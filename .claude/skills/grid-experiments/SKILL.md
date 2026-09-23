@@ -68,14 +68,18 @@ twice.
 **Remove the worktree once its PR merges**, with the prune script. It is a
 dry run unless you pass `--apply`. For your own worktrees right after the merge,
 name them with `--only`, which skips the 24 h rule below; a sweep over
-everything leaves `--only` off:
+everything leaves `--only` off.
+
+Run it from outside the worktrees it removes, for example dev's copy from the
+shared checkout's `.git` (it keeps any worktree it is running from):
 
 ```bash
-srun --ntasks=1 --partition=cpu --mem=2G --time=00:15:00 \
-    bash scripts/grid/prune-worktrees.sh --apply \
+git -C /exp/$USER/projects/VTSearch show origin/dev:scripts/grid/prune-worktrees.sh > /expscratch/$USER/prune-worktrees.sh
+cd /expscratch/$USER && srun --ntasks=1 --partition=cpu --mem=2G --time=00:15:00 \
+    bash /expscratch/$USER/prune-worktrees.sh --apply \
     --only /expscratch/$USER/worktrees/vts-<issue> --only /expscratch/$USER/worktrees/vts-<issue>-tests
 srun --ntasks=1 --partition=cpu --mem=2G --time=01:00:00 \
-    bash scripts/grid/prune-worktrees.sh [--apply] [--keep 'vts-<issue>*']
+    bash /expscratch/$USER/prune-worktrees.sh [--apply] [--keep 'vts-<issue>*']
 ```
 
 It removes only a worktree that is clean (no modified, staged or untracked

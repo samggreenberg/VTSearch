@@ -47,6 +47,12 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+# Where this script and the caller live. A worktree holding either cannot be
+# removed cleanly: on NFS the open script becomes a .nfsXXXX file, `git worktree
+# remove` deletes the admin record and half the tree, then dies on "Directory not
+# empty" (#4133, vts-4133). Run it from the shared checkout or dev's copy.
+SELF="$(readlink -f "$0")"
+CWD="$(readlink -f "$PWD")"
 SHARED="$(readlink -f "${VTS_SHARED_CHECKOUT:-/exp/$USER/projects/VTSearch}")"
 DEPLOY="$(readlink -f "${VTS_DIR:-/expscratch/$USER/projects/VTSearch}")"
 RECENT_MIN=$(( ${PRUNE_RECENT_HOURS:-24} * 60 ))
@@ -94,6 +100,8 @@ while IFS=$'\t' read -r wt br locked prunable; do
         [[ $hit == 1 ]] || continue
     fi
     [[ "$real" == "$SHARED" ]] && { keep "$name" "the shared checkout (common .git)"; continue; }
+    [[ "$SELF" == "$real"/* ]] && { keep "$name" "this script is running from inside it"; continue; }
+    [[ "$CWD" == "$real" || "$CWD" == "$real"/* ]] && { keep "$name" "the current directory is inside it"; continue; }
     [[ "$real" == "$DEPLOY" ]] && { keep "$name" "the deploy clone"; continue; }
     [[ -n "$prunable" ]] && { keep "$name" "directory is gone; 'git worktree prune' drops the record"; continue; }
     [[ -n "$locked" ]] && { keep "$name" "locked"; continue; }
