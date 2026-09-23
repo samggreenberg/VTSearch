@@ -319,15 +319,19 @@ the two candidate knob shapes.
 
 ## 5. The deep regime
 
-**768/768 cells**, `prod`/`−1`/`−3`/`−4` at `CALIB_MAX_STEPS=400`. Note the
-column the harness calls `positives_100` is the trajectory's *final* value, so
-here it is **positives at t=400**.
+**768/768 cells**, `prod`/`−1`/`−3`/`−4` at `CALIB_MAX_STEPS=400`. When this
+report was written the harness's `positives_100` column held the trajectory's
+*final* value, so the deep generated table's "Δ positives@100" was really
+**positives at t=400**. #3602 renamed that column `positives_final` and added a
+genuine t=100 one; the deep table is regenerated with both. On the same cells
+the deep wave's Δ positives@100 reproduces the 100-click wave's exactly (+3.6,
++17.7, +27.7), as it should: the first 100 clicks are the same run.
 
-| arm | k | Δ final cost vs prod [95% CI] | Δ positives@400 | Δ AP | deep spikes vs prod |
-|---|---:|---|---:|---:|---|
-| `acq_m1` | −1 | −0.016 [−0.022, −0.011] | +16.8 | +0.063 | 0.5% → 1.6% (p=0.63) |
-| `acq_m3` | −3 | **−0.033** [−0.039, −0.027] | +90.1 | +0.123 | 0.5% → **5.7% (p=0.006)** |
-| `acq_m4` | −4 | −0.032 [−0.039, −0.026] | **+99.9** | **+0.128** | 0.5% → 2.1% (p=0.38) |
+| arm | k | Δ final cost vs prod [95% CI] | Δ positives@400 | Δ positives@100 | Δ AP | deep spikes vs prod |
+|---|---:|---|---:|---:|---:|---|
+| `acq_m1` | −1 | −0.016 [−0.022, −0.011] | +16.8 | +3.6 | +0.063 | 0.5% → 1.6% (p=0.63) |
+| `acq_m3` | −3 | **−0.033** [−0.039, −0.027] | +90.1 | +17.7 | +0.123 | 0.5% → **5.7% (p=0.006)** |
+| `acq_m4` | −4 | −0.032 [−0.039, −0.026] | **+99.9** | **+27.7** | **+0.128** | 0.5% → 2.1% (p=0.38) |
 
 **H3's falsification condition was that the 400-click optimum be *shallower* than
 the 100-click one. It is not.** `−3` and `−4` are statistically tied at both
