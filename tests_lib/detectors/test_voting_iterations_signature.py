@@ -58,8 +58,17 @@ class TestKeywordOnlyBoundary:
             if "node_modules" in path.parts:
                 continue
             try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
-            except (SyntaxError, UnicodeDecodeError):
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            # The AST match below is on this exact name, so a file that never
+            # spells it cannot hold an offender; skipping the parse keeps the
+            # whole-repo sweep from costing seconds (issue #4152).
+            if "simulate_voting_iterations" not in text:
+                continue
+            try:
+                tree = ast.parse(text)
+            except SyntaxError:
                 continue
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
