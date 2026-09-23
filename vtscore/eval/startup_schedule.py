@@ -187,6 +187,7 @@ def round_cut(scores: Sequence[float], rnd: StartupRound) -> float:
         gmm_cut_from_fit,
         gmm_fit_array,
         inclusion_cost_weights,
+        text_sort_threshold,
     )
 
     values = list(scores)
@@ -197,8 +198,11 @@ def round_cut(scores: Sequence[float], rnd: StartupRound) -> float:
 
         return float(np.quantile(np.asarray(values, dtype=np.float64), 1.0 - rnd.q))
     if rnd.cut == "mid":
-        # The shipped cosine-sort cut, called rather than re-derived.
-        return float(calculate_gmm_threshold(values))
+        # The app's typed-query line, called rather than re-derived: a schedule
+        # always runs on the text sort (``seed_scores``), so ``@mid`` is whatever
+        # the text route draws (#3826).  Under the default rule that is exactly
+        # ``calculate_gmm_threshold``.
+        return float(text_sort_threshold(values))
     fit = fit_score_gmm(gmm_fit_array(values))
     if fit is None:
         # Same fallback the shipped cut takes on an unfittable distribution -

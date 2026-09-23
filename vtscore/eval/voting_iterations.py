@@ -305,6 +305,7 @@ def _safe_threshold_for_step(
     schedule: str | None = None,
     voted_ids: "set[int] | None" = None,
     exclusion_min_remainder: float | None = None,
+    cut_rule: str | None = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -355,10 +356,18 @@ def _safe_threshold_for_step(
     entirely - the pre-#3308 baseline.  Because the resolution happens inside
     :func:`~vtscore.training.thresholds.resolve_exclusion_floor`, the default
     arm cannot drift from the app even though the knob exists.
+
+    *cut_rule* is the #3557 run-level arm knob, on the same terms: ``None``
+    resolves to the app's :data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`
+    inside this function, so the default arm is production by construction.
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.training.thresholds import drop_voted, fit_fold_anchored_cut  # noqa: PLC0415
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        FOLD_ANCHOR_CUT_RULE,
+        drop_voted,
+        fit_fold_anchored_cut,
+    )
 
     final_model = step.torch_model
     # The final model's pass over the haystack (#3314).  Real app work - it is
@@ -433,7 +442,14 @@ def _safe_threshold_for_step(
         fold_data["haystack_seconds"] = haystack_seconds
 
     cut = (
-        fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], fit_final.tolist()) if fold_haystacks else None
+        fit_fold_anchored_cut(
+            fold_haystacks,
+            fold_orderings[:n_folds],
+            fit_final.tolist(),
+            cut_rule=cut_rule if cut_rule is not None else FOLD_ANCHOR_CUT_RULE,
+        )
+        if fold_haystacks
+        else None
     )
     if cut is not None:
         anchored = cut.threshold_at(inclusion)
@@ -1405,7 +1421,7 @@ def simulate_voting_iterations(  # noqa: C901
     anchored_fold_arms: bool = True,
     anchored_fold_combines: Optional[list[str]] = None,
     fold_count_variants: Optional[list[int]] = None,
-    cut_inclusion_ks: Optional[list[int]] = None,
+    cut_inclusion_ks: Optional[list[int] | list[float]] = None,
     cut_inclusion_sink: Optional[list[dict[str, Any]]] = None,
     cut_inclusion_qtilt_steps: Optional[list[float]] = None,
     acq_inclusion_offset: float = ACQUISITION_INCLUSION_OFFSET,
@@ -1413,6 +1429,7 @@ def simulate_voting_iterations(  # noqa: C901
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     exclusion_min_remainder: Optional[float] = None,
+    live_cut_rule: Optional[str] = None,
     skyline_arms: Optional[list[str]] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
@@ -1646,6 +1663,16 @@ def simulate_voting_iterations(  # noqa: C901
             production pins the split too (issue #2934 pinned it on purpose).
             Recorded verbatim in the ``calibration_seed`` column, so a pooled
             frame says which draw each row came from.
+        live_cut_rule: The fold-anchored cut rule the **live** threshold uses
+            (issue #3557) - the one reporting, acquisition and every downstream
+            vote read.  ``None`` (default) is the app's own
+            :data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`, so the
+            default arm cannot drift from production.  A named rule is a
+            **run-level** arm, never a paired one: the acquisition cut re-cuts
+            the same estimator at ``inclusion + acq_inclusion_offset``, so a
+            rule that moves the cut below ``k = 0`` moves which media get voted
+            from the first fitted step on.  The ``__cutincl`` frame's re-cuts
+            are the paired, reporting-only view of the same rules.
 
         standalone_cut: How a ``gp_*`` trainer's cross-calibration cut reaches
             its final model (issue #3954).  ``"raw"`` (the default, and what
@@ -2102,6 +2129,7 @@ def simulate_voting_iterations(  # noqa: C901
                     schedule=blend_schedule,
                     voted_ids=set(good_votes) | set(bad_votes),
                     exclusion_min_remainder=exclusion_min_remainder,
+                    cut_rule=live_cut_rule,
                 )
             )
             if emit_calibration_metrics:

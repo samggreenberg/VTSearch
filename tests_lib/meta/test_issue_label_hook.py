@@ -40,6 +40,10 @@ just as happily against a hook that had been deleted. Three classes split the
 job: the guard itself, its failure modes (all of which must allow), and
 `TestGhCloseCostsNothingOnOtherCommands`, which watches for a lookup firing on
 commands that close nothing -- a cost no exit-code assertion can see.
+
+`TestSolvedClearsAssignee` covers the fourth guard (#4144): the write that adds
+`solved` must also clear the assignee, on both the `gh issue edit` and the MCP
+path.
 """
 
 import json
@@ -509,7 +513,7 @@ class TestGhPassthrough:
             "gh issue view 3127 --json labels",
             "gh issue list --label claude",
             "gh issue comment 3127 --body 'Addressed in #3130'",
-            "gh issue edit 3127 --add-label solved",
+            "gh issue edit 3127 --add-label claude",
             "gh pr create --base dev --title 'T' --body 'B'",
             "echo 'gh issue created earlier today'",
         ],
@@ -824,7 +828,7 @@ class TestGhCloseCostsNothingOnOtherCommands:
             "git status",
             "gh issue view 3319 --json labels",
             "gh issue list --label solved",
-            "gh issue edit 3319 --add-label solved",
+            "gh issue edit 3319 --add-label solved --remove-assignee samggreenberg",
             "gh pr create --base dev --title 'T' --body 'B'",
             "gh issue create --title 'T' --body 'B' --label claude",
             "gh issue close --help",
@@ -893,12 +897,14 @@ class TestExperimentDropOnUpdate:
         assert run_hook(payload, env=env).returncode == BLOCK
 
     def test_an_update_that_keeps_experiment_is_allowed(self, tmp_path):
-        payload, env = self.update(tmp_path, "claude", "experiment", labels=["claude", "experiment", "solved"])
+        payload, env = self.update(
+            tmp_path, "claude", "experiment", labels=["claude", "experiment", "solved"], assignees=[]
+        )
         assert run_hook(payload, env=env).returncode == ALLOW
 
     def test_an_issue_that_does_not_carry_experiment_is_unaffected(self, tmp_path):
         """The majority case: the guard must not turn an ordinary label edit into a dance."""
-        payload, env = self.update(tmp_path, "claude", labels=["claude", "solved"])
+        payload, env = self.update(tmp_path, "claude", labels=["claude", "solved"], assignees=[])
         assert run_hook(payload, env=env).returncode == ALLOW
 
     def test_a_close_that_drops_experiment_is_blocked_too(self, tmp_path):
@@ -1022,6 +1028,143 @@ class TestExperimentDropCostsNothing:
         log = self.run(tmp_path, labels=["claude"])
         assert log.exists()
         assert len(log.read_text().strip().splitlines()) == 1
+
+
+class TestSolvedClearsAssignee:
+    """Adding `solved` must clear the assignee in the same write (#4144).
+
+    `solved` means nobody is working the issue; an assignee left on it makes
+    solved work look taken in the `no:assignee` view. The guard is pure
+    parsing, so these need no `gh` stub on the `gh` path -- except that the MCP
+    update path also runs the `experiment`-drop lookup, which a failing stub
+    turns into "could not tell" so only the guard under test can block.
+    """
+
+    @staticmethod
+    def bash(command: str) -> subprocess.CompletedProcess:
+        return run_hook({"tool_name": "Bash", "tool_input": {"command": command}})
+
+    @staticmethod
+    def mcp(tmp_path, **overrides) -> subprocess.CompletedProcess:
+        bin_dir = tmp_path / "stub-bin"
+        bin_dir.mkdir(exist_ok=True)
+        exe = bin_dir / "gh"
+        exe.write_text("#!/bin/sh\nexit 1\n")
+        exe.chmod(0o755)
+        env = {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        args = {"method": "update", "owner": "samggreenberg", "repo": "vtsearch", "issue_number": 4144}
+        args.update(overrides)
+        return run_hook({"tool_name": "mcp__github__issue_write", "tool_input": args}, env=env)
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 4144 --add-label solved",
+            "gh issue edit 4144 --add-label claude,solved",
+            "gh issue edit 4144 --add-label 'claude, solved'",
+            "gh issue edit 4144 --add-label=solved",
+            "gh issue edit 4144 --add-label Solved",
+            "gh issue edit 4144 --add-label solved --add-assignee samggreenberg",
+            "gh issue comment 4144 --body 'Addressed in #4150' && gh issue edit 4144 --add-label solved",
+            "cd /tmp && gh issue edit 4144 --add-label solved; echo done",
+            "gh issue edit 4144 --add-label solved && gh issue edit 4144 --remove-assignee samggreenberg",
+            "gh issue edit 4144 --add-label solved --remove-assignee ''",
+            "gh issue edit 4144 --add-label solved --remove-label experiment",
+        ],
+        ids=[
+            "bare",
+            "comma-list",
+            "quoted-comma-list",
+            "equals-form",
+            "case-insensitive",
+            "add-assignee-does-not-count",
+            "after-a-comment-in-a-chain",
+            "mid-chain",
+            "unassign-in-a-separate-edit",
+            "empty-remove-assignee",
+            "other-label-removal",
+        ],
+    )
+    def test_adding_solved_without_unassign_is_blocked(self, command):
+        result = self.bash(command)
+        assert result.returncode == BLOCK
+        assert "KEEPS THE ASSIGNEE" in result.stderr
+
+    def test_the_denial_names_the_exact_fix(self):
+        result = self.bash("gh issue edit 4144 --add-label solved")
+        assert "gh issue edit 4144 --add-label solved --remove-assignee samggreenberg" in result.stderr
+
+    def test_an_unreadable_number_still_names_the_fix_shape(self):
+        result = self.bash("gh issue edit --add-label solved")
+        assert result.returncode == BLOCK
+        assert "gh issue edit <n> --add-label solved --remove-assignee samggreenberg" in result.stderr
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "gh issue edit 4144 --add-label solved --remove-assignee samggreenberg",
+            "gh issue edit 4144 --remove-assignee @me --add-label solved",
+            "gh issue edit 4144 --add-label claude,solved --remove-assignee=samggreenberg",
+            "gh issue comment 4144 --body 'Addressed in #4150' && "
+            "gh issue edit 4144 --add-label solved --remove-assignee samggreenberg",
+            "gh issue edit 4144 --add-label claude",
+            "gh issue edit 4144 --add-assignee samggreenberg",
+            "gh issue edit 4144 --remove-label solved",
+            "gh issue edit 4144 --remove-label solved --add-assignee samggreenberg",
+            "gh issue edit 4144 --body 'remember: --add-label solved needs the unassign'",
+            "gh issue edit --help",
+            "git commit -m 'gh issue edit N --add-label solved is now policed'",
+            "echo 'run gh issue edit 4144 --add-label solved'",
+            "gh issue view 4144 --json labels",
+        ],
+        ids=[
+            "the-fix",
+            "the-fix-at-me-first",
+            "the-fix-comma-equals",
+            "the-fix-mid-chain",
+            "other-label",
+            "assign-only",
+            "remove-solved",
+            "remove-solved-and-reassign",
+            "flag-inside-quoted-body",
+            "help",
+            "commit-message",
+            "prose-mention",
+            "issue-view",
+        ],
+    )
+    def test_everything_else_is_allowed(self, command):
+        assert self.bash(command).returncode == ALLOW
+
+    def test_an_untokenisable_segment_allows(self):
+        """Fail open: an unbalanced quote is "could not tell"."""
+        assert self.bash("gh issue edit 4144 --add-label solved --body 'unterminated").returncode == ALLOW
+
+    def test_mcp_solved_without_assignees_is_blocked(self, tmp_path):
+        result = self.mcp(tmp_path, labels=["claude", "solved"])
+        assert result.returncode == BLOCK
+        assert "KEEPS THE ASSIGNEE" in result.stderr
+        assert "gh issue edit 4144 --add-label solved --remove-assignee samggreenberg" in result.stderr
+
+    def test_mcp_solved_keeping_an_assignee_is_blocked(self, tmp_path):
+        result = self.mcp(tmp_path, labels=["claude", "solved"], assignees=["samggreenberg"])
+        assert result.returncode == BLOCK
+
+    def test_mcp_solved_with_empty_assignees_is_allowed(self, tmp_path):
+        assert self.mcp(tmp_path, labels=["claude", "solved"], assignees=[]).returncode == ALLOW
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"labels": ["claude"]},
+            {"assignees": ["samggreenberg"]},
+            {"body": "a revised body"},
+            {"labels": "solved"},
+        ],
+        ids=["no-solved", "assign-only", "body-edit", "labels-not-a-list"],
+    )
+    def test_mcp_updates_not_adding_solved_are_allowed(self, tmp_path, overrides):
+        assert self.mcp(tmp_path, **overrides).returncode == ALLOW
 
 
 class TestPassthrough:

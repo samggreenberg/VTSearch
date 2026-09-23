@@ -254,8 +254,8 @@ known_first_party = [
     # script so it reads the same cell definitions the build used.
     "pile_config",
     "_cells_io",
-    # scripts/experiments/docmarks, put on sys.path by DocMarks study scripts
-    # under docs/experiments/ (the 4088-4089 review and the UCSF contamination).
+    # scripts/experiments/docmarks, put on sys.path by the DocMarks study
+    # scripts under docs/experiments/ (#3922 v4.2 measure_*.py).
     "docmarks_config",
     "eval_retrieval",
     "sources",

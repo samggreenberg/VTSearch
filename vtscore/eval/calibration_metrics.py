@@ -35,7 +35,7 @@ from __future__ import annotations
 import numpy as np
 
 
-def inclusion_weights(inclusion: int) -> tuple[float, float]:
+def inclusion_weights(inclusion: float) -> tuple[float, float]:
     """``(fpr_weight, fnr_weight)`` for an inclusion value.
 
     Re-exported from :func:`vtscore.training.thresholds.inclusion_cost_weights`

@@ -21,8 +21,9 @@ maintenance beyond the allowlists at the top of this file.
   6. FENCE   no code fence is preceded by text on the same line (``-> ```json``
              renders as a paragraph, silently swallowing the block);
   7. STUDY   every ``docs/experiments/`` study directory is named
-             ``YYYY-MM-DD-<slug>`` and carries a row in that tree's index, so the
-             archive sorts chronologically and nothing lands in it unlisted.
+             ``YYYY-MM-DD-<slug>``, so ``ls`` alone sorts the archive
+             chronologically. There is deliberately no index file to keep in
+             step (#4138).
 
 Dependency-free, imports nothing from the app, and reads each file once, so it
 costs well under a second and can sit early in ``run-tests.sh``.
@@ -184,7 +185,6 @@ HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 # "what is the latest result?" — and it only stays true if nothing can be added
 # without one.
 EXPERIMENTS_DIR = "docs/experiments"
-EXPERIMENTS_INDEX = f"{EXPERIMENTS_DIR}/README.md"
 STUDY_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
@@ -526,28 +526,19 @@ def check_plan_refs(files: frozenset[str]) -> list[Failure]:
 
 
 def check_study_dirs(dirs: frozenset[str]) -> list[Failure]:
-    """(7) STUDY — experiment study directories are dated, and all are indexed.
+    """(7) STUDY — experiment study directories are dated.
 
-    Two failures with one cause: an archive nobody can browse. The date prefix is
-    what puts the newest run at the end of an `ls`, and the index row is what
-    says which question it answered — a study missing either is present but
-    undiscoverable, which is how a third of this tree went unlisted.
+    The date prefix is what puts the newest run at the end of an `ls`, and with
+    each report opening on its question and verdict, `ls` plus `head` is the
+    whole index. A hand-kept index table used to sit beside it; every study PR
+    added a row at the same spot, so parallel studies always conflicted (#4138).
     """
-    index = ROOT / EXPERIMENTS_INDEX
-    try:
-        index_text = index.read_text(encoding="utf-8")
-    except OSError:  # pragma: no cover - the index is tracked
-        return [Failure("STUDY", index, 0, f"{EXPERIMENTS_INDEX} is missing")]
-
     prefix = f"{EXPERIMENTS_DIR}/"
     failures: list[Failure] = []
     for rel in sorted(d for d in dirs if d.startswith(prefix) and d.count("/") == 2):
         name = rel[len(prefix) :]
-        path = ROOT / rel
         if not STUDY_DIR_RE.match(name):
-            failures.append(Failure("STUDY", path, 0, f"study directory '{name}' is not named YYYY-MM-DD-<slug>"))
-        elif f"]({name}/" not in index_text:
-            failures.append(Failure("STUDY", path, 0, f"study '{name}' has no row in {EXPERIMENTS_INDEX}"))
+            failures.append(Failure("STUDY", ROOT / rel, 0, f"study directory '{name}' is not named YYYY-MM-DD-<slug>"))
     return failures
 
 
