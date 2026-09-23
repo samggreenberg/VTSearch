@@ -65,7 +65,7 @@ TIER_SALT = os.environ.get("VTS_DOCMARKS_TIER_SALT", "docmarks-v1")
 #: pass, #3927, 613 -> 721 roster instances); a new page set, tier cut or roster
 #: bumps the major.  A number is only comparable to one measured on the same
 #: version.  See DATASHEET.md.
-CORPUS_VERSION = "v4.3"
+CORPUS_VERSION = "v5.0"
 
 # --------------------------------------------------------------------------
 # Class admission
