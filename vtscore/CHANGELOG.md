@@ -10,6 +10,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`PluginField.opened_in_browser`, for a `url` field only the browser opens**
+  (issue #4078). Every `field_type="url"` value went through the SSRF guard
+  `validate_url`, which refuses `localhost` and private addresses - right for a
+  URL the server fetches, wrong for an `open_url` exporter's template, which
+  the user's browser opens and which legitimately points at a local mock server
+  or LAN viewer. A field declaring `opened_in_browser=True` is checked with
+  `validate_browser_url` instead (http/https only; `javascript:`, `data:` and
+  `file:` still refused). Additive and defaulted to `False`, so every existing
+  `url` field keeps the SSRF guard.
 - **`PluginField.hidden`, for a field the plugin author fills rather than the
   user** (issue #4078). A field declared `hidden=True` gets no widget in any
   GUI form; its value comes from the field's `default` and is normalized,

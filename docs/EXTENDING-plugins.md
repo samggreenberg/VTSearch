@@ -99,6 +99,7 @@ other parameter is optional.
 | `step`        | `str`       | `""`     | For `"number"` fields: step increment. A non-integer step (`"0.05"`) makes the CLI parse the value as `float`; an integer step uses `int` |
 | `clears`      | `list[str]` | `[]`     | Field keys this field is mutually exclusive with; entering a non-empty value here blanks each listed field in the UI (list each peer back for symmetry), so only one of the set is active at a time |
 | `hidden`      | `bool`      | `False`  | When `True`, no GUI form renders a widget for this field: the value is yours to fix via `default`, not the user's to type. Pair the two — the framework fills a hidden field in from its default like any other blank field, so your `run()` / `export()` reads it exactly as if the user had typed it. A plugin whose fields are *all* hidden presents as a bare action button. Hiding is a **GUI affordance only** (the field-level sibling of `PluginBase.hidden_from_picker`): the field keeps its CLI flag, stays on the wire, and is validated and normalised like any other, so it is never a place to put a secret — use `field_type="password"` for that |
+| `opened_in_browser` | `bool` | `False` | For `"url"` fields: the URL is opened by the user's browser (e.g. an exporter's `open_url`) and never fetched by the server, so it is validated with `validate_browser_url` (scheme allowlist; `localhost` and LAN hosts pass) instead of the SSRF guard `validate_url`. Leave it `False` for any URL your plugin fetches itself |
 | `include_in_origin` | `bool \| None` | `None` | Whether to copy this field's value into the persisted origin dict. `None` means "use the field-type default": `False` for `"file"` and `"password"`, `True` otherwise |
 | `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Converts the value to the string persisted in the origin. Use for list/dict values whose `str(...)` isn't round-trip safe. Ignored when `include_in_origin` resolves to `False` |
 | `template_vars` | `tuple[str, ...]` | `()` | Template variables the framework substitutes into this field's value before your `run()` / `export()` sees it — see [Framework-side field normalization](#framework-side-field-normalization). An empty tuple (the default) means **no substitution happens** |
@@ -201,7 +202,8 @@ The remaining three apply to every text-like field (`text`, `url`,
    `template_vars` (see below).
 4. **Field-type-driven security validation.** A `url` field is passed
    through `vtscore.security.url_validation.validate_url` (the SSRF
-   guard). A `server_path` or `folder` field is passed through
+   guard), unless it declares `opened_in_browser=True`, in which case it
+   gets the browser-side scheme guard `validate_browser_url` instead. A `server_path` or `folder` field is passed through
    `confine_server_filepath()` anchored at the per-user data dir, and
    the **approved, canonicalised path is written back** into
    `field_values` — so your body must consume `field_values[key]`, not

@@ -253,6 +253,26 @@ class PluginField:
     #: ``required=False``.
     hidden: bool = False
 
+    #: For ``"url"`` fields: ``True`` declares that the URL is opened by the
+    #: **user's browser** (handed back as an exporter's ``open_url``) and is
+    #: never fetched by the server.  Such a value is validated with
+    #: :func:`~vtscore.security.url_validation.validate_browser_url` — a
+    #: scheme allowlist that rejects ``javascript:`` / ``data:`` / ``file:``
+    #: — instead of the SSRF guard
+    #: :func:`~vtscore.security.url_validation.validate_url`, which refuses
+    #: ``localhost`` and private addresses.  Those are legitimate targets
+    #: for a browser (a companion viewer or mock server on the user's own
+    #: machine or LAN), and refusing them buys no protection when no
+    #: server-side request is made.
+    #:
+    #: Defaults to ``False`` so every ``url`` field stays SSRF-guarded
+    #: unless its author says otherwise.  Only set it on a field whose
+    #: value your plugin never passes to ``requests`` / ``urllib`` itself;
+    #: a URL the server fetches must keep the SSRF guard.  Ignored for
+    #: every other :attr:`field_type` (a ``"text"`` field is not
+    #: URL-validated at all).
+    opened_in_browser: bool = False
+
     #: Template variables the framework should substitute into this
     #: field's value before the plugin's ``run`` / ``export`` receives
     #: it.  Each name (e.g. ``"detector_name"``) is replaced everywhere
