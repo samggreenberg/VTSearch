@@ -495,7 +495,6 @@ def main() -> None:
     speed.to_csv(args.out / "hinge3557_speed.csv", index=False)
 
     # ---- the decision rule ----
-    envs = sorted({(r.dataset, r.embedder, r.style) for r in paired.itertuples()})
     ints = paired[paired["inclusion_k"] == paired["inclusion_k"].round()]
     ship = ints[ints["contrast"] == "ship_cost"]
     recut_h = ints[(ints["contrast"] == "recut") & (ints["arm_b"] == "hinge")]
@@ -517,16 +516,23 @@ def main() -> None:
         )
         rule4_rows.append({"env": f"{r.dataset} x {r.embedder} x {r.style}", "ok": bool(ok)})
     rule4 = bool(rule4_rows) and all(x["ok"] for x in rule4_rows)
-    ls = live_sum.set_index(["arm", "dataset", "embedder", "style", "cut_rule"])["distinct_sets"]
+    # Paired on the cells BOTH arms finished: an unpaired mean compares two
+    # different category mixes (a partial read had arm A on 141 cells and arm B
+    # on 87, and read that as a lost 1.5 stops).
+    la = live[(live["arm"] == "incumbent") & (live["cut_rule"] == INCUMBENT)]
+    lb = live[(live["arm"] == "hinge") & (live["cut_rule"] == "hinge")]
+    lm = la.merge(lb, on=CELL_KEYS, suffixes=("_a", "_b"))
     rule5_rows = []
-    for ds, emb, sty in envs:
-        try:
-            inc = ls[("incumbent", ds, emb, sty, INCUMBENT)]
-            hin = ls[("hinge", ds, emb, sty, "hinge")]
-        except KeyError:
-            continue
+    for (ds, emb, sty), g in lm.groupby(ENV_KEYS):
+        inc, hin = float(g["distinct_sets_a"].mean()), float(g["distinct_sets_b"].mean())
         rule5_rows.append(
-            {"env": f"{ds} x {emb} x {sty}", "incumbent": inc, "hinge": hin, "ok": bool(hin >= inc - 0.5)}
+            {
+                "env": f"{ds} x {emb} x {sty}",
+                "n_cells": len(g),
+                "incumbent": inc,
+                "hinge": hin,
+                "ok": bool(hin >= inc - 0.5),
+            }
         )
     rule5 = bool(rule5_rows) and all(x["ok"] for x in rule5_rows)
 
