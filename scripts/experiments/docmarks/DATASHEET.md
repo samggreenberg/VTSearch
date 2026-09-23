@@ -130,7 +130,7 @@ See [`2026-09-13-docmarks-v3`](../../../docs/experiments/2026-09-13-docmarks-v3/
 | v4.0 | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | 2,004 |
 | v4.1 | 2026-09-22 | the four UCSF classes score against UCSF's un-banded industries (#3922); no page, label or roster change | 2,004 |
 | v4.2 | 2026-09-22 | 1,610 banded pages reviewed for the UCSF classes (#4088): 20 new positives, 1,551 reviewed negatives; SigLIP's top presumed negatives checked for all 27 classes (#4089): 0 of 516 carry the mark | 2,024 |
-| **v4.3** | 2026-09-23 | 303 UCSF-class boxes replaced with reviewed tight boxes (#4109): band-located marks 64 → 20, wrong-shaped boxes 110 → 1; no page, positive or negative changed | **2,024** |
+| **v4.3** | 2026-09-23 | every UCSF-class box reviewed (#4109, #4125): 303 proposals accepted, 30 drawn by hand, 3 set to their query crop's extent; band-located marks 64 → 0; no page, positive or negative changed | **2,024** |
 
 The pages and tiers are identical between v3 and v3.1. Only labels moved: 108
 pages that v3 scored as **negatives** for a class are positives in v3.1.
@@ -163,8 +163,9 @@ negatives, spread over all 27 classes, into reviewed ones, and found no
 unlabelled positive among them. Every class's pool changed, so **re-score**
 every class. The cells need no relabel.
 
-**v4.3 changes boxes only.** 303 boxes on the four UCSF classes were replaced by
-reviewed tight ones (#4109). Retrieval scores are page-level, so every v4.2
+**v4.3 changes boxes only.** Every box on the four UCSF classes was reviewed
+(#4109, #4125): 303 proposals accepted, 30 drawn by hand, and 3 query-page
+boxes set to their crop's extent. Retrieval scores are page-level, so every v4.2
 retrieval number is a v4.3 number. A number that reads boxes (localisation,
 crops cut from members) is not.
 
@@ -308,7 +309,7 @@ those copies is scored down for it, and SIFT is not.
 | **Per-class** AP or recall | **supported with n beside it** | Classes run from 8 to 82 instances. One miss moves recall by 1/8 on `staver/stamp_stampds-00230_0` and by 1/82 on `afm90c00`. |
 | Is class X **harder** than class Y? | **read with the known-gaps list** | Label residuals differ by class (below). `spods/stamp_00931_1` (OUTWARD-) had the weakest SIFT evidence of any class, so its completeness is least certain. |
 | Telling **near-identical marks** apart | **supported** | All 276 roster pairs adjudicated; the three leaf marks, two chiefs and four Secretary stamps are separate classes by ruling, and cannot-links are permanent. |
-| **Localisation** (box IoU, detection mAP) | **supported for the four UCSF classes, with 20 marks excluded; not supported for StaVer; unmeasured elsewhere** | UCSF (v4.3, #4109): 303 boxes were proposed by fitting the query crop's ink outline with SIFT, padded 10%, and each was accepted or redrawn by hand. **The tolerance:** a box counts as tight if it clips only the tips of descending loops, and not if it cuts off substantial strokes such as the tops of letters (owner's rule, 2026-09-23). A loose-IoU criterion suits that tolerance; a strict one does not. Drop the marks whose provenance ends in `_band` (20, located only by their letterhead band). Eleven more keep their earlier SIFT-consensus box: 3 query-page boxes held back so the hand-made query crops are not re-cut, 3 rjr_script proposals the reviewer rejected, and 5 marks SIFT could not fit (#4125). Other sources' boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
+| **Localisation** (box IoU, detection mAP) | **supported for the four UCSF classes; not supported for StaVer; unmeasured elsewhere** | UCSF (v4.3, #4109): 303 boxes were proposed by fitting the query crop's ink outline with SIFT, padded 10%, and each was accepted or redrawn by hand. **The tolerance:** a box counts as tight if it clips only the tips of descending loops, and not if it cuts off substantial strokes such as the tops of letters (owner's rule, 2026-09-23). A loose-IoU criterion suits that tolerance; a strict one does not. The 30 marks no proposal fitted were boxed by hand (#4125), and the 3 query pages carry their crop's own extent. One inconsistency: 4 hand-drawn rjr_script boxes include the "Tobacco Company" line under the script, where the query crop and the other 64 boxes are the script alone. Other sources' boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
 | **Query sensitivity**: how much does the crop matter? | **not yet** | One crop per class until #3949 is applied. `tobacco800/logo_aeq93a00_1`'s crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
 | Retrieval **of UCSF letterheads** (the four roster classes) | **supported at tier `m`, with the control beside it** | At v4.2 a mark-blind Tobacco-industry control scores AP 0.15–0.17 at `m` (above). Quote it beside any UCSF-class number, and read tiers `s` and `l` with their residuals. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
 | Compare against a number measured **before 2026-09-17 07:40** | **not comparable** | That is v3: 108 of today's positives were negatives then. Re-score against the relabelled cells. |

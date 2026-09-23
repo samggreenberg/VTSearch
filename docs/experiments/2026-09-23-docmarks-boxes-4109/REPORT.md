@@ -1,17 +1,18 @@
 # DocMarks v4.3: real boxes for the four UCSF classes
 
-**2026-09-23 · #4109, #4073 · corpus v4.2 → v4.3**
+**2026-09-23 · #4109, #4073, #4125 · corpus v4.2 → v4.3**
 
 ## Result
 
-303 UCSF-class boxes were replaced by reviewed tight ones. 306 questions were
-answered, 2 boxes were redrawn by hand, and 3 proposals were rejected.
+**Every UCSF-class box is now reviewed.** 303 proposals were accepted (2 of
+them redrawn by hand), 28 marks no proposal fitted were drawn by hand, and 3
+query pages were given their crop's own extent. 334 questions in all.
 
 | class | instances | band-located, v4.2 → v4.3 | wrong-shaped boxes, v4.2 → v4.3 |
 |---|---:|---|---|
-| bat_leaf | 213 | 54 → **18** | 74 → **1** |
-| p_lorillard_crest | 24 | 9 → **2** | 11 → **0** |
-| rjr_script | 68 | 1 → **0** | 25 → **0** |
+| bat_leaf | 213 | 54 → **0** | 74 → **0** |
+| p_lorillard_crest | 24 | 9 → **0** | 11 → **0** |
+| rjr_script | 68 | 1 → **0** | 25 → **4**, see below |
 | bw_oval_emblem | 30 | 0 → 0 | 0 → 0 |
 
 "Wrong-shaped" means an aspect ratio more than 1.6× off the class's query crop.
@@ -68,15 +69,24 @@ Both drawn boxes, mapped back to their pages:
 |---|---|
 | ![](examples/drawn-bat_leaf-m159.png) | ![](examples/drawn-p_lorillard_crest-fhkw0113.png) |
 
-## Held back, and left over (#4125)
+## Held back, then finished (#4125)
 
-- **Three query-page boxes were not applied.** Accepting a box on a class's
-  query page makes `audit_to_corrections.py` re-cut the query crop from it. That
-  would have replaced three hand-made crops with padded proposals and changed
-  every retrieval number for those classes. The crops' checksums are unchanged.
-- **31 marks have no reviewed box:** 20 still band-located and 5 more with no
-  fit, 3 rejected, and the 3 query pages. The DATASHEET excludes the band-located
-  ones from localisation; #4125 queues the rest for hand drawing.
+- **Three query-page boxes were not applied from proposals.** Accepting a box
+  on a class's query page made `audit_to_corrections.py` re-cut the query crop
+  from it. That would have replaced three hand-made crops with padded proposals
+  and changed every retrieval number for those classes. Each query page now
+  carries its crop's own extent (`query_box`), and a box pass re-cuts a crop
+  only with `--recut-query-crop`. The crops' checksums are unchanged.
+- **The 28 marks no proposal fitted, or whose proposal was rejected, were
+  drawn by hand** (`box_leftovers.py`, `binary_review.py emit --task box_draw`).
+  Most are faint or broken BAT emblems on "Group Research and Development"
+  letterheads. All 28 mapped boxes were checked on their pages before apply:
+
+  ![the 28 hand-drawn boxes on their pages](examples/drawn-by-hand-28.jpg)
+- **One inconsistency is left, on purpose.** The 4 hand-drawn rjr_script boxes
+  include the "Tobacco Company" line under the script, while the query crop and
+  the other 64 boxes are the script alone. That's within the loose-IoU
+  tolerance, and these are the 4 boxes the aspect check still flags.
 
 ## Reproduce
 
@@ -87,9 +97,12 @@ python binary_review.py emit --task box_tighten_band --root <root>
 python binary_review.py load --queue <root>/<queue> ...
 python binary_review.py bank --root <root>                    # reads drawn boxes too
 python audit_to_corrections.py --task box_tighten --audit-dir box_tighten_band_banked --reviewer <name> --apply
+python box_leftovers.py --slate box_tighten_band_banked       # query pages -> audit/box_query, the rest -> audit/box_draw
+python audit_to_corrections.py --task box_tighten --audit-dir box_query --reviewer "query crop extent" --apply
+python binary_review.py emit --task box_draw --root <root2>   # draw, bank, then apply --audit-dir box_draw_banked
 ```
 
-Verdicts, with the held-back query pages removed, are in
-`measurements/box_verdicts.jsonl`. The pre-apply corpus is in
-`corpus/backup-pre4109-20260923/`, and detector backups are in
+Verdicts are in `measurements/box_verdicts.jsonl` (with the held-back query pages
+removed) and `measurements/draw_verdicts.jsonl`. The pre-apply corpora are in
+`corpus/backup-pre4109-20260923/`, `backup-pre4125-20260923/` and `backup-pre4125draw-20260923/`, and detector backups are in
 `keep/detectors-cleared-20260922/`.
