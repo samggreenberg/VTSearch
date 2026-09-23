@@ -322,7 +322,7 @@ def relabel(corpus: Path, *, apply: bool = False, chunk: int = REWRITE_CHUNK) ->
                 # and holding what it read to find out is the ceiling this
                 # change exists to remove.
                 _rewrite_cell(io, path, _RelabelPass(pages, known).run(io.iter_medias(path)), chunk=chunk)
-    print(f"\n{touched} media(s) relabelled" + ("" if apply else " — dry run, pass --apply to write"))
+    print(f"\n{touched} media(s) relabelled" + ("" if apply else " — dry run, pass --force to write"))
     return 0
 
 
