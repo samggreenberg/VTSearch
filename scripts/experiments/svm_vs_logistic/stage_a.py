@@ -291,8 +291,10 @@ def replay_sets(replay_root: Path, dataset: str, embedder: str, category: str, s
         if df.empty:
             continue
         for t in REPLAY_T:
-            sub = df[df["t"] < t]
-            if len(sub) < t or sub["picked_label"].nunique() < 2:
+            # The harness numbers clicks from 1, so "the first t clicks" is
+            # t <= T.  (A ``< T`` cut left T-1 rows and skipped every replay.)
+            sub = df[df["t"] <= t]
+            if len(sub) != t or sub["picked_label"].nunique() < 2:
                 continue
             out[(arm, t)] = (sub["picked_id"].astype(int).tolist(), sub["picked_label"].astype(int).to_numpy())
     return out
@@ -501,6 +503,10 @@ def main() -> int:
                     recs=evaluate(fit_all(everything, X[idx], plabels), X, idx, plabels, cell.test, yt),
                 )
 
+    if args.replay_only and not rows:
+        # Every Stage B cell has 150 picks with both classes by click 150, so a
+        # replay that yields nothing is a bug, not a result.
+        raise SystemExit(f"replay produced 0 rows for {slug}: check the picks file and the click cut")
     meta["seconds"] = round(time.time() - t_start, 1)
     meta["n_rows"] = len(rows)
     if rows:
