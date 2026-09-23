@@ -193,7 +193,9 @@ def relabel_cell(dataset: str, embedder: str) -> dict:
     record = json.loads(side.read_text()) if side.exists() else {}
     before = (record.get("fingerprint") or {}).get("vectors_sha256")
     if not before:
-        raise SystemExit(f"{side.name}: no recorded vector fingerprint, so a relabel could not prove it kept the vectors")
+        raise SystemExit(
+            f"{side.name}: no recorded vector fingerprint, so a relabel could not prove it kept the vectors"
+        )
     kind = pc.DATASETS[dataset]["kind"]
     loader = loader_for(dataset, kind)
     if not hasattr(loader, "relabel"):

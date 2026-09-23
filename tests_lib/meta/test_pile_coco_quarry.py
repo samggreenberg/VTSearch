@@ -483,6 +483,7 @@ class TestTheCarrierAndVesselMerges:
             assert pc.SCALE_CLASS_RULES_RETIRED[cls] == rule.name
         assert pc.rule_digest("vase") == "29e5d90e768c", "the digest the committed record was stamped with"
 
+
 class TestRelabel:
     """#4091: a full-corpus cell's LABELS can be brought up to date without re-embedding.
 
@@ -511,7 +512,10 @@ class TestRelabel:
         built: dict = {}
         mod.load(full, built, "siglip")
         assert built, "the fixture corpus emitted nothing"
-        stale = {iid: {**m, "categories": [], "category": "", "regions": [], "evaluable_categories": []} for iid, m in built.items()}
+        stale = {
+            iid: {**m, "categories": [], "category": "", "regions": [], "evaluable_categories": []}
+            for iid, m in built.items()
+        }
         stats = mod.relabel(full, stale)
         for iid, m in built.items():
             for k in LABEL_FIELDS:
