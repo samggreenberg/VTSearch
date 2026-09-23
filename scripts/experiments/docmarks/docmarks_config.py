@@ -65,7 +65,7 @@ TIER_SALT = os.environ.get("VTS_DOCMARKS_TIER_SALT", "docmarks-v1")
 #: pass, #3927, 613 -> 721 roster instances); a new page set, tier cut or roster
 #: bumps the major.  A number is only comparable to one measured on the same
 #: version.  See DATASHEET.md.
-CORPUS_VERSION = "v4.0"
+CORPUS_VERSION = "v4.1"
 
 # --------------------------------------------------------------------------
 # Class admission
@@ -151,10 +151,16 @@ CONTAMINATES: dict[str, frozenset[str]] = {
     # *same underlying archive*, so it is excluded; the other UCSF industries
     # are different companies and are admitted.
     "tobacco800": frozenset({"tobacco800", "ucsf:Tobacco"}),
-    # Weakly-labelled UCSF letterhead classes contaminate all of UCSF: the same
-    # company's letterhead recurs across industries (Philip Morris reaches Food
-    # through Kraft), and the label is metadata-derived rather than observed.
-    "ucsf": frozenset({"ucsf"}),
+    # UCSF letterhead classes exclude UCSF's Tobacco industry, which is exactly
+    # the 13,857 pages the letterhead pull banded: their own marks recur there
+    # unlabelled (#3922: the band classes miss most of their own mark).  The
+    # un-banded industries were admitted at v4.1 on corporate lineage -- these
+    # are tobacco marks -- and checked by hand: 0 of 200 sampled pages and 0 of
+    # 120 SigLIP-top-ranked pages carry one, 6 of 6 planted controls found,
+    # with the draw weighted 3:1 toward Food, the known leak route (Philip
+    # Morris owned Kraft, RJR owned Nabisco).  See
+    # docs/experiments/2026-09-22-docmarks-ucsf-contamination/.
+    "ucsf": frozenset({"ucsf:Tobacco"}),
     # Synthetic pastes contaminate only their own backgrounds, which
     # build_corpus.py holds out of every other stratum.
     "synth": frozenset({"synth"}),

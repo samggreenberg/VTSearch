@@ -1,6 +1,6 @@
 # DocMarks — datasheet and use register
 
-**Corpus version v4.0** (`docmarks_config.CORPUS_VERSION`), 2026-09-20. DocMarks
+**Corpus version v4.1** (`docmarks_config.CORPUS_VERSION`), 2026-09-22. DocMarks
 is a benchmark for **finding a given stamp or printed logo in a pile of scanned
 pages**, from one query crop. It exists so that ideas about that task (matchers,
 shortlists, embedders, query handling) can be tested against labels someone has
@@ -126,7 +126,8 @@ See [`2026-09-13-docmarks-v3`](../../../docs/experiments/2026-09-13-docmarks-v3/
 |---|---|---|---:|
 | v3 | 2026-09-14 | roster countersigned; every instance and all 276 pairs adjudicated | 613 |
 | v3.1 | 2026-09-17 | completeness pass applied (#3927); cells relabelled, no pages added or removed | 721 |
-| **v4.0** | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | **2,004** |
+| v4.0 | 2026-09-20 | UCSF classes admitted (#3953), second completeness pass, query-crop alternates; duplicate page records removed (#4054) | 2,004 |
+| **v4.1** | 2026-09-22 | the four UCSF classes score against UCSF's un-banded industries (#3922); no page, label or roster change | **2,004** |
 
 The pages and tiers are identical between v3 and v3.1. Only labels moved: 108
 pages that v3 scored as **negatives** for a class are positives in v3.1.
@@ -144,6 +145,13 @@ than once were collapsed to one record each (#4054).
 - A minor bump is comparable after re-scoring against the relabelled cells. A
   major one is not: at v4.0 the baselines are **re-run**, because the roster, the
   positive sets and the page list all moved.
+
+**v4.1 is a minor bump.** Pages, tiers, labels and roster are unchanged; only
+the four UCSF classes' pools grew, when the contamination rule for UCSF classes
+narrowed from all of UCSF to its Tobacco industry (below). A v4.0 number for
+any of the other 23 classes is a v4.1 number. For the four UCSF classes,
+**re-score**. The cells need no relabel, because pools are computed at scoring
+time.
 
 `build_report.json` records `corpus_version` from builds after v3.1. The
 on-disk v3.1 corpus predates that field, and is recognisable by
@@ -212,7 +220,7 @@ call negatives. `eval_retrieval.py` offers three pools:
 | pool | negatives | use |
 |---|---|---|
 | **`own_verified`** (the headline, `HEADLINE_POOL`, #3913) | the class's own source as **known negatives**, plus every page the contamination rule allows | quote numbers from this one |
-| `eligible` | only pages the contamination rule allows, so **the class's own source is excluded** | diagnostic only |
+| `eligible` | only pages the contamination rule allows, so **the class's own source is excluded** (for a UCSF class, UCSF's Tobacco industry) | diagnostic only |
 | `naive` | every page in the tier | records the size of the exclusion |
 
 The query crop's own page is dropped from every pool.
@@ -232,6 +240,15 @@ The query crop's own page is dropped from every pool.
   and **0 of 49** company-named pages carry a roster mark (#3914). That check
   was not exhaustive over Food's 15,796 tier-`m` pages, and tier `l` is
   unchecked.
+- A **UCSF** class never uses UCSF's **Tobacco** industry. Those 13,857 pages
+  are exactly the ones the letterhead pull banded, and the band classes miss
+  most of their own mark there (#3922). The five un-banded industries were
+  admitted at v4.1, on corporate lineage (these are tobacco marks) and a hand
+  check. That check drew 200 pages at random, three-quarters from Food, and
+  took SigLIP's top 30 per class; no page in either sample carried the mark,
+  and all 6 planted controls were found. At tier `m` this took each class's
+  pool from ~2,900 pages to ~46,700
+  ([report](../../../docs/experiments/2026-09-22-docmarks-ucsf-contamination/REPORT.md)).
 
 **Why own-source pages are negatives and not exclusions.**
 - Every mark on a SPODS, Tobacco800 or StaVer page is boxed and clustered. A
@@ -241,6 +258,14 @@ The query crop's own page is dropped from every pool.
   source's style. A `source_prior` control that ranks pages by source and
   ignores the mark then scores **AP 1.00** under `eligible`.
 - Under `own_verified` the same control scores **0.029** (#3904, #3913).
+- **The UCSF classes still carry a style shortcut.** Every positive is on a
+  banded Tobacco-industry letter, and the only such pages among their negatives
+  are the 1–13 per class a person reviewed. At tier `m` a control that ranks
+  UCSF Tobacco pages first, ignoring the mark, scores **AP 0.53–0.97** under
+  `own_verified`. Ranking by source alone, it scored 0.20–0.97 at v4.0 and
+  0.00 at v4.1. A method that learns "tobacco letterhead" rather than
+  the mark will look good on these four. More reviewed negatives from the banded
+  pool are the fix (#3922, #4088).
 
 ## What this dataset can and cannot be asked
 
@@ -268,7 +293,7 @@ those copies is scored down for it, and SIFT is not.
 | Telling **near-identical marks** apart | **supported** | All 276 roster pairs adjudicated; the three leaf marks, two chiefs and four Secretary stamps are separate classes by ruling, and cannot-links are permanent. |
 | **Localisation** (box IoU, detection mAP) | **not supported for StaVer, unmeasured elsewhere** | Boxes come from source masks and were never audited for tightness, except the query crops. StaVer boxes on `stampds-00213_1` are wide enough to take in the separate EINGEGANGEN AM date stamp. |
 | **Query sensitivity**: how much does the crop matter? | **not yet** | One crop per class until #3949 is applied. `tobacco800/logo_aeq93a00_1`'s crop has 211 SIFT keypoints and sits at the bottom of every ranking, so a per-class result mixes the method with that crop. |
-| Retrieval **of UCSF letterheads**, or anything with a UCSF positive | **not supported** | UCSF holds no classes. The band classes proposed in #3902 are audit candidates (#3921, #3922). |
+| Retrieval **of UCSF letterheads** (the four roster classes) | **method-vs-method only, and not as a headline** | The pools are sound to a measured bound at v4.1, but a mark-blind Tobacco-industry control scores AP 0.53–0.97 (above), so an absolute number mostly measures the shortcut. The other band classes proposed in #3902 are still audit candidates (#3921, #3922). |
 | Compare against a number measured **before 2026-09-17 07:40** | **not comparable** | That is v3: 108 of today's positives were negatives then. Re-score against the relabelled cells. |
 
 ### Known gaps, by class
@@ -296,7 +321,13 @@ those copies is scored down for it, and SIFT is not.
   `adjudications.json`.
 - **UCSF distractors are not exhaustively clean.** The per-page rule and the
   Food check (#3914) cover the known routes by which a roster mark could leak.
-  No hand pass covers 197,222 pages.
+  No hand pass covers 197,222 pages. Two measured bounds exist, both at tier `m`:
+  six anchor classes, 0 of 239 random pages (≤1.3%, 2026-09-20); and the four
+  UCSF classes, 0 of 152 Food and 0 of 48 other random pages (≤2.0% and ≤6.3%).
+  A rate bound is not a count bound: 1% of a 46,700-page pool is ~470 pages, and
+  a UCSF class has 9–181 positives there. What the bounds show is that nothing
+  is common, and the ranked arms show nothing sits at the top of a SigLIP
+  ranking.
 
 ### Reference points, not targets
 
