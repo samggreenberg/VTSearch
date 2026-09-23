@@ -1,0 +1,11 @@
+{
+  "cells": 624,
+  "cells_identical_throughout": 0,
+  "share_identical": 0.0,
+  "first_divergence_t_median": 5.0,
+  "first_divergence_t_quartiles": [
+    5.0,
+    6.0
+  ],
+  "steps_cost_bit_identical": 0.02232705769816079
+}

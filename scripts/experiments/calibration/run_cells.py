@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
         f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
-        f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
+        f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} live_cut_rule={cfg.LIVE_CUT_RULE or 'app default'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
@@ -335,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
             calibrate_count=cfg.CALIBRATE_COUNT,
             calibration_fraction=cfg.CALIBRATION_FRACTION,
             exclusion_min_remainder=cfg.EXCLUSION_MIN_REMAINDER,
+            live_cut_rule=cfg.LIVE_CUT_RULE,
             region_voting=region_voting,
             max_steps=cfg.MAX_STEPS,
             seed_scores=seed_scores,
@@ -390,6 +391,12 @@ def main(argv: list[str] | None = None) -> int:
 
         exclusion_arm = cfg.exclusion_arm_name()
         exclusion_floor = resolve_exclusion_floor(cfg.EXCLUSION_MIN_REMAINDER)
+        # The live cut rule, resolved to a NAME even on the default arm (#3557),
+        # for the same reason as the exclusion floor above: a frame concatenated
+        # across run-level arms has no other record of which rule cut it.
+        from vtscore.training.thresholds import FOLD_ANCHOR_CUT_RULE
+
+        live_cut_rule = cfg.LIVE_CUT_RULE or FOLD_ANCHOR_CUT_RULE
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
@@ -399,6 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             r["sim_fraction"] = cfg.SIM_FRACTION
             r["exclusion_arm"] = exclusion_arm
             r["exclusion_min_remainder"] = exclusion_floor
+            r["live_cut_rule"] = live_cut_rule
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -441,6 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         "sim_fraction",
         "exclusion_arm",
         "exclusion_min_remainder",
+        "live_cut_rule",
     ]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)

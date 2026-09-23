@@ -12,7 +12,7 @@ query pages were given their crop's own extent. 334 questions in all.
 |---|---:|---|---|
 | bat_leaf | 213 | 54 → **0** | 74 → **0** |
 | p_lorillard_crest | 24 | 9 → **0** | 11 → **0** |
-| rjr_script | 68 | 1 → **0** | 25 → **4**, see below |
+| rjr_script | 68 | 1 → **0** | 25 → **0** (4 flagged boxes take in an optional line; see below) |
 | bw_oval_emblem | 30 | 0 → 0 | 0 → 0 |
 
 "Wrong-shaped" means an aspect ratio more than 1.6× off the class's query crop.
@@ -83,10 +83,12 @@ Both drawn boxes, mapped back to their pages:
   letterheads. All 28 mapped boxes were checked on their pages before apply:
 
   ![the 28 hand-drawn boxes on their pages](examples/drawn-by-hand-28.jpg)
-- **One inconsistency is left, on purpose.** The 4 hand-drawn rjr_script boxes
-  include the "Tobacco Company" line under the script, while the query crop and
-  the other 64 boxes are the script alone. That's within the loose-IoU
-  tolerance, and these are the 4 boxes the aspect check still flags.
+- **4 rjr_script boxes take in the "Tobacco Company" line; that is fine.** The
+  logo is the script. The line is printed under it on some letters and not
+  others without changing what the mark is (owner, 2026-09-23), so a box with or
+  without it is correct. These 4 hand-drawn boxes include it because the
+  script's loops hug it. They are the 4 the aspect check flags, and the flag
+  is a false alarm.
 
 ## Reproduce
 

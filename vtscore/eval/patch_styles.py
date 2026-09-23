@@ -345,10 +345,12 @@ class _FlattenedStyle:
         blocks = [self._rows_for_media(clips_dict[cid]) for cid in ids]
         seg_starts = np.zeros(len(blocks), dtype=np.int64)
         np.cumsum([b.shape[0] for b in blocks[:-1]], out=seg_starts[1:])
-        # Keep the flattened stack float16 (the pickle dtype) so a large
-        # patch dataset doesn't double its memory here; the scorer upcasts
-        # chunk-wise.
-        matrix = np.concatenate(blocks, axis=0).astype(np.float16, copy=False)
+        # Keep the flattened stack in the stored patch-row dtype (float16) so
+        # a large patch dataset doesn't double its memory here; the scorer
+        # upcasts chunk-wise.
+        from vtscore.embedding import matrix as _matrix  # noqa: PLC0415
+
+        matrix = np.concatenate(blocks, axis=0).astype(_matrix.PATCH_ROW_DTYPE, copy=False)
         result = (ids, matrix, seg_starts)
         self._matrix_cache[key] = result
         while len(self._matrix_cache) > self._MATRIX_CACHE_SIZE:
@@ -432,11 +434,9 @@ class MaxPatchStyle(_FlattenedStyle):
         (:meth:`good_vec` with ``box=None``) would train on a vector this
         scorer never evaluates.  See the module docstring.
         """
-        import numpy as np  # noqa: PLC0415
+        from vtscore.embedding import matrix as _matrix  # noqa: PLC0415
 
-        from vtscore.embedding.matrix import media_score_rows  # noqa: PLC0415
-
-        rows = media_score_rows(media, dtype=np.float16)
+        rows = _matrix.media_score_rows(media, dtype=_matrix.PATCH_ROW_DTYPE)
         if rows is None:  # pragma: no cover - a media with no vector at all
             raise ValueError(f"media {media.get('id')!r} has no scoring rows")
         return rows

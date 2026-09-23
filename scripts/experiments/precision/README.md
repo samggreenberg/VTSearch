@@ -92,3 +92,36 @@ Three scripts exist only to stop a wrong conclusion, in the order they run:
   a 1e-6 cosine gap is a tie broken differently, not a retrieval failure.
 - The bench verdict distinguishes *below margin (resolved)* from *cannot resolve
   at this n*. An underpowered null is not evidence of no effect.
+
+## Follow-up: the float16 patch grid (#3159)
+
+`dinov3_patch` was excluded above because its patch grid is **stored** float16
+whatever the forward ran in. #3159 measures that cast. The dtype now has one
+name, `vtscore.embedding.matrix.PATCH_ROW_DTYPE`, read at call time by the
+ingest cast, the live region matrix and the harness's MaxPatch stack, so the
+study flips all three in-process. It is not an env knob.
+
+```bash
+bash launch_grid_3159.sh build            # fp32-grid cells, 1 GPU on rack7n03 (the pile's node)
+bash launch_grid_3159.sh verify           # MUST pass: fp32 cell -> fp16 cast == the pile, bit for bit
+bash launch_grid_3159.sh drift            # pooled-score / rank drift (CPU)
+bash launch_grid_3159.sh prepare          # bench arms: fp16 = the pile via symlink, fp32 = the rebuild
+bash launch_grid_3159.sh cells            # paired arrays, siglip+dinov3_patch, production defaults
+bash launch_grid_3159.sh analyze
+```
+
+| file | job |
+|---|---|
+| `build_grid_3159.py` | build (PATCH_ROW_DTYPE=float32), `adopt-cls`, `verify` |
+| `grid_drift_3159.py` | drift of the max-pooled score, per query, split by box band |
+| `run_cells_3159.py` | the calibration harness with the dtype pinned and asserted per pickle |
+| `analyze_grid_3159.py` | paired bench, per dataset and band, plus the report's measurement files |
+| `launch_grid_3159.sh` | all of the above |
+
+Two reproduction traps, both found by `verify`: the grid is **not
+batch-invariant** (the pile was embedded at batch 32; today's table says 64,
+which moves ~1.3% of cast elements), and a *second* build in the same side
+pile reads the demo loader's cached base pickle (`visual_genome_m.pkl`, written
+by the first), whose serializer drops `categories` and `regions`: the cell
+comes out with every label gone and nothing fails. Delete it before a rebuild. Report:
+`docs/experiments/2026-09-22-patch-grid-fp16-3159/REPORT.md`.

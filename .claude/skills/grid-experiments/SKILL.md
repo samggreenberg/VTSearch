@@ -66,9 +66,14 @@ srun --ntasks=1 --partition=cpu --mem=2G --time=00:15:00 bash -lc '
 twice.
 
 **Remove the worktree once its PR merges**, with the prune script. It is a
-dry run unless you pass `--apply`:
+dry run unless you pass `--apply`. For your own worktrees right after the merge,
+name them with `--only`, which skips the 24 h rule below; a sweep over
+everything leaves `--only` off:
 
 ```bash
+srun --ntasks=1 --partition=cpu --mem=2G --time=00:15:00 \
+    bash scripts/grid/prune-worktrees.sh --apply \
+    --only /expscratch/$USER/worktrees/vts-<issue> --only /expscratch/$USER/worktrees/vts-<issue>-tests
 srun --ntasks=1 --partition=cpu --mem=2G --time=01:00:00 \
     bash scripts/grid/prune-worktrees.sh [--apply] [--keep 'vts-<issue>*']
 ```
@@ -79,6 +84,13 @@ script on `origin/dev`, and either on a branch already merged into
 `origin/dev` with no open PR, or a detached `*-tests` worktree. It prints
 every other worktree with the reason it was kept, and it never deletes a
 branch.
+
+**A PR merges into `dev` only with a green `suite-grid` status on its exact
+HEAD.** `scripts/slurm/suite.sbatch` posts that commit status at the end of every
+run, success or failure, with the pass count or the gate that blocked. Submit
+dev's copy of the script (`git show origin/dev:scripts/slurm/suite.sbatch >
+<scratch>/suite.sbatch`), never the branch's own. A new commit on the branch
+needs a new run, because the status belongs to the SHA.
 
 **Never delete a dirty or unmerged worktree**, yours or anyone's, and never
 `git worktree remove --force` one. `/expscratch` has no snapshots, so a
