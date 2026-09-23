@@ -15,6 +15,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import numpy as np
 import pile_config as pc
 
 from pilebuild.env import cells_io, experiment_config, log
@@ -231,7 +232,8 @@ def verify() -> int:
         if not path.exists():
             rows.append((ds, emb, "MISSING", "", "", ""))
             continue
-        medias = io.load_medias(path)
+        # Raw, never repaired: this is the audit of what the pile STORES.
+        medias = io.load_medias(path, repair=False)
         n = len(medias)
         counts_by_dataset[ds][emb] = n
         n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
@@ -243,6 +245,16 @@ def verify() -> int:
             vec = media_embedding(first)
             dim = str(len(vec)) if vec is not None else "NO-VECTOR"
         want_region = pc.region_capable(ds, emb)
+        # The app holds every vector unit-norm; a cell that does not is a cell
+        # whose harness runs measured a detector nobody ships (#4095, #4099).
+        from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+        norms = [
+            float(np.linalg.norm(np.asarray(v, dtype=np.float32)))
+            for m in list(medias.values())[:200]
+            if (v := media_embedding(m)) is not None
+        ]
+        off_unit = [x for x in norms if abs(x - 1.0) > io.UNIT_NORM_TOL]
         state = "ok"
         if n == 0:
             state = "EMPTY"
@@ -256,6 +268,12 @@ def verify() -> int:
         elif not pc.is_patch_embedder(emb) and n_patch:
             state = "UNEXPECTED-PATCH"
             problems.append(f"{ds} x {emb}: single-vector embedder carries patch grids")
+        elif off_unit:
+            state = "NOT-UNIT"
+            problems.append(
+                f"{ds} x {emb}: {len(off_unit)}/{len(norms)} sampled vectors not unit-norm "
+                f"(e.g. {off_unit[0]:.2f}); normalise the cell"
+            )
         rows.append((ds, emb, state, str(n), f"{n_patch}/{n}", dim))
 
     # A banded cell's NAME asserts the size of its boxes, so the stored box has

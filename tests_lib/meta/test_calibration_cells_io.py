@@ -418,3 +418,44 @@ def test_the_cell_does_not_appear_until_the_writer_exits(tmp_path: Path) -> None
         writer.write({0: {"a": 1}})
         assert not path.exists(), "a reader could pick this up mid-build"
     assert path.exists()
+
+
+class TestRepairNorms:
+    """#4095/#4099: the harness holds vectors unit-norm, exactly as the app does."""
+
+    @pytest.fixture
+    def cells_io(self):
+        return _cell_io_module()
+
+    def test_a_raw_vector_comes_back_unit_norm(self, cells_io, tmp_path: Path):
+        import numpy as np
+
+        path = tmp_path / "raw.pkl"
+        cells_io.dump_medias({1: {"embeddings": {"siglip": np.array([3.0, 4.0], dtype=np.float32)}}}, path)
+        vec = cells_io.load_medias(path)[1]["embeddings"]["siglip"]
+        assert abs(float(np.linalg.norm(vec)) - 1.0) < 1e-6
+
+    def test_a_unit_vector_is_left_bit_identical(self, cells_io, tmp_path: Path):
+        """Re-dividing an already-unit vector moves float32 bits in every published cell."""
+        import numpy as np
+
+        v = np.array([0.6, 0.8000001], dtype=np.float32)
+        path = tmp_path / "unit.pkl"
+        cells_io.dump_medias({1: {"embeddings": {"siglip": v}}}, path)
+        assert cells_io.load_medias(path)[1]["embeddings"]["siglip"].tobytes() == v.tobytes()
+
+    def test_an_audit_reads_what_is_stored(self, cells_io, tmp_path: Path):
+        import numpy as np
+
+        path = tmp_path / "raw.pkl"
+        cells_io.dump_medias({1: {"embeddings": {"siglip": np.array([3.0, 4.0], dtype=np.float32)}}}, path)
+        raw = cells_io.load_medias(path, repair=False)[1]["embeddings"]["siglip"]
+        assert float(np.linalg.norm(raw)) == 5.0, "verify must see the defect, not a repaired copy"
+
+    def test_patch_grids_are_not_touched(self, cells_io):
+        import numpy as np
+
+        grid = np.full((2, 2, 3), 7.0, dtype=np.float16)
+        medias = {1: {"embeddings": {"dinov3_patch": np.array([1.0, 0.0], dtype=np.float32)}, "patch_grid": grid}}
+        cells_io.repair_norms(medias)
+        assert medias[1]["patch_grid"] is grid

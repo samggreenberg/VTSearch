@@ -241,7 +241,8 @@ def cell_fingerprint(dataset: str, embedder: str, medias: dict | None = None) ->
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
     if medias is None:
-        medias = cells_io().load_medias(pc.cell_path(dataset, embedder))
+        # Raw: a fingerprint describes what is STORED, never a repaired copy.
+        medias = cells_io().load_medias(pc.cell_path(dataset, embedder), repair=False)
     ids = sorted(medias)
     vecs = [media_embedding(medias[i]) for i in ids]
     arr = np.stack([np.asarray(v, dtype=np.float32) for v in vecs if v is not None])

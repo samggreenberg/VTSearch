@@ -200,7 +200,7 @@ def relabel_cell(dataset: str, embedder: str) -> dict:
         raise SystemExit(f"{dataset}: loader {kind!r} has no relabel; rebuild instead")
     log(f"=== relabel {dataset} x {embedder} ===")
     t0 = time.time()
-    medias = cells_io().load_medias(out)
+    medias = cells_io().load_medias(out, repair=False)  # vectors must round-trip bit for bit
     stats = loader.relabel(dataset, medias)
     after = cell_fingerprint(dataset, embedder, medias)["vectors_sha256"]
     if after != before:
