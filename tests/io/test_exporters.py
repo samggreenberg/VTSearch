@@ -1338,7 +1338,12 @@ class TestOpenUrlResponseKey:
     @staticmethod
     def _hidden_url_template(**overrides):
         """An in-house ``open_url`` subclass's field (issue #4078): a hidden
-        ``url``-typed template fixed to a local mock server by its default."""
+        ``url``-typed template fixed to a local mock server by its default.
+
+        The tests below also blank the plugin's cached arg schema, which is
+        built from ``fields`` once per instance and would otherwise leak
+        between these patched fields and the shipped ones.
+        """
         from vtscore.plugins import PluginField
 
         return [
@@ -1358,7 +1363,10 @@ class TestOpenUrlResponseKey:
         from vtscore.exporters import get_exporter
 
         exporter = get_exporter("open_url")
-        with patch.object(type(exporter), "fields", self._hidden_url_template(opened_in_browser=True)):
+        with (
+            patch.object(type(exporter), "fields", self._hidden_url_template(opened_in_browser=True)),
+            patch.object(exporter, "_arg_schema_instance", None, create=True),
+        ):
             res = client.post(
                 "/api/exporters/export",
                 json={
@@ -1376,7 +1384,10 @@ class TestOpenUrlResponseKey:
         from vtscore.exporters import get_exporter
 
         exporter = get_exporter("open_url")
-        with patch.object(type(exporter), "fields", self._hidden_url_template()):
+        with (
+            patch.object(type(exporter), "fields", self._hidden_url_template()),
+            patch.object(exporter, "_arg_schema_instance", None, create=True),
+        ):
             res = client.post(
                 "/api/exporters/export",
                 json={
