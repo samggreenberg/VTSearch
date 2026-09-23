@@ -715,6 +715,75 @@ def emit_box_band(audit: Path, classes, pages) -> list[tuple[str, list[Question]
     return queues
 
 
+def emit_box_draw(audit: Path, classes, pages) -> list[tuple[str, list[Question]]]:
+    """One queue per class of marks to draw a box on (#4125): the current box outlined, no proposal."""
+    queues = []
+    for r in read_jsonl(audit / "verdicts.jsonl"):
+        cid = r["class_id"]
+        refs = class_refs(cid, classes, pages)
+        qs = [
+            Question(
+                filename=f"draw__{slug(cid)}__m{m['index']:03d}.jpg",
+                task="box_draw",
+                question="Draw a box on the left mark, then Good. Bad = not on this page.",
+                refs=refs,
+                page_id=m["page_id"],
+                box=list(m["old_box"]),
+                key={"class_id": cid, "index": m["index"]},
+                item=f"{cid} member {m['index']} ({m.get('why', '')})",
+                greyscale=False,
+                ref_labels=False,
+                anonymous=True,
+                margin=0.1,
+            )
+            for m in r["members"]
+            if m["page_id"] in pages
+        ]
+        if qs:
+            queues.append((f"{PREFIX} {cid.split('/')[-1]} -- draw the box", qs))
+    return queues
+
+
+def translate_box_draw(rows, questions, votes, drawn=None):
+    """Only a drawn box changes a mark (#4125).
+
+    Good with a drawn box: it replaces the current box.  Good alone: the current
+    box is kept (confirmed as it is).  Bad: the reviewer says the mark is not on
+    the page -- that contradicts a positive, so it is reported, never applied.
+    """
+    got = _per_class(questions, votes, "box_draw")
+    by_member = {
+        (q["key"]["class_id"], q["key"]["index"]): fn for fn, q in questions.items() if q["task"] == "box_draw"
+    }
+    drawn = drawn or {}
+    out, notes = [], []
+    for r in rows:
+        r = dict(r)
+        asked = got.get(r["class_id"], {})
+        if any(v is None for v in asked.values()):
+            notes.append(f"{r['class_id']}: {sum(v is None for v in asked.values())} of {len(asked)} unanswered")
+            out.append(r)
+            continue
+        members, keep = [], []
+        for m in r.get("members", []):
+            vote = asked.get(m["index"])
+            box = drawn.get(by_member.get((r["class_id"], m["index"])))
+            if vote == "good" and box is not None:
+                m = dict(m, new_box=list(box), drawn_by_reviewer=True)
+                keep.append(m["index"])
+            elif vote == "good":
+                m = dict(m, confirmed_as_is=True)
+            elif vote == "bad":
+                m = dict(m, reviewer_says_not_on_page=True)
+                notes.append(f"{r['class_id']}: {m['page_id']} voted Bad (mark not on page?) -- a person should look")
+            members.append(m)
+        r["members"] = members
+        r["verdict"] = ",".join(map(str, keep)) if keep else "none"
+        r["verdict_source"] = "vtsearch"
+        out.append(r)
+    return out, notes
+
+
 COMPLETENESS2 = Path("/expscratch/sgreenberg/docmarks/completeness2/verdicts.suggested.jsonl")
 
 
@@ -1018,6 +1087,8 @@ TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
     "surprise": (lambda corpus: corpus / "audit" / "surprise" / "verdicts.jsonl", _translate_surprise),
     "box_tighten": (lambda corpus: corpus / "audit" / "box_tighten" / "verdicts.jsonl", translate_box_tighten),
     # Band-located marks given a real box (#4109); applied with --task box_tighten --audit-dir box_tighten_band.
+    # Boxes drawn by hand on marks no proposal fitted (#4125); applied like box_tighten_band.
+    "box_draw": (lambda corpus: corpus / "audit" / "box_draw" / "verdicts.jsonl", translate_box_draw),
     "box_tighten_band": (
         lambda corpus: corpus / "audit" / "box_tighten_band" / "verdicts.jsonl",
         lambda rows, questions, votes, drawn=None: translate_box_tighten(
@@ -1265,7 +1336,7 @@ def guard_write(dest: Path, out_rows: Sequence[dict[str, Any]], cleared: Path, a
 
 
 #: Tasks whose Good votes may carry a reviewer-drawn box that replaces the proposal.
-DRAWN_BOX_TASKS = frozenset({"box_tighten_band"})
+DRAWN_BOX_TASKS = frozenset({"box_tighten_band", "box_draw"})
 
 
 def drawn_boxes(
@@ -1376,7 +1447,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     e = sub.add_parser("emit")
     e.add_argument(
         "--task",
-        choices=["ucsf_classes", "query_crops", "box_tighten", "box_tighten_band", "completeness2"],
+        choices=["ucsf_classes", "query_crops", "box_tighten", "box_tighten_band", "box_draw", "completeness2"],
         required=True,
     )
     e.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -1427,6 +1498,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         queues = emit_completeness2(COMPLETENESS2, classes, pages)
     elif args.task == "box_tighten_band":
         queues = emit_box_band(audit, classes, pages)
+    elif args.task == "box_draw":
+        queues = emit_box_draw(audit, classes, pages)
     else:
         queues = emit_box_tighten(audit, classes, pages)
     # a class can have queues from several passes: the pass keeps their dirs apart

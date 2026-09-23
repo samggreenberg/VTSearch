@@ -754,3 +754,28 @@ class TestDrawnBoxes:
         m = filled[0]["members"][0]
         assert filled[0]["verdict"] == "0" and m["new_box"] == [9, 9, 30, 20]
         assert m["proposed_box"] == [1, 1, 5, 5] and m["drawn_by_reviewer"] is True
+
+
+class TestBoxDraw:
+    """#4125: only a drawn box changes a mark; Bad is reported, never applied."""
+
+    def test_drawn_confirmed_and_bad_votes(self, br):
+        rows = [
+            {
+                "class_id": "c",
+                "members": [
+                    {"index": 0, "page_id": "u/a", "new_box": None},
+                    {"index": 1, "page_id": "u/b", "new_box": None},
+                    {"index": 2, "page_id": "u/c", "new_box": None},
+                ],
+                "verdict": "",
+            }
+        ]
+        questions = {f"{i}.jpg": {"task": "box_draw", "key": {"class_id": "c", "index": i}} for i in range(3)}
+        votes = {"0.jpg": "good", "1.jpg": "good", "2.jpg": "bad"}
+        out, notes = br.TRANSLATORS["box_draw"][1](rows, questions, votes, drawn={"0.jpg": [5, 6, 7, 8]})
+        m = out[0]["members"]
+        assert out[0]["verdict"] == "0" and m[0]["new_box"] == [5, 6, 7, 8]
+        assert m[1].get("confirmed_as_is") and m[1]["new_box"] is None
+        assert m[2].get("reviewer_says_not_on_page") and any("u/c" in n for n in notes)
+        assert "box_draw" in br.DRAWN_BOX_TASKS

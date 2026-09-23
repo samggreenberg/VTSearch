@@ -246,3 +246,82 @@ class TestBandLocated:
     def test_a_located_provenance_is_left_alone(self, mods):
         assert mods["b"].located_provenance("gt") == "gt"
         assert mods["b"].located_provenance("ucsf_classes_band") == "ucsf_classes"
+
+
+class TestLeftovers:
+    """#4125: marks a box pass left without a reviewed box."""
+
+    @pytest.fixture
+    def lo(self):
+        sys.path.insert(0, str(_DOCMARKS))
+        try:
+            yield importlib.import_module("box_leftovers")
+        finally:
+            sys.path.remove(str(_DOCMARKS))
+
+    ROWS = [
+        {
+            "class_id": "ucsf/logo_x",
+            "verdict": "0",
+            "members": [
+                {
+                    "index": 0,
+                    "page_id": "u/ok",
+                    "mark_index": 1,
+                    "old_box": [1, 1, 5, 5],
+                    "new_box": [2, 2, 4, 4],
+                    "flags": [],
+                },
+                {
+                    "index": 1,
+                    "page_id": "u/q",
+                    "mark_index": 1,
+                    "old_box": [1, 1, 5, 5],
+                    "new_box": [3, 3, 4, 4],
+                    "flags": [],
+                },
+                {
+                    "index": 2,
+                    "page_id": "u/nofit",
+                    "mark_index": 1,
+                    "old_box": [0, 0, 900, 300],
+                    "new_box": None,
+                    "flags": ["no fit"],
+                },
+                {
+                    "index": 3,
+                    "page_id": "u/same",
+                    "mark_index": 1,
+                    "old_box": [1, 1, 5, 5],
+                    "new_box": [1, 1, 5, 5],
+                    "flags": ["unchanged"],
+                },
+                {
+                    "index": 4,
+                    "page_id": "u/rej",
+                    "mark_index": 1,
+                    "old_box": [7, 7, 5, 5],
+                    "new_box": [8, 8, 4, 4],
+                    "flags": [],
+                },
+            ],
+        }
+    ]
+
+    def test_the_query_page_gets_its_crop_extent_and_the_rest_are_drawn(self, lo):
+        classes = {"ucsf/logo_x": {"query_page_id": "u/q"}}
+        query_rows, draw_rows = lo.leftovers(self.ROWS, classes, {"ucsf/logo_x": [10, 20, 30, 40]})
+        (q,) = query_rows
+        assert (
+            q["verdict"] == "0"
+            and q["members"][0]["page_id"] == "u/q"
+            and q["members"][0]["new_box"] == [10, 20, 30, 40]
+        )
+        (d,) = draw_rows
+        assert [(m["page_id"], m["why"]) for m in d["members"]] == [("u/nofit", "no fit"), ("u/rej", "rejected")]
+        assert all(m["new_box"] is None for m in d["members"]) and d["verdict"] == ""
+
+    def test_a_query_page_with_no_known_crop_box_is_drawn_instead(self, lo):
+        classes = {"ucsf/logo_x": {"query_page_id": "u/q"}}
+        query_rows, draw_rows = lo.leftovers(self.ROWS, classes, {})
+        assert query_rows == [] and "u/q" in [m["page_id"] for m in draw_rows[0]["members"]]
