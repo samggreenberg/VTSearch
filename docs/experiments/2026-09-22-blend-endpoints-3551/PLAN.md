@@ -127,4 +127,4 @@ optimum is worth and where it sits, so the question does not need re-asking.
   (#2841: ~half its gain). A null screen bounds the threshold-rule effect, not
   the whole-system effect; the A/B exists for anything promoted.
 - Issue item 3 (why `pure_gmm` loses at `fpr×4` on region voting) is a
-  diagnostic, not a decision; it is filed separately rather than run here.
+  diagnostic, not a decision; it is filed separately (#4103) rather than run here.
