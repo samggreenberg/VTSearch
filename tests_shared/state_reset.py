@@ -104,6 +104,29 @@ def freeze_startup_heap() -> None:
     gc.freeze()
 
 
+_collected_heap_frozen = False
+
+
+def freeze_collected_heap() -> None:
+    """Freeze again once collection is done; call from ``pytest_collection_finish``.
+
+    :func:`freeze_startup_heap` runs at conftest import, *before* collection,
+    so everything collection brings in stays in the scanned generations:
+    the test modules and whatever they import (sklearn, scipy, pandas, the
+    extension-doc AST index, ...) plus ~13k collected items.  All of it lives
+    for the whole session, yet every production ``gc.collect()`` rescanned it,
+    and that was about a quarter of the suite's test time (issue #4152).
+
+    Both conftests define the hook, so it fires twice when both trees are
+    collected; the flag keeps it to one full collection.
+    """
+    global _collected_heap_frozen
+    if _collected_heap_frozen:
+        return
+    _collected_heap_frozen = True
+    freeze_startup_heap()
+
+
 def reset_shared_state(medias_snapshot) -> None:
     """Reset every ``vtscore`` global that leaks between tests.
 

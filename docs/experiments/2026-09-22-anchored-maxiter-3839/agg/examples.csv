@@ -1,0 +1,9 @@
+cell,style,kind,case,env,category,seed,n,n_unconverged,admitted_shipped,admitted_limit,move,limit_iters_max_fold
+cell_0080,whole_image,fold,75,coco_val/dinov3_patch/whole_image,clock,1,2396,1,1141,288,0.35601001669449084,477
+cell_0013,whole_image,fold,25,visual_genome_m/dinov3_patch/whole_image,nose,0,2066,0,663,67,0.2884801548886738,319
+cell_0053,whole_image,fold,15,visual_genome_m/dinov3_patch/whole_image,cat,1,2076,2,758,245,0.24710982658959538,1604
+cell_0038,whole_image,fold,45,coco_val/dinov3_patch/whole_image,clock,0,2426,0,744,165,0.23866446826051113,399
+cell_0029,whole_image,fold,0,coco_val/siglip/whole_image,bed,0,2471,1,1104,1658,0.22420072845002023,1498
+cell_0011,whole_image,fold,20,visual_genome_m/dinov3_patch/whole_image,cat,0,2071,2,1201,737,0.22404635441815549,1356
+cell_0080,max_patch,fold,5,coco_val/dinov3_patch/max_patch,clock,1,2466,1,557,108,0.18207623682076238,408
+cell_0049,whole_image,fold,40,visual_genome_m/siglip/whole_image,sky,1,2049,2,926,603,0.1576378721327477,3025

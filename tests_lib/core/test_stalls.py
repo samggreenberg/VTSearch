@@ -292,10 +292,21 @@ class TestFreezeGcAfterPreload:
 
     @pytest.fixture(autouse=True)
     def _unfreeze(self):
-        """Undo it: leaving this process frozen would silently change what
-        every later test's collections can reach."""
+        """Put the freeze back the way the test found it.
+
+        Both conftests freeze the session heap (``freeze_startup_heap``), so
+        the state to restore is usually *frozen*: a bare ``gc.unfreeze()`` here
+        handed the whole import-time heap back to the collector for the rest of
+        the worker's session, and every later production ``gc.collect()`` paid
+        to rescan it (issue #4152).  Whatever this test itself froze is undone
+        first, so nothing it created outlives it in the permanent generation.
+        """
+        was_frozen = gc.get_freeze_count() > 0
         yield
         gc.unfreeze()
+        if was_frozen:
+            gc.collect()
+            gc.freeze()
 
     def test_freezes_and_reports_what_it_froze(self, monkeypatch):
         monkeypatch.delenv(stalls.GC_FREEZE_ENV, raising=False)

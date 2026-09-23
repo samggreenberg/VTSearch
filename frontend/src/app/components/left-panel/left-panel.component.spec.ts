@@ -217,6 +217,39 @@ describe('LeftPanelComponent', () => {
     });
   });
 
+  /**
+   * Before any sort runs, Manual's ranking is empty while the dataset is not.
+   * The grid must say how to get items on screen, not "Nothing to show",
+   * which reads as an empty dataset (#4157).
+   */
+  describe('Manual grid before a sort (#4157)', () => {
+    const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
+    const empty = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('.empty-list');
+
+    function show(inputs: Record<string, unknown>): void {
+      component.setTab('manual');
+      for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
+      TestBed.tick();
+    }
+
+    it('asks for a sort order instead of claiming there is nothing', () => {
+      show({ medias: [stub(1), stub(2)], sortOrder: [] });
+      expect(empty()!.textContent).toContain('Choose a sort order above');
+      expect(empty()!.textContent).not.toContain('Nothing to show');
+    });
+
+    it('says it is sorting while a sort is in flight', () => {
+      show({ medias: [stub(1)], sortOrder: [], sortBusy: true });
+      expect(empty()!.textContent).toContain('Sorting');
+    });
+
+    it('still reports an empty dataset as such', () => {
+      show({ medias: [], sortOrder: [] });
+      expect(empty()!.textContent).toContain('No media loaded');
+    });
+  });
+
   describe('grid header (mediaTypeName)', () => {
     const stub = (media_type: string): Media => ({ id: 1, media_type }) as Media;
 

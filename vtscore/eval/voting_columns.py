@@ -646,4 +646,15 @@ CUT_INCLUSION_COLUMNS: tuple[str, ...] = (
     "admitted_frac",
     "n_admitted",
     "n_test",
+    # Issue #3557: per-step constants of the shared fit, repeated on every row
+    # so a sign-dependent ("hinge") rule's seam can be audited without a second
+    # frame.  ``seam_q_cross0 < seam_q_mid`` is exactly the condition under which
+    # the literal hinge (``cross_tilt`` below k=0) breaks nesting; the two fit
+    # columns are fold means, in bits, of the prior odds ``cross_tilt`` keeps and
+    # of the component-variance asymmetry.
+    "seam_q_mid",
+    "seam_q_cross0",
+    "seam_q_rate0",
+    "fit_log2_prior_odds",
+    "fit_log2_var_ratio",
 )

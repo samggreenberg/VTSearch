@@ -51,7 +51,6 @@ DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").spli
 #: someone hunting a close one both type "boat", so one text serves all three
 #: bands and only the labels differ.
 _VG_SCALE_TEXTS = {
-    "backpack": "a backpack",
     "bicycle": "a bicycle",
     "bird": "a bird",
     "boat": "a boat on the water",
@@ -80,7 +79,6 @@ _VG_SCALE_TEXTS = {
     "spoon": "a spoon",
     "bowl": "a bowl",
     "bottle": "a bottle",
-    "vase": "a vase",
     "bench": "a bench",
     "chair": "a chair",
     "sink": "a sink",
@@ -93,6 +91,10 @@ _VG_SCALE_TEXTS = {
     # opening a biased sort over a class that is half something else.
     "enclosed road vehicle": "a car or truck",
     "single serving drinking vessel": "a cup or glass",
+    # #4119's two, on the same terms: each names the halves someone hunting it
+    # would type, never the ruling.
+    "bag or luggage": "a bag or suitcase",
+    "vase or potted plant": "a vase or potted plant",
     # The twenty-eight #4056 added, taken VERBATIM from `_COCO_TEXTS` on the
     # same terms as the thirteen above -- `a person wearing a necktie` and
     # `a laptop computer` included, scene and qualifier untouched. The class
@@ -106,7 +108,6 @@ _VG_SCALE_TEXTS = {
     "baseball bat": "a baseball bat",
     "dining table": "a dining table",
     "frisbee": "a frisbee",
-    "handbag": "a handbag",
     "keyboard": "a computer keyboard",
     "laptop": "a laptop computer",
     "microwave": "a microwave oven",
@@ -115,13 +116,11 @@ _VG_SCALE_TEXTS = {
     "orange": "an orange fruit",
     "parking meter": "a parking meter",
     "person": "a person",
-    "potted plant": "a potted plant",
     "remote": "a tv remote control",
     "scissors": "a pair of scissors",
     "skateboard": "a skateboard",
     "skis": "a pair of skis",
     "snowboard": "a snowboard",
-    "suitcase": "a suitcase",
     "surfboard": "a surfboard",
     "tennis racket": "a tennis racket",
     "tie": "a person wearing a necktie",
@@ -234,9 +233,10 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
-    # `coco_quarry` (#4044/#4051) is `vg_scale`'s question asked of COCO with no
-    # Visual Genome, on the SAME 25 `SCALE_CLASSES` and the same three bands -- so
-    # it takes the same texts, under the same `class@band` keying.
+    # `coco_quarry` (#4044) is `vg_scale`'s question asked of COCO with no Visual
+    # Genome, on `SCALE_CLASSES` (49 since #4119) and the same three bands -- so it
+    # takes the same texts, under the same `class@band` keying. A dropped cell
+    # (`SCALE_DROPPED_CELLS`) keeps its text here; it is never built, so never asked.
     #
     # The VG-named constant serving a COCO dataset is deliberate, not an
     # oversight. Every entry in it was taken byte-identically from `_COCO_TEXTS`
@@ -707,6 +707,7 @@ ANCHORED_CHECKPOINTS = [
     int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
 ]
 
+
 #: Inclusion values the **fold-anchored cut rules** are swept over (issue
 #: #2865), into the ``__cutincl.csv`` side frame.  Empty (the default) = off,
 #: and every other study runs exactly as before.
@@ -719,7 +720,25 @@ ANCHORED_CHECKPOINTS = [
 #: The arms are :data:`ANCHORED_WEIGHTS` x :data:`ANCHORED_RULES` x
 #: :data:`ANCHORED_FOLD_COMBINES`, so a run that wants the #2865 candidate set
 #: sets ``CALIB_ANCHORED_RULES=mid,mid_tilt,rate,cross_tilt,q_tilt``.
-CUT_INCLUSION_KS = [int(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "").split(",") if k.strip()]
+def _knob_stop(text: str) -> "int | float":
+    """One inclusion stop: an int when integral, so the frames every earlier study
+    wrote keep their ``-1``/``0`` spelling, else the float (issue #3557 audits the
+    hinge's seam at fractional stops like ``-0.25``, which the knob accepts)."""
+    value = float(text)
+    return int(value) if value.is_integer() else value
+
+
+CUT_INCLUSION_KS = [_knob_stop(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "").split(",") if k.strip()]
+
+#: The fold-anchored cut rule the **live** threshold uses (issue #3557).  Empty
+#: (the default) = the app's own ``FOLD_ANCHOR_CUT_RULE``, resolved inside the
+#: harness, so an unset variable IS the production arm.  Naming a rule makes a
+#: RUN-LEVEL arm: the acquisition cut re-cuts the same estimator at
+#: ``inclusion + ACQUISITION_INCLUSION_OFFSET`` (below zero), so a rule that
+#: moves the cut there changes which media get voted, and the arm needs its own
+#: ``CALIB_EXP`` and a declared ``--diverges live_cut_rule``.  Contrast
+#: :data:`ANCHORED_RULES`, which are re-cuts riding the live trajectory.
+LIVE_CUT_RULE: str | None = os.environ.get("CALIB_LIVE_CUT_RULE", "").strip() or None
 
 #: Step sizes the eval-only ``q_tilt`` rule expands over - its free parameter,
 #: in combined-fold-quantile units per inclusion step.  Every other rule ignores

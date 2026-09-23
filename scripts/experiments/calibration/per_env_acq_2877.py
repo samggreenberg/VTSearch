@@ -57,7 +57,7 @@ for label, mask, prefix in groups:
     n_per_arm = int(len(sub) / max(1, sub.arm.nunique()))
     print(f"=== {label}   {len(sub)} trajectories, {n_per_arm}/arm")
     print(
-        f"{'arm':10s} {'pos@100':>8s} {'cost':>7s} {'costCI':>20s} "
+        f"{'arm':10s} {'pos@end':>8s} {'cost':>7s} {'costCI':>20s} "
         f"{'AP':>7s} {'oracle':>7s} {'blips':>6s} {'acq_pct':>8s}  ADOPT"
     )
     for arm in A.ARMS:
@@ -72,7 +72,7 @@ for label, mask, prefix in groups:
         if arm == A.FALSIFIER:
             mark = "falsifier"
         print(
-            f"{arm:10s} {v['median_positives_100']:8.1f} {v['median_final_cost']:7.3f} {ci:>20s} "
+            f"{arm:10s} {v['median_positives_final']:8.1f} {v['median_final_cost']:7.3f} {ci:>20s} "
             f"{v['median_final_ap']:7.3f} {v['median_final_oracle_cost']:7.3f} "
             f"{100 * v['genuine_blip_rate']:5.1f}% "
             f"{s['lever_verification'][arm]['median_acq_pool_percentile']:8.4f}  {mark}"
@@ -136,7 +136,7 @@ if args.markdown:
         n_per_arm = int(len(sub) / max(1, sub["arm"].nunique()))
         L.append(f"\n### {label} — {n_per_arm} pairs/arm\n")
         L.append(
-            "| arm | pos@100 | final cost | 95% CI on mean Δ cost | AP | oracle | "
+            "| arm | positives @final | final cost | 95% CI on mean Δ cost | AP | oracle | "
             "deep spikes | p (spikes) | genuine blips | **ADOPT** |"
         )
         L.append("|---|---:|---:|---|---:|---:|---:|---:|---:|:--:|")
@@ -158,7 +158,7 @@ if args.markdown:
             else:
                 mark = "**yes**" if ship.get("ADOPT") else "no"
             L.append(
-                f"| `{arm}` ({A.ARM_K.get(arm, 'pin')}) | {v['median_positives_100']:.0f} | "
+                f"| `{arm}` ({A.ARM_K.get(arm, 'pin')}) | {v['median_positives_final']:.0f} | "
                 f"{_p(v['median_final_cost'])} | {ci} | {_p(v['median_final_ap'])} | "
                 f"{_p(v['median_final_oracle_cost'])} | {100 * drate:.1f}% | "
                 f"{('%.4f' % dp) if dp is not None else '—'} | "

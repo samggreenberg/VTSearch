@@ -28,9 +28,9 @@ from tests_lib.flask_blocker import install_if_requested as _install_flask_block
 
 _install_flask_blocker()
 
-# Cap native math threads BEFORE numpy/torch are imported, mirroring the top of
-# ``app.py``.  The app tier gets this for free (``tests/conftest.py`` imports
-# ``app``), but a ``tests_lib``-only run never does, and the fallback
+# Cap native math threads BEFORE numpy/torch are imported.  The app tier sets
+# the same default at the top of ``tests/conftest.py`` (before it imports
+# ``app``); a ``tests_lib``-only run never loads that file, and the fallback
 # (``ensure_torch_configured``) only fires from embedder paths the suite stubs
 # out — so torch fell back to one intra-op thread *per core*.  Under ``-n auto``
 # that is workers x cores native threads fighting over the same cores, and it
@@ -40,6 +40,10 @@ _install_flask_blocker()
 import os  # noqa: E402
 
 _torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
+# Publish it too: when both trees run together and this conftest loads first,
+# ``tests/conftest.py`` then imports ``app``, whose prelude *overwrites* OMP/MKL
+# with ``VTSEARCH_TORCH_THREADS`` or, if unset, the whole CPU allocation.
+os.environ.setdefault("VTSEARCH_TORCH_THREADS", _torch_threads)
 os.environ.setdefault("OMP_NUM_THREADS", _torch_threads)
 os.environ.setdefault("MKL_NUM_THREADS", _torch_threads)
 
@@ -57,6 +61,7 @@ from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
+    freeze_collected_heap,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -67,6 +72,11 @@ from tests_shared.state_reset import (  # noqa: E402
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers based on the test file's parent directory."""
     add_group_markers(items, root_dir_name="tests_lib")
+
+
+def pytest_collection_finish(session):
+    """Freeze the heap collection built, so ``gc.collect()`` stops rescanning it."""
+    freeze_collected_heap()
 
 
 pin_training_budget()

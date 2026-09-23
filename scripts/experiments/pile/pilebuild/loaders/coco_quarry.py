@@ -80,13 +80,22 @@ from __future__ import annotations
 
 import json
 import zipfile
+import collections
 from collections import defaultdict
 from pathlib import Path
+from typing import NamedTuple
 
 import pile_config as pc
 
 from pilebuild.env import log
-from pilebuild.scale_core import band_candidates, designate_cells, draw_negatives, scale_media
+from pilebuild.scale_core import (
+    band_candidates,
+    designate_cells,
+    draw_negatives,
+    largest_box,
+    scale_label_fields,
+    scale_media,
+)
 
 #: The two splits, in the order the census read them.
 SPLITS = ("val2017", "train2017")
@@ -155,23 +164,50 @@ def read_coco_labels(
     return labels, dims, filenames
 
 
+_LVIS: dict[tuple, dict] = {}
+
+
 def lump_exclusions(
     labels: dict[int, dict[str, list[list[float]]]],
     lvis_dir: Path | None = None,
 ) -> set[tuple[int, str]]:
-    """``(image, class)`` pairs whose COCO box is a pile, or cannot be shown not to be.
+    """``(image, class)`` pairs whose picked COCO box is not ONE object by LVIS's count.
 
     Only the classes in :data:`pile_config.SCALE_LUMP_FILTER` are tested (#3985).
-    A pair is excluded when LVIS never boxed the class on that image -- nothing
-    then vouches for COCO's box -- or when COCO's mean box area is at least
-    :data:`pile_config.SCALE_LUMP_CUT` times LVIS's, which is one box round what
-    LVIS drew as several. The ratio is the one `coco_box_granularity.py`
-    measured and the owner's votes calibrated; it is per image, not per box,
-    because COCO's pile box and LVIS's fruit boxes do not pair up one to one.
+    The box tested is the one the build bands on and the simulated user drags --
+    the largest instance (:func:`largest_box`, #4096). "Inside" means at least
+    :data:`pile_config.SCALE_LUMP_CONTAIN` of an LVIS box's area. A pair is
+    excluded when the count inside reaches the class's ``pile_at`` (COCO drew
+    one box where LVIS drew several), or is zero under ``require_lvis`` (nothing
+    vouches for COCO's box).
     """
     lvis_dir = lvis_dir or pc.LVIS_DIR
-    wanted = {name: cls for cls, names in pc.SCALE_LUMP_FILTER.items() for name in names}
-    lvis: dict[int, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    wanted = {name: cls for cls, rule in pc.SCALE_LUMP_FILTER.items() for name in rule.lvis_names}
+    lvis = _lvis_boxes(lvis_dir, wanted)
+
+    out: set[tuple[int, str]] = set()
+    for iid, by_name in labels.items():
+        for cls, rule in pc.SCALE_LUMP_FILTER.items():
+            bs = by_name.get(cls)
+            if not bs:
+                continue
+            box = largest_box(bs)
+            inside = sum(_share_inside(lb, box) >= pc.SCALE_LUMP_CONTAIN for lb in lvis.get(iid, {}).get(cls, []))
+            if inside >= rule.pile_at or (inside == 0 and rule.require_lvis):
+                out.add((iid, cls))
+    return out
+
+
+def _lvis_boxes(lvis_dir: Path, wanted: dict[str, str]) -> dict[int, dict[str, list[list[float]]]]:
+    """``{image_id: {class: [xyxy, ...]}}`` for the LVIS names in *wanted*, memoised.
+
+    A relabel asks once per cell, and parsing the 1.1 GB train file is most of a
+    cell's relabel time. Keyed on the inputs only, never on an object's identity.
+    """
+    key = (str(lvis_dir), tuple(sorted(wanted.items())))
+    if key in _LVIS:
+        return _LVIS[key]
+    lvis: dict[int, dict[str, list[list[float]]]] = defaultdict(lambda: defaultdict(list))
     for split in pc.LVIS_SPLITS:
         path = lvis_dir / f"lvis_v1_{split}.json"
         if not path.exists():
@@ -182,23 +218,19 @@ def lump_exclusions(
         for ann in data["annotations"]:
             cls = cats.get(ann["category_id"])
             if cls is not None:
-                lvis[int(ann["image_id"])][cls].append(ann["bbox"][2] * ann["bbox"][3])
+                x, y, w, h = ann["bbox"]
+                lvis[int(ann["image_id"])][cls].append([x, y, x + w, y + h])
         del data
+    _LVIS[key] = lvis
+    return lvis
 
-    out: set[tuple[int, str]] = set()
-    for iid, by_name in labels.items():
-        for cls in pc.SCALE_LUMP_FILTER:
-            bs = by_name.get(cls)
-            if not bs:
-                continue
-            lb = lvis.get(iid, {}).get(cls)
-            if not lb:
-                out.add((iid, cls))
-                continue
-            coco_mean = sum((b[2] - b[0]) * (b[3] - b[1]) for b in bs) / len(bs)
-            if coco_mean >= pc.SCALE_LUMP_CUT * (sum(lb) / len(lb)):
-                out.add((iid, cls))
-    return out
+
+def _share_inside(inner: list[float], outer: list[float]) -> float:
+    """Fraction of *inner*'s area that lies within *outer* (both ``[x0, y0, x1, y1]``)."""
+    ix = max(0.0, min(inner[2], outer[2]) - max(inner[0], outer[0]))
+    iy = max(0.0, min(inner[3], outer[3]) - max(inner[1], outer[1]))
+    area = (inner[2] - inner[0]) * (inner[3] - inner[1])
+    return ix * iy / area if area > 0 else 0.0
 
 
 def _cells_of(cls: str, supply: dict[str, dict[str, list[int]]]) -> dict[str, list[int]]:
@@ -231,8 +263,23 @@ def _zip_members() -> dict[str, tuple[Path, str]]:
     return members
 
 
-def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
-    """Populate *medias* with the designated positives, the pool, and its spares."""
+class _Plan(NamedTuple):
+    """Everything :func:`load` decides before it reads a single pixel."""
+
+    labels: dict[int, dict[str, list[list[float]]]]
+    box_dims: dict[int, tuple[int, int]]
+    filenames: dict[int, str]
+    boxes_for: dict[tuple[int, str], list[list[float]]]
+    cells: list[str]
+    neg_set: set[int]
+    positive_in: dict[int, list[str]]
+    coco_scored: set[int]
+    emit_ids: set[int]
+    where: str
+
+
+def _plan(dataset: str) -> _Plan:
+    """Which images the cell holds and what each is labelled -- the whole selection."""
     classes = pc.SCALE_CLASSES
     labels, box_dims, filenames = read_coco_labels(pc.COCO_ANCHOR_DIR, classes)
 
@@ -243,8 +290,10 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     for cls in pc.SCALE_LUMP_FILTER:
         held = sum(1 for by_name in labels.values() if by_name.get(cls))
         gone = sum(1 for _, c in excluded if c == cls)
-        log(f"  coco_quarry: {cls}: {gone:,} of {held:,} images not positives (pile or no LVIS box)")
-    supply, boxes_for, clean = band_candidates(labels, box_dims, unbanded=set(), classes=classes, excluded=excluded)
+        log(f"  coco_quarry: {cls}: {gone:,} of {held:,} images not positives (not ONE by LVIS)")
+    supply, boxes_for, clean = band_candidates(
+        labels, box_dims, unbanded=set(), classes=classes, excluded=excluded, largest=pc.SCALE_BAND_ON_LARGEST
+    )
     coco_scored = set(labels)  # every image; COCO answered for all eighty
 
     full = bool(pc.DATASETS.get(dataset, {}).get("full_corpus"))
@@ -270,17 +319,12 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     if short:
         log(f"  coco_quarry: WARNING {len(short)} cells under SCALE_N_POS: {', '.join(short[:6])}")
 
-    members = _zip_members()
     positive_in: dict[int, list[str]] = defaultdict(list)
     for cell, ids in chosen.items():
         for iid in ids:
             positive_in[iid].append(cell)
     neg_set = set(negatives)
 
-    # Resolve every id to its archive FIRST, so an image absent from both is
-    # counted once rather than once per archive, and each zip is opened once.
-    by_zip: dict[Path, list[tuple[int, str]]] = defaultdict(list)
-    missing = 0
     # In full-corpus mode the emit set is the CORPUS, not the union of the draws.
     # `band_candidates` returns banded supply and the clean pool; an image that
     # holds a class in no valid band -- scattered, or oversize -- is in neither,
@@ -298,7 +342,35 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
         index, count = shard
         emit_ids = {iid for iid in emit_ids if iid % count == index}
     where = f" (FULL CORPUS shard {shard[0]}/{shard[1]})" if shard else (" (FULL CORPUS)" if full else "")
-    log(f"  coco_quarry: emitting {len(emit_ids):,} medias{where}")
+    return _Plan(labels, box_dims, filenames, boxes_for, cells, neg_set, positive_in, coco_scored, emit_ids, where)
+
+
+def _label_fields(plan: _Plan, iid: int) -> dict:
+    return scale_label_fields(
+        iid=iid,
+        box_dims=plan.box_dims[iid],
+        cats=sorted(plan.positive_in.get(iid, [])),
+        boxes_for=plan.boxes_for,
+        cells=plan.cells,
+        neg_set=plan.neg_set,
+        labels=plan.labels,
+        coco_scored=plan.coco_scored,
+        exhaustive=plan.coco_scored,
+        reviewed_absent=set(),
+        reviewed_present=set(),
+    )
+
+
+def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
+    """Populate *medias* with the designated positives, the pool, and its spares."""
+    plan = _plan(dataset)
+    filenames, emit_ids = plan.filenames, plan.emit_ids
+    members = _zip_members()
+    # Resolve every id to its archive FIRST, so an image absent from both is
+    # counted once rather than once per archive, and each zip is opened once.
+    by_zip: dict[Path, list[tuple[int, str]]] = defaultdict(list)
+    missing = 0
+    log(f"  coco_quarry: emitting {len(emit_ids):,} medias{plan.where}")
     for iid in sorted(emit_ids):
         found = members.get(Path(filenames[iid]).name)
         if found is None:
@@ -314,14 +386,14 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
                     data=zf.read(member),
                     filename=Path(filenames[iid]).name,
                     origin_name=f"{zip_path}::{member}",
-                    box_dims=box_dims[iid],
-                    cats=sorted(positive_in.get(iid, [])),
-                    boxes_for=boxes_for,
-                    cells=cells,
-                    neg_set=neg_set,
-                    labels=labels,
-                    coco_scored=coco_scored,
-                    exhaustive=coco_scored,
+                    box_dims=plan.box_dims[iid],
+                    cats=sorted(plan.positive_in.get(iid, [])),
+                    boxes_for=plan.boxes_for,
+                    cells=plan.cells,
+                    neg_set=plan.neg_set,
+                    labels=plan.labels,
+                    coco_scored=plan.coco_scored,
+                    exhaustive=plan.coco_scored,
                     reviewed_absent=set(),
                     reviewed_present=set(),
                     embedder_name=embedder_name,
@@ -332,6 +404,36 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
 
     if missing:
         log(f"  coco_quarry: WARNING {missing} designated images absent from the archives")
+
+
+def relabel(dataset: str, medias: dict[int, dict]) -> dict:
+    """Recompute every media's LABEL fields in place; never touch a vector (#4091).
+
+    Only a full-corpus cell can be relabelled. Its image set is the corpus, so no
+    rule change can add or remove an image -- only change what each one is
+    labelled -- and re-embedding 123,287 images (~3.7 h) to rewrite six fields is
+    waste. A designated cell is refused: a rule change moves WHICH images it
+    holds, and that needs pixels this function does not have.
+
+    Refuses rather than guesses if the cell holds an image the plan would not
+    emit, which would mean the cell is not what its name says.
+    """
+    if not pc.DATASETS.get(dataset, {}).get("full_corpus"):
+        raise SystemExit(f"{dataset}: only a full-corpus cell can be relabelled; rebuild a designated one")
+    plan = _plan(dataset)
+    stray = set(medias) - plan.emit_ids
+    if stray:
+        raise SystemExit(f"{dataset}: {len(stray)} medias the plan would not emit (e.g. {sorted(stray)[:3]})")
+    changed = collections.Counter()
+    for iid, media in medias.items():
+        fields = _label_fields(plan, iid)
+        for k, v in fields.items():
+            if media.get(k) != v:
+                changed[k] += 1
+        media.update(fields)
+    unemitted = len(plan.emit_ids) - len(medias)
+    log(f"  coco_quarry: relabelled {len(medias):,} medias{plan.where}; fields changed: {dict(changed)}")
+    return {"n_medias": len(medias), "changed": dict(changed), "plan_ids_not_in_cell": unemitted}
 
 
 def check(dataset: str) -> str:

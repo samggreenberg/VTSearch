@@ -35,7 +35,9 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
 
     Returns ``(results, threshold)`` where *results* is a list of
     ``{"id": …, "similarity": …}`` dicts sorted descending, and
-    *threshold* is the GMM-based boundary (rounded to 4 decimals).
+    *threshold* is the sort's line (rounded to 4 decimals): for a ``"text"``
+    query, :func:`~vtscore.training.thresholds.text_sort_threshold`; for any
+    other, the GMM midpoint.
 
     *role* selects which bound embedder the haystack is scored against (the
     v3 routing table, see :meth:`DatasetContext.routed_embedder`): ``"text"``
@@ -57,7 +59,7 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
     from vtscore.state import snapshot_medias
     from vtscore.state.core import get_active_context
     from vtscore.training.region_similarity import cosine_sort_with_boxes
-    from vtscore.training.thresholds import calculate_gmm_threshold
+    from vtscore.training.thresholds import calculate_gmm_threshold, text_sort_threshold
 
     ctx = get_active_context()
     embedder_name = ctx.routed_embedder(role)
@@ -68,7 +70,11 @@ def cosine_sort_active(query_vec, *, role: str = "score", snap=None) -> tuple[li
     if snap is None:
         snap = snapshot_medias()
     results, sims_list = cosine_sort_with_boxes(snap, query_vec, embedder_name, region_aware=region_aware)
-    threshold = calculate_gmm_threshold(sims_list)
+    # A typed query draws its line with the text-sort rule (#3826; the GMM
+    # midpoint unless ``VTSEARCH_TEXT_SORT_CUT`` says otherwise).  Example and
+    # label-file sorts keep the midpoint: the guarded rule was measured on
+    # typed queries only.
+    threshold = text_sort_threshold(sims_list) if role == "text" else calculate_gmm_threshold(sims_list)
     return results, round(threshold, 4)
 
 
@@ -112,7 +118,10 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
     dataset.  A single example sorts by cosine similarity to its vector;
     multiple examples sort against their centroid (the mean of the
     L2-normalised example vectors), so each example contributes equally
-    regardless of its embedding norm.
+    regardless of its embedding norm.  On a structural (SIFT/VLAD) dataset
+    that Stage-1 order is then geometrically re-ranked against *every*
+    example as a template, max-over-templates, exactly as the voted path
+    treats its RegionYes templates.
     """
     import numpy as np
 
@@ -150,14 +159,17 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
 
     # Stage-2 structural re-rank (a no-op for non-structural datasets): for a
     # SIFT/VLAD dataset, geometrically verify the VLAD shortlist against the
-    # uploaded example's own local features.  The example is the template; any
-    # crop was already applied to the file above, so it restricts the template.
-    # Geometric verification needs a single template, so the multi-example
-    # centroid path skips it and keeps the pure cosine ranking.
-    if len(medias) == 1 and getattr(emb, "supports_geometric_verification", False):
+    # uploaded examples' own local features.  Every example is a template and
+    # a candidate scores as the max over templates - the same rule the voted
+    # path applies to its RegionYes templates - so several crops of one mark
+    # (or several marks) widen what verifies instead of collapsing into the
+    # Stage-1 centroid alone, which on a structural dataset ranks at chance.
+    # Any crop was already applied to the file above, so it restricts the
+    # template.
+    if getattr(emb, "supports_geometric_verification", False):
         from vtscore.training.structural_similarity import maybe_structural_rerank_example
 
-        example_features = emb.local_features_forward(medias[0])
+        example_features = [emb.local_features_forward(m) for m in medias]
         results, threshold = maybe_structural_rerank_example(
             results, threshold, snap, example_features, score_key="similarity"
         )

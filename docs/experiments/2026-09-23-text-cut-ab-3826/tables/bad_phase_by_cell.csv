@@ -1,0 +1,161 @@
+arm,dataset,category,seed,bad_clicks,positives_hit,median_seed_percentile
+gmm_midpoint,caltech101_m,airplanes,0,4,0,0.2980885
+gmm_midpoint,caltech101_m,airplanes,1,4,0,0.2998805
+gmm_midpoint,caltech101_m,car_side,0,4,0,0.1666665
+gmm_midpoint,caltech101_m,car_side,1,4,0,0.1630825
+gmm_midpoint,caltech101_m,cougar_face,0,5,1,0.026284
+gmm_midpoint,caltech101_m,cougar_face,1,9,5,0.0227
+gmm_midpoint,caltech101_m,grand_piano,0,4,0,0.035245
+gmm_midpoint,caltech101_m,grand_piano,1,4,0,0.038232
+gmm_midpoint,caltech101_m,ibis,0,4,0,0.053166
+gmm_midpoint,caltech101_m,ibis,1,4,0,0.0507765
+gmm_midpoint,caltech101_m,starfish,0,4,0,0.2108725
+gmm_midpoint,caltech101_m,starfish,1,4,0,0.210872
+gmm_midpoint,coco_val,baseball bat,0,4,0,0.257019
+gmm_midpoint,coco_val,baseball bat,1,4,0,0.25712
+gmm_midpoint,coco_val,bear,0,4,0,0.35427200000000003
+gmm_midpoint,coco_val,bear,1,4,0,0.353767
+gmm_midpoint,coco_val,bed,0,4,0,0.29892949999999996
+gmm_midpoint,coco_val,bed,1,4,0,0.299434
+gmm_midpoint,coco_val,cat,0,4,0,0.069582
+gmm_midpoint,coco_val,cat,1,4,0,0.06897600000000001
+gmm_midpoint,coco_val,cell phone,0,4,0,0.38164
+gmm_midpoint,coco_val,cell phone,1,4,0,0.38164
+gmm_midpoint,coco_val,clock,0,4,0,0.235205
+gmm_midpoint,coco_val,clock,1,4,0,0.235205
+gmm_midpoint,coco_val,dining table,0,4,0,0.372753
+gmm_midpoint,coco_val,dining table,1,3,0,0.373056
+gmm_midpoint,coco_val,elephant,0,4,0,0.27943850000000003
+gmm_midpoint,coco_val,elephant,1,4,0,0.27923699999999996
+gmm_midpoint,coco_val,giraffe,0,4,0,0.126641
+gmm_midpoint,coco_val,giraffe,1,4,0,0.12744899999999998
+gmm_midpoint,coco_val,microwave,0,4,0,0.413755
+gmm_midpoint,coco_val,microwave,1,4,0,0.413957
+gmm_midpoint,coco_val,oven,0,4,0,0.33013499999999996
+gmm_midpoint,coco_val,oven,1,3,0,0.329832
+gmm_midpoint,coco_val,refrigerator,0,4,0,0.368006
+gmm_midpoint,coco_val,refrigerator,1,4,0,0.3678045
+gmm_midpoint,coco_val,scissors,0,4,0,0.45475699999999997
+gmm_midpoint,coco_val,scissors,1,4,0,0.454252
+gmm_midpoint,coco_val,sink,0,3,0,0.277722
+gmm_midpoint,coco_val,sink,1,4,0,0.277015
+gmm_midpoint,coco_val,sports ball,0,3,0,0.236922
+gmm_midpoint,coco_val,sports ball,1,4,0,0.237124
+gmm_midpoint,coco_val,toilet,0,4,0,0.18814399999999998
+gmm_midpoint,coco_val,toilet,1,4,0,0.18774
+gmm_midpoint,coco_val,toothbrush,0,4,0,0.42849899999999996
+gmm_midpoint,coco_val,toothbrush,1,4,0,0.428701
+gmm_midpoint,coco_val,train,0,4,0,0.24601099999999998
+gmm_midpoint,coco_val,train,1,4,0,0.246819
+gmm_midpoint,coco_val,zebra,0,4,0,0.25661500000000004
+gmm_midpoint,coco_val,zebra,1,4,0,0.257524
+gmm_midpoint,visual_genome_m,bike,1,1,0,0.415076
+gmm_midpoint,visual_genome_m,building,0,5,1,0.443941
+gmm_midpoint,visual_genome_m,building,1,4,1,0.44417949999999995
+gmm_midpoint,visual_genome_m,bus,0,4,0,0.41925100000000004
+gmm_midpoint,visual_genome_m,bus,1,4,0,0.4193705
+gmm_midpoint,visual_genome_m,cat,0,3,0,0.450143
+gmm_midpoint,visual_genome_m,cat,1,4,0,0.4502625
+gmm_midpoint,visual_genome_m,clock,0,4,0,0.4519325
+gmm_midpoint,visual_genome_m,clock,1,3,0,0.451813
+gmm_midpoint,visual_genome_m,dog,0,4,0,0.4543175
+gmm_midpoint,visual_genome_m,dog,1,1,0,0.453721
+gmm_midpoint,visual_genome_m,elephant,0,4,0,0.4728055
+gmm_midpoint,visual_genome_m,elephant,1,4,0,0.4732825
+gmm_midpoint,visual_genome_m,giraffe,0,4,0,0.33802449999999995
+gmm_midpoint,visual_genome_m,giraffe,1,2,0,0.33838250000000003
+gmm_midpoint,visual_genome_m,hat,0,3,0,0.389552
+gmm_midpoint,visual_genome_m,horse,0,4,0,0.4868795
+gmm_midpoint,visual_genome_m,horse,1,4,0,0.4880725
+gmm_midpoint,visual_genome_m,laptop,0,4,0,0.36414599999999997
+gmm_midpoint,visual_genome_m,man,0,4,0,0.42605
+gmm_midpoint,visual_genome_m,man,1,5,1,0.425811
+gmm_midpoint,visual_genome_m,skateboard,0,1,0,0.457061
+gmm_midpoint,visual_genome_m,snow,0,4,0,0.397543
+gmm_midpoint,visual_genome_m,snow,1,1,0,0.397901
+gmm_midpoint,visual_genome_m,table,0,4,0,0.2076575
+gmm_midpoint,visual_genome_m,table,1,4,0,0.20694200000000001
+gmm_midpoint,visual_genome_m,train,0,2,0,0.4264075
+gmm_midpoint,visual_genome_m,train,1,3,0,0.425811
+gmm_midpoint,visual_genome_m,truck,0,4,0,0.3899095
+gmm_midpoint,visual_genome_m,truck,1,3,0,0.38979
+guarded_tail,caltech101_m,airplanes,0,4,0,0.2980885
+guarded_tail,caltech101_m,airplanes,1,4,0,0.2998805
+guarded_tail,caltech101_m,car_side,0,4,0,0.043608
+guarded_tail,caltech101_m,car_side,1,7,3,0.041816
+guarded_tail,caltech101_m,cougar_face,0,5,1,0.026284
+guarded_tail,caltech101_m,cougar_face,1,9,5,0.0227
+guarded_tail,caltech101_m,grand_piano,0,4,0,0.035245
+guarded_tail,caltech101_m,grand_piano,1,4,0,0.038232
+guarded_tail,caltech101_m,ibis,0,4,0,0.051971500000000004
+guarded_tail,caltech101_m,ibis,1,4,0,0.0507765
+guarded_tail,caltech101_m,starfish,0,4,0,0.1021505
+guarded_tail,caltech101_m,starfish,1,4,0,0.10274749999999999
+guarded_tail,coco_val,baseball bat,0,6,2,0.032721
+guarded_tail,coco_val,baseball bat,1,4,0,0.032317
+guarded_tail,coco_val,bear,0,4,0,0.025348
+guarded_tail,coco_val,bear,1,4,0,0.024742
+guarded_tail,coco_val,bed,0,4,0,0.029994
+guarded_tail,coco_val,bed,1,5,1,0.029893
+guarded_tail,coco_val,cat,0,4,0,0.048778
+guarded_tail,coco_val,cat,1,4,0,0.048374
+guarded_tail,coco_val,cell phone,0,4,0,0.022521
+guarded_tail,coco_val,cell phone,1,4,0,0.022420000000000002
+guarded_tail,coco_val,clock,0,4,0,0.032014
+guarded_tail,coco_val,clock,1,4,0,0.03161
+guarded_tail,coco_val,dining table,0,11,7,0.02141
+guarded_tail,coco_val,dining table,1,11,8,0.021208
+guarded_tail,coco_val,elephant,0,4,0,0.027873000000000002
+guarded_tail,coco_val,elephant,1,4,0,0.028782000000000002
+guarded_tail,coco_val,giraffe,0,4,0,0.039588
+guarded_tail,coco_val,giraffe,1,4,0,0.03878
+guarded_tail,coco_val,microwave,0,4,0,0.017269
+guarded_tail,coco_val,microwave,1,4,0,0.017269
+guarded_tail,coco_val,oven,0,4,0,0.035850999999999994
+guarded_tail,coco_val,oven,1,3,0,0.035952
+guarded_tail,coco_val,refrigerator,0,4,0,0.025044999999999998
+guarded_tail,coco_val,refrigerator,1,4,0,0.02555
+guarded_tail,coco_val,scissors,0,4,0,0.009694999999999999
+guarded_tail,coco_val,scissors,1,4,0,0.0102
+guarded_tail,coco_val,sink,0,4,1,0.049384
+guarded_tail,coco_val,sink,1,6,2,0.049788
+guarded_tail,coco_val,sports ball,0,3,0,0.209857
+guarded_tail,coco_val,sports ball,1,4,0,0.210261
+guarded_tail,coco_val,toilet,0,5,1,0.045243
+guarded_tail,coco_val,toilet,1,4,0,0.045950000000000005
+guarded_tail,coco_val,toothbrush,0,4,0,0.012018000000000001
+guarded_tail,coco_val,toothbrush,1,4,0,0.011816
+guarded_tail,coco_val,train,0,4,0,0.039486999999999994
+guarded_tail,coco_val,train,1,4,0,0.039486999999999994
+guarded_tail,coco_val,zebra,0,4,0,0.029489
+guarded_tail,coco_val,zebra,1,4,0,0.029388
+guarded_tail,visual_genome_m,bike,1,1,0,0.017176
+guarded_tail,visual_genome_m,building,0,7,3,0.426527
+guarded_tail,visual_genome_m,building,1,3,0,0.426765
+guarded_tail,visual_genome_m,bus,0,11,7,0.008826
+guarded_tail,visual_genome_m,bus,1,20,16,0.009780500000000001
+guarded_tail,visual_genome_m,cat,0,3,0,0.010496
+guarded_tail,visual_genome_m,cat,1,4,0,0.0101385
+guarded_tail,visual_genome_m,clock,0,4,0,0.0128815
+guarded_tail,visual_genome_m,clock,1,4,1,0.013478
+guarded_tail,visual_genome_m,dog,0,4,0,0.013954999999999999
+guarded_tail,visual_genome_m,dog,1,1,0,0.014074
+guarded_tail,visual_genome_m,elephant,0,5,1,0.008349
+guarded_tail,visual_genome_m,elephant,1,5,1,0.008588
+guarded_tail,visual_genome_m,giraffe,0,4,0,0.012643499999999998
+guarded_tail,visual_genome_m,giraffe,1,2,0,0.0127625
+guarded_tail,visual_genome_m,hat,0,4,1,0.0138355
+guarded_tail,visual_genome_m,horse,0,4,0,0.013954999999999999
+guarded_tail,visual_genome_m,horse,1,6,2,0.013597
+guarded_tail,visual_genome_m,laptop,0,6,2,0.022662500000000002
+guarded_tail,visual_genome_m,man,0,12,8,0.0196805
+guarded_tail,visual_genome_m,man,1,26,22,0.019799499999999998
+guarded_tail,visual_genome_m,skateboard,0,1,0,0.015029
+guarded_tail,visual_genome_m,snow,0,11,7,0.024332
+guarded_tail,visual_genome_m,snow,1,3,2,0.023855
+guarded_tail,visual_genome_m,table,0,4,0,0.209208
+guarded_tail,visual_genome_m,table,1,4,0,0.208373
+guarded_tail,visual_genome_m,train,0,2,0,0.021469500000000002
+guarded_tail,visual_genome_m,train,1,5,2,0.021231
+guarded_tail,visual_genome_m,truck,0,5,1,0.01145
+guarded_tail,visual_genome_m,truck,1,3,0,0.011927

@@ -1,0 +1,28 @@
+{
+ "rule": "ship iff PRIMARY (app_visible/all_steps cost: mean+2SE <= +0.010) AND SECONDARY (app_visible/ramp_6_20 cost: mean+2SE <= +0.020)",
+ "primary": {
+  "scope": "app_visible",
+  "window": "all_steps",
+  "metric": "cost",
+  "dataset": "all",
+  "n_cells": 84,
+  "mean": 0.01633879624682804,
+  "se": 0.0047536586413204004,
+  "sd": 0.04356800110366334,
+  "upper_2se": 0.02584611352946884,
+  "passes": false
+ },
+ "secondary": {
+  "scope": "app_visible",
+  "window": "ramp_6_20",
+  "metric": "cost",
+  "dataset": "all",
+  "n_cells": 82,
+  "mean": 0.0709151789947857,
+  "se": 0.012798042090523617,
+  "sd": 0.11589120014378469,
+  "upper_2se": 0.09651126317583293,
+  "passes": false
+ },
+ "ship_as_default": false
+}

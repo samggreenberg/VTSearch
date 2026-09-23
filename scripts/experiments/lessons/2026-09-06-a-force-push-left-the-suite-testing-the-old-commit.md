@@ -7,8 +7,8 @@
 branch name, and its `git fetch origin` is not forced — so a non-fast-forward
 update is refused, the grid's local branch stays where it was, and the job
 checks out the **previous** commit. It then failed the docs gate for a missing
-`docs/experiments/README.md` row that the new commit adds, which reads exactly
-like a real finding about the branch under test. The `=== HEAD <sha> <subject>`
+row in the experiments index (a file since removed, #4138) that the new commit
+adds, which reads exactly like a real finding about the branch under test. The `=== HEAD <sha> <subject>`
 line the job prints is what gave it away, and it is the only thing that did.
 
 Force-fetching the ref by hand was not enough either: the local branch is
@@ -66,3 +66,8 @@ The guard lives in `/exp/sgreenberg/suite.sbatch`, **outside this repository**, 
 nothing here reviews it, tests it, or notices if it is edited away — the previous
 version is kept beside it as `suite.sbatch.bak.20260906`. That gap is filed as
 **#3694**.
+
+*Update (#3694):* the launcher is now tracked at `scripts/slurm/suite.sbatch`,
+submitted from the `dev` checkout, and `tests_lib/meta/test_suite_sbatch.py`
+exercises all four states (plus diverged and a force-push) against the real
+script.

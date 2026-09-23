@@ -142,7 +142,7 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
     if pkl.exists():
         common.log(f"\n=== {ds} x {emb_name} === (reusing cached pickle {pkl.name})")
         with common.timed(f"load_cache:{ds}:{emb_name}", timings):
-            medias = load_medias(pkl)
+            medias = load_medias(pkl, repair=True)  # as the app holds them (#4095)
     else:
         common.log(f"\n=== {ds} x {emb_name} === (embedding fresh as {learn_name})")
         if learn_name.startswith("dinov3") and not os.environ.get("HF_TOKEN"):
@@ -165,7 +165,7 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
         text_pkl = EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb_name)
         if not text_pkl.exists():
             raise FileNotFoundError(f"{emb_name}: text half's pickle {text_pkl.name} does not exist")
-        text_medias = load_medias(text_pkl)
+        text_medias = load_medias(text_pkl, repair=True)  # as the app holds them (#4095)
         missing = set(medias) - set(text_medias)
         if missing:
             raise ValueError(

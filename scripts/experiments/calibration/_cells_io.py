@@ -432,13 +432,60 @@ def iter_medias(path: str | Path) -> Iterator[tuple[int, dict[str, Any]]]:
             yield from chunk.items()
 
 
-def load_medias(path: str | Path) -> dict[int, dict[str, Any]]:
+#: How far a stored vector's norm may sit from 1 before the harness renormalises
+#: it. Loose on purpose: float32 rounding leaves unit vectors a few 1e-7 off,
+#: and re-dividing those would change the bits of every cell in the pile and
+#: every published run with them. Only a genuinely raw vector is touched.
+UNIT_NORM_TOL = 1e-3
+
+
+def repair_norms(medias: dict[int, dict[str, Any]], where: str = "") -> int:
+    """Renormalise any whole-image vector that is not unit-norm; return how many.
+
+    The app sends every vector through ``l2_normalize`` at ingest, and the
+    harness reads cells with a raw ``pickle.load`` that bypassed that chokepoint:
+    `coco_val__siglip` shipped norms of 12-19 for seven weeks, and every harness
+    run on it trained a detector the app would never have built (#4095, #4099).
+    This puts the harness through the same rule. Patch grids are untouched.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    fixed = 0
+    for media in medias.values():
+        embs = media.get("embeddings")
+        if not isinstance(embs, dict):
+            continue
+        for name, vec in embs.items():
+            arr = np.asarray(vec, dtype=np.float32)
+            if arr.ndim != 1:
+                continue
+            norm = float(np.linalg.norm(arr))
+            if norm > 0 and np.isfinite(norm) and abs(norm - 1.0) > UNIT_NORM_TOL:
+                embs[name] = arr / norm
+                fixed += 1
+    if fixed:
+        import sys  # noqa: PLC0415
+
+        print(f"_cells_io: renormalised {fixed} non-unit vectors{f' in {where}' if where else ''}", file=sys.stderr)
+    return fixed
+
+
+def load_medias(path: str | Path, repair: bool = False) -> dict[int, dict[str, Any]]:
     """Load a cell pickle written by :func:`dump_medias` or :class:`CellWriter`.
+
+    Returns the cell exactly as stored. ``repair=True`` renormalises non-unit
+    vectors (:func:`repair_norms`), which is what a harness that trains and
+    scores the APP's detector must ask for; it is not the default because this
+    reader is shared with pipelines whose vectors never pass through the app
+    (DocMarks' structural descriptors among them), where a norm is data.
 
     Tolerates the pre-#2886 ``RegionVector`` nodes in cached pickles; see
     :class:`_StaleRegionVector`.
     """
-    return dict(iter_medias(path))
+    medias = dict(iter_medias(path))
+    if repair:
+        repair_norms(medias, where=Path(path).name)
+    return medias
 
 
 #: Columns ``run_cells.py`` writes to record **how each cell opened**: the app's

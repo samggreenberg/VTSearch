@@ -1,3 +1,19 @@
+import os
+
+# Pin the test process to one native-math thread BEFORE anything imports torch /
+# numpy / scipy (OpenMP and MKL read their env vars once, at import) and before
+# ``import app`` below. Since c2375be75 ``app.py`` sizes OMP/MKL/torch to the
+# CPU allocation when ``VTSEARCH_TORCH_THREADS`` is unset -- right for the
+# interactive server, ruinous here: under ``-n auto`` every xdist worker got one
+# thread per core, so a 4-vCPU box ran 16 math threads on 4 cores and the full
+# suite went from ~3 min to ~10 min. OMP/MKL are set here too, not left to the
+# prelude: ``vtscore.config`` below imports numpy first, and OpenBLAS sizes its
+# pool from OMP_NUM_THREADS at that moment. An explicit override still wins.
+_torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
+os.environ.setdefault("VTSEARCH_TORCH_THREADS", _torch_threads)
+os.environ.setdefault("OMP_NUM_THREADS", _torch_threads)
+os.environ.setdefault("MKL_NUM_THREADS", _torch_threads)
+
 from pathlib import Path
 from unittest.mock import patch
 
@@ -9,6 +25,7 @@ from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_ex
 from tests_shared.state_reset import (
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
+    freeze_collected_heap,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -25,6 +42,11 @@ from tests_shared.state_reset import (
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers based on the test file's parent directory."""
     add_group_markers(items, root_dir_name="tests")
+
+
+def pytest_collection_finish(session):
+    """Freeze the heap collection built, so ``gc.collect()`` stops rescanning it."""
+    freeze_collected_heap()
 
 
 pin_training_budget()

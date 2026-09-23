@@ -40,19 +40,6 @@ folds.
 
 <!-- item-sep -->
 
-- **Price a sign-dependent tilt (`cross_tilt`'s asymmetry).** The #2865 sweep
-  found the one rule that genuinely reads the acquisition-biased mixture weights
-  is *better* than the shipped `mid_tilt` below inclusion 0 — by up to
-  −0.034±0.005 at k=−1 on binary COCO, the largest effect anywhere on that
-  table — and worse above it (up to +0.073±0.012). Those weights push the cut in
-  the "admit more" direction, which is what the knob wants when it asks for
-  fewer false alarms and the opposite of what it wants above zero. A rule that
-  reads them only on one side of the knob is not obviously wrong, but it is a
-  *new* rule: it needs its own pre-registration, and a hinge at k=0 has to be
-  shown not to break the nesting contract
-  `test_inclusion_slide_recut.py::test_slide_is_monotone_across_the_whole_knob`
-  pins.
-
 <!-- item-sep -->
 
 - **Explain the k=0 loss on `coco_val × dinov3_patch`.** `rate` is worse than

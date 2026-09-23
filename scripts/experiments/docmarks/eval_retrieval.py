@@ -29,7 +29,8 @@ Reads cells, writes only under ``--out``:
     source scripts/experiments/pile/pile_env.sh
     python eval_retrieval.py --tiers s,m --out /expscratch/$USER/docmarks/eval-3904
 
-``rows.csv`` holds one row per (tier, class, pool, method); ``excluded_hits.json``
+``rows.csv`` holds one row per (tier, class, pool, method); ``surprise_hits.json``
+each method's top-ranked presumed negatives, for review (#4089); ``excluded_hits.json``
 the top excluded pages per class; ``summary.md`` the per-tier table.
 """
 
@@ -69,6 +70,11 @@ HEADLINE_POOL = "own_verified"
 RECALL_AT = (10, 50, 100)
 #: Excluded pages kept per class for inspection.
 EXCLUDED_TOP = 20
+#: Presumed negatives kept per class and method for review (#4089): the pages a
+#: method ranked highest that the headline pool scores as negatives unchecked.
+#: Ten per method, over three methods, bounds a class at 30 questions before
+#: the methods' overlap is removed.
+SURPRISE_K = 10
 
 
 # --------------------------------------------------------------------------
@@ -135,6 +141,9 @@ def class_pools(
         "eligible": eligible - {query_page},
         "own_verified": own_verified - {query_page},
         "naive": naive,
+        # The headline pool's negatives that nobody checked: where a correct
+        # retrieval would be scored as a false positive (#4089).
+        "presumed": set(own["presumed_negative"]) - {query_page},
     }
 
 
@@ -216,8 +225,18 @@ def source_prior_scores(class_source: str, source_of: dict[str, str]) -> dict[st
 
 
 def run_tier(
-    corpus: Path, tier: str, classes: dict[str, Any], *, rerank_k: int, rerank_all: bool = False, log=print
+    corpus: Path,
+    tier: str,
+    classes: dict[str, Any],
+    *,
+    rerank_k: int,
+    rerank_all: bool = False,
+    surprise_k: int = SURPRISE_K,
+    surprise: Optional[dict[str, Any]] = None,
+    log=print,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Score every class at *tier*.  *surprise*, if given, is filled with each class's :func:`top_presumed` hits."""
+    surprise = {} if surprise is None else surprise
     from vtscore.media import get_embedder  # noqa: PLC0415
 
     pages = embed_corpus.pages_for_tier(corpus, tier)
@@ -282,6 +301,8 @@ def run_tier(
                 else:
                     ranked = rank_pool(scores[method][cid], members)
                 _emit(rows, tier, cid, meta, positives, pool, members, method, ranked)
+                if pool == HEADLINE_POOL and method != "source_prior":
+                    surprise.setdefault(cid, {})[method] = top_presumed(ranked, pools[cid]["presumed"], surprise_k)
                 if method == "vlad_rerank" and rerank_all and pool != "naive":
                     full = rerank(
                         shortlists[(cid, pool)],
@@ -311,6 +332,23 @@ def run_tier(
             },
         }
     return rows, excluded
+
+
+def top_presumed(ranked: Sequence[str], presumed: set[str], k: int) -> list[dict[str, Any]]:
+    """The first *k* pages of *ranked* that are presumed negatives, with their ranks.
+
+    These are the pages a method put highest that the benchmark scores as
+    negatives without anyone having looked.  If one carries the mark, the method
+    was right and the metric says otherwise -- so they are review items, not
+    false positives (#3922 rung 3, #4089).
+    """
+    out: list[dict[str, Any]] = []
+    for rank, p in enumerate(ranked, start=1):
+        if p in presumed:
+            out.append({"page_id": p, "rank": rank})
+            if len(out) >= k:
+                break
+    return out
 
 
 def _emit(rows, tier, cid, meta, positives, pool, members, method, ranked) -> None:
@@ -383,6 +421,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--rerank-all", action="store_true", help="also verify every pool page (diagnostic; slow past tier s)"
     )
+    ap.add_argument(
+        "--surprise-k",
+        type=int,
+        default=SURPRISE_K,
+        help="presumed negatives per class and method to write to surprise_hits.json for review (#4089)",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
 
@@ -396,8 +440,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     all_rows: list[dict[str, Any]] = []
     all_excluded: dict[str, Any] = {}
+    all_surprise: dict[str, Any] = {}
     for tier in args.tiers.split(","):
-        rows, excluded = run_tier(args.corpus, tier, classes, rerank_k=args.rerank_k, rerank_all=args.rerank_all)
+        all_surprise[tier] = {}
+        rows, excluded = run_tier(
+            args.corpus,
+            tier,
+            classes,
+            rerank_k=args.rerank_k,
+            rerank_all=args.rerank_all,
+            surprise_k=args.surprise_k,
+            surprise=all_surprise[tier],
+        )
         all_rows += rows
         all_excluded[tier] = excluded
 
@@ -406,6 +460,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         writer.writeheader()
         writer.writerows(all_rows)
     (args.out / "excluded_hits.json").write_text(json.dumps(all_excluded, indent=2) + "\n", encoding="utf-8")
+    (args.out / "surprise_hits.json").write_text(json.dumps(all_surprise, indent=2) + "\n", encoding="utf-8")
     (args.out / "summary.md").write_text(summarise(all_rows), encoding="utf-8")
     print("\n" + summarise(all_rows))
     return 0

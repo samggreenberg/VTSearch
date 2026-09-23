@@ -25,7 +25,9 @@ behaviours that used to be plugin-author responsibility:
    by an admin-configured template.
 4. **Field-type-driven security validation**.
    ``field_type="url"`` values are passed through
-   :func:`~vtscore.security.url_validation.validate_url`;
+   :func:`~vtscore.security.url_validation.validate_url` (or, for a field
+   declaring :attr:`~vtscore.plugins.PluginField.opened_in_browser`,
+   through :func:`~vtscore.security.url_validation.validate_browser_url`);
    ``field_type="server_path"`` values are passed through
    :func:`~vtscore.security.path_validation.confine_server_filepath`
    anchored at the per-user data dir, and the *approved* path is written
@@ -121,7 +123,7 @@ def _apply_templates(value: str, template_vars: tuple[str, ...]) -> str:
     return value
 
 
-def _validated_field_value(field_type: str, value: str) -> str:
+def _validated_field_value(field_type: str, value: str, *, opened_in_browser: bool = False) -> str:
     """Run the field-type-driven security validator, returning the value to store.
 
     Path-typed values come back **canonicalised**: under multi-user
@@ -132,6 +134,12 @@ def _validated_field_value(field_type: str, value: str) -> str:
     approved path keeps validation and consumption on one anchor (see
     :func:`~vtscore.security.path_validation.confine_server_filepath`).
     """
+    if field_type == "url" and opened_in_browser:
+        # The browser makes this request, not us: vet the scheme only, so a
+        # ``http://localhost:9000`` viewer is not refused by the SSRF guard.
+        from vtscore.security.url_validation import validate_browser_url  # noqa: PLC0415
+
+        return validate_browser_url(value)
     if field_type == "url":
         from vtscore.security.url_validation import validate_url  # noqa: PLC0415
 
@@ -208,7 +216,7 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
 
         if value:
             value = _apply_templates(value, tuple(f.template_vars))
-            value = _validated_field_value(f.field_type, value)
+            value = _validated_field_value(f.field_type, value, opened_in_browser=f.opened_in_browser)
         field_values[f.key] = value
 
     return field_values

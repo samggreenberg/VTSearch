@@ -10,6 +10,7 @@
     python audit_to_corrections.py --task ucsf_classes --reviewer <name> --apply
     python audit_to_corrections.py --task query_crops --reviewer <name> --apply
     python audit_to_corrections.py --task box_tighten --reviewer <name> --apply
+    python audit_to_corrections.py --task surprise --reviewer <name> --apply   # top-ranked presumed negatives (#4089)
     python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
@@ -1006,6 +1007,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "ucsf_classes",
             "query_crops",
             "box_tighten",
+            "surprise",
         ),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -1027,6 +1029,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default=None,
         help="who worked these sheets; stamped onto every class the membership pass verifies, "
         "because 'a human checked it' is a claim about a person",
+    )
+    ap.add_argument(
+        "--recut-query-crop",
+        action="store_true",
+        help="box_tighten: re-cut a class's query crop when its query page's box changes. Off by default: the crop "
+        "is what every method searches with, and some are hand-made (#4125)",
     )
     ap.add_argument(
         "--migrate-adjudications",
@@ -1120,7 +1128,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # truth: it compiles to the same same/different rows the pairwise pass
         # produces and goes through the same applier.
         verdicts, slate_problems = load_merge_answer(audit_dir)
-    elif args.task == "ucsf_classes":
+    elif args.task in ("ucsf_classes", "surprise"):
         # Every row, answered or not: a relation row carries no `verdict`, and an
         # unanswered sheet is still counted as unreviewed.
         path = audit_dir / "verdicts.jsonl"
@@ -1177,6 +1185,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             pages, classes, verdicts, reviewer=args.reviewer
         )
         new_class_ids = sorted(set(classes) - before)
+    elif args.task == "surprise":
+        from surprise_review import apply_surprise  # noqa: PLC0415
+
+        changes, problems, new_reviewed_negatives, new_exclusions = apply_surprise(
+            classes, verdicts, reviewer=args.reviewer
+        )
     elif args.task == "query_crops":
         from query_crops import STORE, apply_query_crops, load_store  # noqa: PLC0415
 
@@ -1304,7 +1318,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"  wrote {len(box_store)} box override(s) to {args.corpus / BOX_STORE}")
         by_page = {p.page_id: p for p in pages}
         for class_id in sorted(stale_queries):
-            # The primary crop was cut from the box just replaced.
+            # The primary crop was cut from the box just replaced.  Re-cutting
+            # it changes the query every method searches with, and so every
+            # result for the class -- and some crops are hand-made (#4125) --
+            # so it happens only when asked.
+            if not args.recut_query_crop:
+                print(f"  {class_id}: query page's box changed; query crop NOT re-cut (pass --recut-query-crop)")
+                continue
             path = recut_query_crop(classes[class_id], by_page[classes[class_id]["query_page_id"]], class_id)
             print(f"  re-cut {class_id} query crop -> {path}")
 

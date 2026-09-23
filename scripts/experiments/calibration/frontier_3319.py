@@ -57,7 +57,10 @@ args = ap.parse_args()
 
 TOL = A.COST_REGRESSION_TOLERANCE
 ANALYSIS = pathlib.Path(args.analysis)
-traj = pd.read_csv(ANALYSIS / "agg" / "trajectories.csv")
+# A trajectories.csv from before #3602 carries the final-step value under the
+# name `positives_100`; the upgrade renames it and leaves the real t=100 absent.
+traj = A.upgrade_legacy_trajectories(pd.read_csv(ANALYSIS / "agg" / "trajectories.csv"))
+HAS_P100 = "positives_100" in traj.columns
 
 # The shipped arm only.  The region half is a separate wave and pooling it here
 # would average the frontier over two environments that #3318 showed disagree.
@@ -70,6 +73,11 @@ lines: list[str] = []
 def out(s: str = "") -> None:
     print(s)
     lines.append(s)
+
+
+def _d1(r: dict) -> str:
+    """A paired mean delta to one decimal, or a dash when it was not computed."""
+    return f"{r['mean_delta']:+.1f}" if r.get("n_pairs") else "—"
 
 
 out(f"# #3319 frontier — `{args.embedder} x {args.style}` — {len(traj)} trajectories, {len(arms)} arms\n")
@@ -116,20 +124,21 @@ out()
 
 # --- the frontier ------------------------------------------------------------
 out("## The frontier — paired against `prod` (k=0)\n")
-out("| arm | k | Δ final cost [95% CI] | Δ positives@100 | Δ AP | Δ oracle cost | pairs |")
-out("|---|---:|---|---:|---:|---:|---:|")
+out("| arm | k | Δ final cost [95% CI] | Δ positives@final | Δ positives@100 | Δ AP | Δ oracle cost | pairs |")
+out("|---|---:|---|---:|---:|---:|---:|---:|")
 front: dict[str, dict] = {}
 for a in ordered:
     if a == A.CONTROL:
         continue
     c = A._paired(traj, "final_cost", a)
-    p = A._paired(traj, "positives_100", a)
+    p = A._paired(traj, "positives_final", a)
+    p100 = A._paired(traj, "positives_100", a) if HAS_P100 else {}
     ap_ = A._paired(traj, "final_ap", a)
     o = A._paired(traj, "final_oracle_cost", a)
     front[a] = {"k": K[a], "cost": c, "pos": p, "ap": ap_, "oracle": o}
     out(
         f"| `{a}` | {K[a]:g} | {c['mean_delta']:+.4f} [{c['ci95_lo']:+.4f}, {c['ci95_hi']:+.4f}] | "
-        f"{p['mean_delta']:+.1f} | {ap_['mean_delta']:+.3f} | {o['mean_delta']:+.4f} | {c['n_pairs']} |"
+        f"{p['mean_delta']:+.1f} | {_d1(p100)} | {ap_['mean_delta']:+.3f} | {o['mean_delta']:+.4f} | {c['n_pairs']} |"
     )
 out()
 
@@ -255,7 +264,7 @@ for a in ordered:
     if a == inc or K.get(a, 0) >= 0:
         continue
     c = A._paired(traj, "final_cost", a, control=inc)
-    p = A._paired(traj, "positives_100", a, control=inc)
+    p = A._paired(traj, "positives_final", a, control=inc)
     apd = A._paired(traj, "final_ap", a, control=inc)
     sp_ = A._mcnemar(traj, a, "has_genuine", control=inc)
     if not c.get("n_pairs"):
@@ -275,22 +284,24 @@ out()
 if args.deep:
     dpath = pathlib.Path(args.deep) / "agg" / "trajectories.csv"
     if dpath.exists():
-        dt = pd.read_csv(dpath)
+        dt = A.upgrade_legacy_trajectories(pd.read_csv(dpath))
+        d_p100 = "positives_100" in dt.columns
         dt = dt[(dt["embedder"] == args.embedder) & (dt["style"] == args.style)]
         out("## H3 — the deep regime (400 clicks)\n")
-        out("| arm | k | Δ final cost vs prod [95% CI] | Δ positives | pairs |")
-        out("|---|---:|---|---:|---:|")
+        out("| arm | k | Δ final cost vs prod [95% CI] | Δ positives@400 | Δ positives@100 | pairs |")
+        out("|---|---:|---|---:|---:|---:|")
         darms = [a for a in A.ARMS if a in set(dt["arm"]) and a != A.CONTROL]
         dbest = None
         for a in sorted(darms, key=lambda a: -A.ARM_K.get(a, 0)):
             c = A._paired(dt, "final_cost", a)
-            p = A._paired(dt, "positives_100", a)
+            p = A._paired(dt, "positives_final", a)
+            p100 = A._paired(dt, "positives_100", a) if d_p100 else {}
             if not c.get("n_pairs"):
                 continue
             out(
                 f"| `{a}` | {A.ARM_K.get(a, float('nan')):g} | "
                 f"{c['mean_delta']:+.4f} [{c['ci95_lo']:+.4f}, {c['ci95_hi']:+.4f}] | "
-                f"{p['mean_delta']:+.1f} | {c['n_pairs']} |"
+                f"{p['mean_delta']:+.1f} | {_d1(p100)} | {c['n_pairs']} |"
             )
             if A.ARM_K.get(a, 0) < 0 and (dbest is None or c["mean_delta"] < dbest[1]):
                 dbest = (a, c["mean_delta"])
@@ -303,10 +314,10 @@ if args.deep:
                 f"{'at least as deep' if deep_k <= shallow_k else 'SHALLOWER'} as the 100-click one.\n"
             )
         # exhaustion: the artefact that would masquerade as 'the offset stops mattering'
-        if "positives_100" in dt.columns:
+        if "positives_final" in dt.columns:
             out("### Positive exhaustion\n")
             for a in sorted(darms + [A.CONTROL], key=lambda a: -A.ARM_K.get(a, 0)):
-                s = dt[dt["arm"] == a]["positives_100"]
+                s = dt[dt["arm"] == a]["positives_final"]
                 if len(s):
                     out(
                         f"* `{a}`: median {s.median():.0f} positives found by t=400 "

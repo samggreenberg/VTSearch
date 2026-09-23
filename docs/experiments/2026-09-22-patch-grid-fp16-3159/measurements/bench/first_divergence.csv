@@ -1,0 +1,625 @@
+dataset,embedder,category,seed,style,first_divergence_t
+coco_val,siglip+dinov3_patch,baseball bat,0,max_patch,4
+coco_val,siglip+dinov3_patch,baseball bat,1,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,2,max_patch,4
+coco_val,siglip+dinov3_patch,baseball bat,3,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,4,max_patch,8
+coco_val,siglip+dinov3_patch,baseball bat,5,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,6,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,7,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,8,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,9,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,10,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,11,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,12,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,13,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,14,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,15,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,16,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,17,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,18,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,19,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,20,max_patch,5
+coco_val,siglip+dinov3_patch,baseball bat,21,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,22,max_patch,6
+coco_val,siglip+dinov3_patch,baseball bat,23,max_patch,8
+coco_val,siglip+dinov3_patch,bear,0,max_patch,5
+coco_val,siglip+dinov3_patch,bear,1,max_patch,4
+coco_val,siglip+dinov3_patch,bear,2,max_patch,4
+coco_val,siglip+dinov3_patch,bear,3,max_patch,5
+coco_val,siglip+dinov3_patch,bear,4,max_patch,7
+coco_val,siglip+dinov3_patch,bear,5,max_patch,5
+coco_val,siglip+dinov3_patch,bear,6,max_patch,6
+coco_val,siglip+dinov3_patch,bear,7,max_patch,7
+coco_val,siglip+dinov3_patch,bear,8,max_patch,4
+coco_val,siglip+dinov3_patch,bear,9,max_patch,5
+coco_val,siglip+dinov3_patch,bear,10,max_patch,6
+coco_val,siglip+dinov3_patch,bear,11,max_patch,6
+coco_val,siglip+dinov3_patch,bear,12,max_patch,5
+coco_val,siglip+dinov3_patch,bear,13,max_patch,4
+coco_val,siglip+dinov3_patch,bear,14,max_patch,6
+coco_val,siglip+dinov3_patch,bear,15,max_patch,5
+coco_val,siglip+dinov3_patch,bear,16,max_patch,5
+coco_val,siglip+dinov3_patch,bear,17,max_patch,8
+coco_val,siglip+dinov3_patch,bear,18,max_patch,5
+coco_val,siglip+dinov3_patch,bear,19,max_patch,7
+coco_val,siglip+dinov3_patch,bear,20,max_patch,5
+coco_val,siglip+dinov3_patch,bear,21,max_patch,7
+coco_val,siglip+dinov3_patch,bear,22,max_patch,4
+coco_val,siglip+dinov3_patch,bear,23,max_patch,6
+coco_val,siglip+dinov3_patch,bed,0,max_patch,7
+coco_val,siglip+dinov3_patch,bed,1,max_patch,5
+coco_val,siglip+dinov3_patch,bed,2,max_patch,6
+coco_val,siglip+dinov3_patch,bed,3,max_patch,6
+coco_val,siglip+dinov3_patch,bed,4,max_patch,5
+coco_val,siglip+dinov3_patch,bed,5,max_patch,6
+coco_val,siglip+dinov3_patch,bed,6,max_patch,7
+coco_val,siglip+dinov3_patch,bed,7,max_patch,6
+coco_val,siglip+dinov3_patch,bed,8,max_patch,6
+coco_val,siglip+dinov3_patch,bed,9,max_patch,6
+coco_val,siglip+dinov3_patch,bed,10,max_patch,6
+coco_val,siglip+dinov3_patch,bed,11,max_patch,6
+coco_val,siglip+dinov3_patch,bed,12,max_patch,7
+coco_val,siglip+dinov3_patch,bed,13,max_patch,5
+coco_val,siglip+dinov3_patch,bed,14,max_patch,5
+coco_val,siglip+dinov3_patch,bed,15,max_patch,8
+coco_val,siglip+dinov3_patch,bed,16,max_patch,7
+coco_val,siglip+dinov3_patch,bed,17,max_patch,5
+coco_val,siglip+dinov3_patch,bed,18,max_patch,9
+coco_val,siglip+dinov3_patch,bed,19,max_patch,5
+coco_val,siglip+dinov3_patch,bed,20,max_patch,5
+coco_val,siglip+dinov3_patch,bed,21,max_patch,7
+coco_val,siglip+dinov3_patch,bed,22,max_patch,5
+coco_val,siglip+dinov3_patch,bed,23,max_patch,6
+coco_val,siglip+dinov3_patch,cat,0,max_patch,4
+coco_val,siglip+dinov3_patch,cat,1,max_patch,5
+coco_val,siglip+dinov3_patch,cat,2,max_patch,5
+coco_val,siglip+dinov3_patch,cat,3,max_patch,7
+coco_val,siglip+dinov3_patch,cat,4,max_patch,6
+coco_val,siglip+dinov3_patch,cat,5,max_patch,5
+coco_val,siglip+dinov3_patch,cat,6,max_patch,4
+coco_val,siglip+dinov3_patch,cat,7,max_patch,5
+coco_val,siglip+dinov3_patch,cat,8,max_patch,5
+coco_val,siglip+dinov3_patch,cat,9,max_patch,5
+coco_val,siglip+dinov3_patch,cat,10,max_patch,5
+coco_val,siglip+dinov3_patch,cat,11,max_patch,5
+coco_val,siglip+dinov3_patch,cat,12,max_patch,5
+coco_val,siglip+dinov3_patch,cat,13,max_patch,4
+coco_val,siglip+dinov3_patch,cat,14,max_patch,5
+coco_val,siglip+dinov3_patch,cat,15,max_patch,5
+coco_val,siglip+dinov3_patch,cat,16,max_patch,5
+coco_val,siglip+dinov3_patch,cat,17,max_patch,4
+coco_val,siglip+dinov3_patch,cat,18,max_patch,6
+coco_val,siglip+dinov3_patch,cat,19,max_patch,8
+coco_val,siglip+dinov3_patch,cat,20,max_patch,6
+coco_val,siglip+dinov3_patch,cat,21,max_patch,6
+coco_val,siglip+dinov3_patch,cat,22,max_patch,5
+coco_val,siglip+dinov3_patch,cat,23,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,0,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,1,max_patch,6
+coco_val,siglip+dinov3_patch,cell phone,2,max_patch,9
+coco_val,siglip+dinov3_patch,cell phone,3,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,4,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,5,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,6,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,7,max_patch,7
+coco_val,siglip+dinov3_patch,cell phone,8,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,9,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,10,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,11,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,12,max_patch,7
+coco_val,siglip+dinov3_patch,cell phone,13,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,14,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,15,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,16,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,17,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,18,max_patch,5
+coco_val,siglip+dinov3_patch,cell phone,19,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,20,max_patch,4
+coco_val,siglip+dinov3_patch,cell phone,21,max_patch,6
+coco_val,siglip+dinov3_patch,cell phone,22,max_patch,6
+coco_val,siglip+dinov3_patch,cell phone,23,max_patch,6
+coco_val,siglip+dinov3_patch,clock,0,max_patch,5
+coco_val,siglip+dinov3_patch,clock,1,max_patch,6
+coco_val,siglip+dinov3_patch,clock,2,max_patch,7
+coco_val,siglip+dinov3_patch,clock,3,max_patch,5
+coco_val,siglip+dinov3_patch,clock,4,max_patch,6
+coco_val,siglip+dinov3_patch,clock,5,max_patch,6
+coco_val,siglip+dinov3_patch,clock,6,max_patch,7
+coco_val,siglip+dinov3_patch,clock,7,max_patch,6
+coco_val,siglip+dinov3_patch,clock,8,max_patch,6
+coco_val,siglip+dinov3_patch,clock,9,max_patch,5
+coco_val,siglip+dinov3_patch,clock,10,max_patch,5
+coco_val,siglip+dinov3_patch,clock,11,max_patch,6
+coco_val,siglip+dinov3_patch,clock,12,max_patch,5
+coco_val,siglip+dinov3_patch,clock,13,max_patch,11
+coco_val,siglip+dinov3_patch,clock,14,max_patch,6
+coco_val,siglip+dinov3_patch,clock,15,max_patch,6
+coco_val,siglip+dinov3_patch,clock,16,max_patch,6
+coco_val,siglip+dinov3_patch,clock,17,max_patch,9
+coco_val,siglip+dinov3_patch,clock,18,max_patch,7
+coco_val,siglip+dinov3_patch,clock,19,max_patch,6
+coco_val,siglip+dinov3_patch,clock,20,max_patch,6
+coco_val,siglip+dinov3_patch,clock,21,max_patch,5
+coco_val,siglip+dinov3_patch,clock,22,max_patch,5
+coco_val,siglip+dinov3_patch,clock,23,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,0,max_patch,4
+coco_val,siglip+dinov3_patch,dining table,1,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,2,max_patch,4
+coco_val,siglip+dinov3_patch,dining table,3,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,4,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,5,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,6,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,7,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,8,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,9,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,10,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,11,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,12,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,13,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,14,max_patch,5
+coco_val,siglip+dinov3_patch,dining table,15,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,16,max_patch,3
+coco_val,siglip+dinov3_patch,dining table,17,max_patch,4
+coco_val,siglip+dinov3_patch,dining table,18,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,19,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,20,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,21,max_patch,2
+coco_val,siglip+dinov3_patch,dining table,22,max_patch,6
+coco_val,siglip+dinov3_patch,dining table,23,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,0,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,1,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,2,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,3,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,4,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,5,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,6,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,7,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,8,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,9,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,10,max_patch,8
+coco_val,siglip+dinov3_patch,giraffe,11,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,12,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,13,max_patch,7
+coco_val,siglip+dinov3_patch,giraffe,14,max_patch,7
+coco_val,siglip+dinov3_patch,giraffe,15,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,16,max_patch,7
+coco_val,siglip+dinov3_patch,giraffe,17,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,18,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,19,max_patch,5
+coco_val,siglip+dinov3_patch,giraffe,20,max_patch,7
+coco_val,siglip+dinov3_patch,giraffe,21,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,22,max_patch,6
+coco_val,siglip+dinov3_patch,giraffe,23,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,0,max_patch,6
+coco_val,siglip+dinov3_patch,microwave,1,max_patch,7
+coco_val,siglip+dinov3_patch,microwave,2,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,3,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,4,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,5,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,6,max_patch,6
+coco_val,siglip+dinov3_patch,microwave,7,max_patch,6
+coco_val,siglip+dinov3_patch,microwave,8,max_patch,6
+coco_val,siglip+dinov3_patch,microwave,9,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,10,max_patch,6
+coco_val,siglip+dinov3_patch,microwave,11,max_patch,4
+coco_val,siglip+dinov3_patch,microwave,12,max_patch,4
+coco_val,siglip+dinov3_patch,microwave,13,max_patch,3
+coco_val,siglip+dinov3_patch,microwave,14,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,15,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,16,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,17,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,18,max_patch,4
+coco_val,siglip+dinov3_patch,microwave,19,max_patch,5
+coco_val,siglip+dinov3_patch,microwave,20,max_patch,7
+coco_val,siglip+dinov3_patch,microwave,21,max_patch,4
+coco_val,siglip+dinov3_patch,microwave,22,max_patch,6
+coco_val,siglip+dinov3_patch,microwave,23,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,0,max_patch,4
+coco_val,siglip+dinov3_patch,refrigerator,1,max_patch,6
+coco_val,siglip+dinov3_patch,refrigerator,2,max_patch,8
+coco_val,siglip+dinov3_patch,refrigerator,3,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,4,max_patch,4
+coco_val,siglip+dinov3_patch,refrigerator,5,max_patch,4
+coco_val,siglip+dinov3_patch,refrigerator,6,max_patch,6
+coco_val,siglip+dinov3_patch,refrigerator,7,max_patch,4
+coco_val,siglip+dinov3_patch,refrigerator,8,max_patch,6
+coco_val,siglip+dinov3_patch,refrigerator,9,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,10,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,11,max_patch,4
+coco_val,siglip+dinov3_patch,refrigerator,12,max_patch,4
+coco_val,siglip+dinov3_patch,refrigerator,13,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,14,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,15,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,16,max_patch,6
+coco_val,siglip+dinov3_patch,refrigerator,17,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,18,max_patch,6
+coco_val,siglip+dinov3_patch,refrigerator,19,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,20,max_patch,6
+coco_val,siglip+dinov3_patch,refrigerator,21,max_patch,5
+coco_val,siglip+dinov3_patch,refrigerator,22,max_patch,8
+coco_val,siglip+dinov3_patch,refrigerator,23,max_patch,4
+coco_val,siglip+dinov3_patch,sports ball,0,max_patch,6
+coco_val,siglip+dinov3_patch,sports ball,1,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,2,max_patch,6
+coco_val,siglip+dinov3_patch,sports ball,3,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,4,max_patch,3
+coco_val,siglip+dinov3_patch,sports ball,5,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,6,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,7,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,8,max_patch,6
+coco_val,siglip+dinov3_patch,sports ball,9,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,10,max_patch,3
+coco_val,siglip+dinov3_patch,sports ball,11,max_patch,6
+coco_val,siglip+dinov3_patch,sports ball,12,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,13,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,14,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,15,max_patch,2
+coco_val,siglip+dinov3_patch,sports ball,16,max_patch,4
+coco_val,siglip+dinov3_patch,sports ball,17,max_patch,4
+coco_val,siglip+dinov3_patch,sports ball,18,max_patch,2
+coco_val,siglip+dinov3_patch,sports ball,19,max_patch,6
+coco_val,siglip+dinov3_patch,sports ball,20,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,21,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,22,max_patch,5
+coco_val,siglip+dinov3_patch,sports ball,23,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,0,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,1,max_patch,7
+coco_val,siglip+dinov3_patch,toilet,2,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,3,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,4,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,5,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,6,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,7,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,8,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,9,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,10,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,11,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,12,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,13,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,14,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,15,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,16,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,17,max_patch,5
+coco_val,siglip+dinov3_patch,toilet,18,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,19,max_patch,9
+coco_val,siglip+dinov3_patch,toilet,20,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,21,max_patch,6
+coco_val,siglip+dinov3_patch,toilet,22,max_patch,7
+coco_val,siglip+dinov3_patch,toilet,23,max_patch,9
+coco_val,siglip+dinov3_patch,train,0,max_patch,5
+coco_val,siglip+dinov3_patch,train,1,max_patch,6
+coco_val,siglip+dinov3_patch,train,2,max_patch,4
+coco_val,siglip+dinov3_patch,train,3,max_patch,6
+coco_val,siglip+dinov3_patch,train,4,max_patch,7
+coco_val,siglip+dinov3_patch,train,5,max_patch,8
+coco_val,siglip+dinov3_patch,train,6,max_patch,5
+coco_val,siglip+dinov3_patch,train,7,max_patch,5
+coco_val,siglip+dinov3_patch,train,8,max_patch,6
+coco_val,siglip+dinov3_patch,train,9,max_patch,10
+coco_val,siglip+dinov3_patch,train,10,max_patch,5
+coco_val,siglip+dinov3_patch,train,11,max_patch,6
+coco_val,siglip+dinov3_patch,train,12,max_patch,5
+coco_val,siglip+dinov3_patch,train,13,max_patch,4
+coco_val,siglip+dinov3_patch,train,14,max_patch,5
+coco_val,siglip+dinov3_patch,train,15,max_patch,5
+coco_val,siglip+dinov3_patch,train,16,max_patch,6
+coco_val,siglip+dinov3_patch,train,17,max_patch,5
+coco_val,siglip+dinov3_patch,train,18,max_patch,5
+coco_val,siglip+dinov3_patch,train,19,max_patch,6
+coco_val,siglip+dinov3_patch,train,20,max_patch,6
+coco_val,siglip+dinov3_patch,train,21,max_patch,7
+coco_val,siglip+dinov3_patch,train,22,max_patch,5
+coco_val,siglip+dinov3_patch,train,23,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,0,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,1,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,2,max_patch,3
+visual_genome_m,siglip+dinov3_patch,bike,3,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,4,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,5,max_patch,7
+visual_genome_m,siglip+dinov3_patch,bike,6,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,7,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,8,max_patch,3
+visual_genome_m,siglip+dinov3_patch,bike,9,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,11,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,12,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bike,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,15,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,16,max_patch,3
+visual_genome_m,siglip+dinov3_patch,bike,17,max_patch,4
+visual_genome_m,siglip+dinov3_patch,bike,18,max_patch,3
+visual_genome_m,siglip+dinov3_patch,bike,19,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,20,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bike,21,max_patch,3
+visual_genome_m,siglip+dinov3_patch,bike,22,max_patch,4
+visual_genome_m,siglip+dinov3_patch,bike,23,max_patch,2
+visual_genome_m,siglip+dinov3_patch,building,0,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,1,max_patch,3
+visual_genome_m,siglip+dinov3_patch,building,2,max_patch,11
+visual_genome_m,siglip+dinov3_patch,building,3,max_patch,12
+visual_genome_m,siglip+dinov3_patch,building,4,max_patch,11
+visual_genome_m,siglip+dinov3_patch,building,5,max_patch,10
+visual_genome_m,siglip+dinov3_patch,building,6,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,7,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,8,max_patch,6
+visual_genome_m,siglip+dinov3_patch,building,9,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,10,max_patch,9
+visual_genome_m,siglip+dinov3_patch,building,11,max_patch,6
+visual_genome_m,siglip+dinov3_patch,building,12,max_patch,9
+visual_genome_m,siglip+dinov3_patch,building,13,max_patch,11
+visual_genome_m,siglip+dinov3_patch,building,14,max_patch,10
+visual_genome_m,siglip+dinov3_patch,building,15,max_patch,5
+visual_genome_m,siglip+dinov3_patch,building,16,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,17,max_patch,6
+visual_genome_m,siglip+dinov3_patch,building,18,max_patch,8
+visual_genome_m,siglip+dinov3_patch,building,19,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,20,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,21,max_patch,6
+visual_genome_m,siglip+dinov3_patch,building,22,max_patch,7
+visual_genome_m,siglip+dinov3_patch,building,23,max_patch,7
+visual_genome_m,siglip+dinov3_patch,bus,0,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,1,max_patch,4
+visual_genome_m,siglip+dinov3_patch,bus,2,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,3,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,4,max_patch,4
+visual_genome_m,siglip+dinov3_patch,bus,5,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,6,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,7,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,8,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,11,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,12,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,13,max_patch,7
+visual_genome_m,siglip+dinov3_patch,bus,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,15,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,16,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,17,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,18,max_patch,4
+visual_genome_m,siglip+dinov3_patch,bus,19,max_patch,6
+visual_genome_m,siglip+dinov3_patch,bus,20,max_patch,5
+visual_genome_m,siglip+dinov3_patch,bus,21,max_patch,7
+visual_genome_m,siglip+dinov3_patch,bus,22,max_patch,7
+visual_genome_m,siglip+dinov3_patch,bus,23,max_patch,4
+visual_genome_m,siglip+dinov3_patch,cat,0,max_patch,3
+visual_genome_m,siglip+dinov3_patch,cat,1,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,2,max_patch,2
+visual_genome_m,siglip+dinov3_patch,cat,3,max_patch,2
+visual_genome_m,siglip+dinov3_patch,cat,4,max_patch,3
+visual_genome_m,siglip+dinov3_patch,cat,5,max_patch,6
+visual_genome_m,siglip+dinov3_patch,cat,6,max_patch,2
+visual_genome_m,siglip+dinov3_patch,cat,7,max_patch,6
+visual_genome_m,siglip+dinov3_patch,cat,8,max_patch,4
+visual_genome_m,siglip+dinov3_patch,cat,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,11,max_patch,2
+visual_genome_m,siglip+dinov3_patch,cat,12,max_patch,8
+visual_genome_m,siglip+dinov3_patch,cat,13,max_patch,2
+visual_genome_m,siglip+dinov3_patch,cat,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,15,max_patch,7
+visual_genome_m,siglip+dinov3_patch,cat,16,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,17,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,18,max_patch,4
+visual_genome_m,siglip+dinov3_patch,cat,19,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,20,max_patch,2
+visual_genome_m,siglip+dinov3_patch,cat,21,max_patch,3
+visual_genome_m,siglip+dinov3_patch,cat,22,max_patch,5
+visual_genome_m,siglip+dinov3_patch,cat,23,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,0,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,1,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,2,max_patch,6
+visual_genome_m,siglip+dinov3_patch,clock,3,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,4,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,5,max_patch,6
+visual_genome_m,siglip+dinov3_patch,clock,6,max_patch,3
+visual_genome_m,siglip+dinov3_patch,clock,7,max_patch,4
+visual_genome_m,siglip+dinov3_patch,clock,8,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,9,max_patch,6
+visual_genome_m,siglip+dinov3_patch,clock,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,11,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,12,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,14,max_patch,7
+visual_genome_m,siglip+dinov3_patch,clock,15,max_patch,6
+visual_genome_m,siglip+dinov3_patch,clock,16,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,17,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,18,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,19,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,20,max_patch,4
+visual_genome_m,siglip+dinov3_patch,clock,21,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,22,max_patch,5
+visual_genome_m,siglip+dinov3_patch,clock,23,max_patch,2
+visual_genome_m,siglip+dinov3_patch,elephant,0,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,1,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,2,max_patch,12
+visual_genome_m,siglip+dinov3_patch,elephant,3,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,4,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,5,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,6,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,7,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,8,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,9,max_patch,4
+visual_genome_m,siglip+dinov3_patch,elephant,10,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,11,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,12,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,14,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,15,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,16,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,17,max_patch,3
+visual_genome_m,siglip+dinov3_patch,elephant,18,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,19,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,20,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,21,max_patch,6
+visual_genome_m,siglip+dinov3_patch,elephant,22,max_patch,5
+visual_genome_m,siglip+dinov3_patch,elephant,23,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,0,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,1,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,2,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,3,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,4,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,5,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,6,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,7,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,8,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,11,max_patch,4
+visual_genome_m,siglip+dinov3_patch,giraffe,12,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,14,max_patch,7
+visual_genome_m,siglip+dinov3_patch,giraffe,15,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,16,max_patch,3
+visual_genome_m,siglip+dinov3_patch,giraffe,17,max_patch,4
+visual_genome_m,siglip+dinov3_patch,giraffe,18,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,19,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,20,max_patch,5
+visual_genome_m,siglip+dinov3_patch,giraffe,21,max_patch,6
+visual_genome_m,siglip+dinov3_patch,giraffe,22,max_patch,4
+visual_genome_m,siglip+dinov3_patch,giraffe,23,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,0,max_patch,4
+visual_genome_m,siglip+dinov3_patch,hat,1,max_patch,7
+visual_genome_m,siglip+dinov3_patch,hat,2,max_patch,3
+visual_genome_m,siglip+dinov3_patch,hat,3,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,4,max_patch,9
+visual_genome_m,siglip+dinov3_patch,hat,5,max_patch,6
+visual_genome_m,siglip+dinov3_patch,hat,6,max_patch,2
+visual_genome_m,siglip+dinov3_patch,hat,7,max_patch,2
+visual_genome_m,siglip+dinov3_patch,hat,8,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,10,max_patch,4
+visual_genome_m,siglip+dinov3_patch,hat,11,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,12,max_patch,6
+visual_genome_m,siglip+dinov3_patch,hat,13,max_patch,3
+visual_genome_m,siglip+dinov3_patch,hat,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,15,max_patch,13
+visual_genome_m,siglip+dinov3_patch,hat,16,max_patch,6
+visual_genome_m,siglip+dinov3_patch,hat,17,max_patch,5
+visual_genome_m,siglip+dinov3_patch,hat,18,max_patch,3
+visual_genome_m,siglip+dinov3_patch,hat,19,max_patch,8
+visual_genome_m,siglip+dinov3_patch,hat,20,max_patch,7
+visual_genome_m,siglip+dinov3_patch,hat,21,max_patch,2
+visual_genome_m,siglip+dinov3_patch,hat,22,max_patch,2
+visual_genome_m,siglip+dinov3_patch,hat,23,max_patch,9
+visual_genome_m,siglip+dinov3_patch,horse,0,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,1,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,2,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,3,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,4,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,5,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,6,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,7,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,8,max_patch,7
+visual_genome_m,siglip+dinov3_patch,horse,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,10,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,11,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,12,max_patch,4
+visual_genome_m,siglip+dinov3_patch,horse,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,15,max_patch,4
+visual_genome_m,siglip+dinov3_patch,horse,16,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,17,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,18,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,19,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,20,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,21,max_patch,5
+visual_genome_m,siglip+dinov3_patch,horse,22,max_patch,6
+visual_genome_m,siglip+dinov3_patch,horse,23,max_patch,5
+visual_genome_m,siglip+dinov3_patch,laptop,0,max_patch,4
+visual_genome_m,siglip+dinov3_patch,laptop,1,max_patch,4
+visual_genome_m,siglip+dinov3_patch,laptop,2,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,3,max_patch,2
+visual_genome_m,siglip+dinov3_patch,laptop,4,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,5,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,6,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,7,max_patch,5
+visual_genome_m,siglip+dinov3_patch,laptop,8,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,9,max_patch,4
+visual_genome_m,siglip+dinov3_patch,laptop,10,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,11,max_patch,5
+visual_genome_m,siglip+dinov3_patch,laptop,12,max_patch,5
+visual_genome_m,siglip+dinov3_patch,laptop,13,max_patch,2
+visual_genome_m,siglip+dinov3_patch,laptop,14,max_patch,4
+visual_genome_m,siglip+dinov3_patch,laptop,15,max_patch,3
+visual_genome_m,siglip+dinov3_patch,laptop,16,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,17,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,18,max_patch,8
+visual_genome_m,siglip+dinov3_patch,laptop,19,max_patch,2
+visual_genome_m,siglip+dinov3_patch,laptop,20,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,21,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,22,max_patch,6
+visual_genome_m,siglip+dinov3_patch,laptop,23,max_patch,6
+visual_genome_m,siglip+dinov3_patch,skateboard,0,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,1,max_patch,7
+visual_genome_m,siglip+dinov3_patch,skateboard,2,max_patch,6
+visual_genome_m,siglip+dinov3_patch,skateboard,3,max_patch,6
+visual_genome_m,siglip+dinov3_patch,skateboard,4,max_patch,2
+visual_genome_m,siglip+dinov3_patch,skateboard,5,max_patch,7
+visual_genome_m,siglip+dinov3_patch,skateboard,6,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,7,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,8,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,9,max_patch,6
+visual_genome_m,siglip+dinov3_patch,skateboard,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,11,max_patch,4
+visual_genome_m,siglip+dinov3_patch,skateboard,12,max_patch,7
+visual_genome_m,siglip+dinov3_patch,skateboard,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,15,max_patch,9
+visual_genome_m,siglip+dinov3_patch,skateboard,16,max_patch,2
+visual_genome_m,siglip+dinov3_patch,skateboard,17,max_patch,2
+visual_genome_m,siglip+dinov3_patch,skateboard,18,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,19,max_patch,3
+visual_genome_m,siglip+dinov3_patch,skateboard,20,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,21,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,22,max_patch,5
+visual_genome_m,siglip+dinov3_patch,skateboard,23,max_patch,4
+visual_genome_m,siglip+dinov3_patch,snow,0,max_patch,6
+visual_genome_m,siglip+dinov3_patch,snow,1,max_patch,6
+visual_genome_m,siglip+dinov3_patch,snow,2,max_patch,3
+visual_genome_m,siglip+dinov3_patch,snow,3,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,4,max_patch,2
+visual_genome_m,siglip+dinov3_patch,snow,5,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,6,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,7,max_patch,7
+visual_genome_m,siglip+dinov3_patch,snow,8,max_patch,2
+visual_genome_m,siglip+dinov3_patch,snow,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,10,max_patch,4
+visual_genome_m,siglip+dinov3_patch,snow,11,max_patch,2
+visual_genome_m,siglip+dinov3_patch,snow,12,max_patch,6
+visual_genome_m,siglip+dinov3_patch,snow,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,14,max_patch,3
+visual_genome_m,siglip+dinov3_patch,snow,15,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,16,max_patch,6
+visual_genome_m,siglip+dinov3_patch,snow,17,max_patch,2
+visual_genome_m,siglip+dinov3_patch,snow,18,max_patch,6
+visual_genome_m,siglip+dinov3_patch,snow,19,max_patch,6
+visual_genome_m,siglip+dinov3_patch,snow,20,max_patch,3
+visual_genome_m,siglip+dinov3_patch,snow,21,max_patch,2
+visual_genome_m,siglip+dinov3_patch,snow,22,max_patch,5
+visual_genome_m,siglip+dinov3_patch,snow,23,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,0,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,1,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,2,max_patch,2
+visual_genome_m,siglip+dinov3_patch,train,3,max_patch,4
+visual_genome_m,siglip+dinov3_patch,train,4,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,5,max_patch,2
+visual_genome_m,siglip+dinov3_patch,train,6,max_patch,2
+visual_genome_m,siglip+dinov3_patch,train,7,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,8,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,9,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,10,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,11,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,12,max_patch,4
+visual_genome_m,siglip+dinov3_patch,train,13,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,14,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,15,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,16,max_patch,7
+visual_genome_m,siglip+dinov3_patch,train,17,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,18,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,19,max_patch,2
+visual_genome_m,siglip+dinov3_patch,train,20,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,21,max_patch,6
+visual_genome_m,siglip+dinov3_patch,train,22,max_patch,5
+visual_genome_m,siglip+dinov3_patch,train,23,max_patch,8

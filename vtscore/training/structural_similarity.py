@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from collections.abc import Sequence
 from typing import Any, Optional
 
 import numpy as np
@@ -500,28 +501,42 @@ def maybe_structural_rerank_example(
     results: list[dict],
     threshold: float,
     snap: dict[Any, dict],
-    example_features: Optional[StructuralFeatures],
+    example_features: Optional[StructuralFeatures] | Sequence[Optional[StructuralFeatures]],
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
 ) -> tuple[list[dict], float]:
     """Stage-2 re-rank for the example-sort (seed-by-example) path.
 
-    The template is the **uploaded example's own** local features rather than a
-    vote-derived one: the user can crop the upload to the pattern they want to
+    The templates are the **uploaded examples' own** local features rather than
+    vote-derived ones: the user can crop an upload to the pattern they want to
     match before it is embedded, so the crop already restricts the template (no
-    ``region_box`` filtering needed here).  There are no votes, so there is no
-    match-statistic classifier to train - the cold-start inlier gate
-    (:class:`VerificationScorer` with no model) scores the fits, with its
-    boundary at :data:`STRUCTURAL_DECISION_THRESHOLD` like every other regime.
+    ``region_box`` filtering needed here).  *example_features* is one
+    :class:`~vtscore.media.structural.StructuralFeatures` or a sequence of them
+    - one per example - and a candidate is scored as the **max over
+    templates**, the same rule :func:`maybe_structural_rerank` applies to a
+    detector's RegionYes templates.  Several crops of one mark, or several
+    marks, therefore widen what can verify rather than being averaged away
+    (Stage 1 already folds the examples into a centroid; the geometry does
+    not, because a VLAD centroid of two logos matches neither).
 
-    A no-op for non-structural datasets and when the example yielded no
-    features (an empty template can never verify anything, so the Stage-1
-    cosine order is left intact).
+    There are no votes, so there is no match-statistic classifier to train -
+    the cold-start inlier gate (:class:`VerificationScorer` with no model)
+    scores the fits, with its boundary at :data:`STRUCTURAL_DECISION_THRESHOLD`
+    like every other regime.
+
+    A no-op for non-structural datasets and when no example yielded features
+    (an empty template can never verify anything, so the Stage-1 cosine order
+    is left intact); an empty template among usable ones is simply dropped.
     """
     if not snapshot_is_structural(snap):
         return results, threshold
-    if example_features is None or example_features.count == 0:
+    if example_features is None or isinstance(example_features, StructuralFeatures):
+        candidates: list[Optional[StructuralFeatures]] = [example_features]
+    else:
+        candidates = list(example_features)
+    templates = [f for f in candidates if f is not None and f.count > 0]
+    if not templates:
         return results, threshold
     matcher = _resolve_matcher(snap)
     if matcher is None:
@@ -530,7 +545,7 @@ def maybe_structural_rerank_example(
     reranked = structural_rerank(
         results,
         snap,
-        [example_features],
+        templates,
         scorer,
         matcher,
         top_k=top_k,

@@ -95,6 +95,7 @@ is used by every family; each family's base module re-exports
 | `step` | `str` | `""` | `"number"` fields: step increment; non-integer step → `float` CLI parsing |
 | `clears` | `list[str]` | `[]` | Field keys blanked in the UI when this field gets a non-empty value ("supply A *or* B") |
 | `hidden` | `bool` | `False` | Render no GUI widget for this field; its value is fixed by the plugin author in `default` and filled in by `normalize_field_values` like any other blank field. A GUI affordance only — the CLI flag, the wire payload, validation and normalization are all unchanged, so never hide a secret behind it. All-hidden plugins present as a bare action button |
+| `opened_in_browser` | `bool` | `False` | `"url"` fields only: the value is opened by the user's browser and never fetched by the server, so `normalize_field_values` checks it with `validate_browser_url` (scheme allowlist; `localhost` / LAN hosts pass) instead of the SSRF guard `validate_url` |
 | `include_in_origin` | `bool \| None` | `None` | Copy into the persisted origin dict. `None` = field-type default (`False` for `"file"` / `"password"`, `True` otherwise) |
 | `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Custom value → origin-string conversion for list/dict values |
 | `template_vars` | `tuple[str, ...]` | `()` | Template placeholders the framework substitutes into this field's value; see [Field-value normalization](#field-value-normalization) |
@@ -168,7 +169,8 @@ declared field of a text-like type (`text`, `url`, `email`, `password`,
    undeclared or unknown name raises `ValueError`. Supported names:
    `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`, `MM`, `DD`, `detector_name`,
    `detector_id`, `username`.
-3. Runs the field-type validator: `url` → `validate_url`;
+3. Runs the field-type validator: `url` → `validate_url` (or
+   `validate_browser_url` when the field sets `opened_in_browser`);
    `server_path` / `folder` → `confine_server_filepath` anchored at
    `get_file_access_base_dir()`, whose **approved path is written back**
    into `field_values` so the plugin body consumes exactly what was
@@ -509,7 +511,8 @@ def normalize_field_values(plugin: PluginBase, field_values: dict) -> dict: ...
    attacker-controlled name cannot escape the directory an
    admin-configured template implies.
 3. **Field-type-driven security validation.** `field_type="url"` goes
-   through `validate_url`; `field_type="server_path"` goes through
+   through `validate_url` (`validate_browser_url` with
+   `opened_in_browser=True`); `field_type="server_path"` goes through
    `confine_server_filepath` anchored at the per-user data dir, and the
    **approved** path is written back into `field_values` so the plugin
    body consumes exactly what was validated.
