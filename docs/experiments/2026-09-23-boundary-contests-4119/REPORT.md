@@ -63,3 +63,20 @@ build time.
   halves: "a bag or suitcase" and "a vase or potted plant".
 
 Raw per-type tables: `measurements/*.json`.
+
+## Rebuilt, 2026-09-23
+
+Job 688902 (v100), commit `cbdb8f207`, built from a clean tree.
+
+- **144 cells, all full, 14,400 positives.** That is 49 classes × 3 bands,
+  less the three fruit `@small` cells that were already dropped.
+- **Against the previous 52-class build:** the 15 cells of the five member
+  classes are replaced by 6 merged cells. **All 138 other cells have identical
+  membership**, and all 10,900 negatives and spares are the same images. That
+  is expected: the union covers exactly the same COCO classes, so no image
+  changes whether it holds a class in *C*.
+- **The merged cells are fresh draws.** Membership is a hash of
+  `(cell, image)`, and the cell names are new, so only 6–18 of each merged
+  cell's 100 were positives of a member class before.
+- **Vectors are unchanged:** 18,952 of the 24,028 shared images match
+  bit-for-bit, and the rest differ by at most 5e-7 (batch composition).
