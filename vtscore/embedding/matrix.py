@@ -605,6 +605,24 @@ def _patch_embedder_for_region_snap(snap: dict[int, dict[str, Any]]) -> str | No
     return None
 
 
+#: The dtype every **patch row** is held in: the ``patch_grid`` ingest stores
+#: (:func:`vtscore.datasets.stages.embedding._attach_patch_grid_to_media`), the
+#: flattened region matrix the live scorer max-pools over
+#: (:func:`_build_region_arrays`), and the eval harness's MaxPatch stack
+#: (:mod:`vtscore.eval.patch_styles`).  Read at call time, so all three follow
+#: one name and cannot disagree.
+#:
+#: float16 is a memory tradeoff - MaxPatch keeps ~197 rows per image, and this
+#: halves them - and #3159 measured what it costs: nothing resolvable.  The
+#: max-pooled score moves by ~5e-5 (the same for sub-patch objects), and 624
+#: paired region-voting runs put cost and AP within 0.005 of the float32 arm.
+#: See ``docs/experiments/2026-09-22-patch-grid-fp16-3159/``.
+#: Not an env knob on purpose: a cell's stored grid carries the dtype it was
+#: built with, so flipping this for an existing dataset would change only the
+#: *matrix* half of the path.  The study flips it in-process, on cells it built.
+PATCH_ROW_DTYPE: Any = np.float16
+
+
 def media_score_rows(
     media: dict[str, Any],
     embedder_name: str | None = None,
@@ -763,13 +781,13 @@ def _build_region_arrays(
     # rows are width-checked against the first media's before assignment, for
     # the same reason as in ``_stack_embeddings``: the raw failure here is a
     # bare numpy broadcast error naming neither the media nor the embedder.
-    first = media_score_rows(snap[sorted_ids[0]], patch_embedder_name, dtype=np.float16)
+    first = media_score_rows(snap[sorted_ids[0]], patch_embedder_name, dtype=PATCH_ROW_DTYPE)
     assert first is not None  # guaranteed by the _require_embedding pass above
     dim = int(first.shape[1])
-    region_matrix = np.empty((total, dim), dtype=np.float16)
+    region_matrix = np.empty((total, dim), dtype=PATCH_ROW_DTYPE)
     region_matrix[: first.shape[0]] = first
     for mi, cid in enumerate(sorted_ids[1:], start=1):
-        rows = media_score_rows(snap[cid], patch_embedder_name, dtype=np.float16)
+        rows = media_score_rows(snap[cid], patch_embedder_name, dtype=PATCH_ROW_DTYPE)
         assert rows is not None
         if int(rows.shape[1]) != dim:
             raise MismatchedVectorError(
