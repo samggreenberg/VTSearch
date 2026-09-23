@@ -1,4 +1,4 @@
-# `sbatch --wrap` runs `/bin/sh`, where `source gridenv.sh` searches PATH
+# 2026-09-22 — `sbatch --wrap` runs `/bin/sh`, so `source gridenv.sh` searches PATH (#3551)
 
 **2026-09-22, #3551.** To keep preflight's Python off the login node, the screen
 launcher was itself submitted as a job:
