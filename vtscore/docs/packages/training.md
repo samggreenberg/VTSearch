@@ -250,12 +250,40 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 | Function                                  | When it fires                                                 |
 |-------------------------------------------|---------------------------------------------------------------|
 | `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
+| `text_sort_threshold`                     | A cosine/text sort's line - the midpoint, or the guarded rule behind `VTSEARCH_TEXT_SORT_CUT` |
 | `conformal_threshold`                     | Conformal inclusion rule on one (scores, labels) set          |
 | `calculate_cross_calibration_threshold`   | k-fold cross-calibration, in one call                         |
 | `calibration_folds` / `calibration_folds_cached` | The inclusion-*independent* half: fit the folds       |
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
+
+### `text_sort_threshold(scores, rule=None)`
+
+`vtscore/training/thresholds/gmm.py`. The line a **typed-query** sort draws,
+called by `cosine_sort_active` for `role="text"` and by the eval harness's
+Autopilot opening (`_sort_threshold(typed_query=True)`, `startup_schedule`'s
+`@mid`, `text_baseline.py`). Example and label-file sorts keep
+`calculate_gmm_threshold`. The rule comes from `VTSEARCH_TEXT_SORT_CUT`:
+
+- `gmm_midpoint` (the default): exactly `calculate_gmm_threshold`.
+- `guarded_tail`: `guarded_text_sort_threshold`. If the shipped fit's two
+  components are separated (Ashman's D >= `TEXT_SORT_SEPARATION_D` = 2), it
+  continues that fit to convergence (`converge_score_gmm`) and cuts at the
+  midpoint. Otherwise it cuts at median + `TEXT_SORT_TAIL_K` (3) x the
+  lower-half-MAD sigma (`bulk_location_scale`).
+
+Issue #3826 measured the two on 1,120 labelled text sorts. A text sort is
+usually one broad mode with the matches as a shoulder, so the midpoint splits
+the mode and admits a median 43% of the haystack. The guarded line admits
+about the matches (F1 0.17 -> 0.39) and is 4x more stable under a bootstrap
+resample. It is worse on the Inclusion-0 rate cost (+0.053). It also fails on an
+unseparated majority-class query, a limitation that is documented and pinned by
+`tests_lib/sorting/test_text_sort_threshold.py`. The study is issue #3826
+(its report is `2026-09-22-text-cut-3826` under `docs/experiments/`). The rule is off by default because
+the trajectory A/B (`docs/experiments/2026-09-23-text-cut-ab-3826/REPORT.md`) found that it makes
+Autopilot's opening worse: the Bad phase votes at this line (Δcost +0.016 ± 0.005). A display-only
+version is #4136.
 
 ### `calculate_gmm_threshold(scores)`
 

@@ -255,18 +255,24 @@ def _hard_pick_by_index(ctx: ALContext, ranking: dict[int, float], threshold: fl
     return best
 
 
-def _sort_threshold(scores: dict[int, float]) -> float:
+def _sort_threshold(scores: dict[int, float], *, typed_query: bool = False) -> float:
     """The cutoff a text / example sort would show for *scores*.
 
-    Every cosine sort in the app draws its line with
-    :func:`~vtscore.training.thresholds.calculate_gmm_threshold` over the full
-    score distribution, and the ``hard`` select measures against that line — so
-    the Bad phase's pick lands in the *middle* of the text ranking, not at its
-    bottom.
+    Every cosine sort in the app draws a line over its full score distribution,
+    and the ``hard`` select measures against that line.  For an example (or
+    known-good centroid) sort the line is
+    :func:`~vtscore.training.thresholds.calculate_gmm_threshold`.  For a
+    **typed-query** sort (*typed_query*) it is
+    :func:`~vtscore.training.thresholds.text_sort_threshold`, the same call the
+    app's text route makes, so a flag that moves the app's text line (#3826)
+    moves the opening simulated here too.  With the default rule the two are
+    identical, and the Bad phase's pick lands in the *middle* of the text
+    ranking, not at its bottom.
     """
-    from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import calculate_gmm_threshold, text_sort_threshold  # noqa: PLC0415
 
-    return calculate_gmm_threshold(list(scores.values()))
+    values = list(scores.values())
+    return text_sort_threshold(values) if typed_query else calculate_gmm_threshold(values)
 
 
 def _atlas_next(ctx: ALContext) -> Optional[int]:
@@ -315,10 +321,11 @@ def _pick_on_seed_sort(ctx: ALContext, cut: Optional[float]) -> int:
     means the sort's own GMM line - the app's cutoff for every cosine sort.
     """
     ranking = ctx.seed_scores
+    typed_query = ranking is not None
     if ranking is None:
         ranking = _centroid_similarities(ctx, list(ctx.embeddings))
     if ranking:
-        line = _sort_threshold(ranking) if cut is None else cut
+        line = _sort_threshold(ranking, typed_query=typed_query) if cut is None else cut
         pick = _hard_pick_by_index(ctx, ranking, line)
         if pick is not None:
             return pick
