@@ -2087,9 +2087,14 @@ class TestLabelsetSyncDebounce:
         return ctx
 
     def test_sync_does_not_block_caller(self, tmp_path, monkeypatch):
-        """sync_to_labelset_source returns before the (potentially slow) push runs."""
-        import time
+        """sync_to_labelset_source returns before the (potentially slow) push runs.
 
+        Asserted structurally, not by wall clock: the save must never run on
+        the caller's thread while ``sync_to_labelset_source`` is on the stack.
+        A ``elapsed < 0.1`` bound flaked at 115 ms on a loaded GRID node
+        (#4140), and ``save_started`` being unset raced the 200 ms debounce
+        timer the same way.
+        """
         from vtscore.labels.sync import flush_pending_label_syncs, sync_to_labelset_source
         from vtscore.state.core import set_thread_detector_context, unregister_detector_context
         from vtsearch.state import medias, good_votes
@@ -2102,11 +2107,17 @@ class TestLabelsetSyncDebounce:
 
         src = get_labelset_source("server_json_file")
         original_save = src.save
-        save_started = threading.Event()
         release_save = threading.Event()
+        caller = threading.get_ident()
+        in_sync_call = False
+        saves_blocking_caller = []
 
         def slow_save(labelset, fv):
-            save_started.set()
+            if in_sync_call and threading.get_ident() == caller:
+                # A synchronous push: record it and bail out rather than
+                # deadlocking the caller on release_save.
+                saves_blocking_caller.append(fv)
+                return original_save(labelset, fv)
             assert release_save.wait(timeout=5)
             return original_save(labelset, fv)
 
@@ -2118,17 +2129,12 @@ class TestLabelsetSyncDebounce:
             medias[mid] = {"id": mid, "md5": "dbnc_block_md5", "media_type": "audio"}
             good_votes[mid] = None
 
-            t0 = time.monotonic()
-            sync_to_labelset_source()
-            elapsed = time.monotonic() - t0
-            # Scheduling must be effectively free; well under the 200ms
-            # debounce window, let alone the timer + slow save.
-            assert elapsed < 0.1
-
-            # The slow save shouldn't have started yet: the debounce timer
-            # hasn't fired (200ms), and even if it had, the save would be
-            # blocked on release_save.
-            assert not save_started.is_set()
+            in_sync_call = True
+            try:
+                sync_to_labelset_source()
+            finally:
+                in_sync_call = False
+            assert saves_blocking_caller == []
 
             # Allow the eventual write to finish so flush() returns.
             release_save.set()
