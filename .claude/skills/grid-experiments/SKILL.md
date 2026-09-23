@@ -89,12 +89,16 @@ script on `origin/dev`, and either on a branch already merged into
 every other worktree with the reason it was kept, and it never deletes a
 branch.
 
-**A PR merges into `dev` only with a green `suite-grid` status on its exact
-HEAD.** `scripts/slurm/suite.sbatch` posts that commit status at the end of every
-run, success or failure, with the pass count or the gate that blocked. Submit
-dev's copy of the script (`git show origin/dev:scripts/slurm/suite.sbatch >
-<scratch>/suite.sbatch`), never the branch's own. A new commit on the branch
-needs a new run, because the status belongs to the SHA.
+**Run the suite on the GRID before merging, so the PR carries a `suite-grid`
+status on its exact HEAD.** `scripts/slurm/suite.sbatch` posts that commit status
+at the end of every run, success or failure, with the pass count or the gate that
+blocked. The status is informational, not a required check (#4149): the merge gate
+is a full green `./run-tests.sh` on every surface, and cloud sessions, which cannot
+reach the GRID, merge without it. From the GRID, though, post it: it is the only
+machine-readable record that a commit passed. Submit dev's copy of the script
+(`git show origin/dev:scripts/slurm/suite.sbatch > <scratch>/suite.sbatch`), never
+the branch's own. A new commit on the branch needs a new run, because the status
+belongs to the SHA. See `docs/branch-protection.md`.
 
 **Never delete a dirty or unmerged worktree**, yours or anyone's, and never
 `git worktree remove --force` one. `/expscratch` has no snapshots, so a

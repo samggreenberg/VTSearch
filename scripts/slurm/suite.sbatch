@@ -23,10 +23,11 @@
 # the same risk every other script run from that checkout carries.
 #
 # At the end it posts a GitHub commit status, context `suite-grid`, on the SHA it
-# tested: success or failure, with the pass count or the gate that blocked. dev's
-# branch protection requires that status, so a PR merges only once this script
-# has passed on its exact HEAD. A failure to post is a WARNING in the log and
-# never changes the exit code; SUITE_POST_STATUS=0 skips it.
+# tested: success or failure, with the pass count or the gate that blocked. The
+# status is informational, not a required check on dev (#4149): cloud sessions
+# cannot produce it, so a full green ./run-tests.sh stays the merge gate. A
+# failure to post is a WARNING in the log and never changes the exit code;
+# SUITE_POST_STATUS=0 skips it.
 #
 # The worktree and ref are ARGUMENTS, not baked in: editing a copy of this file
 # with sed is how job 507084 ended up sourcing a gridenv.sh that did not exist,
@@ -140,9 +141,9 @@ status=${PIPESTATUS[0]}
 echo "RUN_TESTS_EXIT=$status"
 
 # Post the verdict as a GitHub commit status on the SHA that was tested, context
-# `suite-grid`, which dev's branch protection requires (#4133). There are no
-# GitHub Actions in this repo, so this is the only machine-readable record that a
-# commit passed the suite; before it, "green" meant a human reading a log.
+# `suite-grid`, which is informational rather than required on dev (#4149; see
+# docs/branch-protection.md). There are no GitHub Actions in this repo, so this
+# is the only machine-readable record that a commit passed the suite; before it, "green" meant a human reading a log.
 #
 # This must never change the job's outcome: every failure below is a WARNING and
 # `status` is untouched. SUITE_POST_STATUS=0 turns it off.
