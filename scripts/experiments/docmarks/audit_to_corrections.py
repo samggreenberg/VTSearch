@@ -10,6 +10,7 @@
     python audit_to_corrections.py --task ucsf_classes --reviewer <name> --apply
     python audit_to_corrections.py --task query_crops --reviewer <name> --apply
     python audit_to_corrections.py --task box_tighten --reviewer <name> --apply
+    python audit_to_corrections.py --task surprise --reviewer <name> --apply   # top-ranked presumed negatives (#4089)
     python audit_to_corrections.py --migrate-adjudications --apply
 
 Without ``--apply`` it prints what it would change and touches nothing.
@@ -1006,6 +1007,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "ucsf_classes",
             "query_crops",
             "box_tighten",
+            "surprise",
         ),
     )
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -1120,7 +1122,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         # truth: it compiles to the same same/different rows the pairwise pass
         # produces and goes through the same applier.
         verdicts, slate_problems = load_merge_answer(audit_dir)
-    elif args.task == "ucsf_classes":
+    elif args.task in ("ucsf_classes", "surprise"):
         # Every row, answered or not: a relation row carries no `verdict`, and an
         # unanswered sheet is still counted as unreviewed.
         path = audit_dir / "verdicts.jsonl"
@@ -1177,6 +1179,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             pages, classes, verdicts, reviewer=args.reviewer
         )
         new_class_ids = sorted(set(classes) - before)
+    elif args.task == "surprise":
+        from surprise_review import apply_surprise  # noqa: PLC0415
+
+        changes, problems, new_reviewed_negatives, new_exclusions = apply_surprise(
+            classes, verdicts, reviewer=args.reviewer
+        )
     elif args.task == "query_crops":
         from query_crops import STORE, apply_query_crops, load_store  # noqa: PLC0415
 

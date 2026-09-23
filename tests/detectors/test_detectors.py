@@ -1354,7 +1354,7 @@ class TestLoadModelEndpoint:
         res = client.post("/api/detectors/registry/load", json={"detector_id": "nope"})
         assert res.status_code == 404
 
-    def test_load_with_unloaded_dataset_header_409s_cleanly(self, client):
+    def test_load_with_unloaded_dataset_header_409s_cleanly(self, client, tmp_path):
         """An ``X-Dataset-Id`` naming an unloaded dataset must 409, not hang.
 
         Regression test for issue #3139: the route resolved the dataset
@@ -1364,6 +1364,18 @@ class TestLoadModelEndpoint:
         until the app was restarted.
         """
         from vtscore.concurrency.progress import detector_loading_tasks
+        from vtscore.datasets.registry import register_dataset
+
+        # Registered but not in memory; an unregistered id would be a deleted
+        # dataset, which is a 404 rather than this 409 (issue #4086).
+        unloaded = register_dataset(
+            name="Unloaded",
+            media_type="audio",
+            num_items=0,
+            pkl_path=str(tmp_path / "unloaded.pkl"),
+            embedder="",
+            created_by="default",
+        )
 
         res = client.post(
             "/api/detectors/registry",
@@ -1374,7 +1386,7 @@ class TestLoadModelEndpoint:
         res = client.post(
             "/api/detectors/registry/load",
             json={"detector_id": detector_id},
-            headers={"X-Dataset-Id": "not_a_loaded_dataset"},
+            headers={"X-Dataset-Id": unloaded["id"]},
         )
         assert res.status_code == 409
         assert res.get_json().get("error_code") == "dataset_not_loaded"
