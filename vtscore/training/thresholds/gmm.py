@@ -687,9 +687,12 @@ _ANCHOR_MIN_WEIGHT = 1e-6
 #: together and the midpoint cut lands low (FPR +0.044 to buy FNR -0.018).
 #: What ports is the *criterion*, not the number.  1e-8 is numerically the
 #: incumbent's own tolerance applied to the likelihood instead of the
-#: parameters: 1.6x cheaper, the admitted set moves by a median of zero and a
+#: parameters: 1.9x cheaper, the admitted set moves by a median of zero and a
 #: p90 of one media in two thousand, and the share of folds exiting on
-#: ``max_iter`` falls from 5.7% to 1.4%.  Measured in
+#: ``max_iter`` falls from 26.5% to 7.4%.  (An earlier version of this comment
+#: said 1.6x and 5.7% -> 1.4%: those came from a harness frame fitted at the
+#: library's default anchor mass of 10 rather than the shipped 0.3, and #3825's
+#: report retracted them.)  Measured in
 #: ``docs/experiments/2026-09-13-anchored-em-stop-3825/REPORT.md``.
 #:
 #: Read inside :func:`fit_anchored_score_gmm` rather than bound as a default
@@ -702,7 +705,28 @@ _ANCHORED_EM_LOGLIK_TOL: "float | None" = 1e-8
 #: budget is one fact rather than two literals.  The tolerance is inert while
 #: :data:`_ANCHORED_EM_LOGLIK_TOL` is set (:func:`_anchored_em` reads one rule
 #: or the other, never both).
-_ANCHORED_EM_MAX_ITER = 200
+#:
+#: **The budget is 2,000, not 200, because a capped refit is not a nearly
+#: converged one** (issue #3839).  At 200, 7.4% of 4,493 real fold refits left on
+#: the cap, and finishing them (the same loop run to 1e-13) moved the admitted
+#: set on 98% of the cases they belonged to - median 0.73% of the haystack, max
+#: 36%.  They are slow migrations, the minority component still walking out to
+#: the high mode, and a capped fit's midpoint sits low, so the cut over-admits.
+#: The issue's other two answers were priced and rejected: a stall / relative /
+#: Aitken rule makes "converged" reachable by stopping *earlier* and moves every
+#: capped case further from the converged fit, and treating a capped refit as a
+#: degeneracy (fall back to the unanchored fit) moves them furthest of all
+#: (median 7% of the haystack from converged).  At 2,000: capped 7.4% -> 0.067%
+#: (3 of 4,493), no case more than 2.3% of a haystack from converged, the
+#: objective better on every fold it changes and worse on none; a paired
+#: trajectory A/B over 513 cells gives Delta cost -0.0021 +- 0.0015 (not a
+#: regression).  Price: mean refit +25% (the median fold never reaches 200 and
+#: is untouched), and on the slow folds themselves 26 -> 47 ms at fold size,
+#: 0.32 -> 0.77 s at ``_GMM_MAX_SAMPLES``.  Measured in
+#: ``docs/experiments/2026-09-22-anchored-maxiter-3839/REPORT.md``.  The residual
+#: rate is still reported (``FoldAnchoredCut.n_unconverged``, provenance
+#: ``fold_anchored_maxiter{u}[a/k]``) - the documented rate is 0.07%.
+_ANCHORED_EM_MAX_ITER = 2000
 _ANCHORED_EM_TOL = 1e-8
 
 
