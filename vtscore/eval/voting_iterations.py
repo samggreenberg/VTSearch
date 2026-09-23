@@ -1858,18 +1858,33 @@ def simulate_voting_iterations(  # noqa: C901
     # get the decomposition on the column that has one instead of dying on the
     # column that doesn't, and the skip is loud here and visible in the frame
     # (no `skyline_*` rows, NaN decomposition columns) rather than silent.
+    #
+    # **v2 (#4159): a patch column under REGION voting gets `skyline_train_full`
+    # with oracle boxes.** Owner ruling on #3321's open item: supervise with each
+    # positive's ground-truth box and every image, which is exactly what
+    # `_train_and_calibrate(region_voting=True)` already does for a mortal Good
+    # vote -- the sim user drags the GT box -- so the skyline still differs from a
+    # mortal step in the labels and nothing else. It needs datasets whose
+    # positives carry the box (`coco_quarry` carries exactly one per positive,
+    # #4096). The cross-fitted bracket stays whole-image only: cross-fitting a
+    # box-supervised head over the TEST split is a second design nobody has made.
     if skyline_arms and (style_obj is None or style_obj.name != _WHOLE_IMAGE_STYLE):
         import warnings  # noqa: PLC0415
 
-        warnings.warn(
-            f"skyline_arms={skyline_arms} skipped for style={style or 'none'!r}: the supervised "
-            f"skyline is scoped to the {_WHOLE_IMAGE_STYLE!r} column in v1, because a patch "
-            "column's skyline needs a supervision decision (GT boxes vs. multiple-instance) "
-            "that is still open - see issue #3321.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-        skyline_arms = []
+        keep = [a for a in skyline_arms if a == SKYLINE_TRAIN_FULL] if (region_voting and style_obj is not None) else []
+        dropped = [a for a in skyline_arms if a not in keep]
+        if dropped:
+            why = (
+                "the cross-fitted bracket is whole-image only"
+                if region_voting and style_obj is not None
+                else "a patch column's skyline is defined only under region voting (oracle boxes, #4159)"
+            )
+            warnings.warn(
+                f"skyline_arms={dropped} skipped for style={style or 'none'!r}: {why}; see issues #3321, #4159.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        skyline_arms = keep
     blend_schedule, calibration_fraction = _resolve_production_defaults(
         blend_schedule=blend_schedule,
         calibration_fraction=calibration_fraction,
