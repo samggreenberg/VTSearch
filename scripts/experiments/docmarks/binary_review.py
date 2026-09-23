@@ -87,6 +87,11 @@ FOOTER_H = 34
 #: The candidate's mark is enlarged to at least this many pixels on its long side
 #: when the panel allows it.
 MIN_MARK_PX = 400
+#: An outlined candidate is never enlarged past this (#4073).  400 interpolated
+#: pixels from a 24 px mark are not more information than 24 px; instead the
+#: window widens until the panel is filled with real pixels, and the outline
+#: says which mark is the question.
+MAX_UPSCALE = 2.0
 MARGIN = 0.25
 #: Extra query crops kept per class, in inlier-rank order.
 QUERY_CROP_CAP = 4
@@ -256,6 +261,37 @@ def expand(
     return max(0, x0 - pad), max(0, y0 - pad), min(width, x1 + pad), min(height, y1 + pad)
 
 
+def widen_to_real_pixels(
+    region: tuple[int, int, int, int], mark_long: int, panel: tuple[int, int], width: int, height: int
+) -> tuple[int, int, int, int]:
+    """Widen *region* so filling *panel* never enlarges it past :data:`MAX_UPSCALE` (#4073).
+
+    The target scale is the one that brings the mark to :data:`MIN_MARK_PX`,
+    capped at :data:`MAX_UPSCALE` and never below 1.  The window grows about its
+    centre to the size that fills the panel at that scale, shifted to stay on
+    the page, and never shrinks.  Only for a question that outlines its box: a
+    wider window makes "which mark?" ambiguous without one.
+    """
+    target = min(max(MIN_MARK_PX / max(1, mark_long), 1.0), MAX_UPSCALE)
+    x0, y0, x1, y1 = region
+
+    def grow(lo: int, hi: int, need: float, limit: int) -> tuple[int, int]:
+        need = min(float(limit), need)
+        if hi - lo >= need:
+            return lo, hi
+        extra = need - (hi - lo)
+        lo, hi = lo - extra / 2, hi + extra / 2
+        if lo < 0:
+            lo, hi = 0, hi - lo
+        if hi > limit:
+            lo, hi = max(0, lo - (hi - limit)), limit
+        return int(round(lo)), int(round(hi))
+
+    x0, x1 = grow(x0, x1, panel[0] / target, width)
+    y0, y1 = grow(y0, y1, panel[1] / target, height)
+    return x0, y0, x1, y1
+
+
 def panel_scale(region: tuple[int, int, int, int], mark_long: int, panel: tuple[int, int]) -> float:
     """Enlarge so the mark reaches MIN_MARK_PX, but never past the panel."""
     rw, rh = max(1, region[2] - region[0]), max(1, region[3] - region[1])
@@ -296,6 +332,40 @@ def _fit(im: Any, size: tuple[int, int]) -> Any:
     w, h = im.size
     s = min(size[0] / w, size[1] / h)
     return im.resize((max(1, int(w * s)), max(1, int(h * s))), Image.Resampling.LANCZOS)
+
+
+def outlined_placement(q: Question, page: Any) -> tuple[tuple[int, int, int, int], float, int, int]:
+    """``(region, scale, ox, oy)``: where an outlined question puts its page region on the sheet.
+
+    One function for the renderer and for :func:`sheet_box_to_page`, so a box a
+    reviewer draws on the sheet maps back to exactly the page pixels shown.
+    """
+    W, H = sheet_size(q)
+    body_top, body_h = HEADER_H + 8, H - HEADER_H - FOOTER_H - 16
+    left_w = q.left_w or LEFT_W
+    panel = (W - left_w - 32, body_h)
+    region = expand(q.box, q.old_box, page.width, page.height, q.margin)
+    if q.outline:
+        region = widen_to_real_pixels(region, max(q.box[2], q.box[3]), panel, page.width, page.height)
+    s = panel_scale(region, max(q.box[2], q.box[3]), panel)
+    cw, ch = max(1, int((region[2] - region[0]) * s)), max(1, int((region[3] - region[1]) * s))
+    return region, s, left_w + 16 + (panel[0] - cw) // 2, body_top + (panel[1] - ch) // 2
+
+
+def sheet_box_to_page(q: Question, page: Any, norm: Sequence[float]) -> list[int]:
+    """A reviewer-drawn box, ``(x0, y0, x1, y1)`` normalised to the sheet, as a page ``[x, y, w, h]``.
+
+    VTSearch stores a box drawn with a Good vote relative to the image shown
+    (#4109: Sam drew corrected boxes rather than voting Bad).  Clipped to the
+    page region the sheet showed.
+    """
+    region, s, ox, oy = outlined_placement(q, page)
+    W, H = sheet_size(q)
+    xs = sorted(region[0] + (float(v) * W - ox) / s for v in (norm[0], norm[2]))
+    ys = sorted(region[1] + (float(v) * H - oy) / s for v in (norm[1], norm[3]))
+    x0, x1 = (min(max(v, region[0]), region[2]) for v in xs)
+    y0, y1 = (min(max(v, region[1]), region[3]) for v in ys)
+    return [int(round(x0)), int(round(y0)), max(1, int(round(x1 - x0))), max(1, int(round(y1 - y0)))]
 
 
 def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
@@ -340,10 +410,12 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
 
     # right: one candidate, enlarged
     page = pages[q.page_id]
+    panel = (W - left_w - 32, body_h)
     region = expand(q.box, q.old_box, page.width, page.height, q.margin)
+    if q.outline:
+        region = widen_to_real_pixels(region, max(q.box[2], q.box[3]), panel, page.width, page.height)
     with _open_page(page, corpus) as im:
         crop = im.convert("RGB").crop(region)
-    panel = (W - left_w - 32, body_h)
     if (q.trim_border or q.crop_to_ink) and not q.outline:
         from vtscore.media.image.edge_trim import solid_edge_box  # noqa: PLC0415
 
@@ -358,11 +430,12 @@ def render(q: Question, pages: dict[str, Any], corpus: Path, out: Path) -> Path:
         # a trimmed crop just fills the panel: there is no box to keep legible,
         # only the page.
         s = min(panel[0] / crop.width, panel[1] / crop.height)
+        crop = crop.resize((max(1, int(crop.width * s)), max(1, int(crop.height * s))), Image.Resampling.LANCZOS)
+        ox = left_w + 16 + (panel[0] - crop.width) // 2
+        oy = body_top + (panel[1] - crop.height) // 2
     else:
-        s = panel_scale(region, max(q.box[2], q.box[3]), panel)
-    crop = crop.resize((max(1, int(crop.width * s)), max(1, int(crop.height * s))), Image.Resampling.LANCZOS)
-    ox = left_w + 16 + (panel[0] - crop.width) // 2
-    oy = body_top + (panel[1] - crop.height) // 2
+        region, s, ox, oy = outlined_placement(q, page)
+        crop = crop.resize((max(1, int(crop.width * s)), max(1, int(crop.height * s))), Image.Resampling.LANCZOS)
     img.paste(crop, (ox, oy))
     lw = 4
 
@@ -609,6 +682,108 @@ def emit_box_tighten(audit: Path, classes, pages) -> list[tuple[str, list[Questi
     return [(f"{PREFIX} staver boxes -- red box right?", qs)]
 
 
+def emit_box_band(audit: Path, classes, pages) -> list[tuple[str, list[Question]]]:
+    """One queue per class: is the proposed box tight on a band-located mark? (#4109)
+
+    The band itself is not drawn: it spans the letterhead, and showing it would
+    widen the window until the mark is small again.  The references are the
+    class's tight crops.
+    """
+    queues = []
+    for r in read_jsonl(audit / "verdicts.jsonl"):
+        cid = r["class_id"]
+        refs = class_refs(cid, classes, pages)
+        qs = [
+            Question(
+                filename=f"band__{slug(cid)}__m{m['index']:03d}.jpg",
+                task="box_tighten_band",
+                question="Is the red box tight around the mark on the left?",
+                refs=refs,
+                page_id=m["page_id"],
+                box=list(m["new_box"]),
+                key={"class_id": cid, "index": m["index"]},
+                item=f"{cid} member {m['index']}",
+                greyscale=False,
+                ref_labels=False,
+                anonymous=True,
+            )
+            for m in r["members"]
+            if box_questionable(m) and m["page_id"] in pages
+        ]
+        if qs:
+            queues.append((f"{PREFIX} {cid.split('/')[-1]} -- red box tight on the mark?", qs))
+    return queues
+
+
+def emit_box_draw(audit: Path, classes, pages) -> list[tuple[str, list[Question]]]:
+    """One queue per class of marks to draw a box on (#4125): the current box outlined, no proposal."""
+    queues = []
+    for r in read_jsonl(audit / "verdicts.jsonl"):
+        cid = r["class_id"]
+        refs = class_refs(cid, classes, pages)
+        qs = [
+            Question(
+                filename=f"draw__{slug(cid)}__m{m['index']:03d}.jpg",
+                task="box_draw",
+                question="Draw a box on the left mark, then Good. Bad = not on this page.",
+                refs=refs,
+                page_id=m["page_id"],
+                box=list(m["old_box"]),
+                key={"class_id": cid, "index": m["index"]},
+                item=f"{cid} member {m['index']} ({m.get('why', '')})",
+                greyscale=False,
+                ref_labels=False,
+                anonymous=True,
+                margin=0.1,
+            )
+            for m in r["members"]
+            if m["page_id"] in pages
+        ]
+        if qs:
+            queues.append((f"{PREFIX} {cid.split('/')[-1]} -- draw the box", qs))
+    return queues
+
+
+def translate_box_draw(rows, questions, votes, drawn=None):
+    """Only a drawn box changes a mark (#4125).
+
+    Good with a drawn box: it replaces the current box.  Good alone: the current
+    box is kept (confirmed as it is).  Bad: the reviewer says the mark is not on
+    the page -- that contradicts a positive, so it is reported, never applied.
+    """
+    got = _per_class(questions, votes, "box_draw")
+    by_member = {
+        (q["key"]["class_id"], q["key"]["index"]): fn for fn, q in questions.items() if q["task"] == "box_draw"
+    }
+    drawn = drawn or {}
+    out, notes = [], []
+    for r in rows:
+        r = dict(r)
+        asked = got.get(r["class_id"], {})
+        if any(v is None for v in asked.values()):
+            notes.append(f"{r['class_id']}: {sum(v is None for v in asked.values())} of {len(asked)} unanswered")
+            out.append(r)
+            continue
+        members, keep = [], []
+        for m in r.get("members", []):
+            vote = asked.get(m["index"])
+            box = drawn.get(by_member.get((r["class_id"], m["index"])))
+            if vote == "good" and box is not None:
+                m = dict(m, new_box=list(box), drawn_by_reviewer=True)
+                keep.append(m["index"])
+            elif vote == "good":
+                m = dict(m, confirmed_as_is=True)
+            elif vote == "bad":
+                m = dict(m, reviewer_says_not_on_page=True)
+                notes.append(f"{r['class_id']}: {m['page_id']} voted Bad (mark not on page?) -- a person should look")
+            members.append(m)
+        r["members"] = members
+        r["verdict"] = ",".join(map(str, keep)) if keep else "none"
+        r["verdict_source"] = "vtsearch"
+        out.append(r)
+    return out, notes
+
+
 COMPLETENESS2 = Path("/expscratch/sgreenberg/docmarks/completeness2/verdicts.suggested.jsonl")
 
 
@@ -811,9 +986,14 @@ def translate_query_crops(rows, questions, votes, cap: int = QUERY_CROP_CAP):
     return out, unanswered
 
 
-def translate_box_tighten(rows, questions, votes):
-    """Members voted Good accept the red box; members never asked keep their box."""
-    got = _per_class(questions, votes, "box_tighten")
+def translate_box_tighten(rows, questions, votes, task: str = "box_tighten", drawn=None):
+    """Members voted Good accept the red box; members never asked keep their box.
+
+    *drawn* maps a question's filename to a page box the reviewer drew with the
+    Good vote: it replaces the proposal, because it is the reviewer's box.
+    """
+    got = _per_class(questions, votes, task)
+    by_member = {(q["key"]["class_id"], q["key"]["index"]): fn for fn, q in questions.items() if q["task"] == task}
     out, unanswered = [], []
     for r in rows:
         r = dict(r)
@@ -826,6 +1006,14 @@ def translate_box_tighten(rows, questions, votes):
             keep = sorted(i for i, v in asked.items() if v == "good")
             r["verdict"] = ",".join(map(str, keep)) if keep else "none"
             r["verdict_source"] = "vtsearch"
+        if drawn:
+            members = []
+            for m in r.get("members", []):
+                box = drawn.get(by_member.get((r["class_id"], m["index"])))
+                if box is not None:
+                    m = dict(m, proposed_box=m.get("new_box"), new_box=list(box), drawn_by_reviewer=True)
+                members.append(m)
+            r["members"] = members
         out.append(r)
     return out, unanswered
 
@@ -898,6 +1086,15 @@ TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
     # Top-ranked presumed negatives of a run (#4089); the translator lives with its pass.
     "surprise": (lambda corpus: corpus / "audit" / "surprise" / "verdicts.jsonl", _translate_surprise),
     "box_tighten": (lambda corpus: corpus / "audit" / "box_tighten" / "verdicts.jsonl", translate_box_tighten),
+    # Band-located marks given a real box (#4109); applied with --task box_tighten --audit-dir box_tighten_band.
+    # Boxes drawn by hand on marks no proposal fitted (#4125); applied like box_tighten_band.
+    "box_draw": (lambda corpus: corpus / "audit" / "box_draw" / "verdicts.jsonl", translate_box_draw),
+    "box_tighten_band": (
+        lambda corpus: corpus / "audit" / "box_tighten_band" / "verdicts.jsonl",
+        lambda rows, questions, votes, drawn=None: translate_box_tighten(
+            rows, questions, votes, task="box_tighten_band", drawn=drawn
+        ),
+    ),
     "completeness2": (lambda corpus: COMPLETENESS2, translate_completeness2),
 }
 
@@ -1138,6 +1335,50 @@ def guard_write(dest: Path, out_rows: Sequence[dict[str, Any]], cleared: Path, a
         )
 
 
+#: Tasks whose Good votes may carry a reviewer-drawn box that replaces the proposal.
+DRAWN_BOX_TASKS = frozenset({"box_tighten_band", "box_draw"})
+
+
+def drawn_boxes(
+    base: Optional[str], cleared: Path, manifests: dict[str, tuple[Path, dict[str, Any]]], corpus: Path
+) -> dict[str, list[int]]:
+    """``{filename: page box}`` for every Good vote carrying a drawn ``region_box``.
+
+    Read from ``.cleared`` detector backups, then the live app, which wins.
+    Only questions of :data:`DRAWN_BOX_TASKS` are mapped; the rest are ignored.
+    """
+    questions = {
+        fn: q for _d, m in manifests.values() for fn, q in m["questions"].items() if q["task"] in DRAWN_BOX_TASKS
+    }
+    if not questions:
+        return {}
+    sheets: dict[str, list[float]] = {}
+
+    def take(labels) -> None:
+        for lab in labels or []:
+            fn, box = lab.get("filename"), lab.get("region_box")
+            if fn in questions and box and lab.get("label") == "good":
+                sheets[fn] = box
+
+    for path in sorted(cleared.glob("detectors-cleared-*/*.json.cleared")):
+        take((json.loads(path.read_text(encoding="utf-8")).get("labelset") or {}).get("labels"))
+    if base:
+        for d in docmarks_detectors(api(base, "/api/detectors/registry").get("detectors", [])):
+            take((api(base, f"/api/detectors/{urllib.parse.quote(d['name'])}").get("labelset") or {}).get("labels"))
+    if not sheets:
+        return {}
+    from sources._common import read_manifest  # noqa: PLC0415
+
+    want = {questions[fn]["page_id"] for fn in sheets}
+    pages = {p.page_id: p for p in read_manifest(corpus / "corpus.jsonl") if p.page_id in want}
+    out = {}
+    for fn, box in sheets.items():
+        q = dict(questions[fn])
+        q["refs"] = [Ref(**r) for r in q.get("refs", [])]
+        out[fn] = sheet_box_to_page(Question(**q), pages[q["page_id"]], box)
+    return out
+
+
 def bank(
     base: str,
     root: Path,
@@ -1176,11 +1417,16 @@ def bank(
             qs[fn] = q
             if fn in votes:
                 vs[fn] = votes[fn]
+    drawn = drawn_boxes(base, cleared, manifests, corpus)
     for src_name, (qs, vs) in by_task.items():
-        translator = TRANSLATORS[next(iter(qs.values()))["task"]][1]
+        task = next(iter(qs.values()))["task"]
+        translator = TRANSLATORS[task][1]
         src = Path(src_name)
         rows = read_jsonl(src)
-        out_rows, unanswered = translator(rows, qs, vs)
+        if task in DRAWN_BOX_TASKS:
+            out_rows, unanswered = translator(rows, qs, vs, drawn={fn: b for fn, b in drawn.items() if fn in qs})
+        else:
+            out_rows, unanswered = translator(rows, qs, vs)
         dest = src.with_name("verdicts.from_vtsearch.jsonl")
         guard_write(dest, out_rows, cleared, allow_loss)
         dest.write_text("".join(json.dumps(r) + "\n" for r in out_rows), encoding="utf-8")
@@ -1199,7 +1445,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     e = sub.add_parser("emit")
-    e.add_argument("--task", choices=["ucsf_classes", "query_crops", "box_tighten", "completeness2"], required=True)
+    e.add_argument(
+        "--task",
+        choices=["ucsf_classes", "query_crops", "box_tighten", "box_tighten_band", "box_draw", "completeness2"],
+        required=True,
+    )
     e.add_argument("--corpus", type=Path, default=cfg.OUT)
     e.add_argument("--root", type=Path, default=ROOT)
     e.add_argument("--cross", type=Path, default=Path("/expscratch/sgreenberg/docmarks/ucsf-3921/cross.json"))
@@ -1246,6 +1496,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         queues = emit_query_crops(audit, classes, pages, cap=args.cap)
     elif args.task == "completeness2":
         queues = emit_completeness2(COMPLETENESS2, classes, pages)
+    elif args.task == "box_tighten_band":
+        queues = emit_box_band(audit, classes, pages)
+    elif args.task == "box_draw":
+        queues = emit_box_draw(audit, classes, pages)
     else:
         queues = emit_box_tighten(audit, classes, pages)
     # a class can have queues from several passes: the pass keeps their dirs apart
