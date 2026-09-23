@@ -91,15 +91,33 @@ def edge_shift(new: Sequence[int], old: Sequence[int]) -> float:
     )
 
 
-def members(class_id: str, meta: dict[str, Any], pages: dict[str, Page]) -> list[Proposal]:
-    """Every boxed instance of *class_id*, in page order, as an empty proposal."""
+#: Provenance suffix of a mark located only by its letterhead band (#3953, #4088):
+#: the mark is somewhere inside the box, not boxed.
+BAND_SUFFIX = "_band"
+
+
+def is_band(mark: Mark) -> bool:
+    return str(mark.provenance).endswith(BAND_SUFFIX)
+
+
+def located_provenance(provenance: str) -> str:
+    """The provenance a band-located mark takes once a person accepts a tight box for it (#4109)."""
+    return provenance[: -len(BAND_SUFFIX)] if provenance.endswith(BAND_SUFFIX) else provenance
+
+
+def members(class_id: str, meta: dict[str, Any], pages: dict[str, Page], *, band_only: bool = False) -> list[Proposal]:
+    """Every boxed instance of *class_id*, in page order, as an empty proposal.
+
+    ``band_only`` keeps only band-located instances: the pass that gives them a
+    real box (#4109).
+    """
     out = []
     for page_id in sorted(meta.get("page_ids", [])):
         page = pages.get(page_id)
         if page is None:
             continue
         for i, mark in enumerate(page.marks):
-            if mark.class_id == class_id and area(mark.box) > 0:
+            if mark.class_id == class_id and area(mark.box) > 0 and (not band_only or is_band(mark)):
                 out.append(Proposal(page_id, i, tuple(int(v) for v in mark.box)))
     return out
 
@@ -109,13 +127,19 @@ def propose(
     corners: Optional[Sequence[tuple[float, float]]],
     inlier_pts: Optional[Sequence[tuple[float, float]]],
     page_size: tuple[int, int],
+    within: Optional[Box] = None,
 ) -> Proposal:
-    """Turn a fit (projected query corners and inlier points, page pixels) into a box and flags."""
+    """Turn a fit (projected query corners and inlier points, page pixels) into a box and flags.
+
+    The proposal is clamped near the old box -- or near *within*, when the old
+    box may itself be the wrong shape and a larger region (a letterhead band)
+    is known to hold the mark.
+    """
     if corners is None or not inlier_pts:
         prop.flags.append("no fit")
         return prop
     pw, ph = page_size
-    ox, oy, ow, oh = prop.old_box
+    ox, oy, ow, oh = within or prop.old_box
     prop.inliers = len(inlier_pts)
     xs, ys = [c[0] for c in corners], [c[1] for c in corners]
     x0, y0, x1, y1 = max(0.0, min(xs)), max(0.0, min(ys)), min(float(pw), max(xs)), min(float(ph), max(ys))
@@ -132,6 +156,7 @@ def propose(
     ix = [p[0] for p in inlier_pts]
     iy = [p[1] for p in inlier_pts]
     prop.inlier_box = (int(min(ix)), int(min(iy)), int(max(ix) - min(ix)), int(max(iy) - min(iy)))
+    ox, oy, ow, oh = prop.old_box
     if edge_shift(prop.new_box, prop.old_box) <= UNCHANGED:
         # Nothing to decide, so no warnings to read either.
         prop.flags.append("unchanged")
@@ -244,7 +269,9 @@ def apply_box_tighten(
                 )
                 continue
             new_box = tuple(int(v) for v in m["new_box"])
-            page.marks[idx] = Mark(mark.kind, new_box, mark.class_id, mark.provenance)
+            # An accepted tight box is a located mark, whatever located it before.
+            provenance = located_provenance(mark.provenance)
+            page.marks[idx] = Mark(mark.kind, new_box, mark.class_id, provenance)
             key = (page.page_id, idx)
             store[:] = [r for r in store if (r["page_id"], r["mark_index"]) != key]
             store.append(
@@ -254,6 +281,7 @@ def apply_box_tighten(
                     "class_id": class_id,
                     "old_box": list(m["old_box"]),
                     "new_box": list(new_box),
+                    "provenance": provenance,
                     "reviewed_by": reviewer,
                 }
             )
@@ -293,7 +321,7 @@ def replay_box_overrides(
         old, new = tuple(row["old_box"]), tuple(row["new_box"])
         if 0 <= idx < len(page.marks) and tuple(page.marks[idx].box) == old:
             mark = page.marks[idx]
-            page.marks[idx] = Mark(mark.kind, new, mark.class_id, mark.provenance)
+            page.marks[idx] = Mark(mark.kind, new, mark.class_id, row.get("provenance", mark.provenance))
             n += 1
         elif not (0 <= idx < len(page.marks) and tuple(page.marks[idx].box) == new):
             if warnings is not None:
@@ -336,8 +364,14 @@ def ink_points(rgb, limit: int = 20000):
     return np.stack([xs[::step], ys[::step]], axis=1).astype(np.float32)
 
 
-def sift_fitter(query_crop: str, budget: int):
-    """``fit(page, box) -> (ink bounds corners, inlier points)`` in page pixels, or ``(None, None)``."""
+def sift_fitter(query_crop: str, budget: int, upsample: float = 1.0):
+    """``fit(page, box) -> (ink bounds corners, inlier points)`` in page pixels, or ``(None, None)``.
+
+    ``upsample`` enlarges both the crop and the searched region before
+    detection.  A UCSF letterhead mark is often under 60 px on a 150 dpi page,
+    where SIFT finds too few keypoints to fit; the geometry is unchanged, and
+    the result is returned in page pixels.
+    """
     import cv2  # noqa: PLC0415
     import numpy as np  # noqa: PLC0415
     from PIL import Image  # noqa: PLC0415
@@ -347,9 +381,11 @@ def sift_fitter(query_crop: str, budget: int):
     matcher = SiftMatcher()
     with Image.open(query_crop) as crop:
         q = crop.convert("L")
+        if upsample != 1.0:
+            q = q.resize((round(q.width * upsample), round(q.height * upsample)), Image.Resampling.BICUBIC)
         qw, qh = q.size
         q_feats = matcher.detect_and_describe(np.asarray(q, dtype=np.uint8), max_features=budget)
-        ink = ink_points(crop.convert("RGB"))
+        ink = ink_points(crop.convert("RGB")) * upsample
     q_kp = q_feats.keypoints_f32()[:, :2] * np.array([qw, qh], dtype=np.float32)
 
     def fit(page: Page, box: Box):
@@ -358,6 +394,10 @@ def sift_fitter(query_crop: str, budget: int):
         right, bottom = min(page.width, int(x + w + CONTEXT * w)), min(page.height, int(y + h + CONTEXT * h))
         with Image.open(page.path) as im:
             region = im.convert("L").crop((left, top, right, bottom))
+        if upsample != 1.0:
+            region = region.resize(
+                (round(region.width * upsample), round(region.height * upsample)), Image.Resampling.BICUBIC
+            )
         rw, rh = region.size
         feats = matcher.detect_and_describe(np.asarray(region, dtype=np.uint8), max_features=budget)
         if q_feats.descriptors_f32().shape[0] < 2 or feats.descriptors_f32().shape[0] < 2:
@@ -367,11 +407,15 @@ def sift_fitter(query_crop: str, budget: int):
             return None, None
         src = np.ascontiguousarray(q_kp[t_idx], dtype=np.float32)
         dst = np.ascontiguousarray(
-            feats.keypoints_f32()[c_idx, :2] * np.array([rw, rh], dtype=np.float32) + np.array([left, top]),
+            feats.keypoints_f32()[c_idx, :2] * np.array([rw, rh], dtype=np.float32) / upsample + np.array([left, top]),
             dtype=np.float32,
         )
         model, mask = cv2.estimateAffinePartial2D(
-            src, dst, method=cv2.RANSAC, ransacReprojThreshold=max(3.0, 0.004 * max(rw, rh)), maxIters=4000
+            src,
+            dst,
+            method=cv2.RANSAC,
+            ransacReprojThreshold=max(3.0, 0.004 * max(rw, rh) / upsample),
+            maxIters=4000,
         )
         if model is None or mask is None or not np.isfinite(model).all():
             return None, None
@@ -385,6 +429,69 @@ def sift_fitter(query_crop: str, budget: int):
         return corners, [tuple(map(float, p)) for p in dst[keep]]
 
     return fit
+
+
+def band_of(page: Page) -> Optional[Box]:
+    """The page's letterhead band: its unclassed ``candidate`` mark, if it has one."""
+    for m in page.marks:
+        if m.class_id is None and m.provenance == "candidate":
+            return tuple(int(v) for v in m.box)
+    return None
+
+
+def union(a: Box, b: Box) -> Box:
+    x0, y0 = min(a[0], b[0]), min(a[1], b[1])
+    x1, y1 = max(a[0] + a[2], b[0] + b[2]), max(a[1] + a[3], b[1] + b[3])
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def padded(box: Box, pad: float, page_size: tuple[int, int]) -> Box:
+    """*box* grown by *pad* of its width and height on each edge, clipped to the page."""
+    x, y, w, h = box
+    dx, dy = round(pad * w), round(pad * h)
+    x0, y0 = max(0, x - dx), max(0, y - dy)
+    x1, y1 = min(page_size[0], x + w + dx), min(page_size[1], y + h + dy)
+    return (x0, y0, x1 - x0, y1 - y0)
+
+
+def best_fit(fits, page: Page, box: Box):
+    """The fit with the most inliers over several references, or ``(None, None)``."""
+    best = (None, None)
+    for fit in fits:
+        corners, pts = fit(page, box)
+        if corners is not None and pts and len(pts) > len(best[1] or ()):
+            best = (corners, pts)
+    return best
+
+
+def reference_crops(class_id: str, meta: dict[str, Any], pages: dict[str, Page], out: Path, k: int) -> list[str]:
+    """Crops of the class's *k* largest tightly boxed instances, written under *out*.
+
+    A single query crop is one copy of the mark. Band-located copies vary in
+    print and scan, and a second or third reference fits the ones the first
+    misses.  Band-located instances are never references: their box is a band.
+    """
+    if k <= 0:
+        return []
+    from PIL import Image  # noqa: PLC0415
+
+    tight = []
+    for page_id in meta.get("page_ids", []):
+        page = pages.get(page_id)
+        if page is None or page_id == meta.get("query_page_id"):
+            continue
+        for mark in page.marks:
+            if mark.class_id == class_id and not is_band(mark) and area(mark.box) > 0:
+                tight.append((area(mark.box), page, mark.box))
+                break
+    out.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for _a, page, (x, y, w, h) in sorted(tight, key=lambda t: -t[0])[:k]:
+        dst = out / f"{page.page_id.replace('/', '_').replace('#', '_')}.png"
+        with Image.open(page.path) as im:
+            im.convert("RGB").crop((x, y, x + w, y + h)).save(dst)
+        paths.append(str(dst))
+    return paths
 
 
 #: Members per sheet; one screen (the owner's rule).
@@ -475,6 +582,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--source", default="staver")
     ap.add_argument("--budget", type=int, default=8192, help="SIFT keypoint budget")
     ap.add_argument(
+        "--band-only",
+        action="store_true",
+        help="propose boxes only for marks located by their letterhead band (#4109)",
+    )
+    ap.add_argument("--upsample", type=float, default=1.0, help="enlarge crop and page region before SIFT")
+    ap.add_argument(
+        "--extra-refs",
+        type=int,
+        default=0,
+        help="also fit the class's N largest tightly boxed instances, keeping the fit with the most inliers",
+    )
+    ap.add_argument("--audit-dir", default="box_tighten", help="slate directory under <corpus>/audit/")
+    ap.add_argument(
+        "--within-band",
+        action="store_true",
+        help="search and clamp within the page's letterhead band, not the current box, which may be the wrong shape",
+    )
+    ap.add_argument(
+        "--pad",
+        type=float,
+        default=0.0,
+        help="grow each proposal by this share of its side, per edge: a fit a few pixels off then still holds the mark",
+    )
+    ap.add_argument(
         "--loose-only",
         action="store_true",
         help=f"sheet only members whose proposal is at most {LOOSE:.0%} of the current box's area",
@@ -487,16 +618,24 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         chosen = [c.strip() for c in args.classes.split(",") if c.strip()]
     else:
         chosen = sorted(c for c, m in classes.items() if m.get("on_roster") and m.get("source") == args.source)
-    out = args.corpus / "audit" / "box_tighten"
+    out = args.corpus / "audit" / args.audit_dir
     rows = []
     for class_id in chosen:
         meta = classes[class_id]
-        fit = sift_fitter(meta["query_crop"], args.budget)
+        refs = [meta["query_crop"]] + reference_crops(
+            class_id, meta, pages, out / "refs" / class_id.replace("/", "_"), args.extra_refs
+        )
+        fits = [sift_fitter(r, args.budget, args.upsample) for r in refs]
         props = []
-        for prop in members(class_id, meta, pages):
+        for prop in members(class_id, meta, pages, band_only=args.band_only):
             page = pages[prop.page_id]
-            corners, inlier_pts = fit(page, prop.old_box)
-            props.append(propose(prop, corners, inlier_pts, (page.width, page.height)))
+            within = band_of(page) if args.within_band else None
+            search = union(prop.old_box, within) if within else prop.old_box
+            corners, inlier_pts = best_fit(fits, page, search)
+            prop = propose(prop, corners, inlier_pts, (page.width, page.height), within=search if within else None)
+            if args.pad and prop.new_box and "unchanged" not in prop.flags:
+                prop.new_box = padded(prop.new_box, args.pad, (page.width, page.height))
+            props.append(prop)
         if args.loose_only:
             props = [p for p in props if p.new_box and area(p.new_box) <= LOOSE * area(p.old_box)]
         render(class_id, meta, props, pages, out)

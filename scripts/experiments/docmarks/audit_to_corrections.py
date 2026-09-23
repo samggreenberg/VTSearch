@@ -1031,6 +1031,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "because 'a human checked it' is a claim about a person",
     )
     ap.add_argument(
+        "--recut-query-crop",
+        action="store_true",
+        help="box_tighten: re-cut a class's query crop when its query page's box changes. Off by default: the crop "
+        "is what every method searches with, and some are hand-made (#4125)",
+    )
+    ap.add_argument(
         "--migrate-adjudications",
         action="store_true",
         help="stamp the mark index onto legacy page-id-only adjudications, then exit",
@@ -1312,7 +1318,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"  wrote {len(box_store)} box override(s) to {args.corpus / BOX_STORE}")
         by_page = {p.page_id: p for p in pages}
         for class_id in sorted(stale_queries):
-            # The primary crop was cut from the box just replaced.
+            # The primary crop was cut from the box just replaced.  Re-cutting
+            # it changes the query every method searches with, and so every
+            # result for the class -- and some crops are hand-made (#4125) --
+            # so it happens only when asked.
+            if not args.recut_query_crop:
+                print(f"  {class_id}: query page's box changed; query crop NOT re-cut (pass --recut-query-crop)")
+                continue
             path = recut_query_crop(classes[class_id], by_page[classes[class_id]["query_page_id"]], class_id)
             print(f"  re-cut {class_id} query crop -> {path}")
 
