@@ -51,7 +51,6 @@ DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").spli
 #: someone hunting a close one both type "boat", so one text serves all three
 #: bands and only the labels differ.
 _VG_SCALE_TEXTS = {
-    "backpack": "a backpack",
     "bicycle": "a bicycle",
     "bird": "a bird",
     "boat": "a boat on the water",
@@ -80,7 +79,6 @@ _VG_SCALE_TEXTS = {
     "spoon": "a spoon",
     "bowl": "a bowl",
     "bottle": "a bottle",
-    "vase": "a vase",
     "bench": "a bench",
     "chair": "a chair",
     "sink": "a sink",
@@ -93,6 +91,10 @@ _VG_SCALE_TEXTS = {
     # opening a biased sort over a class that is half something else.
     "enclosed road vehicle": "a car or truck",
     "single serving drinking vessel": "a cup or glass",
+    # #4119's two, on the same terms: each names the halves someone hunting it
+    # would type, never the ruling.
+    "bag or luggage": "a bag or suitcase",
+    "vase or potted plant": "a vase or potted plant",
     # The twenty-eight #4056 added, taken VERBATIM from `_COCO_TEXTS` on the
     # same terms as the thirteen above -- `a person wearing a necktie` and
     # `a laptop computer` included, scene and qualifier untouched. The class
@@ -106,7 +108,6 @@ _VG_SCALE_TEXTS = {
     "baseball bat": "a baseball bat",
     "dining table": "a dining table",
     "frisbee": "a frisbee",
-    "handbag": "a handbag",
     "keyboard": "a computer keyboard",
     "laptop": "a laptop computer",
     "microwave": "a microwave oven",
@@ -115,13 +116,11 @@ _VG_SCALE_TEXTS = {
     "orange": "an orange fruit",
     "parking meter": "a parking meter",
     "person": "a person",
-    "potted plant": "a potted plant",
     "remote": "a tv remote control",
     "scissors": "a pair of scissors",
     "skateboard": "a skateboard",
     "skis": "a pair of skis",
     "snowboard": "a snowboard",
-    "suitcase": "a suitcase",
     "surfboard": "a surfboard",
     "tennis racket": "a tennis racket",
     "tie": "a person wearing a necktie",
