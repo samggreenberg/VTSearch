@@ -1335,6 +1335,70 @@ class TestOpenUrlResponseKey:
         )
         assert "open_url" not in res.get_json()
 
+    @staticmethod
+    def _hidden_url_template(**overrides):
+        """An in-house ``open_url`` subclass's field (issue #4078): a hidden
+        ``url``-typed template fixed to a local mock server by its default.
+
+        The tests below also blank the plugin's cached arg schema, which is
+        built from ``fields`` once per instance and would otherwise leak
+        between these patched fields and the shipped ones.
+        """
+        from vtscore.plugins import PluginField
+
+        return [
+            PluginField(
+                key="url_template",
+                label="URL Template",
+                field_type="url",
+                default="http://localhost:8000/review?ids={ids}",
+                hidden=True,
+                **overrides,
+            )
+        ]
+
+    def test_browser_opened_url_field_accepts_a_localhost_default(self, client):
+        """Issue #4078: the SSRF guard refused ``::1`` for a URL the server
+        never fetches, so a mock server on localhost could not be targeted."""
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("open_url")
+        with (
+            patch.object(type(exporter), "fields", self._hidden_url_template(opened_in_browser=True)),
+            patch.object(exporter, "_arg_schema_instance", None, create=True),
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "open_url",
+                    "field_values": {"url_template": ""},
+                    "results": {"labels": [{"md5": "aaa1"}]},
+                },
+            )
+        assert res.status_code == 200, res.get_json()
+        assert res.get_json()["open_url"] == "http://localhost:8000/review?ids=aaa1"
+
+    def test_url_field_without_the_flag_keeps_the_ssrf_guard(self, client):
+        """The opt-in is per field: an undeclared ``url`` field is still one
+        the server might fetch, so localhost stays refused."""
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("open_url")
+        with (
+            patch.object(type(exporter), "fields", self._hidden_url_template()),
+            patch.object(exporter, "_arg_schema_instance", None, create=True),
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "open_url",
+                    "field_values": {"url_template": ""},
+                    "results": {"labels": [{"md5": "aaa1"}]},
+                },
+            )
+        assert res.status_code == 400
+        assert "private/internal" in res.get_json()["message"]
+
 
 class TestStreamingExportSupport:
     def test_streaming_exporters_advertise_support(self):
