@@ -174,9 +174,14 @@ run_preflight() {
   # sizing above), and an A/B arm pins its fallback schedule on purpose.
   local div="calibration_seed"
   [[ -n "${CALIB_BLEND_SCHEDULE:-}" ]] && div="$div,blend_schedule"
-  for arm in visual_genome_m:siglip+dinov3_patch coco_val:siglip+dinov3_patch; do
+  local region_arms="visual_genome_m:siglip+dinov3_patch coco_val:siglip+dinov3_patch"
+  # A binary-only A/B has no region arm to assert; preflight still runs once.
+  [[ "${AB_MODE:-}" == "binary" ]] && region_arms="-"
+  for arm in $region_arms; do
+    local rv=(--require-region-voting "$arm")
+    [[ "$arm" == "-" ]] && rv=()
     bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
-      --require-region-voting "$arm" --diverges "$div" \
+      "${rv[@]}" --diverges "$div" \
       --job-name "$CALIB_JOB_NAME" --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
       echo "preflight FAILED ($arm)" >&2
       [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
@@ -220,9 +225,27 @@ case "$MODE" in
     # A/B arms live under the named fallback schedule; nothing is re-cut.
     export CALIB_SCHEDULE_VARIANTS=
     export CALIB_N_SEEDS="${AB_N_SEEDS:-8}"
+    # Several arms run at once; %20 each keeps the study near 100 tasks of the
+    # shared per-user QOS.  The arms are compared by analyze_blend_ab_3551.py
+    # once all have drained, so no per-arm analyzer is chained.
+    export CALIB_CONC="${AB_CONC:-20}"
+    export CALIB_ANALYZE=noop.py
+    # AB_MODE=binary|region restricts the grid to that voting mode's
+    # environments: a schedule is promoted PER MODE, and the other mode's cells
+    # would cost compute (region cells are 10x) without informing the verdict.
+    # The control arm is the shipped schedule named explicitly, run alongside.
+    case "${AB_MODE:-}" in
+      binary)
+        export CALIB_VG_EMBEDDERS=siglip CALIB_COCO_EMBEDDERS=siglip CALIB_CALTECH_EMBEDDERS=siglip ;;
+      region)
+        export CALIB_DATASETS=visual_genome_m,coco_val
+        export CALIB_VG_EMBEDDERS=siglip+dinov3_patch CALIB_COCO_EMBEDDERS=siglip+dinov3_patch ;;
+      "") ;;
+      *) echo "AB_MODE must be binary or region" >&2; exit 2 ;;
+    esac
     for arm in "$@"; do
       (
-        set_exp "ab-${arm//[:=]/_}"
+        set_exp "ab${AB_MODE:+-$AB_MODE}-${arm//[:=]/_}"
         export CALIB_BLEND_SCHEDULE="$arm"
         link_prepare
         run_preflight
