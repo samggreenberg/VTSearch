@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import unittest.mock
 
+import pytest
+
 from vtscore.concurrency.progress import CancelledError
 from vtsearch.state import bad_votes, good_votes, label_history, medias
 
@@ -130,24 +132,44 @@ class TestContextErrorsAreNot500:
     with no labels yet) rather than as a detector still loading.
     """
 
-    UNLOADED = {"X-Detector-Id": "no-such-detector"}
+    @pytest.fixture
+    def unloaded(self):
+        """Headers naming a detector that is registered but not in memory.
+
+        It has to be *registered*: an id with no registry entry is a deleted
+        detector, which answers 404 ``detector_not_found`` (issue #4086).
+        """
+        from vtscore.detectors.registry import register_detector
+
+        entry = register_detector(name="still-loading", media_type="audio")
+        return {"X-Detector-Id": entry["id"]}
 
     def _assert_detector_409(self, resp):
         assert resp.status_code == 409, resp.get_json()
         body = resp.get_json()
         assert body["error_code"] == "detector_not_loaded"
 
-    def test_labeling_status_returns_409(self, client):
-        self._assert_detector_409(client.get("/api/labeling-status", headers=self.UNLOADED))
+    def test_labeling_status_returns_409(self, client, unloaded):
+        self._assert_detector_409(client.get("/api/labeling-status", headers=unloaded))
 
-    def test_labeling_progress_returns_409(self, client):
-        self._assert_detector_409(client.post("/api/labeling-progress", headers=self.UNLOADED))
+    def test_labeling_progress_returns_409(self, client, unloaded):
+        self._assert_detector_409(client.post("/api/labeling-progress", headers=unloaded))
 
-    def test_indicator_score_history_returns_409(self, client):
-        self._assert_detector_409(client.get("/api/indicator-score-history?metric=smart", headers=self.UNLOADED))
+    def test_indicator_score_history_returns_409(self, client, unloaded):
+        self._assert_detector_409(client.get("/api/indicator-score-history?metric=smart", headers=unloaded))
 
-    def test_unloaded_dataset_returns_409(self, client):
-        resp = client.get("/api/labeling-status", headers={"X-Dataset-Id": "no-such-dataset"})
+    def test_unloaded_dataset_returns_409(self, client, tmp_path):
+        from vtscore.datasets.registry import register_dataset
+
+        entry = register_dataset(
+            name="still-loading",
+            media_type="audio",
+            num_items=0,
+            pkl_path=str(tmp_path / "x.pkl"),
+            embedder="",
+            created_by="default",
+        )
+        resp = client.get("/api/labeling-status", headers={"X-Dataset-Id": entry["id"]})
         assert resp.status_code == 409, resp.get_json()
         assert resp.get_json()["error_code"] == "dataset_not_loaded"
 

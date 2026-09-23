@@ -38,6 +38,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pile_config as pc  # noqa: E402
+from pilebuild.loaders.coco_quarry import _share_inside  # noqa: E402
+from pilebuild.scale_core import band_for, largest_box  # noqa: E402
 
 CONTEXT = 0.45
 MIN_WINDOW = 480
@@ -73,14 +75,33 @@ def main() -> int:
     ap.add_argument("--lvis-names", required=True, help="comma-separated, from coco_box_granularity.SAME")
     ap.add_argument("--annotations", type=Path, default=Path("/expscratch/sgreenberg/vts-cache/coco_anchor"))
     ap.add_argument(
-        "--lvis", type=Path, default=Path("/exp/scale26/datasets/external/LVIS/annotations/lvis_v1_val.json")
+        "--lvis",
+        type=Path,
+        nargs="+",
+        default=[pc.LVIS_DIR / f"lvis_v1_{s}.json" for s in pc.LVIS_SPLITS],
+        help="LVIS annotation files; default both splits, since val alone is 16%% of COCO",
+    )
+    ap.add_argument(
+        "--banded-only",
+        action="store_true",
+        help="sample only images `band_for` puts in a band, i.e. ones a cell could take. Without it a "
+        "class the scatter guard mostly rejects (`book`: 3,223 of 5,562) spends votes on images no "
+        "cell will ever hold.",
     )
     ap.add_argument("--n", type=int, default=24)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--seed", type=int, default=20260922)
+    ap.add_argument(
+        "--inside-strata",
+        default="",
+        help="e.g. '0,2-4,5-9,10+': stratify on how many LVIS instances lie inside the picked (largest) "
+        "COCO box instead of on the area ratio, --n per stratum. The picked box and the band follow "
+        "`largest_box`, which is what the build drags since #4096. Images LVIS never boxed are "
+        "included, since stratum 0 is a question too.",
+    )
+    ap.add_argument("--exclude", type=Path, nargs="*", default=[], help="manifests whose annotations are not re-asked")
     args = ap.parse_args()
 
-    from PIL import Image, ImageDraw  # noqa: PLC0415
 
     coco: dict = collections.defaultdict(lambda: collections.defaultdict(list))
     dims: dict = {}
@@ -90,16 +111,49 @@ def main() -> int:
         for iid, m in per.items():
             for cls, bs in m.items():
                 coco[iid][cls] += bs
-    lvis, _ = _read(args.lvis)
+    lvis: dict = collections.defaultdict(lambda: collections.defaultdict(list))
+    for path in args.lvis:
+        per, _ = _read(path)
+        for iid, m in per.items():
+            for cls, bs in m.items():
+                lvis[iid][cls] += bs
     names = [n.strip() for n in args.lvis_names.split(",")]
+
+    strata = [t.strip() for t in args.inside_strata.split(",") if t.strip()]
+    asked = {i["ann_id"] for m in args.exclude for i in json.loads(m.read_text())["items"]}
+
+    def stratum(n: int) -> str | None:
+        for t in strata:
+            lo_, _, hi_ = t.rstrip("+").partition("-")
+            if n >= int(lo_) and (t.endswith("+") or n <= int(hi_ or lo_)):
+                return t
+        return None
 
     rows = []
     for iid, m in coco.items():
         cb = m.get(args.klass)
         lb = [b for n in names for b in (lvis.get(iid, {}).get(n) or [])]
+        if strata and cb:
+            w, h, _ = dims[iid]
+            xyxy = {(x, y, x + bw, y + bh): ann for (x, y, bw, bh), ann in cb}
+            pick = largest_box([list(k) for k in xyxy])
+            ann = xyxy[tuple(pick)]
+            if ann in asked or band_for([pick], w, h) not in pc.BOX_BANDS:
+                continue
+            inside = sum(_share_inside([x, y, x + bw, y + bh], pick) >= pc.SCALE_LUMP_CONTAIN for (x, y, bw, bh), _ in lb)
+            t = stratum(inside)
+            if t is not None:
+                bx = [pick[0], pick[1], pick[2] - pick[0], pick[3] - pick[1]]
+                rows.append({"image_id": iid, "bbox": bx, "ann_id": ann, "ratio": float(inside), "n_coco": len(cb),
+                             "n_lvis": len(lb), "arm": t, "lvis_inside": inside})
+            continue
         if not cb or not lb:
             continue
         w, h, _ = dims[iid]
+        if args.banded_only:
+            xyxy = [[x, y, x + bw, y + bh] for (x, y, bw, bh), _ in cb]
+            if band_for(xyxy, w, h) not in pc.BOX_BANDS:
+                continue
         ca = sum(b[2] * b[3] for b, _ in cb) / len(cb) / (w * h)
         la = sum(b[2] * b[3] for b, _ in lb) / len(lb) / (w * h)
         if la <= 0:
@@ -110,18 +164,41 @@ def main() -> int:
             {"image_id": iid, "bbox": box, "ann_id": ann, "ratio": ca / la, "n_coco": len(cb), "n_lvis": len(lb)}
         )
 
+    rng = random.Random(args.seed)
+    if strata:
+        by: dict = collections.defaultdict(list)
+        for r in rows:
+            by[r["arm"]].append(r)
+        print(f"{args.klass}: {len(rows)} banded images by LVIS-inside stratum:", {t: len(by[t]) for t in strata})
+        picked = []
+        for t in strata:
+            rng.shuffle(by[t])
+            picked += by[t][: args.n]
+        rng.shuffle(picked)
+    else:
+        picked = _ratio_arms(rows, args, rng)
+    return _render(picked, args, dims)
+
+
+def _ratio_arms(rows: list, args, rng: random.Random) -> list:
+    """Half lumped (ratio >= LUMPED), half clean (< CLEAN) -- the #3985 design."""
     hi = [r for r in rows if r["ratio"] >= LUMPED]
     lo = [r for r in rows if r["ratio"] < CLEAN]
     print(f"{args.klass}: {len(rows)} comparable images -- {len(hi)} lumped (>={LUMPED}), {len(lo)} clean (<{CLEAN})")
     if len(hi) < 4 or len(lo) < 4:
         raise SystemExit("not enough on one side to make a control arm")
 
-    rng = random.Random(args.seed)
     rng.shuffle(hi)
     rng.shuffle(lo)
     half = args.n // 2
     picked = [dict(r, arm="lumped") for r in hi[:half]] + [dict(r, arm="clean") for r in lo[: args.n - half]]
     rng.shuffle(picked)
+    return picked
+
+
+def _render(picked: list, args, dims: dict) -> int:
+    """Crop, outline and write each picked box, and the manifest beside them."""
+    from PIL import Image, ImageDraw  # noqa: PLC0415
 
     slug = args.klass.replace(" ", "_")
     outdir = args.out / slug / "images"
@@ -168,7 +245,7 @@ def main() -> int:
 
     kb.sort()
     (args.out / slug / "manifest.json").write_text(
-        json.dumps({"class": args.klass, "lvis_names": names, "seed": args.seed, "items": manifest}, indent=1)
+        json.dumps({"class": args.klass, "lvis_names": [n.strip() for n in args.lvis_names.split(",")], "seed": args.seed, "items": manifest}, indent=1)
     )
     print(f"  wrote {len(manifest)} crops; size median {kb[len(kb) // 2]:.0f} KB, p90 {kb[int(0.9 * len(kb))]:.0f} KB")
     return 0

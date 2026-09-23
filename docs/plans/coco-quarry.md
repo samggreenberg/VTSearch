@@ -43,10 +43,12 @@ instance than the frame's main one 8.3% of the time (#3924, #3925). There is no
 cheaper read available either — every one of VG's 2,516,939 objects carries a
 `names` list of length one (#3618).
 
-**What the switch does not buy is difficulty.** Supply is not hardness, and
-`anchor_to_coco`'s claim that dropping VG's non-COCO half loses "VG's non-COCO
-diversity for nothing" is still unmeasured. It is the one live argument for VG
-and it is cheap to settle — see the first item below.
+**What the switch does not buy is difficulty — and it does not cost any
+either.** Supply is not hardness, and `anchor_to_coco` (retired with VG) claimed
+that dropping VG's non-COCO half loses "VG's non-COCO diversity for nothing".
+#3997 measured it: off-COCO is differently distributed (AUC 0.53–0.54 matched)
+but **not harder** on the shipped head, so there is no difficulty argument for
+keeping VG. See the first item below.
 
 ## Open work
 

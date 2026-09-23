@@ -287,6 +287,79 @@ describe('SortRunnerService', () => {
     httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
   });
 
+  describe('peekUpcomingMedia (#3896)', () => {
+    const ranking = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.8 },
+      { id: 3, score: 0.6 },
+      { id: 4, score: 0.4 },
+      { id: 5, score: 0.2 },
+    ];
+
+    it('lists the next items the advance would show, skipping labeled ones', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking, 0.5);
+      voteState.applyOptimisticState(2, 'bad');
+
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([3, 4]);
+      expect(mediaState.selectedId()).toBeNull();
+    });
+
+    /**
+     * The queue is only worth anything if each entry is what the advance will
+     * actually pick once the reviewer gets there. Walk it for real: vote, let
+     * `autoSelectNext` choose, and compare with the peek taken beforehand.
+     */
+    it.each(['top', 'hard'] as const)('matches what successive votes select in `%s` mode', (mode) => {
+      sortState.setSelectMode(mode);
+      sortState.setSortResults(ranking, 0.5);
+      runner.autoSelectNext();
+      const current = mediaState.selectedId()!;
+      const predicted = runner.peekUpcomingMedia(current, 2);
+
+      const walked: number[] = [];
+      let on = current;
+      for (let i = 0; i < 2; i++) {
+        voteState.applyOptimisticState(on, 'good');
+        runner.autoSelectNext(on);
+        on = mediaState.selectedId()!;
+        walked.push(on);
+      }
+      expect(predicted).toEqual(walked);
+    });
+
+    it('follows the ranking when a re-sort lands with the same item on screen', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking, 0.5);
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([2, 3]);
+
+      sortState.setSortResults(
+        [ranking[0], ranking[4], ranking[3], ranking[2], ranking[1]],
+        0.5,
+      );
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([5, 4]);
+    });
+
+    it('stops short when the ranking runs out', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking.slice(0, 2), 0.5);
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([2]);
+    });
+
+    it('stops at a `new`-mode pick and fires no probe', () => {
+      sortState.setSelectMode('new');
+      sortState.setSortResults(ranking, 0.5);
+      expect(runner.peekUpcomingMedia(1, 2)).toEqual([]);
+      httpMock.expectNone((req) => req.url.startsWith('/api/coverage-atlas/next'));
+    });
+
+    it('is empty with nothing on screen', () => {
+      sortState.setSelectMode('top');
+      sortState.setSortResults(ranking, 0.5);
+      expect(runner.peekUpcomingMedia(null, 2)).toEqual([]);
+    });
+  });
+
   // --- inclusion ------------------------------------------------------------
 
   it('pushes the inclusion value and re-advances the selection', () => {

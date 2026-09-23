@@ -1,0 +1,186 @@
+[
+ {
+  "tier": "s",
+  "class_id": "ucsf/logo_bat_leaf",
+  "v4.0": {
+   "pool": 2783,
+   "positives": 5,
+   "tobacco_negatives": 0
+  },
+  "v4.1": {
+   "pool": 4847,
+   "positives": 5,
+   "tobacco_negatives": 0
+  }
+ },
+ {
+  "tier": "s",
+  "class_id": "ucsf/logo_bw_oval_emblem",
+  "v4.0": {
+   "pool": 2782,
+   "positives": 2,
+   "tobacco_negatives": 0
+  },
+  "v4.1": {
+   "pool": 4844,
+   "positives": 2,
+   "tobacco_negatives": 0
+  }
+ },
+ {
+  "tier": "s",
+  "class_id": "ucsf/logo_p_lorillard_crest",
+  "v4.0": {
+   "pool": 2778,
+   "positives": 0,
+   "tobacco_negatives": 0
+  },
+  "v4.1": {
+   "pool": 4840,
+   "positives": 0,
+   "tobacco_negatives": 0
+  }
+ },
+ {
+  "tier": "s",
+  "class_id": "ucsf/logo_rjr_script",
+  "v4.0": {
+   "pool": 2783,
+   "positives": 3,
+   "tobacco_negatives": 0
+  },
+  "v4.1": {
+   "pool": 4845,
+   "positives": 3,
+   "tobacco_negatives": 0
+  }
+ },
+ {
+  "tier": "m",
+  "class_id": "ucsf/logo_bat_leaf",
+  "v4.0": {
+   "pool": 2965,
+   "positives": 181,
+   "tobacco_negatives": 6,
+   "source_prior_ap": 0.9748677243971535,
+   "industry_prior_ap": 0.9748677243971535
+  },
+  "v4.1": {
+   "pool": 46847,
+   "positives": 181,
+   "tobacco_negatives": 6,
+   "source_prior_ap": 0.004342663415796198,
+   "industry_prior_ap": 0.970749377940723
+  }
+ },
+ {
+  "tier": "m",
+  "class_id": "ucsf/logo_bw_oval_emblem",
+  "v4.0": {
+   "pool": 2813,
+   "positives": 16,
+   "tobacco_negatives": 1,
+   "source_prior_ap": 0.48667011171642616,
+   "industry_prior_ap": 0.9306088231111207
+  },
+  "v4.1": {
+   "pool": 46677,
+   "positives": 16,
+   "tobacco_negatives": 1,
+   "source_prior_ap": 0.00045934301578696166,
+   "industry_prior_ap": 0.9432410272529758
+  }
+ },
+ {
+  "tier": "m",
+  "class_id": "ucsf/logo_p_lorillard_crest",
+  "v4.0": {
+   "pool": 2834,
+   "positives": 9,
+   "tobacco_negatives": 13,
+   "source_prior_ap": 0.20152928076566262,
+   "industry_prior_ap": 0.4661132375631859
+  },
+  "v4.1": {
+   "pool": 46680,
+   "positives": 9,
+   "tobacco_negatives": 13,
+   "source_prior_ap": 0.0003752988666080158,
+   "industry_prior_ap": 0.5333590467601046
+  }
+ },
+ {
+  "tier": "m",
+  "class_id": "ucsf/logo_rjr_script",
+  "v4.0": {
+   "pool": 2858,
+   "positives": 52,
+   "tobacco_negatives": 8,
+   "source_prior_ap": 0.6623782115822485,
+   "industry_prior_ap": 0.8846929855628977
+  },
+  "v4.1": {
+   "pool": 46720,
+   "positives": 52,
+   "tobacco_negatives": 8,
+   "source_prior_ap": 0.001317390371849358,
+   "industry_prior_ap": 0.8523418271955657
+  }
+ },
+ {
+  "tier": "l",
+  "class_id": "ucsf/logo_bat_leaf",
+  "v4.0": {
+   "pool": 2978,
+   "positives": 194,
+   "tobacco_negatives": 6
+  },
+  "v4.1": {
+   "pool": 186198,
+   "positives": 194,
+   "tobacco_negatives": 6
+  }
+ },
+ {
+  "tier": "l",
+  "class_id": "ucsf/logo_bw_oval_emblem",
+  "v4.0": {
+   "pool": 2826,
+   "positives": 29,
+   "tobacco_negatives": 1
+  },
+  "v4.1": {
+   "pool": 186028,
+   "positives": 29,
+   "tobacco_negatives": 1
+  }
+ },
+ {
+  "tier": "l",
+  "class_id": "ucsf/logo_p_lorillard_crest",
+  "v4.0": {
+   "pool": 2847,
+   "positives": 22,
+   "tobacco_negatives": 13
+  },
+  "v4.1": {
+   "pool": 186031,
+   "positives": 22,
+   "tobacco_negatives": 13
+  }
+ },
+ {
+  "tier": "l",
+  "class_id": "ucsf/logo_rjr_script",
+  "v4.0": {
+   "pool": 2873,
+   "positives": 67,
+   "tobacco_negatives": 8
+  },
+  "v4.1": {
+   "pool": 186073,
+   "positives": 67,
+   "tobacco_negatives": 8
+  }
+ }
+]
