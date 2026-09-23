@@ -1,6 +1,6 @@
 ---
 name: grid-experiments
-description: Practices for running eval experiments and sweeps on the GRID (SLURM). Use when launching, monitoring, resuming, or analysing a study under scripts/experiments/ — anything involving sbatch arms, cells, CALIB_EXP dirs, or a long run whose results feed a REPORT.md. Also use when an experiment run fails, to record the lesson.
+description: Practices for running eval experiments and sweeps on the GRID (SLURM). Use when launching, monitoring, resuming, or analysing a study under scripts/experiments/ — anything involving sbatch arms, cells, CALIB_EXP dirs, or a long run whose results feed a REPORT.md. Also use when an experiment run fails, to record the lesson. Also use before creating, committing in, or removing a git worktree or checkout on the GRID.
 ---
 
 # Running experiments on the GRID
@@ -17,6 +17,73 @@ Three companions, each with a different job:
 | `scripts/experiments/preflight.sh` | **Blocks** the checkable mistakes | Before submitting arms |
 | `scripts/experiments/GRID-PLAYBOOK.md` | SLURM resource practice (memory, QOS, chunking) | When sizing a sweep |
 | `scripts/experiments/LESSONS.md` | Incident log index; entries are `lessons/*.md`, one per incident | Read once; **add a file when something breaks** |
+
+## Worktrees on the GRID
+
+Every session on the GRID shares one `.git`, one Slurm QOS and two checkouts
+that must stay clean. Work that ignores this strands other sessions' work
+without anyone noticing: on 2026-09-23 the shared checkout held 17 files staged
+and forgotten for five days, the deploy clone held 137, and 57 worktrees sat on
+disk, 27 of them already merged (#4133).
+
+**The two checkouts nobody works in:**
+
+| Path | What it is | What you may do there |
+|---|---|---|
+| `/exp/$USER/projects/VTSearch` | the **shared checkout**: its `.git` is the common dir every worktree hangs off, and the suite submits the pinned `scripts/slurm/suite.sbatch` from it | `git fetch`, `git worktree add/remove`, and `git merge --ff-only origin/dev` to move it forward. Nothing else. |
+| `/expscratch/$USER/projects/VTSearch` | the **deploy clone** (`$VTS_DIR`), a separate clone the live `vtsearch` app job runs from | nothing, except a deploy the owner asked for |
+
+A hook refuses a commit in either of them (`scripts/grid/guard-shared-checkout.sh`,
+installed into both hooks dirs by `scripts/grid/install-guard-hook.sh`). If you
+already staged something there, save it before anything else:
+`git diff --cached --binary > /expscratch/$USER/keep/<name>.patch`.
+
+**One worktree per task.** Branch work goes in its own worktree at
+`/expscratch/$USER/worktrees/vts-<issue>` (never under `/exp/$USER/projects/`:
+that mount is 50 GB, and a worktree is ~250 MB). Two tasks never share a
+worktree, and neither do two sessions.
+
+**One separate test worktree per suite run.** `suite.sbatch` checks the ref
+out *in the worktree you pass it*, so point it at a detached
+`/expscratch/$USER/worktrees/vts-<issue>-tests`, never at the worktree an
+analysis job reads or you are editing.
+
+**Create and remove worktrees through `srun`, under `flock`.** A checkout
+writes thousands of files, which is login-node load (login2 went down on
+2026-09-16 with that load on it). The lock serialises every git operation on
+the shared `.git`, which otherwise races ("reference already exists"). Wrap any
+fetch you run by hand in the same lock:
+
+```bash
+srun --ntasks=1 --partition=cpu --mem=2G --time=00:15:00 bash -lc '
+  cd /exp/$USER/projects/VTSearch && G="$(git rev-parse --git-common-dir)"
+  flock "$G" git fetch -q origin
+  flock "$G" git worktree add -b claude/<slug>-<issue> /expscratch/$USER/worktrees/vts-<issue> origin/dev
+  flock "$G" git worktree add --detach /expscratch/$USER/worktrees/vts-<issue>-tests origin/dev'
+```
+
+`--ntasks=1` matters: without it `srun` on the cpu partition runs the command
+twice.
+
+**Remove the worktree once its PR merges**, with the prune script. It is a
+dry run unless you pass `--apply`:
+
+```bash
+srun --ntasks=1 --partition=cpu --mem=2G --time=01:00:00 \
+    bash scripts/grid/prune-worktrees.sh [--apply] [--keep 'vts-<issue>*']
+```
+
+It removes only a worktree that is clean (no modified, staged or untracked
+files), untouched for 24 h, used by no queued or running job, named by no
+script on `origin/dev`, and either on a branch already merged into
+`origin/dev` with no open PR, or a detached `*-tests` worktree. It prints
+every other worktree with the reason it was kept, and it never deletes a
+branch.
+
+**Never delete a dirty or unmerged worktree**, yours or anyone's, and never
+`git worktree remove --force` one. `/expscratch` has no snapshots, so a
+delete is final. If a worktree looks abandoned, rescue its work to a branch
+or a patch under `/expscratch/$USER/keep/` first, then ask.
 
 ## Before launching
 
