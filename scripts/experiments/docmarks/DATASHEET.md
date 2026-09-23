@@ -371,7 +371,9 @@ python score_ranker.py score --scores my_idea.csv.gz --tiers s,m --name my_idea 
   Queue them with `surprise_review.py`: if one carries the mark, the method was
   right and the labels were not (#4089).
 - Every result is stamped with the corpus version, and with whether the corpus
-  on disk still matches that version's frozen manifest in `versions/`.
+  on disk still matches that version's frozen manifest in `versions/`. v4.3 is
+  the first frozen version: `versions/v4.3.json` checksums the six files that
+  define it and all 27 query crops. A version bump runs `score_ranker.py freeze`.
 
 To start from a built-in method, `score_ranker.py export --method siglip --tier m`
 writes SigLIP's scores in that format. Export from the tier you score, because

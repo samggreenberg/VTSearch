@@ -91,3 +91,16 @@ class TestVersionStamp:
     def test_an_unfrozen_version_never_claims_to_match(self, mods, tmp_path):
         corpus, _ = self._corpus(tmp_path)
         assert mods["s"].stamp(corpus, "v0.1", tmp_path)["matches_frozen"] is False
+
+
+class TestFrozenManifest:
+    def test_the_current_version_has_a_committed_manifest(self, mods):
+        # A version bump without `score_ranker.py freeze` would stamp every new
+        # result "no frozen manifest", so a version is not released until it is frozen.
+        s = mods["s"]
+        path = s.VERSIONS / f"{s.cfg.CORPUS_VERSION}.json"
+        assert path.exists(), f"run `score_ranker.py freeze` for {s.cfg.CORPUS_VERSION}"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        assert manifest["version"] == s.cfg.CORPUS_VERSION
+        assert set(s.VERSION_FILES) <= set(manifest["files"])
+        assert any(k.startswith("query_crop:") for k in manifest["files"])
