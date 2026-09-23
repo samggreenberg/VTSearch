@@ -105,7 +105,17 @@ def translate_membership(rows, questions, votes, drawn=None):
 
 
 def translate_completeness(rows, questions, votes, drawn=None):
-    """Good candidates are accepted (``"0,3"``), ``"none"`` when all are Bad; blank until all are answered."""
+    """Good candidates are accepted (``"0,3"``), ``"none"`` when all are Bad; blank until all are answered.
+
+    A box drawn with a Good vote is kept on the candidate as ``drawn_box``.  With
+    no existing mark it also becomes the candidate's ``box``, the box the new
+    mark is added with; on an existing mark it is applied afterwards as a
+    reviewed box override (:func:`drawn_overrides`).
+    """
+    drawn = drawn or {}
+    by_cand = {
+        (q["key"]["class_id"], q["key"]["index"]): fn for fn, q in questions.items() if q["task"] == COMPLETENESS
+    }
     got: dict[str, dict[int, Optional[str]]] = {}
     for fn, q in questions.items():
         if q["task"] == COMPLETENESS:
@@ -123,12 +133,66 @@ def translate_completeness(rows, questions, votes, drawn=None):
             good = sorted(i for i, v in asked.items() if v == "good")
             r["verdict"] = ",".join(map(str, good)) if good else "none"
             r["verdict_source"] = "vtsearch"
+        cands = []
+        for c in r.get("candidates", []):
+            box = drawn.get(by_cand.get((r["class_id"], c["index"])))
+            if box is not None:
+                c = dict(c, drawn_box=list(box))
+                if c.get("mark_index") is None:
+                    c["box"] = list(box)
+            cands.append(c)
+        r["candidates"] = cands
         out.append(r)
     return out, unanswered
 
 
-def completeness_questions(rows, classes, pages) -> list[tuple[str, list[Any]]]:
-    """One queue per class from ``completeness.py``'s slate: is the candidate this mark?"""
+def drawn_overrides(rows: Sequence[dict[str, Any]], pages: dict[str, Any]) -> list[dict[str, Any]]:
+    """``box_tighten`` rows for accepted candidates on existing marks whose box the reviewer redrew.
+
+    Applied with ``audit_to_corrections.py --task box_tighten`` after the
+    completeness apply, so the mark carries the reviewer's box, stored in
+    ``box_overrides.json`` and replayed by a rebuild.
+    """
+    out = []
+    for r in rows:
+        verdict = str(r.get("verdict", ""))
+        accepted = {int(i) for i in verdict.split(",")} if verdict not in ("", "none") else set()
+        members = []
+        for c in r["candidates"]:
+            idx, box = c.get("mark_index"), c.get("drawn_box")
+            if c["index"] not in accepted or idx is None or box is None or c["page_id"] not in pages:
+                continue
+            old = [int(v) for v in pages[c["page_id"]].marks[idx].box]
+            if old != list(box):
+                members.append(
+                    {
+                        "index": len(members),
+                        "page_id": c["page_id"],
+                        "mark_index": idx,
+                        "old_box": old,
+                        "new_box": list(box),
+                    }
+                )
+        if members:
+            out.append(
+                {
+                    "task": "box_tighten",
+                    "class_id": r["class_id"],
+                    "members": members,
+                    "verdict": ",".join(str(m["index"]) for m in members),
+                    "verdict_source": "boxes the reviewer drew on completeness candidates",
+                }
+            )
+    return out
+
+
+def completeness_questions(rows, classes, pages, stem: str = "complete") -> list[tuple[str, list[Any]]]:
+    """One queue per class from ``completeness.py``'s slate: is the candidate this mark?
+
+    *stem* prefixes every filename.  A later round must use a new one: the bank
+    matches votes to questions by filename, reading old rounds' detector
+    backups too, so a reused name would hand a new candidate an old answer.
+    """
     from binary_review import PREFIX, Question, class_refs, slug  # noqa: PLC0415
 
     queues = []
@@ -140,16 +204,23 @@ def completeness_questions(rows, classes, pages) -> list[tuple[str, list[Any]]]:
             page = pages.get(c["page_id"])
             if page is None:
                 continue
-            located = c.get("box") is not None
+            # On an existing mark, a Good keeps THAT mark's box (apply_completeness
+            # reassigns it), so show it.  The candidate's own box is the extent of
+            # SIFT's matched keypoints, a subset of the mark (Sam, 2026-09-23).
+            # With no mark to reassign, ask for the whole page and a drawn box.
+            idx = c.get("mark_index")
+            on_mark = idx is not None and idx < len(page.marks)
             qs.append(
                 Question(
-                    filename=f"complete__{slug(cid)}__{c['index']:03d}.jpg",
+                    filename=f"{stem}__{slug(cid)}__{c['index']:03d}.jpg",
                     task=COMPLETENESS,
-                    question="Is the left mark in the red box?" if located else "Is the left mark on this page?",
+                    question="Is the left mark in the red box?"
+                    if on_mark
+                    else "Left mark on this page? Draw it, then Good.",
                     refs=refs,
                     page_id=c["page_id"],
-                    box=list(c["box"]) if located else [0, 0, page.width, page.height],
-                    outline=located,
+                    box=list(page.marks[idx].box) if on_mark else [0, 0, page.width, page.height],
+                    outline=on_mark,
                     key={"class_id": cid, "index": c["index"]},
                     item=f"{cid} candidate {c['index']} ({c['inliers']} inliers)",
                     ref_labels=False,
@@ -189,6 +260,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     c = sub.add_parser("completeness", help="queue completeness.py's candidates for the new classes")
     c.add_argument("--corpus", type=Path, required=True)
     c.add_argument("--root", type=Path, required=True)
+    c.add_argument("--classes", default="", help="comma-separated; default every class in the slate")
+    c.add_argument("--stem", default="complete", help="filename prefix; a new one per round")
     e = sub.add_parser("emit")
     e.add_argument("--corpus", type=Path, required=True)
     e.add_argument("--classes", required=True, help="the newly admitted class ids")
@@ -200,7 +273,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         pages = {p.page_id: p for p in read_manifest(args.corpus / "corpus.jsonl")}
         slate = args.corpus / "audit" / "completeness" / "verdicts.jsonl"
         rows = [json.loads(line) for line in slate.read_text(encoding="utf-8").splitlines() if line]
-        for name, qs in completeness_questions(rows, classes, pages):
+        only = {c.strip() for c in args.classes.split(",") if c.strip()}
+        rows = [r for r in rows if not only or r["class_id"] in only]
+        for name, qs in completeness_questions(rows, classes, pages, stem=args.stem):
             d = args.root / (slug(name.split(" -- ")[0]) + "__complete")
             emit(qs, d, name, pages=pages, corpus=args.corpus)
             print(f"  {name}: {len(qs)} candidate(s) -> {d}")

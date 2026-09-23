@@ -1104,7 +1104,9 @@ TRANSLATORS: dict[str, tuple[Callable[[Path], Path], Callable[..., Any]]] = {
     ),
     "roster_completeness": (
         lambda corpus: corpus / "audit" / "completeness" / "verdicts.jsonl",
-        lambda rows, questions, votes: _roster_review().translate_completeness(rows, questions, votes),
+        lambda rows, questions, votes, drawn=None: _roster_review().translate_completeness(
+            rows, questions, votes, drawn=drawn
+        ),
     ),
     # Boxes drawn by hand on marks no proposal fitted (#4125); applied like box_tighten_band.
     "box_draw": (lambda corpus: corpus / "audit" / "box_draw" / "verdicts.jsonl", translate_box_draw),
@@ -1355,7 +1357,7 @@ def guard_write(dest: Path, out_rows: Sequence[dict[str, Any]], cleared: Path, a
 
 
 #: Tasks whose Good votes may carry a reviewer-drawn box that replaces the proposal.
-DRAWN_BOX_TASKS = frozenset({"box_tighten_band", "box_draw"})
+DRAWN_BOX_TASKS = frozenset({"box_tighten_band", "box_draw", "roster_completeness"})
 
 
 def drawn_boxes(
