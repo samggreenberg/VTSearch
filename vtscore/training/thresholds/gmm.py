@@ -13,6 +13,7 @@ has no notion of it beyond the plain fit.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -1204,3 +1205,188 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     byte-identical bodies; delegating is what stops them drifting apart.
     """
     return fit_gmm_threshold(scores)[0]
+
+
+# ----------------------------------------------------------------------------
+# The typed-query (text / cosine) sort's line (issue #3826)
+# ----------------------------------------------------------------------------
+
+#: The two rules a cosine sort's line can be drawn with.
+#:
+#: * ``"gmm_midpoint"`` - :func:`calculate_gmm_threshold`, the midpoint of a
+#:   two-Gaussian fit.  The shipped default.
+#: * ``"guarded_tail"`` - :func:`guarded_text_sort_threshold`.  Keep the mixture
+#:   (fitted to convergence) only when its two components are separated, and
+#:   otherwise cut the upper tail of the one broad mode.
+#:
+#: Which one :func:`text_sort_threshold` uses is :data:`TEXT_SORT_CUT_RULE`.
+TEXT_SORT_CUT_RULES = ("gmm_midpoint", "guarded_tail")
+
+#: The rule every cosine/text sort draws its line with, and Autopilot's opening
+#: reads, from the ``VTSEARCH_TEXT_SORT_CUT`` environment variable.  **Off by
+#: default**: #3826 chose the guarded rule, and it waits on the trajectory A/B
+#: of its effect on Autopilot's opening before becoming the default.  An
+#: unrecognised value falls back to the default instead of raising, so a typo
+#: cannot take the sort route down.
+TEXT_SORT_CUT_RULE = os.environ.get("VTSEARCH_TEXT_SORT_CUT", "gmm_midpoint").strip().lower()
+if TEXT_SORT_CUT_RULE not in TEXT_SORT_CUT_RULES:
+    TEXT_SORT_CUT_RULE = "gmm_midpoint"
+
+#: Ashman's D at or above which the two fitted components count as separated
+#: and the mixture's midpoint is kept.  2 is the textbook bimodality criterion
+#: for a two-Gaussian mixture.  On 1,120 real text sorts, 9% cleared it, almost
+#: all of them single-object images (``caltech101_m``, 60%).  Elsewhere the two
+#: components are two halves of one mode (#3826).
+TEXT_SORT_SEPARATION_D = 2.0
+
+#: How many bulk sigmas above the median the tail cut sits.  Chosen as the
+#: F1-best constant on three environments and tested on the fourth.  It was the
+#: pick in 3 of 4 folds (3.5 in the other).  This is a tuned constant, not a
+#: p-value: real negative tails are heavier than Gaussian, and at k = 3 a
+#: Gaussian bulk under-predicts the negatives above the cut 2.7-6x.
+TEXT_SORT_TAIL_K = 3.0
+
+#: The converged fit's stopping rule, for the separated branch: the shipped
+#: EM continued to 1e-10 in mean log-likelihood.  At the shipped 1e-3 the fit
+#: still moves 5% of the haystack under a random start.  On separated data the
+#: continuation is short.
+_TEXT_SORT_CONVERGED_TOL = 1e-10
+_TEXT_SORT_CONVERGED_MAX_ITER = 5000
+
+
+def ashman_d(fit: GmmFit1D) -> float:
+    """``|mu_hi - mu_lo| * sqrt(2 / (var_lo + var_hi))``: component separation in pooled sigmas."""
+    pooled = fit.var_lo + fit.var_hi
+    if not pooled > 0.0:
+        return math.inf if fit.mu_hi != fit.mu_lo else 0.0
+    return abs(fit.mu_hi - fit.mu_lo) * math.sqrt(2.0 / pooled)
+
+
+def bulk_location_scale(scores: "list[float] | np.ndarray") -> tuple[float, float]:
+    """The median of *scores*, and a sigma read from the half **below** it.
+
+    The sigma is 1.4826 x the median distance of the lower half from the median,
+    the MAD's Gaussian consistency factor applied to one side.  A typed query's
+    matches are a right shoulder on one broad mode, so the lower half is the
+    side they do not reach.  A heavy shoulder of positives therefore moves
+    neither number much, which a symmetric MAD or a standard deviation would
+    not survive.  Non-finite scores are ignored.  Returns ``(nan, nan)`` for an
+    empty sample and a zero sigma for a constant one.
+    """
+    x = np.asarray(scores, dtype=np.float64).ravel()
+    x = x[np.isfinite(x)]
+    if x.size == 0:
+        return float("nan"), float("nan")
+    mu = float(np.median(x))
+    below = mu - x[x <= mu]
+    return mu, 1.4826 * float(np.median(below))
+
+
+def converge_score_gmm(arr: np.ndarray, start: GmmFit1D) -> GmmFit1D | None:
+    """Continue the shipped unanchored EM from *start* until the likelihood stops moving.
+
+    This is the "converged" fit of #3826: the same loop and the same objective as
+    :func:`fit_score_gmm`, at :data:`_TEXT_SORT_CONVERGED_TOL`.  The stopping
+    point is then no longer a parameter of the answer, and on separated data
+    that is what makes the midpoint reproducible.  Returns ``None`` on
+    numerical failure.
+    """
+    x = np.asarray(arr, dtype=np.float64).ravel()
+    fit = _anchored_em(
+        x,
+        _NO_ANCHORS,
+        _NO_ANCHORS,
+        start,
+        1.0,
+        _TEXT_SORT_CONVERGED_MAX_ITER,
+        _EM_TOL,
+        _TEXT_SORT_CONVERGED_TOL,
+    )
+    if fit is None:
+        return None
+    if fit.mu_hi < fit.mu_lo:
+        return GmmFit1D(
+            w_lo=fit.w_hi, mu_lo=fit.mu_hi, var_lo=fit.var_hi, w_hi=fit.w_lo, mu_hi=fit.mu_lo, var_hi=fit.var_lo
+        )
+    return fit
+
+
+def guarded_text_sort_threshold(scores: list[float]) -> tuple[float, str]:
+    """The guarded line for a typed-query sort, and which branch drew it (issue #3826).
+
+    A cosine sort of a typed query is usually **one** broad mode, with the
+    query's matches as a thin right shoulder.  A two-Gaussian fit then splits
+    the mode itself, and its midpoint lands in the densest region of the scores.
+    On 1,120 real sorts the midpoint admitted a median 43% of the haystack, 12-54x
+    the true matches outside single-object images.  That placement is also why
+    a re-initialised or re-toleranced fit moved 6% of the verdicts: any
+    perturbation of a line drawn through the mode moves thousands of medias.
+
+    So:
+
+    * fit the shipped mixture (:func:`fit_score_gmm`), and if its components are
+      **separated** (:func:`ashman_d` >= :data:`TEXT_SORT_SEPARATION_D`),
+      converge it (:func:`converge_score_gmm`) and cut at the midpoint.  Branch
+      ``"gmm"``.  There the two components are real and the midpoint is well
+      posed.
+    * otherwise cut the tail: :func:`bulk_location_scale`'s median +
+      :data:`TEXT_SORT_TAIL_K` sigmas.  Branch ``"tail"``.  The line admits
+      what the bulk cannot explain.  It has no optimiser, so nothing but the
+      data can move it.
+
+    Measured against the midpoint on those 1,120 labelled sorts: F1 0.17 -> 0.39,
+    and median admitted / true matches 17x -> 1.0x.  A bootstrap resample moves
+    0.32% of the haystack instead of 1.2%.  The line is **worse** on the
+    Inclusion-0 rate cost (FPR+FNR, +0.053), which prices a missed match at
+    1/prevalence false alarms.  That trade was the decision #3826 asked for.
+    See ``docs/experiments/2026-09-22-text-cut-3826/REPORT.md``.
+
+    **Known failure: a majority-class query.**  When the matches are a large
+    share of the haystack ("a person" in COCO is 54%) and the mixture is *not*
+    separated, the median sits inside the matches, the tail is only the top of
+    them, and the line admits a handful where the midpoint was roughly right.
+    On the 28 measured sorts above 20% prevalence, F1 was 0.31 against the
+    midpoint's 0.62.  Nothing label-free distinguishes that sort from a
+    query the embedder barely separates, so this is documented and pinned by a
+    test rather than guessed at.  A *separated* majority class takes the
+    ``"gmm"`` branch and is unaffected.
+
+    The tail cut can sit above every score, which paints nothing green.  That
+    is "nothing here stands out", not an error.  It happened on 0.3% of the
+    measured sorts.
+
+    Fallbacks mirror :func:`calculate_gmm_threshold`: ``0.5`` with fewer than two
+    scores (branch ``"fallback"``), and the shipped midpoint when the bulk has no
+    spread to measure (a constant or two-valued sample, branch ``"gmm"``).
+    """
+    if len(scores) < 2:
+        return 0.5, "fallback"
+    arr = gmm_fit_array(scores)
+    fit = fit_score_gmm(arr)
+    if fit is None:
+        return float(np.median(arr)), "fallback"
+    if ashman_d(fit) >= TEXT_SORT_SEPARATION_D:
+        converged = converge_score_gmm(arr, fit)
+        return (fit if converged is None else converged).midpoint(), "gmm"
+    mu, sigma = bulk_location_scale(scores)
+    if not (math.isfinite(mu) and math.isfinite(sigma) and sigma > 0.0):
+        return fit.midpoint(), "gmm"
+    return mu + TEXT_SORT_TAIL_K * sigma, "tail"
+
+
+def text_sort_threshold(scores: list[float], rule: str | None = None) -> float:
+    """The line a cosine/text sort draws, under *rule* (default :data:`TEXT_SORT_CUT_RULE`).
+
+    The single entry point for "where does a typed-query sort's green region
+    end".  The app's sort routes call it through
+    :func:`vtscore.training.query_sort.cosine_sort_active`, and the eval
+    harness's Autopilot opening calls it too (the Bad phase votes at this line).
+    That way a study of the rule and the app cannot disagree about which line
+    was drawn.  With the default rule it *is* :func:`calculate_gmm_threshold`.
+    """
+    chosen = TEXT_SORT_CUT_RULE if rule is None else rule
+    if chosen == "guarded_tail":
+        return guarded_text_sort_threshold(scores)[0]
+    if chosen != "gmm_midpoint":
+        raise ValueError(f"unknown text-sort cut rule {chosen!r}; expected one of {TEXT_SORT_CUT_RULES}")
+    return calculate_gmm_threshold(scores)

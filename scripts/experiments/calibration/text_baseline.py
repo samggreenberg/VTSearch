@@ -60,7 +60,7 @@ def main() -> int:
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
     from vtscore.eval.calibration_metrics import detection_metrics
-    from vtscore.training.thresholds import calculate_gmm_threshold, inclusion_cost_weights
+    from vtscore.training.thresholds import inclusion_cost_weights, text_sort_threshold
 
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
@@ -134,8 +134,10 @@ def main() -> int:
                 scores = np.asarray([float(sims[i]) for i in ids], dtype=np.float64)
                 labels = np.asarray([1 if media_is_positive(medias_cat[i], cat) else 0 for i in ids])
 
-                # The app cuts the haystack it can see: every media, not a split.
-                gmm_cut = float(calculate_gmm_threshold([float(s) for s in scores]))
+                # The app cuts the haystack it can see: every media, not a split,
+                # with the text route's own rule (the GMM midpoint unless
+                # VTSEARCH_TEXT_SORT_CUT says otherwise, #3826).
+                gmm_cut = float(text_sort_threshold([float(s) for s in scores]))
 
                 for seed in cfg.SEEDS:
                     _, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
