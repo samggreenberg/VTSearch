@@ -1,5 +1,7 @@
 # VTSearch at production defaults: what each configuration gives a user
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** The `coco_val × siglip` rows here were measured on **un-normalised** vectors (norms 12–19, #4099): the COCO SigLIP reference row, the COCO `dinov3 − siglip` and `siglip − siglip2_l` contrasts, and the COCO 10-vote curve. The headlines do not move with them dropped: rule inefficiency −0.014 → −0.014, and ≤2-positive runs 5.7% → 5.9%. In RESULT-horizon-250.md, the VG+COCO column goes from −0.011 ± 0.005 to −0.010 ± 0.006, which is below 2 SE. The box-band column still carries that conclusion. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 > # ⚠️ SEEDING CAVEAT — these runs did not start the way the app does
 >
 > **Recorded 2026-08-26 (#3156).** Autopilot seeds its first three Good votes from

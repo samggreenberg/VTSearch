@@ -1,5 +1,7 @@
 # #2808 — Is the linear head's spike reduction limited by early stopping?
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** The `coco_val × siglip` rows here were measured on **un-normalised** vectors (norms 12–19, #4099), so they describe a detector the app never builds. That environment was the only one where converging looked worse (+0.044 ± 0.025 final cost), so "vanishes on the shipped default embedder" rests half on it. **The decision stands:** on `visual_genome_m × siglip` alone, converged − shipped is +0.013 ± 0.020, still no gain at 5.3× the training cost. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 > # ⚠️ SEEDING CAVEAT — these runs did not start the way the app does
 >
 > **Recorded 2026-08-26 (#3156).** Autopilot seeds its first three Good votes from

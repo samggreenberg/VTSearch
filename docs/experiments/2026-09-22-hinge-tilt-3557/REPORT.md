@@ -1,5 +1,7 @@
 # A sign-dependent ("hinge") cut rule for the Inclusion knob (#3557)
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** The `coco_val × siglip` (binary COCO) rows read **un-normalised** vectors (#4099). "Nothing ships" is independent of them, because every harmed shipping stop is caltech or VG. But all three literal nesting-violation examples in §1 are `coco_val × siglip` cold starts and may be raw-norm artefacts; #4118 should draw its examples from elsewhere. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 **Verdict: nothing ships.** `FOLD_ANCHOR_CUT_RULE` stays `mid_tilt`.
 
 The guarded hinge keeps the nesting contract, both by proof and on every one of
