@@ -1,0 +1,8 @@
+contrast,arm_b,n,sig_better,sig_worse,harmed
+recut,cross_tilt,105,34,35,39
+recut,hinge,105,40,0,0
+recut,hinge_cont,105,0,40,39
+recut,hinge_raw,105,31,0,0
+recut,mid,105,2,72,74
+recut,rate,105,19,52,8
+ship_cost,hinge,105,9,24,22
