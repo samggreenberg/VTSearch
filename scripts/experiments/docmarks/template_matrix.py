@@ -144,6 +144,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     mine = [cid for i, cid in enumerate(wanted) if i % shard_n == shard_i]
     mine = [cid for cid in mine if not (args.out / f"{slug(cid)}.npz").exists()]
     print(f"=== tier {args.tier}: shard {args.shard}, {len(mine)} class(es) to do", flush=True)
+    if not mine and args.no_vectors:
+        # A continuation job after a timeout: nothing left, so skip the extraction.
+        return 0
 
     pages = embed_corpus.pages_for_tier(args.corpus, args.tier)
     page_by_id = {p.page_id: p for p in pages}
