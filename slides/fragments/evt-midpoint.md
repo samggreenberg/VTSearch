@@ -24,7 +24,9 @@
 <!-- **c** — This. The midpoint is right only when a random item is as likely to
      come from one component as the other, and it never is: the concept the user
      is hunting occupies a fraction of the corpus. Price each curve by how
-     likely it is and the crossing moves right, into the Bad component's tail. -->
+     likely it is — here 91% of the corpus is Bad, so its curve stands ten
+     times the other's — and the crossing moves right, into the Bad
+     component's tail. -->
 
 <!-- **d** — The arithmetic is one line and it is old: with a shared variance
      the log-odds are linear in the score, so the answer is the midpoint plus a

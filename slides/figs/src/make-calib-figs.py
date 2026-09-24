@@ -3452,32 +3452,42 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 #: being width-limited in the slot and the type starts shrinking.
 ACQ_CANVAS_H = 13.46
 
-#: The acquisition figure's panel and the ranking bar under it.
-#: Shifted right with the rest of Part 2 to clear the title notch (#3242).
-#: This figure's blocker was not its score axis but the loop: `D_0` sits in the
-#: top-left corner and the return arrow enters it horizontally, so the whole
-#: drawing — rail, block and panel — moves right together rather than the panel
-#: alone. It had the room: the old layout left the right third of the canvas
-#: empty, which is exactly what the shift spends.
-ACQ_PANEL_X0, ACQ_PANEL_W, ACQ_PANEL_H = 11.05, 10.3, 2.0
+#: The acquisition figure's two halves, and they are deliberately *not*
+#: stacked on one x axis. The histogram is a score axis and the ranking bar is
+#: a rank axis — not the same scale, not even linearly related — and drawn
+#: flush under one another they read as one axis twice, with the cut on the
+#: bar looking as if it should sit under θ on the histogram. So the calibration
+#: half (the histogram) is slid left and the selection half (the ranking and
+#: its zoom) slid right, overlapping only in the middle.
+#:
+#: `M_0` stays where the top row needs it — the `train` arrow out of `D_0` has
+#: a minimum length (`arrow_len_for`), and `D_0` cannot move left into the
+#: title notch — so the score arrow lands on the histogram right of centre.
+ACQ_HIST_X0, ACQ_HIST_W, ACQ_PANEL_H = 7.4, 9.6, 2.0
+ACQ_M0_X = 14.14
+ACQ_RANK_X0, ACQ_RANK_W = 12.4, 10.3
 ACQ_GAUGE_H = 0.34
 
-#: The zoom strip: how many items of the ranking it shows, and how tall a cell
-#: is. Twenty-one is chosen from the drawing's own numbers rather than for
-#: looks — one step of the knob moves this estimator's cut about eight items of
-#: six thousand, so a window of twenty-one is the smallest that holds both cuts
-#: *and* the gap between them at their true separation.
-ACQ_ZOOM_CELLS = 21
+#: The zoom strip is inset from the ranking it enlarges by this much at each
+#: end: an enlargement drawn exactly as wide as the thing it enlarges reads as
+#: a second copy of it rather than as a closer look at one part.
+ACQ_ZOOM_INSET = 0.8
 ACQ_ZOOM_H = 0.62
+
+#: How many items the zoom shows either side of the two cuts. The window is
+#: sized from the drawing's own numbers rather than for looks: it holds both
+#: cuts *and* the gap between them at their true separation, which at the
+#: shipped offset is some twenty-six items of six thousand, plus this margin.
+ACQ_ZOOM_MARGIN = 5
 
 #: How far the zoomed ranking hangs below the full one, leaving room for the
 #: callout lines that tie the two together and for the pick's own name.
 ACQ_ZOOM_DROP = 1.2
 
 #: Which cells of the zoom carry votes rather than unlabeled media, as
-#: `(index, is_good)`. Two of twenty-one: near the cut almost everything is
+#: `(index, is_good)`. Three of thirty-six: near the cut almost everything is
 #: unlabeled, which is the whole reason there is something to ask about.
-ACQ_ZOOM_VOTES = ((3, False), (17, True))
+ACQ_ZOOM_VOTES = ((3, False), (14, True), (23, True))
 
 
 def acq_flow_fig() -> None:
@@ -3499,18 +3509,18 @@ def acq_flow_fig() -> None:
 
     The direction is the opposite of the intuition from the cost weights, so the
     figure draws it at its true size rather than at a legible one: on this
-    corpus one step of the knob is about eight items in six thousand, which is
-    why the ranking is zoomed rather than merely notched twice. The gap is small
-    and it compounds — every pick it changes changes a vote, and every vote
-    retrains the model, which is the arrow that closes the loop back to D₀.
+    corpus the shipped offset moves the cut some twenty-six items in six
+    thousand, which is why the ranking is zoomed rather than merely notched
+    twice. The gap is small and it compounds — every pick it changes changes a
+    vote, and every vote retrains the model, which is the arrow that closes the
+    loop back to D₀.
 
-    Measured record, and it is not a clean one:
-    ``coco_val × siglip2`` found an interior optimum at −3 (positives per 100
-    votes 4 → 18, average precision 0.696 → 0.817), ``visual_genome_m × siglip``
-    rejected −3 against a +0.01 tolerance, and only −1 passed in both. The
-    region-voting leg is void pending a re-run (#2943), and a supply-dependent
-    offset is the open frontier (#2910). See
-    ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md``.
+    Measured record, and it is not a clean one: ``coco_val × siglip2`` found an
+    interior optimum at −3 (positives per 100 votes 4 → 18, average precision
+    0.696 → 0.817), ``visual_genome_m × siglip`` rejected −3 on labels that miss
+    a quarter of the true positives, and the verified-label pile (#3319) went
+    past −4 and shipped it. The history lives beside the constant, in
+    :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`.
     """
     folds, final = _xquant_populations()
     last = _acq_flow_stage(ACQ_FLOW_STAGES, folds, final)
@@ -3539,7 +3549,8 @@ def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str,
 def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = _incl_figure(ACQ_CANVAS_H)
-    x0, w = ACQ_PANEL_X0, ACQ_PANEL_W
+    hx0, hw = ACQ_HIST_X0, ACQ_HIST_W
+    x0, w = ACQ_RANK_X0, ACQ_RANK_W
 
     cut = _xquant_cut(folds, final)
     k_acq = acquisition_inclusion(0)
@@ -3558,7 +3569,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     block_y0 = block_top - block_h
     row_y = block_y0 + block_h / 2
 
-    m0x = x0 + 0.30 * w
+    m0x = ACQ_M0_X
     score_len = arrow_len_for("score")
     panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
     y_base = panel_top - ACQ_PANEL_H
@@ -3576,14 +3587,15 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
     zoom_top = gauge_y0 - ACQ_ZOOM_DROP
     zoom_y0 = zoom_top - ACQ_ZOOM_H
-    cell_w = w / ACQ_ZOOM_CELLS
-    # The window is centred on the reporting cut and holds the acquisition cut at
-    # its true distance: one step of the knob is about eight items in six
-    # thousand here, and drawing that gap wider than it is would be the one lie
-    # the figure could tell that actually matters.
+    zx0, zw = x0 + ACQ_ZOOM_INSET, w - 2 * ACQ_ZOOM_INSET
+    # The window holds both cuts at their true distance, centred between them:
+    # drawing that gap wider or narrower than it is would be the one lie the
+    # figure could tell that actually matters.
     gap_cells = (q_acq - q_report) * final.size
-    report_cell = (ACQ_ZOOM_CELLS - gap_cells) / 2
-    zoom_report_x = x0 + report_cell * cell_w
+    zoom_cells = int(np.ceil(gap_cells)) + 2 * ACQ_ZOOM_MARGIN
+    cell_w = zw / zoom_cells
+    report_cell = (zoom_cells - gap_cells) / 2
+    zoom_report_x = zx0 + report_cell * cell_w
     zoom_acq_x = zoom_report_x + gap_cells * cell_w
     # The app ranks descending and takes the first position at or below the cut,
     # so the pick is the item the cut falls *into*, not the one above it.
@@ -3594,8 +3606,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     ask_y = cut_label_bottom - OBJECT_GAP - CAP_16 - LABEL_GAP
     conclusion_y = ask_y - OBJECT_GAP - 0.24
 
-    def row_name(y: float, text: str, size: float = 15.0) -> None:
-        ax.text(x0 - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
+    def row_name(x: float, y: float, text: str, size: float = 15.0) -> None:
+        ax.text(x - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
 
     # ── stage 1: where the calibration talk left off ──────────────────────────
     ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
@@ -3610,11 +3622,11 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
         "score",
         z=2.1,
     )
-    ax.text(x0 + w, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
-    _score_histogram(ax, x0, y_base, w, ACQ_PANEL_H, None, final, fill="plain", mu_labels=False)
-    _theta_notch(ax, x0 + theta_report * w, y_base, _sub(r"\theta_{report}"))
+    ax.text(hx0 + hw, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
+    _score_histogram(ax, hx0, y_base, hw, ACQ_PANEL_H, None, final, fill="plain", mu_labels=False)
+    _theta_notch(ax, hx0 + theta_report * hw, y_base, _sub(r"\theta_{report}"))
     _quantile_gauge(ax, x0, gauge_y0, w, ACQ_GAUGE_H, q_report, "")
-    row_name(gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
+    row_name(x0, gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
 
     # ── stage 2: job one — the cut read as a decision boundary ───────────────
     if stage >= 2:
@@ -3639,13 +3651,13 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
     # ── stage 3: job two reads the same number as a rank, so zoom in ─────────
     if stage >= 3:
-        for i in range(ACQ_ZOOM_CELLS):
+        for i in range(zoom_cells):
             kind = "unlabeled"
             for idx, good in ACQ_ZOOM_VOTES:
                 if idx == i:
                     kind = "good" if good else "bad"
-            _acq_cell(ax, x0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
-        for target in (x0, x0 + w):
+            _acq_cell(ax, zx0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
+        for target in (zx0, zx0 + zw):
             ax.plot(
                 [x0 + q_report * w, target],
                 [gauge_y0, zoom_top],
@@ -3653,33 +3665,36 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
                 linewidth=1.4,
                 zorder=0,
             )
-        row_name(zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
+        row_name(zx0, zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
+        # The two cuts' names sit *between* them, each against its own tick: the
+        # gap is wide enough to hold both, and a name hung outside the window
+        # would widen the figure and shrink everything in the slot.
         ax.plot([zoom_report_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
         ax.text(
-            zoom_report_x - LABEL_GAP,
+            zoom_report_x + LABEL_GAP,
             zoom_y0 - 0.32 - LABEL_GAP,
             _sub(r"\theta_{report}"),
-            ha="right",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-
-    # ── stage 4: the second cut, one step of the knob further up the ranking ──
-    if stage >= 4:
-        ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
-        ax.text(
-            zoom_acq_x + LABEL_GAP,
-            zoom_y0 - 0.32 - LABEL_GAP,
-            _sub(rf"\theta_{{acq}}\ \ (k = {k_acq})"),
             ha="left",
             va="top",
             fontsize=16,
             color=INK,
         )
-        _acq_cell(ax, x0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+
+    # ── stage 4: the second cut, a few steps of the knob further up the ranking
+    if stage >= 4:
+        ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
         ax.text(
-            x0 + (pick_index + 0.5) * cell_w,
+            zoom_acq_x - LABEL_GAP,
+            zoom_y0 - 0.32 - LABEL_GAP,
+            _sub(rf"\theta_{{acq}}\ \ (k = {k_acq})"),
+            ha="right",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+        _acq_cell(ax, zx0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+        ax.text(
+            zx0 + (pick_index + 0.5) * cell_w,
             zoom_top + LABEL_GAP,
             "ask about this one",
             ha="center",
@@ -3694,7 +3709,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     # step has to say is that the threshold chooses what gets voted on, which a
     # clean rectangular return says more plainly than a shortcut.
     if stage >= 5:
-        pick_cx = x0 + (pick_index + 0.5) * cell_w
+        pick_cx = zx0 + (pick_index + 0.5) * cell_w
         ax.plot(
             [pick_cx, pick_cx, rail_x, rail_x],
             [cut_label_bottom - OBJECT_GAP, ask_y, ask_y, row_y],
@@ -4071,9 +4086,10 @@ COST_STAGES = 5
 #: cross; the arithmetic that moves one to the other.
 CROSSING_STAGES = 4
 
-#: How many stages the region-maximum figure reveals in: one item's regions and
-#: the max over them; the corpus of maxima; the two tail families fitted to it.
-REGION_MAX_STAGES = 3
+#: How many stages the region-maximum figure reveals in: two photographs cut
+#: into regions; each region's score and the max over them; the corpus of
+#: maxima; the two tail families fitted to it.
+REGION_MAX_STAGES = 4
 
 #: The cost weightings the knob figure draws, as (price of a false alarm, price
 #: of a miss, label). Symmetric about the middle one on purpose: the slide's
@@ -4441,15 +4457,6 @@ def _crossing_stage(stage: int) -> plt.Figure:
         ax.plot([x0 + mu * w] * 2, [shape_base, top], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
         ax.text(x0 + mu * w, shape_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=16, color=INK)
     _range_line(ax, x0, x0 + w, shape_base, z=5)
-    ax.text(
-        x0,
-        shape_base + shape_h + LABEL_GAP,
-        "two components, same shape",
-        ha="left",
-        va="bottom",
-        fontsize=16,
-        color=INK,
-    )
 
     # ── stage 2: the shipped rule — halfway between the means ─────────────────
     if stage >= 2:
@@ -4474,7 +4481,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
         ax.text(
             x0,
             weighted_base + weighted_h + LABEL_GAP,
-            _sub(r"\pi_{lo} = 0.91") + "  of the corpus is Bad, so its curve is ten times the other's",
+            _sub(r"\pi_{lo} = 0.91"),
             ha="left",
             va="bottom",
             fontsize=16,
@@ -4636,9 +4643,12 @@ def _region_max_stage(stage: int) -> plt.Figure:
         ax.imshow(image, extent=(px0, px0 + photo_w, py0, photo_top), zorder=1, aspect="auto")
         best = np.unravel_index(int(np.argmax(scores)), scores.shape)
         cw, ch = photo_w / cols, photo_h / rows
+        # Stage 1 is the photographs and the grid alone, so the room can see
+        # what is *in* each picture before a number goes over every region of it.
+        numbered = stage >= 2
         for r in range(rows):
             for c in range(cols):
-                won = (r, c) == tuple(best)
+                won = numbered and (r, c) == tuple(best)
                 ax.add_patch(
                     Rectangle(
                         (px0 + c * cw, photo_top - (r + 1) * ch),
@@ -4650,6 +4660,8 @@ def _region_max_stage(stage: int) -> plt.Figure:
                         zorder=3 if won else 2,
                     )
                 )
+                if not numbered:
+                    continue
                 ax.text(
                     px0 + (c + 0.5) * cw,
                     photo_top - (r + 0.5) * ch,
@@ -4667,6 +4679,8 @@ def _region_max_stage(stage: int) -> plt.Figure:
                         "edgecolor": "none",
                     },
                 )
+        if not numbered:
+            continue
         ax.text(
             px0,
             py0 - LABEL_GAP,
@@ -4677,12 +4691,12 @@ def _region_max_stage(stage: int) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 2: every item is a maximum, so the corpus is a pile of maxima ───
+    # ── stage 3: every item is a maximum, so the corpus is a pile of maxima ───
     panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
     panel_h = 3.75
     y_base = 1.5
     sample = _maxima()
-    if stage >= 2:
+    if stage >= 3:
         lo, hi = REGION_RANGE
         density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
         sy = panel_h / float(density.max())
@@ -4700,7 +4714,7 @@ def _region_max_stage(stage: int) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 3: the two tail families, fitted to the same maxima ─────────────
+    # ── stage 4: the two tail families, fitted to the same maxima ─────────────
     if stage >= REGION_MAX_STAGES:
         lo, hi = REGION_RANGE
         density, _edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
