@@ -7,6 +7,7 @@
 #   analysis/viewer.html         cost / F1 / ... over clicks, every cell and path,
 #                                with the click-0 notch and the full-label ceiling
 #   analysis/cells.csv, influence.csv, images.csv, image_detector.csv, summary.md
+#   analysis/figures/*.png, analysis/images.md + images/ (thumbnails)
 #
 # Run it on a compute node (srun): text_baseline re-reads every cell.
 set -euo pipefail
@@ -31,4 +32,6 @@ python viewer.py --results "$EXP" --arms results=prod --baseline "$OUT/text_base
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
   --subtitle "coco_quarry, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)"
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$OUT/text_baseline.csv" --out "$OUT"
+python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"
+python "$HERE/thumbs.py" --analysis "$OUT" --out "$OUT/images" --n 12 --min-obs 5
 echo "done: $OUT"
