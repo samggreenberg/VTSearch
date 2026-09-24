@@ -33,6 +33,7 @@ and this module borrows it rather than fetching val2017 a second time.
 from __future__ import annotations
 
 import json
+import shutil
 import sys
 import tarfile
 import urllib.request
@@ -194,7 +195,10 @@ def caltech101_dir() -> Path:
         return root
     if not CALTECH_ZIP.exists():
         CALTECH_ZIP.parent.mkdir(parents=True, exist_ok=True)
-        urllib.request.urlretrieve(CALTECH_URL, CALTECH_ZIP)  # noqa: S310 — constant https URL
+        # A User-Agent, because the Caltech data host answers urllib's default with a 403.
+        request = urllib.request.Request(CALTECH_URL, headers={"User-Agent": "Mozilla/5.0 (vtsearch slide figures)"})  # noqa: S310
+        with urllib.request.urlopen(request) as resp, CALTECH_ZIP.open("wb") as out:  # noqa: S310 — constant https URL
+            shutil.copyfileobj(resp, out)
     _extract(CALTECH_ZIP, CALTECH_DIR)
     # The distribution nests a second archive: the outer zip holds
     # `101_ObjectCategories.tar.gz` rather than the folders themselves.

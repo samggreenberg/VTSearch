@@ -3,28 +3,19 @@
 
 Run from the repo root:
 
-    python slides/figs/src/make-dataset-figs.py            # everything it can draw offline
-    python slides/figs/src/make-dataset-figs.py --no-media # skip the cards that need pixels
+    python slides/figs/src/make-dataset-figs.py
 
-Three kinds of figure, and the differences matter more than they look.
+The dataset *cards* — what each dataset is and what its media look like — are
+`make-data-cards.py`'s. This file draws the figures that say why a dataset is
+*shaped* the way it is:
 
-**Story figures** say how a dataset is *made* — the sources it starts from,
-what is done to them, and what a reader may conclude. `coco_quarry` and DocMarks
-get one each, drawn as a five-step stack with build markers so the room watches
-the construction assemble rather than reading a paragraph. The steps are the
-construction the build performs, not the order the decisions were reached in.
-
-**Cards** say what a dataset *is*: how much of it there is, where to download
-it, and — the part a drawing cannot fake — what the media look like. Every
-card's strip is real pixels, fetched by `dataset_samples.py`.
-
-**Argument figures** say why a dataset is *shaped* the way it is. There is one,
-`coco_quarry`'s complement build, and it draws set theory rather than data: it
-carries no counts at all, because the thing it is arguing about — that an
-exhaustively annotated corpus can name the images a class is *absent* from —
-is true of three classes and eighty alike. A dataset gets one of these only
-where the design decision is the interesting part and a number would not say
-it.
+* `coco_quarry`'s complement build, which draws set theory rather than data: it
+  carries no counts at all, because the thing it argues — that an exhaustively
+  annotated corpus can name the images a class is *absent* from — is true of
+  three classes and eighty alike;
+* `coco_quarry`'s size bands and its grid of identical cells;
+* DocMarks' shape: where its pages come from, and how its copies fall across
+  marks.
 
 **Where the numbers come from.** Nothing here is typed in twice.
 
@@ -40,19 +31,12 @@ it.
   datasheet is the weaker guarantee of the two and is chosen for exactly that
   reason — it is the strongest one available from a checkout, and it fails
   loudly rather than going stale in silence.
-* The COCO card counts its own annotation file.
-
-**What the DocMarks slides still owe.** The one thing neither source carries is
-*photographs of the marks*. Drawing them needs the corpus, so it is GRID work;
-until then the DocMarks slides show structure and counts and say so.
 """
 
 from __future__ import annotations
 
 import argparse
-import contextlib
 import importlib.util
-import io
 import math
 import re
 import sys
@@ -81,12 +65,6 @@ OUT = REPO / "slides" / "figs"
 FIG_W, FIG_H = 12.8, 7.2
 FLOOR_PT = 15
 
-#: Characters per line in a story figure's step body. Five steps fit the
-#: slide at two lines each and do not fit at three, so this number and the
-#: length of the prose below are one decision; `_steps` refuses the figure
-#: rather than letting the last step slide off the bottom.
-STEP_WRAP = 66
-
 #: The notch, as axes fractions of the 1280x720 slot, so a layout can be
 #: written against it instead of against pixel arithmetic repeated in every
 #: figure. `NOTCH_R` is its right edge and `NOTCH_B` its bottom, measured from
@@ -111,31 +89,6 @@ LEFT_X = 0.047
 LEFT_TOP = 1.0 - NOTCH_B - 0.045
 RIGHT_X = NOTCH_R + 0.045
 RIGHT_W = 0.975 - RIGHT_X
-
-
-def _save_photo(fig: plt.Figure, name: str) -> None:
-    """Write a photograph-carrying card as WebP, through `save`'s own checks.
-
-    `slides/README.md`'s rule: PNG for plots, WebP for photographs. These three
-    cards are twelve web photographs each and cost 500-780 KB as PNG against
-    about a sixth of that as WebP, at a quality no projector resolves — and a
-    figure that is re-rendered whenever its dataset moves pays that repeatedly.
-
-    Routed through `save` rather than around it so the type floor and the title
-    notch are still checked, on the same pixels; matplotlib cannot write WebP,
-    so the PNG is written, converted and removed.
-    """
-    from PIL import Image
-
-    png = f"{name}.png"
-    # `save` announces the file it writes, and this one is deleted three lines
-    # later; printing it would put a name in the log that is not on disk.
-    with contextlib.redirect_stdout(io.StringIO()):
-        save(fig, OUT, png, column=FULL_BLEED, tight=False)
-    with Image.open(OUT / png) as image:
-        image.convert("RGB").save(OUT / f"{name}.webp", quality=88, method=6)
-    (OUT / png).unlink()
-    print(f"wrote figs/{name}.webp")
 
 
 def count(n: int) -> str:
@@ -206,108 +159,6 @@ def _stats(fig: plt.Figure, rows: list[tuple[str, str]], *, top: float = LEFT_TO
         fig.text(LEFT_X, y - 0.042, label, fontsize=FLOOR_PT, color=SOFT, va="top")
 
 
-def _steps(fig: plt.Figure, steps: list[tuple[str, str]], *, upto: int | None = None) -> None:
-    """The right column's numbered stack: one row per construction step.
-
-    Laid out by flow rather than on a fixed pitch — a row is as tall as its own
-    wrapped body — because the alternative is a constant that is right for the
-    longest step and leaves a hole under every other one. Rows are drawn from
-    the same top in the same order whatever `upto` is, so a build reveal adds a
-    row and moves nothing (`slides/STYLE.md`, *Builds*).
-
-    `upto` draws only the first *n*, which is how the build stages are made.
-    """
-    shown = len(steps) if upto is None else upto
-    y, line, lead, gap = 0.925, 0.0425, 0.052, 0.034
-    for i, (verb, body) in enumerate(steps[:shown]):
-        fig.text(RIGHT_X, y, f"{i + 1}", fontsize=FLOOR_PT + 11, color=RULE, fontweight="bold", va="top")
-        fig.text(RIGHT_X + 0.042, y, verb, fontsize=FLOOR_PT + 5, color=INK, fontweight="bold", va="top")
-        wrapped = textwrap.wrap(body, STEP_WRAP)
-        fig.text(
-            RIGHT_X + 0.042,
-            y - lead,
-            "\n".join(wrapped),
-            fontsize=FLOOR_PT,
-            color=SOFT,
-            va="top",
-            linespacing=1.5,
-        )
-        y -= lead + line * len(wrapped) + gap
-    # Checked rather than eyeballed: the stack is laid out by flow, so one step
-    # gaining a line silently pushes the last one off the bottom of the slide
-    # — which is exactly what an edit to a *number* can do, months after the
-    # layout was last looked at.
-    if y < 0.045:
-        raise SystemExit(
-            f"step stack: {shown} steps overflow the slide (bottom at {y:.3f}, floor 0.045). "
-            f"Shorten a step to {STEP_WRAP * 2} characters or fewer — every one of them is "
-            f"meant to wrap to two lines."
-        )
-
-
-STRIP_TOP = 0.815
-
-
-def _strip(fig: plt.Figure, tiles: list[Any], cols: int, rows: int, *, top: float = STRIP_TOP, captions=None) -> None:
-    """A grid of real photographs in the right column, uniform tiles.
-
-    Uniform because the tiles are the *evidence*, not a composition: a ragged
-    mosaic invites the eye to read the layout, and the only thing worth reading
-    here is the photographs.
-    """
-    pad = 0.008
-    cell_w = RIGHT_W / cols
-    cell_h = cell_w * (FIG_W / FIG_H) * 0.75
-    for i, tile in enumerate(tiles[: cols * rows]):
-        r, c = divmod(i, cols)
-        ax = fig.add_axes(
-            [RIGHT_X + c * cell_w, top - (r + 1) * cell_h + pad, cell_w - pad, cell_h - pad - (0.03 if captions else 0)]
-        )
-        ax.imshow(tile)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_edgecolor(RULE)
-        if captions:
-            ax.set_xlabel(captions[i], fontsize=FLOOR_PT, color=SOFT, labelpad=4)
-
-
-def _fit_tile(image: Any, aspect: float = 4 / 3) -> Any:
-    """Centre-crop to a common aspect so a grid of frames is a grid, not a mess."""
-    return _fit_tile_offset(image, aspect)[0]
-
-
-def _fit_tile_offset(image: Any, aspect: float = 4 / 3) -> tuple[Any, tuple[int, int]]:
-    """As `_fit_tile`, and the pixels the crop removed from the left and top.
-
-    A card that draws annotation over its frames has to move the boxes by the
-    same crop; returning the offset is what stops that being a second, silently
-    different piece of arithmetic.
-    """
-    width, height = image.size
-    if width / height > aspect:
-        side = int(round(height * aspect))
-        left = (width - side) // 2
-        box = (left, 0, left + side, height)
-    else:
-        side = int(round(width / aspect))
-        top = (height - side) // 2
-        box = (0, top, width, top + side)
-    return image.convert("RGB").crop(box), (box[0], box[1])
-
-
-def _source_line(fig: plt.Figure, text: str, *, caption: str = "where to get it", y: float = 0.105) -> None:
-    """The pointer on the foot of a card: a download URL, or how it is built.
-
-    Two captions rather than one because two of these datasets are not
-    downloads at all — they are constructions over somebody else's download,
-    and labelling a build recipe "where to get it" would send a reader looking
-    for a zip that does not exist.
-    """
-    fig.text(LEFT_X, y, caption, fontsize=FLOOR_PT, color=SOFT, va="center")
-    fig.text(LEFT_X, y - 0.052, text, fontsize=FLOOR_PT + 1, color=CUT, va="center", family="monospace")
-
-
 def _caption(fig: plt.Figure, text: str) -> None:
     """One descriptive line at the top of the right column, and no title.
 
@@ -363,60 +214,6 @@ def _quarry_classes(pc: Any) -> list[str]:
 def _quarry_cell_count(pc: Any) -> int:
     """Every `class@band`, less the cells no honest supply fills."""
     return len(pc.SCALE_CLASSES) * len(pc.BOX_BANDS) - len(pc.SCALE_DROPPED_CELLS)
-
-
-def _quarry_steps(pc: Any) -> list[tuple[str, str]]:
-    """What `coco_quarry` is made of, one decision per step.
-
-    Written as the construction the build performs, in the order it performs
-    it — not the order the decisions were reached in. Every number is read out
-    of `pile_config`, so a ruling that moves the roster moves the slide.
-    """
-    bands = pc.BOX_BANDS
-    merged = [name for name in pc.SCALE_CLASSES if name in pc.SCALE_CLASS_MERGES]
-    return [
-        (
-            "Start with all of COCO 2017",
-            f"{count(123_287)} photographs and 80 classes, every class answered on every image — "
-            "so a missing box is an absence.",
-        ),
-        (
-            "Merge the names COCO cannot keep apart",
-            "Where one object gets either label — car or truck, cup or wine glass — the two "
-            f"become one class: {len(merged)} merges in all.",
-        ),
-        (
-            "Band by the largest instance",
-            f"Against the model's own grid: small is under one patch (1/{1 / bands['small'][1]:.0f}), "
-            f"large runs to {bands['large'][1]:.0%} of the frame.",
-        ),
-        (
-            "Check that the box is one object",
-            "LVIS re-boxed the same photographs one object at a time. A COCO box round a pile of "
-            "fruit or books is no positive.",
-        ),
-        (
-            "Keep every class that fills its bands",
-            f"By count alone, never by how easy a class looks: {len(pc.SCALE_CLASSES)} classes. "
-            f"No honest supply fills {len(pc.SCALE_DROPPED_CELLS)} small-fruit cells.",
-        ),
-    ]
-
-
-def fig_quarry_build(pc: Any, upto: int | None = None) -> plt.Figure:
-    """How `coco_quarry` is cut out of COCO, in five steps."""
-    fig = _blank_fig()
-    _steps(fig, _quarry_steps(pc), upto=upto)
-    if upto is None:
-        _stats(
-            fig,
-            [
-                (f"{len(pc.SCALE_CLASSES)}", "classes"),
-                (f"{len(pc.BOX_BANDS)}", "size bands each"),
-                (f"{_quarry_cell_count(pc)}", "cells, all the same shape"),
-            ],
-        )
-    return fig
 
 
 def fig_quarry_bands(pc: Any) -> plt.Figure:
@@ -694,61 +491,6 @@ def _docmarks_facts() -> dict[str, Any]:
     }
 
 
-def _docmarks_steps(dc: Any, facts: dict[str, Any]) -> list[tuple[str, str]]:
-    """What DocMarks is made of, one decision per step.
-
-    Written as the construction the build performs, not the order the passes
-    were first run in. Every number is the corpus's own.
-    """
-    haystack = facts["haystack"]
-    return [
-        (
-            "Start with pages whose marks are outlined",
-            ", ".join(f"{s['name']} ({count(s['pages'])})" for s in facts["anchors"])
-            + f" ship every mark's outline; UCSF's {haystack['classes']} letterhead marks are boxed by hand.",
-        ),
-        (
-            "Settle which marks are the same mark",
-            "Hashing proposes the groups, and a person rules: is it one mark, is every member it, "
-            "are two classes really two?",
-        ),
-        (
-            "Find every copy",
-            "SIFT searches every page for copies the sources missed, and a person confirms each: "
-            f"{facts['instances']:,} copies of {facts['classes']} marks.",
-        ),
-        (
-            "Bury them in real documents",
-            f"{count(haystack['pages'])} scanned industry pages, in nested tiers of "
-            # The tiers sit in one breath, so they take one form: `count` would
-            # give "5,000 ⊂ 50K ⊂ 200K", which reads as three different units.
-            + " ⊂ ".join(f"{round(size, -3) // 1000}K" for size in dc.TIERS.values())
-            + " pages.",
-        ),
-        (
-            "Fix what counts as a wrong answer",
-            "Negatives are pages checked not to hold the mark, no archive scores against "
-            "itself, and a mark-blind control runs alongside.",
-        ),
-    ]
-
-
-def fig_docmarks_build(dc: Any, facts: dict[str, Any], upto: int | None = None) -> plt.Figure:
-    """How DocMarks is made, in five steps."""
-    fig = _blank_fig()
-    _steps(fig, _docmarks_steps(dc, facts), upto=upto)
-    if upto is None:
-        _stats(
-            fig,
-            [
-                (count(max(dc.TIERS.values())), "pages"),
-                (f"{facts['classes']}", "marks to find"),
-                (f"{facts['instances']:,}", "copies of them, all checked"),
-            ],
-        )
-    return fig
-
-
 def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     """What DocMarks is: where the pages come from, and how the roster falls.
 
@@ -770,7 +512,6 @@ def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
             (f"{dc.CORPUS_VERSION}", "corpus version, and it moves"),
         ],
     )
-    _source_line(fig, "scripts/experiments/docmarks/DATASHEET.md", caption="what it can be asked")
 
     _heading(
         fig,
@@ -830,121 +571,6 @@ def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
         fontsize=FLOOR_PT,
         color=NEG,
     )
-    return fig
-
-
-# --------------------------------------------------------------------------
-# Cards: one per dataset the studies actually ran on
-# --------------------------------------------------------------------------
-
-
-def fig_card_visual_genome() -> plt.Figure:
-    """Visual Genome: messy web photography, densely annotated in free text."""
-    from PIL import Image
-
-    import dataset_samples
-
-    fig = _blank_fig()
-    _stats(
-        fig,
-        [
-            (count(108_077), "photographs"),
-            (count(2_516_939), "objects, each a box and a name"),
-            ("0.61", "VG's recall against COCO"),
-        ],
-    )
-    _source_line(fig, "homes.cs.washington.edu/~ranjay/visualgenome")
-    _caption(fig, "ordinary scenes with a dozen nameable things in each — in the app as visual_genome_s/m/l/a")
-    tiles = [_fit_tile(Image.open(p)) for p in dataset_samples.visual_genome_samples()]
-    _strip(fig, tiles, cols=4, rows=3)
-    return fig
-
-
-def fig_card_coco_val() -> plt.Figure:
-    """COCO val2017: fewer classes than VG, annotated exhaustively — the reference."""
-    from PIL import Image
-
-    import dataset_samples
-
-    images, coco = dataset_samples.coco_val()
-    annotated = {a["image_id"] for a in coco["annotations"]}
-    by_id = {i["id"]: i for i in coco["images"]}
-    boxes: dict[int, list[list[float]]] = {}
-    for annotation in coco["annotations"]:
-        boxes.setdefault(annotation["image_id"], []).append(annotation["bbox"])
-
-    fig = _blank_fig()
-    _stats(
-        fig,
-        [
-            (count(len(by_id)), "images in val2017"),
-            (f"{len(coco['categories'])}", "classes, all always annotated"),
-            (count(len(by_id) - len(annotated)), "hold none of them"),
-        ],
-    )
-    _source_line(fig, "images.cocodataset.org/zips/val2017.zip")
-    _caption(
-        fig,
-        "exhaustive — if a class is not boxed here it is not in the picture, which is what "
-        "lets COCO say where a class is absent",
-    )
-
-    # Cropped to the strip's own aspect like every other card, with the boxes
-    # moved by the same crop: a grid of raw COCO frames is four aspect ratios
-    # in two rows, and the eye reads the ragged edges before it reads the
-    # annotation the slide is about.
-    tiles, moved = [], []
-    for image_id in dataset_samples.COCO_SAMPLE_IDS[:12]:
-        meta = by_id[image_id]
-        with Image.open(images / meta["file_name"]) as frame:
-            tile, (dx, dy) = _fit_tile_offset(frame)
-        tiles.append(tile)
-        moved.append([(x - dx, y - dy, w, h) for x, y, w, h in boxes.get(image_id, [])])
-
-    pad = 0.008
-    cols = 4
-    cell_w = RIGHT_W / cols
-    cell_h = cell_w * (FIG_W / FIG_H) * 0.75
-    for i, tile in enumerate(tiles):
-        r, c = divmod(i, cols)
-        ax = fig.add_axes([RIGHT_X + c * cell_w, STRIP_TOP - (r + 1) * cell_h + pad, cell_w - pad, cell_h - pad])
-        ax.imshow(tile)
-        for x, y, w, h in moved[i]:
-            ax.add_patch(Rectangle((x, y), w, h, fill=False, ec=CUT, lw=1.3))
-        ax.set_xlim(0, tile.size[0])
-        ax.set_ylim(tile.size[1], 0)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for spine in ax.spines.values():
-            spine.set_edgecolor(RULE)
-    return fig
-
-
-def fig_card_caltech101() -> plt.Figure:
-    """Caltech-101: one centred object, no boxes — the boxless control."""
-    from PIL import Image
-
-    import dataset_samples
-
-    picks = dataset_samples.caltech101_samples()
-    # `BACKGROUND_Google` is a 102nd directory and not one of the 101: it is a
-    # pile of assorted web images the original paper shipped as a negative
-    # class. Counting it would put a wrong number on the slide.
-    categories = [c for c in dataset_samples.caltech101_categories() if not c.startswith("BACKGROUND")]
-
-    fig = _blank_fig()
-    _stats(
-        fig,
-        [
-            (f"{len(categories)}", "categories, one per picture"),
-            ("0", "boxes — whole-image labels only"),
-            ("838", "of them in caltech101_m"),
-        ],
-    )
-    _source_line(fig, "data.caltech.edu/records/mzrjq-6wc02")
-    _caption(fig, "one object, centred, filling the frame — the set where region voting has nothing to point at")
-    tiles = [_fit_tile(Image.open(p)) for _, p in picks]
-    _strip(fig, tiles, cols=4, rows=3, captions=[c.replace("_", " ") for c, _ in picks])
     return fig
 
 
@@ -1058,12 +684,15 @@ QUARRY_BLOCKS = [
     ("head", "Hard: A⁺ vs ¬A", None),
 ]
 
-#: One entry per frame: `(good, negatives, cells, blocks)`.
+#: One entry per frame: `(good, negatives, cells, blocks, lit)`.
 #:
 #: `good` is the circle hatched as the positive pile, `negatives` is `None`,
 #: `"outside"` (∅ alone) or `"not_a"` (everything but A), `cells` says whether
 #: the seven exact-set labels are drawn, and `blocks` is how much of the
-#: notation column has been introduced.
+#: notation column has been introduced. `lit` names the heading the frame is
+#: drawing — `"easy"`, `"hard"` or `None` — and only that one is set at full
+#: weight: a heading whose experiment is not on screen drops to the quiet
+#: register, so the room is never asked to read a claim the picture has left.
 #:
 #: **The middle three frames rotate rather than accumulate**, which is why the
 #: fragment declares `frames: equal`. Frame *c* is not frame *b* plus ink — it
@@ -1076,14 +705,20 @@ QUARRY_BLOCKS = [
 #: The cells arrive at *e* and not before. Until ¬A needs naming there is
 #: nothing for `AB⁼` to do but sit on the drawing being read, and the
 #: shading is carrying the argument on its own up to that point.
+#:
+#: **The last frame goes back.** *h* is *b* again — `A⁺ vs Ø`, lit — drawn over
+#: the full column and the cells, so that it differs from *g* in the shading
+#: and the emphasis and nothing else. That is the pair the presenter flicks
+#: between: a detector that fires on A or B or C aces *h* and fails *g*.
 QUARRY_FRAMES = [
-    (None, None, False, 2),
-    (0, "outside", False, 3),
-    (1, "outside", False, 3),
-    (2, "outside", False, 3),
-    (None, None, True, 4),
-    (None, "not_a", True, 5),
-    (0, "not_a", True, 6),
+    (None, None, False, 2, None),
+    (0, "outside", False, 3, "easy"),
+    (1, "outside", False, 3, "easy"),
+    (2, "outside", False, 3, "easy"),
+    (None, None, True, 4, None),
+    (None, "not_a", True, 5, None),
+    (0, "not_a", True, 6, "hard"),
+    (0, "outside", True, 6, "easy"),
 ]
 
 
@@ -1172,7 +807,7 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
     and has to be the same however wide the term is, so it cannot be a column
     position. `A⁺` and `AB⁼` differ by half the gloss's own indent.
     """
-    shown = QUARRY_FRAMES[frame][3]
+    shown, lit = QUARRY_FRAMES[frame][3], QUARRY_FRAMES[frame][4]
     y = lowest = STACK_TOP
     for index, (kind, term, gloss) in enumerate(QUARRY_BLOCKS):
         draw = index < shown
@@ -1184,8 +819,8 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
                     y,
                     _quarry_easy_term(frame) if index == 2 else term,
                     fontsize=HEAD_PT,
-                    color=INK,
-                    fontweight="bold",
+                    color=INK if lit == ("easy" if index == 2 else "hard") else SOFT,
+                    fontweight="bold" if lit == ("easy" if index == 2 else "hard") else "normal",
                     va="baseline",
                 )
             lowest, y = y, y - HEAD_PITCH
@@ -1260,7 +895,7 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
     ax.set_xlim(x0, x0 + w)
     ax.set_ylim(y0, y0 + h)
 
-    good, negatives, cells, _ = QUARRY_FRAMES[frame]
+    good, negatives, cells, _, _ = QUARRY_FRAMES[frame]
     centres = _quarry_centres()
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=SOFT, linewidth=1.6, zorder=1))
     if negatives:
@@ -1343,37 +978,14 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument(
-        "--no-media",
-        action="store_true",
-        help="skip the three cards that download real media (Visual Genome, COCO, Caltech-101)",
-    )
-    args = ap.parse_args()
+    argparse.ArgumentParser(description=__doc__).parse_args()
 
     pc = _pile_config()
     dc = _docmarks_config()
     facts = _docmarks_facts()
 
-    steps = len(_quarry_steps(pc))
-    for n in range(1, steps):
-        save(
-            fig_quarry_build(pc, upto=n), OUT, f"dataset-coco-quarry-build.build{n}.png", column=FULL_BLEED, tight=False
-        )
-    save(fig_quarry_build(pc), OUT, "dataset-coco-quarry-build.png", column=FULL_BLEED, tight=False)
     save(fig_quarry_bands(pc), OUT, "dataset-coco-quarry-bands.png", column=FULL_BLEED, tight=False)
     save(fig_quarry_cells(pc), OUT, "dataset-coco-quarry-cells.png", column=FULL_BLEED, tight=False)
-
-    steps = len(_docmarks_steps(dc, facts))
-    for n in range(1, steps):
-        save(
-            fig_docmarks_build(dc, facts, upto=n),
-            OUT,
-            f"dataset-docmarks-build.build{n}.png",
-            column=FULL_BLEED,
-            tight=False,
-        )
-    save(fig_docmarks_build(dc, facts), OUT, "dataset-docmarks-build.png", column=FULL_BLEED, tight=False)
     save(fig_docmarks_shape(dc, facts), OUT, "dataset-docmarks-shape.png", column=FULL_BLEED, tight=False)
 
     for n in range(len(QUARRY_FRAMES) - 1):
@@ -1385,13 +997,6 @@ def main() -> int:
             tight=False,
         )
     save(fig_coco_quarry_complement(), OUT, "dataset-coco-quarry-complement.png", column=FULL_BLEED, tight=False)
-
-    if args.no_media:
-        print("--no-media: skipped the Visual Genome, COCO and Caltech-101 cards")
-        return 0
-    _save_photo(fig_card_visual_genome(), "dataset-card-visual-genome")
-    _save_photo(fig_card_coco_val(), "dataset-card-coco-val")
-    _save_photo(fig_card_caltech101(), "dataset-card-caltech101")
     return 0
 
 

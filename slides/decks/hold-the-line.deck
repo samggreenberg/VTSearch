@@ -89,36 +89,35 @@ slides:
   atlas-depth
   atlas-pvalues
 
-  # Appendix — what "logo detection" actually means. Parked after the end for
-  # now, to be worked into the argument later: it is the `book` slide's claim
-  # made a second time, in the one domain where a room expects a concept to
-  # have a published spec sheet. Eight results for one query, arriving one at a
-  # time, and the presenter asks about each without answering.
-  logo-grid
-
   # Appendix — the data. Slides that come *before* any experimental result
   # that used them, and sit here only because the deck does not show those
   # results yet (#3958). Move them in front of the results section when it
   # arrives rather than leaving them parked.
   #
-  # The order is the dependency order: the three sets somebody else made, then
-  # the two we made. COCO's card goes last of the three because the Venn after
-  # it is COCO's exhaustiveness put to work, and `coco_quarry`'s construction
-  # only makes sense once that argument is on screen.
+  # Every dataset arrives on one card, "Data, Set" (`make-data-cards.py`):
+  # the sets somebody else made, what they do not give you ("Not Yet a …"),
+  # then what we built from them, in the same card. Twice: COCO into
+  # `coco_quarry`, and four document sources into DocMarks.
   #
-  # Each dataset is shown as it is, not as it came about: the build slides walk
-  # the construction the builder performs today, in its own order.
+  # The logo slide sits between the two because it introduces the idea of
+  # logo detection before the room is asked to find logos on documents. It is
+  # the `book` slide's claim made a second time, in the one domain where a
+  # room expects a concept to have a published spec sheet: eight results for
+  # one query, arriving one at a time, and the presenter asks about each
+  # without answering.
   #
   # The figures are generated from the config the pile builds against and from
-  # the DocMarks datasheet, so a rebuilt dataset is a re-run of
-  # `make-dataset-figs.py` rather than an edit here — but the presenter notes
-  # carry numbers too, and those are hand-written.
-  data-visual-genome
-  data-caltech101
-  data-coco-val
+  # the DocMarks datasheet, so a rebuilt dataset is a re-run of the figure
+  # scripts rather than an edit here — but the presenter notes carry numbers
+  # too, and those are hand-written.
+  data-set-coco
   data-coco-quarry-complement
-  data-coco-quarry-build
+  data-coco-problems
+  data-set-quarry
   data-coco-quarry-bands
   data-coco-quarry-cells
-  data-docmarks-build
+  logo-grid
+  data-set-docmarks-sources
+  data-docmarks-problems
+  data-set-docmarks
   data-docmarks-shape
