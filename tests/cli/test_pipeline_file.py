@@ -48,6 +48,17 @@ def _write_detector(name: str, labelset: dict) -> Path:
     return path
 
 
+class _FilelessLabelImporter:
+    """Minimal stand-in for a label importer that reads no file (issue #4174)."""
+
+    name = "fileless_labels"
+
+    def __init__(self):
+        from vtscore.plugins import PluginField
+
+        self.fields = [PluginField(key="detectors", label="Detectors", field_type="text")]
+
+
 def _stub_resolve(monkeypatch, file_map: dict[str, Path]) -> None:
     import vtscore.detectors.resolver as resolver_mod
 
@@ -227,13 +238,150 @@ class TestLoadPipelineFile:
         assert cfg["stream_results"] is True
         assert cfg["keep_negatives"] is True
 
-    def test_import_labels_requires_detector_and_file(self, tmp_path):
+    def test_import_labels_default_importer_requires_filepath(self, tmp_path):
+        """The default ``server_json_file`` importer still needs a path, via
+        either ``file:`` or ``importer.fields.filepath``."""
         from vtscore.cli_pipeline import load_pipeline_file
 
         p = tmp_path / "p.yaml"
         p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "import_labels": {"detector": "d"}}))
-        with pytest.raises(ValueError, match="import_labels.file"):
+        with pytest.raises(ValueError, match="filepath"):
             load_pipeline_file(p)
+
+    def test_import_labels_flat_form_maps_file_to_filepath(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "import_labels": {"detector": "d", "importer": "server_csv_file", "file": "l.csv"},
+                }
+            )
+        )
+        cfg = load_pipeline_file(p)
+        assert cfg["import_labels"] == {"detector": "d", "importer": "server_csv_file", "fields": {"filepath": "l.csv"}}
+
+    def test_import_labels_accepts_plugin_mapping(self, tmp_path):
+        """``import_labels.importer`` takes the same ``{name, fields}`` shape
+        as ``importer:`` / ``exporter:``."""
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "import_labels": {
+                        "detector": "d",
+                        "importer": {"name": "server_json_file", "fields": {"filepath": "l.json"}},
+                    },
+                }
+            )
+        )
+        cfg = load_pipeline_file(p)
+        assert cfg["import_labels"] == {
+            "detector": "d",
+            "importer": "server_json_file",
+            "fields": {"filepath": "l.json"},
+        }
+
+    def test_import_labels_fileless_importer_needs_no_file(self, tmp_path, monkeypatch):
+        """Issue #4174: a label importer whose fields are not a file path must
+        not be forced to carry ``file:``."""
+        import vtscore.labels.importers as li_mod
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        plugin = _FilelessLabelImporter()
+        real_get = li_mod.get_label_importer
+        monkeypatch.setattr(li_mod, "get_label_importer", lambda n: plugin if n == plugin.name else real_get(n))
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "import_labels": {
+                        "detector": "Dogs",
+                        "importer": {"name": plugin.name, "fields": {"detectors": "somestring"}},
+                    },
+                }
+            )
+        )
+        cfg = load_pipeline_file(p)
+        assert cfg["import_labels"] == {
+            "detector": "Dogs",
+            "importer": plugin.name,
+            "fields": {"detectors": "somestring"},
+        }
+
+    def test_import_labels_unknown_field_key_raises(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "import_labels": {
+                        "detector": "d",
+                        "importer": {"name": "server_json_file", "fields": {"filepath": "l.json", "typo": 1}},
+                    },
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="typo"):
+            load_pipeline_file(p)
+
+    def test_import_labels_file_and_filepath_field_conflict(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "import_labels": {
+                        "detector": "d",
+                        "file": "a.json",
+                        "importer": {"name": "server_json_file", "fields": {"filepath": "b.json"}},
+                    },
+                }
+            )
+        )
+        with pytest.raises(ValueError, match="pick one"):
+            load_pipeline_file(p)
+
+    @pytest.mark.parametrize("family", ["exporter", "importer", "label_importer"])
+    def test_every_declared_plugin_field_is_accepted(self, tmp_path, family):
+        """Every field a registered plugin declares is a legal YAML key for it,
+        so no plugin field is unreachable from a pipeline file."""
+        from vtscore.cli_pipeline import load_pipeline_file
+        from vtscore.datasets.importers import list_importers
+        from vtscore.exporters import list_exporters
+        from vtscore.labels.importers import list_label_importers
+
+        plugins = {"exporter": list_exporters, "importer": list_importers, "label_importer": list_label_importers}[
+            family
+        ]()
+        assert plugins
+        for plugin in plugins:
+            fields = {f.key: f.default or "x" for f in plugin.fields}
+            if family == "exporter":
+                doc = {"dataset": "foo.pkl", "exporter": {"name": plugin.name, "fields": fields}}
+            elif family == "importer":
+                doc = {"importer": {"name": plugin.name, "fields": fields}}
+            else:
+                doc = {
+                    "dataset": "foo.pkl",
+                    "import_labels": {"detector": "d", "importer": {"name": plugin.name, "fields": fields}},
+                }
+            p = tmp_path / f"{family}-{plugin.name}.yaml"
+            p.write_text(yaml.safe_dump(doc))
+            cfg = load_pipeline_file(p)
+            got = cfg["import_labels"]["fields"] if family == "label_importer" else cfg[f"{family}_fields"]
+            assert got == fields, plugin.name
 
     def test_unknown_importer_field_key_raises(self, tmp_path):
         """A typo in importer.fields surfaces at load time, like argparse
@@ -377,3 +525,35 @@ class TestRunPipelineFile:
         with pytest.raises(SystemExit) as exc:
             run_pipeline_file(p)
         assert exc.value.code == 1
+
+
+class TestDispatchImportLabels:
+    def test_dispatch_passes_label_importer_fields(self, monkeypatch):
+        """_dispatch hands the whole field mapping, not just a file path, to
+        the label import (issue #4174)."""
+        import vtscore.cli as vtcli
+        from vtscore.cli_pipeline import _dispatch
+
+        seen = {}
+
+        def _fake_import(detector, importer, field_values):
+            seen.update(detector=detector, importer=importer, fields=field_values)
+            return (1, 0)
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", _fake_import)
+        monkeypatch.setattr(vtcli, "_load_pickle_whole", lambda path: [])
+        monkeypatch.setattr(vtcli, "_run_pipeline", lambda *a, **k: None)
+        _dispatch(
+            {
+                "dataset": "foo.pkl",
+                "importer": None,
+                "importer_fields": {},
+                "settings": None,
+                "detectors": None,
+                "chunk_size": None,
+                "import_labels": {"detector": "Dogs", "importer": "x", "fields": {"detectors": "somestring"}},
+                "exporter": None,
+                "exporter_fields": {},
+            }
+        )
+        assert seen == {"detector": "Dogs", "importer": "x", "fields": {"detectors": "somestring"}}
