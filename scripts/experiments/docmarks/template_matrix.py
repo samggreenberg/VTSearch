@@ -88,8 +88,29 @@ def inliers_from_stats(stats: np.ndarray) -> np.ndarray:
     return np.where(stats[..., 8] > 0.5, counts, 0).astype(np.int16)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def verify_all(templates: list[Any], pool_ids: list[str], workers: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(stats float16 [T, N, 9], inliers int16 [T, N], tentative int32 [T, N])``."""
     global _TEMPLATES
+    _TEMPLATES = templates
+    chunks = [pool_ids[i : i + CHUNK] for i in range(0, len(pool_ids), CHUNK)]
+    stats = np.zeros((len(templates), len(pool_ids), 9), dtype=np.float16)
+    inliers = np.zeros((len(templates), len(pool_ids)), dtype=np.int16)
+    tentative = np.zeros((len(templates), len(pool_ids)), dtype=np.int32)
+    if not templates:
+        return stats, inliers, tentative
+    col = {p: i for i, p in enumerate(pool_ids)}
+    # Fork after the templates are set, so workers inherit them and the page features.
+    with get_context("fork").Pool(workers, initializer=_init_worker) as pool:
+        for chunk_ids, block in pool.imap_unordered(_verify_chunk, chunks):
+            cols = [col[p] for p in chunk_ids]
+            stats[:, cols, :] = block
+            # From the float32 block: log1p counts do not survive float16.
+            inliers[:, cols] = inliers_from_stats(block)
+            tentative[:, cols] = np.rint(np.expm1(block[..., 2]))
+    return stats, inliers, tentative
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.media import get_embedder  # noqa: PLC0415
     from vtscore.training.structural_similarity import filter_features_to_box  # noqa: PLC0415
 
@@ -100,6 +121,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--shard", default="0/1", help="i/n: this job does classes i, i+n, ... in sorted order")
     ap.add_argument("--classes", default="", help="comma-separated subset (default: every roster class)")
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
+    ap.add_argument(
+        "--goods-in-top",
+        type=int,
+        default=0,
+        help="only positives in the exemplar's top N become templates (the shared sequence to N votes)",
+    )
+    ap.add_argument("--no-vectors", action="store_true", help="skip the VLAD/SigLIP vectors the SVM arms need")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     if args.out.resolve().is_relative_to(args.corpus.resolve()):
@@ -136,20 +164,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             if (i + 1) % 1000 == 0:
                 print(f"  extracted {i + 1}/{len(pages)} in {time.time() - t0:.0f}s", flush=True)
 
-    siglip_emb = get_embedder("siglip")
-    siglip_emb.load_models()
+    if args.no_vectors:
+        mine_vectors: list[str] = []
+    else:
+        mine_vectors = mine
+    siglip_emb = get_embedder("siglip") if mine_vectors else None
     esr._init_budget(args.budget)
     query_vlad, query_siglip = {}, {}
-    for cid in mine:
+    if siglip_emb is not None:
+        siglip_emb.load_models()
+    for cid in mine_vectors:
         crop = esr._matcher().detect_and_describe(_gray(classes[cid]["query_crop"]), max_features=args.budget)
         query_vlad[slug(cid)] = esr._vlad(crop)
         vec, _ = ev.embed_query(siglip_emb, Path(classes[cid]["query_crop"]))
         query_siglip[slug(cid)] = np.asarray(vec, dtype=np.float32)
     ids = sorted(vlads)
-    np.savez(
+    np.savez(  # an empty vectors file when --no-vectors, so a rerun still finds one per shard
         args.out / f"vectors-{shard_i}.npz",
-        page_ids=np.array(ids),
-        page_vlad=np.stack([vlads[p] for p in ids]).astype(np.float32),
+        page_ids=np.array(ids if mine_vectors else []),
+        page_vlad=np.stack([vlads[p] for p in ids]).astype(np.float32) if mine_vectors else np.zeros((0, 0)),
         **{f"qvlad__{k}": v for k, v in query_vlad.items()},
         **{f"qsiglip__{k}": v for k, v in query_siglip.items()},
     )
@@ -163,28 +196,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         crop = esr._matcher().detect_and_describe(_gray(meta["query_crop"]), max_features=args.budget)
         template_ids = [meta["query_page_id"]]
         templates = [crop.compact()]
+        candidates = sorted(positives)
+        if args.goods_in_top:
+            # Only the Goods the shared sequence can reveal: positives in the exemplar's top N.
+            c_stats, c_inl, c_tent = verify_all(templates, pool_ids, args.workers)
+            top = np.lexsort((np.arange(len(pool_ids)), -c_tent[0].astype(np.int64), -c_inl[0].astype(np.int64)))
+            reach = {pool_ids[i] for i in top[: args.goods_in_top]}
+            candidates = [p for p in candidates if p in reach]
         unboxed = []
-        for pid in sorted(positives):
+        for pid in candidates:
             box = largest_box(page_by_id[pid], cid)
             if box is None:
                 unboxed.append(pid)
                 continue
             template_ids.append(pid)
             templates.append(filter_features_to_box(esr._FEATURES[pid], box))
-        _TEMPLATES = templates
-        chunks = [pool_ids[i : i + CHUNK] for i in range(0, len(pool_ids), CHUNK)]
-        stats = np.zeros((len(templates), len(pool_ids), 9), dtype=np.float16)
-        inliers = np.zeros((len(templates), len(pool_ids)), dtype=np.int16)
-        tentative = np.zeros((len(templates), len(pool_ids)), dtype=np.int32)
-        col = {p: i for i, p in enumerate(pool_ids)}
-        # Fork after the templates are set, so workers inherit them and the page features.
-        with get_context("fork").Pool(args.workers, initializer=_init_worker) as pool:
-            for chunk_ids, block in pool.imap_unordered(_verify_chunk, chunks):
-                cols = [col[p] for p in chunk_ids]
-                stats[:, cols, :] = block
-                # From the float32 block: log1p counts do not survive float16.
-                inliers[:, cols] = inliers_from_stats(block)
-                tentative[:, cols] = np.rint(np.expm1(block[..., 2]))
+        if args.goods_in_top:
+            g_stats, g_inl, g_tent = verify_all(templates[1:], pool_ids, args.workers)
+            stats = np.concatenate([c_stats, g_stats])
+            inliers = np.concatenate([c_inl, g_inl])
+            tentative = np.concatenate([c_tent, g_tent])
+        else:
+            stats, inliers, tentative = verify_all(templates, pool_ids, args.workers)
         np.savez_compressed(
             args.out / f"{slug(cid)}.npz",
             template_ids=np.array(template_ids),

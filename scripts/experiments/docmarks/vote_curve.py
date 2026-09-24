@@ -53,6 +53,9 @@ MIN_MLP_VOTES = 3
 #: The cold gate: ``min(1, inliers / (2 * DEFAULT_MIN_INLIERS))``.
 MIN_INLIERS = 8
 
+#: Arms that read the page VLAD / SigLIP vectors rather than the template matrix alone.
+VECTOR_ARMS = {"a3_vlad_svm", "a3s_production", "a4_siglip_svm", "a4r_siglip_sift"}
+
 ARMS = (
     "a0_exemplar",
     "a1_max",
@@ -253,7 +256,9 @@ def remainder(order: np.ndarray, labelled: set[int]) -> np.ndarray:
     return np.array([i for i in order if i not in labelled], dtype=np.int64)
 
 
-def run_class(cd: ClassData, arms: Sequence[str], checkpoints: Sequence[int]) -> list[dict[str, Any]]:
+def run_class(
+    cd: ClassData, arms: Sequence[str], checkpoints: Sequence[int], readouts: Sequence[str] = ("shared", "closed")
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     vmax = max(checkpoints)
     n_pos = int(cd.positive.sum())
@@ -266,7 +271,7 @@ def run_class(cd: ClassData, arms: Sequence[str], checkpoints: Sequence[int]) ->
 
     # Shared sequence: the top v of a0's (static) ranking.
     a0 = rank("a0_exemplar", cd, [], [])
-    for arm in arms:
+    for arm in arms if "shared" in readouts else ():
         for v in checkpoints:
             seq = [int(i) for i in a0[:v]]
             goods = [i for i in seq if cd.positive[i]]
@@ -277,7 +282,7 @@ def run_class(cd: ClassData, arms: Sequence[str], checkpoints: Sequence[int]) ->
             )
 
     # Closed loop: each arm chooses its next vote from its own current ranking.
-    for arm in arms:
+    for arm in arms if "closed" in readouts else ():
         goods: list[int] = []
         bads: list[int] = []
         labelled: set[int] = set()
@@ -369,7 +374,13 @@ def summarise(rows: list[dict[str, Any]], subset: Optional[set[str]] = None) -> 
     classes = sorted({r["class_id"] for r in rows})
 
     def mean(readout: str, arm: str, v: int, key: str) -> tuple[float, int]:
-        xs = [float(val[(readout, arm, v, c)][key]) for c in classes if (readout, arm, v, c) in val]
+        # A class-step with nothing left to find has no remainder to score (AP is nan, P@10 a
+        # meaningless 0), and vote_stoplist.py writes no row for it at all.
+        xs = [
+            float(val[(readout, arm, v, c)][key])
+            for c in classes
+            if (readout, arm, v, c) in val and (readout == "closed" or int(val[(readout, arm, v, c)]["left"]) > 0)
+        ]
         xs = [x for x in xs if not np.isnan(x)]
         return (float(np.mean(xs)) if xs else float("nan")), len(xs)
 
@@ -438,6 +449,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--arms", default=",".join(ARMS))
     ap.add_argument("--classes", default="", help="comma-separated subset (default: every matrix)")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--readouts", default="shared,closed")
+    ap.add_argument("--max-v", type=int, default=max(CHECKPOINTS), help="last checkpoint (tier m's matrix reaches 20)")
     ap.add_argument("--summarise", action="store_true", help="only rewrite summary.md from <out>/rows.csv")
     args = ap.parse_args(argv)
     if args.out.resolve().is_relative_to(cfg.OUT.resolve()):
@@ -451,7 +464,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if unknown:
         ap.error(f"unknown arms: {sorted(unknown)}")
 
-    row, page_vlad, siglip, qvlad, qsiglip = load_vectors(args.matrix, args.tier)
+    readouts = [r for r in args.readouts.split(",") if r]
+    checkpoints = tuple(v for v in CHECKPOINTS if v <= args.max_v)
+    if any(a in VECTOR_ARMS for a in arms):
+        row, page_vlad, siglip, qvlad, qsiglip = load_vectors(args.matrix, args.tier)
+    else:
+        row, page_vlad, siglip, qvlad, qsiglip = None, None, None, {}, {}
     wanted = {c.replace("/", "__") for c in args.classes.split(",") if c}
     files = [f for f in sorted(args.matrix.glob("*.npz")) if not f.name.startswith("vectors-")]
     files = [f for f in files if not wanted or f.stem in wanted]
@@ -460,19 +478,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         t0 = time.time()
         slug = f.stem
         z = np.load(f)
-        idx = [row[str(p)] for p in z["pool_ids"]]
-        cd = ClassData(f, page_vlad[idx], siglip[idx], qvlad[slug], qsiglip[slug])
+        if row is None:
+            none = np.zeros((len(z["pool_ids"]), 1), dtype=np.float32)
+            cd = ClassData(f, none, none, np.zeros(1, np.float32), np.zeros(1, np.float32))
+        else:
+            idx = [row[str(p)] for p in z["pool_ids"]]
+            cd = ClassData(f, page_vlad[idx], siglip[idx], qvlad[slug], qsiglip[slug])
         if not cd.positive.any():
             print(f"  {slug}: no positive in the pool, skipped", flush=True)
             continue
-        rows = run_class(cd, arms, CHECKPOINTS)
+        rows = run_class(cd, arms, checkpoints, readouts)
         cid = slug.replace("__", "/", 1)
         for r in rows:
             r["class_id"] = cid
         all_rows.extend(rows)
-        found = {r["arm"]: r["found"] for r in rows if r["readout"] == "closed" and r["v"] == max(CHECKPOINTS)}
+        found = {r["arm"]: r["found"] for r in rows if r["readout"] == "closed" and r["v"] == max(checkpoints)}
         print(
-            f"  {cid}: {cd.n} pages, {cd.positive.sum()} positives, {time.time() - t0:.0f}s; found@40 {found}",
+            f"  {cid}: {cd.n} pages, {cd.positive.sum()} positives, {time.time() - t0:.0f}s; found@{max(checkpoints)} {found}",
             flush=True,
         )
         # Rewrite after every class so a partial run is still readable.
@@ -483,7 +505,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             w.writeheader()
             w.writerows(all_rows)
     (args.out / "run.json").write_text(
-        json.dumps({"matrix": str(args.matrix), "tier": args.tier, "arms": arms, "checkpoints": CHECKPOINTS}, indent=2)
+        json.dumps(
+            {
+                "matrix": str(args.matrix),
+                "tier": args.tier,
+                "arms": arms,
+                "checkpoints": checkpoints,
+                "readouts": readouts,
+            },
+            indent=2,
+        )
         + "\n",
         encoding="utf-8",
     )

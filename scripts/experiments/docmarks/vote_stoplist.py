@@ -85,6 +85,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--shard", default="0/1")
     ap.add_argument("--classes", default="")
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
+    ap.add_argument("--max-v", type=int, default=max(CHECKPOINTS), help="last checkpoint (tier m's matrix reaches 20)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     if args.out.resolve().is_relative_to(args.corpus.resolve()):
@@ -125,7 +126,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         crop = esr._matcher().detect_and_describe(_gray(meta["query_crop"]), max_features=args.budget).compact()
         a0 = vc.rank("a0_exemplar", cd, [], [])
         notes = []
-        for v in CHECKPOINTS:
+        for v in (v for v in CHECKPOINTS if v <= args.max_v):
             seq = [int(i) for i in a0[:v]]
             goods = [i for i in seq if cd.positive[i]]
             bads = [i for i in seq if not cd.positive[i]]
