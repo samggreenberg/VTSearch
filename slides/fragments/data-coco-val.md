@@ -5,7 +5,7 @@
 ## COCO val2017
 
 <!-- Twenty times fewer classes than Visual Genome, and the property that
-     makes it the reference the others are corrected against: it is
+     makes it the one every size result here is built on: it is
      **exhaustive**. If COCO touches an image, it annotates every one of its
      eighty classes on that image. So a missing box is evidence of absence,
      which is exactly what VG's silence is not. -->
@@ -21,11 +21,10 @@
      to score, which is the whole reason the pile's `coco_val` cell is 4,952
      medias rather than a round five thousand. -->
 
-<!-- Two jobs in this work, and they are different. It is a **dataset** —
-     one of the two region-voting cells in the pile, because it has boxes.
-     And it is an **instrument**: half of Visual Genome is COCO images too,
-     so on that half we can replace VG's labels with COCO's and know what is
-     really in the picture. That is the next-but-one slide. -->
+<!-- Two jobs in this work, and they are different. val2017 is a
+     **dataset** — a region-voting cell in the pile, because it has boxes.
+     And COCO 2017 as a whole, train and val, is the **source** the size
+     benchmark is cut from, for the reason on the next slide. -->
 
 <!-- It is not a gold standard, and the review found that out the hard way:
      two prohibition circles and a school-crossing paddle labelled

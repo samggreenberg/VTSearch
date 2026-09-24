@@ -8,28 +8,30 @@
      from this corpus means anything. -->
 
 <!-- The top one is the whole design in one picture. It is a log scale — the
-     distractor source is seventy times the size of everything that holds an
-     answer. Under three thousand pages carry a mark and nearly two hundred
-     thousand do not, and every one of the pages that does is in the smallest
-     tier. So "how does this method
-     degrade as the haystack grows" is a question about *real unrelated
-     scans*, and not about harder look-alikes: those are all in the small
-     tier already. -->
+     UCSF archive is seventy times the size of the other three sources
+     together. Every page of those three is in the smallest tier, so "how
+     does this method degrade as the haystack grows" is a question about
+     *real unrelated scans*, and not about harder look-alikes: those are all
+     in the small tier already. -->
 
-<!-- UCSF holds no positives for anything. There are 14K letterhead bands
-     boxed on those pages, and not one of them belongs to a class yet — they
-     are raw material for classes that have not passed the audits. -->
+<!-- UCSF is grey because it is the haystack, not because it is empty: four
+     of its letterhead marks are on the roster, with 335 copies between them.
+     Those four are the one place a bigger tier adds positives as well as
+     distractors, so their numbers are compared within a tier, never across. -->
 
 <!-- The bottom one is why a per-class number needs its **n** printed beside
-     it. Copies per mark run from 8 to 82. One miss moves recall by an eighth
-     at one end of that roster and an eighty-second at the other, and a
+     it. Copies per mark run from 5 to 399. One miss moves recall by a fifth
+     at one end of that roster and a four-hundredth at the other, and a
      league table across classes would read that as difficulty. -->
 
-<!-- The version number is on the slide on purpose. This corpus is in flux —
-     v3.1 relabelled 108 pages that v3 scored as negatives, without adding or
-     removing a single page, and that alone makes a v3 number not a v3.1
-     number. Anything measured before 17 September has to be re-scored rather
-     than compared. -->
+<!-- For scale, on the headline pool at the 50K tier: SIFT checking every
+     page scores AP 0.87, SigLIP alone 0.087, and a control that ranks by
+     source and ignores the mark 0.026. The gap between the first two is what
+     the benchmark exists to close. -->
+
+<!-- The version number is on the slide on purpose. v5.0 is a major version —
+     the roster, not just the labels, moved — and a number from one major
+     version is re-run, never compared, against another. -->
 
 <!-- The one bias worth stating out loud: the labels were *completed* by one
      matcher. A copy of a mark too faint or too small for SIFT to find is the

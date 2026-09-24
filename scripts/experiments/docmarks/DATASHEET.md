@@ -15,7 +15,7 @@ covers what the data *is* and what a study may *conclude* from it.
 |---|---|
 | pages | **199,855**, in three nested tiers: `s` = 4,999 ⊂ `m` = 49,969 ⊂ `l` = 199,855 |
 | roster | **36 classes**, **2,260 instances**, almost always one instance per page — one class repeats, see [Repeated marks on a page](#repeated-marks-on-a-page) |
-| instances per class | 8 to 399, median 32 |
+| instances per class | 5 to 399, median 31 |
 | other labels | 733 must-link and 1,159 cannot-link rows in `adjudications.json`, keyed on `(page_id, mark_index)` |
 | query | one primary crop per class (`query_crop`) plus up to four hand-chosen alternates (`query_crops`), **119 in all**, so a study can average over queries (#3949) |
 | cells | tiers `s` and `m`: `siglip` and `sift_vlad`. Tier `l`: `siglip` only (`sift_vlad` was cancelled because its keypoint budget starves it, #3911) |

@@ -18,16 +18,16 @@
      about small objects and large ones without changing dataset. (Exactly:
      108,077 and 2,516,939, if anybody wants them.) -->
 
-<!-- The catch, and it is the one the next four slides are all about: the
-     names are **free text**. Whoever annotated the image typed a word.
-     Nothing reconciles `bike` with `bicycle`, and every object's name list
-     has exactly one entry, so there is no synonym to look up. -->
+<!-- The catch: the names are **free text**. Whoever annotated the image
+     typed a word. Nothing reconciles `bike` with `bicycle`, and every
+     object's name list has exactly one entry, so there is no synonym to look
+     up. -->
 
 <!-- And it is not exhaustive. Measured against COCO on the twenty-five
      classes we care about, VG names **0.61** of the objects COCO does. So
      an image where VG says nothing is not an image with nothing in it — the
-     single fact that costs the most to work around. -->
+     single fact that decides what VG can and cannot be asked, and the reason
+     the size benchmark a few slides on is built on COCO instead. -->
 
 <!-- In the app it is `visual_genome_s/m/l/a` on the Demo tab; the download
-     is about 14.5 GB, which is why the cards further on are built on top of
-     it rather than beside it. -->
+     is about 14.5 GB. -->

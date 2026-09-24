@@ -96,34 +96,29 @@ slides:
   # time, and the presenter asks about each without answering.
   logo-grid
 
-  # Appendix — the data. Ten slides that come *before* any experimental
-  # result that used them, and sit here only because the deck does not show
-  # those results yet (#3958). Move them in front of the results section when
-  # it arrives rather than leaving them parked.
+  # Appendix — the data. Slides that come *before* any experimental result
+  # that used them, and sit here only because the deck does not show those
+  # results yet (#3958). Move them in front of the results section when it
+  # arrives rather than leaving them parked.
   #
-  # The order is the dependency order, not the order they were built: the four
-  # sets somebody else made, then the two we made out of them. Visual Genome
-  # and COCO have to be on screen before `vg_scale`'s construction makes any
-  # sense, because two of its five steps are "and then we used COCO".
+  # The order is the dependency order: the three sets somebody else made, then
+  # the two we made. COCO's card goes last of the three because the Venn after
+  # it is COCO's exhaustiveness put to work, and `coco_quarry`'s construction
+  # only makes sense once that argument is on screen.
   #
-  # `data-coco-quarry-complement` is the successor's argument rather than its
-  # card, which is why it sits after `vg_scale`'s three and carries no counts:
-  # `coco_quarry` is not built yet (see docs/plans/coco-quarry.md), and the one
-  # thing about it that is already decided is the one this slide draws — what
-  # exhaustive annotation buys that a designation cannot. Give it a card of its
-  # own once there is a built set to count.
+  # Each dataset is shown as it is, not as it came about: the build slides walk
+  # the construction the builder performs today, in its own order.
   #
-  # Both `vg_scale` and DocMarks are moving. The figures are generated from the
-  # config the pile builds against and from the DocMarks datasheet, so a rebuilt
-  # dataset is a re-run of `make-dataset-figs.py` rather than an edit here — but
-  # the presenter notes carry numbers too, and those are hand-written.
+  # The figures are generated from the config the pile builds against and from
+  # the DocMarks datasheet, so a rebuilt dataset is a re-run of
+  # `make-dataset-figs.py` rather than an edit here — but the presenter notes
+  # carry numbers too, and those are hand-written.
   data-visual-genome
-  data-coco-val
   data-caltech101
-  data-vg-box
-  data-vg-scale-build
-  data-vg-scale-bands
-  data-vg-scale-cells
+  data-coco-val
   data-coco-quarry-complement
+  data-coco-quarry-build
+  data-coco-quarry-bands
+  data-coco-quarry-cells
   data-docmarks-build
   data-docmarks-shape

@@ -28,6 +28,6 @@
      deliberately not on this wall. -->
 
 <!-- 838 of them are in the pile's `caltech101_m` cell. The `_m` is a
-     *dataset size* tier, not a box size — worth saying because the next
-     slide's `_small`/`_medium`/`_large` mean something completely
+     *dataset size* tier, not a box size — worth saying because the size
+     benchmark's `small`/`medium`/`large` mean something completely
      different. -->

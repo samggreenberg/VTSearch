@@ -17,35 +17,33 @@
      scanned pages. Same shape: a concept the user can point at and not write
      down, and a haystack too big to read. -->
 
-<!-- **a** — Start where the marks already have outlines. Three sources ship
-     them: SPODS, pseudo-official documents made with logos, stamps and
-     signatures on them; Tobacco800, binarised scans from 1980s and 90s tobacco
-     litigation with the logos boxed; and StaVer, German scanned invoices
-     carrying real rubber stamps. Under three thousand pages between them. -->
+<!-- **a** — Start where the marks already have outlines. SPODS: made-up
+     official documents with logos and stamps. Tobacco800: binarised 1980s–90s
+     litigation scans, logos boxed. StaVer: German invoices with real rubber
+     stamps. Plus four UCSF letterhead marks, each box checked by hand. -->
 
-<!-- **b** — None of the three tells you which marks are *the same* mark.
-     A box is a box. So perceptual hashing over every boxed mark proposes the
-     groups — and that is all it does, propose. -->
+<!-- **b** — None of the sources tells you which marks are *the same* mark.
+     A box is a box. Perceptual hashing proposes the groups, and a person
+     settles them with separate questions: is this group one mark, is every
+     member really it, are these two classes different? -->
 
-<!-- **c** — Then a person settles it, and this is where most of the work went.
-     Four questions, asked separately: is this group one mark? is every member
-     really that mark? are these two classes different? is it a mark at all, or
-     a plain shape? All 276 pairs of the roster were ruled on, and the rulings
-     survive a rebuild — it is the *rulings* that are the dataset, not the
-     clustering. -->
+<!-- **c** — Then look for the copies nobody boxed. SIFT compares every
+     query with every page of the small tier, and the owner confirms or
+     rejects each candidate. A rejection is kept too, as a permanent hard
+     negative no rebuild can lose. -->
 
 <!-- **d** — Then bury them. Nearly two hundred thousand real scanned industry
-     pages go in as distractors, in three nested tiers. Every page carrying a
-     mark is in the smallest tier, so 5K to 200K adds only distractors and the
-     hard same-source near-misses stay constant. -->
+     pages, in three nested tiers. Every page from the three outlined sources
+     is in the smallest tier, so growing the haystack adds unrelated real
+     scans — and, for the four UCSF marks alone, more copies, which is why
+     their numbers are read per tier. -->
 
-<!-- **e** — Last, fix what counts as wrong. A mark is scored against its
-     own source's other pages — all of which have been checked — and two
-     sources cut from the same archive never score each other. Without that
-     last rule a correct find on a Tobacco800 logo, found on an unlabelled
-     UCSF page from the same archive, is counted as a false positive. -->
+<!-- **e** — Last, fix what counts as wrong. A mark is scored against its own
+     source's other pages, every one of which has been checked. Two sources
+     cut from the same archive never score each other, or a correct find on a
+     Tobacco800 logo, on an unboxed UCSF page from that archive, would be
+     marked a false positive. Every number sits beside a mark-blind control
+     that ranks by source alone. -->
 
 <!-- One thing this slide does not show, and should: a photograph of an actual
-     mark. The corpus lives on the cluster, so a container cannot open it, and
-     the panel that used to be here was built against an old 41-class version.
-     Reshooting it is booked. -->
+     mark. The corpus lives on the cluster, so drawing one is GRID work. -->

@@ -17,7 +17,7 @@
 
 <!-- build: figs/dataset-coco-quarry-complement.build6.png -->
 
-<!-- Why the set moved to COCO, in one slide. Three classes here; COCO has
+<!-- Why the size benchmark is built on COCO, in one slide. Three classes here; COCO has
      eighty of them, and answers for every one of them on every image it
      touches. Everything below is a consequence of that one property. -->
 
