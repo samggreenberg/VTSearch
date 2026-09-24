@@ -29,9 +29,9 @@
      books. Boxing all of them measures the desk. The one a user would drag
      is the most obvious one, the largest — so that is the size. -->
 
-<!-- **d** — COCO sometimes draws one box round a pile: here a stack of
-     game booklets, filed as one `book`. By area it is as large as the open
-     book beside it — same-sized photos, same-sized boxes — but no one booklet
-     is. A second annotation of the same images, LVIS, boxes one object at a
-     time, and a pile box is not admitted as a positive. (Fruit gets the same
-     check.) -->
+<!-- **d** — One bookcase, and two boxes COCO drew on it, both labelled
+     `book`. Up top it boxed a single spine: small. Along the bottom shelf it
+     drew one box round the whole row: by area, large — but no book in it is.
+     A second annotation of the same images, LVIS, boxes one object at a time,
+     and a box round a pile is not admitted as a positive. (Fruit gets the
+     same check: a bunch of bananas under one box.) -->

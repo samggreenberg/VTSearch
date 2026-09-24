@@ -229,11 +229,15 @@ COCO_MERGE_PAIRS = (
 #: Frames b–d stay on the talk's running example, the book. A desk of books at
 #: several sizes: the largest is the one on the left, under the dog.
 COCO_SHELF = 309938
-#: Image ids: a stack of game booklets under one `book` box, beside one open
-#: book as big. `COCO_PILE_SIDE` picks the stack's box out of the first image,
-#: which boxes another pile on its other half.
-COCO_PILE = (379842, 262938)
-COCO_PILE_SIDE = "right"
+#: A bookcase in COCO **train2017** (image 469810), the one frame here from
+#: outside val2017, so it is fetched by URL rather than out of `coco_fixture`.
+#: COCO boxes a dozen spines on the upper shelves one by one, and then draws a
+#: single `book` box round the whole bottom row. Boxes are pinned from
+#: `instances_train2017.json` by annotation id rather than read live, because
+#: that file is 450 MB and this is the only thing the slides want from it.
+COCO_SHELF_URL = "http://images.cocodataset.org/train2017/000000469810.jpg"
+COCO_SHELF_ROW = (0.0, 164.52, 629.75, 67.69)  # ann 1652128: one box, a row of spines
+COCO_SHELF_SPINE = (387.0, 102.0, 34.0, 52.0)  # ann 1662519: one spine, boxed alone
 
 
 def _problems_column(fig: Any, active: int, items: tuple[str, ...]) -> None:
@@ -436,52 +440,40 @@ def frame_problem_largest() -> Any:
 
 
 def frame_problem_pile() -> Any:
-    """A pile under one `book` box beside one book as big, in two photos of one size.
+    """One bookcase, two boxes COCO drew in it: a single spine, and a whole row.
 
-    Both pictures are cropped to the same 4:3 and drawn in rectangles of the
-    same size, so the room compares two boxes of the same area — which is the
-    whole claim: by area they are the same band, and only one is one book.
+    Both are labelled `book`. The spine is small; the row is the same kind of
+    label round a union of spines, and by area it is large. Drawn on one
+    photograph so the two boxes are compared at one scale.
     """
+    import urllib.request
+
+    from PIL import Image
+
+    path = REPO / "data" / "coco-train" / COCO_SHELF_URL.rsplit("/", 1)[1]
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        urllib.request.urlretrieve(COCO_SHELF_URL, path)  # noqa: S310 — constant http URL, public photograph
+    with Image.open(path) as frame:
+        image, (dx, dy) = dc.fit_tile(frame)
+    row = (COCO_SHELF_ROW[0] - dx, COCO_SHELF_ROW[1] - dy, COCO_SHELF_ROW[2], COCO_SHELF_ROW[3])
+    spine = (COCO_SHELF_SPINE[0] - dx, COCO_SHELF_SPINE[1] - dy, COCO_SHELF_SPINE[2], COCO_SHELF_SPINE[3])
+
     fig = dc.blank()
     _problems_column(fig, 3, COCO_PROBLEMS)
-    _, _, by_image, names = _coco()
-    width = 0.27
+    width = 0.54
     height = width / (4 / 3) * dc.FIG_W / dc.FIG_H
-    for col, (image_id, label, colour, dashed) in enumerate(
-        ((COCO_PILE[0], "“book”: one box", dc.NEG, True), (COCO_PILE[1], "“book”: one book", dc.CUT, False))
-    ):
-        from PIL import Image
-
-        images, _, _, _ = _coco()
-        books = [a for a in by_image[image_id] if names[a["category_id"]] == "book"]
-        _, meta = _ann(books[0]["id"])
-        with Image.open(images / meta["file_name"]) as frame:
-            image, (dx, dy) = dc.fit_tile(frame)
-        if dashed:
-            half = meta["width"] / 2
-            books = [a for a in books if (a["bbox"][0] + a["bbox"][2] / 2 > half) == (COCO_PILE_SIDE == "right")]
-        (ann,) = books
-        x, y, w, h = ann["bbox"]
-        box = (x - dx, y - dy, w, h)
-        x0 = 0.40 + col * (width + 0.03)
-        _picture(
-            fig,
-            [x0, 0.30, width, height],
-            image,
-            boxes=[] if dashed else [(box, colour, 3.5)],
-            dashed=[box] if dashed else [],
-        )
-        fig.text(
-            x0 + width / 2,
-            0.28,
-            label,
-            ha="center",
-            va="top",
-            fontsize=dc.FLOOR_PT + 2,
-            color=colour,
-            fontweight="bold",
-        )
-        fig.text(x0 + width / 2, 0.22, "both “large”", ha="center", va="top", fontsize=dc.FLOOR_PT, color=dc.SOFT)
+    _picture(
+        fig,
+        [0.41, 0.93 - height, width, height],
+        image,
+        boxes=[(spine, dc.CUT, 3.5)],
+        dashed=[row],
+        labels=[
+            (spine[0] + spine[2] + 10, spine[1] + spine[3], "“book”: small", dc.CUT),
+            (row[0] + 6, row[1] + row[3] + 34, "“book”: large", dc.NEG),
+        ],
+    )
     return fig
 
 
