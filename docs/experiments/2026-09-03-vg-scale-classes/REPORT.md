@@ -324,6 +324,8 @@ the likely cause is the Bench definition, which rules a concrete seating ledge
 out where COCO appears to box one. Only the 3.0% box is a plausible ordinary
 miss.
 
+> **\*** Band edges changed on 2026-09-24: `large` now runs to the whole frame, and the 0.80 cap that excluded the first box is gone, so today it would band `large`. See [`large` runs to the whole frame](../../../scripts/experiments/pile/README.md#large-runs-to-the-whole-frame-2026-09-24).
+
 > **Report a miss rate with the box sizes attached, or a deliberate narrowing
 > reads as reviewer error.**
 
