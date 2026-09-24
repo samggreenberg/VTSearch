@@ -27,6 +27,7 @@ mis-specification has burned three studies (#2877, #2897, #2905), so
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from pathlib import Path
 from typing import NamedTuple
@@ -229,8 +230,15 @@ DATASETS: dict[str, dict] = {
 #: importing that into the negatives is a different decision from this one.
 SCALE_CROSS_CLASS_NEGATIVES = True
 
-#: The upper cut mirrors ``MAX_VOTED_AREA``: a box covering >80% of the image
-#: is not a region, it is the image.
+#: ``large`` runs to the whole frame, inclusive (:data:`FULL_FRAME`). It used to
+#: stop at 0.80, a cap copied from the Max-Patch study's ``MAX_VOTED_AREA``,
+#: where it dropped *categories* whose typical drag was near-frame because that
+#: study was about region voting. Here it dropped *images* -- a photo whose
+#: object filled more than 80% of it was neither a positive nor a negative for
+#: that class -- and the close-up is the easiest positive a real user meets, so
+#: the cap hid exactly the images a detector should never miss. A near-frame box
+#: pools to near the whole-image vector, which is a real Good vote, not a
+#: degenerate one. Owner ruling, 2026-09-24: fold them into ``large``.
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
 #: that is a decision** (2026-09-07).
@@ -264,11 +272,13 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #: anyone deciding to (#3726).
 PATCH_AREA = 1 / 196
 LEAF_AREA = 1 / 12
-MAX_VOTED_AREA = 0.80
+#: Band edges are half-open (``lo <= area < hi``), so the top edge sits one ulp
+#: above 1.0 to admit a box that is exactly the frame. It still prints as 100%.
+FULL_FRAME = math.nextafter(1.0, math.inf)
 BOX_BANDS: dict[str, tuple[float, float]] = {
     "small": (0.0, PATCH_AREA),
     "medium": (PATCH_AREA, LEAF_AREA),
-    "large": (LEAF_AREA, MAX_VOTED_AREA),
+    "large": (LEAF_AREA, FULL_FRAME),
 }
 
 #: How many categories each banded dataset draws, and the image cap.  Categories

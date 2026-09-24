@@ -322,7 +322,9 @@ HAC leaf is 1/12:
 |---|---|---|
 | `vg_box_small` | 0 → **1/196** (0.5 %) | below what the patch grid can resolve at all |
 | `vg_box_medium` | 1/196 → **1/12** (8 %) | resolvable by patches, smaller than one HAC leaf |
-| `vg_box_large` | 1/12 → **0.80** | above 80 % a box is not a region, it is the image |
+| `vg_box_large` | 1/12 → **0.80**\* | above 80 % a box is not a region, it is the image |
+
+> **\*** Band edges changed on 2026-09-24: `large` now runs to the whole frame, and the 0.80 cap this run used is gone. See [`large` runs to the whole frame](../../../scripts/experiments/pile/README.md#large-runs-to-the-whole-frame-2026-09-24).
 
 ![Cost, AP and fnr against box-area band](figures/fig_scale_bands.png)
 

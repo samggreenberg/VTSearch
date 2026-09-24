@@ -319,7 +319,7 @@ result ever needs that split.
 | `coco_val` | 4952 | yes | assembled from the staged val2017 zip |
 | `vg_box_small` | 12000 | yes | box-banded VG: union box **below one patch** |
 | `vg_box_medium` | 12000 | yes | box-banded VG: patch → HAC leaf |
-| `vg_box_large` | 12000 | yes | box-banded VG: leaf → 80% of the image |
+| `vg_box_large` | 12000 | yes | box-banded VG: leaf → the whole frame ([\*](#large-runs-to-the-whole-frame-2026-09-24)) |
 | `vg_scale` | 7747 | yes | one class list held fixed across every box-size band |
 | `vg_scale_any` | 7747 | yes | derived from `vg_scale`, band collapsed away (#3115) |
 
@@ -584,6 +584,35 @@ A band that cannot fill its share makes the set **smaller**, never a different
 mix: handing its seats to the bands with headroom would keep the count round
 while quietly running an arm nobody asked for. `realised_mix` beside
 `requested_mix` is where that shows.
+
+## `large` runs to the whole frame (2026-09-24)
+
+The three bands are `small` (below one patch, 1/196), `medium` (patch to HAC
+leaf, 1/12) and `large` (leaf to the **whole frame**, inclusive). Until
+2026-09-24 `large` stopped at **0.80**. An image whose object filled more of the
+frame than that was banded `OVERSIZE`, which made it neither a positive nor a
+negative for its class, so it dropped out of the evaluation.
+
+The cap was copied from the Max-Patch study's `MAX_VOTED_AREA`. That study asked
+whether region voting helps, so it dropped *categories* whose typical drag was
+basically the frame. Copied into `BOX_BANDS`, the same number dropped *images*
+instead, and the images it dropped were close-ups: the easiest positive a real
+user meets, and the one a detector should never miss. A near-frame drag pools to
+nearly the whole-image vector, which is an ordinary Good vote. The owner ruled
+to fold those images into `large`, keeping three bands rather than adding an
+`xlarge`. A fourth band would be a contrived definition, and it would be empty
+for every run built before the change anyway.
+
+**\* Every pile-built `large` cell, `vg_scale`, `vg_box_large` and `coco_quarry`
+alike, from before this change was capped at 0.80.** Read those results as
+"large, excluding close-ups". Comparing one against a rebuilt cell compares two
+definitions, and the old `large` is missing its easiest positives, so it
+probably understates recall. A report that quotes the old edge carries a
+pointer back here.
+
+`band_for` also caps areas at the frame, because COCO stores `[x, y, w, h]`
+unclipped and a full-frame box can overhang by a rounding error. `OVERSIZE`
+remains only as the answer for malformed boxes.
 
 ## Voted-box scale bands (`--bands`)
 
