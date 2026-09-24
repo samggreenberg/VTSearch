@@ -8,7 +8,7 @@
 <!-- build: figs/data-set-docmarks-grid.webp -->
 
 <!-- **DocMarks**: what we have. Find *this exact mark*, from one crop of it,
-     in 200,000 scanned pages. -->
+     in 200,000 scanned pages. Ours, like COCO Quarry, so no web address. -->
 
 <!-- **a** — The grid. Six of the 36 marks: stamps from the made-up documents
      and the invoices, crests and seals from real letters. Every one was

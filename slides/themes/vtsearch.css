@@ -256,13 +256,29 @@ section.outline.at2 ol li:nth-of-type(2),
 section.outline.at3 ol li:nth-of-type(3),
 section.outline.at4 ol li:nth-of-type(4),
 section.outline.at5 ol li:nth-of-type(5),
-section.outline.at6 ol li:nth-of-type(6) { color: var(--ink); font-weight: 700; }
+section.outline.at6 ol li:nth-of-type(6),
+section.outline.at7 ol li:nth-of-type(7) { color: var(--ink); font-weight: 700; }
 section.outline.at1 ol li:nth-of-type(1)::before,
 section.outline.at2 ol li:nth-of-type(2)::before,
 section.outline.at3 ol li:nth-of-type(3)::before,
 section.outline.at4 ol li:nth-of-type(4)::before,
 section.outline.at5 ol li:nth-of-type(5)::before,
-section.outline.at6 ol li:nth-of-type(6)::before { color: var(--ink-soft); }
+section.outline.at6 ol li:nth-of-type(6)::before,
+section.outline.at7 ol li:nth-of-type(7)::before { color: var(--ink-soft); }
+
+/* The closing line. `The End` is not a section the room is walked through, so
+   it is not on the list they are shown on the way: the fragment wraps it in
+   `<span class="closing">`, every showing hides it, and the one showing that
+   closes the deck — `outline-<deck> +end` in the manifest — reveals it as the
+   marked line, with every section above it quieted. Hidden, not removed: the
+   line keeps its space on every showing, so the list does not re-centre when
+   it finally appears — the sections above it stay exactly where the room has
+   been seeing them all talk. */
+section.outline ol li:has(> .closing) { visibility: hidden; }
+section.outline.end ol li { color: var(--ink-soft); }
+section.outline.end ol li::before { color: var(--rule); }
+section.outline.end ol li:has(> .closing) { visibility: visible; color: var(--ink); font-weight: 700; }
+section.outline.end ol li:has(> .closing)::before { color: var(--ink-soft); }
 
 /* Full-bleed figure: the figure owns the whole 1280x720 slide, and the title
    sits in a notch cut out of its top-left corner.
@@ -308,6 +324,16 @@ section.full h2 {
     0 0 28px #fff,
     0 0 28px #fff;
 }
+
+/* A short aside set in the white a full-bleed figure leaves under the
+   headline: the headline's own 300px column, an object gap below it, body
+   type. For the rare slide whose figure keeps that column clear on purpose
+   (the Find slide's contact sheet) and has two or three words to put in it.
+   `.indent` hangs a value under its label, the way it would be written by
+   hand. */
+section.full .side { max-width: 300px; margin-top: 64px; }
+section.full .side p { margin: 0 0 0.9em; line-height: 1.3; }
+section.full .side .indent { display: inline-block; padding-left: 1.2em; }
 
 /* Build groups (progressive reveal): build.py injects this class on every
    page of the group, the final page included. Anchoring the column to the

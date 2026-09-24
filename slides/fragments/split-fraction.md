@@ -31,4 +31,4 @@
      of ten examples — while the threshold it needs is one quantile of one
      list, and a quantile does not need many scores to sit in roughly the right
      place. So the scarce votes are worth more in Train. The measured curves
-     are in the appendix; ask and I will bring them up. -->
+     belong to the results slides, which come later. -->

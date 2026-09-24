@@ -2,23 +2,30 @@
 
 Every dataset slide in `hold-the-line` is a frame of this one card, so the
 room learns where to look once and then reads each new dataset by comparison:
-the **name** and a few **counts** in the left column, the **url** along the
-foot, and the dataset's own media on the right. Nothing else. A caption that
-explains what the pictures show is a sentence the presenter says, so the card
-has no caption.
+the **name** under the slide's headline, a few **counts** in the left column,
+the **url** along the foot, and the dataset's own media on the right. Nothing
+else. A caption that explains what the pictures show is a sentence the
+presenter says, so the card has no caption.
+
+The name is the slide's subtitle — the headline says *Data, Set*, the name
+says which one — so it is set in the headline's own face, weight and size and
+hung just under it, rather than as a heading of the column below.
+
+A dataset we built has no url, because there is nowhere to download it from,
+and a repo path set in the url's place reads as one. Its card leaves the foot
+empty.
 
 The right-hand side comes in two shapes:
 
 * **A grid** — `cols x rows` real frames, optionally with their boxes drawn and
   a caption under each (a category name, where the dataset has one per image).
-* **A zoom** — one frame of a 3x2 grid blown up to fill its 2x2 corner, with
-  the free 1x2 column beside it listing categories: the ones in the picture in
-  the box blue, each joined by a line to its boxes, and the ones that are not
-  in grey. That is exhaustive annotation in one picture — a grey name is a
-  *checked* absence, not an unmentioned one.
-
-The grid and the zoom share one geometry (`_grid_geometry`), so a build that
-goes grid → zoom keeps the zoomed frame's corner exactly where it was.
+* **A zoom** — one frame of the grid blown up as large as the media area
+  allows, with a column beside it listing categories: the ones in the picture
+  in the box blue, each joined by a line to its boxes, and the ones that are
+  not in grey. That is exhaustive annotation in one picture — a grey name is a
+  *checked* absence, not an unmentioned one. The zoom is not held to the size
+  of the grid cells it came from: the picture is the point of the frame, so it
+  takes every pixel the category column does not need.
 """
 
 from __future__ import annotations
@@ -30,7 +37,13 @@ from typing import Any
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
+from matplotlib import font_manager
 from slide_figure import INK, SOFT, TITLE_NOTCH_PX
+
+
+def _installed(face: str) -> bool:
+    return any(f.name == face for f in font_manager.fontManager.ttflist)
+
 
 FIG_W, FIG_H = 12.8, 7.2
 FLOOR_PT = 15
@@ -47,6 +60,32 @@ ABSENT = "#9aa3ae"  # a checked absence: quieter than SOFT, still legible
 
 LEFT_X = 0.047
 LEFT_TOP = 1.0 - NOTCH_B - 0.03
+
+#: The title notch a "Data, Set" card clears. Its headline is one line, whose
+#: box measures 56.8px (`slide_figure.TITLE_NOTCH_PX`), plus one
+#: `OBJECT_GAP_PT` — 16pt, 22px at the card's 100 dpi — so the subtitle below it
+#: clears the headline by the deck's own standard gap. The trim
+#: `slides/STYLE.md` allows a one-line headline, as `vote-boundary` takes it.
+DATA_SET_NOTCH_PX = (_nx, _ny, _nw, 80.0)
+
+#: The dataset's name, set as the slide's subtitle. The face, weight and size
+#: are the theme's `section.full h2` (`themes/vtsearch.css`): 40px, weight 600
+#: of the deck's sans stack — at the card's 100 dpi a pixel is 0.72pt, and
+#: matplotlib has no 600, so bold is the nearest it can draw. The first face of
+#: the stack that is installed is the one used, as a browser would. The
+#: baseline is where the cap height lands just under `DATA_SET_NOTCH_PX`.
+NAME_FAMILY = next(
+    (face for face in ("Helvetica Neue", "Helvetica", "Arial", "Liberation Sans") if _installed(face)),
+    "DejaVu Sans",
+)
+NAME_PT = 40 * 0.72
+NAME_BASELINE = 1.0 - 156 / 720
+NAME_LEADING = 44.8 / 720
+#: Where the counts start, whatever the name does above them: the column below
+#: the subtitle is the card's own, and it stays put between datasets.
+STATS_TOP = LEFT_TOP - 0.12
+#: How wide a line of the name may run before it wraps: up to the media area.
+NAME_MAX_W = NOTCH_R + 0.03 - LEFT_X
 LEFT_W = NOTCH_R - LEFT_X + 0.01
 #: The media area: right of the left column, above the url line.
 AREA_X0, AREA_X1 = NOTCH_R + 0.045, 0.975
@@ -133,20 +172,50 @@ def fit_tile(image: Any, aspect: float = 4 / 3) -> tuple[Any, tuple[int, int]]:
     return image.convert("RGB").crop(box), (box[0], box[1])
 
 
-def left_column(fig: plt.Figure, name: str, stats: list[tuple[str, str]], url: str) -> None:
-    """Name, counts and url: the part of the card that stays put between frames."""
-    wrapped = textwrap.wrap(name, 15)
-    fig.text(
-        LEFT_X,
-        LEFT_TOP,
-        "\n".join(wrapped),
-        fontsize=FLOOR_PT + 11,
-        color=INK,
-        fontweight="bold",
-        va="top",
-        linespacing=1.1,
-    )
-    y = LEFT_TOP - 0.075 * len(wrapped) - 0.045
+def _name_width(fig: plt.Figure, text: str) -> float:
+    probe = fig.text(0, 0, text, fontsize=NAME_PT, fontweight="bold", family=NAME_FAMILY)
+    width = probe.get_window_extent(fig.canvas.get_renderer()).width / fig.bbox.width
+    probe.remove()
+    return width
+
+
+def _name_lines(fig: plt.Figure, name: str) -> list[str]:
+    """The name on one line if it fits, else on the two most even lines that do.
+
+    Balanced rather than greedy, for the reason `slides/STYLE.md` gives for
+    headlines: the browser's greedy wrap is the most lopsided split available,
+    and this is the headline's subtitle, set in the headline's type.
+    """
+    if _name_width(fig, name) <= NAME_MAX_W:
+        return [name]
+    words = name.split()
+    splits = [(" ".join(words[:i]), " ".join(words[i:])) for i in range(1, len(words))]
+    fits = [pair for pair in splits if max(_name_width(fig, line) for line in pair) <= NAME_MAX_W]
+    if not fits:
+        raise SystemExit(f"data card {name!r}: the name does not fit the column on two lines")
+    return list(min(fits, key=lambda pair: abs(_name_width(fig, pair[0]) - _name_width(fig, pair[1]))))
+
+
+def left_column(fig: plt.Figure, name: str, stats: list[tuple[str, str]], url: str | None) -> None:
+    """Name, counts and url: the part of the card that stays put between frames.
+
+    `url` is None for a dataset we built, which has nowhere to be fetched from.
+    """
+    lines = _name_lines(fig, name)
+    for i, line in enumerate(lines):
+        fig.text(
+            LEFT_X,
+            NAME_BASELINE - i * NAME_LEADING,
+            line,
+            fontsize=NAME_PT,
+            color=INK,
+            fontweight="bold",
+            family=NAME_FAMILY,
+            va="baseline",
+        )
+    y = STATS_TOP
+    if NAME_BASELINE - (len(lines) - 1) * NAME_LEADING - 0.03 < y:
+        raise SystemExit(f"data card {name!r}: the name runs into the counts under it")
     for value, label in stats:
         fig.text(LEFT_X, y, value, fontsize=FLOOR_PT + 9, color=INK, fontweight="bold", va="top")
         lines = textwrap.wrap(label, 26)
@@ -154,7 +223,8 @@ def left_column(fig: plt.Figure, name: str, stats: list[tuple[str, str]], url: s
         y -= 0.058 + 0.040 * len(lines) + 0.030
     if y < URL_Y + 0.06:
         raise SystemExit(f"data card {name!r}: the left column runs into the url line (bottom at {y:.3f})")
-    fig.text(LEFT_X, URL_Y, url, fontsize=FLOOR_PT + 1, color=CUT, va="center", family="monospace")
+    if url is not None:
+        fig.text(LEFT_X, URL_Y, url, fontsize=FLOOR_PT + 1, color=CUT, va="center", family="monospace")
 
 
 def _grid_geometry(cols: int, rows: int, aspect: float, caption: bool) -> tuple[float, float, float, float]:
@@ -250,6 +320,13 @@ def interleave(
     return out if present else absent
 
 
+#: The zoom's right-hand limit — the category column may run nearly to the
+#: slide's edge, further than the grid does — and the gap between the picture
+#: and the names.
+ZOOM_X1 = 0.985
+ZOOM_COL_GAP = 0.025
+
+
 def zoom(
     fig: plt.Figure,
     tile: Tile,
@@ -259,7 +336,7 @@ def zoom(
     more: bool = True,
     sort: bool = True,
 ) -> None:
-    """One frame over the 2x2 corner of a 3x2 grid, and a category column beside it.
+    """One frame as large as the media area allows, and a category column beside it.
 
     `categories` is `[(name, boxes)]` in the order to list them; an empty box
     list means *checked absent* and the name is set in grey with no line. The
@@ -268,9 +345,18 @@ def zoom(
     """
     if sort:
         categories = interleave(categories)
-    x0, y_top, cell_w, cell_h = _grid_geometry(3, 2, aspect, False)
-    pad = 0.006
-    rect = [x0, y_top - 2 * cell_h + pad, 2 * cell_w - pad, 2 * cell_h - pad]
+    # The column's width is measured, and the picture takes the rest of the
+    # media area — as large as that width and the area's height allow, centred
+    # on the height it leaves.
+    renderer = fig.canvas.get_renderer()
+    col_w = 0.0
+    for name, _ in categories:
+        probe = fig.text(0, 0, name, fontsize=FLOOR_PT + 1, fontweight="bold")
+        col_w = max(col_w, probe.get_window_extent(renderer).width / fig.bbox.width)
+        probe.remove()
+    pic_w = min(ZOOM_X1 - AREA_X0 - ZOOM_COL_GAP - col_w, (AREA_Y1 - AREA_Y0) * aspect * FIG_H / FIG_W)
+    pic_h = pic_w / aspect * FIG_W / FIG_H
+    rect = [AREA_X0, AREA_Y0 + (AREA_Y1 - AREA_Y0 - pic_h) / 2, pic_w, pic_h]
     shown = Tile(tile.image, [b for _, boxes in categories for b in boxes])
     _draw_tile(fig, rect, shown, lw=2.2)
 
@@ -279,7 +365,7 @@ def zoom(
     def to_fig(x: float, y: float) -> tuple[float, float]:
         return rect[0] + x / width * rect[2], rect[1] + (1 - y / height) * rect[3]
 
-    col_x = x0 + 2 * cell_w + 0.025
+    col_x = rect[0] + rect[2] + ZOOM_COL_GAP
     n = len(categories) + (1 if more else 0)
     top, bottom = rect[1] + rect[3], rect[1]
     pitch = min(0.052, (top - bottom) / max(n, 1))

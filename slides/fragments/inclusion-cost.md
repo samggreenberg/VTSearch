@@ -13,7 +13,7 @@
 <!-- build: figs/calib-cost-knob.build4.png -->
 
 <!-- **a** — The same ten items, same order, photographs taken away and only
-     the labels left. -->
+     the labels left. The axis label has not moved: still “bookness”. -->
 
 <!-- **b** — Weigh the two mistakes equally and the cheapest cut is the middle
      one, Include five — one false alarm against one miss. Nothing about the
@@ -30,5 +30,7 @@
 
 <!-- **e** — So we exposed it. Inclusion, minus ten to plus ten: each step up
      doubles the price of a miss, each step down the price of a false alarm.
+     It sits down with the prices because that is all it sets — the ratio, not
+     a place on the ranking.
      One definition, shared by every rule in this section — and the rest of the
      section is what happened when we tried to make the slider mean it. -->

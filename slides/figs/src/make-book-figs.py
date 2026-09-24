@@ -372,7 +372,10 @@ def _rank_stage(stage: int) -> plt.Figure:
     ax.text(
         (left + right) / 2,
         RANK_AXIS_LABEL_Y,
-        "detector score, low to high",
+        # In quotes because it is a word we made up: the detector's score, named
+        # for the concept it is a score *of*. The next slide carries the same
+        # label in the same place.
+        "“bookness”, low to high",
         ha="center",
         va="bottom",
         fontsize=21,

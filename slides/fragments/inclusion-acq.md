@@ -22,9 +22,11 @@
 <!-- **c** — The turn, and the mechanism is not what people guess. Autopilot's
      hard pick ranks the corpus descending, finds the first position at or below
      the cut, and takes the unlabeled item whose *index* is closest. A rank
-     position, not a number. -->
+     position, not a number — which is why the bar does not sit under the
+     histogram: one is scores, the other is ranks, and the zoom is three dozen
+     items either side of the cut. -->
 
-<!-- **d** — The change: a second cut from the same fit, one inclusion step
+<!-- **d** — The change: a second cut from the same fit, four inclusion steps
      *below* the reporting one. Say it slowly — a negative offset prices false
      alarms higher, which raises the cut, which moves it up the ranking, which
      returns more positives to vote on. -->
@@ -33,7 +35,10 @@
      model retrains, and the threshold that chose the question is re-derived
      from the answer. That is why the number compounds. -->
 
-<!-- The record, straight. On COCO with SigLIP2 the interior optimum was minus
-     three: positives per hundred votes went from four to eighteen, and average
-     precision from 0.696 to 0.817 — the ranking itself improved. Visual Genome
-     rejected minus three, so minus one ships. -->
+<!-- The record, straight. COCO found minus three: positives per hundred votes
+     four to eighteen, average precision 0.696 to 0.817. Visual Genome rejected
+     it — but its labels miss a quarter of the true positives, which charges
+     exactly this arm. On verified labels the grid went past minus four, and
+     minus four ships: cost is flat from minus two to minus five, and minus four
+     buys pick precision, 24 to 35 percent. Its real worth is speed — half the
+     clicks to the same answer. -->
