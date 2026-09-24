@@ -40,5 +40,5 @@ python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
   --subtitle "coco_quarry, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)"
 python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"
-python "$HERE/thumbs.py" --analysis "$OUT" --out "$OUT/images" --n 12 --min-obs 5
+python "$HERE/thumbs.py" --analysis "$OUT" --out "$OUT/images" --n 12
 echo "done: $OUT"

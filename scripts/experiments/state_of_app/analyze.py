@@ -27,6 +27,15 @@ noise. It becomes a statement about an image only in aggregate, over the runs
 and detectors that clicked it; ``images.csv`` carries ``n_obs`` so a reader can
 see how much aggregate there is.
 
+**Is an image's effect its own?** Early positives hurt on average (the first
+detector is worse than the text sort) and some classes are harder than others,
+so a raw per-image mean mostly says *when* and *where* the image was clicked.
+``resid`` removes both: the click's credit minus the mean credit of every click
+with the same run cell, label and phase. ``resid_z`` is that residual's mean
+over the image's clicks in standard errors; ``summary.md`` compares the count
+with |z| > ``Z_FLAG`` to the same count after shuffling images within each
+(cell, label, phase) bucket, which is what chance gives.
+
     python analyze.py --exp /expscratch/$USER/state-of-the-app/<date> \\
         --baseline <exp>/analysis/text_baseline.csv --out <exp>/analysis
 """
@@ -54,6 +63,9 @@ CHECKPOINTS = (10, 25, 50, 100, 150)
 #: What "early" and "late" mean for a click, in clicks.
 EARLY, LATE = 30, 90
 RUN_KEY = ["dataset", "category", "embedder", "style", "seed"]
+#: The per-image test: an image needs this many clicks, and flags past this |z|.
+MIN_OBS_Z, Z_FLAG = 10, 3.0
+_BUCKET = ["arm", "category", "label", "when"]
 
 
 def _f(x) -> float:
@@ -269,6 +281,7 @@ def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if inf.empty:
         return inf, inf
     inf = inf.assign(when=np.where(inf["t"] <= EARLY, "early", np.where(inf["t"] > LATE, "late", "mid")))
+    inf["resid"] = inf["help_cost"] - inf.groupby(_BUCKET)["help_cost"].transform("mean")
     agg = dict(
         n_obs=("help_cost", "size"),
         n_runs=("seed", "size"),
@@ -285,6 +298,7 @@ def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         help_cost_sd=("help_cost", "std"),
         d_f1=("d_f1", "mean"),
     )
+    img = img.join(_resid_z(inf))
     for w in ("early", "late"):
         sub = inf[inf["when"] == w].groupby("image_id")["help_cost"].agg(["mean", "size"])
         img[f"help_{w}"] = sub["mean"]
@@ -292,6 +306,30 @@ def roll_up(inf: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     img = img.reset_index().sort_values("help_cost", ascending=False)
     det = inf.groupby(["image_id", "arm", "class", "label"]).agg(**{k: v for k, v in agg.items() if k != "n_runs"})
     return img, det.reset_index()
+
+
+def _resid_z(inf: pd.DataFrame) -> pd.DataFrame:
+    g = inf.groupby("image_id")["resid"].agg(["mean", "std", "size"])
+    z = g["mean"] / (g["std"] / np.sqrt(g["size"]))
+    ok = (g["size"] >= MIN_OBS_Z) & (g["std"] > 0)
+    return pd.DataFrame({"resid": g["mean"], "resid_z": z.where(ok)})
+
+
+def image_null(inf: pd.DataFrame, reps: int = 5, seed: int = 0) -> tuple[int, int, list[tuple[int, int]]]:
+    """Images flagged helpful / harmful, and the same counts with images shuffled within buckets."""
+
+    def count(df: pd.DataFrame) -> tuple[int, int]:
+        z = _resid_z(df)["resid_z"]
+        return int((z > Z_FLAG).sum()), int((z < -Z_FLAG).sum())
+
+    inf = inf.assign(when=np.where(inf["t"] <= EARLY, "early", np.where(inf["t"] > LATE, "late", "mid")))
+    inf["resid"] = inf["help_cost"] - inf.groupby(_BUCKET)["help_cost"].transform("mean")
+    rng = np.random.default_rng(seed)
+    null = []
+    for _ in range(reps):
+        shuf = inf.groupby(_BUCKET)["image_id"].transform(lambda s: rng.permutation(s.to_numpy()))
+        null.append(count(inf.assign(image_id=shuf)))
+    return (*count(inf), null)
 
 
 def _md(df: pd.DataFrame, index: bool = True) -> str:
@@ -305,7 +343,7 @@ def _md(df: pd.DataFrame, index: bool = True) -> str:
     )
 
 
-def summary(cells: pd.DataFrame, img: pd.DataFrame, det: pd.DataFrame, out: Path) -> None:
+def summary(cells: pd.DataFrame, img: pd.DataFrame, det: pd.DataFrame, out: Path, null: tuple | None = None) -> None:
     lines = ["# State of the App -- summary tables", ""]
     if not cells.empty and cells["never_trained"].any():
         nt = cells[cells["never_trained"]][["arm", "category", "positives_found", "text_cost", "ceiling_cost"]]
@@ -357,6 +395,18 @@ def summary(cells: pd.DataFrame, img: pd.DataFrame, det: pd.DataFrame, out: Path
         flips = both[np.sign(both["help_early"]) != np.sign(both["help_late"])]
         lines += [f"### Early/late sign flips ({len(flips)} images seen both early and late)", ""]
         lines += [_md(flips.sort_values("n_obs", ascending=False).head(15).round(4), index=False), ""]
+    if null is not None:
+        hp, hn, perm = null
+        tested = int(img["resid_z"].notna().sum())
+        lines += [
+            f"## Images with an effect of their own (|resid_z| > {Z_FLAG:g}, {MIN_OBS_Z}+ clicks)",
+            "",
+            f"{tested} images tested: **{hp} helpful, {hn} harmful**. With images shuffled within each "
+            f"(cell, label, phase) bucket: " + ", ".join(f"{a}/{b}" for a, b in perm) + " (helpful/harmful).",
+            "",
+        ]
+        flagged = img[img["resid_z"].abs() > Z_FLAG].sort_values("resid_z")
+        lines += [_md(flagged.round(4), index=False), ""]
     (out / "summary.md").write_text("\n".join(lines))
 
 
@@ -395,7 +445,7 @@ def main() -> int:
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)
-    summary(cells, img, det, args.out)
+    summary(cells, img, det, args.out, image_null(inf) if not inf.empty else None)
     print(f"{len(cells)} runs, {len(inf)} credited clicks, {len(img)} images -> {args.out}")
     return 0
 

@@ -51,6 +51,11 @@ same edit.
   the opening clicks. Then roll the credit up per image, per image × detector,
   and early (≤30 clicks) vs late (>90). One click's credit includes refit
   noise, so an image claim needs repeat observations (`n_obs`).
+- **An image's own effect:** judge images on `resid_z`, never the raw mean. The
+  raw mean mostly says *when* (early positives hurt) and *where* (hard classes)
+  an image was clicked. `resid` nets out the cell, label and phase. Report the
+  |z| > 3 count **next to the shuffled-image null** that `summary.md` prints.
+  At 3 seeds nothing cleared it; at 7 seeds (2026-09-24) the harmful side did.
 
 ## How to run it
 

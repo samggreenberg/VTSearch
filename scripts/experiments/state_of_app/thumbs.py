@@ -4,9 +4,11 @@
     python thumbs.py --analysis <exp>/analysis --out <report dir>/images --n 12
 
 Writes one small JPEG per named image (whole image, shrunk to ``--px``) and
-``images.md``, a markdown table the report includes: the most helpful and most
-harmful images among those clicked at least ``--min-obs`` times, with how many
-times, by how many detectors, and early vs late.
+``images.md``, a markdown table the report includes: the images with an effect
+of their own (``analyze.py``'s ``resid_z``: credit net of cell, label and
+phase), most helpful and most harmful, with how many times they were clicked,
+by how many detectors, and early vs late. Images past |z| > 3 are marked; the
+rest of the ``--n`` slots fill with the next strongest.
 
 Kept deliberately light: a review page with dozens of full-size images goes
 black on a laptop (the review-sheet weight budget), so each thumbnail is ~10 KB.
@@ -61,24 +63,29 @@ def main() -> int:
     ap.add_argument("--analysis", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--n", type=int, default=12)
-    ap.add_argument("--min-obs", type=int, default=5)
     ap.add_argument("--px", type=int, default=180)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
     img = pd.read_csv(args.analysis / "images.csv")
-    seen = img[img["n_obs"] >= args.min_obs].sort_values("help_cost", ascending=False)
+    seen = img[img["resid_z"].notna()].sort_values("resid_z", ascending=False)
     picks = {"Most helpful": seen.head(args.n), "Most harmful": seen.tail(args.n).iloc[::-1]}
     ids = {int(i) for df in picks.values() for i in df["image_id"]}
     names = _filenames(ids)
     zips = [zipfile.ZipFile(z) for z in (pc.COCO_VAL_ZIP, pc.COCO_TRAIN_ZIP)]
 
-    lines = [f"Images clicked at least {args.min_obs} times: {len(seen)} of {len(img)}.", ""]
+    flagged = int((seen["resid_z"].abs() > 3).sum())
+    lines = [
+        f"Images tested (clicked 10+ times): {len(seen)} of {len(img)}; {flagged} past |z| > 3. "
+        "*Net* is the mean cost removed per click beyond what an average click with the same "
+        "cell, label and phase removed; *z* is that in standard errors.",
+        "",
+    ]
     for title, df in picks.items():
-        lines += [f"### {title} (mean cost removed per click)", ""]
+        lines += [f"### {title}", ""]
         lines += [
-            "| image | id | clicks | detectors | as positive | cost removed / click | early | late |",
-            "|---|---|---:|---:|---:|---:|---:|---:|",
+            "| image | id | clicks | detectors | as positive | net / click | z | raw / click | early | late |",
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for r in df.itertuples():
             jpg = _thumb(zips, names.get(int(r.image_id), ""), args.px)
@@ -89,7 +96,7 @@ def main() -> int:
             fmt = lambda x: "" if pd.isna(x) else f"{x:+.3f}"  # noqa: E731
             lines.append(
                 f"| {cell} | {int(r.image_id)} | {int(r.n_obs)} | {int(r.n_detectors)} | {int(r.clicked_as_positive)} "
-                f"| {fmt(r.help_cost)} | {fmt(r.help_early)} | {fmt(r.help_late)} |"
+                f"| {fmt(r.resid)} | {r.resid_z:+.1f} | {fmt(r.help_cost)} | {fmt(r.help_early)} | {fmt(r.help_late)} |"
             )
         lines.append("")
     (args.out.parent / "images.md").write_text("\n".join(lines))

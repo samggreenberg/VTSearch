@@ -3,9 +3,8 @@
 **Issue:** #4159. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
 **Path:** SigLIP whole-image embedding, binary (Good/Bad) votes.
 **Bench:** `coco_quarry`, all 49 classes at every size, which is 144 cells.
-**Seeds:** 3 (432 runs). Four more seeds are running, and the numbers here will
-be refreshed at **7 seeds**. The companion report is *State of the App: Region
-Photo*, which is still running.
+**Seeds:** 7 (1008 runs). The companion report is *State of the App: Region
+Photo*.
 
 A **review**, not an experiment: the app as it ships, the way a user meets it.
 The user types a query, sees the text sort, then votes for up to 150 clicks
@@ -17,7 +16,7 @@ threshold.
 
 ## Headline
 
-| mean over 432 runs | text only | after 150 clicks | full labels |
+| mean over 1008 runs | text only | after 150 clicks | full labels |
 |---|---:|---:|---:|
 | **cost** | 0.49 | **0.33** | 0.15 |
 | **F1** | 0.02 | **0.05** | — |
@@ -25,18 +24,18 @@ threshold.
 ![Mean cost over clicks](figures/cost_over_clicks.png)
 
 1. **Clicking roughly halves the distance to the ceiling, and no more.** Cost
-   falls from 0.49 to 0.33, against a ceiling of 0.15: 150 clicks close 48% of
+   falls from 0.49 to 0.33, against a ceiling of 0.15: 150 clicks close 47% of
    the gap between typing the query and having every label.
 2. **The first detector is worse than the text sort.** Mean cost jumps from 0.49
    to **0.68 at click 4**, when the first Good and Bad train a head, and does not
    beat the text sort again until **click 12**. A user who stops after a few
    clicks has a worse result than if they had not clicked at all.
 3. **The clicks find few positives.** The median run finds **4** positives in
-   150 clicks, of about 50 in its training half. 12 runs never find one, so no
-   detector is ever trained: `chair@small` and `knife@small` in all 3 seeds,
-   `bowl@small` and `person@small` in 2, and `laptop@small` and `spoon@small` in
-   1. The easy classes find far more: `tennis racket` 30, `baseball bat` 27,
-   `skis` 24.
+   150 clicks, of about 50 in its training half. 30 runs never find one, so no
+   detector is ever trained, all of them on small-band cells: `chair@small` in
+   all 7 seeds, `knife@small` in 6, `bench@small`, `laptop@small` and
+   `spoon@small` in 3, and five more cells once or twice. The easy classes find
+   far more: `tennis racket` 31, `baseball bat` 29, `skis` 26.
 4. **The shipped threshold buys recall with precision.** Median recall at 150
    clicks is **0.96**; median precision is **0.02**. At about 1% prevalence, a
    user sees roughly 50 false positives for every true one. Cost rewards that
@@ -48,37 +47,37 @@ threshold.
 
 | band (mean) | text only | after 150 clicks | full labels | F1 | positives found |
 |---|---:|---:|---:|---:|---:|
-| large | 0.41 | **0.19** | 0.06 | 0.06 | 8.3 |
-| medium | 0.47 | **0.31** | 0.17 | 0.05 | 6.4 |
-| small | 0.59 | **0.49** | 0.24 | 0.03 | 5.5 |
+| large | 0.41 | **0.19** | 0.057 | 0.062 | 8.0 |
+| medium | 0.47 | **0.31** | 0.17 | 0.046 | 6.8 |
+| small | 0.58 | **0.50** | 0.24 | 0.033 | 5.5 |
 
 **Well:** sports equipment and other objects with a distinctive shape.
 
 | class | text only | after 150 | full labels | positives found |
 |---|---:|---:|---:|---:|
-| baseball bat | 0.46 | **0.08** | 0.02 | 27 |
-| skis | 0.43 | **0.09** | 0.01 | 24 |
-| snowboard | 0.34 | **0.10** | 0.01 | 14 |
-| surfboard | 0.39 | **0.11** | 0.02 | 8.6 |
-| tennis racket | 0.43 | **0.11** | 0.01 | 30 |
+| baseball bat | 0.46 | **0.082** | 0.018 | 29 |
+| skis | 0.43 | **0.089** | 0.015 | 26 |
+| snowboard | 0.34 | **0.10** | 0.014 | 14 |
+| surfboard | 0.39 | **0.11** | 0.016 | 7.8 |
+| tennis racket | 0.43 | **0.10** | 0.013 | 31 |
 
 **Poorly:** furniture, tableware and people, all of them things that fill
 scenes rather than stand out in them.
 
 | class | text only | after 150 | full labels | positives found |
 |---|---:|---:|---:|---:|
-| chair | 0.74 | **0.78** | 0.36 | 2.9 |
-| bench | 0.74 | **0.68** | 0.29 | 2.8 |
-| vase or potted plant | 0.55 | **0.64** | 0.33 | 3.6 |
-| knife | 0.69 | **0.55** | 0.15 | 2.4 |
-| bottle | 0.69 | **0.54** | 0.30 | 4.2 |
-| person | 0.74 | **0.51** | 0.18 | 2.9 |
+| chair | 0.74 | **0.78** | 0.36 | 2.8 |
+| bench | 0.75 | **0.66** | 0.31 | 3.6 |
+| vase or potted plant | 0.54 | **0.64** | 0.31 | 3.2 |
+| knife | 0.69 | **0.53** | 0.14 | 2.8 |
+| bottle | 0.70 | **0.55** | 0.29 | 3.4 |
+| person | 0.74 | **0.53** | 0.17 | 3.2 |
 
-- **Clicking made things worse than typing** in 46 of 432 runs. Averaged over
-  seeds, three classes end above their text score: `vase or potted plant`
-  (+0.09), `stop sign` (+0.05) and `chair` (+0.04).
+- **Clicking made things worse than typing** in 122 of 1008 runs (12%). Averaged
+  over seeds, four classes end above their text score: `vase or potted plant`
+  (+0.09), `parking meter` (+0.05), `stop sign` (+0.04) and `chair` (+0.04).
 - **Headroom** (final − ceiling) is largest where positives are hardest to find:
-  `chair` 0.42, `knife` 0.40, `bench` 0.39, `person` 0.33. The head could learn
+  `chair` 0.42, `knife` 0.40, `person` 0.35, `bench` 0.35. The head could learn
   these classes with the labels; the loop never collects them. That makes the
   loop, not the class, the limit.
 
@@ -97,25 +96,38 @@ each run's net change.
 
 | mean cost removed per click | clicks 1–30 | clicks 31–90 | clicks 91–150 |
 |---|---:|---:|---:|
-| a **positive** (Good) | **−0.027** (hurts) | **+0.017** (helps) | +0.002 |
+| a **positive** (Good) | **−0.027** (hurts) | **+0.015** (helps) | +0.001 |
 | a negative (Bad) | +0.005 | +0.001 | +0.001 |
 
 An early positive hurts on average because it trains the first detector, and
 that detector is worse than the text sort (finding 2). The same positive helps
 once there are enough labels to fit a reasonable head.
 
-**Individual images are not yet distinguishable from noise.** Of 19,361 clicked
-images, 383 were clicked 10 or more times, and only **4** of those show an
-effect beyond |z| > 3, close to the number chance alone would give. The
-thumbnails below are therefore **examples of the format, not findings**. At 7
-seeds more images reach the repeat counts where a per-image claim can hold.
+**Some images hurt in their own right; few help in their own right.** Early
+positives hurt and some classes are harder than others, so an image's raw mean
+credit mostly records *when* and *where* it was clicked. The test below nets
+both out: each click's credit minus the mean of every click with the same cell,
+label and phase. Of 21,880 clicked images, 4,742 were clicked 10 or more times:
 
-See [images.md](images.md) for the top and bottom 12 among images clicked at
-least 5 times.
+| images past \|z\| > 3 | observed | shuffled images (5 draws) |
+|---|---:|---:|
+| **harmful** | **39** | 9–12 |
+| helpful | 11 | 3–8 |
+
+About 28 harmful images are beyond chance; the helpful excess is too small to
+name individual images. The harmful ones share a pattern: each hurts **one
+class, as a negative, in every size band** of that class. Most are correct
+negatives from an unrelated scene, such as a bear for `kite`, cows for
+`airplane`, an elephant for `stop sign`, a horse for `tie` and zebras for
+`tennis racket`. One is not: **490264**, a negative for `fork`, shows a fork,
+which makes it a candidate label error in the bench.
+
+See [images.md](images.md) for the 12 strongest in each direction, with
+thumbnails.
 
 ## Flagged regimes
 
-- **Never found a positive:** the 12 runs above, all small-band cells.
+- **Never found a positive:** the 30 runs above, all small-band cells.
 - **Positive exhaustion (#4121)** did not arise. Runs find too few positives to
   run out.
 
@@ -136,7 +148,7 @@ least 5 times.
   curves for every cell.
 - **Shipped defaults** throughout: text opening, fused threshold, linear SVM
   head, 150 clicks.
-- **CPU count:** these runs used 2 CPUs. Thread count changes low-order
+- **CPU count:** seeds 0–2 and part of 3–6 used 2 CPUs; the rest used 1. Thread count changes low-order
   floating-point digits, and so can change individual picks, but a check on one
   cell gave identical costs at clicks 25, 50 and 150.
 
