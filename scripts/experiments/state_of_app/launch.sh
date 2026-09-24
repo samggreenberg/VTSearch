@@ -76,6 +76,16 @@ export CALIB_TIME="${CALIB_TIME:-4:00:00}"
 # cells land exactly where the full run would put them and a later full run
 # can skip them. The owner's rule: settle the presentation on a few classes,
 # then widen classes and seeds together.
+# A review's run directory defaults to TODAY. Adding cells to an existing review
+# after midnight therefore needs SOTA_DATE pinned, or every task lands in a new,
+# unprepared directory and dies in 0 s (576 of them did, 2026-09-24). Refuse it.
+case "${1:-}" in subset|redo|cells|size)
+  if [[ ! -s "$CALIB_EXP/results/prepare_info.json" ]]; then
+    echo "no prepared grid at $CALIB_EXP (set SOTA_DATE=<the review's date>, or run prepare first)" >&2
+    exit 3
+  fi ;;
+esac
+
 if [[ "${1:-}" == "subset" ]]; then
   CLASSES="${2:?usage: launch.sh subset \"airplane,dining table,...\"}"
   IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" <<'PYIDX'

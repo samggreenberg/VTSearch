@@ -78,6 +78,9 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   144-287 are region. The 2026-09-23 widening (49 classes x 3 seeds) was
   409 + 409 runs: whole-image took about 30 min at 70 concurrent, and the
   region runs took ~40-50 h at 8-10 concurrent under the memory QOS.
+- **Pin `SOTA_DATE` when adding to an existing review.** The run directory
+  defaults to today's date, so a `redo` after midnight lands in a new, unprepared
+  directory. The launcher now refuses that.
 - **Submit `subset` / `redo` / `cells` from the LOGIN node** (they only call
   `sbatch`). Twice, `srun -c 1 ... launch.sh redo` submitted the array TWICE,
   so every cell would have run in duplicate and raced its twin on the same
