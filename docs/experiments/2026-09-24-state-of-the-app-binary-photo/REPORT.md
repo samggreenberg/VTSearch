@@ -120,7 +120,8 @@ class, as a negative, in every size band** of that class. Most are correct
 negatives from an unrelated scene, such as a bear for `kite`, cows for
 `airplane`, an elephant for `stop sign`, a horse for `tie` and zebras for
 `tennis racket`. One is not: **490264**, a negative for `fork`, shows a fork,
-which makes it a candidate label error in the bench.
+which makes it a candidate label error in the bench. #4179 reviews every flagged
+image by hand.
 
 See [images.md](images.md) for the 12 strongest in each direction, with
 thumbnails.
