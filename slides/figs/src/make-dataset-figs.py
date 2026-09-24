@@ -460,7 +460,7 @@ def fig_vg_scale_bands(pc: Any) -> plt.Figure:
             fontsize=FLOOR_PT + 2,
             color=INK,
         )
-        upper = {"small": "one model patch", "medium": "one poolable region", "large": "the whole picture"}[name]
+        upper = {"small": "one model patch", "medium": "one poolable region", "large": "most of the picture"}[name]
         ax.text(
             0.5,
             -0.20,
@@ -471,10 +471,21 @@ def fig_vg_scale_bands(pc: Any) -> plt.Figure:
             color=SOFT,
         )
 
-    # The count, not the names. The wrapped name list outgrew the space above
-    # the frames at forty-nine classes and ran into their titles; the cells
-    # figure is where the classes are named, and this one is about the bands.
-    _caption(fig, f"the same {len(pc.SCALE_CLASSES)} classes, whatever size the thing is")
+    # The class list, right of the reserve so the corner stays clear. Set as
+    # wrapped running text rather than columns: the list has grown once already
+    # (twelve to twenty-five) and a column layout has to be re-tuned every time
+    # it does, while a wrap does not.
+    names = list(pc.SCALE_CLASSES)
+    _caption(fig, f"the same {len(names)} classes, whatever size the thing is")
+    fig.text(
+        RIGHT_X,
+        0.885,
+        "\n".join(textwrap.wrap(", ".join(names), 54)),
+        fontsize=FLOOR_PT + 1,
+        color=SOFT,
+        va="top",
+        linespacing=1.7,
+    )
     return fig
 
 
