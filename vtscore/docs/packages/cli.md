@@ -191,9 +191,15 @@ Exporter: server_json_file
 In `json` format the same information is emitted as a single
 `dry_run_plan` NDJSON event.
 
-### One-shot label-import helper
+### One-shot label-import helpers
 
 ```python
+def import_labels_into_detector(
+    det_name: str,
+    importer_name: str,
+    field_values: dict[str, Any],
+) -> tuple[int, int]:
+
 def import_labels_into_detector_from_file(
     det_name: str,
     importer_name: str,
@@ -201,13 +207,15 @@ def import_labels_into_detector_from_file(
 ) -> tuple[int, int]:
 ```
 
-Defined in `vtscore/cli.py`. Runs a named label importer
-(`vtscore.labels.importers`) against a single file, merges the
-returned `LabeledElement`s into the named detector's labelset, and
-returns `(applied, skipped)`. Used by the pipeline-YAML
-`import_labels:` block (see below); also callable directly when you
-want to ingest a CSV/JSON of labels without running a full
-autodetect pass.
+Defined in `vtscore/cli.py`. `import_labels_into_detector` runs a
+named label importer (`vtscore.labels.importers`) with the given field
+values, merges the returned `LabeledElement`s into the named
+detector's labelset, and returns `(applied, skipped)`. Required fields
+are checked and values normalized as for the other CLI plugin paths.
+`import_labels_into_detector_from_file` is the file-path shorthand
+(`{"filepath": filepath}`). Used by the pipeline-YAML `import_labels:`
+block and `--import-labels-into` (see below); also callable directly
+when you want to ingest labels without running a full autodetect pass.
 
 ### What `_run_pipeline` does
 

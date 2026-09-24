@@ -10,6 +10,15 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.cli.import_labels_into_detector(det_name, importer_name,
+  field_values)`** (issue #4174). Runs a label importer with an arbitrary
+  field mapping and merges its labels into a detector, so importers that read
+  no file work from the CLI and pipeline files. Required fields are now
+  checked and normalized (`validate_cli_field_values`) as for the dataset
+  importer and exporter CLI paths. `import_labels_into_detector_from_file`
+  is kept and delegates with `{"filepath": filepath}`. Pipeline
+  `import_labels:` results now carry `fields` in place of `file`. Additive.
+
 - **`maybe_structural_rerank_example` takes a sequence of templates** (issue
   #4161). The example-sort Stage-2 re-rank in
   `vtscore.training.structural_similarity` accepts either one

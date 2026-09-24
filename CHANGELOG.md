@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Pipeline files and `--import-labels-into` accept any label importer's
+  fields** (issue #4174). `import_labels:` required a `file:` and passed it as
+  the importer's only field, so a label importer that reads no file could not
+  be driven from the CLI. `import_labels.importer` now takes the same
+  `{name, fields}` mapping as `importer:` / `exporter:` (the old
+  `importer: <name>` + `file:` form still works), and the flag CLI gains a
+  repeatable `--label-importer-field KEY=VALUE`.
+
 - **Sorting a SIFT/VLAD dataset by several examples now geometrically
   verifies against every example** (issue #4161). The example sort ran its
   Stage-2 RANSAC re-rank only when given exactly one example; with two or
