@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-blend-schedule.png)
 
-## Never All<br>the Way
+## Weight and See
 
 <!-- One question, and the previous slide left it open: the blend is a weighted
      average, so pick the weight. The two estimators are good at opposite ends

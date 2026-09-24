@@ -13,7 +13,7 @@ The dataset *cards* — what each dataset is and what its media look like — ar
   carries no counts at all, because the thing it argues — that an exhaustively
   annotated corpus can name the images a class is *absent* from — is true of
   three classes and eighty alike;
-* `coco_quarry`'s size bands and its grid of identical cells;
+* `coco_quarry`'s size bands;
 * DocMarks' shape: where its pages come from, and how its copies fall across
   marks.
 
@@ -211,11 +211,6 @@ def _quarry_classes(pc: Any) -> list[str]:
     return list(pc.SCALE_CLASSES)
 
 
-def _quarry_cell_count(pc: Any) -> int:
-    """Every `class@band`, less the cells no honest supply fills."""
-    return len(pc.SCALE_CLASSES) * len(pc.BOX_BANDS) - len(pc.SCALE_DROPPED_CELLS)
-
-
 def fig_quarry_bands(pc: Any) -> plt.Figure:
     """What the three bands *are*: box area against the model's own geometry.
 
@@ -279,121 +274,21 @@ def fig_quarry_bands(pc: Any) -> plt.Figure:
     # The class list, right of the reserve so the corner stays clear. Set as
     # wrapped running text rather than columns, so a roster ruling that adds or
     # merges a class re-flows the list instead of breaking a hand-tuned grid.
-    names = _quarry_classes(pc)
+    # Shown the way every slide shows a quarry class (`data_card.display_class`),
+    # and alphabetised by that name, so a merge lands where its short name does.
+    from data_card import display_class
+
+    names = sorted(display_class(name) for name in _quarry_classes(pc))
     _caption(fig, f"the same {len(names)} classes, whatever size the thing is")
     fig.text(
         RIGHT_X,
         0.885,
-        "\n".join(textwrap.wrap(", ".join(names), 72)),
+        # Non-breaking spaces inside a name, so "Dining Table" never splits.
+        "\n".join(textwrap.wrap(", ".join(n.replace(" ", "\u00a0") for n in names), 72)),
         fontsize=FLOOR_PT,
         color=SOFT,
         va="top",
         linespacing=1.45,
-    )
-    return fig
-
-
-def fig_quarry_cells(pc: Any) -> plt.Figure:
-    """Every cell the same size, drawn from the same pool.
-
-    The uniformity *is* the design: identical positives and one shared pool
-    make small-vs-large a paired comparison instead of two datasets of
-    different difficulty. A grid of identical tiles is the honest picture of
-    that — there is no variation to plot. The three cells that are not built
-    are drawn empty rather than left out, because a grid with a hole in it
-    says "not built" and a grid with three fewer columns in one row says
-    nothing at all.
-
-    The columns carry no class names. At this roster's width a column is about
-    twenty slide pixels, which is one line of the floor type set sideways and
-    no room between neighbours; the names are on the slide before.
-    """
-    fig = _blank_fig()
-    classes = _quarry_classes(pc)
-    bands = list(pc.BOX_BANDS)
-    dropped = set(pc.SCALE_DROPPED_CELLS)
-
-    grid_x, grid_w, grid_y, grid_h = 0.215, 0.765, 0.43, 0.21
-    ax = fig.add_axes([grid_x, grid_y, grid_w, grid_h])
-    ax.set_xlim(-0.5, len(classes) - 0.5)
-    ax.set_ylim(-0.5, len(bands) - 0.5)
-    ax.axis("off")
-
-    for r, band in enumerate(bands):
-        for c, name in enumerate(classes):
-            if f"{name}@{band}" in dropped:
-                ax.add_patch(Rectangle((c - 0.42, r - 0.40), 0.84, 0.80, fill=False, ec=SOFT, lw=1.2, ls=":"))
-                continue
-            ax.add_patch(Rectangle((c - 0.42, r - 0.40), 0.84, 0.80, facecolor=CUT, alpha=0.18, ec=CUT, lw=1.2))
-        # Set as figure text, not an axis label: an axis label is placed
-        # outside the axes and runs off the canvas when the roster grows.
-        fig.text(
-            grid_x - 0.014,
-            grid_y + grid_h * (r + 0.5) / len(bands),
-            band,
-            ha="right",
-            va="center",
-            fontsize=FLOOR_PT + 3,
-            color=INK,
-        )
-    fruit = sorted({cell.split("@")[0] for cell in dropped}, key=classes.index)
-    fig.text(
-        grid_x,
-        grid_y - 0.035,
-        f"dotted: {', '.join(fruit)} @small — no honest supply, so not built",
-        fontsize=FLOOR_PT,
-        color=SOFT,
-        va="top",
-    )
-
-    _stats(
-        fig,
-        [
-            (f"{pc.SCALE_N_POS}", "positives in each cell"),
-            (count(pc.SCALE_N_NEG), "shared negatives, holding no class"),
-        ],
-        top=0.30,
-    )
-    fig.text(
-        RIGHT_X + 0.10,
-        0.30,
-        "\n".join(
-            textwrap.wrap(
-                "Every other cell's positives count as negatives too, wherever they do not hold "
-                "the class. And the whole of COCO is embedded, so any other cut — a prevalence, a "
-                "pool, a size to train at — is a filter, not a rebuild.",
-                52,
-            )
-        ),
-        fontsize=FLOOR_PT + 1,
-        color=SOFT,
-        va="top",
-        linespacing=1.5,
-    )
-    fig.text(
-        RIGHT_X,
-        0.945,
-        f"{len(classes)} classes × {len(bands)} bands, less {len(dropped)} = {_quarry_cell_count(pc)} cells",
-        fontsize=FLOOR_PT + 5,
-        color=INK,
-        fontweight="bold",
-        va="top",
-    )
-    fig.text(
-        RIGHT_X,
-        0.885,
-        "\n".join(
-            textwrap.wrap(
-                "Every cell is exactly the same shape: the same positive count, the same shared "
-                "pool of negatives. Nothing varies across the grid but the size of the thing you "
-                "are looking for.",
-                62,
-            )
-        ),
-        fontsize=FLOOR_PT + 1,
-        color=SOFT,
-        va="top",
-        linespacing=1.55,
     )
     return fig
 
@@ -985,7 +880,6 @@ def main() -> int:
     facts = _docmarks_facts()
 
     save(fig_quarry_bands(pc), OUT, "dataset-coco-quarry-bands.png", column=FULL_BLEED, tight=False)
-    save(fig_quarry_cells(pc), OUT, "dataset-coco-quarry-cells.png", column=FULL_BLEED, tight=False)
     save(fig_docmarks_shape(dc, facts), OUT, "dataset-docmarks-shape.png", column=FULL_BLEED, tight=False)
 
     for n in range(len(QUARRY_FRAMES) - 1):

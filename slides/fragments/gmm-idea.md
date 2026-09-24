@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-gmm-flow.png)
 
-## A Mixed<br>Blessing
+## Oops! All<br>Haystack
 
 <!-- build: figs/calib-gmm-flow.build1.png -->
 

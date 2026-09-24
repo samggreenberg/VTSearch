@@ -3,7 +3,7 @@
 
 ![bg fit](figs/coco-problems-pile.webp)
 
-## Not Yet<br>a Quarry
+## Picture<br>(im)Perfect
 
 <!-- build: figs/coco-problems-merge.webp -->
 
@@ -21,15 +21,17 @@
      classes' boxes carry the other name. Where the line does not hold, the
      two become one class. -->
 
-<!-- **b** — We want many datasets out of one set of pictures: common or
-     rare, small or large. So a dataset has to be a rule over the images,
+<!-- **b** — Back to books. We want many datasets out of one set of
+     pictures: books common or rare, small or large. So a dataset has to be a rule over the images,
      not a hand-picked list — then any of these is a filter, not a rebuild. -->
 
-<!-- **c** — A size band needs one size per image, and an image holds many
-     cars. Boxing all of them measures the street. The one a user would drag
+<!-- **c** — A size band needs one size per image, and a desk holds many
+     books. Boxing all of them measures the desk. The one a user would drag
      is the most obvious one, the largest — so that is the size. -->
 
-<!-- **d** — COCO sometimes draws one box round a pile: a stalk of bananas,
-     a shelf of books. By area that is "large", but no single banana is. A
-     second annotation of the same images, LVIS, boxes one object at a time,
-     and a pile box is not admitted as a positive. -->
+<!-- **d** — COCO sometimes draws one box round a pile: here a stack of
+     game booklets, filed as one `book`. By area it is as large as the open
+     book beside it — same-sized photos, same-sized boxes — but no one booklet
+     is. A second annotation of the same images, LVIS, boxes one object at a
+     time, and a pile box is not admitted as a positive. (Fruit gets the same
+     check.) -->

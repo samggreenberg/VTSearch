@@ -67,6 +67,52 @@ class Tile:
     box_labels: list[str] = field(default_factory=list)
 
 
+def nice(n: int) -> str:
+    """A count rounded the way it would be said: `886,284` is "900K".
+
+    Two significant figures, or one when the leading digit is 5 or more — so
+    the relative precision stays roughly even — and a K or M suffix from ten
+    thousand up. Counts under a thousand are usually exact by design (80
+    classes, 36 marks) and are left alone.
+
+    >>> [nice(n) for n in (886_284, 123_287, 199_855, 8_677, 2_260, 13_216_456, 400)]
+    ['900K', '120K', '200K', '9,000', '2,300', '13M', '400']
+    """
+    if n < 1_000:
+        return f"{n:,}"
+    digits = len(str(n))
+    keep = 1 if str(n)[0] >= "5" else 2
+    rounded = round(n, keep - digits)
+    if rounded >= 1_000_000:
+        return f"{rounded / 1_000_000:g}M"
+    if rounded >= 10_000:
+        return f"{rounded / 1_000:g}K"
+    return f"{rounded:,}"
+
+
+#: The name a merged quarry class goes by on a slide. The config names the
+#: union it is (`enclosed road vehicle`) so nobody mistakes it for COCO's own
+#: `car`; a slide just says Car. Every class name is *a* definition anyway —
+#: nobody writes "bird, alive or dead, not cooked" — so the long names buy the
+#: room nothing.
+CLASS_DISPLAY = {
+    "enclosed road vehicle": "Car",
+    "single serving drinking vessel": "Cup",
+    "vase or potted plant": "Vase",
+    "bag or luggage": "Bag",
+    "tv": "TV",
+}
+
+
+def display_class(name: str) -> str:
+    """A quarry class as a slide shows it: capitalised, merges by their short name.
+
+    Capitalised on purpose. `Cup` reads as a proper name, which is the point —
+    it is this dataset's definition of a cup, not the word's.
+    """
+    return CLASS_DISPLAY.get(name) or " ".join(word.capitalize() for word in name.split())
+
+
 def blank() -> plt.Figure:
     fig = plt.figure(figsize=(FIG_W, FIG_H))
     fig.patch.set_facecolor("white")

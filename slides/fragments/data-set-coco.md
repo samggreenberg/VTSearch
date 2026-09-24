@@ -16,11 +16,12 @@
      background that is usually nothing; 101 categories, one per picture, and
      no boxes at all. It is the control: the set where region voting has
      nothing to point at, so a result that holds here and on cluttered scenes
-     is not a result about clutter. (8,677 images, leaving out the
+     is not a result about clutter. (8,677 images exactly, leaving out the
      `BACKGROUND_Google` pile the paper shipped as a negative class.) -->
 
 <!-- **b** — COCO. Rooms and streets, many things in each, and every one of them
-     boxed. 123,287 images across train and val, 80 classes. -->
+     boxed. 123,287 images exactly, across train and val, and 80
+     classes. -->
 
 <!-- **c** — The zoom. Blue names are in the picture, each joined to its box.
      Grey names are not — and that is the property the rest of this section

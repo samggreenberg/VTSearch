@@ -94,8 +94,8 @@ slides:
   # arrives rather than leaving them parked.
   #
   # Every dataset arrives on one card, "Data, Set" (`make-data-cards.py`):
-  # the sets somebody else made, what they do not give you ("Not Yet a …"),
-  # then what we built from them, in the same card. Twice: COCO into
+  # the sets somebody else made, a slide of what they do not give you, then
+  # what we built from them, in the same card. Twice: COCO into
   # `coco_quarry`, and four document sources into DocMarks.
   #
   # The logo slide sits between the two because it introduces the idea of
@@ -114,7 +114,6 @@ slides:
   data-coco-problems
   data-set-quarry
   data-coco-quarry-bands
-  data-coco-quarry-cells
   logo-grid
   data-set-docmarks-sources
   data-docmarks-problems

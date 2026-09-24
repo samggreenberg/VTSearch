@@ -94,7 +94,7 @@ def frame_caltech() -> Any:
     dc.left_column(
         fig,
         "Caltech-101",
-        [(f"{images:,}", "images"), (f"{len(categories)}", "categories, one per image"), ("0", "boxes")],
+        [(dc.nice(images), "images"), (f"{len(categories)}", "categories, one per image"), ("0", "boxes")],
         "data.caltech.edu/records/mzrjq-6wc02",
     )
     tiles = [dc.Tile(dc.fit_tile(Image.open(p))[0], caption=CALTECH_NAMES[c]) for c, p in picks]
@@ -176,9 +176,9 @@ def _coco_left(fig: Any) -> None:
         fig,
         "COCO 2017",
         [
-            (f"{COCO_IMAGES:,}", "images"),
+            (dc.nice(COCO_IMAGES), "images"),
             (f"{len(coco['categories'])}", "classes, every one checked on every image"),
-            (f"{round(COCO_OBJECTS, -3) // 1000}K", "objects, each boxed"),
+            (dc.nice(COCO_OBJECTS), "objects, each boxed"),
         ],
         "cocodataset.org",
     )
@@ -226,11 +226,14 @@ COCO_MERGE_PAIRS = (
     (((677789, "cup"), (2097457, "wine glass")), "single serving drinking vessel"),
     (((1156773, "vase"), (2128630, "potted plant")), "vase or potted plant"),
 )
-#: A street with cars at every size: the largest is the taxi in the corner.
-COCO_STREET = 336232
-#: Image ids: a stalk of green bananas under one `banana` box, beside one
-#: banana as big. Each holds exactly one `banana` box.
-COCO_PILE = (161820, 2587)
+#: Frames b–d stay on the talk's running example, the book. A desk of books at
+#: several sizes: the largest is the one on the left, under the dog.
+COCO_SHELF = 309938
+#: Image ids: a stack of game booklets under one `book` box, beside one open
+#: book as big. `COCO_PILE_SIDE` picks the stack's box out of the first image,
+#: which boxes another pile on its other half.
+COCO_PILE = (379842, 262938)
+COCO_PILE_SIDE = "right"
 
 
 def _problems_column(fig: Any, active: int, items: tuple[str, ...]) -> None:
@@ -309,7 +312,6 @@ def frame_problem_merge() -> Any:
     Each crop keeps its own aspect at a shared height, so a label under it sits
     under the picture rather than under a letterbox.
     """
-    import textwrap
 
     fig = dc.blank()
     _problems_column(fig, 0, COCO_PROBLEMS)
@@ -337,7 +339,7 @@ def frame_problem_merge() -> Any:
         fig.text(
             0.775,
             top - height / 2,
-            "\n".join(textwrap.wrap(merged, 16)),
+            dc.display_class(merged),
             va="center",
             fontsize=dc.FLOOR_PT + 3,
             color=dc.CUT,
@@ -399,10 +401,10 @@ def frame_problem_cuts() -> Any:
             fontweight="bold",
         )
 
-    dots([0.40, 0.52, 0.25, 0.33], 10, 10, 10, 60, "1 in 10 is a bus")
-    dots([0.70, 0.52, 0.25, 0.33], 40, 25, 1, 9, "1 in 1,000 is a bus")
-    frame([0.445, 0.14, 0.16, 0.28], 0.07, "small buses")
-    frame([0.745, 0.14, 0.16, 0.28], 0.75, "large buses")
+    dots([0.40, 0.52, 0.25, 0.33], 10, 10, 10, 60, "1 in 10 is a book")
+    dots([0.70, 0.52, 0.25, 0.33], 40, 25, 1, 9, "1 in 1,000 is a book")
+    frame([0.445, 0.14, 0.16, 0.28], 0.07, "small books")
+    frame([0.745, 0.14, 0.16, 0.28], 0.75, "large books")
     return fig
 
 
@@ -412,8 +414,8 @@ def frame_problem_largest() -> Any:
     fig = dc.blank()
     _problems_column(fig, 2, COCO_PROBLEMS)
     images, coco, by_image, names = _coco()
-    meta = next(i for i in coco["images"] if i["id"] == COCO_STREET)
-    cars = [a["bbox"] for a in by_image[COCO_STREET] if names[a["category_id"]] == "car"]
+    meta = next(i for i in coco["images"] if i["id"] == COCO_SHELF)
+    cars = [a["bbox"] for a in by_image[COCO_SHELF] if names[a["category_id"]] == "book"]
     largest = max(cars, key=lambda b: b[2] * b[3])
     x0 = min(b[0] for b in cars)
     y0 = min(b[1] for b in cars)
@@ -434,30 +436,44 @@ def frame_problem_largest() -> Any:
 
 
 def frame_problem_pile() -> Any:
+    """A pile under one `book` box beside one book as big, in two photos of one size.
+
+    Both pictures are cropped to the same 4:3 and drawn in rectangles of the
+    same size, so the room compares two boxes of the same area — which is the
+    whole claim: by area they are the same band, and only one is one book.
+    """
     fig = dc.blank()
     _problems_column(fig, 3, COCO_PROBLEMS)
     _, _, by_image, names = _coco()
+    width = 0.27
+    height = width / (4 / 3) * dc.FIG_W / dc.FIG_H
     for col, (image_id, label, colour, dashed) in enumerate(
-        ((COCO_PILE[0], "“banana”: one box", dc.NEG, True), (COCO_PILE[1], "“banana”: one banana", dc.CUT, False))
+        ((COCO_PILE[0], "“book”: one box", dc.NEG, True), (COCO_PILE[1], "“book”: one book", dc.CUT, False))
     ):
         from PIL import Image
 
         images, _, _, _ = _coco()
-        (ann,) = [a for a in by_image[image_id] if names[a["category_id"]] == "banana"]
-        _, meta = _ann(ann["id"])
+        books = [a for a in by_image[image_id] if names[a["category_id"]] == "book"]
+        _, meta = _ann(books[0]["id"])
         with Image.open(images / meta["file_name"]) as frame:
-            image = frame.convert("RGB")
-        box = ann["bbox"]
+            image, (dx, dy) = dc.fit_tile(frame)
+        if dashed:
+            half = meta["width"] / 2
+            books = [a for a in books if (a["bbox"][0] + a["bbox"][2] / 2 > half) == (COCO_PILE_SIDE == "right")]
+        (ann,) = books
+        x, y, w, h = ann["bbox"]
+        box = (x - dx, y - dy, w, h)
+        x0 = 0.40 + col * (width + 0.03)
         _picture(
             fig,
-            [0.39 + col * 0.30, 0.20, 0.28, 0.72],
+            [x0, 0.30, width, height],
             image,
             boxes=[] if dashed else [(box, colour, 3.5)],
             dashed=[box] if dashed else [],
         )
         fig.text(
-            0.39 + col * 0.30 + 0.14,
-            0.18,
+            x0 + width / 2,
+            0.28,
             label,
             ha="center",
             va="top",
@@ -465,9 +481,7 @@ def frame_problem_pile() -> Any:
             color=colour,
             fontweight="bold",
         )
-        fig.text(
-            0.39 + col * 0.30 + 0.14, 0.12, "both “large”", ha="center", va="top", fontsize=dc.FLOOR_PT, color=dc.SOFT
-        )
+        fig.text(x0 + width / 2, 0.22, "both “large”", ha="center", va="top", fontsize=dc.FLOOR_PT, color=dc.SOFT)
     return fig
 
 
@@ -540,7 +554,7 @@ def _quarry_left(fig: Any) -> None:
         fig,
         "coco_quarry",
         [
-            (f"{COCO_IMAGES:,}", "images, all of COCO 2017"),
+            (dc.nice(COCO_IMAGES), "images, all of COCO 2017"),
             (f"{len(pc.SCALE_CLASSES)}", "classes"),
             (f"{cells}", "cells: a class at a size"),
         ],
@@ -556,7 +570,7 @@ def frame_quarry_grid() -> Any:
         base, largest, fractions = _largest_by_class(image_id)
         if cls not in largest or _band(fractions[cls]) != band:
             raise SystemExit(f"quarry grid: image {image_id} is not a {cls}@{band} positive")
-        tiles.append(dc.Tile(base.image, [largest[cls]], caption=f"{cls}@{band}"))
+        tiles.append(dc.Tile(base.image, [largest[cls]], caption=f"{dc.display_class(cls)}@{band}"))
     dc.grid(fig, tiles, cols=3, rows=2)
     return fig
 
@@ -568,7 +582,9 @@ def frame_quarry_zoom() -> Any:
     clash = set(largest) & set(QUARRY_ZOOM_ABSENT)
     if clash:
         raise SystemExit(f"quarry zoom: {sorted(clash)} are listed absent but present in {QUARRY_ZOOM}")
-    categories = [(name, [box]) for name, box in largest.items()] + [(name, []) for name in QUARRY_ZOOM_ABSENT]
+    categories = [(dc.display_class(name), [box]) for name, box in largest.items()] + [
+        (dc.display_class(name), []) for name in QUARRY_ZOOM_ABSENT
+    ]
     dc.zoom(fig, tile, categories)
     return fig
 
@@ -651,7 +667,7 @@ def frame_spods() -> Any:
         fig,
         "SPODS",
         [
-            (f"{counts['pages']:,}", "made-up official documents"),
+            (dc.nice(counts["pages"]), "made-up official documents"),
             ("4", "masks a page: logo, stamp, signature, text"),
             ("0", "names for the marks"),
         ],
@@ -674,7 +690,7 @@ def frame_tobacco800() -> Any:
         fig,
         "Tobacco800",
         [
-            (f"{counts['pages']:,}", "scanned business letters, 1980s–90s"),
+            (dc.nice(counts["pages"]), "scanned business letters, 1980s–90s"),
             ("412", "with a logo, boxed"),
             ("21", "logos seen more than once"),
         ],
@@ -696,7 +712,7 @@ def frame_staver() -> Any:
     dc.left_column(
         fig,
         "StaVer",
-        [(f"{counts['pages']:,}", "German invoices, rubber-stamped"), ("0", "names for the stamps")],
+        [(dc.nice(counts["pages"]), "German invoices, rubber-stamped"), ("0", "names for the stamps")],
         "madm.dfki.de/downloads-ds-staver",
     )
     tiles = []
@@ -715,7 +731,7 @@ def frame_ucsf() -> Any:
         fig,
         "UCSF Industry Documents",
         # Measured live against the IDL Solr index (docmarks/README.md).
-        [("13.2M", "short tobacco-industry documents"), ("0", "boxes")],
+        [(dc.nice(13_216_456), "short tobacco-industry documents"), ("0", "boxes")],
         "industrydocuments.ucsf.edu",
     )
     tiles = [_page_tile(dm.ucsf_page(doc_id), []) for doc_id in dm.UCSF_PAGES]
@@ -885,9 +901,9 @@ def _docmarks_left(fig: Any) -> None:
         fig,
         "DocMarks",
         [
-            (f"{sum(s['pages'] for s in sources.values()):,}", "pages"),
+            (dc.nice(sum(s["pages"] for s in sources.values())), "pages"),
             (f"{len(dm.datasheet_roster())}", "marks to find"),
-            (f"{sum(s['instances'] for s in sources.values()):,}", "copies, every one checked"),
+            (dc.nice(sum(s["instances"] for s in sources.values())), "copies, every one checked"),
         ],
         "scripts/experiments/docmarks/",
     )

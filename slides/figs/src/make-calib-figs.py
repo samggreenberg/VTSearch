@@ -2696,7 +2696,15 @@ def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, gri
     return (fpr_weight * fpr + fnr_weight * fnr) / (fpr_weight + fnr_weight)
 
 
-def _incl_panel(ax: plt.Axes, y_base: float, top: float, *, votes: bool = True) -> None:
+def _incl_panel(
+    ax: plt.Axes,
+    y_base: float,
+    top: float,
+    *,
+    votes: bool = True,
+    x0: float = INCL_PANEL_X0,
+    w: float = INCL_PANEL_W,
+) -> None:
     """Part 2's shared evidence row: a score axis, and the held-out votes on it.
 
     **No histogram.** Both rules this section compares — the retired cost search
@@ -2711,7 +2719,6 @@ def _incl_panel(ax: plt.Axes, y_base: float, top: float, *, votes: bool = True) 
     model scored which half is the fact the whole progression turns on — and
     `M_1(D_{-1})` goes with the bars, because the corpus is no longer on screen.
     """
-    x0, w = INCL_PANEL_X0, INCL_PANEL_W
     _range_line(ax, x0, x0 + w, y_base, z=5)
     if votes:
         ax.text(x0, top + LABEL_GAP, _sub("M_1(D_2)"), ha="left", va="bottom", fontsize=16, color=INK)
@@ -2829,6 +2836,14 @@ def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
 #: of white a third of the figure deep.
 KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_base"] + RANGE_FOOT + 0.25
 
+#: The knob figure's own panel, wider than the one the rest of Part 2 shares.
+#: This figure is short enough that, centred on the slide, its top row already
+#: sits below the title notch, so it needs no indent: it runs from the left
+#: margin and spends the column of white the indent used to leave under the
+#: headline. `save()`'s notch check is what holds that claim.
+KNOB_PANEL_X0 = 0.9
+KNOB_PANEL_W = INCL_CANVAS_W - KNOB_PANEL_X0 - 0.9
+
 
 def knob_flow_fig() -> None:
     """Schematic of the knob that did not turn — Part 2's opening figure (#3218).
@@ -2867,7 +2882,7 @@ def knob_flow_fig() -> None:
 def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = _incl_figure(KNOB_CANVAS_H)
-    x0, w = INCL_PANEL_X0, INCL_PANEL_W
+    x0, w = KNOB_PANEL_X0, KNOB_PANEL_W
 
     # The cost panel's own labels sit above it, so the object gap below the cut's
     # name is measured to *them* rather than to the curves they name; `_incl_rows`
@@ -2877,7 +2892,7 @@ def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.
     cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
 
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
-    _incl_panel(ax, y_base, panel_top)
+    _incl_panel(ax, y_base, panel_top, x0=x0, w=w)
 
     # ── stage 2: the only cuts the search can return ──────────────────────────
     # A tick per observed vote score. Shorter than the progression's own cut
@@ -4150,12 +4165,24 @@ def cost_knob_fig() -> None:
     save(final, OUT, "calib-cost-knob.png", column=FULL_BLEED, box=box)
 
 
+#: The cost figure's own canvas: the slide's 16:9 at nearly the teaching
+#: figures' scale, so its type stays their size. Wider and shorter than
+#: `TEACH_CANVAS` on purpose. That canvas was indented past the title notch and
+#: left a column of white under the headline; this one spans the slide and
+#: drops the whole drawing below the notch instead (`COST_TOP_RESERVE`), which
+#: costs a little height and buys the width the panel is read across.
+COST_CANVAS = (20.6, 11.6)
+#: Canvas units kept clear at the top for the headline: the notch's 172px at
+#: this canvas's 62px a unit, plus the object gap under it.
+COST_TOP_RESERVE = 3.1
+
+
 def _cost_knob_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the cost figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in COST_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, TEACH_CANVAS[0])
-    ax.set_ylim(0, TEACH_CANVAS[1])
+    ax.set_xlim(0, COST_CANVAS[0])
+    ax.set_ylim(0, COST_CANVAS[1])
     ax.set_axis_off()
 
     bad, good = _ranked_votes()
@@ -4173,10 +4200,10 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # 1.5 of right margin stays: the slide draws its own page number in the
     # bottom-right corner, and a slider label run out to the canvas edge lands
     # on top of it.
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 1.5
-    rank_y = TEACH_CANVAS[1] - 1.9
+    x0, w = 4.0, COST_CANVAS[0] - 4.0 - 1.5
+    rank_y = COST_CANVAS[1] - COST_TOP_RESERVE - 0.75
     panel_top = rank_y - 2.15
-    panel_h = 5.0
+    panel_h = 3.6
     panel_base = panel_top - panel_h
 
     cuts = np.linspace(0.0, 1.0, 501)
@@ -4455,14 +4482,64 @@ REGION_GRID = (3, 4)
 REGION_RANGE = (0.33, 0.82)
 REGION_BINS = 42
 
-#: Per-region scores for that one item, row-major. Hand-set rather than drawn,
-#: because the point is which cell is the maximum and by how much, and a random
-#: draw that makes two cells tie makes the slide argue with itself.
-REGION_SCORES = (
-    (0.11, 0.19, 0.44, 0.23),
-    (0.16, 0.62, 0.81, 0.35),
-    (0.09, 0.28, 0.41, 0.14),
-)
+#: The two photographs the max figure opens on, by COCO val2017 id: one
+#: holding a book (a doll's "Goody Two Shoes"), and one holding none — a dog on
+#: a couch, with cushions for a detector to be tempted by.
+REGION_PHOTOS = (167159, 347930)
+
+
+@functools.cache
+def _region_photo(image_id: int) -> tuple:
+    """`(4:3 image, [book boxes in its pixels])` for one COCO val2017 frame."""
+    import json
+
+    from PIL import Image
+
+    import coco_fixture
+
+    coco_fixture.ensure_corpus()
+    coco = json.loads(coco_fixture.ANNOTATIONS.read_text())
+    meta = next(i for i in coco["images"] if i["id"] == image_id)
+    book = next(c["id"] for c in coco["categories"] if c["name"] == "book")
+    image = Image.open(coco_fixture.IMAGES / meta["file_name"]).convert("RGB")
+    width, height = image.size
+    side = int(round(height * 4 / 3)) if width / height > 4 / 3 else width
+    tall = height if width / height > 4 / 3 else int(round(width * 3 / 4))
+    dx, dy = (width - side) // 2, (height - tall) // 2
+    image = image.crop((dx, dy, dx + side, dy + tall))
+    boxes = [
+        (x - dx, y - dy, w, h)
+        for a in coco["annotations"]
+        if a["image_id"] == image_id and a["category_id"] == book
+        for x, y, w, h in [a["bbox"]]
+    ]
+    return image, boxes
+
+
+def _region_scores(image_id: int, seed: int) -> np.ndarray:
+    """Illustrative per-region scores: a little of everything, and a lot of book.
+
+    Each region scores a noisy baseline — every region of every photograph
+    resembles *something* — plus a share proportional to how much of it the
+    photograph's COCO book box covers. So the book's own regions win when there
+    is a book, and when there is none the grid still has a spread, and a top.
+    Seeded, so the slide is the same every time it is drawn.
+    """
+    image, boxes = _region_photo(image_id)
+    rows, cols = REGION_GRID
+    width, height = image.size
+    rng = np.random.default_rng(seed)
+    scores = 0.10 + 0.30 * rng.random((rows, cols))
+    for r in range(rows):
+        for c in range(cols):
+            x0, y0 = c * width / cols, r * height / rows
+            x1, y1 = x0 + width / cols, y0 + height / rows
+            cover = sum(
+                max(0.0, min(x1, bx + bw) - max(x0, bx)) * max(0.0, min(y1, by + bh) - max(y0, by))
+                for bx, by, bw, bh in boxes
+            ) / ((x1 - x0) * (y1 - y0))
+            scores[r, c] += 0.8 * cover
+    return np.round(np.clip(scores, 0.0, 0.95), 2)
 
 
 def region_max_fig() -> None:
@@ -4506,57 +4583,56 @@ def _region_max_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     rows, cols = REGION_GRID
-    cell = 1.08
-    grid_x0 = 6.2
-    grid_top = TEACH_CANVAS[1] - 0.65
-    grid_y0 = grid_top - rows * cell
-    best = max(((r, c) for r in range(rows) for c in range(cols)), key=lambda rc: REGION_SCORES[rc[0]][rc[1]])
-
-    # ── stage 1: one item, its regions, and the maximum over them ─────────────
-    for r in range(rows):
-        for c in range(cols):
-            score = REGION_SCORES[r][c]
-            won = (r, c) == best
-            ax.add_patch(
-                Rectangle(
-                    (grid_x0 + c * cell, grid_top - (r + 1) * cell),
-                    cell,
-                    cell,
-                    facecolor=UNLABELED_FILL if not won else "white",
-                    edgecolor=INK if won else RULE,
-                    linewidth=2.6 if won else 1.2,
-                    zorder=3 if won else 2,
+    photo_w, photo_h = 4.6, 3.45
+    photo_top = TEACH_CANVAS[1] - 0.5
+    for slot, (image_id, seed) in enumerate(zip(REGION_PHOTOS, (3, 7), strict=True)):
+        image, _ = _region_photo(image_id)
+        scores = _region_scores(image_id, seed)
+        px0 = 6.2 + slot * (photo_w + 2.2)
+        py0 = photo_top - photo_h
+        ax.imshow(image, extent=(px0, px0 + photo_w, py0, photo_top), zorder=1, aspect="auto")
+        best = np.unravel_index(int(np.argmax(scores)), scores.shape)
+        cw, ch = photo_w / cols, photo_h / rows
+        for r in range(rows):
+            for c in range(cols):
+                won = (r, c) == tuple(best)
+                ax.add_patch(
+                    Rectangle(
+                        (px0 + c * cw, photo_top - (r + 1) * ch),
+                        cw,
+                        ch,
+                        facecolor="none",
+                        edgecolor=INK if won else "white",
+                        linewidth=3.0 if won else 1.2,
+                        zorder=3 if won else 2,
+                    )
                 )
-            )
-            ax.text(
-                grid_x0 + (c + 0.5) * cell,
-                grid_top - (r + 0.5) * cell,
-                f"{score:.2f}",
-                ha="center",
-                va="center",
-                fontsize=15,
-                color=INK if won else SOFT,
-                fontweight="bold" if won else "normal",
-                zorder=4,
-            )
-    ax.text(
-        grid_x0 + cols * cell + OBJECT_GAP,
-        grid_y0 + rows * cell / 2,
-        "one item, scored\nregion by region",
-        ha="left",
-        va="center",
-        fontsize=16,
-        color=INK,
-    )
-    ax.text(
-        grid_x0,
-        grid_y0 - LABEL_GAP,
-        "score(item) = max over its regions = " + f"{REGION_SCORES[best[0]][best[1]]:.2f}",
-        ha="left",
-        va="top",
-        fontsize=17,
-        color=INK,
-    )
+                ax.text(
+                    px0 + (c + 0.5) * cw,
+                    photo_top - (r + 0.5) * ch,
+                    f"{scores[r, c]:.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=15,
+                    color=INK,
+                    fontweight="bold" if won else "normal",
+                    zorder=4,
+                    bbox={
+                        "boxstyle": "round,pad=0.15",
+                        "facecolor": "white",
+                        "alpha": 0.85 if won else 0.7,
+                        "edgecolor": "none",
+                    },
+                )
+        ax.text(
+            px0,
+            py0 - LABEL_GAP,
+            ("a book" if slot == 0 else "no book") + f":  max = {scores.max():.2f}",
+            ha="left",
+            va="top",
+            fontsize=17,
+            color=INK,
+        )
 
     # ── stage 2: every item is a maximum, so the corpus is a pile of maxima ───
     panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
