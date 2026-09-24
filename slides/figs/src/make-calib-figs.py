@@ -2680,20 +2680,33 @@ def _argmin_cut(scores: np.ndarray, labels: np.ndarray, inclusion: int) -> float
     return best
 
 
-def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, grid: np.ndarray) -> np.ndarray:
-    """``(w_f·FPR + w_n·FNR) / (w_f + w_n)`` over a grid of cut positions.
+#: The smallest share of the cost the cheaper error is *drawn* at. At k = ±10
+#: the true share is about a thousandth, which is a flat line on any drawing —
+#: and a flat line says the cheap error is free, which is exactly what a price
+#: of 1/1024 does not mean. So the drawing floors it here: every error still
+#: raises the curve, visibly and by a little, and the steps the expensive error
+#: makes stay the steps the eye compares. Exaggerated, and the notes say so;
+#: the argmin the figure is about is unaffected, because the band where both
+#: curves sit at zero has no error of either kind in it to price.
+KNOB_CHEAP_SHARE = 0.18
 
-    Divided by the weights' sum only so the two ends of the knob — which price
-    the two errors a thousand to one in opposite directions — can be drawn on
-    one vertical scale. It is a rescaling by a positive constant, so it moves
-    neither the curve's shape nor its argmin, which are the two things the
-    figure reads off it.
+
+def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, grid: np.ndarray) -> np.ndarray:
+    """``(w_f·FPR + w_n·FNR) / (w_f + w_n)`` over a grid of cut positions, as drawn.
+
+    Divided by the weights' sum so the two ends of the knob — which price the
+    two errors a thousand to one in opposite directions — can be drawn on one
+    vertical scale, and with the cheaper error's share floored at
+    `KNOB_CHEAP_SHARE` so it can be seen at all. Neither moves the curve's
+    zero band or its argmin, which are the two things the figure reads off it.
     """
     fpr_weight, fnr_weight = inclusion_cost_weights(inclusion)
+    fpr_share = fpr_weight / (fpr_weight + fnr_weight)
+    fpr_share = min(max(fpr_share, KNOB_CHEAP_SHARE), 1.0 - KNOB_CHEAP_SHARE)
     neg, pos = scores[labels == 0], scores[labels == 1]
     fpr = np.array([float((neg > t).mean()) for t in grid])
     fnr = np.array([float((pos <= t).mean()) for t in grid])
-    return (fpr_weight * fpr + fnr_weight * fnr) / (fpr_weight + fnr_weight)
+    return fpr_share * fpr + (1.0 - fpr_share) * fnr
 
 
 def _incl_panel(
@@ -2894,23 +2907,61 @@ def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
     _incl_panel(ax, y_base, panel_top, x0=x0, w=w)
 
-    # ── stage 2: the only cuts the search can return ──────────────────────────
-    # A tick per observed vote score. Shorter than the progression's own cut
-    # notch and in soft grey: these are candidates, not a decision.
-    if stage >= 2:
-        for score in scores:
-            ax.plot([x0 + score * w] * 2, [y_base - 0.18, y_base], color=SOFT, linewidth=1.6, zorder=5)
-
-    # ── stage 3: what a cut costs, at the two ends of the knob ────────────────
-    # Drawn together because the whole content is that they agree. At k = +10 a
-    # miss is priced 1024:1 and the curve is essentially the false-negative
-    # rate; at k = -10 it is essentially the false-positive rate. Between the
-    # top ✗ and the bottom ✓ neither error is possible, so both curves sit on
-    # zero — and every cut in that band is optimal at every setting of a knob
-    # whose two ends are three orders of magnitude apart.
+    # ── stages 2-3: what a cut costs, at one end of the knob and then both ────
+    # One curve first, so the room reads how a cost curve is built before it
+    # is asked to compare two: at k = -10 a false alarm is priced a thousand to
+    # one, so the curve falls a step at every ✗ the cut passes. Then the other
+    # end, its mirror. Between the top ✗ and the bottom ✓ neither error is
+    # possible, so both sit on zero — and every cut in that band is optimal at
+    # every setting of a knob whose two ends are three orders of magnitude
+    # apart.
+    #
+    # Weighted like the three prices on the slide before (`COST_WEIGHTS`): light
+    # for the end that fears false alarms, bold for the end that fears misses.
+    # Both solid, for the reason given there — one quantity at two settings.
     band_lo, band_hi = float(scores[labels == 0].max()), float(scores[labels == 1].min())
     band_mid = (band_lo + band_hi) / 2
+    grid = np.linspace(0.0, 1.0, 800)
+    ends = ((-10, COST_WEIGHTS[0], 0.035), (10, COST_WEIGHTS[-1], 0.965))
+    for reveal, (inclusion, weight, name_at) in enumerate(ends, start=2):
+        if stage < reveal:
+            continue
+        curve = _normalised_cost(scores, labels, inclusion, grid)
+        ax.plot(
+            x0 + grid * w,
+            cost_base + curve * cost_h,
+            color=INK,
+            linewidth=weight,
+            solid_joinstyle="miter",
+            zorder=3,
+        )
+        ax.text(
+            x0 + name_at * w,
+            cost_label_y,
+            _sub(rf"k = {inclusion:+d}"),
+            ha="right" if inclusion > 0 else "left",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+    if stage >= 2:
+        _range_line(ax, x0, x0 + w, cost_base, z=4)
+        # The row's name is the definition of the knob, which is the one thing
+        # every rule in this section shares — and putting it here rather than in
+        # the slide's own copy means the pair of figures carries it, so the walk
+        # figure's identical row is read against the same sentence.
+        ax.text(
+            x0 + band_mid * w,
+            cost_label_y,
+            _sub(r"cost = w_f\cdot FPR + w_n\cdot FNR"),
+            ha="center",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
     if stage >= 3:
+        # The band arrives with the second curve, because it is what the two
+        # agree on: the one stretch where both are at zero.
         ax.add_patch(
             Rectangle(
                 (x0 + band_lo * w, cost_base),
@@ -2934,58 +2985,16 @@ def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.
                 linewidth=1.4,
                 zorder=0,
             )
-        grid = np.linspace(0.0, 1.0, 800)
-        for inclusion, style, name_at in ((10, "solid", 0.965), (-10, (0, (4, 3)), 0.035)):
-            curve = _normalised_cost(scores, labels, inclusion, grid)
-            ax.plot(
-                x0 + grid * w,
-                cost_base + curve * cost_h,
-                color=INK,
-                linewidth=2.2,
-                linestyle=style,
-                zorder=3,
-            )
-            ax.text(
-                x0 + name_at * w,
-                cost_label_y,
-                _sub(rf"k = {inclusion:+d}"),
-                ha="right" if inclusion > 0 else "left",
-                va="bottom",
-                fontsize=15,
-                color=INK,
-            )
-        _range_line(ax, x0, x0 + w, cost_base, z=4)
-        # The row's name is the definition of the knob, which is the one thing
-        # every rule in this section shares — and putting it here rather than in
-        # the slide's own copy means the pair of figures carries it, so the walk
-        # figure's identical row is read against the same sentence.
-        ax.text(
-            x0 + band_mid * w,
-            cost_label_y,
-            _sub(r"cost = w_f\cdot FPR + w_n\cdot FNR"),
-            ha="center",
-            va="bottom",
-            fontsize=16,
-            color=INK,
-        )
-        ax.text(
-            x0 + band_mid * w,
-            cost_base + LABEL_GAP,
-            "zero, either way",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=SOFT,
-        )
 
     # ── stage 4: turn the knob, twenty-one times, and watch ───────────────────
-    # Twenty-one cuts land on one score, so the reveal is one notch — named θ,
-    # like every other cut in the deck, and not narrated. The three sentences
-    # that used to stand here ("no ✗ ranks above a ✓", "so the search has one
-    # optimum, at every price", "θ at all 21 stops") were the presenter's lines
-    # written onto the slide; they are in the fragment's notes, where the rest
-    # of the deck keeps its prose (#3301).
+    # The search only ever looked at the observed vote scores — a soft tick
+    # under each — and twenty-one cuts land on one of them, so the reveal is
+    # one notch: named θ, like every other cut in the deck, and not narrated.
+    # The ticks used to be a build page of their own, which drew nothing the
+    # room could see arrive; they come in with the answer they constrain.
     if stage >= 4:
+        for score in scores:
+            ax.plot([x0 + score * w] * 2, [y_base - 0.18, y_base], color=SOFT, linewidth=1.6, zorder=5)
         cuts = [_argmin_cut(scores, labels, k) for k in INCL_KNOB]
         for cut in cuts:
             ax.plot([x0 + cut * w] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
@@ -4200,10 +4209,12 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # 1.5 of right margin stays: the slide draws its own page number in the
     # bottom-right corner, and a slider label run out to the canvas edge lands
     # on top of it.
+    # The ranking's line sits at the height of the previous slide's score axis
+    # (see `COST_AXIS_LABEL_X`), and the panel gives up the difference.
     x0, w = 4.0, COST_CANVAS[0] - 4.0 - 1.5
-    rank_y = COST_CANVAS[1] - COST_TOP_RESERVE - 0.75
+    rank_y = COST_CANVAS[1] - COST_TOP_RESERVE - 0.97
     panel_top = rank_y - 2.15
-    panel_h = 3.6
+    panel_h = 3.38
     panel_base = panel_top - panel_h
 
     cuts = np.linspace(0.0, 1.0, 501)
@@ -4228,8 +4239,20 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
             fontsize=30,
             color=GREEN if keep else RED,
         )
-    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "the same ten items", ha="left", va="bottom", fontsize=16, color=INK)
-    ax.text(x0 + w, rank_y + SCORE_LABEL_LIFT, "score", ha="right", va="bottom", fontsize=15, color=SOFT)
+    # The previous slide's axis label, word for word, in the same place on the
+    # slide and at the same rendered size: flicking between the two, the
+    # photographs go and the label does not move. So it is centred on the
+    # *slide* (`COST_AXIS_LABEL_X`), not on this line, which starts right of
+    # the prices' column. `make-book-figs.py` draws the same string.
+    ax.text(
+        COST_AXIS_LABEL_X,
+        rank_y + COST_AXIS_LABEL_LIFT,
+        "“bookness”, low to high",
+        ha="center",
+        va="bottom",
+        fontsize=COST_AXIS_LABEL_PT,
+        color=SOFT,
+    )
 
     # ── stages 2-4: one cost rule, three prices, three cuts ───────────────────
     # The rule names the panel rather than sitting in a row of its own: the
@@ -4283,23 +4306,43 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 5: the control that sets the ratio ──────────────────────────────
+    # Down in the corner with the prices, not under the ranking. It sets the
+    # ratio those three labels name, so that is where it belongs; drawn across
+    # the full width under the panel, a rail with a knob in the middle read as a
+    # second copy of the score axis, as though the knob picked an item.
     if stage >= COST_STAGES:
-        _incl_slider(ax, x0, panel_base - 1.2, w)
+        _incl_slider(ax, COST_SLIDER_X0, panel_base - COST_SLIDER_DROP, COST_SLIDER_W)
     return fig
 
 
 #: The slider's stops, and the two ends it is labelled by.
-INCL_STOPS = 13
+INCL_STOPS = 9
 INCL_SLIDER_H = 0.34
+
+#: Where the slider sits: the bottom-left corner, centred under the column of
+#: three prices it sets, and stopping short of the panel so its end label does
+#: not run under the curves.
+COST_SLIDER_X0 = 1.45
+COST_SLIDER_W = 2.2
+#: How far under the panel's floor the rail runs.
+COST_SLIDER_DROP = 1.15
+
+#: The axis label, placed so it lands where `book-rank`'s does on its slide:
+#: centred on the slide rather than on this figure's (indented) axis, and at
+#: the same rendered size. Measured, not derived — if either figure's framing
+#: changes, re-measure both labels in slide pixels and move this one.
+COST_AXIS_LABEL_X = 10.30
+COST_AXIS_LABEL_LIFT = 0.30
+COST_AXIS_LABEL_PT = 12.8
 
 
 def _incl_slider(ax: plt.Axes, x0: float, y: float, w: float) -> None:
     """The Inclusion control, drawn as the thing the room will actually see.
 
-    A rail with thirteen stops and the two ends named in the units the previous
-    row just established — each step up doubles the price of a miss, each step
-    down doubles the price of a false alarm. That is the whole definition, and
-    every rule in the section it opens shares it.
+    A rail with its stops, the knob in the middle, and the two ends numbered.
+    Each step up doubles the price of a miss and each step down doubles the
+    price of a false alarm — the ratio the labels above it name. That is the
+    whole definition, and every rule in the section it opens shares it.
     """
     _range_line(ax, x0, x0 + w, y, z=3)
     for i in range(INCL_STOPS):
@@ -4315,9 +4358,9 @@ def _incl_slider(ax: plt.Axes, x0: float, y: float, w: float) -> None:
             zorder=4,
         )
     )
-    ax.text(x0, y - LABEL_GAP, "−10  no false alarms", ha="left", va="top", fontsize=15, color=INK)
+    ax.text(x0, y - LABEL_GAP, "−10", ha="center", va="top", fontsize=15, color=INK)
     ax.text(x0 + w / 2, y + INCL_SLIDER_H + LABEL_GAP, "Inclusion", ha="center", va="bottom", fontsize=16, color=INK)
-    ax.text(x0 + w, y - LABEL_GAP, "miss nothing  +10", ha="right", va="top", fontsize=15, color=INK)
+    ax.text(x0 + w, y - LABEL_GAP, "+10", ha="center", va="top", fontsize=15, color=INK)
 
 
 #: The mixture the crossing figure argues over: (weight, mean, variance) for

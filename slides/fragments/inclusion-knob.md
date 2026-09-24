@@ -16,18 +16,21 @@
      it. That is the whole of the evidence: nothing is fitted, and the rule
      about to be drawn reads these seven marks and nothing else. -->
 
-<!-- **b** — The only cuts the original rule could return. It searched for the
-     minimum cost over the *observed held-out scores*, so its answer is always
-     one of those ticks. -->
+<!-- **b** — One end of the slider, k = −10: a false alarm priced a thousand
+     times a miss. Read the curve left to right — it drops a step every time
+     the cut passes a ✗. Past the ✓s it creeps up, and only a little: a miss at
+     a thousandth of the price is cheap, not free. (The creep is drawn larger
+     than a thousandth, or it would not show at all.) -->
 
-<!-- **c** — Take the two ends of the slider — a thousand to one apart — and plot
-     what a cut costs under each. Between the top cross and the bottom check
-     there are no errors to make, so both curves sit flat on zero: every cut in
+<!-- **c** — The other end, k = +10, the mirror image, drawn bold the way the
+     last slide drew its miss-fearing price. Between the top ✗ and the bottom
+     ✓ there are no errors to make, so both curves sit on zero: every cut in
      that band is optimal at every setting. -->
 
-<!-- **d** — So the search returns θ, and returns it at *every* stop: no ✗ here
-     ranks above a ✓, so the cost has one optimum at every price, and the
-     twenty-one ticks the slider offers land on one score. -->
+<!-- **d** — The search only ever looked at the observed vote scores — the soft
+     ticks — so it returns θ, and returns it at *every* stop: no ✗ here ranks
+     above a ✓, so the cost has one optimum at every price, and the twenty-one
+     ticks the slider offers land on one score. -->
 
 <!-- And that is the common case, not a corner case. The cost has as many
      distinct optima as the calibration set has ranking errors, and a strongly
