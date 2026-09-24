@@ -93,7 +93,20 @@ def per_cell(cells: pd.DataFrame, out: Path) -> None:
     axes = axes[0]
     for ax, (arm, color) in zip(axes, arms, strict=True):
         _axes(ax)
-        a = cells[cells["arm"] == arm].set_index("category").reindex(order)
+        sub = cells[cells["arm"] == arm].assign(
+            never_trained=lambda d: d["never_trained"].astype("boolean").fillna(False).astype(bool)
+        )
+        # Mean over seeds; a cell "never found a positive" only if it failed in every seed.
+        a = (
+            sub.groupby("category")
+            .agg(
+                text_cost=("text_cost", "mean"),
+                final_cost=("final_cost", "mean"),
+                ceiling_cost=("ceiling_cost", "mean"),
+                never_trained=("never_trained", "all"),
+            )
+            .reindex(order)
+        )
         y = range(len(order))
         for yi, (tc, fc, cc) in zip(
             y, a[["text_cost", "final_cost", "ceiling_cost"]].itertuples(index=False), strict=True

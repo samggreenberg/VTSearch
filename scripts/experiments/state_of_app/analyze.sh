@@ -31,7 +31,9 @@ cd "$CALIB"
 # the same text sort whichever path the clicks then take.
 BASELINE="$EXP/text_baseline.csv"
 if [[ ! -s "$BASELINE" ]]; then
-  python text_baseline.py --results "$EXP/results" --out "$BASELINE"
+  # SigLIP only: the region path opens on SigLIP's text sort too, so one
+  # baseline serves both, and it avoids reading the 7.5 GB patch cell.
+  CALIB_COCO_QUARRY_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"
 fi
 python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
