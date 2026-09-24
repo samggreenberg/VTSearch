@@ -408,6 +408,27 @@ To start from a built-in method, `score_ranker.py export --method siglip --tier 
 writes SigLIP's scores in that format. Export from the tier you score, because
 each tier's cell was embedded separately.
 
+### Scoring a learning rule
+
+A ranker that learns from Good/Bad votes is scored by `vote_curve.py` (#4162),
+not `score_ranker.py`.
+
+1. `template_matrix.py` checks every template of a class against every pool
+   page once. The templates are the query crop and each positive page's boxed
+   features.
+2. `vote_curve.py` replays each learning rule from that table, one vote at a
+   time. Arms that change the templates, such as the stop-list in
+   `vote_stoplist.py`, re-check them instead.
+
+Two readouts:
+- **shared sequence**: every rule trains on the same *v* votes and is scored by
+  AP on the same unlabelled remainder. This is the comparison.
+- **closed loop**: each rule picks its own votes; the metric is positives found.
+
+A new rule is a new branch in `vote_curve.rank`. The
+[report](../../../docs/experiments/2026-09-23-docmarks-votes-4162/REPORT.md)
+has the tier `s` curves to stand next to.
+
 ### Reference points, not targets
 
 These are recorded so a new idea has something to stand next to. `own_verified`

@@ -33,7 +33,29 @@ reorders what was previously planned here.
   evidence without paying its recall ceiling. Open design question: how the score
   embedder and the verification stage compose when they are different embedders
   (today V3 resolves one score embedder by precedence `structural ▸ patch ▸ text`).
-  A hybrid with votes was never measured; that is the first thing to run.
+  **With votes, on DocMarks (#4162):**
+  - SigLIP SVM → SIFT re-rank of the top 1,000 finds slightly more by 40
+    votes than exhaustive max-over-templates (+0.46 per class).
+  - It ranks the remainder worse (−0.27 AP).
+  - Against the app's VLAD path it is far ahead: 23.6 against 1.1 found by 40
+    votes. VLAD's top 50 almost never holds a positive, so the path the app
+    runs today is capped by Stage 1, not by what it learns
+    ([report](../experiments/2026-09-23-docmarks-votes-4162/REPORT.md)).
+
+<!-- item-sep -->
+
+- **Stop-list templates from Bad votes (#4162, promoted).** The first rule that
+  learns from Bads in SIFT space.
+  - Each Bad page marks the template descriptors that ratio-match it as "not the
+    mark", and those are dropped from every template before verification.
+  - On DocMarks tier `s`, after 10 shared votes, it is +0.018 AP over
+    max-over-templates (interval [+0.005, +0.035]), and the gain grows with
+    Bads.
+  - It is cheap: one ratio test per template × Bad, and no training.
+  - Wiring it into `build_templates` needs the Bad votes' `local_features`,
+    which `maybe_structural_rerank` already has.
+  - Its limit is a mark made of printed text, whose box templates match any
+    typed page (#4170).
 
 <!-- item-sep -->
 
@@ -204,6 +226,15 @@ reorders what was previously planned here.
   calibrate and then stop; put sustained labeling effort into deep-embedder
   detectors (the SigLIP MLP converts 40 votes into AP 0.39 → 0.67 and shows no
   saturation).
+  **DocMarks (#4162) makes the trained classifier a liability, not a wash.**
+  - Where SIFT is strong, the Bads that reach the top are hard negatives, and
+    the MLP trained on them ranks worse than the inlier gate in every class
+    where it had a Bad: 10 of 10, −0.18 AP on average.
+  - Re-picking one "best" exemplar from the Goods was also measured, and is a
+    null (−0.03).
+  - Max over templates is the rule that learns (+0.13 AP over the exemplar
+    after 10 votes).
+  - #4169 decides whether the MLP stays in the re-rank.
 
 <!-- item-sep -->
 
