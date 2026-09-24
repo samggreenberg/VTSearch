@@ -327,7 +327,7 @@ def _plan(dataset: str) -> _Plan:
 
     # In full-corpus mode the emit set is the CORPUS, not the union of the draws.
     # `band_candidates` returns banded supply and the clean pool; an image that
-    # holds a class in no valid band -- scattered, or oversize -- is in neither,
+    # holds a class in no valid band -- scattered -- is in neither,
     # so taking the union here would drop it and call the result "everything".
     emit_ids = set(labels) if full else (set(positive_in) | neg_set | set(spares))
 
