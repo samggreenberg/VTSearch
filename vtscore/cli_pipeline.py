@@ -100,7 +100,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         raise ValueError("'keep_negatives:' only applies with 'stream_results:'.")
 
     import_labels = raw.get("import_labels")
-    parsed_import_labels: dict[str, str] | None = None
+    parsed_import_labels: dict[str, Any] | None = None
     if import_labels is not None:
         parsed_import_labels = _parse_import_labels(import_labels)
 
@@ -145,7 +145,15 @@ def _parse_plugin_section(value: Any, section: str) -> tuple[str, dict[str, Any]
     return name, dict(fields)
 
 
-def _parse_import_labels(value: Any) -> dict[str, str]:
+def _parse_import_labels(value: Any) -> dict[str, Any]:
+    """Parse the ``import_labels:`` block into ``{detector, importer, fields}``.
+
+    ``importer`` takes the same ``{name, fields}`` mapping as the top-level
+    ``importer:`` / ``exporter:`` blocks, so any label importer - including
+    one that reads no file - can be driven from YAML.  The older flat form
+    (``importer: <name>`` plus ``file: <path>``) is still accepted: ``file``
+    is shorthand for the importer's ``filepath`` field.
+    """
     if not isinstance(value, dict):
         raise ValueError("'import_labels:' must be a mapping.")
     unknown = set(value.keys()) - _IMPORT_LABELS_KEYS
@@ -154,23 +162,55 @@ def _parse_import_labels(value: Any) -> dict[str, str]:
         raise ValueError(f"'import_labels' has unknown key(s): {', '.join(sorted(unknown))}. Allowed: {allowed}.")
 
     detector = value.get("detector")
-    file = value.get("file")
     if not isinstance(detector, str) or not detector:
         raise ValueError("'import_labels.detector' is required and must be a string.")
-    if not isinstance(file, str) or not file:
-        raise ValueError("'import_labels.file' is required and must be a string path.")
 
-    importer_name = value.get("importer", "server_json_file")
-    if not isinstance(importer_name, str) or not importer_name:
-        raise ValueError("'import_labels.importer' must be a string when set.")
+    importer = value.get("importer", "server_json_file")
+    if isinstance(importer, dict):
+        importer_name, fields = _parse_plugin_section(importer, "import_labels.importer")
+    elif isinstance(importer, str) and importer:
+        importer_name, fields = importer, {}
+    else:
+        raise ValueError("'import_labels.importer' must be a label importer name or a mapping with a 'name:' key.")
 
     from vtscore.labels.importers import get_label_importer, list_label_importers  # noqa: PLC0415
 
-    if get_label_importer(importer_name) is None:
+    plugin = get_label_importer(importer_name)
+    if plugin is None:
         available = ", ".join(li.name for li in list_label_importers())
         raise ValueError(f"Unknown label importer: {importer_name!r}. Available: {available}.")
 
-    return {"detector": detector, "importer": importer_name, "file": file}
+    file = value.get("file")
+    if file is not None:
+        if not isinstance(file, str) or not file:
+            raise ValueError("'import_labels.file' must be a string path when set.")
+        if "filepath" in fields:
+            raise ValueError("'import_labels' sets both 'file:' and 'importer.fields.filepath'; pick one.")
+        fields["filepath"] = file
+
+    _validate_field_keys(importer_name, fields, "import_labels.importer", lambda _name: {f.key for f in plugin.fields})
+    _require_fields(plugin, importer_name, fields)
+
+    return {"detector": detector, "importer": importer_name, "fields": fields}
+
+
+def _require_fields(plugin: Any, plugin_name: str, fields: dict[str, Any]) -> None:
+    """Fail fast on a required label-importer field left out of the YAML."""
+    missing = [
+        f.key
+        for f in plugin.fields
+        if f.required and not f.default and f.field_type != "checkbox" and _is_blank(fields.get(f.key))
+    ]
+    if missing:
+        hint = " (or 'import_labels.file')" if missing == ["filepath"] else ""
+        raise ValueError(
+            f"'import_labels.importer.fields' is missing required field(s) for {plugin_name!r}: "
+            f"{', '.join(missing)}{hint}."
+        )
+
+
+def _is_blank(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def _validate_importer_name(name: str) -> None:
@@ -246,7 +286,7 @@ def _dispatch(config: dict[str, Any]) -> None:
         _load_pickle_chunked,
         _load_pickle_whole,
         _run_pipeline,
-        import_labels_into_detector_from_file,
+        import_labels_into_detector,
     )
 
     settings_path = config["settings"]
@@ -260,7 +300,7 @@ def _dispatch(config: dict[str, Any]) -> None:
 
             CoreConfig.from_settings(settings_path=settings_path)
         il = config["import_labels"]
-        applied, skipped = import_labels_into_detector_from_file(il["detector"], il["importer"], il["file"])
+        applied, skipped = import_labels_into_detector(il["detector"], il["importer"], il["fields"])
         print(
             f"Imported {applied} label(s) into detector '{il['detector']}' (skipped {skipped} duplicate/invalid).",
             flush=True,
