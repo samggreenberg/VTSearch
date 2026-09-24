@@ -211,6 +211,22 @@ def _quarry_classes(pc: Any) -> list[str]:
     return list(pc.SCALE_CLASSES)
 
 
+def _fraction(x: float) -> str:
+    """An area fraction the way the band edges are defined: 1/196, 1/12, 100%."""
+    if x >= 1.0:
+        return "100%"
+    return f"1/{round(1 / x)}"
+
+
+def _band_rule(lo: float, hi: float) -> str:
+    """A band's edges as the inequality `BOX_BANDS` applies: `lo <= area < hi`."""
+    if lo <= 0.0:
+        return f"< {_fraction(hi)}"
+    if hi >= 1.0:
+        return f"≥ {_fraction(lo)}"
+    return f"≥ {_fraction(lo)},  < {_fraction(hi)}"
+
+
 def fig_quarry_bands(pc: Any) -> plt.Figure:
     """What the three bands *are*: box area against the model's own geometry.
 
@@ -251,24 +267,17 @@ def fig_quarry_bands(pc: Any) -> plt.Figure:
             )
         )
         ax.set_title(name, fontsize=FLOOR_PT + 8, color=INK, pad=14, fontweight="bold")
+        # The edges as numbers, straight from `BOX_BANDS` and in its own
+        # half-open sense (`lo <= area < hi`): words like "one model patch"
+        # are the presenter's to say, and a number cannot drift from the config.
         ax.text(
             0.5,
-            -0.11,
-            f"up to 1/{1 / hi:.0f} of the frame" if hi < 0.5 else f"up to {hi:.0%} of the frame",
+            -0.12,
+            _band_rule(lo, hi),
             transform=ax.transAxes,
             ha="center",
-            fontsize=FLOOR_PT + 2,
+            fontsize=FLOOR_PT + 4,
             color=INK,
-        )
-        upper = {"small": "one model patch", "medium": "one poolable region", "large": "most of the picture"}[name]
-        ax.text(
-            0.5,
-            -0.20,
-            upper,
-            transform=ax.transAxes,
-            ha="center",
-            fontsize=FLOOR_PT,
-            color=SOFT,
         )
 
     # The class list, right of the reserve so the corner stays clear. Set as
@@ -279,10 +288,9 @@ def fig_quarry_bands(pc: Any) -> plt.Figure:
     from data_card import display_class
 
     names = sorted(display_class(name) for name in _quarry_classes(pc))
-    _caption(fig, f"the same {len(names)} classes, whatever size the thing is")
     fig.text(
         RIGHT_X,
-        0.885,
+        0.945,
         # Non-breaking spaces inside a name, so "Dining Table" never splits.
         "\n".join(textwrap.wrap(", ".join(n.replace(" ", "\u00a0") for n in names), 72)),
         fontsize=FLOOR_PT,
