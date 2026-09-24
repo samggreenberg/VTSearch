@@ -366,6 +366,12 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
 
     base, sky, picks = load(args.exp)
+    # A two-pass run keeps the full-label ceiling in its own directory
+    # (launch.sh SOTA_PASS=ceiling); read its skyline rows alongside.
+    ceiling_dir = args.exp / "ceiling"
+    if (ceiling_dir / "results" / "cells").exists():
+        _, sky2, _ = load(ceiling_dir)
+        sky = pd.concat([sky, sky2], ignore_index=True) if not sky.empty else sky2
     if base.empty:
         raise SystemExit(f"no cells under {args.exp}/results/cells")
     ts = text_scores(args.baseline)

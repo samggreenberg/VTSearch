@@ -33,6 +33,27 @@ export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${SOTA_SEEDS:-1}"
 export CALIB_MAX_STEPS="${SOTA_MAX_STEPS:-150}"
 export CALIB_SKYLINE_ARMS=skyline_train_full
+# Two passes for the region path (measured 2026-09-23): its CLICKS peak at ~15 GB
+# but the full-label ceiling, trained on every patch of every sim negative once
+# at the end of the run, peaks at ~70 GB. The ceiling reads only the seed's
+# sim/test split, never the votes, so it can run on its own and let the clicks
+# run ~4x as wide under the per-user memory QOS.
+#   SOTA_PASS=both        clicks + ceiling in one run (the default; 80 GB)
+#   SOTA_PASS=trajectory  clicks only, no ceiling (24 GB)
+#   SOTA_PASS=ceiling     the ceiling only (1 click), into $CALIB_EXP/ceiling/results
+case "${SOTA_PASS:-both}" in
+  both) ;;
+  trajectory)
+    export CALIB_SKYLINE_ARMS=""
+    export CALIB_MEM="${CALIB_MEM:-24G}" ;;
+  ceiling)
+    export CALIB_MAX_STEPS=1
+    export CALIB_RESULTS="$CALIB_EXP/ceiling/results"
+    mkdir -p "$CALIB_RESULTS/cells"
+    ln -sfn "$CALIB_EXP/results/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"
+    ln -sfn "$CALIB_EXP/results/crops" "$CALIB_RESULTS/crops" ;;
+  *) echo "SOTA_PASS must be both, trajectory or ceiling" >&2; exit 2 ;;
+esac
 # launch_bands.sh turns an empty value into `all`. That only ADDS per-band FNR
 # columns (BAND_COLUMNS) and moves no headline one, so it is left on: free
 # context for "does this detector miss the other sizes" without it being a study.
