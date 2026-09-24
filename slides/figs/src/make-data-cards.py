@@ -745,7 +745,7 @@ def frame_docmarks_same() -> Any:
 
     fig = dc.blank()
     _problems_column(fig, 0, DOCMARKS_PROBLEMS)
-    height = 0.32
+    height = 0.27
     for row, ids in enumerate(LOOKALIKES):
         top = 0.93 - row * 0.44
         x = 0.42
@@ -754,6 +754,8 @@ def frame_docmarks_same() -> Any:
             width = height * dc.FIG_H / dc.FIG_W
             _picture(fig, [x, top - height, width, height], crop)
             x += width + 0.03
+        if x - 0.03 > 0.975:
+            raise SystemExit(f"look-alikes row {row}: runs to {x - 0.03:.3f}, off the slide")
     return fig
 
 
