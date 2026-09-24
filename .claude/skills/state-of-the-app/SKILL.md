@@ -23,6 +23,16 @@ same edit.
   - **SigLIP binary:** `siglip`, `whole_image`.
   - **DINOv3 region:** `siglip+dinov3_patch`, `max_patch`, opened on SigLIP's
     text sort.
+- **One report per production path (owner, 2026-09-24):** "State of the App:
+  Binary Photo" and "State of the App: Region Photo". A future "Document Logo"
+  report follows the same shape. Each goes in its own directory,
+  `docs/experiments/<date>-state-of-the-app-<path>-<modality>/`, and is written
+  when ITS runs finish; one path does not wait for the other.
+- **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
+  run, ~10-15 min per seed for all 144 cells), so it takes **7 seeds**. Region
+  Photo costs ~5 h per seed under the memory QOS, so it has 3. About 60% of a
+  region seed is the full-label ceiling, so extra region seeds can run the
+  clicks (`SOTA_PASS=trajectory`) with a ceiling for only some seeds.
 - **Shipped defaults** for everything else: the text opening (refused
   otherwise), the fused threshold, and no variant arms.
 - **Scale up in one step (owner, 2026-09-23):** settle the presentation on a
@@ -50,7 +60,8 @@ srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too h
 bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band, both paths
 bash launch.sh cells                                  # login node: the full array; SOTA_SEEDS=N for more seeds
 bash launch.sh status
-srun -p cpu --mem=24G -c 4 -t 4:00:00 bash analyze.sh     # after the array finishes
+SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
+SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 
 - **Output:** everything lands in `/expscratch/$USER/state-of-the-app/<date>/`,
