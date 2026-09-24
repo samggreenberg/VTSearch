@@ -86,8 +86,12 @@ def over_clicks(curves: pd.DataFrame, cells: pd.DataFrame, metric: str, out: Pat
 def per_cell(cells: pd.DataFrame, out: Path) -> None:
     cells = cells.copy()
     order = cells.groupby("category")["final_cost"].mean().sort_values().index.tolist()
-    fig, axes = plt.subplots(1, 2, figsize=(10, 0.28 * len(order) + 1.4), sharey=True, facecolor=SURFACE)
-    for ax, (arm, color) in zip(axes, COLORS.items(), strict=True):
+    arms = [(a, c) for a, c in COLORS.items() if a in set(cells["arm"])]
+    fig, axes = plt.subplots(
+        1, len(arms), figsize=(5.2 * len(arms), 0.2 * len(order) + 1.4), sharey=True, facecolor=SURFACE, squeeze=False
+    )
+    axes = axes[0]
+    for ax, (arm, color) in zip(axes, arms, strict=True):
         _axes(ax)
         a = cells[cells["arm"] == arm].set_index("category").reindex(order)
         y = range(len(order))
@@ -116,9 +120,9 @@ def per_cell(cells: pd.DataFrame, out: Path) -> None:
         ax.set_xlabel("cost (lower is better)", color=INK)
         ax.set_xlim(0, 1)
     axes[0].set_yticks(range(len(order)))
-    axes[0].set_yticklabels(order, fontsize=8)
+    axes[0].set_yticklabels(order, fontsize=6 if len(order) > 60 else 8)
     axes[0].invert_yaxis()
-    handles, labels = axes[1].get_legend_handles_labels()
+    handles, labels = axes[-1].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=3, fontsize=8, frameon=False)
     fig.tight_layout(rect=(0, 0, 1, 0.965))
     fig.savefig(out, dpi=150, facecolor=SURFACE)

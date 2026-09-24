@@ -46,6 +46,9 @@ import _cells_io  # noqa: E402
 
 #: The two production paths, as the harness names them.
 ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max_patch"): "DINOv3 region"}
+#: The State of the App reports are one per production path (owner, 2026-09-24):
+#: "Binary Photo" and "Region Photo" (and later e.g. "Document Logo").
+PATHS = {"binary": ("siglip", "whole_image"), "region": ("siglip+dinov3_patch", "max_patch")}
 #: Clicks at which a curve is sampled into ``cells.csv``.
 CHECKPOINTS = (10, 25, 50, 100, 150)
 #: What "early" and "late" mean for a click, in clicks.
@@ -362,6 +365,8 @@ def main() -> int:
     ap.add_argument("--exp", type=Path, required=True)
     ap.add_argument("--baseline", type=Path, default=None, help="text_baseline.csv (the click-0 score)")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--path", choices=["all", *PATHS], default="all", help="one production path per report")
+    ap.add_argument("--seeds", type=int, default=0, help="keep seeds 0..N-1 only (0 = all); for a snapshot mid-run")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -372,6 +377,13 @@ def main() -> int:
     if (ceiling_dir / "results" / "cells").exists():
         _, sky2, _ = load(ceiling_dir)
         sky = pd.concat([sky, sky2], ignore_index=True) if not sky.empty else sky2
+    if args.path != "all":
+        emb, style = PATHS[args.path]
+        keep = lambda df: df[(df["embedder"] == emb) & (df["style"] == style)] if not df.empty else df  # noqa: E731
+        base, sky, picks = keep(base), keep(sky), keep(picks)
+    if args.seeds:
+        within = lambda df: df[df["seed"] < args.seeds] if not df.empty else df  # noqa: E731
+        base, sky, picks = within(base), within(sky), within(picks)
     if base.empty:
         raise SystemExit(f"no cells under {args.exp}/results/cells")
     ts = text_scores(args.baseline)

@@ -18,20 +18,25 @@ source "$WT/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
 EXP="${1:-${CALIB_EXP:-/expscratch/$USER/state-of-the-app/$(date +%Y-%m-%d)}}"
-OUT="$EXP/analysis"
+# SOTA_PATH=binary|region writes that path's report inputs to analysis-<path>/.
+SOTA_PATH="${SOTA_PATH:-all}"
+OUT="$EXP/analysis$([[ "$SOTA_PATH" == all ]] || echo "-$SOTA_PATH")"
 mkdir -p "$OUT"
 export VTS_REPO="$WT" CALIB_EXP="$EXP" CALIB_RESULTS="$EXP/results" CALIB_DATASETS=coco_quarry
 export CALIB_COCO_QUARRY_EMBEDDERS="siglip,siglip+dinov3_patch" CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="$(python -c "import json;print(json.load(open('$EXP/results/grid_shape.json'))['n_seeds'])")"
 
 cd "$CALIB"
-if [[ ! -s "$OUT/text_baseline.csv" ]]; then
-  python text_baseline.py --results "$EXP/results" --out "$OUT/text_baseline.csv"
+# One text baseline per run directory, shared by every path's analysis: it is
+# the same text sort whichever path the clicks then take.
+BASELINE="$EXP/text_baseline.csv"
+if [[ ! -s "$BASELINE" ]]; then
+  python text_baseline.py --results "$EXP/results" --out "$BASELINE"
 fi
-python viewer.py --results "$EXP" --arms results=prod --baseline "$OUT/text_baseline.csv" \
+python viewer.py --results "$EXP" --arms results=prod --baseline "$BASELINE" \
   --out "$OUT/viewer.html" --title "State of the App: $(basename "$EXP")" \
   --subtitle "coco_quarry, every class at every size; SigLIP binary and DINOv3 region, shipped defaults (#4159)"
-python "$HERE/analyze.py" --exp "$EXP" --baseline "$OUT/text_baseline.csv" --out "$OUT"
+python "$HERE/analyze.py" --exp "$EXP" --baseline "$BASELINE" --out "$OUT" --path "$SOTA_PATH" --seeds "${SOTA_ANALYZE_SEEDS:-0}"
 python "$HERE/figures.py" --analysis "$OUT" --out "$OUT/figures"
 python "$HERE/thumbs.py" --analysis "$OUT" --out "$OUT/images" --n 12 --min-obs 5
 echo "done: $OUT"
