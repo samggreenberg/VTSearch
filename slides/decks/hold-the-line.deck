@@ -78,7 +78,8 @@ slides:
   # 5 — Experiments: the photographs the experiments run on. Every dataset
   # arrives on one card, "Data, Set" (`make-data-cards.py`): the sets somebody
   # else made, a slide of what they do not give you, then what we built from
-  # them, in the same card — COCO into `coco_quarry`.
+  # them, in the same card — COCO into COCO Quarry (`coco_quarry` in code;
+  # the slides use the name a person would say).
   #
   # The figures are generated from the config the pile builds against, so a
   # rebuilt dataset is a re-run of the figure scripts rather than an edit here —

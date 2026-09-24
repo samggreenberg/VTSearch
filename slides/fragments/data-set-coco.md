@@ -9,8 +9,9 @@
 
 <!-- build: figs/data-set-coco-grid.webp -->
 
-<!-- One card, and every dataset in the talk arrives on it: name, counts,
-     where to get it, and what the pictures look like. Click to the next. -->
+<!-- One card, and every dataset in the talk arrives on it: its name under
+     the headline, counts, where to get it, and what the pictures look like.
+     Click to the next. -->
 
 <!-- **a** — Caltech-101. One object, centred, filling the frame, on a
      background that is usually nothing; 101 categories, one per picture, and
@@ -23,7 +24,8 @@
      boxed. 123,287 images exactly, across train and val, and 80
      classes. -->
 
-<!-- **c** — The zoom. Blue names are in the picture, each joined to its box.
+<!-- **c** — The zoom, bigger than its cell in the grid. Blue names are in the
+     picture, each joined to its box.
      Grey names are not — and that is the property the rest of this section
      leans on: COCO answers for all 80 classes on every image, so a grey name
      is a *checked* absence, not an unmentioned one. There is no mouse on
