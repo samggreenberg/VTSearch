@@ -202,6 +202,30 @@ const REGION_VOTES = {
 const GRID_COLS = 4;
 const GRID_ROWS = 3;
 
+// The Find view's layout for the line shot, as the settings a user would have
+// after dragging the two dividers and picking a thumbnail size. That frame's
+// whole subject is the ranking in the left column — the line through it, and
+// what sits either side of it — and at the app's defaults that column was the
+// narrowest of the three, its thumbnails 80px, and the right column (two
+// counts) wider than it (#4176). So the left column is widened to three
+// columns of Large thumbnails, with the few pixels the panel's scrollbar and
+// padding need to keep the third (at 465 it drops to two, and the column is
+// narrower than the centre again), and the right one narrowed as far as its
+// counts allow without clipping; the centre keeps what is left. Set before the view opens and put back after the shot, because
+// these are persisted per media type and the Label view reads the same keys: a
+// run that left them behind would shoot the next run's train loop in this
+// layout.
+const FIND_LINE_LAYOUT = {
+  grid_icon_size_left: { image: 'L' },
+  panel_pct_left: { image: 500 },
+  panel_pct_right: { image: 225 },
+};
+const DEFAULT_LAYOUT = {
+  grid_icon_size_left: { image: 'M' },
+  panel_pct_left: { image: 260 },
+  panel_pct_right: { image: 300 },
+};
+
 const HERO_REGION = 'book/000000396729.jpg';
 const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
 
@@ -730,6 +754,11 @@ async function scrollResults(page, to) {
  * which spends the next ten minutes on where that line should go.
  */
 async function shootFind(page) {
+  // The layout goes in first and the page is reloaded to read it, because the
+  // app reads its settings at load and a hash navigation is not a load. The
+  // dashboard frame below is unaffected: it has no media panels.
+  await api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
   await selectOnly(page, 'tr[vt-dataset-card]', 'photos-prod');
   await selectOnly(page, 'tr[vt-detector-card]', INTRO_DETECTOR);
@@ -782,6 +811,7 @@ async function shootFind(page) {
   });
   await scrollResults(page, Math.max(0, centred));
   await shoot(page, 'ui-find-line');
+  await api('/api/settings', { method: 'PUT', body: DEFAULT_LAYOUT });
 }
 
 /**

@@ -45,11 +45,11 @@
      occasional one the whole point — with no second mode to learn and nothing
      to configure between answers. -->
 
-<!-- **f** — Twenty-eight questions in — twelve Good, sixteen Bad, a few
+<!-- **f** — Twenty-seven questions in — twelve Good, fifteen Bad, a few
      minutes, the whole budget this task was ever going to get. Note what it
-     asks *now*: a man on an exercise bike, a bookcase over his shoulder. What
-     is left is the frames where the books are *present* and the picture is not
-     about them — exactly the line the rest of the talk is about. -->
+     asks *now*: a swallow perched on an open book. What is left is the frames
+     where the books are *present* and the picture is not about them — exactly
+     the line the rest of the talk is about. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
      with the whole pile in a grid, sort controls and a threshold slider — a
