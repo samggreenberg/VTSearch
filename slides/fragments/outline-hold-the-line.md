@@ -10,7 +10,7 @@
 
 <!-- **a** — Five stops, in order. Promise the room the shape: the first third
      builds the tool, the middle two sections are the same machinery walked
-     twice, and the last one closes a question for good. -->
+     twice, and the last one is the idea region voting asks for. -->
 
 <!-- **b** — Section 1 is the tool, from nothing — nobody needs to have seen it
      before. Three slides, and the last of them is where the whole talk's

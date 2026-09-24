@@ -26,5 +26,5 @@
      which is the first hint of how this ends. -->
 
 <!-- The premise is principled and testable, and the sweep was pre-registered
-     before any result came back. That is what makes the next slide's answer
-     mean something. -->
+     before any result came back. What it found belongs to the Results
+     section, with the runs that are still reporting. -->

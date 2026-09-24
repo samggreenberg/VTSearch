@@ -4022,52 +4022,6 @@ def anchored_fig() -> None:
     save(fig, OUT, "calib-anchored-em.png")
 
 
-def decomposition_fig() -> None:
-    # docs/experiments/2026-08-04-gmm-cut/REPORT-2881.md — the #2879 re-measure of #2836's
-    # decomposition (region arm, ramp 6-20): total excess cost 0.0686.
-    terms = [
-        ("identification", 0.0057),
-        ("prior / loss", 0.0111),
-        ("Gaussian\nmisspecification", 0.0129),
-        ("sim → test\ntransfer", 0.0389),
-    ]
-    fig, ax = plt.subplots(figsize=(11.5, 6.5))
-    ys = np.arange(len(terms))
-    for y, (name, v) in zip(ys, terms):
-        emphasized = name.startswith("sim")
-        ax.barh(y, v, height=0.55, color=BLUE if emphasized else "#9aa4b0", zorder=2)
-        ax.annotate(
-            f"{v:.4f}",
-            xy=(v, y),
-            xytext=(6, 0),
-            textcoords="offset points",
-            va="center",
-            fontsize=15,
-            color=BLUE if emphasized else SOFT,
-            fontweight="bold" if emphasized else "normal",
-        )
-    ax.set_yticks(ys, [t[0] for t in terms])
-    ax.set_xlim(0, 0.047)
-    ax.set_xticks([])
-    ax.spines["left"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    ax.tick_params(left=False)
-    # Full-bleed: the in-figure title is gone (the slide's headline says the
-    # same thing, over this band), but the units line stays — it is the one
-    # thing the bars do not say for themselves.
-    ax.annotate(
-        "excess cost vs the test oracle, region arm",
-        xy=(0, 1.0),
-        xycoords="axes fraction",
-        xytext=(0, 8),
-        textcoords="offset points",
-        fontsize=15,
-        color=SOFT,
-    )
-    fig.subplots_adjust(left=0.175, right=0.98, top=0.55, bottom=0.06)
-    save(fig, OUT, "calib-error-decomposition.png", column=FULL_BLEED, tight=False)
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # Part 3 — the three teaching figures (issue #3246).
 #
@@ -4972,5 +4926,4 @@ if __name__ == "__main__":
     blend_schedule_fig()
     split_fraction_fig()
     anchored_fig()
-    decomposition_fig()
     print("wrote figures to", OUT)

@@ -8,8 +8,8 @@
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
 # same machinery walked a second time along the Inclusion axis — where
-# the *user* wants it — and then the epilogue that closed the cut-rule question
-# for good.
+# the *user* wants it — and then the region-voting idea, whose measured
+# verdict waits for the Results section with the runs still reporting.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in the reports the presenter notes cite (see #3246, #3265).
@@ -61,7 +61,6 @@ slides:
   voting-modes
   evt-midpoint
   evt-gumbel
-  evt-close
 
   # 5 — The End
   outline-hold-the-line +at5
