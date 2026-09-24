@@ -118,14 +118,14 @@ def staver_root() -> Path:
 
 def ucsf_page(doc_id: str, dpi: int = 150) -> Any:
     """First page of a UCSF document, rendered."""
-    import pymupdf
+    import fitz  # PyMuPDF, spelled the way the rest of the repo imports it
     from PIL import Image
 
     pdf = _download(
         UCSF_PDF.format(a=doc_id[0], b=doc_id[1], c=doc_id[2], d=doc_id[3], id=doc_id),
         ROOT / "ucsf" / f"{doc_id}.pdf",
     )
-    pix = pymupdf.open(pdf)[0].get_pixmap(dpi=dpi)
+    pix = fitz.open(pdf)[0].get_pixmap(dpi=dpi)
     return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
 
 

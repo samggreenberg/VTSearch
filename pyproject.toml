@@ -246,7 +246,9 @@ extend_exclude = [
 # docs/ is still checked.
 known_first_party = [
     "coco_fixture",
+    "data_card",
     "dataset_samples",
+    "docmarks_media",
     "report_svg",
     "slide_figure",
     "hook_payload",
