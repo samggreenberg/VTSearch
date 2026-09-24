@@ -325,6 +325,16 @@ section.full h2 {
     0 0 28px #fff;
 }
 
+/* A short aside set in the white a full-bleed figure leaves under the
+   headline: the headline's own 300px column, an object gap below it, body
+   type. For the rare slide whose figure keeps that column clear on purpose
+   (the Find slide's contact sheet) and has two or three words to put in it.
+   `.indent` hangs a value under its label, the way it would be written by
+   hand. */
+section.full .side { max-width: 300px; margin-top: 64px; }
+section.full .side p { margin: 0 0 0.9em; line-height: 1.3; }
+section.full .side .indent { display: inline-block; padding-left: 1.2em; }
+
 /* Build groups (progressive reveal): build.py injects this class on every
    page of the group, the final page included. Anchoring the column to the
    top instead of centring it means a reveal adds ink below what is already

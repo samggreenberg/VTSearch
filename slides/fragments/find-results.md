@@ -7,6 +7,16 @@
 
 <!-- build: figs/ui-find.build1.webp -->
 
+<!-- build -->
+
+<div class="side">
+
+**Auto-Ingest:**<br><span class="indent">#VTSearch</span>
+
+**Auto-Output:**<br><span class="indent">Email, Dropbox, etc.</span>
+
+</div>
+
 <!-- **a** — Different pile. The detector was voted into existence on one set of
      photographs; this is a **second set, sharing no item with the first** —
      none of it voted on, none of it ever shown. Which is the situation that
@@ -18,11 +28,13 @@
      people reading — out of a corpus that had no labels in it an hour ago, on
      the strength of a handful of answers to a handful of questions. -->
 
-<!-- Say what is *not* on this slide, because it is the point: the tool. Nobody
-     opened anything. A detector left on autorun mails a list of references, and
-     the person who asked for the books gets the books — so the picture of the
-     payoff is the pictures, not a screen with them stacked in a panel down one
-     side of it. -->
+<!-- **c** — Say what is *not* on this slide, because it is the point: the
+     tool. Nobody opened anything. New media flows in on its own — whatever
+     lands in the team's channel — and a detector left on autorun sends what
+     it finds wherever the person who asked already looks: an email, a
+     Dropbox folder, anything an exporter can reach. The person who asked for
+     the books gets the books — so the picture of the payoff is the pictures,
+     not a screen with them stacked in a panel down one side of it. -->
 
 <!-- The next slide goes back into the tool, once, for the one thing this view
      cannot show: **85** of the 240 came back and 155 did not. Nobody asked for
