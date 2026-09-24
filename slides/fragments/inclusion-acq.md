@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-acq-flow.png)
 
-## Compound<br>Interest
+## Second Cut
 
 <!-- build: figs/calib-acq-flow.build1.png -->
 

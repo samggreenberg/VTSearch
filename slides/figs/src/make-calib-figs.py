@@ -3707,45 +3707,92 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
 
 def blend_schedule_fig() -> None:
+    """Slide 13: how far the blend lets the cross-calibrated cut move, per voting mode.
+
+    Two panels, because the two modes no longer share a *kind* of schedule and
+    one set of axes would force them to. Region voting still averages, so its
+    panel is a weight over votes: ``slow_cap50`` against the historical ramp it
+    replaced. Binary voting ships ``corridor20`` (#3551), which is a clamp, not
+    a weight — a weight axis cannot draw it — so its panel is the score axis
+    itself, with the band the x-cal cut is kept inside.
+
+    Everything here is computed from the shipped registry
+    (`production_schedule_for`), so the slide moves when the schedule does.
+    """
+    from types import SimpleNamespace
+
+    from vtscore.training.blend_schedules import production_schedule_for
+
+    region = production_schedule_for(region_voting=True)
+    binary = production_schedule_for(region_voting=False)
+
+    fig = plt.figure(figsize=(12.8, 7.2))
+    # ── left: region voting, a weight over votes ─────────────────────────────
+    ax = fig.add_axes([0.40, 0.56, 0.57, 0.33])
     n = np.arange(0, 121)
-    fig, ax = plt.subplots(figsize=(11.5, 6.5))
-    for name, color, style, label, xy, ha, va in (
-        ("prod", SOFT, (0, (4, 3)), "historical ramp:\npure x-cal by 20 votes", (40, 0.96), "left", "top"),
-        ("cap50", BLUE, (0, (1, 1.6)), "cap50 — binary voting", (23, 0.42), "left", "top"),
-        ("slow_cap50", BLUE, "solid", "slow_cap50 — region voting", (44, 0.55), "left", "bottom"),
-    ):
-        w = [
+
+    def curve(name: str) -> list[float]:
+        return [
             get_schedule(name).weight(BlendContext(n_labels=int(k), n_good=int(k) // 2, n_bad=int(k) - int(k) // 2))
             for k in n
         ]
-        ax.plot(n, w, color=color, linestyle=style, linewidth=2.4)
-        ax.annotate(label, xy=xy, ha=ha, va=va, fontsize=15, color=color)
+
+    ax.plot(n, curve("prod"), color=SOFT, linestyle=(0, (4, 3)), linewidth=2.2)
+    ax.plot(n, curve(region), color=BLUE, linewidth=2.8)
+    ax.annotate("the old ramp: all x-cal by 20 votes", xy=(60, 0.90), ha="left", va="top", fontsize=15, color=SOFT)
+    ax.annotate(
+        f"{region}: never past half", xy=(50, 0.5), xytext=(50, 0.60), ha="left", va="bottom", fontsize=15, color=BLUE
+    )
     ax.set_xlim(0, 122)
-    ax.set_ylim(-0.02, 1.08)
-    ax.set_yticks([0, 0.5, 1.0], ["pure\nGMM", "0.5", "pure\nx-cal"])
-    ax.set_xlabel("votes")
-    # Short enough not to overflow the (shortened) axes above the title notch;
-    # the tick labels already read "pure GMM" to "pure x-cal", so the axis name
-    # only has to name the quantity, not re-explain the ends.
-    # Anchored to the bottom of the axis, out of the title reserve's own band:
-    # the reserve is only the *top* left corner, so a label that lives low on
-    # the left costs the drawing nothing.
-    ax.set_ylabel("weight on the x-cal cut", loc="bottom")
+    ax.set_ylim(-0.03, 1.12)
+    ax.set_yticks([0, 0.5, 1.0], ["GMM", "half", "x-cal"])
+    ax.set_xlabel("votes", labelpad=2)
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
-    # Full-bleed: no in-figure title (the slide's headline is the title, drawn
-    # over the top-left corner), and the axes are *indented* past the reserve
-    # rather than pushed under it. Pushing the plot down to `top=0.55` cleared
-    # the corner by spending half the slide, which `slides/STYLE.md` names as
-    # the wrong repair for exactly this shape: the blocker is horizontal, so
-    # the fix is horizontal (#3246).
-    # Indented past the title reserve, which ends at figure x 0.281 here — and
-    # further than the reserve alone needs. Centring the y-label on its axis
-    # (rather than parking it at the bottom, as it used to be) puts a 2.4-inch
-    # rotated string across the middle of the left margin, and the only way a
-    # *centred* label clears the reserve is horizontally. The width this costs
-    # the plot goes to the legend, which lives in the same margin.
-    fig.subplots_adjust(left=0.40, right=0.98, top=0.93, bottom=0.135)
+    fig.text(
+        0.40, 0.955, "region voting: a weight that stops at half", fontsize=17, fontweight="bold", color=INK, va="top"
+    )
+
+    # ── right: binary voting, a clamp on the score axis ──────────────────────
+    ax = fig.add_axes([0.06, 0.07, 0.91, 0.30])
+    mu_lo, mu_hi, sd = 0.22, 0.78, 0.09
+    xs = np.linspace(0, 1, 400)
+    for mu, colour in ((mu_lo, RED), (mu_hi, GREEN)):
+        ax.fill_between(xs, 0, np.exp(-0.5 * ((xs - mu) / sd) ** 2), color=colour, alpha=0.18, linewidth=0)
+        ax.plot(xs, np.exp(-0.5 * ((xs - mu) / sd) ** 2), color=colour, linewidth=1.8)
+    fit = SimpleNamespace(mu_lo=mu_lo, mu_hi=mu_hi)
+    gmm = (mu_lo + mu_hi) / 2
+    ctx = BlendContext(n_labels=10, n_good=5, n_bad=5)
+    schedule = get_schedule(binary)
+    lo_edge = schedule.combine(-10.0, gmm, ctx, fit)
+    hi_edge = schedule.combine(10.0, gmm, ctx, fit)
+    ax.axvspan(lo_edge, hi_edge, color=BLUE, alpha=0.16, linewidth=0)
+    ax.plot([gmm, gmm], [0, 1.18], color=BLUE, linewidth=2.2)
+    ax.text(gmm, 1.22, _sub(r"\theta_G"), ha="center", va="bottom", fontsize=16, color=BLUE)
+    ax.text(mu_lo, -0.10, _sub(r"\mu_{lo}"), ha="center", va="top", fontsize=15, color=RED)
+    ax.text(mu_hi, -0.10, _sub(r"\mu_{hi}"), ha="center", va="top", fontsize=15, color=GREEN)
+    ax.annotate(
+        "",
+        xy=(hi_edge, 0.55),
+        xytext=(0.93, 0.55),
+        arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.8},
+    )
+    ax.text(0.93, 0.62, "a wild x-cal cut\nis pulled back", ha="center", va="bottom", fontsize=15, color=INK)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.45)
+    ax.axis("off")
+    ax.plot([0, 1], [0, 0], color=SOFT, linewidth=1.2)
+    width = round((hi_edge - gmm) / (mu_hi - gmm), 2)
+    fig.text(
+        0.06,
+        0.47,
+        f"binary voting: a band {width:.0%} of the way to each mean",
+        fontsize=17,
+        fontweight="bold",
+        color=INK,
+        va="top",
+    )
+    fig.text(0.06, 0.425, f"{binary} — the same at every vote count", fontsize=15, color=SOFT, va="top")
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
