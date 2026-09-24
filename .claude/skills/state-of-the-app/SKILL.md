@@ -29,7 +29,15 @@ same edit.
   `docs/experiments/<date>-state-of-the-app-<path>-<modality>/`, and is written
   when ITS runs finish; one path does not wait for the other.
 - **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
-  run, ~10-15 min per seed for all 144 cells), so it takes **7 seeds**. Region
+  run, ~10-15 min per seed for all 144 cells), so it takes **as many seeds as
+  a night allows** (owner, 2026-09-24: per-image claims need repeat clicks, and
+  most image-class pairs had one click at 7 seeds). Run it overnight with
+  `CALIB_CPUS=1`, launched in seed order, and stop at a set time. Then analyze
+  the complete seeds only (`SOTA_ANALYZE_SEEDS=N`) and rebuild
+  `text_baseline.csv`, because it is per seed. SLURM caps an array at index
+  10099, which is seed 34, and a user's queue at about 2000 jobs, so later seeds
+  go in a second array with `CALIB_INDEX_OFFSET` (see
+  `<run dir>/overnight.sh` from 2026-09-24). Region
   Photo costs ~5 h per seed under the memory QOS, so it has 3. About 60% of a
   region seed is the full-label ceiling, so extra region seeds can run the
   clicks (`SOTA_PASS=trajectory`) with a ceiling for only some seeds.
