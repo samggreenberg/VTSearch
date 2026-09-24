@@ -200,7 +200,7 @@ class TestFullCorpusMode:
     def test_an_unbanded_image_is_still_in_the_corpus(self, mod, tmp_path: Path):
         """The trap: `band_candidates` returns banded supply and the clean pool.
 
-        An image holding a class in NO valid band -- scattered, or oversize -- is
+        An image holding a class in NO valid band -- scattered -- is
         in neither, so a full-corpus emit set built from their union would drop it
         and still call itself everything.
         """
@@ -462,6 +462,37 @@ class TestLargestInstance:
         import pile_config as pc
 
         assert pc.SCALE_BAND_ON_LARGEST is True
+
+
+class TestCloseUpsAreLarge:
+    """A photo the object fills is a positive, not a hole in the data (2026-09-24).
+
+    ``large`` used to stop at 0.80, which left a close-up neither positive nor
+    negative for its own class -- the easiest positive a user meets, removed.
+    """
+
+    @pytest.mark.parametrize("box", [[5, 5, 95, 95], [0, 0, 100, 100], [0, 0, 100.4, 100.3]])
+    def test_a_near_or_full_frame_box_is_large(self, mod, box):
+        from pilebuild import scale_core
+
+        # 81%, exactly the frame, and COCO's unclipped overhang past it
+        assert scale_core.band_for([box], 100, 100) == "large"
+
+    def test_a_close_up_is_a_positive(self, mod):
+        from pilebuild import scale_core
+
+        supply, boxes_for, clean = scale_core.band_candidates(
+            {1: {"bus": [[0, 0, 100, 100]]}}, {1: (100, 100)}, unbanded=set(), classes=("bus",), largest=True
+        )
+        assert supply["bus"]["large"] == [1]
+        assert boxes_for[(1, "bus@large")] == [[0, 0, 100, 100]]
+        assert clean == []
+
+    def test_the_top_edge_reads_as_the_whole_frame(self, mod):
+        import pile_config as pc
+
+        hi = pc.BOX_BANDS["large"][1]
+        assert 1.0 < hi and f"{hi:.0%}" == "100%"
 
 
 class TestTheCarrierAndVesselMerges:
