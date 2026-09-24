@@ -398,31 +398,35 @@ is anchored in the argument, and a topic change gets an unmistakable signal to
 wake up for.
 
 **The opening list is unmarked, and the marked first section follows it.** The
-room reads `1 … 5` all one weight — every section still ahead of them — and
+room reads `1 … 7` all one weight — every section still ahead of them — and
 only then does section 1 go bold and the rest go quiet. Those two pages are not
 a stutter: the first is the shape of the talk and the second is the entry into
 it, and running them together (opening straight on `+at1`) means the whole list
-is never once shown as a list. So a deck's outline appears *N* + 1 times for
-*N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on.
+is never once shown as a list. So a deck's outline appears *N* + 2 times for
+*N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on, and
+then once more to close the deck (below).
 
-**All of those pages are one slide**, numbered `1a … 1f` — see *Numbering* in
+**All of those pages are one slide**, numbered `1a … 1i` — see *Numbering* in
 [`README.md`](README.md). The room is being shown the same thing again with a
-different line marked, and the deck should say so rather than spending six
+different line marked, and the deck should say so rather than spending nine
 numbers on it.
 
-**The last section is the end of the talk, and its marked outline is the last
-slide.** A deck does not need a separate "Questions" page: the room is already
-looking at the list of everything it just heard, with the final line marked,
-which is a better thing to take questions against than the word *Questions*.
-Name that last section for what it is — `The End` — and let the fragment's
-final showing close the deck.
+**The outline's last showing is the last slide, and it says `The End`.** A deck
+does not need a separate "Questions" page: the room is already looking at the
+list of everything it just heard, with a final line marked, which is a better
+thing to take questions against than the word *Questions*. But `The End` is not
+a section anybody is walked through, so it is not on the list the room sees on
+the way: write it as the fragment's last line wrapped in
+`<span class="closing">`, and the theme hides it on every showing but the one
+the manifest marks `+end`. It is hidden rather than removed, so the list does
+not re-centre when it appears.
 
 **It is laid out like the deck's other slides**, not as its own kind of page:
 the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
 slide's figure — it is the one thing the room is asked to look at — so it gets
 the slot the deck gives figures, and the title does not move on the one slide
-that comes back six times.
+that comes back nine times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that

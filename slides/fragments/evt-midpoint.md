@@ -14,7 +14,7 @@
      to see; this one holds the fit fixed and asks whether there is a smarter
      *cut rule* than the naive midpoint. -->
 
-<!-- **a** — The fit the last section ended on: two components with the same
+<!-- **a** — The fit Calibration ended on: two components with the same
      spread, one Bad and one Good, and their two means. -->
 
 <!-- **b** — And the rule we ship: cut halfway between them. It has survived

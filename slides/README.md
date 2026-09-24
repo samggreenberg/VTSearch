@@ -291,7 +291,7 @@ rules about *fragments*, which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1f` however far apart its six pages fall — which is the same rule a
+  `1a … 1i` however far apart its nine pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -299,8 +299,8 @@ rules about *fragments*, which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees six times from printing the same four paragraphs
-into the speaker's hand six times.
+keeps a slide the room sees nine times from printing the same four paragraphs
+into the speaker's hand nine times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with the final stage large beside the notes and every page of the group under
@@ -315,7 +315,7 @@ estimates the fit (`NOTES_LINES`, `NOTES_CHARS_PER_LINE`) conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown six times owes six lettered
+group across the whole deck, so a fragment shown nine times owes nine lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
