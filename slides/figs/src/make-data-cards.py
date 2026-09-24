@@ -116,29 +116,42 @@ def frame_caltech() -> Any:
 COCO_IMAGES = 123_287
 COCO_OBJECTS = 886_284  # boxes, crowd regions excluded
 
-#: Six val2017 frames for the 3x2 grid: rooms and streets with several classes
-#: each. `COCO_ZOOM` is one of them, the one the next frame blows up — a desk
-#: with six classes and nothing crowding, so each line to a box can be followed.
-COCO_GRID = (139, 67616, 26465, 139099, 350148, 246968)
-COCO_ZOOM = 26465
-#: The category column for the zoom, in the order listed: what is on the desk,
-#: interleaved with what an office photo plausibly *could* hold and does not.
+#: Six val2017 frames for the 3x2 grid: rooms, streets and tables with several
+#: classes each. `COCO_ZOOM` is one of them, the one the next frame blows up.
+COCO_GRID = (139, 67616, 96001, 139099, 350148, 246968)
+#: The zoom: a museum case holding Mary Poppins' umbrella, beside an open book
+#: and a bowl — three classes, every box plainly what it says it is (the desk
+#: this replaced had a card reader boxed as a `remote`, #4176) — and, just as
+#: plainly, things nobody boxed: a glass paperweight, a placard, a glass hen.
+#: Those are the frame's second point: COCO answers for its 80 classes on every
+#: image, and *only* for those, so an object outside them is simply not there
+#: as far as the annotation goes.
+COCO_ZOOM = 96001
+#: Drawn whole, at the photograph's own 3:2 rather than the grid's 4:3: the
+#: umbrella's box runs the full width of the frame, and a 4:3 crop cut its two
+#: ends off and left it as a pair of loose lines.
+COCO_ZOOM_ASPECT = 3 / 2
+#: The category column for the zoom, in the order listed: what is in the case,
+#: interleaved with what a display like it plausibly *could* hold and does not.
 #: As long as the column has room for — the zoom is as tall as the media area,
-#: and every grey name is one more checked absence the room can read.
+#: and every grey name is one more checked absence the room can read. No `cat`
+#: or `dog`, though both are absent as boxes: the case holds china figurines of
+#: both, and a grey "cat" beside a china cat asks a question this frame is not
+#: about.
 COCO_ZOOM_LIST = (
-    "laptop",
-    "mouse",
-    "keyboard",
-    "cell phone",
     "book",
-    "remote",
     "cup",
-    "chair",
-    "tv",
-    "person",
+    "bowl",
+    "vase",
+    "umbrella",
     "clock",
-    "bottle",
     "scissors",
+    "bottle",
+    "wine glass",
+    "cell phone",
+    "spoon",
+    "teddy bear",
+    "handbag",
     "potted plant",
 )
 
@@ -156,8 +169,8 @@ def _coco() -> tuple[Path, dict, dict[int, list[dict]], dict[int, str]]:
     return images, coco, by_image, names
 
 
-def _coco_tile(image_id: int, keep=None, rename=None) -> tuple[dc.Tile, list[tuple[str, tuple]]]:
-    """A val2017 frame cropped to 4:3, with its boxes moved by the same crop.
+def _coco_tile(image_id: int, keep=None, rename=None, aspect: float = 4 / 3) -> tuple[dc.Tile, list[tuple[str, tuple]]]:
+    """A val2017 frame cropped to `aspect` (4:3), with its boxes moved by the same crop.
 
     `keep(name)` filters which classes are drawn; `rename(name)` maps a COCO
     class to the name the card shows. Returns the tile and `(name, box)` pairs.
@@ -167,7 +180,7 @@ def _coco_tile(image_id: int, keep=None, rename=None) -> tuple[dc.Tile, list[tup
     images, coco, by_image, names = _coco()
     meta = next(i for i in coco["images"] if i["id"] == image_id)
     with Image.open(images / meta["file_name"]) as frame:
-        tile, (dx, dy) = dc.fit_tile(frame)
+        tile, (dx, dy) = dc.fit_tile(frame, aspect)
     pairs = []
     for a in by_image[image_id]:
         name = names[a["category_id"]]
@@ -202,14 +215,14 @@ def frame_coco_grid() -> Any:
 def frame_coco_zoom() -> Any:
     fig = dc.blank()
     _coco_left(fig)
-    tile, pairs = _coco_tile(COCO_ZOOM)
+    tile, pairs = _coco_tile(COCO_ZOOM, aspect=COCO_ZOOM_ASPECT)
     present = collections.defaultdict(list)
     for name, box in pairs:
         present[name].append(box)
     missing = set(present) - set(COCO_ZOOM_LIST)
     if missing:
         raise SystemExit(f"coco zoom: {sorted(missing)} are boxed in {COCO_ZOOM} but not listed")
-    dc.zoom(fig, tile, [(name, present.get(name, [])) for name in COCO_ZOOM_LIST])
+    dc.zoom(fig, tile, [(name, present.get(name, [])) for name in COCO_ZOOM_LIST], aspect=COCO_ZOOM_ASPECT)
     return fig
 
 
