@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-knob-flow.png)
 
-## Cost Cutting
+## At All Costs
 
 <!-- build: figs/calib-knob-flow.build1.png -->
 

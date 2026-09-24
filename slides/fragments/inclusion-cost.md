@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-cost-knob.png)
 
-## Pick Your<br>Poison
+## Sunk Cost
 
 <!-- build: figs/calib-cost-knob.build1.png -->
 

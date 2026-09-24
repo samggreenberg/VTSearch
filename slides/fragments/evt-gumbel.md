@@ -12,7 +12,11 @@
      one. -->
 
 <!-- **a** — Region voting again, and the number it implies: an item's score is
-     the **maximum** over its regions. -->
+     the **maximum** over its regions. Left, a photo with a book: the regions
+     over the book score high, and the photo's score is the best of them.
+     Right, no book at all — and the regions still differ, so this photo has a
+     maximum too. Every item gets one, book or not. (The numbers are drawn to
+     make the point, not read off a detector.) -->
 
 <!-- **b** — Now do that for every item in the corpus, and look at what the
      threshold is actually applied to. Every score in this distribution is a
@@ -26,5 +30,5 @@
      which is the first hint of how this ends. -->
 
 <!-- The premise is principled and testable, and the sweep was pre-registered
-     before any result came back. That is what makes the next slide's answer
-     mean something. -->
+     before any result came back. What it found belongs to the Results
+     section, with the runs that are still reporting. -->

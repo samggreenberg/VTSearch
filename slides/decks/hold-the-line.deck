@@ -8,8 +8,8 @@
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
 # same machinery walked a second time along the Inclusion axis — where
-# the *user* wants it — and then the epilogue that closed the cut-rule question
-# for good.
+# the *user* wants it — and then the region-voting idea, whose measured
+# verdict waits for the Results section with the runs still reporting.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in the reports the presenter notes cite (see #3246, #3265).
@@ -61,7 +61,6 @@ slides:
   voting-modes
   evt-midpoint
   evt-gumbel
-  evt-close
 
   # 5 — The End
   outline-hold-the-line +at5
@@ -89,41 +88,34 @@ slides:
   atlas-depth
   atlas-pvalues
 
-  # Appendix — what "logo detection" actually means. Parked after the end for
-  # now, to be worked into the argument later: it is the `book` slide's claim
-  # made a second time, in the one domain where a room expects a concept to
-  # have a published spec sheet. Eight results for one query, arriving one at a
-  # time, and the presenter asks about each without answering.
-  logo-grid
-
-  # Appendix — the data. Ten slides that come *before* any experimental
-  # result that used them, and sit here only because the deck does not show
-  # those results yet (#3958). Move them in front of the results section when
-  # it arrives rather than leaving them parked.
+  # Appendix — the data. Slides that come *before* any experimental result
+  # that used them, and sit here only because the deck does not show those
+  # results yet (#3958). Move them in front of the results section when it
+  # arrives rather than leaving them parked.
   #
-  # The order is the dependency order, not the order they were built: the four
-  # sets somebody else made, then the two we made out of them. Visual Genome
-  # and COCO have to be on screen before `vg_scale`'s construction makes any
-  # sense, because two of its five steps are "and then we used COCO".
+  # Every dataset arrives on one card, "Data, Set" (`make-data-cards.py`):
+  # the sets somebody else made, a slide of what they do not give you, then
+  # what we built from them, in the same card. Twice: COCO into
+  # `coco_quarry`, and four document sources into DocMarks.
   #
-  # `data-coco-quarry-complement` is the successor's argument rather than its
-  # card, which is why it sits after `vg_scale`'s three and carries no counts:
-  # `coco_quarry` is not built yet (see docs/plans/coco-quarry.md), and the one
-  # thing about it that is already decided is the one this slide draws — what
-  # exhaustive annotation buys that a designation cannot. Give it a card of its
-  # own once there is a built set to count.
+  # The logo slide sits between the two because it introduces the idea of
+  # logo detection before the room is asked to find logos on documents. It is
+  # the `book` slide's claim made a second time, in the one domain where a
+  # room expects a concept to have a published spec sheet: eight results for
+  # one query, arriving one at a time, and the presenter asks about each
+  # without answering.
   #
-  # Both `vg_scale` and DocMarks are moving. The figures are generated from the
-  # config the pile builds against and from the DocMarks datasheet, so a rebuilt
-  # dataset is a re-run of `make-dataset-figs.py` rather than an edit here — but
-  # the presenter notes carry numbers too, and those are hand-written.
-  data-visual-genome
-  data-coco-val
-  data-caltech101
-  data-vg-box
-  data-vg-scale-build
-  data-vg-scale-bands
-  data-vg-scale-cells
+  # The figures are generated from the config the pile builds against and from
+  # the DocMarks datasheet, so a rebuilt dataset is a re-run of the figure
+  # scripts rather than an edit here — but the presenter notes carry numbers
+  # too, and those are hand-written.
+  data-set-coco
   data-coco-quarry-complement
-  data-docmarks-build
+  data-coco-problems
+  data-set-quarry
+  data-coco-quarry-bands
+  logo-grid
+  data-set-docmarks-sources
+  data-docmarks-problems
+  data-set-docmarks
   data-docmarks-shape
