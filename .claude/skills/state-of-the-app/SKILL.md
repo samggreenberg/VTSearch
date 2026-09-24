@@ -60,6 +60,13 @@ srun -p cpu --mem=24G -c 4 -t 4:00:00 bash analyze.sh     # after the array fini
   1 h and peaks at 66-70 GB**, so the launcher asks for 80 GB. The memory QOS
   sets the wall clock: 144 region runs at a handful concurrent is most of a
   day. The first review lost an hour to 12 GB out-of-memory kills.
+- **Split the array by path** when widening: whole-image indices at 12 GB,
+  region indices at 80 GB. `run_cells` does NOT skip finished cells, so build
+  the index lists yourself, leaving out every `task_NNNN.csv` already written.
+  Order is seed-major: in each seed's block of 288, 0-143 are SigLIP and
+  144-287 are region. The 2026-09-23 widening (49 classes x 3 seeds) was
+  409 + 409 runs: whole-image took about 30 min at 70 concurrent, and the
+  region runs took ~40-50 h at 8-10 concurrent under the memory QOS.
 - **Submit `subset` / `redo` / `cells` from the LOGIN node** (they only call
   `sbatch`). Twice, `srun -c 1 ... launch.sh redo` submitted the array TWICE,
   so every cell would have run in duplicate and raced its twin on the same
