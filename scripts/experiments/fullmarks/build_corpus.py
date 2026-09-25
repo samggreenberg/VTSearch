@@ -1,0 +1,1164 @@
+#!/usr/bin/env python
+"""Assemble the FullMarks corpus: eval data for stamp detection.
+
+    python build_corpus.py --probe                       # what can I reach?
+    python build_corpus.py --sources spods               # cluster into candidates
+    python build_corpus.py --sources spods --roster r.json   # the eval corpus
+
+Two modes, and which one you are in decides what the output *means*:
+
+* **candidate mode** (no ``--roster``) proposes every class clearing the numeric
+  bars, for ``shortlist.py`` to rank.  These are proposals.
+* **roster mode** admits only the hand-picked classes named in the roster file.
+  Their instances are then adjudicated one by one (``make_audit_slate.py --task
+  membership``), and *that* is the ground truth an eval quotes.
+
+Outputs, under ``fullmarks_config.OUT``:
+
+    corpus.jsonl      one record per page: path, size, marks, provenance, tier
+    classes.json      per class: instances, distinct_from, caveats, audit state
+    queries/          one query crop per box-located class
+    build_report.json counts, survival curve, tier cutoffs, rejections, warnings
+
+The strata (anchor / haystack / synth) live in one manifest with **nested
+tiers**, so ``fullmarks_s`` and ``fullmarks_l`` share class ids and a result on
+one is comparable to a result on the other.
+
+Read ``README.md`` before changing the contamination rules; they are the part of
+this script that is easy to "simplify" and expensive to get wrong.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, Iterable, Optional, Sequence
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import fullmarks_config as cfg  # noqa: E402
+from sources import _common  # noqa: E402
+from sources._common import Page  # noqa: E402
+
+ALL_SOURCES = ("spods", "staver", "tobacco800", "ucsf", "synth")
+
+#: Mark kinds that may become query classes.  Signatures are excluded on
+#: purpose: a handwritten signature is a different mark every time it is made,
+#: so it is not an instance in the sense structural search means.  They stay in
+#: the manifest as a documented negative control.
+QUERYABLE_KINDS = ("logo", "stamp")
+
+
+# --------------------------------------------------------------------------
+# Class inventory
+# --------------------------------------------------------------------------
+
+
+def class_inventory(pages: Sequence[Page]) -> dict[str, list[tuple[int, int]]]:
+    """``{class_id: [(page index, mark index), ...]}`` over every labelled mark."""
+    inv: dict[str, list[tuple[int, int]]] = defaultdict(list)
+    for pi, page in enumerate(pages):
+        for mi, mark in enumerate(page.marks):
+            if mark.class_id:
+                inv[mark.class_id].append((pi, mi))
+    return dict(inv)
+
+
+def survival_curve(inventory: dict[str, list[tuple[int, int]]], thresholds: Iterable[int]) -> dict[int, int]:
+    """How many classes survive each ``min-instances`` bar.
+
+    Printed on every build because the bar is the single most consequential
+    knob in the corpus and the right value is a property of the data, not a
+    preference.  Tobacco800's published protocol uses >=2, which cannot support
+    a train-and-search eval at all.
+    """
+    sizes = [len(v) for v in inventory.values()]
+    return {t: sum(1 for s in sizes if s >= t) for t in thresholds}
+
+
+def admit_classes(
+    pages: Sequence[Page],
+    inventory: dict[str, list[tuple[int, int]]],
+    *,
+    min_instances: int,
+    min_mark_px: int,
+    roster: Optional[Any] = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """Split the inventory into candidate classes and rejects-with-reasons.
+
+    Two modes, and the difference is what the corpus is *for*:
+
+    * **With a roster** — only the named classes are admitted, and the numeric
+      bars are advisory.  This is the mode an eval runs in: a small hand-picked
+      set whose every instance a person has adjudicated, which is the only kind
+      of ground truth worth quoting.  A roster class that fails a bar is still
+      admitted and the reason is recorded on it, because the human who chose it
+      knows something the threshold does not.
+    * **Without one** — everything clearing both bars is admitted, as the
+      candidate pool ``shortlist.py`` ranks for roster selection.  These are
+      proposals, not ground truth.
+
+    The bars themselves: instance count, because a class you cannot both query
+    and retrieve from is not measurable; and mark size, because the 2026-07-13
+    study found a hard floor near 32 px below which no structural pipeline
+    recovers anything, so a sub-floor class measures the floor rather than the
+    method.
+    """
+    admitted: dict[str, dict[str, Any]] = {}
+    rejected: dict[str, str] = {}
+
+    for class_id, refs in sorted(inventory.items()):
+        on_roster = roster is not None and class_id in roster
+        if roster is not None and not on_roster:
+            rejected[class_id] = "not on the roster"
+            continue
+
+        marks = [pages[pi].marks[mi] for pi, mi in refs]
+        kinds = {m.kind for m in marks}
+        caveats: list[str] = []
+
+        if not kinds & set(QUERYABLE_KINDS):
+            rejected[class_id] = f"kind {sorted(kinds)} is not queryable"
+            continue
+        bar = min_instances if min_instances is not None else cfg.min_instances_for(class_id.split("/", 1)[0])
+        if len(refs) < bar:
+            note = f"{len(refs)} instance(s) < min_instances={bar}"
+            if not on_roster:
+                rejected[class_id] = note
+                continue
+            caveats.append(note)
+
+        boxed = [m for m in marks if m.area() > 0]
+        provenances = {m.provenance for m in marks}
+        # A band class is located by a coarse top-of-page strip rather than a
+        # real mark box, so its pixel size describes the strip and says nothing
+        # about the mark.  Applying the size floor to it would compare the
+        # wrong number against the wrong threshold.
+        banded = provenances == {"clustered_band"}
+        median_px: Optional[int] = None
+        if not boxed:
+            rejected[class_id] = "no located instances"
+            continue
+        sides = sorted(m.longest_side() for m in boxed)
+        median_px = sides[len(sides) // 2]
+        if not banded and median_px < min_mark_px:
+            note = f"median mark {median_px}px < min_mark_px={min_mark_px}"
+            if not on_roster:
+                rejected[class_id] = note
+                continue
+            caveats.append(note)
+
+        source = class_id.split("/", 1)[0]
+        admitted[class_id] = {
+            "class_id": class_id,
+            "source": source,
+            "kind": sorted(kinds)[0],
+            "n_instances": len(refs),
+            "median_mark_px": None if banded else median_px,
+            "located_by": "band" if banded else "box",
+            "provenance": sorted(provenances),
+            "page_ids": sorted(pages[pi].page_id for pi, _ in refs),
+            "eligible_distractor_sources": sorted(s for s in ALL_SOURCES if cfg.eligible_distractor(source, s)),
+            # Adjudicated "this is a different mark" partners, filled by the
+            # audit.  The corpus stores both directions of the ground truth:
+            # a shared class id says what must be found together, and this says
+            # what must be told apart.
+            "distinct_from": [],
+            "on_roster": on_roster,
+            # Bars this class fails but a human kept it anyway.  Recorded rather
+            # than silently waived: the roster overrides the threshold, and the
+            # override should be visible in the artifact.
+            "caveats": caveats,
+            # Filled by the human passes; see make_audit_slate.py.
+            "audit": {
+                "distinctive": None,
+                "cluster_ok": None,
+                # Per-instance membership verification: every page id checked in
+                # or out by hand.  Until this is done the class is a proposal.
+                "membership_verified": False,
+                "rejected_page_ids": [],
+                # WHO looked, and when.  `membership_verified` is a boolean and
+                # the corpus's whole claim rests on what stands behind it --
+                # "checked by the person who owns this benchmark" and "checked
+                # by whoever ran the script" are different standards of
+                # evidence, and a boolean cannot tell them apart.  Stamped by
+                # `audit_to_corrections.py --reviewer`.
+                "reviewed_by": None,
+                "reviewed_on": None,
+                "notes": "",
+            },
+        }
+    return admitted, rejected
+
+
+# --------------------------------------------------------------------------
+# Tiers
+# --------------------------------------------------------------------------
+
+
+def assign_tiers(
+    pages: Sequence[Page],
+    admitted: dict[str, dict[str, Any]],
+    *,
+    tiers: dict[str, int],
+    tier_order: Sequence[str],
+    salt: str,
+    pinned_cutoffs: Optional[dict[str, float]] = None,
+) -> tuple[dict[str, str], dict[str, float]]:
+    """``({page_id: smallest tier containing it}, {tier: rank cutoff})``.
+
+    Pages carrying an admitted class are in every tier: a tier that keeps 3 of a
+    class's 30 instances does not measure that class more cheaply, it measures a
+    different and much harder problem.  Distractors get a stable hash rank in
+    ``[0, 1)`` and tiers are prefixes of that order, so ``s`` is always a subset
+    of ``m`` is always a subset of ``l``.
+
+    Two different stability promises are on offer here, and they genuinely
+    conflict — you cannot both hit an exact page budget and keep membership
+    fixed when the source pool changes size:
+
+    * **Within a build** (the default): tiers hit their budgets exactly and are
+      nested.  This is what makes "run it on ``s`` first, then on ``l``" work
+      without a rebuild.
+    * **Across builds** (``pinned_cutoffs``): tier membership is defined by an
+      absolute rank threshold carried over from an earlier build, so adding
+      pages to the source pool cannot evict a page from a tier it was already
+      in.  Budgets then drift with the pool, which is the price.
+
+    Every build records the cutoffs it used in ``build_report.json``; pass them
+    back with ``--pin-tiers`` when a later build must stay comparable to an
+    earlier one.  Without that, a build over a different page set is a new
+    corpus version and should be named as one.
+    """
+    positive_pages: set[str] = set()
+    for meta in admitted.values():
+        positive_pages.update(meta["page_ids"])
+
+    # Anchor pages are in every tier whatever the budget says.  They are the
+    # corpus's known negatives -- same scanner, same paper, same era, checked --
+    # and README calls them the hardest negative a class can be scored against.
+    # The 2026-09-01 build dropped 129 of them over the tier budget to make room
+    # for UCSF distractors, which spends the hardest negatives to buy the
+    # easiest.  There are only ~2,650, so they fit even in `s`.
+    positive_pages.update(p.page_id for p in pages if p.source in cfg.ANCHOR_SOURCES)
+
+    ranked = sorted(
+        ((_common.stable_rank(p.page_id, salt), p.page_id) for p in pages if p.page_id not in positive_pages),
+    )
+
+    out: dict[str, str] = {pid: tier_order[0] for pid in positive_pages}
+    cutoffs: dict[str, float] = {}
+    n_positive = len(positive_pages)
+
+    for tier in tier_order:
+        if pinned_cutoffs and tier in pinned_cutoffs:
+            cutoff = pinned_cutoffs[tier]
+            selected = [pid for rank, pid in ranked if rank < cutoff]
+        else:
+            budget = max(0, tiers[tier] - n_positive)
+            selected = [pid for _rank, pid in ranked[:budget]]
+            # The cutoff sits just past the last selected rank, so replaying it
+            # on this same pool reproduces this same selection exactly.
+            cutoff = ranked[budget - 1][0] + 1e-12 if 0 < budget <= len(ranked) else 1.0
+        cutoffs[tier] = cutoff
+        for pid in selected:
+            out.setdefault(pid, tier)
+
+    # Anything past the largest tier is excluded from the corpus entirely.
+    return out, cutoffs
+
+
+class TierStabilityError(ValueError):
+    """A build would silently re-tier a corpus that already exists."""
+
+
+def tier_provenance(out: Path, *, pin_tiers: Optional[Path], new_version: bool) -> dict[str, Any]:
+    """Decide, before any work starts, which tier promise this build makes.
+
+    ``assign_tiers`` offers two promises and says which one to pick; nothing used
+    to make anyone pick.  Pointed at an ``--out`` that already holds a finished
+    build, an unpinned build recomputes the cutoffs from the new page set, pages
+    move between ``s`` / ``m`` / ``l``, and every cell and number measured on the
+    old tiers stops being comparable to the new ones -- with nothing reporting
+    it (#3903).  Pinning was advice in the runbook, and advice is what a
+    rebuild three weeks later does not read.
+
+    So a build into an existing corpus has to say which it is:
+
+    * ``--pin-tiers <build_report.json>`` -- the same corpus, grown or rebuilt;
+      tier membership is held by the recorded cutoffs.
+    * ``--new-version`` -- a new, incomparable corpus version.  The cutoffs it
+      supersedes are recorded in the new report, so the break is on disk rather
+      than in someone's memory.
+
+    Refused (``TierStabilityError``) rather than warned, and *before* the pull:
+    a warning at the end of a multi-day build is read after the manifest the
+    cells are keyed on has already been replaced.  A ``--pin-tiers`` report that
+    carries no cutoffs is refused here too, instead of after clustering.
+
+    Returns what ``build_report.json`` records under ``tier_provenance``;
+    ``pinned_cutoffs`` is what ``assign_tiers`` is handed.
+    """
+    if pin_tiers is not None and new_version:
+        raise TierStabilityError(
+            "--pin-tiers and --new-version contradict each other: pinning keeps this build "
+            "comparable to an earlier one, --new-version declares that it is not"
+        )
+
+    pinned: Optional[dict[str, float]] = None
+    if pin_tiers is not None:
+        try:
+            pinned = json.loads(Path(pin_tiers).read_text(encoding="utf-8")).get("tier_cutoffs")
+        except (OSError, ValueError) as exc:
+            raise TierStabilityError(f"--pin-tiers {pin_tiers}: cannot read it ({exc})") from exc
+        if not pinned:
+            raise TierStabilityError(f"--pin-tiers {pin_tiers}: no tier_cutoffs recorded in it")
+
+    existing = Path(out) / "build_report.json"
+    superseded: Optional[dict[str, float]] = None
+    if existing.exists():
+        try:
+            superseded = json.loads(existing.read_text(encoding="utf-8")).get("tier_cutoffs")
+        except (OSError, ValueError):
+            # Unreadable is not "no corpus here": a report exists, so something
+            # was built, and guessing that nothing depends on it is the bet
+            # this guard exists not to make.
+            superseded = {}
+        if superseded is not None and pin_tiers is None and not new_version:
+            raise TierStabilityError(
+                f"{existing} already records a finished build, and this build would re-tier it: "
+                "pages would move between tiers and every cell built on the old tiers would stop "
+                f"being comparable. Pass --pin-tiers {existing} to keep the tiers, or --new-version "
+                "to declare a new, incomparable corpus version."
+            )
+
+    return {
+        "pinned_from": str(pin_tiers) if pin_tiers is not None else None,
+        "pinned_cutoffs": pinned,
+        "new_version": bool(new_version),
+        "superseded_cutoffs": superseded if new_version else None,
+    }
+
+
+# --------------------------------------------------------------------------
+# Query crops
+# --------------------------------------------------------------------------
+
+
+def write_query_crops(
+    pages: Sequence[Page],
+    inventory: dict[str, list[tuple[int, int]]],
+    admitted: dict[str, dict[str, Any]],
+    out_dir: Path,
+    *,
+    backend: str = "phash",
+    threshold: Optional[float] = None,
+    spread: float = cfg.QUERY_CORE_SPREAD,
+    min_reach_frac: float = cfg.QUERY_CROP_MIN_REACH_FRAC,
+) -> tuple[list[str], list[str]]:
+    """One query crop per admitted class: its largest boxed instance *of that class*.
+
+    Largest, because the prior study measured a 2.2x AP advantage for a clean
+    canonical query over a crop of a small in-scene instance — the query is the
+    one place where more pixels are free.
+
+    Largest **among the class's core**, because nothing else checks that the
+    exemplar is a member of the class in any sense but the clustering's own say
+    so.  `spods/stamp_00489_1` is the case (#3599): it holds three different
+    rubber stamps, 22 instances of one and 2 of another, and its largest box is
+    a third that appears nowhere else in it — so the eval would have searched
+    the whole class with a crop of `://NOT-DELIVERED//:`, and every resulting
+    zero would have looked like a detector failure.  The core is the class's
+    medoid plus the instances that are not outliers against the class's own
+    spread; see :func:`cluster_marks.medoid_core` for why the comparison is
+    within the class rather than against a fixed distance.
+
+    Neither half of the choice is made silently.  A crop that is not the class's
+    largest instance says which larger ones it passed over, and a crop that
+    *reaches* less than *min_reach_frac* of its class — counted at the merge
+    threshold this corpus already calls "one mark", `threshold` or the source's
+    own — says so: that is a class with no dominant mark, where medoid and
+    majority stop meaning the same thing and no rule can pick the right
+    exemplar.  Both are warnings and neither is a refusal; the crop is still
+    written, because a class with no crop drops out of the eval rather than
+    failing it.
+
+    Weak-label classes have no box and therefore get no crop; they are returned
+    as the list of classes still owing a hand-drawn query.  Returns
+    ``(needs_hand_crop, warnings)``.
+    """
+    from PIL import Image
+
+    from cluster_marks import MarkRef, describe_marks, distance_matrix, medoid_core
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    needs_hand_crop: list[str] = []
+    warnings: list[str] = []
+
+    for class_id, meta in sorted(admitted.items()):
+        # A band class is located by a top-of-page strip, not by the mark. Auto-
+        # cropping the strip would hand the query a banner of letterhead plus
+        # address plus rule line and call it a logo, which is worse than having
+        # no crop: it looks like ground truth.
+        if meta.get("located_by") == "band":
+            needs_hand_crop.append(class_id)
+            continue
+        refs = inventory[class_id]
+        boxed = [(pi, mi) for pi, mi in refs if pages[pi].marks[mi].area() > 0]
+        if not boxed:
+            needs_hand_crop.append(class_id)
+            continue
+
+        mark_refs = [
+            MarkRef(pi, mi, pages[pi].page_id, pages[pi].marks[mi].kind, pages[pi].marks[mi].box) for pi, mi in boxed
+        ]
+        desc = describe_marks(pages, mark_refs, backend=backend)
+        dist = distance_matrix(desc, mark_refs, backend=backend)
+        _medoid, core = medoid_core(dist, spread=spread)
+        core_set = set(core)
+
+        # Largest first, ties broken by the lower row, so the choice is a pure
+        # function of the corpus rather than of inventory order.
+        areas = [pages[pi].marks[mi].area() for pi, mi in boxed]
+        row = max(core, key=lambda r: (areas[r], -r))
+        pi, mi = boxed[row]
+        skipped = sum(1 for r, area in enumerate(areas) if area > areas[row] and r not in core_set)
+        if skipped:
+            warnings.append(
+                f"{class_id}: query crop is not the class's largest instance — {skipped} larger "
+                "box(es) sit outside the class's own core and were passed over"
+            )
+
+        merge_at = threshold if threshold is not None else cfg.cluster_threshold_for(meta["source"])
+        reach = int((dist[row] <= merge_at).sum())
+        if reach < min_reach_frac * len(boxed):
+            warnings.append(
+                f"{class_id}: the query crop is within {merge_at:.3f} of only {reach}/{len(boxed)} "
+                "instance(s) — the class has no dominant mark; adjudicate it with --task cluster "
+                "before quoting its numbers"
+            )
+
+        mark = pages[pi].marks[mi]
+        x, y, w, h = mark.box
+        dest = out_dir / f"{class_id.replace('/', '__')}.png"
+        # Written every time, never skipped when the file is already there: the
+        # crop on disk may have been chosen by an earlier rule (or from an
+        # earlier clustering of this class), and a stale exemplar nobody rewrote
+        # is precisely the defect this function exists to avoid.
+        with Image.open(pages[pi].path) as im:
+            _common.save_verified(im.convert("RGB").crop((x, y, x + w, y + h)), dest)
+        meta["query_crop"] = str(dest)
+        meta["query_page_id"] = pages[pi].page_id
+        # What the choice was made out of, so classes.json carries the evidence
+        # rather than only the verdict.
+        meta["query_core"] = {
+            "n_boxed": len(boxed),
+            "n_core": len(core),
+            "larger_instances_skipped": skipped,
+            "reach": reach,
+            "reach_at": round(float(merge_at), 4),
+            "descriptor": backend,
+        }
+    return needs_hand_crop, warnings
+
+
+# --------------------------------------------------------------------------
+# Source loading
+# --------------------------------------------------------------------------
+
+
+def load_anchor_sources(
+    selected: Sequence[str],
+    raw: Path,
+    *,
+    limit: Optional[int],
+    warnings: list[str],
+) -> list[Page]:
+    """Fetch and parse the real-ground-truth sources."""
+    pages: list[Page] = []
+
+    if "spods" in selected:
+        from sources import spods
+
+        unpacked = spods.fetch(raw)
+        got, warns = spods.build_pages(
+            unpacked,
+            min_area_frac=cfg.MIN_MARK_AREA_FRAC,
+            max_area_frac=cfg.MAX_MARK_AREA_FRAC,
+            limit=limit,
+        )
+        pages.extend(got)
+        warnings.extend(warns)
+
+    if "staver" in selected:
+        from sources import staver
+
+        unpacked = staver.fetch(raw)
+        got, warns = staver.build_pages(
+            unpacked,
+            min_area_frac=cfg.MIN_MARK_AREA_FRAC,
+            max_area_frac=cfg.MAX_MARK_AREA_FRAC,
+            limit=limit,
+        )
+        pages.extend(got)
+        warnings.extend(warns)
+
+    if "tobacco800" in selected:
+        from sources import tobacco800
+
+        unpacked = tobacco800.fetch(raw)
+        got, warns = tobacco800.build_pages(unpacked, limit=limit)
+        pages.extend(got)
+        warnings.extend(warns)
+
+    return pages
+
+
+#: Live 1-page document counts per industry, measured 2026-09-01.  Used only to
+#: ORDER and SIZE the pull; the real counts still come from Solr, and a shortfall
+#: is reported rather than assumed away.
+UCSF_INDUSTRY_CAPACITY: dict[str, int] = {
+    "Tobacco": 9_410_129,
+    "Opioids": 4_070_287,
+    "Food": 71_673,
+    "Chemical": 3_657,
+    "Drug": 1_064,
+    "Fossil Fuel": 311,
+}
+
+
+def _plan_distractor_pull(budget: int) -> list[tuple[str, int]]:
+    """How many distractors to ask each industry for, in pull order.
+
+    Small industries are drained first because they cannot absorb a large share
+    anyway, then Opioids and Food, and Tobacco LAST -- it is the only industry
+    whose pages cost something, being the same archive as Tobacco800.
+    """
+    order = ["Fossil Fuel", "Drug", "Chemical", "Food", "Opioids", "Tobacco"]
+    plan: list[tuple[str, int]] = []
+    left = budget
+    for industry in order:
+        if left <= 0:
+            break
+        take = min(left, UCSF_INDUSTRY_CAPACITY.get(industry, 0))
+        plan.append((industry, take))
+        left -= take
+    return plan
+
+
+def load_ucsf(
+    raw: Path,
+    out_images: Path,
+    *,
+    distractor_budget: int,
+    letterhead_per_author: int,
+    band_frac: float,
+    warnings: list[str],
+) -> list[Page]:
+    """Pull the haystack, plus letterhead *candidate* pages.
+
+    Candidates are not classes.  They are pages an author query says are likely
+    to carry a company letterhead, carrying a coarse top-of-page band so the
+    mark can be clustered and adjudicated like any other.
+    """
+    import time
+
+    from sources import ucsf
+
+    started = time.monotonic()
+    cpu_started = time.process_time()
+    failures: list[str] = []
+
+    def note(doc_id: str, exc: Exception) -> None:
+        failures.append(f"{doc_id}: {type(exc).__name__}")
+
+    pages: list[Page] = []
+
+    for author in cfg.UCSF_LETTERHEAD_AUTHORS:
+        if letterhead_per_author <= 0:
+            break
+        query = ucsf.build_query(author=author, doc_type="letter", max_pages=1)
+        docs = list(ucsf.solr_docs(query, limit=letterhead_per_author))
+        if not docs:
+            warnings.append(f"ucsf: author {author!r} returned no documents")
+            continue
+        pages.extend(
+            ucsf.fetch_and_render(
+                docs,
+                raw,
+                out_images / "ucsf",
+                letterhead_author=author,
+                band_frac=band_frac,
+                on_error=note,
+                # Every name in UCSF_LETTERHEAD_AUTHORS is a tobacco company, so
+                # a page pulled for one is a Tobacco page even though it was
+                # found by an author query rather than an industry one.  Saying
+                # so keeps these 15k pages inside the Tobacco800 exclusion.
+                industry="Tobacco",
+            )
+        )
+
+    # WATER-FILL, not an even split.  The six industries are wildly unequal --
+    # measured live 2026-09-01: Tobacco 9,410,129 and Opioids 4,070,287 against
+    # Fossil Fuel 311, Drug 1,064, Chemical 3,657 -- so an even share of
+    # `budget/6` asks three of them for ~30k pages that do not exist.  At a 200k
+    # budget the even split can only ever deliver 105,031, and the 2026-08-31
+    # build duly stopped at 119,806 pages looking like a job that had finished.
+    #
+    # The order matters as much as the filling.  An industry is not a property
+    # of the eval -- "find this logo" does not care whether the page it is not
+    # on came from a tobacco firm or a drug firm -- so the mix is free to be
+    # whatever fills the budget, with ONE exception: UCSF's Tobacco industry is
+    # the same archive as Tobacco800, so every Tobacco page added is a page
+    # subtracted from what Tobacco800's classes can safely be scored against.
+    # Draw from the cheap industries first and Tobacco only if the budget still
+    # needs it.
+    per_industry = _plan_distractor_pull(distractor_budget)
+    for industry, want in per_industry:
+        if want <= 0:
+            continue
+        query = ucsf.build_query(industry=industry, doc_type=None, max_pages=1)
+        docs = list(ucsf.solr_docs(query, limit=want))
+        if len(docs) < want:
+            warnings.append(f"ucsf: industry {industry!r} yielded {len(docs):,} of {want:,} requested")
+        pages.extend(ucsf.fetch_and_render(docs, raw, out_images / "ucsf", on_error=note, industry=industry))
+
+    if failures:
+        warnings.append(f"ucsf: skipped {len(failures)} document(s) that failed to download or render")
+
+    # SAY HOW FAST THIS WENT.  A pull that is 2.5x slower than it needs to be
+    # raises no error and fails no cell -- it produces a correct corpus, later --
+    # so the only symptom is an ETA, and an ETA reads as the cost of the work
+    # rather than as a number with a cause.  #3343 ran two days at a third of the
+    # achievable rate on exactly that basis.  Printing the rate and the CPU share
+    # makes "we are waiting on the network with idle cores" a line in the log.
+    elapsed = time.monotonic() - started
+    if elapsed > 0 and pages:
+        cpu = time.process_time() - cpu_started
+        print(
+            f"  ucsf pull: {len(pages):,} page(s) in {elapsed / 3600:.2f} h "
+            f"= {len(pages) / elapsed:.2f} pages/s, {100 * cpu / elapsed:.0f}% CPU"
+        )
+    return pages
+
+
+# --------------------------------------------------------------------------
+# Probe
+# --------------------------------------------------------------------------
+
+
+def _reclaim_probe_dirs(raw: Path) -> tuple[int, int]:
+    """Delete the ``_probe_*`` staging dirs an older probe left behind.
+
+    The probe used to reach Kaggle by *downloading* into ``raw/_probe_<source>``
+    — ~2 GB that the real build then fetched again into ``raw/<source>``, and
+    that nothing ever read or reclaimed.  The probe no longer writes them; this
+    sweeps up after the versions that did.  Returns ``(dirs, bytes)`` removed.
+    """
+    import shutil
+
+    dirs = bytes_freed = 0
+    for stale in sorted(raw.glob("_probe_*")) if raw.is_dir() else []:
+        if not stale.is_dir():
+            continue
+        bytes_freed += sum(f.stat().st_size for f in stale.rglob("*") if f.is_file())
+        shutil.rmtree(stale, ignore_errors=True)
+        dirs += 1
+    return dirs, bytes_freed
+
+
+def probe(raw: Path) -> int:
+    """Report what each source can currently be reached and unpacked from.
+
+    Run this before a grid job.  Every source here has a different failure mode
+    — a decommissioned hostname, a missing Kaggle token, an absent RAR extractor
+    — and finding out which one applies costs seconds now and an overnight queue
+    slot later.
+
+    **The probe fetches nothing.**  Every check here is a metadata call: a
+    ``HEAD`` for SPODS, a file listing for the Kaggle mirrors, a result count for
+    UCSF.  That is the whole point of it — a check you can ask repeatedly on a
+    login node, for free.  If you add a source, probe it the same way; an early
+    version reached Kaggle by downloading the bundle, which made the "seconds
+    now" advice above a lie worth ~2 GB of transfer (issue #3356).
+    """
+    import requests
+
+    from sources import spods, staver, tobacco800, ucsf
+
+    ok = True
+    print("FullMarks source probe\n")
+
+    try:
+        head = requests.head(spods.SPODS_URL, timeout=30, allow_redirects=True)
+        size = int(head.headers.get("content-length", 0))
+        status = "OK" if head.status_code == 200 else f"HTTP {head.status_code}"
+        print(f"  spods       {status:<12} {size / 1e9:.2f} GB  {spods.SPODS_URL}")
+        ok &= head.status_code == 200
+    except Exception as exc:  # noqa: BLE001 - a probe reports, it does not raise
+        print(f"  spods       UNREACHABLE  {type(exc).__name__}: {exc}")
+        ok = False
+
+    for name, slug in (("staver", staver.KAGGLE_SLUG), ("tobacco800", tobacco800.KAGGLE_SLUG)):
+        try:
+            _common.kaggle_probe(slug)
+            print(f"  {name:<11} OK           kaggle:{slug}")
+        except _common.FetchError as exc:
+            print(f"  {name:<11} BLOCKED      {exc}")
+            ok = False
+
+    try:
+        n = ucsf.count(ucsf.build_query(industry="Tobacco", doc_type="letter", max_pages=1))
+        print(f"  ucsf        OK           {n:,} single-page tobacco letters")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ucsf        UNREACHABLE  {type(exc).__name__}: {exc}")
+        ok = False
+
+    print("\n  rar extractor:", end=" ")
+    import shutil
+
+    found = [t for t in ("bsdtar", "7z", "unar", "unrar") if shutil.which(t)]
+    print(", ".join(found) if found else "NONE FOUND (needed for SPODS)")
+    ok &= bool(found)
+
+    stale_dirs, stale_bytes = _reclaim_probe_dirs(raw)
+    if stale_dirs:
+        print(f"  reclaimed:     {stale_dirs} stale _probe_* dir(s), {stale_bytes / 1e9:.2f} GB")
+
+    print("\n" + ("probe passed" if ok else "probe FAILED — see above"))
+    return 0 if ok else 1
+
+
+# --------------------------------------------------------------------------
+# Driver
+# --------------------------------------------------------------------------
+
+
+def scan(corpus: Path, tiers: Optional[set[str]] = None) -> int:
+    """Check every page in the manifest still decodes.  Returns an exit code.
+
+    The companion to :func:`sources._common.save_verified`: that one stops a
+    short write from ever being published under its real name, this one finds
+    the pages already on disk from before it existed.
+
+    Strict decoding is the whole mechanism.  With ``LOAD_TRUNCATED_IMAGES`` left
+    on, a truncated PNG loads to the right size with the missing rows filled in
+    -- so the scan would pass on exactly the file it is looking for.  The one
+    known offender, ``ucsf/qkmg0227#0``, was 49% image and 51% black filler and
+    read back as a perfectly ordinary page under a permissive decode.
+    """
+    from PIL import Image, ImageFile  # noqa: PLC0415
+
+    manifest = corpus / "corpus.jsonl"
+    if not manifest.exists():
+        print(f"no manifest at {manifest}")
+        return 1
+
+    previous = ImageFile.LOAD_TRUNCATED_IMAGES
+    ImageFile.LOAD_TRUNCATED_IMAGES = False
+    bad: list[tuple[str, str, str]] = []
+    checked = 0
+    try:
+        for page in _common.read_manifest(manifest):
+            if tiers and page.meta.get("tier") not in tiers:
+                continue
+            checked += 1
+            path = Path(page.path)
+            try:
+                with Image.open(path) as im:
+                    im.load()
+            except Exception as exc:  # noqa: BLE001 - a scan reports, never raises
+                size = path.stat().st_size if path.exists() else -1
+                bad.append((page.page_id, str(path), f"{type(exc).__name__}: {exc} ({size} bytes)"))
+    finally:
+        ImageFile.LOAD_TRUNCATED_IMAGES = previous
+
+    print(f"checked {checked} page(s); {len(bad)} undecodable")
+    for page_id, path_str, why in bad:
+        print(f"  {page_id} {path_str} -- {why}")
+    return 1 if bad else 0
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument(
+        "--sources", default=",".join(ALL_SOURCES), help="comma-separated subset of " + ",".join(ALL_SOURCES)
+    )
+    ap.add_argument("--raw", type=Path, default=cfg.RAW)
+    ap.add_argument("--out", type=Path, default=cfg.OUT)
+    ap.add_argument("--limit", type=int, default=None, help="cap pages per anchor source (smoke builds)")
+    ap.add_argument(
+        "--roster",
+        type=Path,
+        default=None,
+        help="roster.json naming the hand-picked classes; without it every class clearing the bars is a candidate",
+    )
+    ap.add_argument("--min-instances", type=int, default=None, help="override the per-source bar for every source")
+    ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
+    ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
+    ap.add_argument(
+        "--cluster-threshold", type=float, default=None, help="override the per-source threshold for every source"
+    )
+    ap.add_argument("--ucsf-distractors", type=int, default=0, help="total UCSF distractor pages to pull")
+    ap.add_argument(
+        "--ucsf-letterhead-per-author",
+        type=int,
+        default=0,
+        help="pages per author to pull as letterhead candidates (0 = distractors only)",
+    )
+    ap.add_argument(
+        "--letterhead-band-frac",
+        type=float,
+        default=cfg.LETTERHEAD_BAND_FRAC,
+        help="fraction of page height treated as the letterhead band on UCSF candidates",
+    )
+    ap.add_argument("--synth-per-class", type=int, default=cfg.SYNTH_INSTANCES_PER_CLASS)
+    ap.add_argument("--synth-pool-dir", type=Path, default=None, help="local artwork dir (else LogoDet-3K via Kaggle)")
+    ap.add_argument("--synth-max-classes", type=int, default=200)
+    ap.add_argument(
+        "--pin-tiers",
+        type=Path,
+        default=None,
+        help="an earlier build_report.json; reuse its tier cutoffs so this build stays comparable to it",
+    )
+    ap.add_argument(
+        "--new-version",
+        action="store_true",
+        help="--out already holds a build and this one is a new, incomparable corpus version (see --pin-tiers)",
+    )
+    ap.add_argument(
+        "--probe",
+        action="store_true",
+        help="metadata-only reachability check for every source (downloads nothing), then exit",
+    )
+    ap.add_argument("--survival", action="store_true", help="print the class survival curve and exit")
+    ap.add_argument(
+        "--scan",
+        action="store_true",
+        help="check every page in the manifest still decodes, then exit",
+    )
+    ap.add_argument(
+        "--scan-tiers",
+        default="",
+        help="restrict --scan to these tiers (comma-separated; default every page)",
+    )
+    args = ap.parse_args(argv)
+
+    if args.probe:
+        return probe(args.raw)
+
+    if args.scan:
+        return scan(args.out, {t.strip() for t in args.scan_tiers.split(",") if t.strip()} or None)
+
+    selected = [s.strip() for s in args.sources.split(",") if s.strip()]
+    unknown = set(selected) - set(ALL_SOURCES)
+    if unknown:
+        ap.error(f"unknown source(s): {sorted(unknown)}")
+
+    try:
+        provenance = tier_provenance(args.out, pin_tiers=args.pin_tiers, new_version=args.new_version)
+    except TierStabilityError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    images_dir = args.out / "images"
+    warnings: list[str] = []
+
+    pages = load_anchor_sources(selected, args.raw, limit=args.limit, warnings=warnings)
+    print(f"anchor sources: {len(pages)} page(s)")
+
+    if "ucsf" in selected and (args.ucsf_distractors or args.ucsf_letterhead_per_author):
+        ucsf_pages = load_ucsf(
+            args.raw,
+            images_dir,
+            distractor_budget=args.ucsf_distractors,
+            letterhead_per_author=args.ucsf_letterhead_per_author,
+            band_frac=args.letterhead_band_frac,
+            warnings=warnings,
+        )
+        pages.extend(ucsf_pages)
+        print(f"ucsf: {len(ucsf_pages)} page(s)")
+
+    # Identity clustering, for every source that ships location without
+    # identity AND whose marks a descriptor can actually tell apart.
+    #
+    # UCSF was in this list and is not any more (#3343).  The intent was right --
+    # its `author` metadata is a candidate pool, not a class, so the bands should
+    # be adjudicated rather than trusted -- but clustering a fixed top-of-page
+    # strip proposes noise for a human to adjudicate, not candidates.  See
+    # cfg.CLUSTERED_SOURCES for the sweep that says so.  Its pages stay as
+    # distractors and its bands keep `class_id=None` for the `letterhead` pass.
+    #
+    # Tobacco800 is in it for a subtler reason (#3343).  It ships identity for
+    # its SIGNATURES -- GEDI carries an author id on those zones -- and none at
+    # all for its LOGOS, which is the half of the source this corpus exists to
+    # use.  Reading "Tobacco800 has ground-truth identities" as a fact about the
+    # whole source left its 432 logo marks unclustered and therefore classless,
+    # so the one source with a published logo protocol contributed 1,290 pages
+    # of distractors and zero eval classes, while its 130 signature classes were
+    # rejected as unqueryable.  Nothing warned: an absent class is not an error.
+    # `collect_refs` already takes only `class_id is None` marks of the queryable
+    # kinds, so listing the source here clusters the logos and cannot disturb a
+    # signature identity.
+    # Hand-added marks (the completeness pass, #3927) before clustering: they
+    # are real marks the sources never boxed, and the must-links that bind them
+    # to a class name them by index, so they must be on the page -- unclassed,
+    # in store order -- when those links are replayed.
+    from completeness import ADDED_MARKS, load_added_marks, replay_added_marks
+
+    replayed = replay_added_marks(pages, load_added_marks(args.out / ADDED_MARKS), warnings)
+    if replayed:
+        print(f"replayed {replayed} hand-added mark(s) from {ADDED_MARKS}")
+    # Hand-tightened boxes (box_tighten.py) next: an override may name an added
+    # mark, and clustering and the query crops should see the reviewed box.
+    # Replaced in place, so the mark indices the adjudications name hold.
+    from box_tighten import STORE as BOX_OVERRIDES, load_store as load_box_overrides, replay_box_overrides
+
+    tightened = replay_box_overrides(pages, load_box_overrides(args.out / BOX_OVERRIDES), warnings)
+    if tightened:
+        print(f"replayed {tightened} hand-tightened box(es) from {BOX_OVERRIDES}")
+
+    from cluster_marks import cluster_source, load_adjudications, write_cluster_report
+
+    same, different = load_adjudications(args.out / "adjudications.json")
+    if same or different:
+        print(f"\nhonouring {len(same)} hand-merged and {len(different)} hand-separated pair(s)")
+
+    summaries = []
+    for source in cfg.CLUSTERED_SOURCES:
+        if source not in selected:
+            continue
+        summary = cluster_source(
+            pages,
+            source,
+            backend=args.cluster_backend,
+            # Per source, not per corpus: a sweep over everything is dominated
+            # by whichever source has the most marks and reports its optimum as
+            # the corpus's.  0.10 suited SPODS, chained StaVer at 22%, and cost
+            # Tobacco800 two thirds of its usable classes.
+            threshold=(
+                args.cluster_threshold if args.cluster_threshold is not None else cfg.cluster_threshold_for(source)
+            ),
+            same=same,
+            different=different,
+            provenance="clustered_band" if source == "ucsf" else "clustered",
+        )
+        if not summary["marks"]:
+            continue
+        summaries.append(summary)
+        print(
+            f"  {source}: {summary['marks']} mark(s) -> {summary['classes']} candidate class(es) "
+            f"({summary.get('singletons', 0)} singleton) via {summary['backend']}"
+        )
+    if summaries:
+        write_cluster_report(summaries, args.out / "cluster_report.json")
+
+    inventory = class_inventory(pages)
+    curve = survival_curve(inventory, (2, 5, 10, 15, 20, 30, 50))
+    print("\nclass survival curve (min instances -> classes):")
+    for t, n in sorted(curve.items()):
+        marker = "  <- selected" if t == args.min_instances else ""
+        print(f"  >={t:<3} {n:>5}{marker}")
+
+    if args.survival:
+        return 0
+
+    # Synthesis last: it needs held-out backgrounds, which means it needs to know
+    # which pages already carry a real mark.
+    if "synth" in selected:
+        from synth_compose import build_synthetic_pages
+        from sources import artwork
+
+        # Every mark is localised ink someone could retrieve, so any of them
+        # disqualifies a page as a blank canvas.  The page-body text mask is
+        # deliberately *not* a mark (see sources/spods.py) — when it was, this
+        # line disqualified nearly every SPODS page for carrying a heading.
+        marked = {p.page_id for p in pages if p.marks}
+        backgrounds = [Path(p.path) for p in pages if p.page_id not in marked]
+        if not backgrounds:
+            warnings.append("synth: no unmarked pages available as backgrounds — skipped")
+        else:
+            if args.synth_pool_dir:
+                pool = artwork.load_pool_dir(args.synth_pool_dir, limit=args.synth_max_classes)
+            else:
+                root = artwork.fetch_logodet3k(args.raw)
+                pool = artwork.build_pool_from_logodet(
+                    root, args.raw / "artwork_pool", max_classes=args.synth_max_classes
+                )
+            synth_pages = build_synthetic_pages(
+                backgrounds,
+                pool,
+                images_dir / "synth",
+                instances_per_class=args.synth_per_class,
+                size_px=cfg.SYNTH_SIZE_PX,
+                rotation_deg=cfg.SYNTH_ROTATION_DEG,
+                seed=cfg.SYNTH_SEED,
+            )
+            used = {str(p) for page in synth_pages for p in [Path(page.meta["background"])]}
+            # Hold the backgrounds out: a page must not be both a synthetic
+            # canvas and a distractor scored against its own pasted mark.
+            pages = [p for p in pages if p.path not in used]
+            pages.extend(synth_pages)
+            print(f"synth: {len(synth_pages)} page(s) over {len(pool)} class(es); {len(used)} background(s) held out")
+            inventory = class_inventory(pages)
+
+    chosen = None
+    if args.roster:
+        import roster as _roster
+
+        chosen = _roster.load(args.roster)
+        print(f"\nroster {chosen.name!r}: {len(chosen)} class(es)")
+
+    admitted, rejected = admit_classes(
+        pages,
+        inventory,
+        min_instances=args.min_instances,
+        min_mark_px=args.min_mark_px,
+        roster=chosen,
+    )
+
+    # Reviewed negatives (#3921) live in their own store, like hand-added marks:
+    # this build regenerates every class's metadata, and the reviewed-only pool
+    # rule would otherwise silently lose every page a person rejected.
+    import roster as _reviewed  # noqa: PLC0415
+
+    _store = args.out / _reviewed.REVIEWED_NEGATIVES
+    attached = _reviewed.attach_reviewed_negatives(
+        admitted, _reviewed.load_reviewed_negatives(_store), _reviewed.load_reviewed_negatives(_store, "excluded")
+    )
+    if attached:
+        print(f"attached {attached} reviewed negative page(s) from {_reviewed.REVIEWED_NEGATIVES}")
+
+    if chosen is not None:
+        _present, missing = _roster.check(chosen, list(inventory))
+        if missing:
+            # A roster naming a class that no longer exists means the roster and
+            # the clustering have drifted apart — which would otherwise show up
+            # only as a quietly smaller eval.
+            warnings.append(f"roster names {len(missing)} class(es) absent from this build: {missing[:5]}")
+        caveated = {c: m["caveats"] for c, m in admitted.items() if m["caveats"]}
+        if caveated:
+            print(f"  {len(caveated)} roster class(es) kept despite a failed bar:")
+            for cid, notes in sorted(caveated.items()):
+                print(f"    {cid}: {'; '.join(notes)}")
+        print(f"admitted {len(admitted)} roster class(es)")
+    else:
+        print(f"\nadmitted {len(admitted)} candidate class(es); rejected {len(rejected)}")
+        print("  no roster given — these are proposals, not ground truth; rank them with shortlist.py")
+
+    needs_hand_crop, crop_warnings = write_query_crops(
+        pages,
+        inventory,
+        admitted,
+        args.out / "queries",
+        backend=args.cluster_backend,
+        threshold=args.cluster_threshold,
+    )
+    if needs_hand_crop:
+        print(f"  {len(needs_hand_crop)} weak-label class(es) need a hand-drawn query crop")
+    warnings.extend(crop_warnings)
+
+    # Hand-chosen extra query crops (query_crops.py) after the primaries, so a
+    # rebuild reproduces each class's `query_crops` list rather than dropping it.
+    from query_crops import STORE as QUERY_CROP_STORE, load_store as load_query_crops, materialise
+
+    extra = materialise(
+        admitted,
+        load_query_crops(args.out / QUERY_CROP_STORE),
+        {p.page_id: p for p in pages},
+        args.out / "queries",
+        warnings,
+    )
+    if extra:
+        print(f"  replayed {extra} hand-chosen extra query crop(s)")
+
+    # Read at the start by `tier_provenance`, not here: this file may be the
+    # very report this build is about to overwrite.
+    pinned = provenance["pinned_cutoffs"]
+    if pinned:
+        print(f"\npinning tier cutoffs from {args.pin_tiers}: {pinned}")
+
+    tier_of, tier_cutoffs = assign_tiers(
+        pages,
+        admitted,
+        tiers=cfg.TIERS,
+        tier_order=cfg.TIER_ORDER,
+        salt=cfg.TIER_SALT,
+        pinned_cutoffs=pinned,
+    )
+    kept = []
+    for page in pages:
+        tier = tier_of.get(page.page_id)
+        if tier is None:
+            continue
+        page.meta["tier"] = tier
+        kept.append(page)
+    dropped = len(pages) - len(kept)
+
+    n = _common.write_manifest(kept, args.out / "corpus.jsonl")
+    (args.out / "classes.json").write_text(json.dumps(admitted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    tier_counts = {t: sum(1 for p in kept if p.meta.get("tier") == t) for t in cfg.TIER_ORDER}
+    cumulative = {}
+    running = 0
+    for t in cfg.TIER_ORDER:
+        running += tier_counts[t]
+        cumulative[t] = running
+
+    report = {
+        "corpus_version": cfg.CORPUS_VERSION,
+        "pages_written": n,
+        "pages_dropped_over_budget": dropped,
+        "tier_counts": tier_counts,
+        "tier_cumulative": cumulative,
+        # Feed these back with --pin-tiers to keep a later, larger build's tier
+        # membership comparable to this one.
+        "tier_cutoffs": tier_cutoffs,
+        "tier_provenance": provenance,
+        "classes_admitted": len(admitted),
+        "classes_rejected": len(rejected),
+        "roster": chosen.name if chosen is not None else None,
+        "membership_verified": sorted(c for c, m in admitted.items() if m["audit"]["membership_verified"]),
+        # Rejection reasons are only interesting for the candidate-pool mode; in
+        # roster mode almost every entry is the uninformative "not on the
+        # roster", which would bury the real ones.
+        "rejection_reasons": ({c: r for c, r in rejected.items() if r != "not on the roster"} if chosen else rejected),
+        "survival_curve": {str(k): v for k, v in curve.items()},
+        "needs_hand_crop": needs_hand_crop,
+        "merges_honoured": len(same),
+        "separations_honoured": len(different),
+        "hard_negative_pairs": sorted(
+            {
+                tuple(sorted((cid, other)))
+                for cid, meta in admitted.items()
+                for other in meta.get("distinct_from", [])
+                if other in admitted
+            }
+        ),
+        "warnings": warnings,
+        "settings": {
+            "sources": selected,
+            "min_instances": args.min_instances,
+            "min_mark_px": args.min_mark_px,
+            "cluster_backend": args.cluster_backend,
+            "cluster_threshold": args.cluster_threshold,
+            "tier_salt": cfg.TIER_SALT,
+        },
+    }
+    (args.out / "build_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    print(f"\nwrote {n} page(s) to {args.out / 'corpus.jsonl'}")
+    print("  tiers (cumulative): " + ", ".join(f"{t}={cumulative[t]}" for t in cfg.TIER_ORDER))
+    if dropped:
+        print(f"  {dropped} page(s) dropped: past the largest tier's budget")
+    for w in warnings:
+        print(f"  warning: {w}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

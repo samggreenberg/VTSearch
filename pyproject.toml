@@ -248,7 +248,7 @@ known_first_party = [
     "coco_fixture",
     "data_card",
     "dataset_samples",
-    "docmarks_media",
+    "fullmarks_media",
     "report_svg",
     "slide_figure",
     "hook_payload",
@@ -256,9 +256,9 @@ known_first_party = [
     # script so it reads the same cell definitions the build used.
     "pile_config",
     "_cells_io",
-    # scripts/experiments/docmarks, put on sys.path by the DocMarks study
+    # scripts/experiments/fullmarks, put on sys.path by the FullMarks study
     # scripts under docs/experiments/ (#3922 v4.2 measure_*.py).
-    "docmarks_config",
+    "fullmarks_config",
     "eval_retrieval",
     "sources",
 ]

@@ -69,7 +69,7 @@ export CALIB_ANALYZE=noop.py
 
 # --- environments --------------------------------------------------------------
 # Three datasets that depend on nothing another session is rebuilding today
-# (not vg_scale, not DocMarks, not coco_quarry):
+# (not vg_scale, not FullMarks, not coco_better):
 #   visual_genome_m x {siglip+dinov3_patch @ max_patch (REGION), siglip (binary)}
 #   coco_val        x {siglip+dinov3_patch @ max_patch (REGION), siglip (binary)}
 #   caltech101_m    x  siglip (binary; boxless, so there is no region arm)

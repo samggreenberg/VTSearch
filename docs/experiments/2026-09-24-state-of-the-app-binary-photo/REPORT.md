@@ -2,7 +2,7 @@
 
 **Issue:** #4159. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
 **Path:** SigLIP whole-image embedding, binary (Good/Bad) votes.
-**Bench:** `coco_quarry`, all 49 classes at every size, which is 144 cells.
+**Bench:** `coco_better`, all 49 classes at every size, which is 144 cells.
 **Seeds:** 100 (14,400 runs). The companion report is *State of the App:
 Region Photo*.
 

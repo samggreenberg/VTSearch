@@ -34,7 +34,7 @@ what makes a 3x3 matrix a matrix rather than nine unrelated readings, and it is
 why the cohort is the held-out fraction rather than the whole band -- testing the
 off-diagonal on 100% of a band while the diagonal sees 20% of it would compare
 two different populations. Precision is bought at the *export* layer instead, by
-cutting more positives per cell (``quarry_export.py``), which costs nothing now
+cutting more positives per cell (``coco_better_export.py``), which costs nothing now
 that the corpus is embedded whole.
 
 ## Train-side mixes: a retag, not a new code path

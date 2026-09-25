@@ -9,21 +9,21 @@ The dataset *cards* — what each dataset is and what its media look like — ar
 `make-data-cards.py`'s. This file draws the figures that say why a dataset is
 *shaped* the way it is:
 
-* `coco_quarry`'s complement build, which draws set theory rather than data: it
+* `coco_better`'s complement build, which draws set theory rather than data: it
   carries no counts at all, because the thing it argues — that an exhaustively
   annotated corpus can name the images a class is *absent* from — is true of
   three classes and eighty alike;
-* `coco_quarry`'s size bands;
-* DocMarks' shape: where its pages come from, and how its copies fall across
+* `coco_better`'s size bands;
+* FullMarks' shape: where its pages come from, and how its copies fall across
   marks.
 
 **Where the numbers come from.** Nothing here is typed in twice.
 
-* The `coco_quarry` figures import `scripts/experiments/pile/pile_config.py`,
+* The `coco_better` figures import `scripts/experiments/pile/pile_config.py`,
   so a slide cannot drift from the constants the pile actually builds against:
   a roster ruling that merges or adds a class moves the class count, the cell
   count and the class list here with no edit.
-* The DocMarks figures read `scripts/experiments/docmarks/docmarks_config.py`
+* The FullMarks figures read `scripts/experiments/fullmarks/fullmarks_config.py`
   for the tiers and the corpus version, and parse the committed `DATASHEET.md`
   for the per-source and per-class counts. The corpus itself lives on the GRID;
   a container cannot open it, and a figure that could only be built on the
@@ -137,8 +137,10 @@ def _pile_config() -> Any:
     return _load_module(REPO / "scripts" / "experiments" / "pile" / "pile_config.py", "_slides_pile_config")
 
 
-def _docmarks_config() -> Any:
-    return _load_module(REPO / "scripts" / "experiments" / "docmarks" / "docmarks_config.py", "_slides_docmarks_config")
+def _fullmarks_config() -> Any:
+    return _load_module(
+        REPO / "scripts" / "experiments" / "fullmarks" / "fullmarks_config.py", "_slides_fullmarks_config"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -202,11 +204,11 @@ def _heading(fig: plt.Figure, text: str, sub: str = "") -> None:
 
 
 # --------------------------------------------------------------------------
-# coco_quarry: the construction
+# coco_better: the construction
 # --------------------------------------------------------------------------
 
 
-def _quarry_classes(pc: Any) -> list[str]:
+def _coco_better_classes(pc: Any) -> list[str]:
     """The roster the cells are built for, in `pile_config`'s own order."""
     return list(pc.SCALE_CLASSES)
 
@@ -227,7 +229,7 @@ def _band_rule(lo: float, hi: float) -> str:
     return f"≥ {_fraction(lo)},  < {_fraction(hi)}"
 
 
-def fig_quarry_bands(pc: Any) -> plt.Figure:
+def fig_coco_better_bands(pc: Any) -> plt.Figure:
     """What the three bands *are*: box area against the model's own geometry.
 
     The bands are not thirds of some range somebody chose. ``small`` is
@@ -283,11 +285,11 @@ def fig_quarry_bands(pc: Any) -> plt.Figure:
     # The class list, right of the reserve so the corner stays clear. Set as
     # wrapped running text rather than columns, so a roster ruling that adds or
     # merges a class re-flows the list instead of breaking a hand-tuned grid.
-    # Shown the way every slide shows a quarry class (`data_card.display_class`),
+    # Shown the way every slide shows a COCO Better class (`data_card.display_class`),
     # and alphabetised by that name, so a merge lands where its short name does.
     from data_card import display_class
 
-    names = sorted(display_class(name) for name in _quarry_classes(pc))
+    names = sorted(display_class(name) for name in _coco_better_classes(pc))
     fig.text(
         RIGHT_X,
         0.945,
@@ -302,11 +304,11 @@ def fig_quarry_bands(pc: Any) -> plt.Figure:
 
 
 # --------------------------------------------------------------------------
-# DocMarks
+# FullMarks
 # --------------------------------------------------------------------------
 
 
-DATASHEET = REPO / "scripts" / "experiments" / "docmarks" / "DATASHEET.md"
+DATASHEET = REPO / "scripts" / "experiments" / "fullmarks" / "DATASHEET.md"
 
 #: Chart labels for the sources whose datasheet name is a sentence. A y-axis
 #: label is drawn outside its axes, so a long one eats leftwards into the
@@ -325,7 +327,7 @@ def _datasheet_rows(heading: str, columns: int) -> list[list[str]]:
     text = DATASHEET.read_text()
     start = text.find(heading)
     if start < 0:
-        raise SystemExit(f"docmarks datasheet: no '{heading}' section in {DATASHEET}")
+        raise SystemExit(f"fullmarks datasheet: no '{heading}' section in {DATASHEET}")
     rows: list[list[str]] = []
     seen_table = False
     for line in text[start + len(heading) :].splitlines():
@@ -340,7 +342,7 @@ def _datasheet_rows(heading: str, columns: int) -> list[list[str]]:
             continue
         rows.append(cells)
     if not rows:
-        raise SystemExit(f"docmarks datasheet: no {columns}-column table under '{heading}'")
+        raise SystemExit(f"fullmarks datasheet: no {columns}-column table under '{heading}'")
     return rows[1:]  # drop the header row
 
 
@@ -352,11 +354,11 @@ def _clean(cell: str) -> str:
 def _number(cell: str) -> int:
     match = re.search(r"\d[\d,]*", _clean(cell))
     if not match:
-        raise SystemExit(f"docmarks datasheet: no number in {cell!r}")
+        raise SystemExit(f"fullmarks datasheet: no number in {cell!r}")
     return int(match.group().replace(",", ""))
 
 
-def _docmarks_facts() -> dict[str, Any]:
+def _fullmarks_facts() -> dict[str, Any]:
     """Counts the figures need, read out of the datasheet's own tables.
 
     The per-class spread is computed from the roster table rather than read
@@ -376,7 +378,7 @@ def _docmarks_facts() -> dict[str, Any]:
     instances = sorted((_number(r[2]) for r in _datasheet_rows("### The roster", 4)), reverse=True)
     if sum(s["instances"] for s in sources) != sum(instances):
         raise SystemExit(
-            f"docmarks datasheet: the Sources table counts {sum(s['instances'] for s in sources)} instances "
+            f"fullmarks datasheet: the Sources table counts {sum(s['instances'] for s in sources)} instances "
             f"and the roster table {sum(instances)} — fix the datasheet before drawing it"
         )
     # The distractor source is the one the tiers are made of: every page the
@@ -394,8 +396,8 @@ def _docmarks_facts() -> dict[str, Any]:
     }
 
 
-def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
-    """What DocMarks is: where the pages come from, and how the roster falls.
+def fig_fullmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
+    """What FullMarks is: where the pages come from, and how the roster falls.
 
     The two panels answer the two questions that decide whether a result on
     this corpus means anything. *Where the pages come from* — one source
@@ -478,21 +480,21 @@ def fig_docmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
 
 
 # --------------------------------------------------------------------------
-# coco_quarry
+# coco_better
 # --------------------------------------------------------------------------
 
-#: The Venn, in the drawing's own units. `QUARRY_D` is how far each circle's
-#: centre sits from the group's, and the ratio to `QUARRY_R` is what decides
+#: The Venn, in the drawing's own units. `COCO_BETTER_D` is how far each circle's
+#: centre sits from the group's, and the ratio to `COCO_BETTER_R` is what decides
 #: how big the three-way cell in the middle comes out — the one that has to
 #: hold `ABC` and a superscript. At 0.46 / 0.70 that cell is 0.24 units of
 #: inradius, which is 108 slide pixels across against a 45px label; the
 #: textbook 0.55 / 0.70 halves it and the label spills over the lens edges.
-QUARRY_R = 0.70
-QUARRY_D = 0.46
+COCO_BETTER_R = 0.70
+COCO_BETTER_D = 0.46
 #: The universe rectangle: every image there is, drawn so that "outside the
 #: circles" is a *region* with room to be shaded and labelled rather than the
 #: margin of the page.
-QUARRY_RECT = (-1.55, -1.35, 3.10, 2.70)
+COCO_BETTER_RECT = (-1.55, -1.35, 3.10, 2.70)
 
 #: The deck's calibration palette, not a pair of tints of it. Every shaded
 #: region here is a *training side* — the Good pile or the Bad pile — which is
@@ -501,8 +503,8 @@ QUARRY_RECT = (-1.55, -1.35, 3.10, 2.70)
 #: hatch leaning the way that file leans it. Two solid fills side by side read
 #: as a chart of two quantities; two hatches read as two *kinds*, and they stay
 #: apart for a viewer who cannot separate the hues at all.
-QUARRY_GOOD = "#0d8a5f"
-QUARRY_BAD = "#b91c1c"
+COCO_BETTER_GOOD = "#0d8a5f"
+COCO_BETTER_BAD = "#b91c1c"
 GOOD_HATCH = "//////"
 BAD_HATCH = "\\\\\\"
 
@@ -557,7 +559,7 @@ STACK_MAX_W = 0.275
 #: Every label sits on a chip of its own background, because most of them land
 #: on hatching. Tight padding: the chip is there to stop the strokes running
 #: through the glyphs, not to box the word.
-QUARRY_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor": "none"}
+COCO_BETTER_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor": "none"}
 
 #: The column, in the order the build introduces it, as `(kind, term, gloss)`.
 #: A heading carries no gloss: the verdict on each experiment is a thing the
@@ -576,9 +578,9 @@ QUARRY_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgecolor":
 #: differ in what they demand, not in what kind of demand it is.
 #:
 #: The `Easy:` heading is the one entry whose term moves — the experiment is
-#: shown three times, once per class, and `_quarry_easy_term` supplies the
+#: shown three times, once per class, and `_coco_better_easy_term` supplies the
 #: spelling for the frame being drawn.
-QUARRY_BLOCKS = [
+COCO_BETTER_BLOCKS = [
     ("def", "A⁺", "Hold an A, maybe more."),
     ("def", EMPTY, "Hold none of the three."),
     ("head", f"Easy: A⁺ vs {EMPTY}", None),
@@ -613,7 +615,7 @@ QUARRY_BLOCKS = [
 #: the full column and the cells, so that it differs from *g* in the shading
 #: and the emphasis and nothing else. That is the pair the presenter flicks
 #: between: a detector that fires on A or B or C aces *h* and fails *g*.
-QUARRY_FRAMES = [
+COCO_BETTER_FRAMES = [
     (None, None, False, 2, None),
     (0, "outside", False, 3, "easy"),
     (1, "outside", False, 3, "easy"),
@@ -625,7 +627,7 @@ QUARRY_FRAMES = [
 ]
 
 
-def _quarry_easy_term(frame: int) -> str:
+def _coco_better_easy_term(frame: int) -> str:
     """The `Easy:` block's spelling on `frame`.
 
     It follows the rotation through B and C and then comes back to A, so that
@@ -637,23 +639,23 @@ def _quarry_easy_term(frame: int) -> str:
     return f"Easy: {'ABC'[frame - 1] if 1 <= frame <= 3 else 'A'}⁺ vs {EMPTY}"
 
 
-def _quarry_centres() -> list[tuple[float, float]]:
+def _coco_better_centres() -> list[tuple[float, float]]:
     """The three circle centres, as a group centred on the universe rectangle.
 
     The triangle of centres is not symmetric about its own midline — one
-    circle is up and two are down — so placing them at `QUARRY_D` from the
+    circle is up and two are down — so placing them at `COCO_BETTER_D` from the
     origin and stopping would hang the whole Venn above centre by half a
     radius. The drop is the group's own midline, computed rather than nudged.
     """
     raw = [
-        (QUARRY_D * math.cos(math.radians(angle)), QUARRY_D * math.sin(math.radians(angle)))
+        (COCO_BETTER_D * math.cos(math.radians(angle)), COCO_BETTER_D * math.sin(math.radians(angle)))
         for angle in (90.0, 210.0, 330.0)
     ]
-    drop = ((QUARRY_D + QUARRY_R) + (-QUARRY_D / 2 - QUARRY_R)) / 2
+    drop = ((COCO_BETTER_D + COCO_BETTER_R) + (-COCO_BETTER_D / 2 - COCO_BETTER_R)) / 2
     return [(x, y - drop) for x, y in raw]
 
 
-def _quarry_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, float]]:
+def _coco_better_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, float]]:
     """Where each of the seven exact-set labels goes: `{membership bits: (x, y)}`.
 
     Measured off a raster of the drawing rather than derived from the centres.
@@ -661,12 +663,12 @@ def _quarry_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, 
     three single-class ones are crescents whose middle is nowhere near the
     circle's own centre — so arithmetic on the centres puts `A` on the rim of
     the lens below it. Each centroid is then checked to fall inside the cell it
-    names, which is what makes a later edit to `QUARRY_R` or `QUARRY_D` fail
+    names, which is what makes a later edit to `COCO_BETTER_R` or `COCO_BETTER_D` fail
     here instead of printing `AB` into the wrong lens.
     """
     axis = np.linspace(-1.2, 1.2, 601)
     grid_x, grid_y = np.meshgrid(axis, axis)
-    inside = [((grid_x - cx) ** 2 + (grid_y - cy) ** 2) <= QUARRY_R**2 for cx, cy in centres]
+    inside = [((grid_x - cx) ** 2 + (grid_y - cy) ** 2) <= COCO_BETTER_R**2 for cx, cy in centres]
     cells: dict[int, tuple[float, float]] = {}
     for bits in range(1, 8):
         want = [bool(bits >> i & 1) for i in range(3)]
@@ -674,11 +676,11 @@ def _quarry_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, 
         for i in range(3):
             selected &= inside[i] if want[i] else ~inside[i]
         x, y = float(grid_x[selected].mean()), float(grid_y[selected].mean())
-        held = [((x - cx) ** 2 + (y - cy) ** 2) <= QUARRY_R**2 for cx, cy in centres]
+        held = [((x - cx) ** 2 + (y - cy) ** 2) <= COCO_BETTER_R**2 for cx, cy in centres]
         if held != want:
             raise SystemExit(
-                f"venn cells: the centroid of {quarry_cell_name(bits)} lands outside its own cell "
-                f"at ({x:.3f}, {y:.3f}). QUARRY_R / QUARRY_D have moved far enough that a region "
+                f"venn cells: the centroid of {coco_better_cell_name(bits)} lands outside its own cell "
+                f"at ({x:.3f}, {y:.3f}). COCO_BETTER_R / COCO_BETTER_D have moved far enough that a region "
                 f"is no longer convex about its own middle — place that label by hand, or put the "
                 f"circles back."
             )
@@ -686,7 +688,7 @@ def _quarry_cells(centres: list[tuple[float, float]]) -> dict[int, tuple[float, 
     return cells
 
 
-def quarry_cell_name(bits: int) -> str:
+def coco_better_cell_name(bits: int) -> str:
     """`AB⁼` for the cell holding exactly A and B, and so on."""
     return "".join(c for i, c in enumerate("ABC") if bits >> i & 1) + "⁼"
 
@@ -696,7 +698,7 @@ def _text_width(fig: plt.Figure, text: "matplotlib.text.Text") -> float:
     return text.get_window_extent(fig.canvas.get_renderer()).width / fig.bbox.width
 
 
-def _quarry_stack(fig: plt.Figure, frame: int) -> None:
+def _coco_better_stack(fig: plt.Figure, frame: int) -> None:
     """The left column: the notation, introduced one block per frame.
 
     Laid out by flow over *every* block whether this frame draws it or not, so
@@ -710,9 +712,9 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
     and has to be the same however wide the term is, so it cannot be a column
     position. `A⁺` and `AB⁼` differ by half the gloss's own indent.
     """
-    shown, lit = QUARRY_FRAMES[frame][3], QUARRY_FRAMES[frame][4]
+    shown, lit = COCO_BETTER_FRAMES[frame][3], COCO_BETTER_FRAMES[frame][4]
     y = lowest = STACK_TOP
-    for index, (kind, term, gloss) in enumerate(QUARRY_BLOCKS):
+    for index, (kind, term, gloss) in enumerate(COCO_BETTER_BLOCKS):
         draw = index < shown
         if kind == "head":
             y -= HEAD_LEAD
@@ -720,7 +722,7 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
                 fig.text(
                     LEFT_X,
                     y,
-                    _quarry_easy_term(frame) if index == 2 else term,
+                    _coco_better_easy_term(frame) if index == 2 else term,
                     fontsize=HEAD_PT,
                     color=INK if lit == ("easy" if index == 2 else "hard") else SOFT,
                     fontweight="bold" if lit == ("easy" if index == 2 else "hard") else "normal",
@@ -744,18 +746,18 @@ def _quarry_stack(fig: plt.Figure, frame: int) -> None:
         lowest, y = y, y - DEF_PITCH
     if lowest < STACK_FLOOR:
         raise SystemExit(
-            f"notation column: the {len(QUARRY_BLOCKS)} blocks overflow the slide (last baseline "
+            f"notation column: the {len(COCO_BETTER_BLOCKS)} blocks overflow the slide (last baseline "
             f"at {lowest:.3f}, floor {STACK_FLOOR}). Drop a block, or tighten DEF_PITCH / "
             f"HEAD_PITCH."
         )
 
 
-def _quarry_chip(ax: plt.Axes, x: float, y: float, text: str, size: float, colour: str = INK, **kwargs) -> None:
+def _coco_better_chip(ax: plt.Axes, x: float, y: float, text: str, size: float, colour: str = INK, **kwargs) -> None:
     """A label on a chip of background, so hatching does not run through it."""
-    ax.text(x, y, text, fontsize=size, color=colour, bbox=dict(QUARRY_CHIP), zorder=6, **kwargs)
+    ax.text(x, y, text, fontsize=size, color=colour, bbox=dict(COCO_BETTER_CHIP), zorder=6, **kwargs)
 
 
-def _quarry_tone(bits: int, good: int | None, negatives: str | None) -> str:
+def _coco_better_tone(bits: int, good: int | None, negatives: str | None) -> str:
     """The colour a region's own label takes: the colour that region is shaded.
 
     `bits` is a membership mask over (A, B, C), with `0` meaning the outside.
@@ -766,16 +768,16 @@ def _quarry_tone(bits: int, good: int | None, negatives: str | None) -> str:
     Circle labels are coloured by the caller for that reason.
     """
     if good is not None and bits and bits >> good & 1:
-        return QUARRY_GOOD
+        return COCO_BETTER_GOOD
     if negatives == "outside" and not bits:
-        return QUARRY_BAD
+        return COCO_BETTER_BAD
     if negatives == "not_a" and not bits & 1:
-        return QUARRY_BAD
+        return COCO_BETTER_BAD
     return INK
 
 
-def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figure:
-    """Why `coco_quarry` needs COCO's exhaustive annotation: the complement.
+def fig_coco_better_complement(frame: int = len(COCO_BETTER_FRAMES) - 1) -> plt.Figure:
+    """Why `coco_better` needs COCO's exhaustive annotation: the complement.
 
     Seven frames over one Venn. The circles are three classes, the rectangle is
     every image there is, and the slide walks the two ways to pick negatives
@@ -787,10 +789,10 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
     it touches.
     """
     fig = _blank_fig()
-    x0, y0, w, h = QUARRY_RECT
+    x0, y0, w, h = COCO_BETTER_RECT
     # The axes take the rectangle's own aspect, so the drawing fills them
     # exactly instead of letterboxing inside a slot picked by hand — and a
-    # later change to QUARRY_RECT keeps doing so.
+    # later change to COCO_BETTER_RECT keeps doing so.
     ax_h = 0.91
     ax = fig.add_axes((0.342, 0.045, ax_h * FIG_H * (w / h) / FIG_W, ax_h))
     ax.set_aspect("equal")
@@ -798,8 +800,8 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
     ax.set_xlim(x0, x0 + w)
     ax.set_ylim(y0, y0 + h)
 
-    good, negatives, cells, _, _ = QUARRY_FRAMES[frame]
-    centres = _quarry_centres()
+    good, negatives, cells, _, _ = COCO_BETTER_FRAMES[frame]
+    centres = _coco_better_centres()
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=SOFT, linewidth=1.6, zorder=1))
     if negatives:
         ax.add_patch(
@@ -808,7 +810,7 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
                 w,
                 h,
                 facecolor="none",
-                edgecolor=QUARRY_BAD,
+                edgecolor=COCO_BETTER_BAD,
                 hatch=BAD_HATCH,
                 linewidth=0,
                 zorder=2,
@@ -819,21 +821,21 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
         # crescents stay hatched — which is the whole of the last reveal.
         kept = centres if negatives == "outside" else centres[:1]
         for centre in kept:
-            ax.add_patch(Circle(centre, QUARRY_R, facecolor="white", edgecolor="none", zorder=3))
+            ax.add_patch(Circle(centre, COCO_BETTER_R, facecolor="white", edgecolor="none", zorder=3))
     if good is not None:
         ax.add_patch(
             Circle(
                 centres[good],
-                QUARRY_R,
+                COCO_BETTER_R,
                 facecolor="none",
-                edgecolor=QUARRY_GOOD,
+                edgecolor=COCO_BETTER_GOOD,
                 hatch=GOOD_HATCH,
                 linewidth=0,
                 zorder=4,
             )
         )
     for centre in centres:
-        ax.add_patch(Circle(centre, QUARRY_R, facecolor="none", edgecolor=INK, linewidth=2.0, zorder=5))
+        ax.add_patch(Circle(centre, COCO_BETTER_R, facecolor="none", edgecolor=INK, linewidth=2.0, zorder=5))
 
     # Each circle is named from just outside its own rim, anchored by the
     # corner facing the circle so the word grows *away* from the drawing —
@@ -848,32 +850,40 @@ def fig_coco_quarry_complement(frame: int = len(QUARRY_FRAMES) - 1) -> plt.Figur
             "ABC",
         )
     ):
-        _quarry_chip(
+        _coco_better_chip(
             ax,
-            cx + dx * (QUARRY_R + 0.06),
-            cy + dy * (QUARRY_R + 0.06),
+            cx + dx * (COCO_BETTER_R + 0.06),
+            cy + dy * (COCO_BETTER_R + 0.06),
             f"{name}⁺",
             FLOOR_PT + 5,
-            QUARRY_GOOD if good == index else INK,
+            COCO_BETTER_GOOD if good == index else INK,
             fontweight="bold",
             ha=anchor[0],
             va=anchor[1],
         )
     # ∅ bottom-left, ¬A top-right: they name nested regions once both are on
     # screen, so they go in opposite corners rather than along one edge.
-    empty = _quarry_tone(0, good, negatives)
-    _quarry_chip(ax, x0 + 0.13, y0 + 0.13, EMPTY, FLOOR_PT + 7, empty, fontweight="bold", ha="left", va="bottom")
+    empty = _coco_better_tone(0, good, negatives)
+    _coco_better_chip(ax, x0 + 0.13, y0 + 0.13, EMPTY, FLOOR_PT + 7, empty, fontweight="bold", ha="left", va="bottom")
     if cells:
-        for bits, (x, y) in _quarry_cells(centres).items():
-            tone = _quarry_tone(bits, good, negatives)
-            _quarry_chip(ax, x, y, quarry_cell_name(bits), FLOOR_PT, tone, ha="center", va="center")
+        for bits, (x, y) in _coco_better_cells(centres).items():
+            tone = _coco_better_tone(bits, good, negatives)
+            _coco_better_chip(ax, x, y, coco_better_cell_name(bits), FLOOR_PT, tone, ha="center", va="center")
     if negatives == "not_a":
         # ¬A is red throughout by construction — it *is* the Bad pile here.
-        _quarry_chip(
-            ax, x0 + w - 0.13, y0 + h - 0.13, "¬A", FLOOR_PT + 7, QUARRY_BAD, fontweight="bold", ha="right", va="top"
+        _coco_better_chip(
+            ax,
+            x0 + w - 0.13,
+            y0 + h - 0.13,
+            "¬A",
+            FLOOR_PT + 7,
+            COCO_BETTER_BAD,
+            fontweight="bold",
+            ha="right",
+            va="top",
         )
 
-    _quarry_stack(fig, frame)
+    _coco_better_stack(fig, frame)
     return fig
 
 
@@ -884,21 +894,21 @@ def main() -> int:
     argparse.ArgumentParser(description=__doc__).parse_args()
 
     pc = _pile_config()
-    dc = _docmarks_config()
-    facts = _docmarks_facts()
+    dc = _fullmarks_config()
+    facts = _fullmarks_facts()
 
-    save(fig_quarry_bands(pc), OUT, "dataset-coco-quarry-bands.png", column=FULL_BLEED, tight=False)
-    save(fig_docmarks_shape(dc, facts), OUT, "dataset-docmarks-shape.png", column=FULL_BLEED, tight=False)
+    save(fig_coco_better_bands(pc), OUT, "dataset-coco-better-bands.png", column=FULL_BLEED, tight=False)
+    save(fig_fullmarks_shape(dc, facts), OUT, "dataset-fullmarks-shape.png", column=FULL_BLEED, tight=False)
 
-    for n in range(len(QUARRY_FRAMES) - 1):
+    for n in range(len(COCO_BETTER_FRAMES) - 1):
         save(
-            fig_coco_quarry_complement(frame=n),
+            fig_coco_better_complement(frame=n),
             OUT,
-            f"dataset-coco-quarry-complement.build{n + 1}.png",
+            f"dataset-coco-better-complement.build{n + 1}.png",
             column=FULL_BLEED,
             tight=False,
         )
-    save(fig_coco_quarry_complement(), OUT, "dataset-coco-quarry-complement.png", column=FULL_BLEED, tight=False)
+    save(fig_coco_better_complement(), OUT, "dataset-coco-better-complement.png", column=FULL_BLEED, tight=False)
     return 0
 
 

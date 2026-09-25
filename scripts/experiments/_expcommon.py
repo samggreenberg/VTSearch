@@ -34,7 +34,7 @@ reason.  Keeping the churn inside ``common.py`` is what makes this one cheap.
 
 ``umap_params/common.py`` shares nothing with these (it is a dataset roster and
 a set of taxonomy builders that happens to carry the same filename), and
-``docmarks/sources/_common.py`` is unrelated.  Both are left alone.
+``fullmarks/sources/_common.py`` is unrelated.  Both are left alone.
 """
 
 from __future__ import annotations

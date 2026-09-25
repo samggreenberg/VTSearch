@@ -78,7 +78,7 @@ slides:
   # 5 — Experiments: the photographs the experiments run on. Every dataset
   # arrives on one card, "Data, Set" (`make-data-cards.py`): the sets somebody
   # else made, a slide of what they do not give you, then what we built from
-  # them, in the same card — COCO into COCO Quarry (`coco_quarry` in code;
+  # them, in the same card — COCO into COCO Better (`coco_better` in code;
   # the slides use the name a person would say).
   #
   # The figures are generated from the config the pile builds against, so a
@@ -86,9 +86,9 @@ slides:
   # but the presenter notes carry numbers too, and those are hand-written.
   outline-hold-the-line +at5
   data-set-coco
-  data-coco-quarry-complement
+  data-coco-better-complement
   data-coco-problems
-  data-set-quarry
+  data-set-coco-better
 
   # 6 — Regions
   outline-hold-the-line +at6
@@ -102,13 +102,13 @@ slides:
   # expects a concept to have a published spec sheet: eight results for one
   # query, arriving one at a time, and the presenter asks about each without
   # answering. Then the same "Data, Set" card as section 5, for the document
-  # sources and DocMarks, built from the DocMarks datasheet.
+  # sources and FullMarks, built from the FullMarks datasheet.
   outline-hold-the-line +at7
   logo-grid
-  data-set-docmarks-sources
-  data-docmarks-problems
-  data-set-docmarks
-  data-docmarks-shape
+  data-set-fullmarks-sources
+  data-fullmarks-problems
+  data-set-fullmarks
+  data-fullmarks-shape
 
   # The End
   outline-hold-the-line +end

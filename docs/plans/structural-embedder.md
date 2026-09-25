@@ -33,14 +33,14 @@ reorders what was previously planned here.
   evidence without paying its recall ceiling. Open design question: how the score
   embedder and the verification stage compose when they are different embedders
   (today V3 resolves one score embedder by precedence `structural ▸ patch ▸ text`).
-  **With votes, on DocMarks (#4162):**
+  **With votes, on FullMarks (#4162):**
   - SigLIP SVM → SIFT re-rank of the top 1,000 finds slightly more by 40
     votes than exhaustive max-over-templates (+0.46 per class).
   - It ranks the remainder worse (−0.27 AP).
   - Against the app's VLAD path it is far ahead: 23.6 against 1.1 found by 40
     votes. VLAD's top 50 almost never holds a positive, so the path the app
     runs today is capped by Stage 1, not by what it learns
-    ([report](../experiments/2026-09-23-docmarks-votes-4162/REPORT.md)).
+    ([report](../experiments/2026-09-23-fullmarks-votes-4162/REPORT.md)).
 
 <!-- item-sep -->
 
@@ -48,7 +48,7 @@ reorders what was previously planned here.
   #4180).** The first rule that learns from Bads in SIFT space.
   - Each Bad page marks the template descriptors that ratio-match it as "not the
     mark", and those are dropped from every template before verification.
-  - On DocMarks tier `s`, after 10 shared votes, it is +0.018 AP over
+  - On FullMarks tier `s`, after 10 shared votes, it is +0.018 AP over
     max-over-templates (interval [+0.005, +0.035]).
   - At tier `m` it is +0.022, but that interval crosses zero; it is +0.049 at
     20 votes.
@@ -90,8 +90,8 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **DocMarks — build the stamp-detection eval set and run it.** The builder is
-  in `scripts/experiments/docmarks/` (see its README). It exists because the
+- **FullMarks — build the stamp-detection eval set and run it.** The builder is
+  in `scripts/experiments/fullmarks/` (see its README). It exists because the
   2026-07-13 result — the first configuration where structural search beats the
   deep embedder on a real corpus — rests on two corpora of 259 and 1,088 pages
   with as few as 9 instances per class, whose class identities that study
@@ -230,7 +230,7 @@ reorders what was previously planned here.
   calibrate and then stop; put sustained labeling effort into deep-embedder
   detectors (the SigLIP MLP converts 40 votes into AP 0.39 → 0.67 and shows no
   saturation).
-  **DocMarks (#4162) makes the trained classifier a liability, not a wash.**
+  **FullMarks (#4162) makes the trained classifier a liability, not a wash.**
   - Where SIFT is strong, the Bads that reach the top are hard negatives, and
     the MLP trained on them ranks worse than the inlier gate in every class
     where it had a Bad: 10 of 10, −0.18 AP on average.

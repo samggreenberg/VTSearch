@@ -38,7 +38,7 @@ DATADIR="${SVMLOG_DATADIR:-/expscratch/$USER/svmlog-3197/datadir}"
 ARMS="${SVMLOG_ARMS:-svm linear mlp linconv svmc01 svmc10}"
 
 # --- environment -------------------------------------------------------------
-# Three pile datasets that depend on none of vg_scale, DocMarks or coco_quarry.
+# Three pile datasets that depend on none of vg_scale, FullMarks or coco_better.
 # Whole-image embedders only: the head question is the same Linear(D, 1) under
 # region voting, but max-pooling and per-bag flooding weights would add two more
 # moving parts to a study whose point is to have as few as possible.  Region

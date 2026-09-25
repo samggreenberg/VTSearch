@@ -85,11 +85,11 @@ because two of them are where this pile's expensive bugs have lived —
 loader and its test went with the retirement below; the source-agnostic half —
 `band_for`, `band_candidates`, `designate_cells`, `draw_negatives` — is
 `pilebuild/scale_core.py`, which is about boxes and cells rather than about any
-source, and is what `coco_quarry` builds on.
+source, and is what `coco_better` builds on.
 
 ## Retired with Visual Genome (#4038)
 
-`coco_quarry` supplies every cell from an exhaustively annotated source, so the
+`coco_better` supplies every cell from an exhaustively annotated source, so the
 apparatus that existed to guess at what VG could not say has no question left to
 answer. **`vg_scale` is unrebuildable and the scripts below are deleted.** Their
 cells stay readable and their numbers stay quoted — the shipped
@@ -541,7 +541,7 @@ A cell is `class@band`, and until now that band was the training set **and** the
 test set: train on small cars, test on small cars. Two changes make size a
 query on each side independently.
 
-**Testing across bands.** `quarry_export.py --cell car@small --test-bands all`
+**Testing across bands.** `coco_better_export.py --cell car@small --test-bands all`
 lists the class's other bands beside the cell, and the harness knob
 `CALIB_TEST_BANDS=all` scores them, adding `fnr_small` / `fnr_medium` /
 `fnr_large` (with `recall_*` and `n_test_pos_*`) to every row. Three arms per
@@ -603,7 +603,7 @@ to fold those images into `large`, keeping three bands rather than adding an
 `xlarge`. A fourth band would be a contrived definition, and it would be empty
 for every run built before the change anyway.
 
-**\* Every pile-built `large` cell, `vg_scale`, `vg_box_large` and `coco_quarry`
+**\* Every pile-built `large` cell, `vg_scale`, `vg_box_large` and `coco_better`
 alike, from before this change was capped at 0.80.** Read those results as
 "large, excluding close-ups". Comparing one against a rebuilt cell compares two
 definitions, and the old `large` is missing its easiest positives, so it

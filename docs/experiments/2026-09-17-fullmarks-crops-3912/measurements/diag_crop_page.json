@@ -1,0 +1,604 @@
+[
+  {
+    "class_id": "tobacco800/logo_azb11c00_1",
+    "bad": true,
+    "page": "tobacco800/cqc13f00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/cqc13f00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      2544,
+      3284
+    ],
+    "raw_info": {
+      "dpi": "(300.0, 300.0)",
+      "compression": "group4"
+    },
+    "box": [
+      1354,
+      148,
+      158,
+      177
+    ],
+    "crop_size": [
+      158,
+      177
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2544,
+      3284
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      158,
+      177
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 228,
+    "budget": {
+      "1024": {
+        "page_kp": 1025,
+        "kp_in_box": 4,
+        "inliers": 2,
+        "scale": 1.8857,
+        "model_ok": false
+      },
+      "16384": {
+        "page_kp": 6922,
+        "kp_in_box": 100,
+        "inliers": 72,
+        "scale": 0.0565,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 228,
+    "crop_vs_itself_inliers": 228,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_chakraborty_b_b",
+        [
+          1655,
+          2293,
+          541,
+          198
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_bqz95d00_1",
+    "bad": true,
+    "page": "tobacco800/wfo00a00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/wfo00a00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      2504,
+      3112
+    ],
+    "raw_info": {
+      "dpi": "(300.0, 300.0)",
+      "compression": "group4"
+    },
+    "box": [
+      1133,
+      324,
+      258,
+      277
+    ],
+    "crop_size": [
+      258,
+      277
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2504,
+      3112
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      258,
+      277
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 566,
+    "budget": {
+      "1024": {
+        "page_kp": 1024,
+        "kp_in_box": 18,
+        "inliers": 10,
+        "scale": 0.0943,
+        "model_ok": true
+      },
+      "16384": {
+        "page_kp": 12242,
+        "kp_in_box": 270,
+        "inliers": 157,
+        "scale": 0.0959,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 566,
+    "crop_vs_itself_inliers": 566,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_geha_r_s",
+        [
+          1389,
+          2179,
+          465,
+          132
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_cgr96c00_1",
+    "bad": true,
+    "page": "tobacco800/ecn9aa00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/ecn9aa00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      2624,
+      3584
+    ],
+    "raw_info": {
+      "dpi": "(300.0, 300.0)",
+      "compression": "group4"
+    },
+    "box": [
+      1757,
+      224,
+      195,
+      223
+    ],
+    "crop_size": [
+      195,
+      223
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2624,
+      3584
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      195,
+      223
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 117,
+    "budget": {
+      "1024": {
+        "page_kp": 1025,
+        "kp_in_box": 0,
+        "inliers": 0,
+        "scale": 1.0,
+        "model_ok": false
+      },
+      "16384": {
+        "page_kp": 10787,
+        "kp_in_box": 78,
+        "inliers": 39,
+        "scale": 0.0681,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 117,
+    "crop_vs_itself_inliers": 117,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_whitmire_c_e",
+        [
+          1558,
+          3002,
+          509,
+          76
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_asg54f00_1",
+    "bad": true,
+    "page": "tobacco800/dqn43c00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/dqn43c00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      1728,
+      2292
+    ],
+    "raw_info": {
+      "dpi": "(204.0, 196.0)",
+      "compression": "group4"
+    },
+    "box": [
+      427,
+      221,
+      206,
+      209
+    ],
+    "crop_size": [
+      206,
+      209
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      1728,
+      2292
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      206,
+      209
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 482,
+    "budget": {
+      "1024": {
+        "page_kp": 1024,
+        "kp_in_box": 9,
+        "inliers": 8,
+        "scale": 0.112,
+        "model_ok": true
+      },
+      "16384": {
+        "page_kp": 6840,
+        "kp_in_box": 328,
+        "inliers": 151,
+        "scale": 0.1038,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 482,
+    "crop_vs_itself_inliers": 482,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_daigle_w_p",
+        [
+          269,
+          1486,
+          296,
+          81
+        ]
+      ],
+      [
+        "logo",
+        "tobacco800/logo_dqn43c00_1",
+        [
+          103,
+          221,
+          206,
+          209
+        ]
+      ],
+      [
+        "logo",
+        "tobacco800/logo_asg54f00_1",
+        [
+          749,
+          221,
+          206,
+          209
+        ]
+      ],
+      [
+        "logo",
+        "tobacco800/logo_asg54f00_1",
+        [
+          1075,
+          223,
+          206,
+          209
+        ]
+      ],
+      [
+        "logo",
+        "tobacco800/logo_asg54f00_5",
+        [
+          1397,
+          223,
+          206,
+          209
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_afm90c00-first_1_0",
+    "bad": true,
+    "page": "tobacco800/mlk12d00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/mlk12d00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      2400,
+      3150
+    ],
+    "raw_info": {
+      "dpi": "(300.0, 300.0)",
+      "compression": "group4"
+    },
+    "box": [
+      98,
+      267,
+      274,
+      274
+    ],
+    "crop_size": [
+      274,
+      274
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2400,
+      3150
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      274,
+      274
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 892,
+    "budget": {
+      "1024": {
+        "page_kp": 1024,
+        "kp_in_box": 15,
+        "inliers": 12,
+        "scale": 0.1,
+        "model_ok": true
+      },
+      "16384": {
+        "page_kp": 7061,
+        "kp_in_box": 326,
+        "inliers": 219,
+        "scale": 0.0984,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 890,
+    "crop_vs_itself_inliers": 890,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_holek_m_l",
+        [
+          266,
+          2265,
+          614,
+          81
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_ajj10e00_1",
+    "bad": false,
+    "page": "tobacco800/rzo50e00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/rzo50e00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      2560,
+      3295
+    ],
+    "raw_info": {
+      "dpi": "(300.0, 300.0)",
+      "compression": "group4"
+    },
+    "box": [
+      214,
+      258,
+      766,
+      246
+    ],
+    "crop_size": [
+      766,
+      246
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2560,
+      3295
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      766,
+      246
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 376,
+    "budget": {
+      "1024": {
+        "page_kp": 1024,
+        "kp_in_box": 14,
+        "inliers": 3,
+        "scale": 0.7584,
+        "model_ok": false
+      },
+      "16384": {
+        "page_kp": 8370,
+        "kp_in_box": 313,
+        "inliers": 63,
+        "scale": 0.2787,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 376,
+    "crop_vs_itself_inliers": 376,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_fassuliotis_constance",
+        [
+          1571,
+          2249,
+          388,
+          124
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "tobacco800/logo_ciy01a00-page02_1_0",
+    "bad": false,
+    "page": "tobacco800/jci90c00",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/tobacco800/Tobacco800_SinglePage/Tobacco800_SinglePage/SinglePageTIF/jci90c00.tif",
+    "raw_mode": "1",
+    "raw_size": [
+      2400,
+      3150
+    ],
+    "raw_info": {
+      "dpi": "(300.0, 300.0)",
+      "compression": "group4"
+    },
+    "box": [
+      201,
+      75,
+      367,
+      327
+    ],
+    "crop_size": [
+      367,
+      327
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2400,
+      3150
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      367,
+      327
+    ],
+    "unique_gray_page": 2,
+    "unique_gray_crop": 2,
+    "crop_kp": 1024,
+    "budget": {
+      "1024": {
+        "page_kp": 1024,
+        "kp_in_box": 25,
+        "inliers": 12,
+        "scale": 0.1421,
+        "model_ok": true
+      },
+      "16384": {
+        "page_kp": 13963,
+        "kp_in_box": 515,
+        "inliers": 245,
+        "scale": 0.1221,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 1024,
+    "crop_vs_itself_inliers": 1024,
+    "other_marks_on_page": [
+      [
+        "signature",
+        "tobacco800/signature_newmark_g_b",
+        [
+          1303,
+          2104,
+          757,
+          300
+        ]
+      ]
+    ]
+  },
+  {
+    "class_id": "spods/logo_00003_0",
+    "bad": false,
+    "page": "spods/00531",
+    "path": "/expscratch/sgreenberg/fullmarks/raw/spods/unpacked/SPODS_Dataset/image (531).png",
+    "raw_mode": "RGB",
+    "raw_size": [
+      2476,
+      3480
+    ],
+    "raw_info": {
+      "dpi": "None",
+      "compression": "None"
+    },
+    "box": [
+      261,
+      178,
+      356,
+      357
+    ],
+    "crop_size": [
+      356,
+      357
+    ],
+    "crop_mode": "RGB",
+    "crop_equals_recut": true,
+    "decoded_size": [
+      2476,
+      3480
+    ],
+    "scale": 1.0,
+    "box_px_decoded": [
+      356,
+      357
+    ],
+    "unique_gray_page": 256,
+    "unique_gray_crop": 254,
+    "crop_kp": 716,
+    "budget": {
+      "1024": {
+        "page_kp": 1024,
+        "kp_in_box": 0,
+        "inliers": 0,
+        "scale": 1.0,
+        "model_ok": false
+      },
+      "16384": {
+        "page_kp": 7645,
+        "kp_in_box": 279,
+        "inliers": 184,
+        "scale": 0.1337,
+        "model_ok": true
+      }
+    },
+    "crop_vs_decoded_region_inliers": 716,
+    "crop_vs_itself_inliers": 716,
+    "other_marks_on_page": [
+      [
+        "stamp",
+        "spods/stamp_00514_1",
+        [
+          1378,
+          2680,
+          449,
+          144
+        ]
+      ],
+      [
+        "signature",
+        null,
+        [
+          1544,
+          2453,
+          307,
+          105
+        ]
+      ]
+    ]
+  }
+]

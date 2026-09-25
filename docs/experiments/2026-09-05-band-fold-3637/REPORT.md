@@ -268,7 +268,7 @@ exist to be re-measured.
   mode rescues, and the log line says which verb applies.
 - **The fold now runs *after* `anchor_to_coco`**, in `vg_scale` and in
   `vg_scale_deep` alike. This is a no-op on what gets built — verified, not
-  asserted: `band_fold.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) carries `dev`'s pass order as a fourth supply arm and
+  asserted: `band_fold.py` (retired with Visual Genome — see `docs/plans/coco-better.md`) carries `dev`'s pass order as a fourth supply arm and
   it designates **identical ids in all 36 cells**. It is what makes `contested`
   exact, and it fixed a second thing nobody had noticed: the old order reported
   **5,142** boxes folded where the build actually keeps **2,559**. *Half of every

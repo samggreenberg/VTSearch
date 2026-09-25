@@ -48,7 +48,7 @@ def pc():
 def _runnable(cfg, pc) -> list[str]:
     """Pile datasets the calibration harness can actually enumerate cells for.
 
-    A dataset it has never heard of is not a gap -- `coco_quarry_full` and its
+    A dataset it has never heard of is not a gap -- `coco_better_full` and its
     shards are export sources, not study environments, and nothing should run a
     123,287-image cell. The claim here is narrower and is the one that bites:
     a dataset the config *does* know must be described consistently by all three
@@ -94,36 +94,36 @@ class TestTheTablesAgreeWithThePile:
         assert not wrong, f"{wrong} are marked boxed but the pile does not build boxes for them"
 
 
-class TestCocoQuarryIsRunnable:
+class TestCocoBetterIsRunnable:
     """#4051 needs it to be; #4044's plumbing is useless on a dataset the grid
     cannot enumerate."""
 
     def test_it_has_an_embedder_roster(self, cfg):
-        assert cfg.DATASET_EMBEDDERS["coco_quarry"]
+        assert cfg.DATASET_EMBEDDERS["coco_better"]
 
     def test_the_region_arm_is_the_pair_not_the_bare_patch_embedder(self, cfg):
         """Bare `dinov3_patch` has no text tower, so it opens on known-goods while
         the whole-image arms open on a sort -- a seeding difference inside the
         voting-mode axis (#3276, #3278)."""
-        roster = cfg.DATASET_EMBEDDERS["coco_quarry"]
+        roster = cfg.DATASET_EMBEDDERS["coco_better"]
         patch = [e for e in roster if cfg.is_patch_embedder(e)]
         assert patch, "no region arm at all"
         for e in patch:
             assert cfg.text_embedder(e), f"{e} cannot open on a text sort"
 
     def test_region_voting_is_really_on_for_the_patch_arm(self, cfg):
-        for e in cfg.DATASET_EMBEDDERS["coco_quarry"]:
+        for e in cfg.DATASET_EMBEDDERS["coco_better"]:
             if cfg.is_patch_embedder(e):
-                assert cfg.region_voting_for("coco_quarry", e)
+                assert cfg.region_voting_for("coco_better", e)
 
     def test_every_cell_has_a_typed_query(self, cfg, pc):
         """`CALIB_CATEGORY_MODE=all` designates all 75; a cell with no query would
         silently open the other way."""
-        queries = cfg.EXPERIMENT_QUERIES["coco_quarry"]
+        queries = cfg.EXPERIMENT_QUERIES["coco_better"]
         expected = {pc.scale_cell(cls, band) for cls in pc.SCALE_CLASSES for band in pc.BOX_BANDS}
         assert expected <= set(queries), f"no query for {sorted(expected - set(queries))}"
 
     def test_it_shares_vg_scales_queries_exactly(self, cfg):
         """The two sets exist to be read against each other, so a query that
         drifted between them would put a seeding axis inside the source axis."""
-        assert cfg.EXPERIMENT_QUERIES["coco_quarry"] == cfg.EXPERIMENT_QUERIES["vg_scale"]
+        assert cfg.EXPERIMENT_QUERIES["coco_better"] == cfg.EXPERIMENT_QUERIES["vg_scale"]

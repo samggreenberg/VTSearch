@@ -288,7 +288,7 @@ def test_every_key_a_loader_writes_is_one_the_sentence_knows(arm: Path, loader: 
 # --- The two on-disk cell shapes ---------------------------------------------
 #
 # `dump_medias` writes a cell as one pickled dict, which is fine while the dict
-# fits.  DocMarks tier `l` is where it stops: 200,000 pages at ~169 KB of
+# fits.  FullMarks tier `l` is where it stops: 200,000 pages at ~169 KB of
 # `local_features` each is a ~34 GB cell assembled entirely in RAM before a byte
 # of it is written (#3842).  `CellWriter` appends chunk by chunk instead.
 #
@@ -445,7 +445,7 @@ class TestRepairNorms:
         assert cells_io.load_medias(path, repair=True)[1]["embeddings"]["siglip"].tobytes() == v.tobytes()
 
     def test_the_default_reads_what_is_stored(self, cells_io, tmp_path: Path):
-        """Shared with DocMarks, whose structural vectors are not the app's: a norm is data there."""
+        """Shared with FullMarks, whose structural vectors are not the app's: a norm is data there."""
         import numpy as np
 
         path = tmp_path / "raw.pkl"

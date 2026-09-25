@@ -313,7 +313,7 @@ class _FlattenedStyle:
     #: How many flattened id sets stay memoised.  Sized for the sets one
     #: simulation step touches, with room to spare, not for a run's whole history.
     #:
-    #: **Measured (#4159): 4 thrashed.** On coco_quarry a region step touches the
+    #: **Measured (#4159): 4 thrashed.** On coco_better a region step touches the
     #: two stable ~11.6k-media sets (3.5 GB each) AND four small id sets that
     #: change every step, so at 4 the small ones evicted the big two and every
     #: step re-flattened 7 GB: ~25 s a step, most of a ~1 h, 150-click run.

@@ -9,10 +9,10 @@ negatives are semantically nearer. Its text probe read -0.004 AUC on a contrast
 where its *trained* probe read 1.88x. Reading the text number as the answer
 would have concluded there was nothing there.
 
-So this trains the head the benchmark trains, exactly as `coco_quarry` poses it:
+So this trains the head the benchmark trains, exactly as `coco_better` poses it:
 
 1. Fit a linear head on the cell as SHIPPED. That is NOT the barren shared pool
-   alone: `coco_quarry` inherits #3667's fix, so a designated positive of one
+   alone: `coco_better` inherits #3667's fix, so a designated positive of one
    class is an evaluable negative for the other 73 cells. Measured on the built
    cell, a cell's shipped negative set is 16,535 images, **60% barren and 40%
    cross-class** -- not the ~84% barren the issue quotes, which is #3670's
@@ -89,8 +89,8 @@ def main() -> int:
     classes = list(pc.SCALE_CLASSES)
     holders, every = coco_holders(args.anchor_dir, classes)
 
-    full = load_medias(pc.EMBEDDINGS / f"coco_quarry_full__{args.embedder}.pkl")
-    des = load_medias(pc.EMBEDDINGS / f"coco_quarry__{args.embedder}.pkl")
+    full = load_medias(pc.EMBEDDINGS / f"coco_better_full__{args.embedder}.pkl")
+    des = load_medias(pc.EMBEDDINGS / f"coco_better__{args.embedder}.pkl")
 
     ids = sorted(full)
     idx = {i: k for k, i in enumerate(ids)}
@@ -98,7 +98,7 @@ def main() -> int:
 
     pos_of: dict[str, list[int]] = collections.defaultdict(list)
     # The cell's REAL negatives: every media the build marks evaluable for it and
-    # does not designate into it. On `coco_quarry` that is the barren pool plus
+    # does not designate into it. On `coco_better` that is the barren pool plus
     # #3667's cross-class negatives, which are 40% of it.
     ev_of: dict[str, list[int]] = collections.defaultdict(list)
     barren: list[int] = []
