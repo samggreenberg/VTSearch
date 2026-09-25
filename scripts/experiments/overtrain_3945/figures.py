@@ -55,10 +55,19 @@ def fig_c_path(rp: Path, out: Path) -> None:
 def fig_penalty(rp: Path, out: Path) -> None:
     p = pd.read_csv(rp / "R_penalty.csv")
     fig, ax = plt.subplots(figsize=(7, 4))
-    for scope, color in (("all", "black"), ("visual_genome_m", BLUE), ("coco_val", ORANGE), ("caltech101_m", GREEN)):
+    # analyze_c_path.py writes the dataset scopes by their short names.
+    for scope, color in (("all", "black"), ("vg", BLUE), ("coco", ORANGE), ("caltech", GREEN)):
         s = p[p["scope"] == scope].sort_values("t")
         ax.errorbar(
-            s["t"], s["penalty"], yerr=2 * s["se"], color=color, marker="o", ms=3, capsize=2, lw=1.4, label=scope
+            s["t"],
+            s["penalty"],
+            yerr=2 * s["se"],
+            color=color,
+            marker="o",
+            ms=3,
+            capsize=2,
+            lw=1.4,
+            label=DS.get(scope, "pooled"),
         )
     ax.axhline(0, color=GREY, lw=0.8)
     ax.set_xlabel("clicks (votes) in the session")
