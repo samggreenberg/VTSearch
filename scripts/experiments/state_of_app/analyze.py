@@ -204,8 +204,14 @@ def cell_table(base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFr
         row["positives_found"] = int(found.get(key, 0))
         rows.append(row)
     scored = {tuple(k) for k in base[RUN_KEY].drop_duplicates().itertuples(index=False)}
-    for key, n in found.items():
-        if tuple(key) in scored:
+    # A run that never trained is known from its picks or, in a two-pass run
+    # (launch.sh SOTA_PASS), only from its ceiling row: the clicks pass then
+    # writes a header-only file. Missing it drops exactly the hardest runs.
+    unscored = {tuple(k): int(n) for k, n in found.items()}
+    for key in skyd:
+        unscored.setdefault(key, 0)
+    for key, n in unscored.items():
+        if key in scored:
             continue
         ds, cat, emb, style, seed = key
         text = _text_for(ts, ds, cat, emb, int(seed)) or (np.nan, np.nan)

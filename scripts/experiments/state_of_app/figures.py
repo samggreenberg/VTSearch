@@ -6,6 +6,8 @@
 * ``cost_over_clicks.png`` / ``f1_over_clicks.png`` -- the mean curve per path,
   click 0 (text only) to 150, with each path's full-label ceiling dashed. Two
   figures, not one with two y-axes: cost and F1 are different measures.
+* ``compare_cost.png`` (with ``--compare <other analysis dir>``) -- both paths'
+  mean cost on the SAME seeds, the ones this analysis has.
 * ``per_cell.png`` -- every class x band: text only (hollow), after the clicks
   (filled), full labels (tick), one panel per path.
 
@@ -131,7 +133,8 @@ def per_cell(cells: pd.DataFrame, out: Path) -> None:
             )
         ax.set_title(arm, color=INK, fontsize=10, loc="left")
         ax.set_xlabel("cost (lower is better)", color=INK)
-        ax.set_xlim(0, 1)
+        # Cost can pass 1 (chair@small's text sort is ~1.1), so never clip at 1.
+        ax.set_xlim(0, max(1.0, float(a[["text_cost", "final_cost"]].max().max()) + 0.05))
     axes[0].set_yticks(range(len(order)))
     axes[0].set_yticklabels(order, fontsize=6 if len(order) > 60 else 8)
     axes[0].invert_yaxis()
@@ -146,6 +149,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--analysis", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--compare", type=Path, default=None, help="the other path's analysis dir, for compare_cost.png")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     cells = pd.read_csv(args.analysis / "cells.csv")
@@ -153,6 +157,13 @@ def main() -> int:
     over_clicks(curves, cells, "cost", args.out / "cost_over_clicks.png")
     over_clicks(curves, cells, "f1", args.out / "f1_over_clicks.png")
     per_cell(cells, args.out / "per_cell.png")
+    if args.compare is not None:
+        seeds = set(cells["seed"])
+        other_cells = pd.read_csv(args.compare / "cells.csv")
+        other_curves = pd.read_csv(args.compare / "curves.csv")
+        both_cells = pd.concat([cells, other_cells[other_cells["seed"].isin(seeds)]], ignore_index=True)
+        both_curves = pd.concat([curves, other_curves[other_curves["seed"].isin(seeds)]], ignore_index=True)
+        over_clicks(both_curves, both_cells, "cost", args.out / "compare_cost.png")
     print(f"figures -> {args.out}")
     return 0
 
