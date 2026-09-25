@@ -670,6 +670,12 @@ pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
 # the trajectory: this one moves the trajectory itself (acquisition re-cuts the
 # same estimator), so a pinned value is a run-level arm and must be declared.
 pinned("live_cut_rule", "CALIB_LIVE_CUT_RULE", T.FOLD_ANCHOR_CUT_RULE)
+# A RETIRED live threshold rule (#4184) - unset is the shipped fold-anchored
+# cut.  Any value replaces the cut acquisition reads, so it is always a
+# run-level divergence the study must declare.
+v = env("CALIB_LIVE_THRESHOLD")
+if v is not None:
+    rows.append(("live_threshold", v, "<unset> = the shipped fold-anchored cut"))
 # The Train/Calibrate split of each calibration fold (#3287/#3290).  The
 # shipped default is no longer one scalar: unset resolves per embedder through
 # `production_split_for` (PRODUCTION_SPLIT_BY_SPACE), exactly as the app does,

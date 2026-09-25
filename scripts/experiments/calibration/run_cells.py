@@ -263,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
         f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} live_cut_rule={cfg.LIVE_CUT_RULE or 'app default'} "
+        f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
@@ -336,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
             calibration_fraction=cfg.CALIBRATION_FRACTION,
             exclusion_min_remainder=cfg.EXCLUSION_MIN_REMAINDER,
             live_cut_rule=cfg.LIVE_CUT_RULE,
+            live_threshold=cfg.LIVE_THRESHOLD,
             region_voting=region_voting,
             max_steps=cfg.MAX_STEPS,
             seed_scores=seed_scores,
@@ -397,6 +399,10 @@ def main(argv: list[str] | None = None) -> int:
         from vtscore.training.thresholds import FOLD_ANCHOR_CUT_RULE
 
         live_cut_rule = cfg.LIVE_CUT_RULE or FOLD_ANCHOR_CUT_RULE
+        # The retired live rule (#4184), named on every row for the same reason:
+        # "shipped" on the default arm, so a pooled frame never reads a blank as
+        # a rule.
+        live_threshold = cfg.LIVE_THRESHOLD or "shipped"
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
@@ -407,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
             r["exclusion_arm"] = exclusion_arm
             r["exclusion_min_remainder"] = exclusion_floor
             r["live_cut_rule"] = live_cut_rule
+            r["live_threshold"] = live_threshold
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -450,6 +457,7 @@ def main(argv: list[str] | None = None) -> int:
         "exclusion_arm",
         "exclusion_min_remainder",
         "live_cut_rule",
+        "live_threshold",
     ]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)

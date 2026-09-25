@@ -740,6 +740,23 @@ CUT_INCLUSION_KS = [_knob_stop(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "
 #: :data:`ANCHORED_RULES`, which are re-cuts riding the live trajectory.
 LIVE_CUT_RULE: str | None = os.environ.get("CALIB_LIVE_CUT_RULE", "").strip() or None
 
+#: A **retired** live threshold rule (issue #4184) - ``xcal_mincost``,
+#: ``gmm_mid``, ``blend`` or ``anchored_rawmean``; see
+#: :mod:`vtscore.eval.live_threshold_rules`.  Empty (the default) = the shipped
+#: fold-anchored cut, so an unset variable IS the production arm.  Like
+#: :data:`LIVE_CUT_RULE` it replaces the cut acquisition reads, so it is a
+#: RUN-LEVEL arm: its own ``CALIB_EXP`` and a declared
+#: ``--diverges live_threshold``.  Checked here, at import, so a typo fails the
+#: launcher's preflight rather than every array task.
+LIVE_THRESHOLD: str | None = os.environ.get("CALIB_LIVE_THRESHOLD", "").strip() or None
+if LIVE_THRESHOLD is not None:
+    from vtscore.eval.live_threshold_rules import LIVE_THRESHOLD_RULES as _LIVE_THRESHOLD_RULES
+
+    if LIVE_THRESHOLD not in _LIVE_THRESHOLD_RULES:
+        raise ValueError(
+            f"CALIB_LIVE_THRESHOLD={LIVE_THRESHOLD!r} is not a rule; expected one of {', '.join(_LIVE_THRESHOLD_RULES)}"
+        )
+
 #: Step sizes the eval-only ``q_tilt`` rule expands over - its free parameter,
 #: in combined-fold-quantile units per inclusion step.  Every other rule ignores
 #: this.  Empty = the single placeholder default in
