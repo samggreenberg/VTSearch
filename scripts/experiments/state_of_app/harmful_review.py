@@ -57,6 +57,8 @@ import pile_config as pc  # noqa: E402
 MAX_SIDE = 900
 QUALITY = 85
 MIXED = "mixed"
+#: The bands a control positive is drawn from (see its use).
+CONTROL_BANDS = ("medium", "large")
 #: Good means "there is a <class> here" for every question; the two readings of it.
 VERDICT = {(0, "Good"): "label_error", (0, "Bad"): "correct_negative", (1, "Good"): "correct_positive", (1, "Bad"): "label_error"}
 
@@ -149,7 +151,10 @@ def build(args) -> int:
             if m.get(cls)
             and i not in taken
             and (i, cls) not in lumped
-            and band_for([largest_box(m[cls])], *dims[i]) in pc.BOX_BANDS
+            # Not `small`: shown whole with no box, a small positive is a hunt,
+            # and a missed one reads as a label error that is not there (tv's
+            # first control was a background screen in a luggage display).
+            and band_for([largest_box(m[cls])], *dims[i]) in CONTROL_BANDS
         )
         for iid in rng.sample(supply, k):
             items.append({"image_id": iid, "class": cls, "label": 1, "arm": "control", "box": None, "band": None})
@@ -230,8 +235,7 @@ def bank(args) -> int:
     for man in sorted(args.queues.glob("*/manifest.json")):
         m = json.loads(man.read_text())
         if m["name"] not in dets:
-            print(f"  {m['name']}: no detector")
-            continue
+            continue  # cleared, or never loaded; its banked rows stand
         live = _get(args.api, f"/api/detectors/{urllib.parse.quote(m['name'])}/labels-detail")
         votes = {r["filename"]: "Good" for r in live.get("good", [])}
         votes.update({r["filename"]: "Bad" for r in live.get("bad", [])})
@@ -242,9 +246,19 @@ def bank(args) -> int:
                 continue
             rows.append({**it, "queue": m["name"], "vote": v, "verdict": VERDICT[(it["label"], v)]})
         print(f"  {m['name']}: {sum(it['file'] in votes for it in m['items'])}/{len(m['items'])} answered")
+    # MERGE into the banked file, never replace it: once a finished queue is
+    # cleared from the dashboard, the banked row is the only copy of its vote.
     out = args.queues / "verdicts.jsonl"
-    out.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    print(f"{len(rows)} verdicts, {missing} unanswered -> {out}")
+    banked = {}
+    if out.exists():
+        for line in out.read_text().splitlines():
+            r = json.loads(line)
+            banked[(r["queue"], r["file"])] = r
+    fresh = sum((r["queue"], r["file"]) not in banked for r in rows)
+    changed = sum((r["queue"], r["file"]) in banked and banked[(r["queue"], r["file"])]["vote"] != r["vote"] for r in rows)
+    banked.update({(r["queue"], r["file"]): r for r in rows})
+    out.write_text("".join(json.dumps(r) + "\n" for r in banked.values()))
+    print(f"{len(banked)} verdicts banked ({fresh} new, {changed} changed), {missing} unanswered live -> {out}")
     return 0
 
 
