@@ -724,7 +724,7 @@ representations and seeds; the count of positive images is in brackets.
   `intersection` (95), `barn` (57).
 - The boxes-off arm uses the `visual_genome_m` and `coco_val` lists above.
 
-**How the box bands were built** (`scan_vg_boxes.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`)):
+**How the box bands were built** (`scan_vg_boxes.py` (retired with Visual Genome — see `docs/plans/coco-better.md`)):
 scan all ~108k Visual Genome images across `VG_100K` and `VG_100K_2` with the full
 free-text vocabulary from `objects.json`; normalise pixel boxes against dimensions
 read from each JPEG header; take 40 categories and 12,000 images per band,

@@ -1,0 +1,30 @@
+{
+  "name": "fullmarks-v2-24",
+  "notes": "The 24 classes the eval runs on, picked by hand from the 65 candidates of the 2026-09-02 v2 build (#3343 stage 3). Source mix is deliberate and is NOT the shortlist's order: the candidate pool is 71% SPODS, so an eval drawn from the ranking would substantially measure SPODS -- the top 24 of shortlist.json are 21 SPODS logos and 3 Tobacco800. This takes 11 Tobacco800, 11 SPODS (6 rubber stamps, 5 pasted logos) and 2 StaVer, so no source is more than 46% of the roster. Everything here clears n>=8 instances; nothing below that can support train-and-search. Plain shapes are left off on purpose (spods/logo_00001_0 is a red cross, spods/logo_00020_0 a hospital H+): 'find this rectangle' is not a well-posed retrieval query, and the prior study's worst classes were exactly these. The hard pairs are kept rather than avoided -- three Tobacco800 leaf marks, two chief engravings (one a mirror of the other), four SPODS 'Secretary' script stamps -- because telling those apart is the thing the benchmark exists to measure. Two entries carry a caveat worth knowing before their numbers are quoted: spods/stamp_00612_1 is a piece of the #3561 split of spods/stamp_00489_1, so it depends on that split being replayed from adjudications.json rather than living in classes.json alone; and staver/stamp_stampds-00213_1's query crop is wide enough to catch the EINGEGANGEN date stamp above the routing box, which is page furniture and not part of the mark.",
+  "classes": [
+    "spods/logo_00003_0",
+    "spods/logo_00011_0",
+    "spods/logo_00014_0",
+    "spods/logo_00023_0",
+    "spods/logo_00029_0",
+    "spods/stamp_00293_1",
+    "spods/stamp_00546_1",
+    "spods/stamp_00577_1",
+    "spods/stamp_00612_1",
+    "spods/stamp_00769_1",
+    "spods/stamp_00931_1",
+    "staver/stamp_stampds-00213_1",
+    "staver/stamp_stampds-00230_0",
+    "tobacco800/logo_aah97e00-page02_1_0",
+    "tobacco800/logo_aeq93a00_1",
+    "tobacco800/logo_afm90c00-first_1_0",
+    "tobacco800/logo_ajj10e00_1",
+    "tobacco800/logo_ald41a00-ernest_1",
+    "tobacco800/logo_asg54f00_1",
+    "tobacco800/logo_azb11c00_1",
+    "tobacco800/logo_bad45f00_1",
+    "tobacco800/logo_bqz95d00_1",
+    "tobacco800/logo_cgr96c00_1",
+    "tobacco800/logo_ciy01a00-page02_1_0"
+  ]
+}

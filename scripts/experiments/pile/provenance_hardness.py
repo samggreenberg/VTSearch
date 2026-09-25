@@ -2,7 +2,7 @@
 """Are off-COCO positives HARDER, at matched band and class? (#3997)
 
 ``anchor_to_coco`` claims that dropping VG's non-COCO half loses "VG's non-COCO
-diversity for nothing". The ``coco_quarry`` migration plan names settling that
+diversity for nothing". The ``coco_better`` migration plan names settling that
 claim as the item that runs first, because it is the only live argument for
 keeping Visual Genome. ``provenance_probe.py`` answers half of it -- off-COCO
 images are *distinguishable* from COCO ones at AUC 0.53-0.55 once class and band

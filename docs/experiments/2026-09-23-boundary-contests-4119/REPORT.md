@@ -1,6 +1,6 @@
 # Three boundary contests inside C, ruled
 
-**Issue:** #4119. **Dataset:** `coco_quarry`, *C* = 52 → **49**. **Date:** 2026-09-23.
+**Issue:** #4119. **Dataset:** `coco_better`, *C* = 52 → **49**. **Date:** 2026-09-23.
 
 ## Verdict
 
@@ -52,7 +52,7 @@ build time.
 
 ## What a merge costs, and what it does not
 
-- **No annotation is lost.** coco_quarry takes COCO's labels with no human
+- **No annotation is lost.** coco_better takes COCO's labels with no human
   corrections (`corrections={}`). The VG-era backpack and vase verdicts in
   `human_record/` stay readable, because the five retired rules are frozen in
   full in `SCALE_CLASS_RULES_FROZEN`. `apply_recheck.py` replays the vase

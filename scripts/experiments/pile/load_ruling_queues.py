@@ -37,8 +37,8 @@ import pile_config as pc  # noqa: E402
 #: what the query should return measures the thing the cell actually scores, and
 #: it absorbs the use distinction for free.
 QUESTION = {
-    "tv": "coco_quarry tv - would you want this back searching for a tv?",
-    "dining table": "coco_quarry dining table - would you want this back searching for a dining table?",
+    "tv": "coco_better tv - would you want this back searching for a tv?",
+    "dining table": "coco_better dining table - would you want this back searching for a dining table?",
 }
 TEXT = {"tv": "a tv", "dining table": "a dining table"}
 
@@ -76,7 +76,7 @@ def main() -> int:
     ap.add_argument(
         "--name-template",
         default="",
-        help="e.g. 'coco_quarry {cls} - is the red box around {unit}?'. When given, every "
+        help="e.g. 'coco_better {cls} - is the red box around {unit}?'. When given, every "
         "subdirectory of --queues is registered under it and QUESTION is ignored. {unit} is "
         "the class's ClassRule.unit, falling back to 'ONE <class>'.",
     )

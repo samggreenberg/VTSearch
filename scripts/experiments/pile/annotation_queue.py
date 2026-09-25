@@ -7,7 +7,7 @@ how its stratum was counted (2026-09-18, #3983).** The plan it served moved
 stratum -- the **off-COCO positives** -- by hand. That stratum exists only
 because the image pool is Visual Genome's: measured over COCO 2017 train+val
 instead, every cell is supplied with margin and there is no off-COCO half to
-answer. See `docs/plans/coco-quarry.md` and
+answer. See `docs/plans/coco-better.md` and
 `docs/experiments/2026-09-18-coco-only-supply-3983/REPORT.md`. This script goes
 when the rest of the VG inference machinery does.
 

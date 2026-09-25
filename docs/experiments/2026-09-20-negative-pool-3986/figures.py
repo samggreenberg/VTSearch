@@ -123,7 +123,7 @@ def fig_shortcut(barren: dict, shipped: dict) -> None:
     ax2.set_axisbelow(True)
 
     fig.suptitle(
-        "The scene-clutter shortcut is undiminished on coco_quarry — "
+        "The scene-clutter shortcut is undiminished on coco_better — "
         "and #3667's fix already absorbed what it cost the benchmark",
         fontsize=12,
     )

@@ -1,7 +1,7 @@
-"""What does a cell's SHIPPED negative set actually look like on coco_quarry?
+"""What does a cell's SHIPPED negative set actually look like on coco_better?
 
 The issue quotes #3670's vg_scale figure (evaluable pool ~1,900 larger than
-SCALE_N_NEG, ~84% barren). coco_quarry is a different build, so measure it.
+SCALE_N_NEG, ~84% barren). coco_better is a different build, so measure it.
 """
 
 import collections
@@ -15,7 +15,7 @@ import pile_config as pc  # noqa: E402
 pc.setup_env()
 from _cells_io import load_medias  # noqa: E402
 
-des = load_medias(pc.EMBEDDINGS / "coco_quarry__siglip.pkl")
+des = load_medias(pc.EMBEDDINGS / "coco_better__siglip.pkl")
 cells = [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in pc.BOX_BANDS]
 
 ev_of = collections.defaultdict(list)

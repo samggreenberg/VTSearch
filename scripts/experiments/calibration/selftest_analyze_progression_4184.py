@@ -37,7 +37,7 @@ SEEDS = [0, 1, 2]
 HORIZON = 20
 TEXT = 0.6
 LEVEL = {"r1_xcal": 0.5, "r2_gmm": 0.45, "r7_acq4": 0.4}
-STARVED = ("coco_quarry", "siglip", "c", 1)
+STARVED = ("coco_better", "siglip", "c", 1)
 #: The curve CSV is written at six significant digits.
 TOL = 1e-5
 
@@ -50,7 +50,7 @@ def _rows(rung: str, cat: str, seed: int, *, live: str | None = None) -> pd.Data
         acq = thr - 0.1 if (want["acq"] and t > 5) else thr
         rows.append(
             {
-                "dataset": "coco_quarry",
+                "dataset": "coco_better",
                 "embedder": "siglip",
                 "category": cat,
                 "seed": seed,
@@ -84,7 +84,7 @@ def build(root: Path, *, mislabel: bool = False, lose: bool = False) -> str:
                 f = cells / f"task_{i:04d}.csv"
                 i += 1
                 df = _rows(rung, cat, seed, live="blend" if (mislabel and rung == "r2_gmm") else None)
-                if rung == "r2_gmm" and ("coco_quarry", "siglip", cat, seed) == STARVED:
+                if rung == "r2_gmm" and ("coco_better", "siglip", cat, seed) == STARVED:
                     df.iloc[0:0].to_csv(f, index=False)  # header-only: never found a positive
                 elif lose and rung == "r1_xcal" and (cat, seed) == ("f", 2):
                     f.write_bytes(b"")  # died mid-write: data loss
@@ -94,7 +94,7 @@ def build(root: Path, *, mislabel: bool = False, lose: bool = False) -> str:
     base = pd.DataFrame(
         [
             {
-                "dataset": "coco_quarry",
+                "dataset": "coco_better",
                 "embedder": "siglip",
                 "category": c,
                 "seed": s,

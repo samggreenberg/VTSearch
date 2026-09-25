@@ -70,15 +70,15 @@ export CALIB_ANCHORED=0
 export CALIB_CUT_INCL_KS=""
 
 # --- environment ---------------------------------------------------------------
-# COCO Better (`coco_quarry` in code, #4183), every one of its 144 class@band
+# COCO Better (`coco_better` in code, #4183), every one of its 144 class@band
 # cells, BINARY voting only: the progression sits before the deck's Regions
 # section, so SigLIP alone - no patch column, no region arm.
-export CALIB_DATASETS=coco_quarry
-export CALIB_COCO_QUARRY_EMBEDDERS=siglip
+export CALIB_DATASETS=coco_better
+export CALIB_COCO_BETTER_EMBEDDERS=siglip
 export CALIB_CATEGORY_MODE=all
 export CALIB_PATCH_STYLES=max_patch
 # Declared, not left to whether each cell happens to have a query (#3278).
-# `EXPERIMENT_QUERIES["coco_quarry"]` covers every cell.
+# `EXPERIMENT_QUERIES["coco_better"]` covers every cell.
 export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
 
@@ -100,7 +100,7 @@ export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 export CALIB_CPUS=1
 # NOT SIZED ON THIS GRID.  The nearest measurement is #3551's caltech101_m x
-# siglip binary cell at 150 votes: 0m46s, 1.4 GB.  A coco_quarry cell holds
+# siglip binary cell at 150 votes: 0m46s, 1.4 GB.  A coco_better cell holds
 # ~11,000 images to caltech's ~8,700, so expect the same order, and the retired
 # rungs do no extra training.  Run `size` on r1 and r7 and read MaxRSS and
 # Elapsed off `sacct` before trusting these or raising CONC.

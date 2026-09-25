@@ -234,7 +234,7 @@ different classes and nobody has looked.
 
 ## 4. The invariants, checked on the data rather than the function
 
-The unit tests in `test_vg_scale_cross_class_negatives.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) pin
+The unit tests in `test_vg_scale_cross_class_negatives.py` (retired with Visual Genome — see `docs/plans/coco-better.md`) pin
 `_evaluable`. They cannot say that 7,746 real images came out obeying it. All
 three properties are checked on **every** media of every rebuilt cell, not
 sampled:

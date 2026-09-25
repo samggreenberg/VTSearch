@@ -3,7 +3,7 @@
 **Issue:** #4159. **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
 **Path:** SigLIP text opening, then DINOv3 patch embeddings with max-patch
 scoring and region voting (the user votes on a box, not the whole image).
-**Bench:** `coco_quarry`, all 49 classes at every size (144 cells).
+**Bench:** `coco_better`, all 49 classes at every size (144 cells).
 **Seeds:** 3 (432 runs). The companion report is *State of the App: Binary
 Photo*; its comparisons here use the same 3 seeds.
 

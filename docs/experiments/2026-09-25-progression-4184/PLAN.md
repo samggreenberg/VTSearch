@@ -11,7 +11,7 @@ not come out lower than the one before it.
 The *Hold The Line* deck (`slides/decks/hold-the-line.deck`) walks the
 threshold through a ladder of ideas. Each one repairs what the last starved on.
 This study draws that ladder as a single figure: one mean-cost-over-votes curve
-per rung, all on COCO Better (`coco_quarry` in code, renamed in #4183), and all
+per rung, all on COCO Better (`coco_better` in code, renamed in #4183), and all
 leaving from the same click-0 notch, the typed query's own ranking.
 
 It is an **illustration, not an A/B**. No knob ships or retires on it, and the
@@ -73,7 +73,7 @@ split, same test set, same opening. They diverge from the first fitted step.
 
 ## The grid
 
-- **Data:** `coco_quarry`, every designated cell (`CALIB_CATEGORY_MODE=all`):
+- **Data:** `coco_better`, every designated cell (`CALIB_CATEGORY_MODE=all`):
   49 classes in 144 class@band cells, 100 positives against a shared 9,900
   negatives (~1%).
 - **Representation:** `siglip` only, whole-image, **binary voting**. The figure
@@ -157,7 +157,7 @@ bash $H/launch_progression_4184.sh analyze     # after every rung drains
    page. Preview the layout at any time with `--demo DIR`, which draws
    synthetic curves and refuses to write into `figs/`.
 3. Add a `progression` fragment, a seven-page build (a–g, one rung per page),
-   at the end of section 5 in `hold-the-line.deck`, after `data-set-quarry`.
+   at the end of section 5 in `hold-the-line.deck`, after `data-set-coco-better`.
    That is the only place in the deck that comes after COCO Better is
    introduced and before *Regions*. Its notes name each rung's slide, its paired
    step, and the click-0 notch.

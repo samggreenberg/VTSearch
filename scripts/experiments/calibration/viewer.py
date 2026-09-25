@@ -586,7 +586,7 @@ def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.
             if f.stat().st_size == 0:
                 continue
             try:
-                fr = pd.read_csv(f)
+                fr = _cells_io.legacy_datasets(pd.read_csv(f))
             except Exception:  # noqa: BLE001
                 # A cell whose CSV is truncated costs its skyline, never the
                 # page: the main frame's own loader reports unreadable cells,

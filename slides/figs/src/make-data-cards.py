@@ -14,7 +14,7 @@ in grey — because that is the one picture that shows both what a box is and
 what exhaustive annotation means.
 
 Media come from `dataset_samples.py` (Caltech-101, COCO val2017) and
-`docmarks_media.py` (the DocMarks sources), both of which download into the
+`fullmarks_media.py` (the FullMarks sources), both of which download into the
 gitignored `data/` and never into the tree. The selections are pinned by id, so
 re-running redraws the same frames.
 """
@@ -518,14 +518,14 @@ def frame_problem_pile() -> Any:
 
 
 # --------------------------------------------------------------------------
-# coco_quarry — "COCO Quarry" on a slide
+# coco_better — "COCO Better" on a slide
 # --------------------------------------------------------------------------
 
-#: `(val2017 image id, class, band)`: six quarry positives, each drawn with the
+#: `(val2017 image id, class, band)`: six COCO Better positives, each drawn with the
 #: one region the cell carries — the class's largest instance. The class and
 #: band are checked against `pile_config` when the frame is drawn, so a roster
 #: or band change that moves one of these fails here rather than mislabelling it.
-QUARRY_GRID = (
+COCO_BETTER_GRID = (
     (200839, "bus", "large"),
     (245513, "bird", "small"),
     (404484, "dog", "medium"),
@@ -534,10 +534,10 @@ QUARRY_GRID = (
     (358923, "umbrella", "large"),
 )
 #: The dog@medium frame from the grid, blown up: a dog, a person, a tv and a
-#: potted plant — and a teddy bear, which is not a quarry class, so it gets no
+#: potted plant — and a teddy bear, which is not a COCO Better class, so it gets no
 #: box and no line. Each class shows its one region, the largest instance.
-QUARRY_ZOOM = 404484
-QUARRY_ZOOM_ABSENT = (
+COCO_BETTER_ZOOM = 404484
+COCO_BETTER_ZOOM_ABSENT = (
     "bird",
     "bus",
     "book",
@@ -563,8 +563,8 @@ def _pile_config() -> Any:
     return module
 
 
-def _quarry_name(coco_name: str) -> str | None:
-    """The quarry class a COCO class is filed under, or None if it is not in *C*."""
+def _coco_better_name(coco_name: str) -> str | None:
+    """The COCO Better class a COCO class is filed under, or None if it is not in *C*."""
     pc = _pile_config()
     merged = {member: name for name, members in pc.SCALE_CLASS_MERGES.items() for member in members}
     name = merged.get(coco_name, coco_name)
@@ -575,12 +575,12 @@ def _band(area_fraction: float) -> str:
     for band, (lo, hi) in _pile_config().BOX_BANDS.items():
         if lo <= area_fraction < hi:
             return band
-    raise SystemExit(f"quarry: an area fraction of {area_fraction:.3f} is in no band")
+    raise SystemExit(f"COCO Better: an area fraction of {area_fraction:.3f} is in no band")
 
 
 def _largest_by_class(image_id: int) -> tuple[dc.Tile, dict[str, tuple], dict[str, float]]:
-    """The 4:3 tile, the largest box of each quarry class in it, and each one's area fraction."""
-    tile, pairs = _coco_tile(image_id, keep=lambda n: _quarry_name(n) is not None, rename=_quarry_name)
+    """The 4:3 tile, the largest box of each COCO Better class in it, and each one's area fraction."""
+    tile, pairs = _coco_tile(image_id, keep=lambda n: _coco_better_name(n) is not None, rename=_coco_better_name)
     _, coco, _, _ = _coco()
     meta = next(i for i in coco["images"] if i["id"] == image_id)
     area = meta["width"] * meta["height"]
@@ -591,14 +591,14 @@ def _largest_by_class(image_id: int) -> tuple[dc.Tile, dict[str, tuple], dict[st
     return tile, largest, {n: b[2] * b[3] / area for n, b in largest.items()}
 
 
-def _quarry_left(fig: Any) -> None:
+def _coco_better_left(fig: Any) -> None:
     pc = _pile_config()
     cells = len(pc.SCALE_CLASSES) * len(pc.BOX_BANDS) - len(pc.SCALE_DROPPED_CELLS)
     # Its name as a person says it, not as the config spells it; and no url,
     # because we built it and there is nowhere to download it from.
     dc.left_column(
         fig,
-        "COCO Quarry",
+        "COCO Better",
         [
             (dc.nice(COCO_IMAGES), "images, all of COCO 2017"),
             (f"{len(pc.SCALE_CLASSES)}", "classes"),
@@ -608,35 +608,35 @@ def _quarry_left(fig: Any) -> None:
     )
 
 
-def frame_quarry_grid() -> Any:
+def frame_coco_better_grid() -> Any:
     fig = dc.blank()
-    _quarry_left(fig)
+    _coco_better_left(fig)
     tiles = []
-    for image_id, cls, band in QUARRY_GRID:
+    for image_id, cls, band in COCO_BETTER_GRID:
         base, largest, fractions = _largest_by_class(image_id)
         if cls not in largest or _band(fractions[cls]) != band:
-            raise SystemExit(f"quarry grid: image {image_id} is not a {cls}@{band} positive")
+            raise SystemExit(f"COCO Better grid: image {image_id} is not a {cls}@{band} positive")
         tiles.append(dc.Tile(base.image, [largest[cls]], caption=f"{dc.display_class(cls)}@{band}"))
     dc.grid(fig, tiles, cols=3, rows=2)
     return fig
 
 
-def frame_quarry_zoom() -> Any:
+def frame_coco_better_zoom() -> Any:
     fig = dc.blank()
-    _quarry_left(fig)
-    tile, largest, _ = _largest_by_class(QUARRY_ZOOM)
-    clash = set(largest) & set(QUARRY_ZOOM_ABSENT)
+    _coco_better_left(fig)
+    tile, largest, _ = _largest_by_class(COCO_BETTER_ZOOM)
+    clash = set(largest) & set(COCO_BETTER_ZOOM_ABSENT)
     if clash:
-        raise SystemExit(f"quarry zoom: {sorted(clash)} are listed absent but present in {QUARRY_ZOOM}")
+        raise SystemExit(f"COCO Better zoom: {sorted(clash)} are listed absent but present in {COCO_BETTER_ZOOM}")
     categories = [(dc.display_class(name), [box]) for name, box in largest.items()] + [
-        (dc.display_class(name), []) for name in QUARRY_ZOOM_ABSENT
+        (dc.display_class(name), []) for name in COCO_BETTER_ZOOM_ABSENT
     ]
     dc.zoom(fig, tile, categories)
     return fig
 
 
 # --------------------------------------------------------------------------
-# DocMarks: its four sources, what they do not give you, and the result
+# FullMarks: its four sources, what they do not give you, and the result
 # --------------------------------------------------------------------------
 
 
@@ -644,7 +644,7 @@ def _datasheet_sources() -> dict[str, dict[str, int]]:
     """`{source: {pages, instances}}` from DATASHEET.md's Sources table."""
     import re
 
-    text = (REPO / "scripts" / "experiments" / "docmarks" / "DATASHEET.md").read_text()
+    text = (REPO / "scripts" / "experiments" / "fullmarks" / "DATASHEET.md").read_text()
     section = text[text.index("### Sources") :]
     out = {}
     for line in section.splitlines()[4:]:
@@ -705,7 +705,7 @@ STAVER_PAGES = (
 
 
 def frame_spods() -> Any:
-    import docmarks_media as dm
+    import fullmarks_media as dm
 
     counts = _datasheet_sources()["SPODS"]
     fig = dc.blank()
@@ -728,7 +728,7 @@ def frame_spods() -> Any:
 
 
 def frame_tobacco800() -> Any:
-    import docmarks_media as dm
+    import fullmarks_media as dm
 
     counts = _datasheet_sources()["Tobacco800"]
     fig = dc.blank()
@@ -751,7 +751,7 @@ def frame_tobacco800() -> Any:
 
 
 def frame_staver() -> Any:
-    import docmarks_media as dm
+    import fullmarks_media as dm
 
     counts = _datasheet_sources()["StaVer"]
     fig = dc.blank()
@@ -770,13 +770,13 @@ def frame_staver() -> Any:
 
 
 def frame_ucsf() -> Any:
-    import docmarks_media as dm
+    import fullmarks_media as dm
 
     fig = dc.blank()
     dc.left_column(
         fig,
         "UCSF Industry Documents",
-        # Measured live against the IDL Solr index (docmarks/README.md).
+        # Measured live against the IDL Solr index (fullmarks/README.md).
         [(dc.nice(13_216_456), "short tobacco-industry documents"), ("0", "boxes")],
         "industrydocuments.ucsf.edu",
     )
@@ -785,7 +785,7 @@ def frame_ucsf() -> Any:
     return fig
 
 
-DOCMARKS_PROBLEMS = (
+FULLMARKS_PROBLEMS = (
     "Which marks are the same?",
     "Masks, not marks",
     "The haystack holds needles",
@@ -802,11 +802,11 @@ FRAGMENTED = ("00129", 1)
 NEEDLE = ("tobacco800/logo_ajj10e00_1", "ffbb0108")
 
 
-def frame_docmarks_same() -> Any:
-    import docmarks_media as dm
+def frame_fullmarks_same() -> Any:
+    import fullmarks_media as dm
 
     fig = dc.blank()
-    _problems_column(fig, 0, DOCMARKS_PROBLEMS)
+    _problems_column(fig, 0, FULLMARKS_PROBLEMS)
     height = 0.27
     for row, ids in enumerate(LOOKALIKES):
         top = 0.93 - row * 0.44
@@ -821,10 +821,10 @@ def frame_docmarks_same() -> Any:
     return fig
 
 
-def frame_docmarks_mask() -> Any:
+def frame_fullmarks_mask() -> Any:
     from PIL import Image
 
-    import docmarks_media as dm
+    import fullmarks_media as dm
 
     cfg, common, spods, _, _ = dm._modules()
     stem, index = FRAGMENTED
@@ -844,7 +844,7 @@ def frame_docmarks_mask() -> Any:
     shown = mask.crop(box).point(lambda v: 255 if v > 127 else 0).convert("RGB")
 
     fig = dc.blank()
-    _problems_column(fig, 1, DOCMARKS_PROBLEMS)
+    _problems_column(fig, 1, FULLMARKS_PROBLEMS)
     rect_h = 0.36
     rect_w = rect_h * (box[2] - box[0]) / (box[3] - box[1]) * dc.FIG_H / dc.FIG_W
     _picture(fig, [0.42, 0.53, rect_w, rect_h], shown, boxes=[(b, dc.NEG, 1.8) for b in inside])
@@ -872,11 +872,11 @@ def frame_docmarks_mask() -> Any:
     return fig
 
 
-def frame_docmarks_needle() -> Any:
-    import docmarks_media as dm
+def frame_fullmarks_needle() -> Any:
+    import fullmarks_media as dm
 
     fig = dc.blank()
-    _problems_column(fig, 2, DOCMARKS_PROBLEMS)
+    _problems_column(fig, 2, FULLMARKS_PROBLEMS)
     class_id, doc_id = NEEDLE
     crop = _letterbox(dm.mark_crop(class_id), aspect=4 / 3, pad=0.1)
     width = 0.25
@@ -920,7 +920,7 @@ def frame_docmarks_needle() -> Any:
 
 #: `(class id, name on the slide)`: six roster marks, one per tile, two from
 #: each kind of source — made-up documents, real invoices, real letters.
-DOCMARKS_GRID = (
+FULLMARKS_GRID = (
     ("spods/stamp_00293_1", "Elephant Stamp"),
     ("spods/stamp_00716_1", "Not Delivered"),
     ("staver/stamp_stampds-00230_0", "DFKI Receipt"),
@@ -929,8 +929,8 @@ DOCMARKS_GRID = (
     ("ucsf/logo_rjr_script", "RJR Script"),
 )
 #: The zoom: the Philip Morris crest's anchor page, and marks it does not hold.
-DOCMARKS_ZOOM = "tobacco800/logo_aah97e00-page02_1_0"
-DOCMARKS_ZOOM_ABSENT = (
+FULLMARKS_ZOOM = "tobacco800/logo_aah97e00-page02_1_0"
+FULLMARKS_ZOOM_ABSENT = (
     "Elephant Stamp",
     "RJR Script",
     "Lorillard Crest",
@@ -939,47 +939,47 @@ DOCMARKS_ZOOM_ABSENT = (
 )
 
 
-def _docmarks_left(fig: Any) -> None:
-    import docmarks_media as dm
+def _fullmarks_left(fig: Any) -> None:
+    import fullmarks_media as dm
 
     sources = _datasheet_sources()
     dc.left_column(
         fig,
-        "DocMarks",
+        "FullMarks",
         [
             (dc.nice(sum(s["pages"] for s in sources.values())), "pages"),
             (f"{len(dm.datasheet_roster())}", "marks to find"),
             (dc.nice(sum(s["instances"] for s in sources.values())), "copies, every one checked"),
         ],
-        None,  # ours, like COCO Quarry: nowhere to download it from
+        None,  # ours, like COCO Better: nowhere to download it from
     )
 
 
-def frame_docmarks_grid() -> Any:
-    import docmarks_media as dm
+def frame_fullmarks_grid() -> Any:
+    import fullmarks_media as dm
 
     roster = set(dm.datasheet_roster())
     fig = dc.blank()
-    _docmarks_left(fig)
+    _fullmarks_left(fig)
     tiles = []
-    for class_id, name in DOCMARKS_GRID:
+    for class_id, name in FULLMARKS_GRID:
         if class_id not in roster:
-            raise SystemExit(f"docmarks grid: {class_id} is not on the datasheet's roster")
+            raise SystemExit(f"fullmarks grid: {class_id} is not on the datasheet's roster")
         tiles.append(dc.Tile(_letterbox(dm.mark_crop(class_id)), caption=name))
     dc.grid(fig, tiles, cols=3, rows=2)
     return fig
 
 
-def frame_docmarks_zoom() -> Any:
-    import docmarks_media as dm
+def frame_fullmarks_zoom() -> Any:
+    import fullmarks_media as dm
 
     fig = dc.blank()
-    _docmarks_left(fig)
-    image, (x, y, w, h) = dm.anchor(DOCMARKS_ZOOM)
+    _fullmarks_left(fig)
+    image, (x, y, w, h) = dm.anchor(FULLMARKS_ZOOM)
     # The top of the page, at the zoom's 4:3: letterheads live there.
     top = image.crop((0, 0, image.width, int(image.width * 3 / 4)))
-    name = dict(DOCMARKS_GRID)[DOCMARKS_ZOOM]
-    dc.zoom(fig, dc.Tile(top), [(name, [(x, y, w, h)])] + [(n, []) for n in DOCMARKS_ZOOM_ABSENT])
+    name = dict(FULLMARKS_GRID)[FULLMARKS_ZOOM]
+    dc.zoom(fig, dc.Tile(top), [(name, [(x, y, w, h)])] + [(n, []) for n in FULLMARKS_ZOOM_ABSENT])
     return fig
 
 
@@ -989,19 +989,22 @@ def frame_docmarks_zoom() -> Any:
 FRAMES = {
     "caltech": [("data-set-caltech", frame_caltech)],
     "coco": [("data-set-coco-grid", frame_coco_grid), ("data-set-coco-zoom", frame_coco_zoom)],
-    "quarry": [("data-set-quarry-grid", frame_quarry_grid), ("data-set-quarry-zoom", frame_quarry_zoom)],
-    "docmarks-sources": [
+    "coco-better": [
+        ("data-set-coco-better-grid", frame_coco_better_grid),
+        ("data-set-coco-better-zoom", frame_coco_better_zoom),
+    ],
+    "fullmarks-sources": [
         ("data-set-spods", frame_spods),
         ("data-set-tobacco800", frame_tobacco800),
         ("data-set-staver", frame_staver),
         ("data-set-ucsf", frame_ucsf),
     ],
-    "docmarks-problems": [
-        ("docmarks-problems-same", frame_docmarks_same),
-        ("docmarks-problems-mask", frame_docmarks_mask),
-        ("docmarks-problems-needle", frame_docmarks_needle),
+    "fullmarks-problems": [
+        ("fullmarks-problems-same", frame_fullmarks_same),
+        ("fullmarks-problems-mask", frame_fullmarks_mask),
+        ("fullmarks-problems-needle", frame_fullmarks_needle),
     ],
-    "docmarks": [("data-set-docmarks-grid", frame_docmarks_grid), ("data-set-docmarks-zoom", frame_docmarks_zoom)],
+    "fullmarks": [("data-set-fullmarks-grid", frame_fullmarks_grid), ("data-set-fullmarks-zoom", frame_fullmarks_zoom)],
     "coco-problems": [
         ("coco-problems-merge", frame_problem_merge),
         ("coco-problems-cuts", frame_problem_cuts),

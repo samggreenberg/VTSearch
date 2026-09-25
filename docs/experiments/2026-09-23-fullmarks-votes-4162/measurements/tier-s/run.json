@@ -1,0 +1,23 @@
+{
+  "matrix": "/expscratch/sgreenberg/fullmarks/votes-4162/matrix-s",
+  "tier": "s",
+  "arms": [
+    "a0_exemplar",
+    "a1_max",
+    "a1p_goods_only",
+    "a2_repick",
+    "a3_vlad_svm",
+    "a3s_production",
+    "a4_siglip_svm",
+    "a4r_siglip_sift",
+    "a5_mlp"
+  ],
+  "checkpoints": [
+    0,
+    3,
+    5,
+    10,
+    20,
+    40
+  ]
+}

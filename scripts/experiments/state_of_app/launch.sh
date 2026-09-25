@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # State of the App (#4159): run the eval the way a user meets the app, on every
-# coco_quarry cell, with the two production paths, and nothing tuned.
+# coco_better cell, with the two production paths, and nothing tuned.
 #
 #   bash launch.sh prepare          # select cells, cache crops (one CPU job)
 #   bash launch.sh cells            # the array: every class x band x path x seed
@@ -10,7 +10,7 @@
 # What is pinned, and why (see .claude/skills/state-of-the-app/SKILL.md):
 #   * the two production paths: SigLIP whole-image binary voting (`siglip`) and
 #     DINOv3 region voting opened on SigLIP's text sort (`siglip+dinov3_patch`,
-#     max_patch) -- the default coco_quarry embedders, named here so a changed
+#     max_patch) -- the default coco_better embedders, named here so a changed
 #     default cannot silently change what "the app" means;
 #   * shipped defaults for everything else: no repool/schedule/fold variants,
 #     the fused threshold, the text opening (refused otherwise);
@@ -26,8 +26,8 @@ CALIB="$HERE/../calibration"
 
 export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)}"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/state-of-the-app/$SOTA_DATE}"
-export CALIB_DATASETS=coco_quarry
-export CALIB_COCO_QUARRY_EMBEDDERS="siglip,siglip+dinov3_patch"
+export CALIB_DATASETS=coco_better
+export CALIB_COCO_BETTER_EMBEDDERS="siglip,siglip+dinov3_patch"
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${SOTA_SEEDS:-1}"
@@ -63,7 +63,7 @@ export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_EMIT_PICKS=1
 export CALIB_JOB_NAME="${CALIB_JOB_NAME:-sota-$SOTA_DATE}"
-# Sized on the first review (2026-09-23), NOT on vg_scale: a coco_quarry REGION
+# Sized on the first review (2026-09-23), NOT on vg_scale: a coco_better REGION
 # run peaks at 66-70 GB (the 7.5 GB half-precision patch cell expands several-
 # fold) and takes ~1 h; at 12 GB 12 of 23 died within minutes. A whole-image
 # run is ~5 min and small, but one array carries both, so it is sized for the
@@ -90,7 +90,7 @@ if [[ "${1:-}" == "subset" ]]; then
   CLASSES="${2:?usage: launch.sh subset \"airplane,dining table,...\"}"
   IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" <<'PYIDX'
 import json, sys
-info = json.load(open(sys.argv[1]))["datasets"]["coco_quarry"]
+info = json.load(open(sys.argv[1]))["datasets"]["coco_better"]
 keep = {c.strip() for c in sys.argv[2].split(",") if c.strip()}
 n_seeds = int(sys.argv[3])
 # array_cells order at CALIB_CELL_ORDER=seed: seed-major, then embedder, then category.

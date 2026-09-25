@@ -16,7 +16,7 @@ and why #3604's pending rebuild should carry it.
 
 ### 1. The measurement the issue specifies cannot make the decision on its own
 
-#3618 says to read `coco_folds.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`)'s **fold-in** column and act on any VG name
+#3618 says to read `coco_folds.py` (retired with Visual Genome — see `docs/plans/coco-better.md`)'s **fold-in** column and act on any VG name
 reaching a material share. Fold-in is a *box* test: does a VG box named *n* land
 on a COCO box of class *c* at IoU ≥ 0.5? Run against the twelve it produces a
 clean ranking, and the two entries at opposite ends of it show why a ranking is

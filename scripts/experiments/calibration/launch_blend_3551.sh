@@ -81,8 +81,8 @@ for w in 0.2 0.5; do CORR="$CORR,corridor_ramp:w=$w"; done
 export CALIB_SCHEDULE_VARIANTS="$REFS$RARE,$CORR"
 
 # --- environments ------------------------------------------------------------
-# The three classic pile datasets only - none depends on vg_scale, DocMarks or
-# coco_quarry.  Per voting mode, never pooled (#2841 measured the modes to want
+# The three classic pile datasets only - none depends on vg_scale, FullMarks or
+# coco_better.  Per voting mode, never pooled (#2841 measured the modes to want
 # different curves, and PRODUCTION_SCHEDULE_BY_MODE is mode-gated):
 #   region = {visual_genome_m, coco_val} x siglip+dinov3_patch, max_patch
 #   binary = {visual_genome_m, coco_val, caltech101_m} x siglip

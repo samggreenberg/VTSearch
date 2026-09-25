@@ -52,7 +52,7 @@ So the issue splits into two questions, and one screen measures both:
 
 | axis | value | why |
 |---|---|---|
-| environments | region: `visual_genome_m`, `coco_val` × `siglip+dinov3_patch` / `max_patch`; binary: `visual_genome_m`, `coco_val`, `caltech101_m` × `siglip` | the three classic pile datasets, none dependent on vg_scale, DocMarks or coco_quarry. Two region and three binary environments, so no verdict rests on one. The region arm is the pair (#3278). |
+| environments | region: `visual_genome_m`, `coco_val` × `siglip+dinov3_patch` / `max_patch`; binary: `visual_genome_m`, `coco_val`, `caltech101_m` × `siglip` | the three classic pile datasets, none dependent on vg_scale, FullMarks or coco_better. Two region and three binary environments, so no verdict rests on one. The region arm is the pair (#3278). |
 | categories | the harness's own selector; caltech at 12 | the study does not pick its environments. |
 | cell seeds | 4 | |
 | calibration draws | 42, 0 — a **cell axis** | #3796: 70% of cell-to-cell variance is the draw. Two draws make every contrast an average over splits rather than a fact about split 42. |

@@ -2,7 +2,7 @@
 
 **2026-09-18.** `anchor_to_coco` says that dropping Visual Genome's non-COCO half
 loses "VG's non-COCO diversity for nothing". The
-[`coco_quarry` plan](../../plans/coco-quarry.md) names settling that claim as the
+[`coco_better` plan](../../plans/coco-better.md) names settling that claim as the
 item that runs **first**, because it is the only live argument for keeping VG and
 the only one that could still change the migration decision.
 

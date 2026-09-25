@@ -1,6 +1,6 @@
 # The negative pool does not need to be shared — but fixing it buys no accuracy
 
-**Issue:** #3986. **Dataset:** `coco_quarry`, 25 classes, 75 cells, four
+**Issue:** #3986. **Dataset:** `coco_better`, 25 classes, 75 cells, four
 single-vector columns. **Date:** 2026-09-20.
 
 ## Verdict
@@ -8,7 +8,7 @@ single-vector columns. **Date:** 2026-09-20.
 **The representativeness cost the issue calls "the serious one" is, on the
 shipped benchmark, the minor one.** Moving from today's negatives to a fully
 representative per-class pool moves a measured cell by **−0.002 AP**. No
-published `coco_quarry` number needs re-reading on this account.
+published `coco_better` number needs re-reading on this account.
 
 That is not because the shortcut is absent. It is present at full strength: a
 head trained on the shipped pool still fires **2.0-2.3x** as often on negatives that
@@ -158,7 +158,7 @@ change that moves nothing is easy to mistake for a change that did not take.
 
 - **One head family.** A linear head on whole-image embeddings, which is the
   production head (#2683, #2790) — but region-voting and patch arms are not
-  measured here, and #3667 had the same limit. The `coco_quarry_full` patch
+  measured here, and #3667 had the same limit. The `coco_better_full` patch
   column now exists in 8 shards, so this is newly answerable, and filed as #4043.
 - **25 classes, not 54.** The supply arithmetic the issue reports is on the
   #3983 roster; this is on the shipped roster, where a representative draw is

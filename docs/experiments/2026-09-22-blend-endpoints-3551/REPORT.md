@@ -18,7 +18,7 @@ Pre-registration (`PLAN.md`), figures, `viewer.html` and the screen and A/B aggr
 
 ## Method
 
-- **Environments:** three pile datasets, none touching vg_scale, DocMarks or coco_quarry.
+- **Environments:** three pile datasets, none touching vg_scale, FullMarks or coco_better.
   - Region: `visual_genome_m` and `coco_val` × `siglip+dinov3_patch` / `max_patch`.
   - Binary: those two plus `caltech101_m` × `siglip`.
 - **Grid:** 17/19/12 categories × 4 seeds × **2 calibration draws** as a cell axis. #3796 found the draw owns 70% of cell-to-cell variance, so every contrast averages over splits. 150 votes; everything else is the app's own.

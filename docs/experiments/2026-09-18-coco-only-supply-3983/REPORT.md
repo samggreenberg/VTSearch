@@ -19,7 +19,7 @@ python figures_3983.py --supply supply.json --outdir docs/experiments/2026-09-18
 |---|---:|
 | COCO 2017 train+val images | **123,287** |
 | VG images, for comparison | 108,077 |
-| VG∩COCO — the pool `exact_supply.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`) measured | **51,497** |
+| VG∩COCO — the pool `exact_supply.py` (retired with Visual Genome — see `docs/plans/coco-better.md`) measured | **51,497** |
 | cells short of `SCALE_N_POS` = 100 | **0 of 75** |
 | cells short of 300 (`exact_supply.py`'s `NEED`) | **5 of 75**, all `small` |
 | thinnest cell | `bus@small`, **177** |
@@ -33,7 +33,7 @@ neighbouring question in August and is read as having answered this one. It
 reported **20 of 36 shipped cells** short of 300 COCO-anchored positives, which
 is the founding measurement of the 3,391-image exhaustive annotation pass (the
 plan that carried it was retired by this study; see the migration plan,
-[`docs/plans/coco-quarry.md`](../../plans/coco-quarry.md)).
+[`docs/plans/coco-better.md`](../../plans/coco-better.md)).
 
 It draws its candidates from `vg_source()`:
 
@@ -558,7 +558,7 @@ things it therefore does not establish:
 
 ## Consequences
 
-**The result is named `coco_quarry`** — a fixed body of material you cut blocks
+**The result is named `coco_better`** — a fixed body of material you cut blocks
 out of to spec, which is what it becomes once band, prevalence and class list are
 export-time queries (#3987). Nothing parameter-like is in the name on purpose:
 `vg_scale_any` and `vg_scale_deep` exist *because* band and depth were baked into

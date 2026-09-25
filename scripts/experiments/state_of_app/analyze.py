@@ -83,7 +83,7 @@ def load(exp: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     frames, sky, picks = [], [], []
     for f in _cells_io.main_frame_files(cells):
         try:
-            df = pd.read_csv(f, low_memory=False)
+            df = _cells_io.legacy_datasets(pd.read_csv(f, low_memory=False))
         except (pd.errors.EmptyDataError, OSError):
             continue
         if df.empty:
@@ -93,7 +93,7 @@ def load(exp: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         frames.append(_cells_io._base_rows(df))
         p = f.with_name(f.stem + "__picks.csv")
         if p.exists() and p.stat().st_size:
-            picks.append(pd.read_csv(p))
+            picks.append(_cells_io.legacy_datasets(pd.read_csv(p)))
     cat = lambda xs: pd.concat(xs, ignore_index=True) if xs else pd.DataFrame()  # noqa: E731
     return cat(frames), cat(sky), cat(picks)
 
@@ -102,7 +102,7 @@ def text_scores(baseline: Path | None) -> dict[tuple, tuple[float, float]]:
     """``{(dataset, category, embedder, seed): (text_cost, text_f1)}``."""
     if baseline is None or not baseline.exists():
         return {}
-    tb = pd.read_csv(baseline)
+    tb = _cells_io.legacy_datasets(pd.read_csv(baseline))
     tb = tb[tb.get("supports_text", 1) == 1]
     return {(r.dataset, r.category, r.embedder, int(r.seed)): (_f(r.text_cost), _f(r.text_f1)) for r in tb.itertuples()}
 

@@ -5,7 +5,7 @@ Lifted out of `pilebuild/loaders/vg_scale.py` when Visual Genome was retired
 label dict and answers *which cell does this image belong to*, which is the same
 question over any exhaustively annotated source.
 
-**It lives apart from any loader on purpose.** `coco_quarry` and the retired
+**It lives apart from any loader on purpose.** `coco_better` and the retired
 `vg_scale` were only ever comparable because they banded, designated, drew
 negatives and built their media dicts through the *same objects* rather than the
 same intentions -- the reason :func:`band_for` was split out in the first place,
@@ -409,12 +409,12 @@ def scale_media(
     """One scale-family media dict, or ``None`` if the bytes do not decode.
 
     **Single-sourced because comparability lives in the shape, not just the
-    rule.** `coco_quarry` and `vg_scale` are only comparable if a cell means the
+    rule.** `coco_better` and `vg_scale` are only comparable if a cell means the
     same thing in both, and that is as true of `evaluable_categories` and
     `coco_scored` as it is of the band: a second copy of this dict would drift
     in a field nobody diffs. The same argument split :func:`band_for` out, and
     the loaders differ in the one place they genuinely must -- where the pixels
-    come from. `vg_scale` reads a file per image; `coco_quarry` reads a member
+    come from. `vg_scale` reads a file per image; `coco_better` reads a member
     out of a staged zip (#3991).
 
     *data* is decoded header-only as a corruption check: a file that will not

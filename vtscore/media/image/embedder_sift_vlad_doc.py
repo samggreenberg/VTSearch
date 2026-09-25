@@ -14,7 +14,7 @@ and a detector reads it back — so binding ``sift_vlad_doc`` states the choice
 where every consumer already looks, and no existing ``sift_vlad`` cell changes
 meaning or needs rebuilding.
 
-**Measured on DocMarks** (23 roster classes, 721 instances; #3911, #4021):
+**Measured on FullMarks** (23 roster classes, 721 instances; #3911, #4021):
 retrieval AP **0.88** at 8,192 keypoints against **0.12** for SigLIP and 0.16
 for the shipped 1,024-keypoint pairing.
 
@@ -28,7 +28,7 @@ operator who moves the cap moves it for both — but anyone who does should
 re-measure the pair, not just the knob they touched.
 
 **Storage is the price, and it is large.**  Local features scale with the
-budget: a tier-`l` DocMarks cell (200k pages) is **~167 GB** at 2 MP / 8,192
+budget: a tier-`l` FullMarks cell (200k pages) is **~167 GB** at 2 MP / 8,192
 against **~78 GB** at 1 MP / 8,192, where the 1,024-keypoint cell is a small
 fraction of either (#3911 measured ~169 KB/page at 8,192; #4021 priced the
 tier-`l` build at ~5.3 h on 24 CPUs).  Bind this on a large document corpus

@@ -22,7 +22,7 @@
 # ONE FPR, THREE FNRs. The three bands of a class share one negative pool by
 # construction (the `3 *` in `SCALE_PREVALENCE`), so a negative holds no
 # instance of the class and has no size for it. There is no per-band FPR to
-# report and none is emitted; `quarry_export.py --check-bands` asserts the
+# report and none is emitted; `coco_better_export.py --check-bands` asserts the
 # premise rather than assuming it.
 #
 # Shipped defaults only, as in launch_scale.sh: the contrast under test is the
@@ -41,12 +41,12 @@ export VTS_REPO="$WT"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/bands-4051}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
-# `coco_quarry`, not `vg_scale`. The matrix is a claim about object size, and
+# `coco_better`, not `vg_scale`. The matrix is a claim about object size, and
 # VG's boxes sit on a smaller instance than the frame's main one 8.3% of the
 # time (#3924) -- an error that moves an image's BAND, which is the axis this
 # study reads. COCO annotates all eighty classes exhaustively, so the band is
 # derived from adjudicated boxes throughout.
-export CALIB_DATASETS="${CALIB_DATASETS:-coco_quarry}"
+export CALIB_DATASETS="${CALIB_DATASETS:-coco_better}"
 # The region arm is the PAIR `siglip+dinov3_patch`, never bare `dinov3_patch`:
 # DINOv3 has no text tower, so alone it opens on three random known-goods while
 # the whole-image arm opens on a text sort, putting a seeding difference inside
@@ -58,7 +58,7 @@ export CALIB_DATASETS="${CALIB_DATASETS:-coco_quarry}"
 # the region arm was 89% of `launch_scale.sh`'s wall clock, so each extra
 # whole-image column is cheap and each extra patch column is not. Widen this
 # only after `size` has been read on this grid.
-export CALIB_COCO_QUARRY_EMBEDDERS="${CALIB_COCO_QUARRY_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_COCO_BETTER_EMBEDDERS="${CALIB_COCO_BETTER_EMBEDDERS:-siglip,siglip+dinov3_patch}"
 # All 75 cells are designated; selecting a subset would discard the design, and
 # the matrix needs every band of every class to have both a diagonal and two
 # off-diagonals.
@@ -91,7 +91,7 @@ export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_SAFE_THRESHOLDS="${CALIB_SAFE_THRESHOLDS:-1}"
 
 # Declare the opening rather than letting it be decided per cell by whether a
-# query happens to exist (#3278). `EXPERIMENT_QUERIES["coco_quarry"]` covers all
+# query happens to exist (#3278). `EXPERIMENT_QUERIES["coco_better"]` covers all
 # 75 cells -- pinned by `test_every_cell_has_a_typed_query` -- so
 # `REQUIRE_SEED_QUERY` drops nothing here and is a guard, not a selection knob.
 export CALIB_REQUIRE_OPENING="${CALIB_REQUIRE_OPENING:-text}"
@@ -120,7 +120,7 @@ JOB_NAME="${CALIB_JOB_NAME:-bands-$(basename "$CALIB_EXP")}"
 ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS"
 ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
 ENVX="$ENVX VTS_REPO=$VTS_REPO CALIB_DATASETS=$CALIB_DATASETS"
-ENVX="$ENVX CALIB_COCO_QUARRY_EMBEDDERS=$CALIB_COCO_QUARRY_EMBEDDERS CALIB_CATEGORY_MODE=$CALIB_CATEGORY_MODE"
+ENVX="$ENVX CALIB_COCO_BETTER_EMBEDDERS=$CALIB_COCO_BETTER_EMBEDDERS CALIB_CATEGORY_MODE=$CALIB_CATEGORY_MODE"
 ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
 # Named explicitly rather than left to --export=ALL: the launcher computes the
 # cell COUNT and each task computes the cell LIST, and the two must enumerate
@@ -179,13 +179,13 @@ PYCHK
   # One class per LINE: since #4056 a class name can hold spaces
   # (`enclosed road vehicle`), and word-splitting a space-joined list checked
   # three "classes" that do not exist and died on the first.
-  ( cd "$WT/scripts/experiments/pile" && python - <<'PYC' | while IFS= read -r c; do python quarry_export.py --check-bands "$c" || exit 1; done ) || {
+  ( cd "$WT/scripts/experiments/pile" && python - <<'PYC' | while IFS= read -r c; do python coco_better_export.py --check-bands "$c" || exit 1; done ) || {
 import sys; sys.path.insert(0, ".")
 import pile_config as pc
 print("\n".join(pc.SCALE_CLASSES))
 PYC
     echo "SHARED NEGATIVE POOL CHECK FAILED — the matrix would not be paired" >&2; exit 5; }
-  echo "CALIB_EXP=$CALIB_EXP  datasets=$CALIB_DATASETS  embedders=$CALIB_COCO_QUARRY_EMBEDDERS  seeds=$CALIB_N_SEEDS  test_bands=$CALIB_TEST_BANDS"
+  echo "CALIB_EXP=$CALIB_EXP  datasets=$CALIB_DATASETS  embedders=$CALIB_COCO_BETTER_EMBEDDERS  seeds=$CALIB_N_SEEDS  test_bands=$CALIB_TEST_BANDS"
   submit prepare --job-name=bands-prep --mem=96G --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/prepare-%j.out" \
@@ -224,7 +224,7 @@ json.dump(
     {
         "n_cells": int(sys.argv[2]),
         "datasets": "$CALIB_DATASETS".split(","),
-        "embedders": "$CALIB_COCO_QUARRY_EMBEDDERS".split(","),
+        "embedders": "$CALIB_COCO_BETTER_EMBEDDERS".split(","),
         "n_seeds": int("$CALIB_N_SEEDS"),
         "max_steps": int("$CALIB_MAX_STEPS"),
         "cell_order": "$CALIB_CELL_ORDER",
@@ -236,11 +236,11 @@ json.dump(
 )
 PYSHAPE
   PATCH_FLAG=""
-  case "$CALIB_COCO_QUARRY_EMBEDDERS" in *_patch*) PATCH_FLAG="--patch" ;; esac
+  case "$CALIB_COCO_BETTER_EMBEDDERS" in *_patch*) PATCH_FLAG="--patch" ;; esac
   REGION_FLAG=""
-  case "$CALIB_COCO_QUARRY_EMBEDDERS" in
+  case "$CALIB_COCO_BETTER_EMBEDDERS" in
     *_patch*) REGION_FLAG="--require-region-voting ${CALIB_DATASETS%%,*}:$(
-      tr ',' '\n' <<<"$CALIB_COCO_QUARRY_EMBEDDERS" | grep -- '_patch' | head -1)" ;;
+      tr ',' '\n' <<<"$CALIB_COCO_BETTER_EMBEDDERS" | grep -- '_patch' | head -1)" ;;
   esac
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" $PATCH_FLAG \

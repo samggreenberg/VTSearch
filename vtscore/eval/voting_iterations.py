@@ -1878,7 +1878,7 @@ def simulate_voting_iterations(  # noqa: C901
     # `_train_and_calibrate(region_voting=True)` already does for a mortal Good
     # vote -- the sim user drags the GT box -- so the skyline still differs from a
     # mortal step in the labels and nothing else. It needs datasets whose
-    # positives carry the box (`coco_quarry` carries exactly one per positive,
+    # positives carry the box (`coco_better` carries exactly one per positive,
     # #4096). The cross-fitted bracket stays whole-image only: cross-fitting a
     # box-supervised head over the TEST split is a second design nobody has made.
     if skyline_arms and (style_obj is None or style_obj.name != _WHOLE_IMAGE_STYLE):

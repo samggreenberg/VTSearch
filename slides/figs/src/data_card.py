@@ -129,7 +129,7 @@ def nice(n: int) -> str:
     return f"{rounded:,}"
 
 
-#: The name a merged quarry class goes by on a slide. The config names the
+#: The name a merged COCO Better class goes by on a slide. The config names the
 #: union it is (`enclosed road vehicle`) so nobody mistakes it for COCO's own
 #: `car`; a slide just says Car. Every class name is *a* definition anyway —
 #: nobody writes "bird, alive or dead, not cooked" — so the long names buy the
@@ -144,7 +144,7 @@ CLASS_DISPLAY = {
 
 
 def display_class(name: str) -> str:
-    """A quarry class as a slide shows it: capitalised, merges by their short name.
+    """A COCO Better class as a slide shows it: capitalised, merges by their short name.
 
     Capitalised on purpose. `Cup` reads as a proper name, which is the point —
     it is this dataset's definition of a cup, not the word's.

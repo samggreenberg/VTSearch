@@ -58,7 +58,7 @@ COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 
-#: COCO 2017 **train** pixels -- 118,287 images, 94% of `coco_quarry`'s corpus
+#: COCO 2017 **train** pixels -- 118,287 images, 94% of `coco_better`'s corpus
 #: (#3983, #3991). Staged in the same shared tree as the val zip and referenced
 #: nowhere in this repo until now, which is why #3991 was filed believing an
 #: 18 GB fetch was still owed: it is not, the archive has been there since July.
@@ -83,7 +83,7 @@ COCO_TRAIN_IMAGES = COCO_ROOT / "images" / "train2017"
 
 #: The COCO 2017 *annotations* -- `instances_train2017.json` and
 #: `instances_val2017.json` -- as `coco_anchor.py --fetch` stages them. Named
-#: here because `coco_quarry` reads them at build time and a build input spelled
+#: here because `coco_better` reads them at build time and a build input spelled
 #: only in an `--anchor-dir` argument is a build input nobody can check (#3299).
 #:
 #: Not the same file as :data:`COCO_ANNOTATIONS`, which is the val-only flattened
@@ -93,7 +93,7 @@ COCO_ANCHOR_DIR = Path(os.environ.get("VTS_COCO_ANCHOR_DIR", str(PILE / "coco_an
 #: How many shards the full-corpus patch column is cut into. Chosen so each cell
 #: lands near 4.7 GB, which is what `vg_scale__dinov3_patch.pkl` already is and
 #: therefore a size the harness is known to load.
-COCO_QUARRY_SHARDS = 8
+COCO_BETTER_SHARDS = 8
 
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
@@ -112,7 +112,7 @@ DATASETS: dict[str, dict] = {
     # what it is and five-plus shipped studies are conditioned on the VG-built
     # ones -- they stay readable under their own name, and nothing new is built
     # on them.
-    "coco_quarry": {"boxed": True, "kind": "coco_quarry"},
+    "coco_better": {"boxed": True, "kind": "coco_better"},
     # The same corpus with NO designation draw: every COCO 2017 image embedded,
     # so a cell is a filter over a fixed set rather than a build-time choice.
     # That is what lets `SCALE_N_POS`/`SCALE_N_NEG` and the prevalence axis
@@ -124,13 +124,13 @@ DATASETS: dict[str, dict] = {
     # one `pickle.dump`, and every consumer reads it back through `load_medias`
     # into one dict. A full-corpus `dinov3_patch` cell is ~37 GB of patch grids
     # -- unwritable at any sane `--mem` once the thinned copy is counted, and
-    # unreadable afterwards. The patch column stays on `coco_quarry`.
-    "coco_quarry_full": {"boxed": True, "kind": "coco_quarry", "full_corpus": True, "on_request": True},
+    # unreadable afterwards. The patch column stays on `coco_better`.
+    "coco_better_full": {"boxed": True, "kind": "coco_better", "full_corpus": True, "on_request": True},
     # The patch column over the same full corpus, in shards. One cell would be
     # ~37 GB of grids: `build_pile.py` holds a whole cell in RAM and writes it
     # with one `pickle.dump`, and every consumer reads it back through
     # `load_medias` into one dict, so a single cell is unwritable at any sane
-    # `--mem` and unreadable afterwards. At COCO_QUARRY_SHARDS each is ~4.7 GB --
+    # `--mem` and unreadable afterwards. At COCO_BETTER_SHARDS each is ~4.7 GB --
     # the size of the `vg_scale` patch cell studies already load.
     #
     # The shard is a slice of the EMIT set only. Supply, banding and the clean
@@ -138,14 +138,14 @@ DATASETS: dict[str, dict] = {
     # thing in every shard; the split is by `image_id % n`, so each carries every
     # class and band in proportion rather than an arbitrary contiguous range.
     **{
-        f"coco_quarry_full_s{i}": {
+        f"coco_better_full_s{i}": {
             "boxed": True,
-            "kind": "coco_quarry",
+            "kind": "coco_better",
             "full_corpus": True,
             "on_request": True,
-            "shard": (i, COCO_QUARRY_SHARDS),
+            "shard": (i, COCO_BETTER_SHARDS),
         }
-        for i in range(COCO_QUARRY_SHARDS)
+        for i in range(COCO_BETTER_SHARDS)
     },
     # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
     # free-text vocabulary) rather than the demo pipeline's 100 curated
@@ -535,12 +535,12 @@ def scale_study_exclusion(name: str) -> str | None:
 #: barren draw is capped at :data:`SCALE_N_NEG` in both builds while #3667's
 #: cross-class negatives more than double (6,635 -> 13,991). An earlier
 #: measurement varied the barren component alone and read +0.24 AP; that is a
-#: pool `coco_quarry` never ships, and the #4056 report records the correction.
+#: pool `coco_better` never ships, and the #4056 report records the correction.
 #: A design that let the barren pool scale with its candidate set WOULD inherit
 #: it, so this constrains any future change to how the pool is sized.
 #:
 #: :data:`SCALE_CLASSES_25` still freezes the old roster, and the 25-class build
-#: is preserved at ``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/``, so
+#: is preserved at ``/expscratch/sgreenberg/keep/coco-better-25-20260920/``, so
 #: a published number can be reproduced rather than merely disclaimed.
 #:
 #: **Twenty-five since #3588**, and the thirteen were added on the same terms as
@@ -655,7 +655,7 @@ SCALE_CLASSES: tuple[str, ...] = (
 
 #: The twenty-five *C* held before #4056, frozen as a historical roster.
 #:
-#: Every published `coco_quarry` measurement is conditioned on a shared
+#: Every published `coco_better` measurement is conditioned on a shared
 #: negative pool drawn as *holds none of these twenty-five* -- 49,503 clean
 #: candidates, where the widened roster leaves 16,058. The pool DRAWN is
 #: ``SCALE_N_NEG`` either way, so no cell changes size, but the images in it
@@ -2889,7 +2889,7 @@ def is_scale_review(detector: str, text_query: str) -> bool:
     """Whether a dashboard detector is a vg_scale review at all.
 
     The dashboard is shared: other projects load their own review queues onto the
-    same app (DocMarks does, 2026-09-17). ``bank_verdicts.py`` exported EVERY voted
+    same app (FullMarks does, 2026-09-17). ``bank_verdicts.py`` exported EVERY voted
     detector, so a foreign queue would have been banked into vg_scale's human
     record as a ``slate`` labelset -- and ``retire_finished.py``, finding that file,
     would then have deleted the other project's finished pairs. Both scripts ask

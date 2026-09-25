@@ -1,6 +1,6 @@
 ---
 name: state-of-the-app
-description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_quarry, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
+description: Run and write up the periodic "State of the App" review of VTSearch (#4159) - the eval harness run the way a user meets the app, on coco_better, every class at every size, for the two production paths (SigLIP binary, DINOv3 region), with per-image click influence. Use when asked for a State of the App / SotA / periodic review of how the app does, or to re-run last month's.
 ---
 
 # State of the App
@@ -15,7 +15,7 @@ studies that the review points at.
 Keep these unless the owner changes them, and record any change here in the
 same edit.
 
-- **Bench:** `coco_quarry`, every class at every size: all 144 cells
+- **Bench:** `coco_better`, every class at every size: all 144 cells
   (`CALIB_CATEGORY_MODE=all`). The data is the bench, not the subject. Classes
   and bands are strata to report across; a study about the data itself is out
   of scope.

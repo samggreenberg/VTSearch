@@ -9,7 +9,7 @@ answer is philosophically. Human against human, no model (owner ruling on
 `truck`/`car`, 2026-09-20: "we're not going to define our ground truth based on
 our detector").
 
-**The statistic is per object type, and the unit is the BOX.** coco_quarry's
+**The statistic is per object type, and the unit is the BOX.** coco_better's
 region arm drags a box, and a box has no co-occurring instance to redeem it, so
 the rate that binds is the share of boxes carrying the MINORITY COCO label for
 their own LVIS type. That is what merged `car`+`truck` (9.6%) and `cup`+`wine

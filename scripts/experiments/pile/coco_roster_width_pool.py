@@ -7,7 +7,7 @@ pool** is drawn as *holds none of C*, so every class added shrinks the candidate
 set it is drawn from: 49,503 clean images at 25, 16,058 at 54.
 
 The pool *drawn* is ``SCALE_N_NEG`` = 9,900 either way, so no cell changes size.
-What changes is where those 9,900 come from, and every published `coco_quarry`
+What changes is where those 9,900 come from, and every published `coco_better`
 number for the shipped 25 is conditioned on the wider draw. So:
 
 1. Build the clean candidate set at each roster width -- images holding none of
@@ -80,8 +80,8 @@ def main() -> int:
     # one pass answers both widths.
     holders, every = coco_holders(args.anchor_dir, sorted(set(shipped) | set(wide)))
 
-    full = load_medias(pc.EMBEDDINGS / f"coco_quarry_full__{args.embedder}.pkl")
-    des = load_medias(pc.EMBEDDINGS / f"coco_quarry__{args.embedder}.pkl")
+    full = load_medias(pc.EMBEDDINGS / f"coco_better_full__{args.embedder}.pkl")
+    des = load_medias(pc.EMBEDDINGS / f"coco_better__{args.embedder}.pkl")
 
     ids = sorted(full)
     idx = {i: k for k, i in enumerate(ids)}
