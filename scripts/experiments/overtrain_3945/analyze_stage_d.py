@@ -65,7 +65,11 @@ def load(root: Path) -> pd.DataFrame:
         d = root / arm / "results"
         df, prov = _cells_io.load_arm(d)
         print(f"{arm}: {prov}")
-        cols = [c for c in [*KEYS, "t", "phase", *METRICS, "n_test_pos", "fpr", "fnr", "threshold"] if c in df.columns]
+        cols = [
+            c
+            for c in [*KEYS, "t", "phase", *METRICS, "n_test_pos", "fpr", "fnr", "threshold", "n_remainder"]
+            if c in df.columns
+        ]
         parts.append(df[cols].assign(arm=arm))
     return pd.concat(parts, ignore_index=True)
 
@@ -234,6 +238,21 @@ def main() -> int:
             )
     pd.DataFrame(ex).to_csv(args.out / "D_examples.csv", index=False)
 
+    # #4121's natural experiment: vote exclusion switches off when the unvoted
+    # remainder falls below EXCLUSION_MIN_REMAINDER (60).  Read the cut either side
+    # of that step, per arm and dataset, aligned on the remainder (not the click).
+    if "n_remainder" in df.columns:
+        near = df[df["n_remainder"].between(55, 64)]
+        near = near.assign(side=np.where(near["n_remainder"] >= 60, "exclusion on (>=60)", "exclusion off (<60)"))
+        (
+            near.groupby(["arm", "dataset", "n_remainder", "side"])[["threshold", "fpr", "fnr", "cost", "oracle_cost"]]
+            .mean()
+            .join(near.groupby(["arm", "dataset", "n_remainder", "side"]).size().rename("n"))
+            .reset_index()
+            .sort_values(["arm", "dataset", "n_remainder"], ascending=[True, True, False])
+            .to_csv(args.out / "D_exclusion.csv", index=False)
+        )
+
     # ---- the app's own stopping rules ---------------------------------------------------------
     from stopping import stopping_points
 
@@ -259,7 +278,7 @@ def main() -> int:
             rows.append(r)
     pd.DataFrame(rows).to_csv(args.out / "D_stop.csv", index=False)
 
-    for f in ("D_prefix", "D_paired", "D_degrade", "D_stop", "D_examples"):
+    for f in ("D_prefix", "D_paired", "D_degrade", "D_stop", "D_examples", "D_exclusion"):
         p = args.out / f"{f}.csv"
         if p.exists():
             t = pd.read_csv(p)
