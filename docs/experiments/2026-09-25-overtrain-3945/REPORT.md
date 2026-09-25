@@ -4,8 +4,8 @@
 
 **Verdict.**
 
-- **It memorises from the first vote, and it over-trains mildly.** The shipped head (linear SVM, C = 1) separates its own votes perfectly at every depth: training AUROC is 1.00 at 20 votes and 0.999 at 150. On the same votes, a more regularised C ranks the held-out images better from about 10 votes on. The gap is 0.004–0.008 oracle cost pooled, and it grows to 0.017 on Visual Genome by 150 votes. Inside the Autopilot loop at 400 clicks, C = 0.1 ranks better by 0.008 ± 0.002 over clicks 151–400.
-- **The fix is a smaller constant C, not a schedule.** The best C does *not* fall as votes accumulate. It sits at the centroid-like end (C ≈ 0.001) for tiny vote sets, rises to about 0.1 by 60 votes, and stays there. One fixed C ≈ 0.06 captures all of the available gain, and every vote-count schedule does as well or worse. But the shipped cut hands the ranking gain back (regret +0.008), so the cost the user sees does not move. C therefore has to change together with the cut. That is #4115, and nothing ships from here.
+- **It memorises from the first vote, and it over-trains mildly.** The shipped head (linear SVM, C = 1) separates its own votes perfectly at every depth: training AUROC is 1.00 at 20 votes and 0.999 at 150. On the same votes, a more regularised C ranks the held-out images better from about 10 votes on. The gap is 0.005 oracle cost pooled at 10–40 votes, and it grows to 0.008 by 80 and 0.009 by 400. It flattens after about 150 votes and is carried by Visual Genome (0.018 at 400; COCO is flat after 10). Inside the Autopilot loop at 400 clicks, C = 0.1 ranks better by 0.008 ± 0.002 over clicks 151–400.
+- **The fix is a smaller constant C, not a schedule.** The best C does *not* fall as votes accumulate. It sits at the centroid-like end (C ≈ 0.001) for tiny vote sets, rises to about 0.1 by 60 votes, and to 0.1–0.3 by 150. One fixed C ≈ 0.06 captures all of the available gain, and every vote-count schedule does as well or worse. But the shipped cut hands the ranking gain back (regret +0.008), so the cost the user sees does not move. C therefore has to change together with the cut. That is #4115, and nothing ships from here.
 - **The app cannot detect it from the votes.** Every vote-only gauge points the wrong way: the app's own cross-calibration AUROC, 5-fold CV on the votes, and training AUROC all prefer *less* regularisation. Picking C by any of them does worse than leaving C at 1. Autopilot's votes are the hard boundary cases, so a score measured on them does not measure the haystack. A "you are over-training, try a new dataset" message cannot be driven by anything the app computes today.
 - **The late-session degradation a user would actually see is the cut, not the head.** Along 400-click sessions, the *ranking* ends ≥ 0.02 worse than its best stretch in 13% of sessions. The *cost at the shipped cut* does so in 55%, and in 75% of sessions that have found ≥ 80% of the positives. The rise is false positives (FPR +0.067) from the fused cut drifting after exhaustion, which is #4121. The rows contain a natural experiment for it: on Caltech the cut recovers in one click, in every session, at the step where vote exclusion switches off.
 
@@ -28,7 +28,7 @@ Every contrast is paired within the session (and the cut), with SE clustered on 
 
 ![C path](figures/c_path.png)
 
-*Held-out oracle cost against C, relative to C = 1, one line per click count. Below zero is better than the shipped head. R150.*
+*Held-out oracle cost against C, relative to C = 1, one line per click count. Below zero is better than the shipped head. R400 (this study's 400-click sessions).*
 
 Held-out oracle cost, mean over sessions (R150):
 
@@ -48,7 +48,7 @@ What memorisation looks like from inside (pooled, R150):
 | 1 (shipped) | 1.00 / 1.00 / **1.00** | 88% |
 | 10 | 1.00 / 1.00 / 1.00 | 59% |
 
-**The penalty: C = 1 against the cross-fitted best fixed C, per click count.**
+**The penalty: C = 1 against the cross-fitted best fixed C, per click count.** The figure is R400; the table below it is R150 (#3197's sessions), and the R400 table follows.
 
 ![penalty](figures/penalty_vs_clicks.png)
 
@@ -64,43 +64,56 @@ What memorisation looks like from inside (pooled, R150):
 
 So the answer to **"how many votes"** is **about 10**: that is where C = 1 first ranks resolvably worse than a smaller C. Pooled, it passes the pre-registered 0.005 bar from **60 votes**. Whether it *grows* is environment-dependent. Paired within the session, penalty(150) − penalty(20) is **+0.011 ± 0.003 on VG**, −0.0045 ± 0.0024 on COCO (not resolvable), and +0.0035 ± 0.0020 pooled (not resolvable). By PLAN's rule, "C = 1 over-trains" **holds on VG and not in the pool**.
 
-<!-- R400 -->
+**At 400 clicks (R400, this study's own 480 sessions)** ([`R400_penalty.csv`](R400_penalty.csv)):
+
+| click | 10 | 20 | 40 | 80 | 150 | 250 | 400 |
+|---|---|---|---|---|---|---|---|
+| Goods in the vote set (mean) | 3.7 | 5.3 | 8.4 | 14 | 27 | 41 | 57 |
+| pooled | +0.0048 ± 0.0014 | +0.0047 ± 0.0015 | +0.0044 ± 0.0014 | +0.0081 ± 0.0017 | +0.0081 ± 0.0011 | +0.0082 ± 0.0012 | +0.0091 ± 0.0016 |
+| VG | +0.0070 ± 0.0024 | +0.0085 ± 0.0025 | +0.0095 ± 0.0023 | +0.018 ± 0.003 | +0.016 ± 0.002 | +0.016 ± 0.002 | +0.018 ± 0.003 |
+| COCO | +0.0039 ± 0.0019 | not resolvable | not resolvable | not resolvable | not resolvable | not resolvable | not resolvable |
+
+The deeper, independent session set settles the pooled question. Paired within the session, penalty(150) − penalty(20) is **+0.0034 ± 0.0015** and penalty(400) − penalty(20) is **+0.0044 ± 0.0019**. Both clear 2 SE, so by PLAN's rule **"C = 1 over-trains" holds pooled in R400**. It is still carried by VG (+0.0095 ± 0.0034 to click 400); COCO is flat (−0.0005 ± 0.0020) ([`R400_growth.csv`](R400_growth.csv)). The growth is front-loaded: the penalty doubles between 40 and 80 votes and then barely moves from 150 to 400. So "how many votes" has two answers. Over-regularisation first costs something at **about 10 votes**, and the cost stops growing at about **80–150 votes**. It never becomes large: at most 0.009 pooled, 0.018 on VG.
+
+Along the session (R400), the ranking at C = 1 ends ≥ 0.02 worse than its best earlier cut in 17% of sessions (VG 27%). At the cross-fitted C* it does so in 15%, so regularisation removes little of that; most of it is session-to-session noise in which items Autopilot votes, not capacity ([`R400_degrade.csv`](R400_degrade.csv)).
+
+Literal examples of what the smaller C changes, on the same 300 votes, are in [`EXAMPLES.md`](EXAMPLES.md). Its wins lift buried positives where the category is small and incidental: VG `nose` in scenes of people and animals, and COCO `cell phone` on cluttered desks, moved from rank ~1200 to ~400 of 2476. Its losses move bottom-of-haystack negatives (tables, plates) into the middle, which costs little at any usable cut. None of the listed images is an evident annotation error.
 
 ## 2. Should training account for it? A constant, not a schedule
 
-The cross-fitted best C per click count (R150, both seed halves):
+The cross-fitted best C per click count, both seed halves ([`R400_bestC.csv`](R400_bestC.csv); R150 agrees to click 150):
 
-| click | 5 | 10–30 | 40 | 60–150 |
-|---|---|---|---|---|
-| C* | 0.3 (flat, nothing to choose) | 0.001 | 0.001 / 0.1 | **0.1** (0.3 once) |
+| click | 5 | 10–30 | 40 | 60–100 | 120 | 150–350 | 400 |
+|---|---|---|---|---|---|---|---|
+| C* | 0.3 (flat, nothing to choose) | 0.001 | 0.1 / 0.001 | **0.1** | 0.3 / 0.1 | **0.3** | 0.1 / 0.3 |
 
-The best C **rises** with votes. It does not fall. With a handful of votes the best fit is nearly the class-mean difference (C → 0 is the centroid limit, #3197). As votes accumulate the head can afford to fit more, but never as loosely as C = 1. That refutes the premise of a C ∝ 1/n schedule ("the model gets less regularised the more you click, so shrink C with n"). Per dataset, COCO's best C settles at 0.3 and VG's at 0.1.
+The best C **rises** with votes. It does not fall. With a handful of votes the best fit is nearly the class-mean difference (C → 0 is the centroid limit, #3197). As votes accumulate the head can afford to fit more, but never as loosely as C = 1. That refutes the premise of a C ∝ 1/n schedule ("the model gets less regularised the more you click, so shrink C with n"). Per dataset, COCO's best C settles at 0.3 from 30 votes and VG's at 0.1 from 40 ([`R400_bestC_by_ds.csv`](R400_bestC_by_ds.csv)).
 
-Schedules, each fitted on one seed half and scored on the other, averaged over every cut ([`R150_schedule.csv`](R150_schedule.csv)):
+Schedules, each fitted on one seed half and scored on the other, averaged over every cut. R400 ([`R400_schedule.csv`](R400_schedule.csv)), with R150 ([`R150_schedule.csv`](R150_schedule.csv)) in brackets:
 
 | schedule | minus C = 1 | minus the best fixed C |
 |---|---|---|
-| fixed C ≈ 0.06 | **−0.0048 ± 0.0010** | — |
-| C ∝ votes^−½ | −0.0048 ± 0.0009 | not resolvable |
-| C ∝ votes^−1 | −0.0041 ± 0.0008 | +0.0007 ± 0.0003 (worse) |
-| C ∝ Goods^−½ | −0.0043 ± 0.0009 | +0.0005 ± 0.0002 (worse) |
-| C ∝ Goods^−1 | −0.0033 ± 0.0010 | +0.0015 ± 0.0003 (worse) |
+| fixed C ≈ 0.06 | **−0.0059 ± 0.0010** (−0.0048) | — |
+| C ∝ votes^−½ | −0.0056 ± 0.0011 (−0.0048) | not resolvable (not resolvable) |
+| C ∝ votes^−1 | −0.0039 ± 0.0009 (−0.0041) | +0.0021 ± 0.0003 worse (+0.0007) |
+| C ∝ Goods^−½ | −0.0055 ± 0.0012 (−0.0043) | not resolvable (+0.0005 worse) |
+| C ∝ Goods^−1 | −0.0034 ± 0.0012 (−0.0033) | +0.0026 ± 0.0005 worse (+0.0015) |
 
-A per-click oracle C*(t) beats the fixed one by only 0.0003 ± 0.0002. **No schedule clears the pre-registered bar** (beat fixed C* by ≥ 0.005), so the question folds into #4115 as a single constant.
+The fully adaptive oracle, a different best C at every click, beats the fixed one by only 0.0007 ± 0.0002 (R150: 0.0003). The ∝ 1/n schedules the issue discussion proposed are the worst of the lot. **No schedule clears the pre-registered bar** (beat fixed C* by ≥ 0.005), so the question folds into #4115 as a single constant.
 
 ## 3. Can the app detect it? Not from the votes
 
 ![gauges](figures/gauges_vs_truth.png)
 
-*At click 80: held-out AUROC (the truth) peaks at C ≈ 0.1 and falls towards C = 30. The app's cross-calibration split AUROC and 5-fold CV on the votes do the opposite, rising steeply towards large C.*
+*R400, click 80: held-out AUROC (the truth) peaks at C ≈ 0.1 and falls towards C = 30. The app's cross-calibration split AUROC and 5-fold CV on the votes do the opposite, rising steeply towards large C.*
 
 | gauge | within-session rank correlation with held-out AUROC (median) | held-out oracle cost of the C it picks, minus C* | … minus C = 1 | picks C ≥ 1 |
 |---|---|---|---|---|
-| app's cross-calibration splits | **−0.21** | +0.011 ± 0.001 | +0.0055 ± 0.0007 | 90% |
-| 5-fold CV on the votes | −0.11 | +0.011 ± 0.002 | +0.0063 ± 0.0007 | 91% |
-| training AUROC | −0.47 | +0.007 ± 0.001 | +0.0016 ± 0.0003 | 100% |
+| app's cross-calibration splits | −0.21 (R400: −0.07) | +0.011 ± 0.001 (+0.014 ± 0.002) | +0.0055 ± 0.0007 (+0.0071 ± 0.0008) | 90% (89%) |
+| 5-fold CV on the votes | −0.11 (+0.03) | +0.011 ± 0.002 (+0.014 ± 0.002) | +0.0063 ± 0.0007 (+0.0077 ± 0.0009) | 91% (90%) |
+| training AUROC | −0.47 (−0.66) | +0.007 ± 0.001 (+0.012 ± 0.002) | +0.0016 ± 0.0003 (+0.0059 ± 0.0008) | 100% (100%) |
 
-([`R150_detect.csv`](R150_detect.csv).) PLAN's bar was a median correlation > 0.5 **and** a picked C within 0.005 of C*. Every gauge fails both, in the **wrong direction**. The mechanism: Autopilot votes the items nearest the boundary (`hard` phase), so the vote set is a sample of the hardest cases, not of the haystack. A looser fit separates those hard cases better, and the haystack is ranked worse for it. As a session deepens its votes get harder, so a vote-set score *falls* while held-out quality *rises*, which is where the negative correlation comes from. The detector the issue asks for would need scores on items the user did **not** choose. The atlas typicality detector was the natural home, but #3329 measured it as near-constant.
+(R150, with R400 in brackets: [`R150_detect.csv`](R150_detect.csv), [`R400_detect.csv`](R400_detect.csv).) PLAN's bar was a median correlation > 0.5 **and** a picked C within 0.005 of C*. Every gauge fails both, in both session sets. None of them tracks held-out quality within a session (every median is at or below zero). Each one steers C the **wrong way**: letting a gauge choose C is worse than leaving it at 1. The mechanism: Autopilot votes the items nearest the boundary (`hard` phase), so the vote set is a sample of the hardest cases, not of the haystack. A looser fit separates those hard cases better, and the haystack is ranked worse for it. As a session deepens its votes get harder, so a vote-set score falls or stalls while held-out quality rises. The detector the issue asks for would need scores on items the user did **not** choose. The atlas typicality detector was the natural home, but #3329 measured it as near-constant.
 
 ## 4. In the loop at 400 clicks: C = 0.1 ranks better, the cut gives it back
 
@@ -175,9 +188,9 @@ On average, clicking past the stop still helps: the ranking keeps improving (the
 
 | rule | result |
 |---|---|
-| "C = 1 over-trains": penalty > 0.005 and resolvable at ≥ 2 adjacent cuts, **and** growing by 2 SE | **Holds on VG** (+0.011 ± 0.003 growth). **Pooled: first half yes (60–150), growth no** (+0.0035 ± 0.0020). |
+| "C = 1 over-trains": penalty > 0.005 and resolvable at ≥ 2 adjacent cuts, **and** growing by 2 SE | **Holds.** R400 pooled: > 0.005 at every cut 60–400, growth +0.0034 ± 0.0015 (click 150 vs 20). R150 pooled misses the growth half (+0.0035 ± 0.0020). Both are carried by VG; COCO is flat. Small: ≤ 0.009 pooled. |
 | A vote-count schedule worth an in-loop test (beats fixed C* by ≥ 0.005) | **No.** Best schedule: not resolvable against fixed C*. |
-| A gauge detects over-training (median ρ > 0.5 and picked C within 0.005 of C*) | **No, for every gauge.** All three point the wrong way. |
+| A gauge detects over-training (median ρ > 0.5 and picked C within 0.005 of C*) | **No, for every gauge, in both session sets.** All three steer C the wrong way. |
 | Nothing ships | Held. Recommendations go to #4115 and #4121. |
 
 ## What this changes
@@ -191,7 +204,7 @@ On average, clicking past the stop still helps: the ranking keeps improving (the
 
 - **The replay is off-policy.** It refits other C values on votes the C = 1 head chose. Stage D's `svmc01` arm is the on-policy check, and it agrees in sign and grows with depth as the replay does.
 - **Oracle cost is ranking-only.** No claim here is about cost at a re-tuned cut.
-- **Prefix check** (PLAN): only 88 of 480 of this study's 400-click sessions reproduce #3197's first 150 picks. Median first divergence is click 8 ([`D_prefix.csv`](D_prefix.csv)). Dev changed the cut between the two runs (#3551 shipped the corridor20 fold-fallback schedule; #3839 raised the anchored refit budget), and Autopilot's pick depends on the cut. Every contrast in this report is within one run, so none is affected. R150 and R400 are two independent session sets, not one set read twice. <!-- determinism -->
+- **Prefix check** (PLAN): only 88 of 480 of this study's 400-click sessions reproduce #3197's first 150 picks. Median first divergence is click 8 ([`D_prefix.csv`](D_prefix.csv)). Dev changed the cut between the two runs (#3551 shipped the corridor20 fold-fallback schedule; #3839 raised the anchored refit budget), and Autopilot's pick depends on the cut. Every contrast in this report is within one run, so none is affected. R150 and R400 are two independent session sets, not one set read twice. The harness is deterministic on a fixed commit: re-running one session (`visual_genome_m × siglip`, `bus`, seed 1) on this study's commit reproduced all 400 of its picks. So the mismatch is dev drift, not noise.
 - Whole-image voting and two SigLIP embedders, as in #3197. Caltech is saturated (oracle cost 0) and contributes zeros to every ranking contrast.
 
 ## Reproduce
