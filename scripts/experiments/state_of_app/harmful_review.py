@@ -4,6 +4,8 @@
     python harmful_review.py build --pairs <analysis-binary>/harmful_pairs.csv \\
         --influence <analysis-binary>/influence.csv --z 5 --out <queues dir>
     python ../pile/load_ruling_queues.py --api http://<node>:11850 --queues <queues dir> --name-template manifest
+    python harmful_review.py build --extend --z 3 ...   # deeper cut, SAME queues
+    python harmful_review.py refresh --api http://<node>:11850 --queues <queues dir>
     python harmful_review.py bank --api http://<node>:11850 --queues <queues dir>
 
 Each row of ``harmful_pairs.csv`` asks one question: *is this image really a
@@ -125,10 +127,22 @@ def build(args) -> int:
             item["note"] = "coco holds this class" + (" (lump-excluded)" if (iid, cls) in lumped else "")
         by_cls[cls].append(item)
 
+    # --extend: questions already asked stay where they are, and new ones join
+    # their class's existing queue, so a deeper cut lands in the SAME datasets.
+    old: dict[str, list[dict]] = {}
+    asked: set[tuple[int, str]] = set()
+    if args.extend:
+        for man in sorted(args.out.glob("*/manifest.json")):
+            m = json.loads(man.read_text())
+            old[m["class"]] = m["items"]
+            asked |= {(it["image_id"], it["class"]) for it in m["items"]}
+        by_cls = {c: [it for it in its if (it["image_id"], c) not in asked] for c, its in by_cls.items()}
+        by_cls = {c: its for c, its in by_cls.items() if its}
+
     # Controls: the class's own positives, shown like a negative (whole, no box).
     for cls, items in by_cls.items():
-        k = max(args.min_controls, round(args.control_share * len(items)))
-        taken = {it["image_id"] for it in items}
+        k = max(1 if args.extend else args.min_controls, round(args.control_share * len(items)))
+        taken = {it["image_id"] for it in items} | {i for i, c in asked if c == cls}
         supply = sorted(
             i
             for i, m in labels.items()
@@ -143,11 +157,11 @@ def build(args) -> int:
     queues: dict[str, list[dict]] = collections.defaultdict(list)
     for cls, items in by_cls.items():
         flagged = sum(it["arm"] == "flagged" for it in items)
-        queues[cls if flagged >= args.min_per_class else MIXED] += items
-    return _render(queues, dims, filenames, args)
+        queues[cls if cls in old or flagged >= args.min_per_class else MIXED] += items
+    return _render(queues, dims, filenames, args, old)
 
 
-def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args) -> int:
+def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args, old: dict | None = None) -> int:
     from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415
 
     members: dict[str, tuple[Path, str]] = {}
@@ -165,7 +179,7 @@ def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args) ->
         slug = q.replace(" ", "_")
         outdir = args.out / slug / "images"
         outdir.mkdir(parents=True, exist_ok=True)
-        manifest = []
+        manifest = list((old or {}).get(q, []))
         for it in items:
             zp, member = members[filenames[it["image_id"]]]
             zf = zc.setdefault(zp, zipfile.ZipFile(zp))
@@ -193,7 +207,8 @@ def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args) ->
             json.dumps({"class": q, "name": queue_name(q), "seed": args.seed, "items": manifest}, indent=1)
         )
         n_flag = sum(i["arm"] == "flagged" for i in manifest)
-        print(f"  {queue_name(q)}: {n_flag} flagged + {len(manifest) - n_flag} controls")
+        added = len(manifest) - len((old or {}).get(q, []))
+        print(f"  {queue_name(q)}: {n_flag} flagged + {len(manifest) - n_flag} controls ({added} new)")
         total += len(manifest)
     print(f"{len(queues)} queues, {total} questions -> {args.out}")
     return 0
@@ -233,6 +248,56 @@ def bank(args) -> int:
     return 0
 
 
+def refresh(args) -> int:
+    """Grow each queue's dataset to its folder in place, keeping its name and its detector.
+
+    The app cannot add files to a registered dataset, so the grown folder is
+    imported under a temporary name, and only once it has fully landed is the
+    old dataset deleted and the new one renamed into its place. The detector,
+    which holds the votes, is never touched: labels key on file content, and the
+    files already asked are the same bytes. A queue with no dataset yet is left
+    for ``load_ruling_queues.py``, which creates the pair.
+    """
+    import time  # noqa: PLC0415
+
+    from load_ruling_queues import api, count_of, datasets  # noqa: PLC0415
+
+    rc = 0
+    for man in sorted(args.queues.glob("*/manifest.json")):
+        m = json.loads(man.read_text())
+        folder = man.parent / "images"
+        n = len(list(folder.glob("*.jpg")))
+        have = datasets(args.api).get(m["name"])
+        if have is None or count_of(have) >= n:
+            continue
+        tmp = f"{m['name']} [growing]"
+        resp = api(
+            args.api,
+            "/api/dataset/import/server_folder",
+            {"path": str(folder), "media_type": "image", "recursive": "false", "dig_archives": "false", "dataset_name": tmp},
+            method="POST",
+        )
+        if "_error" in resp:
+            print(f"  {m['name']}: IMPORT FAILED {resp['_error'][:100]}")
+            rc = 1
+            continue
+        t0, landed = time.time(), None
+        while time.time() - t0 < args.wait:
+            time.sleep(3)
+            d = datasets(args.api).get(tmp)
+            if d and count_of(d) >= n:
+                landed = d
+                break
+        if landed is None:
+            print(f"  {m['name']}: TIMED OUT; old dataset kept, '{tmp}' left to inspect")
+            rc = 1
+            continue
+        api(args.api, f"/api/datasets/registry/{have['id']}", method="DELETE")
+        api(args.api, f"/api/datasets/registry/{landed['id']}/rename", {"name": m["name"]}, method="PUT")
+        print(f"  {m['name']}: {count_of(have)} -> {count_of(landed)}")
+    return rc
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -245,11 +310,20 @@ def main() -> int:
     b.add_argument("--min-per-class", type=int, default=5)
     b.add_argument("--control-share", type=float, default=0.1)
     b.add_argument("--min-controls", type=int, default=2)
+    b.add_argument(
+        "--extend",
+        action="store_true",
+        help="add to the queues already in --out: skip pairs already asked, render only new ones, append to manifests",
+    )
     k = sub.add_parser("bank")
     k.add_argument("--api", required=True)
     k.add_argument("--queues", type=Path, required=True)
+    r = sub.add_parser("refresh")
+    r.add_argument("--api", required=True)
+    r.add_argument("--queues", type=Path, required=True)
+    r.add_argument("--wait", type=int, default=900)
     args = ap.parse_args()
-    return build(args) if args.cmd == "build" else bank(args)
+    return {"build": build, "bank": bank, "refresh": refresh}[args.cmd](args)
 
 
 if __name__ == "__main__":
