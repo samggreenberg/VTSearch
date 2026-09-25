@@ -378,3 +378,151 @@ class TestGPVotingSimulation:
                 max_steps=12,
                 safe_thresholds=False,
             )
+
+
+# ---------------------------------------------------------------------------
+# The GP-native threshold: the shipped fold-anchored estimator on the GP's own
+# calibration folds (issue #3959)
+# ---------------------------------------------------------------------------
+
+
+class TestGPFoldAnchored:
+    @staticmethod
+    def _votes():
+        return {i: None for i in range(1, 9)}, {i: None for i in range(41, 53)}
+
+    def test_fold_fit_draws_the_apps_splits(self):
+        """A non-torch fold head calibrates on exactly the held-out rows the app's head would."""
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        X, y = _blobs()
+        X_list, y_list = list(X[:30]), [float(v) for v in y[:30]]
+        X_list += list(X[40:70])
+        y_list += [float(v) for v in y[40:70]]
+
+        def labels_only(X_tr, y_tr):
+            return lambda X_q: np.full(len(X_q), 0.5)
+
+        torch_orderings, _ = compute_fold_orderings(
+            X_list, y_list, 16, rng=np.random.RandomState(42), calibrate_count=2, calibration_fraction=0.3
+        )
+        sunk: list = []
+        fit_orderings, fallback = compute_fold_orderings(
+            X_list,
+            y_list,
+            16,
+            rng=np.random.RandomState(42),
+            calibrate_count=2,
+            calibration_fraction=0.3,
+            model_sink=sunk,
+            fold_fit=labels_only,
+        )
+        assert fallback is None and len(sunk) == 2 and all(callable(m) for m in sunk)
+        assert [labels for _, labels in fit_orderings] == [labels for _, labels in torch_orderings]
+        assert all(scores == [0.5] * len(scores) for scores, _ in fit_orderings)
+
+    def test_fold_fit_is_row_wise_only(self):
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        X, y = _blobs()
+        with pytest.raises(ValueError, match="row-wise"):
+            compute_fold_orderings(
+                list(X), [float(v) for v in y], 16, groups=list(range(len(y))), fold_fit=lambda a, b: None
+            )
+
+    def test_non_finite_fold_scores_become_the_sentinel(self):
+        from vtscore.training.thresholds import compute_fold_orderings
+        from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+
+        X, y = _blobs()
+        orderings, _ = compute_fold_orderings(
+            list(X),
+            [float(v) for v in y],
+            16,
+            calibrate_count=1,
+            fold_fit=lambda a, b: lambda q: np.full(len(q), np.nan),
+        )
+        assert set(orderings[0][0]) == {NON_FINITE_SCORE_SENTINEL}
+
+    def test_step_hands_back_its_fold_models(self):
+        clips = _clips()
+        good, bad = self._votes()
+        step, threshold, _, _, details = _train_and_calibrate(
+            "gp_rbf",
+            good,
+            bad,
+            clips,
+            "cat0",
+            region_voting=False,
+            input_dim=16,
+            inclusion=0,
+            calibrate_count=2,
+            calibration_fraction=0.3,
+            fold_anchored=True,
+        )
+        assert details["threshold_rule"] == "fold_anchored"
+        assert details["fold_fallback"] is None
+        assert len(details["fold_models"]) == len(details["fold_orderings"]) == 2
+        X = np.stack([clips[i]["embeddings"]["emb"] for i in sorted(clips)])
+        for model in details["fold_models"]:
+            p = np.asarray(model(X))
+            assert p.shape == (80,) and np.all((p >= 0) & (p <= 1))
+        for scores, labels in details["fold_orderings"]:
+            assert len(scores) == len(labels) and set(labels) == {0.0, 1.0}
+        assert 0.0 <= threshold <= 1.0
+
+    def test_too_few_votes_fall_back_as_production_does(self):
+        _, threshold, _, _, details = _train_and_calibrate(
+            "gp_rbf",
+            {1: None},
+            {41: None, 42: None},
+            _clips(),
+            "cat0",
+            region_voting=False,
+            input_dim=16,
+            inclusion=0,
+            calibrate_count=2,
+            calibration_fraction=0.3,
+            fold_anchored=True,
+        )
+        assert details["fold_models"] == [] and details["fold_fallback"] == threshold
+
+    def test_anchored_is_gp_only_and_excludes_rank(self):
+        good, bad = self._votes()
+        kw = dict(region_voting=False, input_dim=16, inclusion=0, calibrate_count=2, calibration_fraction=0.3)
+        with pytest.raises(ValueError, match="gp_\\* trainers only"):
+            _train_and_calibrate("svm_linear", good, bad, _clips(), "cat0", fold_anchored=True, **kw)
+        with pytest.raises(ValueError, match="pick one"):
+            _train_and_calibrate(
+                "gp_rbf", good, bad, _clips(), "cat0", fold_anchored=True, haystack_X=np.zeros((2, 16)), **kw
+            )
+
+    def test_loop_runs_the_fold_anchored_estimator(self):
+        rows = simulate_voting_iterations(
+            _clips(n_per=60),
+            "cat0",
+            seed=0,
+            trainer="gp_rbf",
+            max_steps=24,
+            safe_thresholds=True,
+            standalone_cut="anchored",
+            emit_calibration_metrics=True,
+        )
+        assert rows and all(np.isfinite(r["cost"]) for r in rows)
+        provenance = [str(r["threshold_provenance"]) for r in rows]
+        assert any(p.startswith("fold_anchored") for p in provenance), provenance
+        assert rows[-1]["cost"] < 0.5
+
+    def test_loop_refuses_anchored_without_its_estimator(self):
+        with pytest.raises(ValueError, match="safe_thresholds"):
+            simulate_voting_iterations(
+                _clips(),
+                "cat0",
+                seed=0,
+                trainer="gp_rbf",
+                max_steps=8,
+                safe_thresholds=False,
+                standalone_cut="anchored",
+            )
+        with pytest.raises(ValueError, match="gp_\\* trainers only"):
+            simulate_voting_iterations(_clips(), "cat0", seed=0, trainer="app", max_steps=8, standalone_cut="anchored")

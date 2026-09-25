@@ -415,7 +415,14 @@ def _safe_threshold_for_step(
     haystack_seconds: list[float] = []
     for model in fold_models[:n_folds]:
         t_hay = time.monotonic()
-        fids, fscores = score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
+        if callable(model) and not hasattr(model, "parameters"):
+            # A standalone trainer's fold model (the #3959 GP folds): a bare
+            # ``predict`` callable on the whole-image matrix, in the same id
+            # order the final model's trainer-agnostic pass above uses.
+            fids = sorted(sim_ids)
+            fscores = np.asarray(model(np.asarray(X_all_clips))).ravel().tolist()
+        else:
+            fids, fscores = score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
         hay = _hay(fscores, fids)
         haystack_seconds.append(time.monotonic() - t_hay)
         fold_haystacks.append(hay)
@@ -656,6 +663,7 @@ def _evaluate_on_test(
     inclusion: int,
     region_aware: bool = False,
     style_obj: Any = None,
+    scored_sink: "list[Any] | None" = None,
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
@@ -671,6 +679,9 @@ def _evaluate_on_test(
     exactly the live detector's inference for patch datasets (an image scores
     by its best-matching row).  Otherwise each media is scored by its single
     whole-image vector through the step's trainer-agnostic ``predict``.
+
+    *scored_sink*, when given, receives the ``(scores, labels)`` arrays so a
+    caller can derive more metrics from the same pass (issue #3959).
     """
     import numpy as np  # noqa: PLC0415
 
@@ -707,6 +718,8 @@ def _evaluate_on_test(
     )
 
     cost, fpr, fnr = operating_cost(scores_arr, labels_arr, threshold, *inclusion_weights(inclusion))
+    if scored_sink is not None:
+        scored_sink.extend((scores_arr, labels_arr))
 
     det = detection_metrics(scores_arr, labels_arr, threshold)
     return {
@@ -717,6 +730,45 @@ def _evaluate_on_test(
         "auroc": round(_auroc(scores_arr, labels_arr), 6),
         "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
     }
+
+
+def _standalone_calibration_row(
+    threshold: float,
+    details: dict[str, Any],
+    scored: list[Any],
+    inclusion: int,
+) -> dict[str, Any]:
+    """The calibration study's base row for a standalone (style-less) trainer.
+
+    :func:`~vtscore.eval.row_metrics.operating_metrics` on the test scores
+    :func:`_evaluate_on_test` already computed, with the step's fold orderings
+    (when its trainer kept any) as the calibration set, so ``oracle_cost``,
+    ``regret`` and ``threshold_provenance`` mean on a ``gp_*`` row exactly what
+    they mean on the app's.  The provenance is the shipped estimator's when the
+    safe-threshold path set one, else the trainer's own ``threshold_rule``.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    scores, labels = scored
+    fold_orderings = details.get("fold_orderings") or []
+    cal_scores = np.array([s for sc, _ in fold_orderings for s in sc]) if fold_orderings else None
+    cal_labels = np.array([lb for _, lbs in fold_orderings for lb in lbs]) if fold_orderings else None
+    row = operating_metrics(
+        scores,
+        labels,
+        threshold,
+        inclusion,
+        cal_scores,
+        cal_labels,
+        pool_variant="max",
+        provenance=str(details.get("provenance") or details.get("threshold_rule") or "standalone"),
+        n_pool_rows=1.0,
+    )
+    if "xcal_threshold" in details:
+        row["xcal_threshold"] = round6(float(details["xcal_threshold"]))
+    if cal_scores is not None:
+        row["n_cal_scores"] = int(cal_scores.size)
+    return row
 
 
 def _calibration_metric_rows(
@@ -1697,6 +1749,13 @@ def simulate_voting_iterations(  # noqa: C901
             :func:`vtscore.eval.step_trainers._rank_transferred_threshold`.
             Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
             trainer is an error, as is a region-aware dataset.
+            ``"anchored"`` (issue #3959) is the GP-native rule: the GP fits its
+            own calibration folds on the app's splits and the **shipped**
+            fold-anchored estimator runs on them - each fold's mixture on that
+            fold GP's haystack scores, anchored by its held-out votes, carried
+            to the final GP by quantile.  Needs *safe_thresholds* (that is where
+            the estimator runs); see
+            :func:`vtscore.eval.step_trainers._gp_train_and_calibrate`.
         test_bands: Report the miss rate **per size band** beside the headline
             one (issue #4044).  ``"auto"`` takes every band the target's class
             has; a list names them; ``None`` (the default) turns the whole thing
@@ -1918,8 +1977,20 @@ def simulate_voting_iterations(  # noqa: C901
     # The rank-transfer haystack for a ``gp_*`` arm (issue #3954): the
     # simulation set's whole-image vectors, in id order.  ``None`` keeps every
     # trainer on its raw-score cut.
-    if standalone_cut not in ("raw", "rank"):
-        raise ValueError(f"standalone_cut must be 'raw' or 'rank', got {standalone_cut!r}")
+    if standalone_cut not in ("raw", "rank", "anchored"):
+        raise ValueError(f"standalone_cut must be 'raw', 'rank' or 'anchored', got {standalone_cut!r}")
+    fold_anchored = standalone_cut == "anchored"
+    if fold_anchored:
+        if not trainer.startswith("gp_"):
+            raise ValueError(f"standalone_cut='anchored' applies to the gp_* trainers only; got trainer={trainer!r}")
+        if region_aware:
+            raise ValueError(
+                "standalone_cut='anchored' needs a single-vector dataset (the gp_* arms score whole images)"
+            )
+        if not safe_thresholds:
+            raise ValueError(
+                "standalone_cut='anchored' needs safe_thresholds=True: the fold-anchored estimator runs there"
+            )
     haystack_X: "np.ndarray | None" = None
     if standalone_cut == "rank":
         if not trainer.startswith("gp_"):
@@ -2125,6 +2196,7 @@ def simulate_voting_iterations(  # noqa: C901
             fold_count_variants=fold_count_variants,
             calibration_seed=calibration_seed,
             haystack_X=haystack_X,
+            fold_anchored=fold_anchored,
         )
 
         # Apply the shipped safe threshold if enabled
@@ -2230,6 +2302,7 @@ def simulate_voting_iterations(  # noqa: C901
                 repool_topk,
             )
         else:
+            scored: list[Any] = []
             metrics = _evaluate_on_test(
                 step,
                 threshold,
@@ -2239,7 +2312,16 @@ def simulate_voting_iterations(  # noqa: C901
                 inclusion,
                 region_aware=region_aware,
                 style_obj=style_obj,
+                scored_sink=scored,
             )
+            if emit_calibration_metrics and trainer != APP_TRAINER and scored:
+                # A standalone trainer has no style, so it never reaches the
+                # calibration rows above - which is where the oracle cut, the
+                # regret split and the provenance live.  Without them a head
+                # comparison cannot say whether an arm lost on its ranking or
+                # on its cut (the #3954 pilot's open gap), so the same base
+                # row is built here from the same test pass (issue #3959).
+                metrics = {**metrics, **_standalone_calibration_row(threshold, details, scored, inclusion)}
         test_score_seconds = time.monotonic() - t_test
 
         # The per-size breakdown (#4044), at the shipped cut and therefore the
