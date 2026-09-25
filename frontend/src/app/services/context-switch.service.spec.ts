@@ -258,6 +258,75 @@ describe('ContextSwitchService: H25 active/intent layering', () => {
     expect(activeContext.modelId).toBe('m1');
   });
 
+  it("does not read an earlier load's finished row as this load finishing (issue #4187)", () => {
+    // Loads of one detector reuse a task id, and a finished row lingers on
+    // the channel for a few seconds. Load m1, unload it, press Find: the
+    // last load's idle row can still be on the channel under the id the
+    // new load's response names. Matching it promoted the pair at once and
+    // opened Find against an unloaded detector.
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1', { loaded: true })];
+    detectors = [makeDetector('m1', { detector_loaded: false })];
+    detectorLoadingTasks$.next([
+      makeLoadingTask({ detector_id: 'm1', task_id: '_detload_m1', status: 'idle', created_at: 100 }),
+    ]);
+
+    switcher.applyActivePair('d1', 'm1').subscribe();
+    loadDetectorSubjects.get('m1')!.next({ ok: true, task_id: '_detload_m1' });
+    loadDetectorSubjects.get('m1')!.complete();
+
+    expect(activeContext.modelId).toBe('old-det');
+
+    // The new load's row replaces the leftover, running…
+    detectorLoadingTasks$.next([
+      makeLoadingTask({ detector_id: 'm1', task_id: '_detload_m1', status: 'loading', created_at: 200 }),
+    ]);
+    expect(activeContext.modelId).toBe('old-det');
+
+    // …and only its own settling promotes the pair.
+    detectorLoadingTasks$.next([
+      makeLoadingTask({ detector_id: 'm1', task_id: '_detload_m1', status: 'idle', created_at: 200 }),
+    ]);
+    expect(activeContext.datasetId).toBe('d1');
+    expect(activeContext.modelId).toBe('m1');
+  });
+
+  it("does not fail a switch on an earlier load's lingering error row", () => {
+    // A cancelled or failed load keeps its row for 30s. A retry inside that
+    // window must wait on its own load, not inherit the old error.
+    activeContext.setActivePair('old-ds', 'old-det');
+    datasets = [makeDataset('d1', { loaded: false })];
+    detectors = [makeDetector('m1', { detector_loaded: true })];
+    loadingTasks$.next([
+      makeLoadingTask({
+        dataset_id: 'd1',
+        task_id: '_regload_d1',
+        status: 'idle',
+        error: 'Cancelled',
+        created_at: 100,
+      }),
+    ]);
+
+    let emitted = false;
+    switcher.applyActivePair('d1', 'm1').subscribe({ next: () => (emitted = true) });
+    loadRegisteredSubjects.get('d1')!.next({ ok: true, message: '', task_id: '_regload_d1' });
+    loadRegisteredSubjects.get('d1')!.complete();
+
+    expect(switcher.switching).toBe(true);
+    expect(emitted).toBe(false);
+
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: '_regload_d1', status: 'loading', created_at: 200 }),
+    ]);
+    loadingTasks$.next([
+      makeLoadingTask({ dataset_id: 'd1', task_id: '_regload_d1', status: 'idle', created_at: 200 }),
+    ]);
+
+    expect(emitted).toBe(true);
+    expect(activeContext.datasetId).toBe('d1');
+    expect(activeContext.modelId).toBe('m1');
+  });
+
   it('re-embeds labels when dataset and detector embedders differ, holding active until detector reloads', () => {
     // detector_loaded is true but the embedders disagree → still needs
     // a detector load to re-embed labels, and active must wait.

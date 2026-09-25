@@ -270,6 +270,11 @@ tracker.update("downloading", "Fetching ...", 0, 100)
 bag.mark_finished("ds_load_42")
 ```
 
+The tracker `create_task` returns already reports `status="loading"`
+(`ProgressTracker(..., initial_status="loading")`): `"idle"` is the
+terminal status readers wait for, and the task is published before the
+caller's first `update()`.
+
 Methods: `create_task(task_id, ...)` (register and return tracker),
 `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
 `remove_task(task_id)`, `cancel_task(task_id)` / `cancel_all()`,

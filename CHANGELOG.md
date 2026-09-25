@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Find (and Train) on an unloaded detector waits for the load to finish**
+  (issue #4187). The route sometimes opened as soon as the detector load
+  started, showing an empty page and a stream of "Detector is not loaded"
+  errors until you went back and pressed Find again. A new loading task used
+  to be published as "idle" for an instant before it reported "loading", and
+  the navigation guard read that first frame as the load already finishing.
+  The guard also now ignores a finished or failed row left on the progress
+  channel by an earlier load of the same dataset or detector, so a retry soon
+  after a cancelled load is no longer refused.
+
 - **Pipeline files and `--import-labels-into` accept any label importer's
   fields** (issue #4174). `import_labels:` required a `file:` and passed it as
   the importer's only field, so a label importer that reads no file could not
