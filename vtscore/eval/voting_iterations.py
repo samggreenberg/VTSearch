@@ -55,6 +55,8 @@ from vtscore.eval.arms_anchored import (
     _anchored_variant_rows,
 )
 from vtscore.eval.arms_fit_quality import _fit_quality_rows
+from vtscore.eval.live_threshold_rules import check_live_threshold
+from vtscore.eval.live_threshold_rules import live_threshold as retired_live_threshold
 from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_count_schedule
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
@@ -1430,6 +1432,7 @@ def simulate_voting_iterations(  # noqa: C901
     pick_sink: Optional[list[dict[str, Any]]] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
+    live_threshold: Optional[str] = None,
     skyline_arms: Optional[list[str]] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
@@ -1673,6 +1676,15 @@ def simulate_voting_iterations(  # noqa: C901
             rule that moves the cut below ``k = 0`` moves which media get voted
             from the first fitted step on.  The ``__cutincl`` frame's re-cuts
             are the paired, reporting-only view of the same rules.
+        live_threshold: A **retired** live threshold rule (issue #4184), one of
+            :data:`~vtscore.eval.live_threshold_rules.LIVE_THRESHOLD_RULES`, or
+            ``None`` (default) for the shipped fold-anchored cut.  The named rule
+            replaces the step's live cut after the fused path has fitted it -
+            reporting, acquisition and every later vote read it - so, like
+            *live_cut_rule*, it is a run-level arm.  The acquisition offset does
+            not apply under it: the retired rules predate the offset and have no
+            inclusion-aware form, so acquisition aims at the reporting cut.
+            Needs *safe_thresholds*; exclusive with *live_cut_rule*.
 
         standalone_cut: How a ``gp_*`` trainer's cross-calibration cut reaches
             its final model (issue #3954).  ``"raw"`` (the default, and what
@@ -1720,6 +1732,7 @@ def simulate_voting_iterations(  # noqa: C901
     # three minutes in on an argument combination readable at the door is a
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
+    check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
     # they have to be taken off the unfiltered pool (#4044).
@@ -2104,6 +2117,9 @@ def simulate_voting_iterations(  # noqa: C901
         sim_pooled_ids: list[int] = []
         sim_fold_haystacks: list[Any] = []
         if safe_thresholds:
+            # What the fold computation returned before any fusion: a retired
+            # live rule (#4184) falls back to it where it has nothing to cut on.
+            fold_threshold = threshold
             # The x-cal side of the blend, not the raw fold return: a step whose
             # folds fell back blends NO_GOOD_THRESHOLD (see _blend_xcal_input),
             # and the variant families below re-blend this same input, so their
@@ -2132,6 +2148,23 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_rule=live_cut_rule,
                 )
             )
+            if live_threshold is not None:
+                # A retired rung replaces the shipped cut, and the fit it
+                # replaced is dropped with it so acquisition cannot re-cut an
+                # estimator this arm does not run.
+                threshold, safe_provenance = retired_live_threshold(
+                    live_threshold,
+                    fold_threshold=fold_threshold,
+                    details=details,
+                    haystack_scores=sim_pooled_scores,
+                    ctx=blend_ctx,
+                    schedule=blend_schedule,
+                    fitted_cut=safe_cut,
+                    shipped_threshold=threshold,
+                    shipped_provenance=safe_provenance,
+                    inclusion=inclusion,
+                )
+                safe_cut = None
             if emit_calibration_metrics:
                 details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = safe_provenance
