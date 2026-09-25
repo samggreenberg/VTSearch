@@ -312,6 +312,55 @@ def refresh(args) -> int:
     return rc
 
 
+def clear(args) -> int:
+    """Remove every FULLY answered queue from the dashboard, after proving its votes are banked.
+
+    Run ``bank`` first. A queue goes only when every one of its questions has a
+    live vote AND that vote is already a row of ``verdicts.jsonl``; its detector
+    JSON is copied to ``<slug>.json.cleared`` (the banked row drops the vote's
+    provenance) before both halves are deleted through the API, and the registry
+    is re-read afterwards because a deletion once came back (#3665).
+    """
+    import shutil  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    from load_ruling_queues import api, datasets  # noqa: PLC0415
+    from vtscore.detectors.store import _slug  # noqa: PLC0415
+
+    banked = {(json.loads(x)["queue"], json.loads(x)["file"]) for x in (args.queues / "verdicts.jsonl").read_text().splitlines()}
+    dets = {d["name"]: d for d in api(args.api, "/api/detectors/registry")["detectors"]}
+    dss = datasets(args.api)
+    gone = []
+    for man in sorted(args.queues.glob("*/manifest.json")):
+        m = json.loads(man.read_text())
+        name = m["name"]
+        if name not in dets or name not in dss:
+            continue
+        live = api(args.api, f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")
+        votes = {r["filename"] for r in live.get("good", []) + live.get("bad", [])}
+        files = {it["file"] for it in m["items"]}
+        if not files <= votes:
+            continue
+        if not all((name, f) in banked for f in files):
+            print(f"  {name}: answered but NOT all banked -- run bank first; left alone")
+            continue
+        src = args.detectors / f"{_slug(name)}.json"
+        if not src.exists():
+            print(f"  {name}: no detector file at {src}; left alone")
+            continue
+        shutil.copy2(src, f"{src}.cleared")
+        api(args.api, f"/api/detectors/registry/{dets[name]['id']}", method="DELETE")
+        api(args.api, f"/api/datasets/registry/{dss[name]['id']}", method="DELETE")
+        gone.append(name)
+        print(f"  cleared {name} ({len(files)} votes)")
+    time.sleep(25)
+    left_d = {d["name"] for d in api(args.api, "/api/detectors/registry")["detectors"]}
+    left_s = set(datasets(args.api))
+    back = [n for n in gone if n in left_d or n in left_s]
+    print(f"{len(gone)} cleared; {len(left_d)} detectors / {len(left_s)} datasets left; unpaired {sorted(left_d ^ left_s)}; came back {back}")
+    return 1 if back or (left_d ^ left_s) else 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -336,8 +385,12 @@ def main() -> int:
     r.add_argument("--api", required=True)
     r.add_argument("--queues", type=Path, required=True)
     r.add_argument("--wait", type=int, default=900)
+    c = sub.add_parser("clear")
+    c.add_argument("--api", required=True)
+    c.add_argument("--queues", type=Path, required=True)
+    c.add_argument("--detectors", type=Path, default=Path("/expscratch/sgreenberg/vtsearch-data/detectors"))
     args = ap.parse_args()
-    return {"build": build, "bank": bank, "refresh": refresh}[args.cmd](args)
+    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear}[args.cmd](args)
 
 
 if __name__ == "__main__":
