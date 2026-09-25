@@ -569,6 +569,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **`LoadingTasksTracker.create_task` publishes a new task as running** (issue
+  #4187). The task's tracker started at `ProgressTracker`'s default
+  `status="idle"`, and `create_task` notifies subscribers before the caller's
+  first `update`. So the first frame every loading-tasks subscriber saw said
+  the task was already finished: a client that caught it took a detector
+  load that had not begun for one that was done, and the app's Find route
+  guard opened an unloaded detector to a stream of 409s. The returned tracker
+  now starts at `status="loading"`, via a new keyword-only
+  `ProgressTracker(..., initial_status=...)` (default `"idle"`, so a
+  standalone tracker is unchanged). Every shipped caller already set
+  `"loading"` right after `create_task`, so the only observable difference is
+  that the create-time frame no longer says the work is over.
+
 - **A declared `PluginField.default` now reaches the plugin body** (issue
   #3874). `default` was documented as a pre-filled value but only `argparse`
   ever applied it: marshmallow's `load_default` fires on a *missing* key, and a

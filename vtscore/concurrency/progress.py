@@ -102,6 +102,11 @@ class ProgressTracker:
         extra_fields: Mapping of extra field names to their default values.
             These fields can be set via keyword arguments in :meth:`update`
             and are returned by :meth:`get`.
+        initial_status: The ``status`` the tracker reports before its first
+            :meth:`update`. ``"idle"`` suits a long-lived tracker that sits at
+            rest between operations; a tracker created *for* an operation
+            that is already starting passes a working status instead, since
+            ``"idle"`` is what readers take to mean "finished".
     """
 
     #: Minimum elapsed time (seconds) before an ETA is computed. Below this we
@@ -113,12 +118,12 @@ class ProgressTracker:
     #: sample lightly enough to dampen noise while still tracking real slowdowns.
     _ETA_SMOOTHING_ALPHA = 0.3
 
-    def __init__(self, extra_fields: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, extra_fields: Optional[dict[str, Any]] = None, *, initial_status: str = "idle") -> None:
         self._lock = threading.Lock()
         self._extra_defaults = dict(extra_fields) if extra_fields else {}
         self._cancel_event = threading.Event()
         self._data: dict[str, Any] = {
-            "status": "idle",
+            "status": initial_status,
             "message": "",
             "current": 0,
             "total": 0,
@@ -639,12 +644,19 @@ class LoadingTasksTracker:
         bar paces across phases; omit for equal weighting. *extra_fields* adds
         task-specific tracked keys (e.g. ``staging_result``) on top of the
         shared progress extras. Returns the per-task :class:`ProgressTracker`
-        instance.
+        instance, already reporting ``status="loading"``: the task is running
+        from the moment it exists, until an ``update("idle", ...)`` ends it.
         """
         fields = dict(PROGRESS_COMMON_EXTRAS)
         if extra_fields:
             fields.update(extra_fields)
-        tracker = ProgressTracker(extra_fields=fields)
+        # Born working, not ``"idle"``: the ``_notify`` below publishes this
+        # row before the caller's first ``update``, and ``"idle"`` is the
+        # terminal status every reader of these channels treats as "done".  A
+        # client that caught that first frame took a load that had not started
+        # for one that had finished — the Find route guard then opened an
+        # unloaded detector to a stream of 409s (issue #4187).
+        tracker = ProgressTracker(extra_fields=fields, initial_status="loading")
         if step_weights is not None:
             tracker.set_step_weights(step_weights)
         tracker.subscribe(lambda _snapshot: self._notify())
