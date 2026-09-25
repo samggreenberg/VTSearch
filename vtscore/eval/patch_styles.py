@@ -311,9 +311,18 @@ class _FlattenedStyle:
     name = "abstract"
 
     #: How many flattened id sets stay memoised.  Sized for the sets one
-    #: simulation step touches - the sim set, the pool, the labelset - with room
-    #: to spare, not for a run's whole history.
-    _MATRIX_CACHE_SIZE = 4
+    #: simulation step touches, with room to spare, not for a run's whole history.
+    #:
+    #: **Measured (#4159): 4 thrashed.** On coco_quarry a region step touches the
+    #: two stable ~11.6k-media sets (3.5 GB each) AND four small id sets that
+    #: change every step, so at 4 the small ones evicted the big two and every
+    #: step re-flattened 7 GB: ~25 s a step, most of a ~1 h, 150-click run.
+    #: 8 keeps the stable sets resident. Caching cannot change a score, only
+    #: whether the same matrix is rebuilt.
+    _MATRIX_CACHE_SIZE = 8
+    #: A byte ceiling beside the count, so a caller that hands in many LARGE
+    #: changing sets cannot grow the memo by 3.5 GB per step up to the count.
+    _MATRIX_CACHE_BYTES = 12 * 1024**3
 
     def __init__(self) -> None:
         self._matrix_cache: OrderedDict[frozenset[int], tuple[list[int], Any, Any]] = OrderedDict()
@@ -353,7 +362,10 @@ class _FlattenedStyle:
         matrix = np.concatenate(blocks, axis=0).astype(_matrix.PATCH_ROW_DTYPE, copy=False)
         result = (ids, matrix, seg_starts)
         self._matrix_cache[key] = result
-        while len(self._matrix_cache) > self._MATRIX_CACHE_SIZE:
+        while len(self._matrix_cache) > 1 and (
+            len(self._matrix_cache) > self._MATRIX_CACHE_SIZE
+            or sum(m.nbytes for _, m, _ in self._matrix_cache.values()) > self._MATRIX_CACHE_BYTES
+        ):
             self._matrix_cache.popitem(last=False)
         return result
 

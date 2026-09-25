@@ -48,6 +48,15 @@ def _blank(s: pd.Series) -> pd.Series:
     return s.isna() | (s.astype(str).str.strip().isin(("", "nan", "None")))
 
 
+def _only_skyline_rows(path: Path) -> bool:
+    """True when every row of a cell file is a supervised-skyline row."""
+    try:
+        df = pd.read_csv(path, usecols=["gmm_variant"])
+    except (ValueError, OSError, pd.errors.EmptyDataError):
+        return False
+    return bool(len(df)) and df["gmm_variant"].astype(str).str.startswith("skyline_").all()
+
+
 def _base_rows(df: pd.DataFrame) -> pd.DataFrame:
     """The production rows of one cell: no variant tag, base pooling only.
 
@@ -246,6 +255,14 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
         #: legitimate result, so it is named apart from the cells above.
         "no_base_rows": base["filtered_out"],
     }
+    # A starved cell that ran with skyline arms on still writes the skyline row:
+    # it is emitted once per run whatever the votes did (#3322, and on the
+    # region path since #4159). Such a file is the starvation case above, not a
+    # tag bug, so it moves across rather than tripping the guard.
+    skyline_only = [name for name in prov["no_base_rows"] if _only_skyline_rows(arm_dir / "cells" / name)]
+    if skyline_only:
+        prov["no_positive_found"] = list(prov["no_positive_found"]) + skyline_only
+        prov["no_base_rows"] = [n for n in prov["no_base_rows"] if n not in skyline_only]
     if prov["no_base_rows"]:
         raise SystemExit(
             f"{arm_dir}: base-row filter kept 0 rows in {len(prov['no_base_rows'])} cells - check tag columns"

@@ -326,23 +326,43 @@ def test_bracket_arm_is_dropped_when_it_cannot_be_cross_fitted():
 # ---------------------------------------------------------------------------
 
 
-def test_patch_column_is_skipped_loudly():
-    """v1 is the whole-image column; a patch column's skyline is #3321's open item."""
+def _patch_rows(arms, region_voting=True):
     medias, _ = _planted_dataset(n_per_cat=25, seed=0)
-    with pytest.warns(RuntimeWarning, match="skyline"):
-        rows = simulate_voting_iterations(
-            medias,
-            target_category="cat0",
-            seed=0,
-            dataset_name="planted",
-            inclusion=0,
-            region_voting=True,
-            safe_thresholds=False,
-            max_steps=10,
-            style="max_patch",
-            emit_calibration_metrics=True,
-            skyline_arms=[SKYLINE_TRAIN_FULL],
-        )
+    return simulate_voting_iterations(
+        medias,
+        target_category="cat0",
+        seed=0,
+        dataset_name="planted",
+        inclusion=0,
+        region_voting=region_voting,
+        safe_thresholds=False,
+        max_steps=10,
+        style="max_patch",
+        emit_calibration_metrics=True,
+        skyline_arms=list(arms),
+    )
+
+
+def test_patch_column_under_region_voting_gets_an_oracle_box_skyline():
+    """#4159: owner ruling on #3321 -- supervise with each positive's GT box and every image."""
+    rows = _patch_rows([SKYLINE_TRAIN_FULL])
+    sky = [r for r in rows if r["gmm_variant"] == SKYLINE_TRAIN_FULL]
+    assert len(sky) == 1, "one skyline row per run, not per step"
+    assert sky[0]["threshold_provenance"] == SKYLINE_PROVENANCE
+    assert not np.isnan(sky[0]["oracle_cost"])
+    assert all(not np.isnan(r["skyline_oracle_cost"]) for r in rows if r["gmm_variant"] not in SKYLINE_ARMS)
+
+
+def test_the_cross_fitted_bracket_stays_whole_image_only():
+    with pytest.warns(RuntimeWarning, match="whole-image only"):
+        rows = _patch_rows([SKYLINE_TRAIN_FULL, SKYLINE_TEST_XFIT])
+    assert {r["gmm_variant"] for r in rows} & set(SKYLINE_ARMS) == {SKYLINE_TRAIN_FULL}
+
+
+def test_patch_column_without_region_voting_is_skipped_loudly():
+    """No box is dragged, so there is no oracle box to supervise with."""
+    with pytest.warns(RuntimeWarning, match="region voting"):
+        rows = _patch_rows([SKYLINE_TRAIN_FULL], region_voting=False)
     assert rows
     assert all(r["gmm_variant"] not in SKYLINE_ARMS for r in rows)
     assert all(np.isnan(r["skyline_oracle_cost"]) for r in rows)

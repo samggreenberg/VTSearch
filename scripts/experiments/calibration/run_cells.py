@@ -243,7 +243,13 @@ def main(argv: list[str] | None = None) -> int:
         print(len(cells))
         return 0
 
-    idx = args.index if args.index is not None else int(os.environ.get("SLURM_ARRAY_TASK_ID", "0"))
+    # CALIB_INDEX_OFFSET lets a second array reach cells past SLURM's MaxArraySize
+    # (10100 on GRID): task i runs cell i + offset (#4159's overnight seeds).
+    idx = (
+        args.index
+        if args.index is not None
+        else int(os.environ.get("SLURM_ARRAY_TASK_ID", "0")) + int(os.environ.get("CALIB_INDEX_OFFSET", "0"))
+    )
     if idx >= len(cells):
         common.log(f"index {idx} >= {len(cells)} cells; nothing to do")
         return 0
