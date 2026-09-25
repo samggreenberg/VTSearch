@@ -1,0 +1,13 @@
+dataset,embedder,category,seed,t,n_good,n_test_pos,threshold,fpr,fnr,cost,oracle_cost
+visual_genome_m,siglip2_l,ball,2,142,14,19.0,0.311747,0.150144,0.157895,0.308039,0.295527
+visual_genome_m,siglip2_l,ball,2,400,26,19.0,0.198807,0.544755,0.157895,0.702649,0.277721
+visual_genome_m,siglip,neck,0,268,20,20.0,0.27932,0.194511,0.2,0.394511,0.360737
+visual_genome_m,siglip,neck,0,400,24,20.0,0.202822,0.56235,0.15,0.71235,0.437217
+coco_val,siglip2_l,microwave,1,375,25,28.0,0.264677,0.116422,0.0,0.116422,0.045343
+coco_val,siglip2_l,microwave,1,400,25,28.0,0.203803,0.341095,0.0,0.341095,0.045343
+coco_val,siglip2_l,microwave,3,338,26,28.0,0.263801,0.113154,0.0,0.113154,0.091912
+coco_val,siglip2_l,microwave,3,400,26,28.0,0.203015,0.335784,0.0,0.335784,0.091503
+caltech101_m,siglip,grand_piano,4,70,12,15.0,0.463426,0.0,0.0,0.0,0.0
+caltech101_m,siglip,grand_piano,4,400,12,15.0,0.480133,0.0,0.0,0.0,0.0
+caltech101_m,siglip,airplanes,3,70,15,105.0,0.416476,0.0,0.0,0.0,0.0
+caltech101_m,siglip,airplanes,3,400,104,105.0,0.521778,0.0,0.0,0.0,0.0
