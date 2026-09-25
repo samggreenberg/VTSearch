@@ -176,6 +176,20 @@ case "$MODE" in
     require_jobid "$J" "prepare"
     echo "prepare $ENV_NAME: job $J -> $PREP"
     ;;
+  baseline)
+    # The click-0 anchor every curve starts from: the typed query's own sort,
+    # cut at its GMM line, scored on each cell's test half.
+    env_env "${2:?usage: $0 baseline <env>}"
+    activate_venv
+    export CALIB_EXP="$BASE/prepare" CALIB_RESULTS="$PREP"
+    dep=()
+    [[ -n "${GPGRID_AFTER:-}" ]] && dep=(--dependency="afterok:$GPGRID_AFTER")
+    J=$(sbatch --parsable --job-name="gp3959-text-$ENV_NAME" --mem=16G --cpus-per-task=2 --time=2:00:00 \
+      "${dep[@]}" --partition=cpu --export=ALL --output="$CALIB_EXP/logs/text-baseline-%j.out" \
+      --wrap="source $WT/gridenv.sh && cd $CAL && python text_baseline.py --results $PREP --out $PREP/text_baseline.csv")
+    require_jobid "$J" "text baseline"
+    echo "text baseline $ENV_NAME: job $J -> $PREP/text_baseline.csv"
+    ;;
   list)
     env_env "${2:?usage: $0 list <env>}"
     activate_venv
@@ -200,8 +214,10 @@ PY
     export CALIB_EXP="$BASE/sizing/$arm" CALIB_RESULTS="$BASE/sizing/$arm/results"
     mkdir -p "$CALIB_EXP/logs"
     link_prepare "$CALIB_RESULTS"
+    dep=()
+    [[ -n "${GPGRID_AFTER:-}" ]] && dep=(--dependency="afterok:$GPGRID_AFTER")
     J=$(sbatch --parsable --job-name="gp3959-size-$ENV_NAME-$arm" --mem=16G --cpus-per-task=1 --time=4:00:00 \
-      --partition=cpu --export=ALL --output="$CALIB_EXP/logs/size-$idx-%j.out" \
+      "${dep[@]}" --partition=cpu --export=ALL --output="$CALIB_EXP/logs/size-$idx-%j.out" \
       --wrap="source $WT/gridenv.sh && cd $CAL && /usr/bin/time -v python run_cells.py --index $idx")
     require_jobid "$J" "size"
     echo "size $ENV_NAME/$arm idx $idx: job $J (read Elapsed + MaxRSS off sacct)"
