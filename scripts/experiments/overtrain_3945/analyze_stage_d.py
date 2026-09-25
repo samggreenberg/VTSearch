@@ -139,7 +139,8 @@ def main() -> int:
     curve_all = df.groupby(["arm", "t"])[list(METRICS)].mean().reset_index().assign(ds="all")
     pd.concat([curve_all, curve]).to_csv(args.out / "D_curve.csv", index=False)
     # Every session's own curve, for the per-run figure (not committed; large).
-    df[["arm", *KEYS, "t", "cost", "oracle_cost", "n_good"]].to_csv(args.out / "D_runs.csv.gz", index=False)
+    run_cols = [c for c in ["arm", *KEYS, "t", "cost", "oracle_cost", "n_good", "fpr", "fnr", "threshold"] if c in df]
+    df[run_cols].to_csv(args.out / "D_runs.csv.gz", index=False)
 
     # ---- along-session degradation, smoothed ------------------------------------------------
     rows = []
@@ -151,11 +152,19 @@ def main() -> int:
             s = g[m].reindex(range(1, 401)).ffill().rolling(SMOOTH, min_periods=SMOOTH).mean().dropna()
             if s.empty:
                 continue
+            # #4121's prediction: past exhaustion the fused cut drifts into the
+            # negatives, so a late cost rise should be an FPR rise, not an FNR one.
+            fx = {}
+            for r in ("fpr", "fnr"):
+                if r in g.columns:
+                    rr = g[r].reindex(range(1, 401)).ffill().rolling(SMOOTH, min_periods=SMOOTH).mean()
+                    fx[f"{r}_last_minus_at_best"] = float(rr.iloc[-1] - rr.loc[s.idxmin()])
             rows.append(
                 {
                     "arm": arm,
                     **dict(zip(KEYS, key, strict=True)),
                     "metric": m,
+                    **fx,
                     "last_minus_best": float(s.iloc[-1] - s.min()),
                     "t_best_end": int(s.idxmin()),
                     "n_good_400": float(g["n_good"].iloc[-1]),
@@ -182,9 +191,48 @@ def main() -> int:
                     "share_worse_0.05": float((sub["last_minus_best"] > 0.05).mean()),
                     "median": float(sub["last_minus_best"].median()),
                     "share_best_before_150": float((sub["t_best_end"] <= 150).mean()),
+                    "mean_dfpr": float(sub["fpr_last_minus_at_best"].mean())
+                    if "fpr_last_minus_at_best" in sub
+                    else np.nan,
+                    "mean_dfnr": float(sub["fnr_last_minus_at_best"].mean())
+                    if "fnr_last_minus_at_best" in sub
+                    else np.nan,
                 }
             )
     pd.DataFrame(summ).to_csv(args.out / "D_degrade.csv", index=False)
+
+    # Literal rows for the late cost rise: per dataset, the two shipped-arm sessions
+    # with the largest rise among those that harvested >= 80% of the positives, read
+    # at the end of their best 50-click stretch and at click 400 (raw, unsmoothed).
+    ex = []
+    top = deg[(deg["arm"] == "svm") & (deg["metric"] == "cost") & (deg["harvest"] >= 0.8)]
+    # Ranked by the RAW rise between the two rows printed, so a row pair never
+    # shows a smoothing artefact the reader cannot see.
+    svm_runs = df[df["arm"] == "svm"].set_index([*KEYS, "t"])["cost"]
+    top = top.assign(
+        raw_rise=[
+            svm_runs.get((*[r[k] for k in KEYS], 400), np.nan)
+            - svm_runs.get((*[r[k] for k in KEYS], int(r["t_best_end"])), np.nan)
+            for _, r in top.iterrows()
+        ]
+    )
+    top = top.sort_values("raw_rise", ascending=False).groupby("dataset").head(2)
+    for _, r in top.iterrows():
+        g = df[(df["arm"] == "svm") & np.logical_and.reduce([df[k] == r[k] for k in KEYS])].set_index("t")
+        for t in (int(r["t_best_end"]), 400):
+            row = g.loc[t]
+            ex.append(
+                {
+                    **{k: r[k] for k in KEYS},
+                    "t": t,
+                    **{
+                        c: row[c]
+                        for c in ("n_good", "n_test_pos", "threshold", "fpr", "fnr", "cost", "oracle_cost")
+                        if c in g
+                    },
+                }
+            )
+    pd.DataFrame(ex).to_csv(args.out / "D_examples.csv", index=False)
 
     # ---- the app's own stopping rules ---------------------------------------------------------
     from stopping import stopping_points
@@ -211,7 +259,7 @@ def main() -> int:
             rows.append(r)
     pd.DataFrame(rows).to_csv(args.out / "D_stop.csv", index=False)
 
-    for f in ("D_prefix", "D_paired", "D_degrade", "D_stop"):
+    for f in ("D_prefix", "D_paired", "D_degrade", "D_stop", "D_examples"):
         p = args.out / f"{f}.csv"
         if p.exists():
             t = pd.read_csv(p)
