@@ -44,13 +44,17 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **Stop-list templates from Bad votes (#4162, promoted).** The first rule that
-  learns from Bads in SIFT space.
+- **Stop-list templates from Bad votes (#4162; a candidate, not confirmed,
+  #4180).** The first rule that learns from Bads in SIFT space.
   - Each Bad page marks the template descriptors that ratio-match it as "not the
     mark", and those are dropped from every template before verification.
   - On DocMarks tier `s`, after 10 shared votes, it is +0.018 AP over
-    max-over-templates (interval [+0.005, +0.035]), and the gain grows with
-    Bads.
+    max-over-templates (interval [+0.005, +0.035]).
+  - At tier `m` it is +0.022, but that interval crosses zero; it is +0.049 at
+    20 votes.
+  - It fails when a Bad carries the mark inside a larger lockup: it strips the
+    mark's own descriptors (−0.24 on one RJR class). #4180 adds a guard and
+    re-confirms.
   - It is cheap: one ratio test per template × Bad, and no training.
   - Wiring it into `build_templates` needs the Bad votes' `local_features`,
     which `maybe_structural_rerank` already has.

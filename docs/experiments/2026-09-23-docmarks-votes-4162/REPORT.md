@@ -6,15 +6,22 @@ do the clicks only calibrate a threshold? This compares six learning rules on
 DocMarks v5.0, the benchmark built for exactly this: pages with stamps and logos,
 all of them boxed.
 
-**Answer, tier `s`.**
+**Answer.** Tier `s` ran every arm. Tier `m`, with 10× the pages, re-ran the
+arms that passed at tier `s`.
 
 - **Votes do help, but only one rule turns them into gains:** adding each Good
   page's boxed mark as a template, and scoring each page by its best-matching
   template (max over templates). After 10 shared votes it scores AP 0.87 on the
   unlabelled remainder, where the query crop alone scores 0.74 (paired +0.13,
   95% interval [+0.04, +0.22]).
-- **The one rule that learns from Bads helps a little:** a descriptor stop-list.
-  It is +0.018 over max-over-templates at 10 votes, interval [+0.005, +0.035].
+- **The one rule that learns from Bads helps on average, but is not confirmed:**
+  a descriptor stop-list.
+  - Tier `s`: +0.018 over max-over-templates at 10 votes, interval
+    [+0.005, +0.035].
+  - Tier `m`: +0.022, but the interval [−0.013, +0.068] crosses zero at the
+    pre-registered point. It is +0.049 at 20 votes, [+0.003, +0.106].
+  - It has one clear failure mode, where it strips the mark's own features
+    ([tier `m`](#tier-m)).
 - **Two rules make things worse:**
   - **Re-picking a single better exemplar** gives no gain: −0.03 at 10 votes,
     and −0.04 at 20, where the interval excludes zero.
@@ -23,7 +30,7 @@ all of them boxed.
   0.87.** The learning rule isn't the reason. The reason is the first stage: a
   VLAD SVM whose top 50 are the only pages SIFT ever checks.
 
-Tier `m` (10× the pages) is in [Tier `m`](#tier-m) below.
+Max over templates holds at tier `m`: +0.12 over the exemplar at 10 votes.
 
 ![Vote curves](figures/vote_curves.png)
 
@@ -231,19 +238,81 @@ class; max-over-templates finds 23.
 
 ## Tier `m`
 
-*Filled in when the tier-`m` run lands.*
+**What ran.** The pre-registered follow-up: the shared readout only, for the
+arms that passed at tier `s` (Goods only, stop-list) plus the exemplar and the
+control.
+
+- **Classes:** all 36, since the Lorillard crest has positives at tier `m`.
+- **Pool:** about 47,000–50,000 pages per class.
+- **Templates:** the crop, plus the positives in the exemplar's top 20. Those
+  are all the Goods a 20-vote shared sequence can reveal.
+- **Readout:** to 20 votes, not 40.
+- **Runs:** matrix 698087 and its continuation 700831; curves 698088;
+  stop-list 698089. Measurements are in
+  [`measurements/tier-m/`](measurements/tier-m/summary.md).
+
+Shared sequence, AP on the unlabelled remainder (mean over classes):
+
+| arm | 0 votes | 3 | 5 | 10 | 20 |
+|---|---:|---:|---:|---:|---:|
+| exemplar | 0.87 | 0.85 | 0.81 | 0.76 | 0.67 |
+| **max over templates** | 0.87 | 0.91 | 0.90 | 0.87 | 0.86 |
+| Goods only | 0.87 | 0.91 | 0.90 | 0.88 | 0.86 |
+| stop-list | — | 0.91 | 0.90 | 0.90 | 0.91 |
+| (classes) | (36) | (36) | (33) | (31) | (31) |
+
+Paired against max-over-templates, bootstrap 95% interval over classes:
+
+| arm | 10 votes | 20 votes |
+|---|---|---|
+| exemplar | −0.12 [−0.19, −0.06] | −0.18 [−0.27, −0.11] |
+| Goods only | +0.008 [+0.001, +0.019] | +0.007 [+0.000, +0.018] |
+| stop-list | +0.022 [−0.013, +0.068] | +0.049 [+0.003, +0.106] |
+
+- **Max over templates replicates.** It improves on the exemplar by about as much
+  as at tier `s`, and it keeps improving the remainder as votes arrive.
+- **Goods only replicates, and stays negligible:** +0.008.
+- **The stop-list:** its mean gain is larger than at tier `s`, but so is the
+  spread. At the pre-registered point (10 votes) the interval crosses zero, so
+  it is **not confirmed**. It is significant at 20 votes, which was not the
+  pre-registered point. Most classes don't move; a few move a lot, in both
+  directions:
+
+| class | max over templates | stop-list | votes | what happened |
+|---|---:|---:|---:|---|
+| `staver/stamp_stampds-00213_1` | 0.14 | **0.69** | 10 | the text-bearing form stamp: pruning the *crop's* glyph descriptors against 10 Bads rescues it (no Good yet) |
+| `tobacco800/logo_asg54f00_1` | 0.07 | 0.33 | 10 | |
+| `ucsf/logo_bw_oval_emblem` | 0.52 | 1.00 | 20 | |
+| `tobacco800/logo_aeq93a00_1` | 0.92 | **0.68** | 10 | a Bad that carries the mark: the stop-list strips the mark itself |
+
+**The failure mode: a Bad that contains the mark.** The RJR logo class
+(`aeq93a00`) has one Bad in its exemplar's top 10, `tobacco800/idr55d00`:
+
+| the query crop | the Bad page's letterhead |
+|---|---|
+| ![RJR](examples/q_aeq93.png) | ![RJR CONFIDENTIAL](examples/idr55d00_head.png) |
+
+That page's "RJR CONFIDENTIAL" lockup contains the RJR letters. The completeness
+review ruled it *not* an instance of this class, and it is a correct Bad under
+the benchmark's definition. But every descriptor it shares with the mark is,
+by construction, a descriptor of the mark. The stop-list drops those from every
+template, and the class loses 0.24 AP.
+
+A user who votes such a page Bad ("not this one, it's the lockup") would get
+the same result. Any rule that learns from Bads needs a guard against it, for
+example keeping descriptors that most Goods also match.
 
 ## Verdict
 
-| arm | tier `s` | decision |
-|---|---|---|
-| max over templates | +0.13 over the exemplar | the rule to keep; it is what the app's templates already do, once Stage 1 lets positives reach them |
-| Goods only | +0.007 | null in practice; not worth a change |
-| re-pick | −0.03 / −0.04 | **null**: recorded, not promoted |
-| stop-list from Bads | +0.018, growing with Bads | **promoted** to a plan item (below) |
-| match-stat MLP | −0.18; loses in every class with a Bad | **negative**; the app should not re-rank with it ([#4169](https://github.com/samggreenberg/VTSearch/issues/4169)) |
-| VLAD SVM / the app today | 0.02–0.19 | the bottleneck is Stage 1 (the hybrid plan item) |
-| SigLIP SVM → SIFT | −0.27 AP, +0.46 found by 40 votes | the hybrid: a recall gain, a ranking loss |
+| arm | tier `s` | tier `m` | decision |
+|---|---|---|---|
+| max over templates | +0.13 over the exemplar | +0.12 | the rule to keep; it is what the app's templates already do, once Stage 1 lets positives reach them |
+| Goods only | +0.007 | +0.008 | null in practice; not worth a change |
+| re-pick | −0.03 / −0.04 | not run | **null**: recorded, not promoted |
+| stop-list from Bads | +0.018 | +0.022, interval crosses 0; +0.049 at 20 votes | **a candidate, not confirmed**: plan item with a guard for Bads that carry the mark ([#4180](https://github.com/samggreenberg/VTSearch/issues/4180)) |
+| match-stat MLP | −0.18; loses in every class with a Bad | not run | **negative**; the app should not re-rank with it ([#4169](https://github.com/samggreenberg/VTSearch/issues/4169)) |
+| VLAD SVM / the app today | 0.02–0.19 | not run | the bottleneck is Stage 1 (the hybrid plan item) |
+| SigLIP SVM → SIFT | −0.27 AP, +0.46 found by 40 votes | not run | the hybrid: a recall gain, a ranking loss |
 
 ## Reproduce
 
@@ -255,6 +324,10 @@ python vote_stoplist.py --matrix <dir>/matrix-s --tier s --shard 0/4 --out <dir>
 python vote_curve.py --matrix x --out <dir>/curves-s --summarise
 ```
 
-GRID runs: matrix 695763, curves 695810, stop-list 695812. Results are under
+Tier `m` adds `--goods-in-top 20 --no-vectors` to `template_matrix.py`,
+`--arms a0_exemplar,a1_max,a1p_goods_only --readouts shared --max-v 20` to
+`vote_curve.py`, and `--max-v 20` to `vote_stoplist.py`.
+
+GRID runs, tier `s`: matrix 695763, curves 695810, stop-list 695812. Results are under
 `/expscratch/sgreenberg/docmarks/votes-4162/`, and the measurements here are
 copied from there.

@@ -390,6 +390,8 @@ def summarise(rows: list[dict[str, Any]], subset: Optional[set[str]] = None) -> 
         ("shared", "ap", "Shared sequence: AP on the unlabelled remainder"),
         ("shared", "p10", "Shared sequence: P@10 on the unlabelled remainder"),
     ):
+        if not any(r["readout"] == readout for r in rows):
+            continue
         out += [f"### {label}", "", "| arm | " + " | ".join(f"v={v}" for v in vs) + " |", "|---|" + "---:|" * len(vs)]
         for arm in arms:
             if not any(r["arm"] == arm and r["readout"] == readout for r in rows):
