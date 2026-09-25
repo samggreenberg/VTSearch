@@ -56,8 +56,8 @@ class TestPrimitives:
         assert vc.shortlist(stage1, 3, np.zeros(4)).tolist() == [3, 0, 1, 2]
 
     def test_average_precision_matches_the_reference(self, vc):
-        sys.path.insert(0, str(_DOCMARKS))
-        import eval_retrieval as ev  # noqa: PLC0415
+        # The ``vc`` fixture has the DocMarks directory on sys.path; load it the same way.
+        ev = importlib.import_module("eval_retrieval")
 
         pos = np.array([False, True, False, True, True])
         order = np.array([1, 0, 3, 2, 4])
