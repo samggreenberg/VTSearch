@@ -11,6 +11,8 @@ Reads one State of the App run (``launch.sh``) and writes, under ``--out``:
   that the click is credited with.
 * ``images.csv`` / ``image_detector.csv`` -- the influence rolled up per image,
   and per image x detector, early and late separately.
+* ``harmful_pairs.csv`` -- the (image, class, label) pairs that hurt past
+  -``Z_FLAG``, net of cell, label and phase: the hand-review list (#4179).
 * ``summary.md`` -- the tables a reader starts from.
 
 **How a click is credited (owner, 2026-09-23).** The harness scores the test
@@ -321,6 +323,22 @@ def _resid_z(inf: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"resid": g["mean"], "resid_z": z.where(ok)})
 
 
+def harmful_pairs(inf: pd.DataFrame) -> pd.DataFrame:
+    """Per image x class x label, the net credit (``resid``) and its z; the pairs past -``Z_FLAG``.
+
+    An image hurts particular classes, not everything, so a hand review (#4179)
+    works from this list rather than from ``images.csv``: each row is one
+    question, "is this image really a <label> for <class>?", strongest first.
+    """
+    inf = inf.assign(when=np.where(inf["t"] <= EARLY, "early", np.where(inf["t"] > LATE, "late", "mid")))
+    inf["resid"] = inf["help_cost"] - inf.groupby(_BUCKET)["help_cost"].transform("mean")
+    g = inf.groupby(["image_id", "class", "label"])["resid"].agg(["mean", "std", "size"])
+    g = g[(g["size"] >= MIN_OBS_Z) & (g["std"] > 0)]
+    g["z"] = g["mean"] / (g["std"] / np.sqrt(g["size"]))
+    out = g[g["z"] < -Z_FLAG].rename(columns={"mean": "resid", "size": "n_clicks"}).reset_index()
+    return out.sort_values("z")
+
+
 def image_null(inf: pd.DataFrame, reps: int = 5, seed: int = 0) -> tuple[int, int, list[tuple[int, int]]]:
     """Images flagged helpful / harmful, and the same counts with images shuffled within buckets."""
 
@@ -451,6 +469,8 @@ def main() -> int:
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)
+    if not inf.empty:
+        harmful_pairs(inf).to_csv(args.out / "harmful_pairs.csv", index=False)
     summary(cells, img, det, args.out, image_null(inf) if not inf.empty else None)
     print(f"{len(cells)} runs, {len(inf)} credited clicks, {len(img)} images -> {args.out}")
     return 0
