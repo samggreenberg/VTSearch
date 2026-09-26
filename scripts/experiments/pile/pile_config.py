@@ -2521,7 +2521,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "reading, not ours -- a PARASAIL, a paraglider and a PARACHUTE: `parasail` "
             "lands on a COCO kite box 57 times and `parachute` 26, and both are already "
             "folded into this class. Bad: a flag, a banner, a balloon, a bird, a windsock, "
-            "a kite tail or string on its own. A kite lying on the ground still counts."
+            "a kite tail or string on its own. A kite lying on the ground still counts. "
+            "OWNER RULED 2026-09-26 during the #4179 review: the LINE is most of what makes "
+            "a kite, so a paper or foam plane or glider flying free is Bad. And the kite "
+            "itself has to be in frame: someone holding a handle or harness whose strings "
+            "run out of the picture is Bad, because a box cannot hold an object that is not "
+            "in the image."
         ),
     ),
     "knife": ClassRule(
