@@ -2540,7 +2540,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "peeler, a knife block or a drawer with nothing visible, and a whole "
             "`silverware` or `utensil` box covering a place setting -- vote Good only when "
             "the boxed object IS the knife, the same rule `fork` carries. Where only the "
-            "handle shows, read the blade line, not the food."
+            "handle shows, read the blade line, not the food. OWNER RULED 2026-09-26 during "
+            "the #4179 review: scissors stay Bad EVEN when broken down to one blade on a "
+            "rounded handle -- it is still `scissors`. A SMALL sword (short blade, "
+            "one-handed) is Good: it is a big knife. COCO boxes 15% of LVIS `sword` as a "
+            "knife and leaves 84% unboxed."
         ),
     ),
     # The remaining rules were measured as names before ``test`` existed
