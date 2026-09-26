@@ -435,6 +435,96 @@ def rezoom(args) -> int:
     return 0
 
 
+def merge(args) -> int:
+    """Fold each live queue of ``--from`` into the live queue of the same class in ``--into``.
+
+    For a class with both halves on the dashboard (e.g. click-side and
+    ``[test set]``): copy the source images byte-for-byte into the target
+    folder, append their manifest items (each keeps its ``arm``), move the
+    source detector's votes onto the target detector by md5 through
+    ``import-labels``, grow the target dataset (``refresh``), check that every
+    moved vote landed, and only then remove the source pair (detector JSON kept
+    as ``.cleared``). Its manifest is marked ``merged_into`` and left in place,
+    and its banked rows stand; the same file banked under both queue names
+    carries one vote, so dedupe on ``file``.
+    """
+    import shutil  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    from load_ruling_queues import api, datasets  # noqa: PLC0415
+    from vtscore.detectors.store import _slug  # noqa: PLC0415
+
+    dets = {d["name"]: d for d in api(args.api, "/api/detectors/registry")["detectors"]}
+    dss = datasets(args.api)
+
+    def live(root: Path) -> dict[str, Path]:
+        out = {}
+        for man in sorted(root.glob("*/manifest.json")):
+            m = json.loads(man.read_text())
+            if m["name"] in dets and m["name"] in dss and not m.get("merged_into"):
+                out[m["class"]] = man
+        return out
+
+    into, src = live(args.into), live(args.source)
+    rc = 0
+    for cls in sorted(set(into) & set(src)):
+        tman, sman = into[cls], src[cls]
+        tm, sm = json.loads(tman.read_text()), json.loads(sman.read_text())
+        clash = {it["file"] for it in tm["items"]} & {it["file"] for it in sm["items"]}
+        if clash:
+            print(f"  {cls}: {len(clash)} file names in both queues; left alone")
+            rc = 1
+            continue
+        lab = api(args.api, f"/api/detectors/{urllib.parse.quote(sm['name'])}/labels-detail")
+        moved = [(r["md5"], "good") for r in lab.get("good", [])] + [(r["md5"], "bad") for r in lab.get("bad", [])]
+        for it in sm["items"]:
+            shutil.copy2(sman.parent / "images" / it["file"], tman.parent / "images" / it["file"])
+        tm["items"] += sm["items"]
+        tman.write_text(json.dumps(tm, indent=1))
+        if moved:
+            with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, dir=args.into) as fh:
+                fh.write("md5,label\n" + "".join(f"{h},{v}\n" for h, v in moved))
+            res = api(
+                args.api,
+                f"/api/detectors/{urllib.parse.quote(tm['name'])}/import-labels/server_csv_file",
+                {"filepath": fh.name},
+                method="POST",
+            )
+            Path(fh.name).unlink()
+            if res.get("applied", 0) + res.get("skipped", 0) != len(moved):
+                print(f"  {cls}: vote import answered {res}; source pair KEPT")
+                rc = 1
+                continue
+        got = api(args.api, f"/api/detectors/{urllib.parse.quote(tm['name'])}/labels-detail")
+        have = {(r["md5"], "good") for r in got.get("good", [])} | {(r["md5"], "bad") for r in got.get("bad", [])}
+        if not set(moved) <= have:
+            print(f"  {cls}: {len(set(moved) - have)} moved votes missing on the target; source pair KEPT")
+            rc = 1
+            continue
+        sd = args.detectors / f"{_slug(sm['name'])}.json"
+        if sd.exists():
+            shutil.copy2(sd, f"{sd}.cleared")
+        sm["merged_into"] = tm["name"]
+        sman.write_text(json.dumps(sm, indent=1))
+        print(f"  {cls}: +{len(sm['items'])} questions, {len(moved)} votes moved")
+    # Grow every target folder, then drop the merged source pairs.
+    rc |= refresh(argparse.Namespace(api=args.api, queues=args.into, wait=900, force=False))
+    for man in sorted(args.source.glob("*/manifest.json")):
+        m = json.loads(man.read_text())
+        if m.get("merged_into") and m["name"] in dets:
+            tgt = datasets(args.api).get(m["merged_into"])
+            tman = into[m["class"]]
+            n = len(list((tman.parent / "images").glob("*.jpg")))
+            if tgt is None or int(tgt.get("num_items") or 0) < n:
+                print(f"  {m['class']}: target dataset not grown yet; source pair KEPT")
+                rc = 1
+                continue
+            api(args.api, f"/api/detectors/registry/{dets[m['name']]['id']}", method="DELETE")
+            if m["name"] in dss:
+                api(args.api, f"/api/datasets/registry/{dss[m['name']]['id']}", method="DELETE")
+    return rc
+
+
 def clear(args) -> int:
     """Remove every FULLY answered queue from the dashboard, after proving its votes are banked.
 
@@ -513,6 +603,11 @@ def main() -> int:
     r.add_argument("--queues", type=Path, required=True)
     r.add_argument("--wait", type=int, default=900)
     r.add_argument("--force", action="store_true", help="also swap a dataset whose images were redrawn (rezoom)")
+    g = sub.add_parser("merge")
+    g.add_argument("--api", required=True)
+    g.add_argument("--into", type=Path, required=True)
+    g.add_argument("--from", dest="source", type=Path, required=True)
+    g.add_argument("--detectors", type=Path, default=Path("/expscratch/sgreenberg/vtsearch-data/detectors"))
     z = sub.add_parser("rezoom")
     z.add_argument("--api", required=True)
     z.add_argument("--queues", type=Path, required=True)
@@ -523,7 +618,7 @@ def main() -> int:
     args = ap.parse_args()
     global SUFFIX
     SUFFIX = getattr(args, "name_suffix", "")
-    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom}[args.cmd](args)
+    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge}[args.cmd](args)
 
 
 if __name__ == "__main__":
