@@ -73,11 +73,15 @@ def _rule_name(cls: str) -> str:
 HINT = {"keyboard": ", a laptop's own is Bad"}
 
 
+#: Appended to every queue name of a build (``--name-suffix``), e.g. " [test set]".
+SUFFIX = ""
+
+
 def queue_name(cls: str) -> str:
     """The dataset/detector name: the class rule first, then the one question every image asks."""
     if cls == MIXED:
-        return "coco_better mixed - is the class on the banner here? (if boxed, is the box one?)"
-    return f"{_rule_name(cls)}{HINT.get(cls, '')} - is there one here? (if boxed, is the box one?)"
+        return "coco_better mixed - is the class on the banner here? (if boxed, is the box one?)" + SUFFIX
+    return f"{_rule_name(cls)}{HINT.get(cls, '')} - is there one here? (if boxed, is the box one?){SUFFIX}"
 
 
 def _bands(influence: Path, keys: set[tuple[int, str, int]]) -> dict[tuple[int, str, int], str]:
@@ -93,9 +97,16 @@ def build(args) -> int:
     from pilebuild.scale_core import band_for, largest_box  # noqa: PLC0415
 
     pairs = pd.read_csv(args.pairs)
-    pairs = pairs[pairs["z"] < -args.z]
+    if "z" in pairs:
+        pairs = pairs[pairs["z"] < -args.z]
+    else:
+        # test_side.py's list: flagged pairs by embedder agreement, plus its random arm.
+        pairs = pairs[(pairs["arm"] == "test_random") | (pairs["n_embedders"] >= args.min_embedders)]
     keys = {(int(r.image_id), r["class"], int(r.label)) for _, r in pairs.iterrows()}
-    band_of = _bands(args.influence, keys)
+    if "band" in pairs:
+        band_of = {(int(r.image_id), r["class"], int(r.label)): r["band"] for _, r in pairs.iterrows()}
+    else:
+        band_of = _bands(args.influence, keys)
     labels, dims, filenames = read_coco_labels(pc.COCO_ANCHOR_DIR, pc.SCALE_CLASSES)
     lumped = lump_exclusions(labels)
     rng = random.Random(args.seed)
@@ -107,14 +118,14 @@ def build(args) -> int:
             "image_id": iid,
             "class": cls,
             "label": lab,
-            "arm": "flagged",
-            "z": float(r.z),
-            "resid": float(r.resid),
-            "n_clicks": int(r.n_clicks),
+            "arm": r.get("arm", "flagged"),
+            **{k: (None if pd.isna(r.get(k)) else float(r.get(k))) for k in ("z", "resid", "n_clicks", "n_embedders", "beat_share") if k in r},
             "band": band_of.get((iid, cls, lab)),
             "box": None,
             "coco_holds": sorted(labels.get(iid, {})),
         }
+        if item["band"] is not None and pd.isna(item["band"]):
+            item["band"] = None
         if lab == 1:
             boxes = labels.get(iid, {}).get(cls)
             if not boxes:
@@ -133,6 +144,12 @@ def build(args) -> int:
     # their class's existing queue, so a deeper cut lands in the SAME datasets.
     old: dict[str, list[dict]] = {}
     asked: set[tuple[int, str]] = set()
+    for root in args.asked_in:
+        for man in sorted(root.glob("*/manifest.json")):
+            asked |= {(it["image_id"], it["class"]) for it in json.loads(man.read_text())["items"]}
+    if asked and not args.extend:
+        by_cls = {c: [it for it in its if (it["image_id"], c) not in asked] for c, its in by_cls.items()}
+        by_cls = {c: its for c, its in by_cls.items() if its}
     if args.extend:
         for man in sorted(args.out.glob("*/manifest.json")):
             m = json.loads(man.read_text())
@@ -161,7 +178,7 @@ def build(args) -> int:
 
     queues: dict[str, list[dict]] = collections.defaultdict(list)
     for cls, items in by_cls.items():
-        flagged = sum(it["arm"] == "flagged" for it in items)
+        flagged = sum(it["arm"] != "control" for it in items)
         queues[cls if cls in old or flagged >= args.min_per_class else MIXED] += items
     return _render(queues, dims, filenames, args, old)
 
@@ -211,7 +228,7 @@ def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args, ol
         (args.out / slug / "manifest.json").write_text(
             json.dumps({"class": q, "name": queue_name(q), "seed": args.seed, "items": manifest}, indent=1)
         )
-        n_flag = sum(i["arm"] == "flagged" for i in manifest)
+        n_flag = sum(i["arm"] != "control" for i in manifest)
         added = len(manifest) - len((old or {}).get(q, []))
         print(f"  {queue_name(q)}: {n_flag} flagged + {len(manifest) - n_flag} controls ({added} new)")
         total += len(manifest)
@@ -366,13 +383,16 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build")
     b.add_argument("--pairs", type=Path, required=True)
-    b.add_argument("--influence", type=Path, required=True)
+    b.add_argument("--influence", type=Path, help="for a harmful_pairs.csv, which carries no band")
     b.add_argument("--z", type=float, default=5.0, help="keep pairs with z < -Z")
     b.add_argument("--out", type=Path, required=True)
     b.add_argument("--seed", type=int, default=4179)
     b.add_argument("--min-per-class", type=int, default=5)
     b.add_argument("--control-share", type=float, default=0.1)
     b.add_argument("--min-controls", type=int, default=2)
+    b.add_argument("--min-embedders", type=int, default=3, help="test_side.py lists: keep pairs this many embedders flag")
+    b.add_argument("--asked-in", type=Path, nargs="*", default=[], help="queue roots whose (image, class) pairs are not re-asked")
+    b.add_argument("--name-suffix", default="", help="appended to every queue name, e.g. ' [test set]'")
     b.add_argument(
         "--extend",
         action="store_true",
@@ -390,6 +410,8 @@ def main() -> int:
     c.add_argument("--queues", type=Path, required=True)
     c.add_argument("--detectors", type=Path, default=Path("/expscratch/sgreenberg/vtsearch-data/detectors"))
     args = ap.parse_args()
+    global SUFFIX
+    SUFFIX = getattr(args, "name_suffix", "")
     return {"build": build, "bank": bank, "refresh": refresh, "clear": clear}[args.cmd](args)
 
 
