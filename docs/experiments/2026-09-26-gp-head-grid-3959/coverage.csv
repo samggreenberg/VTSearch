@@ -1,0 +1,17 @@
+study_env,arm,cells_with_rows
+better,app,565
+better,app_gmm,565
+better,app_xcal,565
+better,gp_dot_anch,565
+better,gp_rbf_anch,565
+better,gp_rbf_anch_maxvar,565
+better,gp_rbf_gmm,565
+better,gp_rbf_xcal,565
+natural,app,304
+natural,app_gmm,304
+natural,app_xcal,304
+natural,gp_dot_anch,304
+natural,gp_rbf_anch,304
+natural,gp_rbf_anch_maxvar,304
+natural,gp_rbf_gmm,304
+natural,gp_rbf_xcal,304

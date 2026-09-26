@@ -822,6 +822,24 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: for the historical auto-sized-MLP arm (#2781).
 HEAD = os.environ.get("CALIB_HEAD") or None
 
+#: Which **pipeline** runs at each step (issue #3959).  Unset is ``"app"``, the
+#: app's own head and calibration - every study before #3959 ran only that.  A
+#: standalone trainer (``gp_rbf``, ``gp_dot``, ``svm_*``) fits a bare estimator
+#: on the whole-image vectors instead, so it runs with no detection style (the
+#: styles are the app pipeline's) and on single-vector embedders only.
+TRAINER = os.environ.get("CALIB_TRAINER", "").strip() or "app"
+
+#: The vote-order strategy (issue #3959).  Unset is ``"autopilot"``, the app's.
+#: ``autopilot_maxvar`` / ``autopilot_uncertainty`` replace the Hard pick with a
+#: posterior-spread pick and need a trainer that reports one (the ``gp_*`` ones).
+STRATEGY = os.environ.get("CALIB_STRATEGY", "").strip() or "autopilot"
+
+#: How a ``gp_*`` trainer's cut reaches its final model (issue #3954/#3959):
+#: ``raw`` (unset), ``rank``, or ``anchored`` - the GP's own calibration folds
+#: under the shipped fold-anchored estimator.  See
+#: ``simulate_voting_iterations(standalone_cut=...)``.
+STANDALONE_CUT = os.environ.get("CALIB_STANDALONE_CUT", "").strip() or "raw"
+
 #: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
 #: This steers the trajectory - the blended threshold feeds Autopilot's Hard
 #: pick - so an A/B between schedules needs one full run per value here.

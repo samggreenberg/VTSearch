@@ -259,12 +259,15 @@ def main(argv: list[str] | None = None) -> int:
     # through as-is: `simulate_voting_iterations` resolves None to the app's own
     # CALIBRATION_SPLIT_SEED, so the harness never writes that constant down.
     cal_seed = cell.get("calibration_seed")
-    styles = cfg.styles_for(ds, emb)
+    # A standalone trainer (#3959) has no head for a detection style to drive,
+    # so it runs style-less: the whole-image path, which is the only one it has.
+    styles = cfg.styles_for(ds, emb) if cfg.TRAINER == "app" else [None]
     region_voting = cfg.region_voting_for(ds, emb)
     common.log(
         f"{cell_progress(idx, len(cells))}: dataset={ds} embedder={emb} "
         f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
+        f"trainer={cfg.TRAINER} strategy={cfg.STRATEGY} standalone_cut={cfg.STANDALONE_CUT} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
         f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
@@ -347,7 +350,9 @@ def main(argv: list[str] | None = None) -> int:
             region_voting=region_voting,
             max_steps=cfg.MAX_STEPS,
             seed_scores=seed_scores,
-            trainer="app",
+            trainer=cfg.TRAINER,
+            strategy=cfg.STRATEGY,
+            standalone_cut=cfg.STANDALONE_CUT,
             head=cfg.HEAD,
             style=style,
             test_bands=cfg.TEST_BANDS,
@@ -420,6 +425,7 @@ def main(argv: list[str] | None = None) -> int:
             r["exclusion_min_remainder"] = exclusion_floor
             r["live_cut_rule"] = live_cut_rule
             r["live_threshold"] = live_threshold
+            r["standalone_cut"] = cfg.STANDALONE_CUT
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -464,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
         "exclusion_min_remainder",
         "live_cut_rule",
         "live_threshold",
+        "standalone_cut",
     ]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
