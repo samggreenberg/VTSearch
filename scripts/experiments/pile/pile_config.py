@@ -2579,7 +2579,13 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "stations. Bad: ticket machines that are not for parking, post boxes, "
             "bollards, utility pillars. 100% pure over 89 LVIS matches -- the cleanest "
             "class in C, so membership is never the question. The risk is the BOX: take "
-            "the head and its housing, not the run of pole down to the pavement."
+            "the head and its housing, not the run of pole down to the pavement. OWNER "
+            "RULED 2026-09-26 during the #4179 review: head only stays, because it is what "
+            "COCO boxes -- median h/w 2.1, only 12% of 1,343 boxes reach h/w 3, and paired "
+            "with LVIS the heights agree (median ratio 0.99, 3% are 1.5x taller). A box "
+            "that does run down the pole is still ONE meter, so Good in a review. "
+            "Electronic meters with a screen and card reader (often a big `P`) are Good, "
+            "single-space or multi-space."
         ),
     ),
     "banana": ClassRule(
