@@ -2157,7 +2157,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "When only the HANDLE shows, read the food: a handle out of cereal is a "
             "spoon, a handle out of a salad is a fork. The one rule here that infers "
             "from surroundings rather than the object, because the alternative deletes "
-            "every partly buried spoon."
+            "every partly buried spoon. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "SLOTTED SPOON is Good -- a solid bowl with holes in it is still a spoon (a "
+            "slotted turner is a flat spatula, which stays Bad). A handheld MESH strainer, "
+            "skimmer or spider is Bad, like a bowl-style strainer: the line is a solid "
+            "bowl, holes or not, against a mesh or wire basket. COCO agrees: LVIS `ladle` "
+            "is COCO spoon 59% of the time, `strainer` 3.4%."
         ),
     ),
     "bowl": ClassRule(
