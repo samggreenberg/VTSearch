@@ -14,6 +14,8 @@ needs a model download:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 from scipy.special import expit
@@ -427,7 +429,7 @@ class TestGPFoldAnchored:
         X, y = _blobs()
         with pytest.raises(ValueError, match="row-wise"):
             compute_fold_orderings(
-                list(X), [float(v) for v in y], 16, groups=list(range(len(y))), fold_fit=lambda a, b: None
+                list(X), [float(v) for v in y], 16, groups=list(range(len(y))), fold_fit=lambda a, b: lambda q: q
             )
 
     def test_non_finite_fold_scores_become_the_sentinel(self):
@@ -489,7 +491,9 @@ class TestGPFoldAnchored:
 
     def test_anchored_is_gp_only_and_excludes_rank(self):
         good, bad = self._votes()
-        kw = dict(region_voting=False, input_dim=16, inclusion=0, calibrate_count=2, calibration_fraction=0.3)
+        kw: dict[str, Any] = dict(
+            region_voting=False, input_dim=16, inclusion=0, calibrate_count=2, calibration_fraction=0.3
+        )
         with pytest.raises(ValueError, match="gp_\\* trainers only"):
             _train_and_calibrate("svm_linear", good, bad, _clips(), "cat0", fold_anchored=True, **kw)
         with pytest.raises(ValueError, match="pick one"):
