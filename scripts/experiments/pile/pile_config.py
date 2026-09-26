@@ -2526,7 +2526,8 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "a kite, so a paper or foam plane or glider flying free is Bad. And the kite "
             "itself has to be in frame: someone holding a handle or harness whose strings "
             "run out of the picture is Bad, because a box cannot hold an object that is not "
-            "in the image."
+            "in the image. Parachutes, parasails and paragliders stay IN: their rigging "
+            "lines count as the line (owner, same day)."
         ),
     ),
     "knife": ClassRule(
