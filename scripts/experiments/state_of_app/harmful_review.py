@@ -183,15 +183,66 @@ def build(args) -> int:
     return _render(queues, dims, filenames, args, old)
 
 
-def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args, old: dict | None = None) -> int:
-    from PIL import Image, ImageDraw, ImageFont  # noqa: PLC0415
+def _draw(im, it: dict, q: str, font):
+    """The question image for *it*: whole photo, its box if it has one, the class banner in ``mixed``.
 
+    A box under :data:`pc.LEAF_AREA` of the frame (the ``small`` and ``medium``
+    bands) gets the side panel of :func:`slate_render.draw_with_side_inset`: the
+    box is drawn on the photo, and an enlarged, unmarked view of what is under it
+    sits beside it. On a tight box the outline alone covers the object, which is
+    what the question is about. Sets ``it["render"]`` to what was drawn.
+    """
+    import tempfile  # noqa: PLC0415
+
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+    from slate_render import draw_with_side_inset  # noqa: PLC0415
+
+    W, H = im.size
+    s = MAX_SIDE / max(W, H)
+    it["render"] = "whole"
+    if it["box"] is not None:
+        x0, y0, x1, y1 = it["box"]
+        if (x1 - x0) * (y1 - y0) / (W * H) < pc.LEAF_AREA:
+            with tempfile.TemporaryDirectory() as tmp:
+                src, dst = Path(tmp) / "src.png", Path(tmp) / "dst.png"
+                im.save(src)
+                draw_with_side_inset(src, (x0 / W, y0 / H, x1 / W, y1 / H), dst)
+                with Image.open(dst) as out:
+                    im = out.convert("RGB")
+            it["render"] = "side_inset"
+        else:
+            draw = ImageDraw.Draw(im)
+            lw = max(2, int(0.006 * max(W, H)))
+            draw.rectangle([x0 - lw, y0 - lw, x1 + lw, y1 + lw], outline=(255, 255, 255), width=lw)
+            draw.rectangle([x0, y0, x1, y1], outline=(255, 64, 0), width=lw)
+            it["render"] = "box"
+    # One scale for the photo in every framing, so the side panel widens the canvas
+    # and never shrinks the photo.
+    im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
+    if q == MIXED:
+        banner = Image.new("RGB", (im.width, 56), (20, 20, 20))
+        ImageDraw.Draw(banner).text((12, 8), _rule_name(it["class"]), fill=(255, 220, 0), font=font)
+        both = Image.new("RGB", (im.width, im.height + 56))
+        both.paste(banner, (0, 0))
+        both.paste(im, (0, 56))
+        im = both
+    return im
+
+
+def _zip_members() -> dict[str, tuple[Path, str]]:
     members: dict[str, tuple[Path, str]] = {}
     for zp in (pc.COCO_VAL_ZIP, pc.COCO_TRAIN_ZIP):
         with zipfile.ZipFile(zp) as zf:
             for nm in zf.namelist():
                 if nm.lower().endswith(".jpg"):
                     members[Path(nm).name] = (zp, nm)
+    return members
+
+
+def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args, old: dict | None = None) -> int:
+    from PIL import Image, ImageFont  # noqa: PLC0415
+
+    members = _zip_members()
     zc: dict[Path, zipfile.ZipFile] = {}
     font = ImageFont.load_default(size=34)
     rng = random.Random(args.seed)
@@ -206,24 +257,10 @@ def _render(queues: dict[str, list[dict]], dims: dict, filenames: dict, args, ol
             zp, member = members[filenames[it["image_id"]]]
             zf = zc.setdefault(zp, zipfile.ZipFile(zp))
             im = Image.open(io.BytesIO(zf.read(member))).convert("RGB")
-            if it["box"] is not None:
-                draw = ImageDraw.Draw(im)
-                x0, y0, x1, y1 = it["box"]
-                lw = max(2, int(0.006 * max(im.size)))
-                draw.rectangle([x0 - lw, y0 - lw, x1 + lw, y1 + lw], outline=(255, 255, 255), width=lw)
-                draw.rectangle([x0, y0, x1, y1], outline=(255, 64, 0), width=lw)
-            s = MAX_SIDE / max(im.size)
-            im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
-            if q == MIXED:
-                banner = Image.new("RGB", (im.width, 56), (20, 20, 20))
-                ImageDraw.Draw(banner).text((12, 8), _rule_name(it["class"]), fill=(255, 220, 0), font=font)
-                both = Image.new("RGB", (im.width, im.height + 56))
-                both.paste(banner, (0, 0))
-                both.paste(im, (0, 56))
-                im = both
+            im = _draw(im, it, q, font)
             stem = hashlib.sha1(f"{args.seed}:{it['image_id']}:{it['class']}".encode()).hexdigest()[:12]  # noqa: S324
             p = outdir / f"{slug}_{stem}.jpg"
-            im.save(p, quality=QUALITY, optimize=True)
+            im.save(p, quality=QUALITY, optimize=True, subsampling=0)
             manifest.append({"file": p.name, **it})
         (args.out / slug / "manifest.json").write_text(
             json.dumps({"class": q, "name": queue_name(q), "seed": args.seed, "items": manifest}, indent=1)
@@ -254,8 +291,15 @@ def bank(args) -> int:
         if m["name"] not in dets:
             continue  # cleared, or never loaded; its banked rows stand
         live = _get(args.api, f"/api/detectors/{urllib.parse.quote(m['name'])}/labels-detail")
-        votes = {r["filename"]: "Good" for r in live.get("good", [])}
-        votes.update({r["filename"]: "Bad" for r in live.get("bad", [])})
+        # A label imported by content (``import-labels``, e.g. a vote moved off
+        # the wrong detector) carries an md5 and no filename, so match on both.
+        md5_of = {hashlib.md5(p.read_bytes()).hexdigest(): p.name for p in (man.parent / "images").glob("*.jpg")}  # noqa: S324
+        votes = {}
+        for key, vote in (("good", "Good"), ("bad", "Bad")):
+            for r in live.get(key, []):
+                name = r.get("filename") or md5_of.get(r.get("md5", ""))
+                if name:
+                    votes[name] = vote
         for it in m["items"]:
             v = votes.get(it["file"])
             if v is None:
@@ -279,6 +323,21 @@ def bank(args) -> int:
     return 0
 
 
+def _redrawn(man: Path, have: dict) -> bool:
+    """Whether any image in *man*'s folder is newer than its dataset's registration."""
+    import datetime as dt  # noqa: PLC0415
+
+    t = have.get("created_at") or have.get("ingest_finished_at") or ""
+    try:
+        since = float(t)  # the registry stores epoch seconds
+    except (TypeError, ValueError):
+        try:
+            since = dt.datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return True
+    return any(p.stat().st_mtime > since for p in (man.parent / "images").glob("*.jpg"))
+
+
 def refresh(args) -> int:
     """Grow each queue's dataset to its folder in place, keeping its name and its detector.
 
@@ -299,7 +358,7 @@ def refresh(args) -> int:
         folder = man.parent / "images"
         n = len(list(folder.glob("*.jpg")))
         have = datasets(args.api).get(m["name"])
-        if have is None or count_of(have) >= n:
+        if have is None or (count_of(have) >= n and not (args.force and _redrawn(man, have))):
             continue
         tmp = f"{m['name']} [growing]"
         resp = api(
@@ -329,6 +388,53 @@ def refresh(args) -> int:
     return rc
 
 
+def rezoom(args) -> int:
+    """Redraw, in place, every UNANSWERED boxed question whose box is small or medium.
+
+    Only unanswered questions: a vote may key on the file's bytes, so an
+    answered image is never rewritten. The file name is kept, so the manifest
+    and the banked verdicts still match; ``refresh --force`` then swaps each
+    touched dataset for its redrawn folder.
+    """
+    from PIL import Image, ImageFont  # noqa: PLC0415
+
+    from load_ruling_queues import api  # noqa: PLC0415
+
+    members = _zip_members()
+    zc: dict[Path, zipfile.ZipFile] = {}
+    font = ImageFont.load_default(size=34)
+    live = {d["name"] for d in api(args.api, "/api/detectors/registry")["detectors"]}
+    touched = 0
+    for man in sorted(args.queues.glob("*/manifest.json")):
+        m = json.loads(man.read_text())
+        if m["name"] not in live:
+            continue
+        lab = api(args.api, f"/api/detectors/{urllib.parse.quote(m['name'])}/labels-detail")
+        md5_of = {hashlib.md5(p.read_bytes()).hexdigest(): p.name for p in (man.parent / "images").glob("*.jpg")}  # noqa: S324
+        voted = {r.get("filename") or md5_of.get(r.get("md5", "")) for r in lab.get("good", []) + lab.get("bad", [])}
+        n = 0
+        for it in m["items"]:
+            if it["box"] is None or it["file"] in voted or it.get("render") == "side_inset":
+                continue
+            # COCO 2017 names every file by its zero-padded id, so no annotation read is needed.
+            zp, member = members[f"{it['image_id']:012d}.jpg"]
+            zf = zc.setdefault(zp, zipfile.ZipFile(zp))
+            im = Image.open(io.BytesIO(zf.read(member))).convert("RGB")
+            before = it.get("render")
+            im = _draw(im, it, m["class"], font)
+            if it["render"] != "side_inset":
+                it["render"] = before or "box"
+                continue
+            im.save(man.parent / "images" / it["file"], quality=QUALITY, optimize=True, subsampling=0)
+            n += 1
+        if n:
+            man.write_text(json.dumps(m, indent=1))
+            print(f"  {m['name']}: {n} redrawn")
+            touched += 1
+    print(f"{touched} queues redrawn; now run refresh --force")
+    return 0
+
+
 def clear(args) -> int:
     """Remove every FULLY answered queue from the dashboard, after proving its votes are banked.
 
@@ -354,7 +460,8 @@ def clear(args) -> int:
         if name not in dets or name not in dss:
             continue
         live = api(args.api, f"/api/detectors/{urllib.parse.quote(name)}/labels-detail")
-        votes = {r["filename"] for r in live.get("good", []) + live.get("bad", [])}
+        md5_of = {hashlib.md5(p.read_bytes()).hexdigest(): p.name for p in (man.parent / "images").glob("*.jpg")}  # noqa: S324
+        votes = {r.get("filename") or md5_of.get(r.get("md5", "")) for r in live.get("good", []) + live.get("bad", [])}
         files = {it["file"] for it in m["items"]}
         if not files <= votes:
             continue
@@ -405,6 +512,10 @@ def main() -> int:
     r.add_argument("--api", required=True)
     r.add_argument("--queues", type=Path, required=True)
     r.add_argument("--wait", type=int, default=900)
+    r.add_argument("--force", action="store_true", help="also swap a dataset whose images were redrawn (rezoom)")
+    z = sub.add_parser("rezoom")
+    z.add_argument("--api", required=True)
+    z.add_argument("--queues", type=Path, required=True)
     c = sub.add_parser("clear")
     c.add_argument("--api", required=True)
     c.add_argument("--queues", type=Path, required=True)
@@ -412,7 +523,7 @@ def main() -> int:
     args = ap.parse_args()
     global SUFFIX
     SUFFIX = getattr(args, "name_suffix", "")
-    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear}[args.cmd](args)
+    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom}[args.cmd](args)
 
 
 if __name__ == "__main__":
