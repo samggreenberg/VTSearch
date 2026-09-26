@@ -2647,7 +2647,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "appear on 0.3% of these boxes. Also bad: on-screen keyboards. A laptop's "
             "own keyboard belongs here only where COCO boxed it apart from the machine; "
             "otherwise the object is `laptop`, which is its own class in C. 98.5% is "
-            "`computer_keyboard`."
+            "`computer_keyboard`. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "stand-alone NUMPAD is Bad, and a keyboard WITHOUT a numpad (tenkeyless, "
+            "compact) is still Good -- the numpad is neither necessary nor sufficient. "
+            "A phone with a key per letter (a BlackBerry) is Bad: it is `cell phone`, "
+            "its own class in C. The laptop/desktop split stays as ruled, though the "
+            "owner expects it to show in this class's numbers as hard negatives."
         ),
     ),
     "tennis racket": ClassRule(
