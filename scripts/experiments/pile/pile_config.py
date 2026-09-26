@@ -2814,7 +2814,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "(`wet_suit` 7.8%, `jacket` 5.4%, `dress` 2.7%, `coat` 2.4%, `shirt` 2.2%). "
             "That is not a definitional split -- LVIS boxes the garment where COCO boxes "
             "the wearer, and mutual best match pairs the two. The object is always the "
-            "PERSON, never the garment."
+            "PERSON, never the garment. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "person cut off by the frame is Good as long as the HEAD OR THE TORSO is in "
+            "frame (a head alone is Good). Only an extremity -- a hand, an arm, a foot, "
+            "legs, a pair of shoes -- is Bad. That is COCO's own reading: where LVIS "
+            "boxes a glove or a shoe, a COCO person box is just that part 0.1% of the "
+            "time, and 8.5% of hands and 17% of shoes carry no person box at all."
         ),
     ),
     "remote": ClassRule(
