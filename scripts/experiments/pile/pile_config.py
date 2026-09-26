@@ -2543,8 +2543,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "handle shows, read the blade line, not the food. OWNER RULED 2026-09-26 during "
             "the #4179 review: scissors stay Bad EVEN when broken down to one blade on a "
             "rounded handle -- it is still `scissors`. A SMALL sword (short blade, "
-            "one-handed) is Good: it is a big knife. COCO boxes 15% of LVIS `sword` as a "
-            "knife and leaves 84% unboxed."
+            "one-handed) is Good: it is a big knife. A LONG or two-handed sword is Bad, a "
+            "weapon rather than a table or kitchen blade (so a ceremonial sabre cutting a "
+            "wedding cake is Bad). The line: a one-handed blade you could use at a table. "
+            "COCO boxes 15% of LVIS `sword` as a knife and leaves 84% unboxed, so Bad is "
+            "also the reading COCO carries."
         ),
     ),
     # The remaining rules were measured as names before ``test`` existed
