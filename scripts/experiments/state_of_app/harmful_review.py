@@ -575,6 +575,18 @@ def clear(args) -> int:
     return 1 if back or (left_d ^ left_s) else 0
 
 
+def _app_url(port: int = 11850) -> str:
+    """The live app's base URL. The app moves node on every restart, so it is looked up, never remembered."""
+    import subprocess  # noqa: PLC0415
+
+    out = subprocess.run(
+        ["squeue", "-h", "-n", "vtsearch", "-t", "RUNNING", "-o", "%N"], capture_output=True, text=True, check=True
+    ).stdout.split()
+    if len(out) != 1:
+        raise SystemExit(f"expected one running vtsearch job, found {out or 'none'}; pass --api")
+    return f"http://{out[0]}:{port}"
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -596,28 +608,30 @@ def main() -> int:
         help="add to the queues already in --out: skip pairs already asked, render only new ones, append to manifests",
     )
     k = sub.add_parser("bank")
-    k.add_argument("--api", required=True)
+    k.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     k.add_argument("--queues", type=Path, required=True)
     r = sub.add_parser("refresh")
-    r.add_argument("--api", required=True)
+    r.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     r.add_argument("--queues", type=Path, required=True)
     r.add_argument("--wait", type=int, default=900)
     r.add_argument("--force", action="store_true", help="also swap a dataset whose images were redrawn (rezoom)")
     g = sub.add_parser("merge")
-    g.add_argument("--api", required=True)
+    g.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     g.add_argument("--into", type=Path, required=True)
     g.add_argument("--from", dest="source", type=Path, required=True)
     g.add_argument("--detectors", type=Path, default=Path("/expscratch/sgreenberg/vtsearch-data/detectors"))
     z = sub.add_parser("rezoom")
-    z.add_argument("--api", required=True)
+    z.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     z.add_argument("--queues", type=Path, required=True)
     c = sub.add_parser("clear")
-    c.add_argument("--api", required=True)
+    c.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     c.add_argument("--queues", type=Path, required=True)
     c.add_argument("--detectors", type=Path, default=Path("/expscratch/sgreenberg/vtsearch-data/detectors"))
     args = ap.parse_args()
     global SUFFIX
     SUFFIX = getattr(args, "name_suffix", "")
+    if hasattr(args, "api") and not args.api:
+        args.api = _app_url()
     return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge}[args.cmd](args)
 
 
