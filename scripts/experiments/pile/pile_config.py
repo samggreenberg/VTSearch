@@ -2759,7 +2759,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "at 0.7%; and a machine under a cover where only the tarp is visible "
             "(`tarp`, 0.5%). The test is the ENGINE, not the size or the step-through "
             "frame: a scooter with a motor is this class, a pedal cycle with a battery "
-            "is `bicycle`. 89% pure."
+            "is `bicycle`. 89% pure. OWNER RULED 2026-09-26 during the #4179 review: the "
+            "engine test decides between TWO-wheelers only. A four-wheeled motorized "
+            "shopping cart or mobility scooter is a cart, not a scooter, so Bad -- as are "
+            "golf carts and powered wheelchairs. COCO agrees: LVIS `golfcart`, "
+            "`wheelchair` and `shopping_cart` land on a COCO motorcycle box 0% of the time."
         ),
     ),
     "tie": ClassRule(
