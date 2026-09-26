@@ -226,7 +226,7 @@ PY
     squeue -u "$USER" -h -o "%.10i %.36j %.9T %.11M" | grep gp3959 || echo "(nothing queued)"
     for d in "$ROOT"/*/*/results/cells; do
       [[ -d "$d" ]] || continue
-      echo "$(ls "$d" | grep -c '^task_.*\.csv$') cells  ${d#$ROOT/}"
+      echo "$(ls "$d" | grep -cE '^task_[0-9]+\.csv$') cells  ${d#$ROOT/}"
     done
     ;;
   better|natural)
