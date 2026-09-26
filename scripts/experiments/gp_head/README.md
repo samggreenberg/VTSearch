@@ -63,3 +63,19 @@ python summarize.py                    # tables, figures, viewer into the study 
 | `GPHEAD_ARMS` | every arm | subset of Stage B arms |
 | `GPHEAD_STAGE_A_TRAINERS` / `GPHEAD_LABEL_COUNTS` | see config | Stage A grid |
 | `GPHEAD_WORKERS` | `4` | Stage B processes |
+
+## The GRID study (#3959)
+
+The pilot's follow-up runs on the calibration harness, not on `stage_b_cells.py`: the
+`gp_*` trainers are reached through `CALIB_TRAINER`, the uncertainty picks through
+`CALIB_STRATEGY`, and the GP-native cut (the shipped fold-anchored estimator on the GP's own
+calibration folds) through `CALIB_STANDALONE_CUT=anchored`.
+
+| Script | Job |
+|---|---|
+| `launch_grid_3959.sh` | `prepare` / `baseline` / `size` / `<env> <arm\|all>` / `status`, two envs x eight arms |
+| `analyze_grid_3959.py` | paired contrasts on the cell: cost = oracle cost (ranking) + regret (cut) |
+| `figures_3959.py` | the quality-over-clicks pair per dataset, the paired forest, the by-click gaps |
+| `viewer_3959.py` | the interactive viewers (`coco_better` one page per embedder, bands folded into the run) |
+
+Report: [`docs/experiments/2026-09-26-gp-head-grid-3959/REPORT.md`](../../../docs/experiments/2026-09-26-gp-head-grid-3959/REPORT.md).

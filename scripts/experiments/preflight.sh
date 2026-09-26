@@ -629,6 +629,11 @@ def must_contain(knob, var, shipped, effective):
 
 
 pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
+# The pipeline, the vote order and the standalone cut (#3959): unset is the app's
+# own on all three, so any value is a run-level arm the study must declare.
+pinned("trainer", "CALIB_TRAINER", "app")
+pinned("strategy", "CALIB_STRATEGY", "autopilot")
+pinned("standalone_cut", "CALIB_STANDALONE_CUT", "raw")
 
 # The heads' own fit knobs are app env vars, not CALIB_* ones (#3197), so a
 # launcher that exports them changes the detector without touching any knob
