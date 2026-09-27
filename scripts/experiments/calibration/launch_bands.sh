@@ -251,11 +251,29 @@ PYSHAPE
     --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" $PATCH_FLAG \
     --require-text-seed $REGION_FLAG || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
-  submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
-    --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
-    --partition="$PARTITION" --export=ALL \
-    --output="$LOGS/cells-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+  # CALIB_BUNDLE=K runs K consecutive cells per array task, in index order.
+  # The normal QOS caps a user at 2000 SUBMITTED jobs and counts every array
+  # task, so a grid larger than the room left under that cap cannot enter the
+  # queue at all (#4160: 4,840 cells against ~2,500 other tasks already queued).
+  # Consecutive, so under CALIB_CELL_ORDER=seed a task is a slice of one seed
+  # and a truncated run still loses whole seeds from the end. CALIB_TIME must
+  # cover K cells.
+  BUNDLE="${CALIB_BUNDLE:-1}"
+  if [[ "$BUNDLE" -gt 1 ]]; then
+    NT=$(( (N + BUNDLE - 1) / BUNDLE ))
+    echo "bundled: $NT tasks of $BUNDLE cells"
+    submit cells --job-name="$JOB_NAME" --array="0-$((NT-1))%$CONC" \
+      --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
+      --partition="$PARTITION" --export=ALL \
+      --output="$LOGS/cells-%A_%a.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && for k in \$(seq 0 $((BUNDLE-1))); do i=\$(( SLURM_ARRAY_TASK_ID * $BUNDLE + k )); [ \$i -lt $N ] && python run_cells.py --index \$i || true; done"
+  else
+    submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
+      --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
+      --partition="$PARTITION" --export=ALL \
+      --output="$LOGS/cells-%A_%a.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+  fi
   ;;
 
 redo)
