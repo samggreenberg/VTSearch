@@ -40,6 +40,21 @@ def mod():
     return coco_better
 
 
+@pytest.fixture(autouse=True)
+def _no_committed_corrections(tmp_path_factory, monkeypatch):
+    """Every corpus here is synthetic; the committed #4179 record is about the real one.
+
+    It names real COCO images under the real roster, so a test that patches
+    ``SCALE_CLASSES`` down to two classes would (rightly) be refused on its first
+    row. Tests of the corrections point this at a record of their own.
+    """
+    if str(_PILE_DIR) not in sys.path:
+        sys.path.insert(0, str(_PILE_DIR))
+    import pile_config as pc
+
+    monkeypatch.setattr(pc, "COCO_BETTER_CORRECTIONS", tmp_path_factory.mktemp("no_record") / "absent.json")
+
+
 def _jpeg_bytes(w: int = 64, h: int = 48) -> bytes:
     import io
 
