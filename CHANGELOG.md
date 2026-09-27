@@ -108,6 +108,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A click-by-click walkthrough in the user guide** (#4202). The guide opens
+  with *Step by step: your first search* — load a folder of photos, make a
+  detector, train it, load a second folder, and Find — with a screenshot per
+  step whose red numbered markers show exactly where to click, in order. Small
+  pictures of the buttons now sit in the sentences that name them ("click the
+  **+**"), in the in-app Help panel as well as on GitHub, and every screenshot
+  in the guide now shows real photographs (the slide deck's books example)
+  instead of synthetic shapes.
+
 - **Double-click the image to zoom in** (#3934). Looking closer at a borderline
   item meant reaching for the zoom control below the image, which breaks the
   rhythm of keyboard voting. A double-click on the image in the Train / Find

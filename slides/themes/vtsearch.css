@@ -18,6 +18,9 @@
  *      --hue-cut   blue   the threshold, and the shipped decision it makes
  *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
+ *      --hue-step  red    a numbered click marker, as the screenshot draws it
+ *                         (scripts/screenshots/callouts.mjs) — the Step-By-Step
+ *                         slides' side lists only
  *
  *    Use them through the .cut / .neg / .pos span classes, and only when the
  *    word names something the adjacent figure also draws in that colour. If
@@ -40,6 +43,9 @@
   --hue-cut: #0b5fa5;
   --hue-neg: #b91c1c;
   --hue-pos: #0d8a5f;
+  /* The callout drawer's red, not --hue-neg: it is a different identity (a
+     place to click), and it has to match the markers baked into the figure. */
+  --hue-step: #e8453c;
 
   font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
 }
@@ -257,14 +263,16 @@ section.outline.at3 ol li:nth-of-type(3),
 section.outline.at4 ol li:nth-of-type(4),
 section.outline.at5 ol li:nth-of-type(5),
 section.outline.at6 ol li:nth-of-type(6),
-section.outline.at7 ol li:nth-of-type(7) { color: var(--ink); font-weight: 700; }
+section.outline.at7 ol li:nth-of-type(7),
+section.outline.at8 ol li:nth-of-type(8) { color: var(--ink); font-weight: 700; }
 section.outline.at1 ol li:nth-of-type(1)::before,
 section.outline.at2 ol li:nth-of-type(2)::before,
 section.outline.at3 ol li:nth-of-type(3)::before,
 section.outline.at4 ol li:nth-of-type(4)::before,
 section.outline.at5 ol li:nth-of-type(5)::before,
 section.outline.at6 ol li:nth-of-type(6)::before,
-section.outline.at7 ol li:nth-of-type(7)::before { color: var(--ink-soft); }
+section.outline.at7 ol li:nth-of-type(7)::before,
+section.outline.at8 ol li:nth-of-type(8)::before { color: var(--ink-soft); }
 
 /* The closing line. `The End` is not a section the room is walked through, so
    it is not on the list they are shown on the way: the fragment wraps it in
@@ -334,6 +342,37 @@ section.full h2 {
 section.full .side { max-width: 300px; margin-top: 64px; }
 section.full .side p { margin: 0 0 0.9em; line-height: 1.3; }
 section.full .side .indent { display: inline-block; padding-left: 1.2em; }
+
+/* Step-By-Step: the side column is the key to the screenshot beside it. The
+   figure marks each control with a red numbered disc, so the list's numbers
+   are those discs — the same number in the same mark, and the room can match
+   a line to a place on the screen without being told. The fragment writes a
+   plain numbered list inside `<div class="side steps">`; build markers between
+   its items reveal a frame's lines with that frame. */
+section.full .side.steps ol { list-style: none; counter-reset: step; margin: 0; padding: 0; }
+section.full .side.steps li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 1.7em;
+  margin: 0 0 0.5em;
+  line-height: 1.3;
+}
+section.full .side.steps li p { margin: 0; }
+section.full .side.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0.08em;
+  width: 1.3em;
+  height: 1.3em;
+  border-radius: 50%;
+  background: var(--hue-step);
+  color: var(--paper);
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1.3em;
+  text-align: center;
+}
 
 /* Build groups (progressive reveal): build.py injects this class on every
    page of the group, the final page included. Anchoring the column to the
