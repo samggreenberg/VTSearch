@@ -114,7 +114,14 @@ arm_env() {
   return 0
 }
 
+activate_venv() {
+  # preflight imports vtscore; the system python cannot.
+  # shellcheck disable=SC1091
+  source "$WT/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv via $WT/gridenv.sh" >&2; exit 1; }
+}
+
 run_preflight() {
+  activate_venv
   [[ -x "$WT/scripts/experiments/preflight.sh" ]] || return 0
   local div=()
   [[ -n "$ARM_DIVERGES" ]] && div=(--diverges "$ARM_DIVERGES")
