@@ -1,0 +1,13 @@
+env,mode,dataset,embedder,category,seed,calibration_seed,t,n_good,n_bad,schedule,thr0,thrs,fpr0,fnr0,fprs,fnrs,delta
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,42,10,9,1,corridor:w=0.2,0.939461,0.515632,0.0,1.0,0.447433,0.0,-0.552567
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,0,10,9,1,corridor:w=0.2,0.939461,0.515632,0.0,1.0,0.447433,0.0,-0.552567
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,42,8,7,1,corridor:w=0.2,0.726864,0.514966,0.0,1.0,0.452323,0.0,-0.547677
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,0,8,7,1,corridor:w=0.2,0.726864,0.514966,0.0,1.0,0.452323,0.0,-0.547677
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,42,9,8,1,corridor:w=0.2,0.832177,0.513988,0.0,1.0,0.454768,0.0,-0.5452319999999999
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,0,9,8,1,corridor:w=0.2,0.832177,0.513988,0.0,1.0,0.454768,0.0,-0.5452319999999999
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,42,7,6,1,pure_gmm,0.621219,0.515159,0.0,0.1,0.457213,0.0,0.357213
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,42,7,6,1,rare:lo=1:hi=8,0.621219,0.515159,0.0,0.1,0.457213,0.0,0.357213
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,0,7,6,1,pure_gmm,0.621219,0.515159,0.0,0.1,0.457213,0.0,0.357213
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,0,7,6,1,rare:lo=1:hi=8,0.621219,0.515159,0.0,0.1,0.457213,0.0,0.357213
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,42,7,6,1,corridor:w=0.2,0.621219,0.515408,0.0,0.1,0.447433,0.0,0.347433
+caltech101_m / binary,binary,caltech101_m,siglip,cougar_face,2,0,7,6,1,corridor:w=0.2,0.621219,0.515408,0.0,0.1,0.447433,0.0,0.347433

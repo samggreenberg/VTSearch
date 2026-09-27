@@ -456,6 +456,11 @@ each to use. `ctx` is a `BlendContext` carrying the vote counts (total,
 good, bad — in votes, not flooded rows); a bare `int` is accepted where
 only the total is known.
 
+**These schedules are the fused threshold's fallback only** (since #2861): they
+run on steps with no usable calibration folds, where the cross-cal side is the
+`NO_GOOD_THRESHOLD` sentinel — 0.75–1.1% of steps, all before vote 20, in the
+#3551 screen. See `docs/experiments/2026-09-22-blend-endpoints-3551/`.
+
 The shipped schedule depends on the **voting mode**, because #2841
 measured the two separately and they want different curves
 (`PRODUCTION_SCHEDULE_BY_MODE`, resolved per training call by
@@ -463,8 +468,8 @@ measured the two separately and they want different curves
 
 | mode | schedule | shape |
 |---|---|---|
-| region (patch dataset) | `slow` | pure GMM ≤6 labels → pure cross-cal at **40** |
-| binary (single vector) | `cap50` | the old 6→20 ramp, but capped at **half** cross-cal forever |
+| region (patch dataset) | `slow_cap50` | pure GMM ≤6 labels, ramping to **half** cross-cal at 40 and held there |
+| binary (single vector) | `corridor20` | clamp the x-cal cut to 0.2 of the way from the GMM midpoint to each component mean (#3551); `cap50` when no fit exists |
 | unknown | `cap50` | the one arm that improved both modes under every weighting |
 
 The historical rule — a single 6→20 linear ramp — is retained as `prod`,

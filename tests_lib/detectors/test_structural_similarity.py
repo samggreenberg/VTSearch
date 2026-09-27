@@ -417,3 +417,68 @@ class TestMaybeStructuralRerankExample:
         assert out[0]["similarity"] >= STRUCTURAL_DECISION_THRESHOLD
         assert "best_region" in out[0]
         assert len(out[0]["best_region"]) == 4
+
+    def test_multiple_examples_are_max_over_templates(self, monkeypatch):
+        """Several examples are several templates, not one averaged query: a
+        candidate that verifies against *either* example is promoted, so two
+        crops of different marks each find their own instances (issue #4161).
+        Before this, the multi-example path skipped Stage 2 entirely and fell
+        back to the VLAD centroid, which matches neither mark."""
+        m = SiftMatcher()
+        mark_a = _textured_image(91)
+        mark_b = _textured_image(92)
+        snap = {
+            10: {"local_features": _feats(_textured_image(93), matcher=m), "embedder": "sift_vlad"},
+            20: {"local_features": _feats(_warp(mark_a, 7.0, 1.05, -4.0, 3.0), matcher=m), "embedder": "sift_vlad"},
+            30: {"local_features": _feats(_warp(mark_b, -6.0, 0.95, 5.0, -2.0), matcher=m), "embedder": "sift_vlad"},
+        }
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity._resolve_matcher",
+            lambda _snap: m,
+        )
+        examples = [_feats(mark_a, matcher=m), _feats(mark_b, matcher=m)]
+        results = [
+            {"id": 10, "similarity": 0.95},  # high cosine, unrelated to both
+            {"id": 20, "similarity": 0.40},  # warp of mark A
+            {"id": 30, "similarity": 0.35},  # warp of mark B
+        ]
+        out, thresh = maybe_structural_rerank_example(results, 0.9, snap, examples, score_key="similarity")
+        assert thresh == STRUCTURAL_DECISION_THRESHOLD
+        assert {out[0]["id"], out[1]["id"]} == {20, 30}, "both marks' instances must lead"
+        assert out[2]["id"] == 10
+        for entry in out[:2]:
+            assert entry["similarity"] >= STRUCTURAL_DECISION_THRESHOLD
+            assert len(entry["best_region"]) == 4
+        assert out[2]["similarity"] < STRUCTURAL_DECISION_THRESHOLD
+
+    def test_empty_template_among_usable_ones_is_dropped(self, monkeypatch):
+        """An example that yielded no features cannot verify anything, but it
+        must not disable the re-rank for the examples that did."""
+        m = SiftMatcher()
+        base = _textured_image(94)
+        snap = {
+            10: {"local_features": _feats(_textured_image(95), matcher=m), "embedder": "sift_vlad"},
+            20: {"local_features": _feats(_warp(base, 5.0, 1.0, 2.0, -2.0), matcher=m), "embedder": "sift_vlad"},
+        }
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity._resolve_matcher",
+            lambda _snap: m,
+        )
+        empty = StructuralFeatures(
+            keypoints=np.zeros((0, 4), dtype=np.float32),
+            descriptors=np.zeros((0, SIFT_DESCRIPTOR_DIM), dtype=np.float32),
+        )
+        results = [{"id": 10, "similarity": 0.95}, {"id": 20, "similarity": 0.40}]
+        out, thresh = maybe_structural_rerank_example(
+            results, 0.9, snap, [empty, None, _feats(base, matcher=m)], score_key="similarity"
+        )
+        assert thresh == STRUCTURAL_DECISION_THRESHOLD
+        assert out[0]["id"] == 20
+
+    def test_all_templates_empty_is_noop(self):
+        m = SiftMatcher()
+        snap = {1: {"local_features": _feats(_textured_image(1), matcher=m), "embedder": "sift_vlad"}}
+        results = [{"id": 1, "similarity": 0.7}]
+        out, thresh = maybe_structural_rerank_example(results, 0.33, snap, [None], score_key="similarity")
+        assert out == results
+        assert thresh == 0.33

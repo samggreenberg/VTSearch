@@ -389,6 +389,12 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "xcal_threshold",
     "gmm_cut",
     "blend_weight",
+    # #3551: which path the SHIPPED threshold took on this row's step (the base
+    # row's `threshold_provenance`) and the fold sentinel behind a fallback, so
+    # a schedule row on a fallback step is never pooled with a replacement
+    # counterfactual on a fused one.  Blank on every row that is not a schedule row.
+    "shipped_provenance",
+    "fold_fallback",
     "cut_fallback",
     "cut_fallback_kind",
     "cut_fail_reason",

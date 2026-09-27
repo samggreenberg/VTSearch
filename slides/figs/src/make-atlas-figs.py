@@ -1022,6 +1022,24 @@ def _occluded_by_dome(u: float, v: float) -> bool:
     return disc >= 0 and (-b + math.sqrt(disc)) / (2 * a) > 1e-9
 
 
+def _partly_behind(occluded, u: float, v: float) -> bool:
+    """Whether any of this floor item stands behind the solid, not just its centre.
+
+    `occluded` walks one ray, from the item's centre, and a sphere is wider than
+    a ray: one whose centre sits just outside the solid's silhouette can still
+    overhang its outline, and if it stands *behind* the solid that overhang is
+    behind the glass. Tested on the centre alone, those spheres were painted in
+    front and sat on top of the pillar's edge. So the walk is repeated from the
+    sphere's two rims either side on the page — a step along `u` is purely
+    sideways in this projection, and at the same depth — and any hit sends the
+    whole item under the glass, where only the part the pillar covers is tinted.
+    A sphere in *front* of the pillar is unaffected: no ray from it toward the
+    eye meets the solid, rim or centre.
+    """
+    step = ITEM_R * 1.02 / (PROJ_SCALE * PROJ_U)
+    return any(occluded(u + du, v) for du in (0.0, -step, step))
+
+
 def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int, float]]:
     """Item indices in paint order, far first, with the z-order each gets.
 
@@ -1158,9 +1176,11 @@ def _depth_stage(stage: int) -> plt.Figure:
     base = _footprint(angles, 0.0)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
     if stage == 4:
-        behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_pillar(u, v, 0.0)}
+        behind = {
+            i for i, (u, v) in enumerate(floor) if _partly_behind(lambda a, b: _occluded_by_pillar(a, b, 0.0), u, v)
+        }
     elif stage == 5:
-        behind = {i for i, (u, v) in enumerate(floor) if _occluded_by_dome(u, v)}
+        behind = {i for i, (u, v) in enumerate(floor) if _partly_behind(_occluded_by_dome, u, v)}
     else:
         behind = set()
 

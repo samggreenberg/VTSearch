@@ -58,7 +58,7 @@ class TestProductionFidelity:
 
     def test_each_voting_mode_gets_the_schedule_the_study_chose(self):
         assert production_schedule_for(region_voting=True) == "slow_cap50"
-        assert production_schedule_for(region_voting=False) == "cap50"
+        assert production_schedule_for(region_voting=False) == "corridor20"
         assert production_schedule_for(region_voting=None) == PRODUCTION_SCHEDULE
 
     def test_every_shipped_schedule_beats_the_old_ramp_on_its_own_mode(self):
@@ -180,11 +180,47 @@ class TestCorridorFamily:
         out = blend_gmm_threshold(NO_GOOD_THRESHOLD, 0.5, _ctx(30), schedule="corridor", fit=self.FIT)
         assert out == pytest.approx(0.8)
 
-    def test_ramped_corridor_is_a_point_at_the_floor_and_open_at_the_top(self):
+    def test_ramped_corridor_is_a_point_at_the_floor_and_full_at_the_top(self):
         at_floor = blend_gmm_threshold(0.01, 0.5, _ctx(6), schedule="corridor_ramp", fit=self.FIT)
         assert at_floor == pytest.approx(0.5)  # zero-width corridor == pure GMM
-        wide_open = blend_gmm_threshold(0.01, 0.5, _ctx(20), schedule="corridor_ramp", fit=self.FIT)
-        assert wide_open == pytest.approx(0.01)  # unbounded past the ramp
+        at_top = blend_gmm_threshold(0.01, 0.5, _ctx(20), schedule="corridor_ramp", fit=self.FIT)
+        assert at_top == pytest.approx(0.2)  # the full component-mean interval, held
+
+    @pytest.mark.parametrize("xcal", [0.01, NO_GOOD_THRESHOLD])
+    def test_ramped_corridor_is_continuous_past_its_endpoint(self, xcal):
+        """#3551: the ramp used to *release* the clamp at ``hi``, so a wild x-cal
+        jumped from nearly the corridor edge (19 labels) to the raw cut (20) -
+        for the fold fallback's ``NO_GOOD_THRESHOLD`` that is ``mu_hi`` to
+        "admit nothing".  No step between consecutive label counts may exceed
+        what one label of ramp can move the edge."""
+        cuts = [blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor_ramp", fit=self.FIT) for n in range(0, 200)]
+        max_step = 0.3 / 14  # (edge - cut) / (hi - lo)
+        assert max(abs(b - a) for a, b in zip(cuts, cuts[1:], strict=False)) <= max_step + 1e-12
+        assert cuts[-1] == pytest.approx(0.8 if xcal > 0.5 else 0.2)
+
+    @pytest.mark.parametrize("width", [0.0, 0.1, 0.25, 0.5, 1.0])
+    def test_width_is_a_fraction_of_the_way_to_each_mean(self, width):
+        low = blend_gmm_threshold(0.01, 0.5, _ctx(30), schedule=f"corridor:w={width}", fit=self.FIT)
+        high = blend_gmm_threshold(0.99, 0.5, _ctx(30), schedule=f"corridor:w={width}", fit=self.FIT)
+        assert low == pytest.approx(0.5 - 0.3 * width)
+        assert high == pytest.approx(0.5 + 0.3 * width)
+
+    def test_full_width_reproduces_the_registered_corridor(self):
+        for xcal in (0.01, 0.45, 0.99, NO_GOOD_THRESHOLD):
+            a = blend_gmm_threshold(xcal, 0.5, _ctx(30), schedule="corridor", fit=self.FIT)
+            b = blend_gmm_threshold(xcal, 0.5, _ctx(30), schedule="corridor:w=1", fit=self.FIT)
+            assert a == b
+
+    def test_zero_width_is_pure_gmm_and_skips_xcal(self):
+        sched = get_schedule("corridor:w=0")
+        assert sched.weight(_ctx(30)) == 0.0
+        assert blend_gmm_threshold(0.01, 0.5, _ctx(30), schedule=sched, fit=self.FIT) == pytest.approx(0.5)
+
+    def test_off_centre_cut_still_yields_a_valid_interval(self):
+        """The GMM cut is the midpoint in production, but a caller may pass any
+        cut; the corridor must never become empty or inverted."""
+        out = blend_gmm_threshold(0.95, 0.9, _ctx(30), schedule="corridor:w=0.5", fit=self.FIT)
+        assert 0.8 <= out <= 0.9
 
     def test_falls_back_to_a_plain_blend_without_a_fit(self):
         """The median/degenerate fallbacks have no component means, so the
@@ -232,3 +268,69 @@ class TestBlendContext:
     def test_rare_is_the_smaller_class(self):
         assert BlendContext(20, 3, 17).n_rare == 3
         assert BlendContext(20, 17, 3).n_rare == 3
+
+
+class TestParametricNames:
+    """#3551's tuning grid names points of a family instead of registering each."""
+
+    def test_rare_point_matches_the_registered_rare(self):
+        for n_rare in range(0, 12):
+            ctx = BlendContext(n_labels=40, n_good=n_rare, n_bad=40 - n_rare)
+            assert safe_blend_weight(ctx, "rare:lo=1:hi=8") == safe_blend_weight(ctx, "rare")
+
+    def test_labels_point_matches_the_registered_cap50(self):
+        for n in range(0, 60):
+            assert safe_blend_weight(_ctx(n), "labels:lo=6:hi=20:cap=0.5") == safe_blend_weight(_ctx(n), "cap50")
+
+    def test_the_name_round_trips(self):
+        assert get_schedule("rare:lo=2:hi=16").name == "rare:lo=2:hi=16"
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "rare:lo=1",  # missing hi
+            "rare:lo=8:hi=1",  # inverted
+            "rare:lo=1:hi=8:cap=2",  # cap out of range
+            "rare:lo=1:hi=8:lo=2",  # repeated key
+            "rare:lo=1:hi=8:w=0.5",  # key from another family
+            "corridor:w=1.5",  # width out of range
+            "nosuch:lo=1:hi=2",  # unknown family
+            "rare:",  # no parameters
+        ],
+    )
+    def test_malformed_names_fail_loudly(self, bad):
+        with pytest.raises(ValueError):
+            get_schedule(bad)
+
+    def test_parametric_names_can_never_be_production(self):
+        for name in {*PRODUCTION_SCHEDULE_BY_MODE.values(), PRODUCTION_SCHEDULE}:
+            assert ":" not in name
+
+
+class TestCorridor20:
+    """#3551's binary fold-fallback schedule."""
+
+    FIT = GmmFit1D(w_lo=0.7, mu_lo=0.2, var_lo=0.01, w_hi=0.3, mu_hi=0.8, var_hi=0.01)
+
+    def test_is_the_width_point_the_study_measured(self):
+        for n in (1, 5, 13, 40):
+            for xcal in (0.01, 0.45, 0.99, NO_GOOD_THRESHOLD):
+                a = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor20", fit=self.FIT)
+                b = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor:w=0.2", fit=self.FIT)
+                assert a == b
+
+    @pytest.mark.parametrize("n", [2, 7, 10, 19, 40])
+    def test_the_fallback_sentinel_never_becomes_admit_nothing(self, n):
+        """The defect it replaces: past 6 votes `cap50` blended the sentinel into
+        the cut and admitted nothing.  The corridor keeps it inside the scores."""
+        ctx = BlendContext(n_labels=n, n_good=n - 1, n_bad=1)
+        out = blend_gmm_threshold(NO_GOOD_THRESHOLD, 0.5, ctx, schedule="corridor20", fit=self.FIT)
+        assert out == pytest.approx(0.5 + 0.2 * 0.3)
+        assert blend_gmm_threshold(NO_GOOD_THRESHOLD, 0.5, _ctx(10), schedule="cap50", fit=self.FIT) > 0.8
+
+    def test_without_a_fit_it_is_cap50(self):
+        for n in (1, 6, 13, 40):
+            for xcal in (0.01, 0.9, NO_GOOD_THRESHOLD):
+                a = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="corridor20", fit=None)
+                b = blend_gmm_threshold(xcal, 0.5, _ctx(n), schedule="cap50", fit=None)
+                assert a == b

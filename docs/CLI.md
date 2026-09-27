@@ -295,8 +295,12 @@ headlessly. Three flags work together:
 | Flag | Meaning |
 |------|---------|
 | `--import-labels-into NAME` | Detector to merge into, by its human-readable name (see [Detector file names](#detector-file-names)). |
-| `--label-importer-file PATH` | The label file to read. Required whenever `--import-labels-into` is given. |
-| `--label-importer NAME` | Which label importer parses the file. Defaults to `server_json_file`; `python app.py --list-label-importers` shows the rest. |
+| `--label-importer-file PATH` | The label file to read. Shorthand for `--label-importer-field filepath=PATH`. |
+| `--label-importer-field KEY=VALUE` | Set any one of the label importer's fields; repeat it for several. This is how you drive a label importer that reads something other than a file. |
+| `--label-importer NAME` | Which label importer to run. Defaults to `server_json_file`; `python app.py --list-label-importers` shows the rest. |
+
+`--import-labels-into` needs at least one of `--label-importer-file` or
+`--label-importer-field`.
 
 ```bash
 # Merge new labels, then run Auto-Find with the enlarged labelset.
@@ -422,13 +426,16 @@ stream_results: false
 # Same as --keep-negatives. Off by default.
 keep_negatives: false
 
-# Optional. One-shot merge of an external label file into a detector
-# before scoring (same as --import-labels-into / --label-importer /
-# --label-importer-file).
+# Optional. One-shot merge of external labels into a detector before
+# scoring (same as --import-labels-into / --label-importer /
+# --label-importer-field). `importer` takes the same name + fields shape
+# as `importer:` and `exporter:`, so any label importer works.
 import_labels:
   detector: Dog Barks             # the detector's name, not its filename slug
-  importer: server_json_file       # default: server_json_file
-  file: new_labels.json
+  importer:
+    name: server_json_file         # default: server_json_file
+    fields:
+      filepath: new_labels.json
 
 # Optional. Where results go. Defaults to the `gui` exporter (console).
 exporter:
@@ -437,9 +444,13 @@ exporter:
     filepath: results.json
 ```
 
-Plugin names (`importer.name`, `exporter.name`, `import_labels.importer`) are
-validated against the registered plugins at load time, so a typo fails fast
-before any media is loaded.
+Plugin names (`importer.name`, `exporter.name`, `import_labels.importer.name`)
+and their `fields` keys are validated against the registered plugins at load
+time, so a typo fails fast before any media is loaded.
+
+The shorter `import_labels` form is still accepted: `importer: <name>` given as
+a plain string, with `file: <path>` as shorthand for the importer's `filepath`
+field.
 
 ## Web server modes
 

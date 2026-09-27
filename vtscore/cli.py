@@ -732,7 +732,27 @@ def import_labels_into_detector_from_file(
     importer_name: str,
     filepath: str,
 ) -> tuple[int, int]:
-    """Run a label importer against a single file and merge into a detector."""
+    """Run a label importer against a single file and merge into a detector.
+
+    Shorthand for :func:`import_labels_into_detector` with
+    ``{"filepath": filepath}`` as the importer's field values.
+    """
+    return import_labels_into_detector(det_name, importer_name, {"filepath": filepath})
+
+
+def import_labels_into_detector(
+    det_name: str,
+    importer_name: str,
+    field_values: dict[str, Any],
+) -> tuple[int, int]:
+    """Run a label importer with *field_values* and merge its labels into a detector.
+
+    *field_values* maps the importer's :attr:`PluginField.key` s to values,
+    exactly as the web form would submit them, so importers that take no
+    file (a database query, a remote service) work from the CLI too.
+    Required fields are checked, and the values normalized, the same way
+    the dataset importer and exporter CLI paths do.
+    """
     from vtscore.datasets.labelset import LabeledElement, LabelSet
     from vtscore.labels.importers import get_label_importer
     from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -746,7 +766,9 @@ def import_labels_into_detector_from_file(
     if importer is None:
         raise ValueError(f"Unknown label importer: {importer_name!r}.")
 
-    label_entries = importer.run_cli({"filepath": filepath})
+    field_values = dict(field_values)
+    importer.validate_cli_field_values(field_values)
+    label_entries = importer.run_cli(field_values)
     if not isinstance(label_entries, list):
         raise ValueError(f"Label importer {importer_name!r} returned {type(label_entries).__name__}, expected list.")
 

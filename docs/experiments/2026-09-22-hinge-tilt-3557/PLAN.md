@@ -73,7 +73,7 @@ Re-cut rules on both arms: `mid_tilt, mid, rate, cross_tilt, hinge, hinge_raw,
 hinge_cont`, at every integer k in [−10, 10] plus −0.5 and −0.25 (the seam).
 `mid` is the instrument check: it must come back inert.
 
-**Environments** - no `vg_scale`, DocMarks or `coco_quarry` (other sessions are
+**Environments** - no `vg_scale`, FullMarks or `coco_better` (other sessions are
 rebuilding those today). #2865's four exactly, plus one it never ran:
 
 | environment | voting |

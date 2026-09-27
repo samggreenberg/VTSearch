@@ -29,6 +29,36 @@ three collaborators above cannot be made read-only while the repo lives under a
 personal account. Restricting *who may push to `main`* is therefore done by the
 branch rule's push restriction, not by giving anyone a weaker role.
 
+## `dev` is governed by a ruleset as well as branch protection
+
+`dev` carries two independent layers, and a merge must satisfy both:
+
+- **Classic branch protection** (Settings → Branches), described under
+  [The intended rules](#the-intended-rules) below.
+- **A repository ruleset** targeting `dev` (Settings → Rules → Rulesets). A
+  refusal from this layer reads *"Repository rule violations found"* rather than
+  the branch-protection wording, which is how to tell which layer said no.
+
+### `suite-grid` is informational, not required
+
+`suite-grid` is a GitHub commit status posted by
+[`scripts/slurm/suite.sbatch`](../scripts/slurm/suite.sbatch) at the end of every
+GRID run of the full suite, success or failure, on the exact SHA it tested. It is
+the only machine-readable record that a commit passed the suite (the repo runs no
+GitHub Actions), so it is worth posting and worth reading on a PR.
+
+It is **not** a required check. #4133 briefly added it to `dev`'s ruleset, and
+that locked every Claude Code on the web session out of merging: a cloud session
+has no `ssh` to reach the GRID, no working `gh` to post a status, and the GitHub
+MCP tools can merge but cannot post one. It also meant every merge of `dev` into a
+PR branch needed a fresh ~13-minute GRID run, since the status belongs to one SHA.
+The owner removed it from the ruleset on 2026-09-23 (#4149).
+
+**The merge gate on every surface is a full, green `./run-tests.sh`.** A
+`suite-grid` status is supporting evidence when a GRID session has one; its
+absence blocks nothing. Do not re-add it to the required checks without a way for
+cloud sessions to produce it.
+
 ## Why `dev` survives a Dev2Main release
 
 Worth stating explicitly, because the repo now has **"Automatically delete head

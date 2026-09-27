@@ -10,7 +10,8 @@
 
 <!-- **a** — Ten items in the order the detector put them, worst first, so the
      row runs the way every score axis in this deck runs: the best match is the
-     one on the right. This much comes out of the model and out of nothing
+     one on the right. “Bookness” is in quotes because we made the word up: it
+     is the detector's score, named for what it is a score of. This much comes out of the model and out of nothing
      else, and it is genuinely all the model has to say: a ranking, with no
      mark on it anywhere saying where a match stops being one. -->
 

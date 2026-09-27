@@ -421,11 +421,11 @@ class TestImportLabels:
 
         seen = {}
 
-        def _fake_import(detector, importer, filepath):
-            seen.update(detector=detector, importer=importer, filepath=filepath)
+        def _fake_import(detector, importer, field_values):
+            seen.update(detector=detector, importer=importer, fields=field_values)
             return (3, 1)
 
-        monkeypatch.setattr(vtcli, "import_labels_into_detector_from_file", _fake_import)
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", _fake_import)
         settings_path = tmp_path / "settings.json"
         settings_path.write_text("{}")
         _run_main(
@@ -444,8 +444,56 @@ class TestImportLabels:
                 "labels.json",
             ],
         )
-        assert seen == {"detector": "det", "importer": "server_json_file", "filepath": "labels.json"}
+        assert seen == {"detector": "det", "importer": "server_json_file", "fields": {"filepath": "labels.json"}}
         assert "autodetect_main" in rec.calls
+
+    def test_label_importer_field_flags_pass_arbitrary_fields(self, monkeypatch):
+        """Issue #4174: a label importer whose fields are not a file path is
+        drivable from the flag CLI via repeated --label-importer-field."""
+        rec = _AutodetectRecorder(monkeypatch)
+        import vtscore.cli as vtcli
+
+        seen = {}
+
+        def _fake_import(detector, importer, field_values):
+            seen.update(detector=detector, importer=importer, fields=field_values)
+            return (0, 0)
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", _fake_import)
+        _run_main(
+            monkeypatch,
+            [
+                "--autodetect",
+                "--dataset",
+                "x.pkl",
+                "--import-labels-into",
+                "det",
+                "--label-importer-field",
+                "detectors=some=string",
+                "--label-importer-field",
+                "limit=5",
+            ],
+        )
+        assert seen["fields"] == {"detectors": "some=string", "limit": "5"}
+        assert "autodetect_main" in rec.calls
+
+    def test_label_importer_field_rejects_malformed_pair(self, monkeypatch, capsys):
+        _AutodetectRecorder(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(
+                monkeypatch,
+                [
+                    "--autodetect",
+                    "--dataset",
+                    "x.pkl",
+                    "--import-labels-into",
+                    "det",
+                    "--label-importer-field",
+                    "novalue",
+                ],
+            )
+        assert exc.value.code == 2
+        assert "KEY=VALUE" in capsys.readouterr().err
 
     def test_label_import_failure_exits_one(self, monkeypatch, capsys):
         _AutodetectRecorder(monkeypatch)
@@ -454,7 +502,7 @@ class TestImportLabels:
         def _boom(*a, **k):
             raise ValueError("bad labels file")
 
-        monkeypatch.setattr(vtcli, "import_labels_into_detector_from_file", _boom)
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", _boom)
         with pytest.raises(SystemExit) as exc:
             _run_main(
                 monkeypatch,

@@ -65,7 +65,7 @@ DOCUMENT_MAX_FEATURES = 8192
 
 A page is mostly text, text wins the SIFT response ranking, and at 1,024
 keypoints the mark being searched for gets none of the budget (#3911).  Measured
-on DocMarks (23 classes, 721 instances): retrieval AP **0.88** at this budget
+on FullMarks (23 classes, 721 instances): retrieval AP **0.88** at this budget
 against **0.16** at ``DEFAULT_MAX_FEATURES`` with the shipped 2 MP detection cap,
 and 0.12 for SigLIP.
 
@@ -77,7 +77,7 @@ cell changes meaning.
 one alone** (#4021).  At this budget the shipped 2 MP cap is optimal (1 MP ties,
 4 MP 0.76, uncapped 0.74); at ``DEFAULT_MAX_FEATURES`` the optimum is 0.5 MP.
 
-**Storage:** local features scale with the budget - a tier-`l` DocMarks cell is
+**Storage:** local features scale with the budget - a tier-`l` FullMarks cell is
 ~167 GB at 2 MP / 8,192 against ~78 GB at 1 MP / 8,192 (~169 KB/page measured).
 """
 
@@ -486,8 +486,8 @@ _RANSAC_REPROJ_THRESHOLD = 0.02
 # the old 0.1 floor rejected it -- no Tobacco800 logo under a tenth of its page's
 # width could verify against the page it was cut from (#3912).  The floor still
 # does real work: collapsed RANSAC fits, which map every template point onto one
-# spot, land at scale ~0 and carry up to 151 inliers on unrelated DocMarks pages.
-# Measured on the 23-class DocMarks roster at a 16,384-keypoint page budget, 0.03
+# spot, land at scale ~0 and carry up to 151 inliers on unrelated FullMarks pages.
+# Measured on the 23-class FullMarks roster at a 16,384-keypoint page budget, 0.03
 # verifies all 23 crops against their own page (0.1: 16) and lifts positives
 # with 8+ inliers from 111 to 166 of 182, while negatives with 8+ go from 5 to 13
 # of 184; the smallest true own-page fit was 0.057.

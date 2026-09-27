@@ -1,0 +1,76 @@
+== gmm-3585
+  fold gate, native changes                    all: 7% of 2258 cases                     dropped: 7.1% of 1978 cases
+  all sorts, native mean haystack moved        all: 0.89% (n=195)                        dropped: 0.9% (n=174)
+  text sorts, native mean haystack moved       all: 0.39% (n=62)                         dropped: 0.34% (n=55)
+  fold gate, sklearn_kmeanspp changes          all: 16% of 2258 cases                    dropped: 17% of 1978 cases
+  all sorts, sklearn_kmeanspp mean haystack moved all: 4.2% (n=195)                         dropped: 3.8% (n=174)
+  text sorts, sklearn_kmeanspp mean haystack moved all: 6.2% (n=62)                          dropped: 6% (n=55)
+  A/B native−sklearn Δcost                     all: -0.0061 ± 0.005 (n=114)              dropped: -0.0027 ± 0.0053 (n=100)
+  A/B native−sklearn Δcost, the cell alone: -0.031 ± 0.014 (n=14)
+== anchem-3825
+  gate ll1e-8: cases moved                     all: 35% of 2258 cases                    dropped: 33% of 1978 cases
+  gate ll1e-8: p90 / max moved                 all: 0.05% / 0.24%                        dropped: 0.05% / 0.24%
+  gate ll1e-3: cases moved                     all: 80% of 2258 cases                    dropped: 78% of 1978 cases
+  gate ll1e-3: p90 / max moved                 all: 20% / 47%                            dropped: 21% / 47%
+  non-convergence, baseline                    all: 26%                                  dropped: 25%
+  non-convergence, ll1e-8                      all: 7.4%                                 dropped: 7.7%
+  A/B ll1e-8−baseline Δcost                    all: +0.0049 ± 0.0037 (n=114)             dropped: +0.00069 ± 0.0033 (n=100)
+  A/B ll1e-8−baseline Δfnr                     all: +0.0081 ± 0.0028 (n=114)             dropped: +0.0053 ± 0.0027 (n=100)
+  A/B ll1e-8−baseline Δcost, the cell alone: +0.035 ± 0.017 (n=14)
+== abres-3840
+  σ baseline-native                all: 0.015 (n=114)   dropped: 0.015 (n=100), mean -0.0033 ± 0.0015
+  σ ll1e-3-baseline                all: 0.066 (n=114)   dropped: 0.069 (n=100), mean +0.025 ± 0.0069
+  σ ll1e-6-baseline                all: 0.034 (n=114)   dropped: 0.034 (n=100), mean +0.0055 ± 0.0034
+  σ ll1e-6-ll1e-8                  all: 0.045 (n=114)   dropped: 0.039 (n=100), mean +0.0048 ± 0.0039
+  σ ll1e-8-baseline                all: 0.04 (n=114)   dropped: 0.033 (n=100), mean +0.00069 ± 0.0033
+  σ native-sklearn                 all: 0.053 (n=114)   dropped: 0.053 (n=100), mean -0.0027 ± 0.0053
+  σ v:ll1e-8-baseline              all: 0.038 (n=399)   dropped: 0.038 (n=350), mean +0.0015 ± 0.002
+== maxiter-3839
+  distance to converged, all: 243 capped cases; shipped med 0.73% p90 4.7%; cap2000 med 0.15% p90 0.38%; fallback med 7% p90 20%; stall1e-4 med 1.5% p90 4.8%
+  distance to converged, dropped: 217 capped cases; shipped med 0.87% p90 4.9%; cap2000 med 0.15% p90 0.39%; fallback med 7.2% p90 19%; stall1e-4 med 1.5% p90 5.2%
+  A/B cap2000−shipped Δcost                    all: -0.0021 ± 0.0015 (n=513)             dropped: -0.0019 ± 0.0015 (n=450)
+  A/B cap2000−shipped Δfpr                     all: -0.0033 ± 0.0014 (n=513)             dropped: -0.0034 ± 0.0015 (n=450)
+  A/B cap2000−shipped Δcost, the cell alone: -0.0036 ± 0.005 (n=63)
+== linhead-2808
+  B_converged−A_shipped, all: worst-step regret -0.016 ± 0.0051 (n=145); final cost +0.0019 ± 0.01 (n=145); positives +1.2 ± 0.51 (n=145); deep-spike A/C 0.49
+  B_converged−A_shipped, dropped: worst-step regret -0.024 ± 0.0062 (n=112); final cost -0.01 ± 0.01 (n=112); positives +1.7 ± 0.64 (n=112); deep-spike A/C 0.54
+  B_converged−A_shipped, the cell alone: worst-step regret +0.0083 ± 0.0067 (n=33); final cost +0.044 ± 0.025 (n=33); positives -0.27 ± 0.58 (n=33); deep-spike A/C 0.27
+  B_converged−A_shipped, VG × siglip only: worst-step regret -0.016 ± 0.01 (n=39); final cost +0.013 ± 0.02 (n=39); positives +0.15 ± 0.76 (n=39); deep-spike A/C 0.5
+== cutincl-2865
+  harmful (arm, k) points, whole CI above +0.01:
+                   all  dropped
+    arm
+    cross_tilt      12        9
+    mid             37       29
+    q_tilt_s0.005   36       28
+    q_tilt_s0.01    36       27
+    q_tilt_s0.02    28       21
+    q_tilt_s0.04    19       15
+    q_tilt_s0.08    13       10
+    rate             1        1
+  best (most negative) Δregret at k<0 by env, the tilt lead #3557 took up:
+    arm         env
+    cross_tilt  coco_val/dinov3_patch/max_patch          -0.013
+                coco_val/siglip/whole_image              -0.034
+                visual_genome_m/dinov3_patch/max_patch   -0.015
+                visual_genome_m/siglip/whole_image       -0.018
+    rate        coco_val/dinov3_patch/max_patch           0.005
+                coco_val/siglip/whole_image              -0.021
+                visual_genome_m/dinov3_patch/max_patch   -0.001
+                visual_genome_m/siglip/whole_image       -0.002
+== fitq-3329
+  B1/B2 median KS                              all: 0.1                                  dropped: 0.1
+  siglip domain shift, all: self false-positive 0, different-source caught 0.71, separation 0.71
+  siglip domain shift, coco_val dropped: self false-positive 0, different-source caught 1, separation 1
+== overview-3129
+  rule inefficiency                            all: -0.014 ± 0.0036 (n=441)              dropped: -0.014 ± 0.0038 (n=422)
+  runs ending on ≤2 positives                  all: 5.7% (n=490)                         dropped: 5.9% (n=471)
+  horizon 250, VG+COCO column                  all: -0.011 ± 0.0048 (n=128)              dropped: -0.0099 ± 0.0056 (n=109)
+== blend-3551
+  binary corridor20−cap50 pooled Δcost, all: -0.00018 ± 1.9e-05 (n=768), upper -0.00014
+  binary corridor20−cap50 pooled Δcost, dropped: -0.00019 ± 3.2e-05 (n=464), upper -0.00013
+== hinge-3557
+  recut: harmed stops by env {'coco_val/max_patch': 37, 'coco_val/whole_image': 47, 'visual_genome_m/max_patch': 37, 'visual_genome_m/whole_image': 42}
+  ship_cost: harmed stops by env {'caltech101_m/whole_image': 15, 'visual_genome_m/max_patch': 1, 'visual_genome_m/whole_image': 10}
+  ship_regret: harmed stops by env {'caltech101_m/whole_image': 15, 'visual_genome_m/whole_image': 9}
+  trajectory_only: harmed stops by env {'caltech101_m/whole_image': 15, 'coco_val/whole_image': 7, 'visual_genome_m/max_patch': 6, 'visual_genome_m/whole_image': 14}

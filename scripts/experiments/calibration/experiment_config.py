@@ -233,19 +233,19 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
-    # `coco_quarry` (#4044) is `vg_scale`'s question asked of COCO with no Visual
+    # `coco_better` (#4044) is `vg_scale`'s question asked of COCO with no Visual
     # Genome, on `SCALE_CLASSES` (49 since #4119) and the same three bands -- so it
     # takes the same texts, under the same `class@band` keying. A dropped cell
     # (`SCALE_DROPPED_CELLS`) keeps its text here; it is never built, so never asked.
     #
     # The VG-named constant serving a COCO dataset is deliberate, not an
     # oversight. Every entry in it was taken byte-identically from `_COCO_TEXTS`
-    # in the first place (see its own note), and `vg_scale` vs `coco_quarry` is
+    # in the first place (see its own note), and `vg_scale` vs `coco_better` is
     # exactly the comparison a drifted query would ruin: the two sets exist to be
     # read against each other, so an opening that differed between them would put
     # a seeding axis inside the source axis. Sharing the dict is what makes that
     # impossible rather than merely unlikely.
-    "coco_quarry": {
+    "coco_better": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
     "coco_val": _COCO_TEXTS,
@@ -368,7 +368,7 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # `run_cells.py --index`, a preflight run without the env -- which are
     # exactly the ones with no launcher comment to warn them.
     "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
-    # `coco_quarry` (#4051): `vg_scale`'s construction on COCO 2017, same 25
+    # `coco_better` (#4051): `vg_scale`'s construction on COCO 2017, same 25
     # classes, same three bands. Its own env var rather than sharing
     # `CALIB_VGSCALE_EMBEDDERS`, because the two datasets are meant to be run
     # against each other and a shared knob would move both columns at once --
@@ -381,7 +381,7 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # known-goods while the whole-image arms opened on a text sort, putting a
     # seeding difference inside the voting-mode axis (#3276, #3278). Both halves
     # are built for this dataset, so the pair is available rather than aspirational.
-    "coco_quarry": os.environ.get("CALIB_COCO_QUARRY_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
+    "coco_better": os.environ.get("CALIB_COCO_BETTER_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -439,7 +439,7 @@ BOXED_BY_DATASET: dict[str, bool] = {
     # look like success. That is what the note above cost 108 cells to learn, and
     # `test_pile_boxed_datasets_are_registered` is now the guard rather than this
     # comment.
-    "coco_quarry": True,
+    "coco_better": True,
 }
 
 
@@ -740,6 +740,23 @@ CUT_INCLUSION_KS = [_knob_stop(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "
 #: :data:`ANCHORED_RULES`, which are re-cuts riding the live trajectory.
 LIVE_CUT_RULE: str | None = os.environ.get("CALIB_LIVE_CUT_RULE", "").strip() or None
 
+#: A **retired** live threshold rule (issue #4184) - ``xcal_mincost``,
+#: ``gmm_mid``, ``blend`` or ``anchored_rawmean``; see
+#: :mod:`vtscore.eval.live_threshold_rules`.  Empty (the default) = the shipped
+#: fold-anchored cut, so an unset variable IS the production arm.  Like
+#: :data:`LIVE_CUT_RULE` it replaces the cut acquisition reads, so it is a
+#: RUN-LEVEL arm: its own ``CALIB_EXP`` and a declared
+#: ``--diverges live_threshold``.  Checked here, at import, so a typo fails the
+#: launcher's preflight rather than every array task.
+LIVE_THRESHOLD: str | None = os.environ.get("CALIB_LIVE_THRESHOLD", "").strip() or None
+if LIVE_THRESHOLD is not None:
+    from vtscore.eval.live_threshold_rules import LIVE_THRESHOLD_RULES as _LIVE_THRESHOLD_RULES
+
+    if LIVE_THRESHOLD not in _LIVE_THRESHOLD_RULES:
+        raise ValueError(
+            f"CALIB_LIVE_THRESHOLD={LIVE_THRESHOLD!r} is not a rule; expected one of {', '.join(_LIVE_THRESHOLD_RULES)}"
+        )
+
 #: Step sizes the eval-only ``q_tilt`` rule expands over - its free parameter,
 #: in combined-fold-quantile units per inclusion step.  Every other rule ignores
 #: this.  Empty = the single placeholder default in
@@ -787,9 +804,10 @@ FOLD_COUNT_SCHEDULE = os.environ.get("CALIB_FOLD_COUNT_SCHEDULE", "").strip() or
 #: through the same trainer, on the entire sim split with full ground-truth
 #: labels.  Add ``skyline_test_xfit`` for the cross-fitted test-side bracket
 #: partner.  Both are vote-independent, so the price is one extra fit per arm per
-#: cell rather than one per click - and both are scoped to the whole-image column
-#: in v1 (a patch column's skyline needs a supervision decision that is still
-#: open on #3321; the harness warns and skips there rather than improvising one).
+#: cell rather than one per click.  ``skyline_train_full`` also runs on a patch
+#: column under REGION voting, supervised with each positive's ground-truth box
+#: (owner ruling on #3321's open item, #4159); ``skyline_test_xfit`` stays
+#: whole-image only, and the harness warns and skips anything else.
 SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").split(",") if a.strip()]
 
 #: Which head each step trains (``vtscore.eval.step_model.HEADS``).  This is the
@@ -803,6 +821,24 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: for the logistic head the SVM replaced (#2790/#2809), or ``CALIB_HEAD=mlp``
 #: for the historical auto-sized-MLP arm (#2781).
 HEAD = os.environ.get("CALIB_HEAD") or None
+
+#: Which **pipeline** runs at each step (issue #3959).  Unset is ``"app"``, the
+#: app's own head and calibration - every study before #3959 ran only that.  A
+#: standalone trainer (``gp_rbf``, ``gp_dot``, ``svm_*``) fits a bare estimator
+#: on the whole-image vectors instead, so it runs with no detection style (the
+#: styles are the app pipeline's) and on single-vector embedders only.
+TRAINER = os.environ.get("CALIB_TRAINER", "").strip() or "app"
+
+#: The vote-order strategy (issue #3959).  Unset is ``"autopilot"``, the app's.
+#: ``autopilot_maxvar`` / ``autopilot_uncertainty`` replace the Hard pick with a
+#: posterior-spread pick and need a trainer that reports one (the ``gp_*`` ones).
+STRATEGY = os.environ.get("CALIB_STRATEGY", "").strip() or "autopilot"
+
+#: How a ``gp_*`` trainer's cut reaches its final model (issue #3954/#3959):
+#: ``raw`` (unset), ``rank``, or ``anchored`` - the GP's own calibration folds
+#: under the shipped fold-anchored estimator.  See
+#: ``simulate_voting_iterations(standalone_cut=...)``.
+STANDALONE_CUT = os.environ.get("CALIB_STANDALONE_CUT", "").strip() or "raw"
 
 #: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
 #: This steers the trajectory - the blended threshold feeds Autopilot's Hard

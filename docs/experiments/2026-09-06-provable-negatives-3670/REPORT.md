@@ -63,7 +63,7 @@ the pool can be made of),
 (is provenance readable at all),
 [`provenance_shortcut.py`](../../../scripts/experiments/pile/provenance_shortcut.py)
 (would a head use it),
-`negpool_coverage.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`)
+`negpool_coverage.py` (retired with Visual Genome — see `docs/plans/coco-better.md`)
 (what it costs the review, and the realised prevalence),
 [`contamination_identity.py`](../../../scripts/experiments/pile/contamination_identity.py)
 (why the two probe arms are one route).

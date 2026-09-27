@@ -38,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pile_config as pc  # noqa: E402
-from pilebuild.loaders.coco_quarry import _share_inside  # noqa: E402
+from pilebuild.loaders.coco_better import _share_inside  # noqa: E402
 from pilebuild.scale_core import band_for, largest_box  # noqa: E402
 
 CONTEXT = 0.45

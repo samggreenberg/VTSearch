@@ -1735,19 +1735,47 @@ def _block_arrow(ax: plt.Axes, start: tuple[float, float], end: tuple[float, flo
     )
 
 
+#: Where the cube's edges sit in the stack: the three hidden ones under every
+#: dot, the nine the viewer can see over every dot. The dots are drawn at
+#: 5 to 7 (`_embed_flow_stage`), so these bracket them.
+CUBE_BACK_Z, CUBE_FRONT_Z = 2, 7.5
+
+
 def _wire_cube(ax: plt.Axes, x0: float, y0: float) -> None:
     """A wire-frame box: the front face, the back face, and the four struts.
 
     Drawn in `WIRE` so the dots inside it stay the darkest thing in the box —
     the cube is the room the items live in, not an object in its own right.
+
+    The dots are *inside* it, so the edges have to occlude the way a real box
+    would. The back face sits up and to the right, so the viewer sees the
+    front, top and right faces: an edge on any of those is in front of every
+    dot in the volume and is drawn over them, and only the three edges where
+    the hidden faces meet — the back face's left and bottom edges and the strut
+    out of the bottom-left corner — pass behind. Drawn all at the back, the
+    front edges ran behind the dots and the cloud read as sitting on top of a
+    picture of a box rather than in one.
     """
     d, side = CUBE_DEPTH, CUBE_SIDE
     front = [(x0, y0), (x0 + side, y0), (x0 + side, y0 + side), (x0, y0 + side)]
     back = [(x + d, y + d) for x, y in front]
-    for face in (front, back):
-        ax.add_patch(plt.Polygon(face, closed=True, facecolor="none", edgecolor=WIRE, linewidth=1.4, zorder=2))
-    for (fx, fy), (bx, by) in zip(front, back):
-        ax.plot([fx, bx], [fy, by], color=WIRE, linewidth=1.4, zorder=2)
+    bl, br, tr, tl = range(4)
+    hidden = {(bl, br), (bl, tl)}
+    edges = []
+    for a, b in ((bl, br), (br, tr), (tr, tl), (tl, bl)):
+        edges.append((front[a], front[b], False))
+        edges.append((back[a], back[b], (a, b) in hidden or (b, a) in hidden))
+    for corner in range(4):
+        edges.append((front[corner], back[corner], corner == bl))
+    for (ax_, ay), (bx, by), behind in edges:
+        ax.plot(
+            [ax_, bx],
+            [ay, by],
+            color=WIRE,
+            linewidth=1.4,
+            solid_capstyle="projecting",
+            zorder=CUBE_BACK_Z if behind else CUBE_FRONT_Z,
+        )
 
 
 def _flow_dot(ax: plt.Axes, x: float, y: float, radius: float, z: float) -> None:

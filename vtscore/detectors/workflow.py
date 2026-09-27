@@ -92,6 +92,7 @@ def apply_and_retrain(  # noqa: C901
         #    nothing has been mutated yet - the detector stays in its
         #    prior consistent state and the exception propagates.
         new_model = None
+        new_labels_sig = None
         new_threshold = 0.5
         if proposed_good and proposed_bad:
             from vtscore.detectors.training import train_and_score
@@ -101,6 +102,10 @@ def apply_and_retrain(  # noqa: C901
                 get_inclusion,
             )
 
+            from vtscore.datasets.labelset import LabelSet
+            from vtscore.detectors.model_loading import labelset_signature
+
+            region_boxes = dict(det_ctx.vote_region_boxes)
             _, new_threshold, new_model = train_and_score(
                 snap,
                 proposed_good,
@@ -108,8 +113,21 @@ def apply_and_retrain(  # noqa: C901
                 get_inclusion(),
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
-                vote_region_boxes=dict(det_ctx.vote_region_boxes),
+                vote_region_boxes=region_boxes,
                 det_ctx=det_ctx,
+            )
+            # This head sees only the labels resolvable in this dataset.  Its
+            # signature matches the saved labelset exactly when that is all the
+            # labelset holds, so a detector with labels from other datasets is
+            # retrained from all of them the next time Find needs it (#4204).
+            new_labels_sig = labelset_signature(
+                LabelSet.from_clips_and_votes(
+                    snap,
+                    proposed_good,
+                    proposed_bad,
+                    expand_dupes=False,
+                    vote_region_boxes=region_boxes,
+                )
             )
 
         # 4) Training succeeded (or was skipped because we don't yet
@@ -160,6 +178,7 @@ def apply_and_retrain(  # noqa: C901
         trained = False
         if new_model is not None:
             det_ctx.model = new_model
+            det_ctx.model_labels_sig = new_labels_sig
             det_ctx.threshold = new_threshold
             training = {}
             for cid in list(det_ctx.good_votes) + list(det_ctx.bad_votes):

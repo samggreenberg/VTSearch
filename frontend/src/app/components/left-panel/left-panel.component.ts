@@ -196,6 +196,17 @@ export class LeftPanelComponent implements OnInit {
   );
 
   /**
+   * What the Manual grid says when its ranking is empty (#4157). In Manual
+   * every sort ranks the whole dataset, so an empty ranking over a non-empty
+   * dataset means no sort has run yet — the pair reset writes ``[]`` — not
+   * that the dataset is empty. Point the user at the sort bar rather than
+   * implying there is nothing to label.
+   */
+  readonly manualEmptyRankingNote = computed(() =>
+    this.sortBusy() ? 'Sorting…' : 'Choose a sort order above to see your items.',
+  );
+
+  /**
    * Whether the active dataset's embedder can embed text queries.  If the
    * embedder is unknown (e.g. embedders haven't loaded yet, or the media
    * doesn't carry an embedder field), default to ``true`` so we never hide a

@@ -49,22 +49,15 @@ def _lookups_for_snap(
     return build_media_lookup(snap)
 
 
-def _patch_output_from_file(
-    file_path: Path,
-    *,
-    media_type: str,
-    embedder_name: str,
-):
-    """Re-derive a media's :class:`PatchEmbedOutput` from its file, or ``None``.
+def _patch_embedder(*, media_type: str, embedder_name: str):
+    """The embedder the cross-dataset patch path forwards through, or ``None``.
 
-    Resolves the embedder (the detector's, else the media type's default) and
-    runs :meth:`MediaEmbedder.patch_forward`.  Returns ``None`` when the
-    embedder doesn't support patch regions or the forward pass produces no
-    output.  Shared by the Good-vote nearest-patch path and the Bad-vote flood
-    path so both see the identical grid cross-dataset.
+    Resolves the detector's embedder, else the media type's default, and
+    returns it only when it produces a patch grid.  ``None`` therefore means
+    "there is no patch space to pool a ``region_box`` from" - the expected
+    state for a whole-image embedder, not a failure.
     """
     from vtscore.media import embedders_for_type, get_embedder
-    from vtscore.media.embedder import media_from_path
 
     embedder = None
     if embedder_name:
@@ -79,6 +72,28 @@ def _patch_output_from_file(
         embedder = avail[0]
 
     if not getattr(embedder, "supports_patch_regions", False):
+        return None
+    return embedder
+
+
+def _patch_output_from_file(
+    file_path: Path,
+    *,
+    media_type: str,
+    embedder_name: str,
+):
+    """Re-derive a media's :class:`PatchEmbedOutput` from its file, or ``None``.
+
+    Resolves the embedder via :func:`_patch_embedder` and runs
+    :meth:`MediaEmbedder.patch_forward`.  Returns ``None`` when the
+    embedder doesn't support patch regions or the forward pass produces no
+    output.  Shared by the Good-vote nearest-patch path and the Bad-vote flood
+    path so both see the identical grid cross-dataset.
+    """
+    from vtscore.media.embedder import media_from_path
+
+    embedder = _patch_embedder(media_type=media_type, embedder_name=embedder_name)
+    if embedder is None:
         return None
 
     try:
@@ -152,18 +167,43 @@ def _patch_pooled_from_file(
     return nearest_patch_to_box(np.asarray(output.patch_grid), region_box)
 
 
-def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> np.ndarray | None:
+class _LabelVector(NamedTuple):
+    """A label's training vector and the ``region_box`` it is final for.
+
+    ``region_box`` is the element's own box whenever resolving that box again
+    would produce *vec* again: it was pooled under the box, or the box can't be
+    used at all (a whole-image embedder, a clipper-bearing origin).  It is
+    ``None`` when the element had no box, and when a patch pool failed, so
+    :func:`populate_label_embeddings` retries that fallback on its next pass
+    rather than keeping it.
+    """
+
+    vec: np.ndarray
+    region_box: tuple[float, float, float, float] | None
+
+
+def _as_box(box) -> tuple[float, float, float, float] | None:
+    """*box* as a tuple, so a JSON list and a tuple of the same box compare equal."""
+    return None if box is None else (float(box[0]), float(box[1]), float(box[2]), float(box[3]))
+
+
+def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> _LabelVector | None:
     """Resolve *elem*'s origin file and embed it.  Returns ``None`` on failure.
 
     When *elem* carries a ``region_box`` and the active embedder supports
     patch regions, the resolved file is patch-forwarded and the raw patch under
     the box is taken via :func:`nearest_patch_to_box` so the
-    user's region-level training intent survives a dataset switch.  Logs a
-    warning and falls
-    back to a full-file embedding when the patch path is unavailable -
-    legacy single-vector embedders, an origin carrying a clipper we'd
-    have to replay against an unknown patch grid, or a failed forward
-    pass.
+    user's region-level training intent survives a dataset switch.  Falls
+    back to a full-file embedding when the patch path is unavailable, logged
+    at the level its cause deserves:
+
+    * a whole-image embedder has no patch space, so the box stays on the
+      label unused - expected, and logged at DEBUG only.  A WARNING here
+      fired once per boxed label per retrain (#4192);
+    * an origin carrying a clipper we'd have to replay against an unknown
+      patch grid - a known limitation, WARNING;
+    * a patch-capable embedder whose forward pass produced nothing - a real
+      failure, WARNING.
     """
     from vtscore.detectors.resolver import (
         _apply_clip_and_embed,
@@ -179,37 +219,51 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
         params = origin.get("params", {}) if isinstance(origin, dict) else {}
         has_clipper = isinstance(params, dict) and bool(params.get("clipper"))
 
-        if elem.region_box is not None and not has_clipper:
-            pooled = _patch_pooled_from_file(
-                file_path,
-                media_type=media_type,
-                embedder_name=embedder_name,
-                region_box=elem.region_box,
-            )
-            if pooled is not None:
-                return pooled
-            log.warning(
-                "labelset_training: region_box on %r cannot be honored cross-dataset "
-                "(embedder=%r does not support patch regions or patch_forward "
-                "produced no output); falling back to image-level embedding",
-                elem.origin_name or elem.filename or "<unknown>",
-                embedder_name or "<default>",
-            )
-        elif elem.region_box is not None and has_clipper:
-            log.warning(
-                "labelset_training: region_box on %r cannot be honored cross-dataset "
-                "because the origin carries a clipper; falling back to image-level "
-                "embedding",
-                elem.origin_name or elem.filename or "<unknown>",
-            )
+        box = _as_box(elem.region_box)
+        if elem.region_box is not None:
+            if _patch_embedder(media_type=media_type, embedder_name=embedder_name) is None:
+                # The in-dataset path's ``patch_capable`` gate reaches the same
+                # image-level vector silently; a box is legitimate data to keep
+                # for a later region detector, not a fault.
+                log.debug(
+                    "labelset_training: region_box on %r unused; embedder=%r is whole-image, "
+                    "training on the image-level embedding",
+                    elem.origin_name or elem.filename or "<unknown>",
+                    embedder_name or "<default>",
+                )
+            elif not has_clipper:
+                pooled = _patch_pooled_from_file(
+                    file_path,
+                    media_type=media_type,
+                    embedder_name=embedder_name,
+                    region_box=elem.region_box,
+                )
+                if pooled is not None:
+                    return _LabelVector(np.asarray(pooled), box)
+                log.warning(
+                    "labelset_training: region_box on %r cannot be honored cross-dataset "
+                    "(embedder=%r patch_forward produced no output); falling back to "
+                    "image-level embedding",
+                    elem.origin_name or elem.filename or "<unknown>",
+                    embedder_name or "<default>",
+                )
+                box = None  # a failed forward pass is retried, not kept
+            else:
+                log.warning(
+                    "labelset_training: region_box on %r cannot be honored cross-dataset "
+                    "because the origin carries a clipper; falling back to image-level "
+                    "embedding",
+                    elem.origin_name or elem.filename or "<unknown>",
+                )
 
         if has_clipper:
             result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
             if result is None:
                 return None
             embedding, _clip_bytes = result
-            return embedding
-        return embed_file(file_path, media_type, embedder_name)
+        else:
+            embedding = embed_file(file_path, media_type, embedder_name)
+        return _LabelVector(np.asarray(embedding), box) if embedding is not None else None
 
 
 def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
@@ -240,14 +294,15 @@ def _resolve_uncached_embedding(
     embedder_name: str,
     patch_capable: bool,
     lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
-) -> np.ndarray | None:
+) -> _LabelVector | None:
     """Produce a training vector for *elem*, not consulting the cache.
 
     Tries the in-dataset path first: when *elem* resolves to a cid in the
     active *snap*, reuse the stored embedding (taking the raw patch under the
     ``region_box`` when the element carries one).
     Falls back to the cross-dataset path - resolve via the importer and embed
-    freshly.  Returns ``None`` when neither path produces a vector.
+    freshly.  Returns ``None`` when neither path produces a vector, else a
+    :class:`_LabelVector` naming the box the vector is final for.
 
     *patch_capable* (:func:`_embedder_supports_patch_regions`) gates the
     raw-patch pool: a detector that doesn't score in a patch space trains on the
@@ -267,22 +322,25 @@ def _resolve_uncached_embedding(
         if cid is not None and cid in snap:
             media = snap[cid]
             pooled = pool_box_from_media(media, elem.region_box) if patch_capable else None
+            if pooled is not None:
+                return _LabelVector(np.asarray(pooled), _as_box(elem.region_box))
             # Read the in-dataset vector from the detector's primary space (the
             # same space the cross-dataset path embeds into), not the media's
             # generic primary - they diverge on a multi-embedder dataset.
-            emb = pooled if pooled is not None else media_embedding(media, embedder_name or None)
+            emb = media_embedding(media, embedder_name or None)
             if emb is not None:
-                return np.asarray(emb)
+                # A detector with no patch space can't use a box, so this is its
+                # final answer for one; a patch detector whose pool failed retries.
+                return _LabelVector(np.asarray(emb), None if patch_capable else _as_box(elem.region_box))
 
     # Cross-dataset path: ``_embed_one`` re-derives the patch grid on the
     # resolved file when ``elem.region_box`` is set and the embedder
     # supports patch regions, then takes the nearest raw patch so
     # region votes survive a dataset switch.  When the patch path isn't
-    # available (legacy single-vector embedder, clipper-bearing origin,
-    # failed forward pass) it logs a warning and returns the image-level
-    # embedding - the only signal we have left to offer training.
-    emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
-    return np.asarray(emb) if emb is not None else None
+    # available (whole-image embedder, clipper-bearing origin, failed
+    # forward pass) it returns the image-level embedding - the only signal
+    # we have left to offer training - warning only for the last two.
+    return _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
 
 
 def _resolve_score_rows(
@@ -450,20 +508,20 @@ def populate_label_embeddings(
             patch_capable=patch_capable,
         )
 
-        # Cache hit only when the cached vector was built against the same
-        # ``region_box`` the element currently carries.  Region-voted
-        # elements (``region_box is not None``) always fall through so the
-        # patch grid is re-pooled with the latest box.  Image-level
-        # elements use the cache only when the cached vector was *also*
-        # built image-level - otherwise we'd return a stale region-pooled
-        # vector after a region→none transition (e.g. good→bad on a
-        # previously region-voted media; or un-vote / re-vote without a
-        # region).  See logical-bug-audit finding M4.
-        if eid in cache and elem.region_box is None and region_cache.get(eid) is None:
+        # ``region_cache`` holds the box each cached vector is final for (see
+        # ``_LabelVector``), so a hit means "resolving again would produce this
+        # vector".  A box edit misses and re-pools.  A region→none transition
+        # (good→bad on a region-voted media, un-vote / re-vote without a box)
+        # misses rather than keeping a stale pooled vector - logical-bug-audit
+        # finding M4.  A failed pool was cached against ``None``, so it misses
+        # and is retried.  An unchanged box hits, which is what spares a boxed
+        # label that doesn't resolve in *snap* a file fetch and embed on every
+        # pass (#4192).
+        if eid in cache and region_cache.get(eid) == _as_box(elem.region_box):
             cached += 1
             continue
 
-        emb = _resolve_uncached_embedding(
+        resolved = _resolve_uncached_embedding(
             elem,
             snap,
             media_type=media_type,
@@ -471,9 +529,9 @@ def populate_label_embeddings(
             patch_capable=patch_capable,
             lookups=lookups,
         )
-        if emb is not None:
-            cache[eid] = emb
-            region_cache[eid] = elem.region_box
+        if resolved is not None:
+            cache[eid] = resolved.vec
+            region_cache[eid] = resolved.region_box
             cached += 1
         if on_progress:
             on_progress(elem.origin_name or elem.filename or eid, idx + 1, total)
@@ -878,7 +936,9 @@ def train_from_labelset(
     """Populate the embedding cache, build (X, y), train, and store on *det_ctx*.
 
     Returns ``True`` when an MLP was trained (need ≥1 good and ≥1 bad cached
-    vector); otherwise leaves ``det_ctx.model`` untouched.
+    vector); otherwise leaves ``det_ctx.model`` untouched.  A trained head is
+    stamped with *labelset*'s signature, so Find reuses it only until the
+    labels change (issue #4204).
 
     *snap* does two jobs, and a caller that scores something other than what it
     loaded needs them separated.  It is the snapshot the labelset's elements
@@ -928,7 +988,10 @@ def train_from_labelset(
         voted_ids=voted_ids,
         haystack=haystack.medias if haystack is not None else None,
     )
+    from vtscore.detectors.model_loading import labelset_signature
+
     det_ctx.model = mlp
+    det_ctx.model_labels_sig = labelset_signature(labelset)
     det_ctx.threshold = threshold
     return True
 

@@ -23,7 +23,7 @@ mechanism is tested.
 
 ## Environments
 
-Three pile datasets that depend on none of `vg_scale`, DocMarks or `coco_quarry`:
+Three pile datasets that depend on none of `vg_scale`, FullMarks or `coco_better`:
 `caltech101_m` (838 images, 6 categories), `coco_val` (4952, 19 categories),
 `visual_genome_m` (4193, 23 categories) × `siglip` (the shipped default) and
 `siglip2_l`, whole-image voting. Categories are the harness's own selection

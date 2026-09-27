@@ -1,6 +1,6 @@
 # 2026-09-01 — "resume is free" was true of downloads and false of rendering (#3343)
 
-**Study:** #3343 DocMarks full-scale build. **Cost:** near-miss — caught while
+**Study:** #3343 FullMarks full-scale build. **Cost:** near-miss — caught while
 timing the render pool, before any of the four restarts that followed needed it.
 Each restart would have re-rendered every page already on disk: **~10 h** at
 200k pages, in a builder whose stated design premise is that resuming is free.

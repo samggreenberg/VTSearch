@@ -206,7 +206,7 @@ def test_the_zip_path_is_never_spelled_inline() -> None:
 
 
 class TestCocoTrainPixels:
-    """#3991: `coco_quarry` draws 94% of its corpus from COCO's train2017 zip.
+    """#3991: `coco_better` draws 94% of its corpus from COCO's train2017 zip.
 
     The zip was staged in the shared tree months ago and named nowhere in this
     repo, so the resolver could not reach a train image at all. These pin that it

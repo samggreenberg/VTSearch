@@ -459,7 +459,7 @@ class TestDetectorKind:
         assert pc.is_scale_review("vase incl pots and planters", "vase")  # an old rule still banks
 
     def test_another_projects_queue_on_the_shared_dashboard_is_not(self, pc):
-        """DocMarks loads its queues onto the same app; banking one would let retire_finished delete it."""
-        assert not pc.is_scale_review("docmarks completeness: elephant stamp", "elephant stamp")
-        assert not pc.is_scale_review("docmarks clock-face stamp", "clock")  # a class word is not enough
+        """FullMarks loads its queues onto the same app; banking one would let retire_finished delete it."""
+        assert not pc.is_scale_review("fullmarks completeness: elephant stamp", "elephant stamp")
+        assert not pc.is_scale_review("fullmarks clock-face stamp", "clock")  # a class word is not enough
         assert not pc.is_scale_review("clockwork", "clock")

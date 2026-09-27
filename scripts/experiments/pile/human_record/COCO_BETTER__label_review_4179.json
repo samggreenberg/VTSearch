@@ -1,0 +1,2986 @@
+{
+ "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side 3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26",
+ "n_answered": 3308,
+ "rows": [
+  {
+   "image_id": 10581,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_6319db74b3c1.jpg"
+  },
+  {
+   "image_id": 95358,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_6be43d3714cd.jpg"
+  },
+  {
+   "image_id": 358442,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_982964377d06.jpg"
+  },
+  {
+   "image_id": 484256,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_6e574608e8ee.jpg"
+  },
+  {
+   "image_id": 486114,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_1b41f1b52ac3.jpg"
+  },
+  {
+   "image_id": 487144,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_6d2aec4a23c8.jpg"
+  },
+  {
+   "image_id": 526890,
+   "class": "airplane",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?)",
+   "file": "airplane_d13c38807fa6.jpg"
+  },
+  {
+   "image_id": 537631,
+   "class": "airplane",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "airplane fixed wing",
+   "asked": "airplane fixed wing - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "airplane_a4d0c8965e1b.jpg"
+  },
+  {
+   "image_id": 195332,
+   "class": "apple",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "apple not other round fruit",
+   "asked": "apple not other round fruit - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "apple_fa03d46cc15b.jpg"
+  },
+  {
+   "image_id": 243173,
+   "class": "apple",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "apple not other round fruit",
+   "asked": "apple not other round fruit - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "apple_44f1fbbd3458.jpg"
+  },
+  {
+   "image_id": 360762,
+   "class": "apple",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "apple not other round fruit",
+   "asked": "apple not other round fruit - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "apple_568f66e832da.jpg"
+  },
+  {
+   "image_id": 377234,
+   "class": "apple",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "apple not other round fruit",
+   "asked": "apple not other round fruit - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "apple_c5370495a54f.jpg"
+  },
+  {
+   "image_id": 317365,
+   "class": "bag or luggage",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "bag or luggage incl backpacks and suitcases - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bag_or_luggage_75ad10072d17.jpg"
+  },
+  {
+   "image_id": 318585,
+   "class": "bag or luggage",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "bag or luggage incl backpacks and suitcases - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bag_or_luggage_2bcd169e961a.jpg"
+  },
+  {
+   "image_id": 338703,
+   "class": "bag or luggage",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_fdf3a267c1e7.jpg"
+  },
+  {
+   "image_id": 396094,
+   "class": "bag or luggage",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "bag or luggage incl backpacks and suitcases - is there one here? (if boxed, is the box one?)",
+   "file": "bag_or_luggage_a8ebc3f12d9a.jpg"
+  },
+  {
+   "image_id": 496053,
+   "class": "bag or luggage",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "bag or luggage incl backpacks and suitcases - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bag_or_luggage_4e1b40aed3c9.jpg"
+  },
+  {
+   "image_id": 550157,
+   "class": "bag or luggage",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "bag or luggage incl backpacks and suitcases - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bag_or_luggage_95f9df5cad00.jpg"
+  },
+  {
+   "image_id": 573125,
+   "class": "bag or luggage",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bag or luggage incl backpacks and suitcases",
+   "asked": "bag or luggage incl backpacks and suitcases - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bag_or_luggage_b4b0a8508745.jpg"
+  },
+  {
+   "image_id": 271057,
+   "class": "banana",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "banana fruit",
+   "asked": "banana fruit - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "banana_38abec57030e.jpg"
+  },
+  {
+   "image_id": 430160,
+   "class": "banana",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "banana fruit",
+   "asked": "banana fruit - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "banana_b467433f9cfe.jpg"
+  },
+  {
+   "image_id": 63119,
+   "class": "baseball bat",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "baseball bat not pipe",
+   "asked": "baseball bat not pipe - is there one here? (if boxed, is the box one?)",
+   "file": "baseball_bat_6604457c341b.jpg"
+  },
+  {
+   "image_id": 267516,
+   "class": "baseball bat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "baseball bat not pipe",
+   "asked": "baseball bat not pipe - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "baseball_bat_5918c057680e.jpg"
+  },
+  {
+   "image_id": 330487,
+   "class": "baseball bat",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "baseball bat not pipe",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_c633312a9ea4.jpg"
+  },
+  {
+   "image_id": 519929,
+   "class": "baseball bat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "baseball bat not pipe",
+   "asked": "baseball bat not pipe - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "baseball_bat_4a13d7b19a92.jpg"
+  },
+  {
+   "image_id": 92746,
+   "class": "bench",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bench_506899752d50.jpg"
+  },
+  {
+   "image_id": 136008,
+   "class": "bench",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?)",
+   "file": "bench_c24fc1aff111.jpg"
+  },
+  {
+   "image_id": 136642,
+   "class": "bench",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bench_7f6f60df7f9e.jpg"
+  },
+  {
+   "image_id": 231941,
+   "class": "bench",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?)",
+   "file": "bench_96e1a9fbba76.jpg"
+  },
+  {
+   "image_id": 315899,
+   "class": "bench",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bench_ccde58364676.jpg"
+  },
+  {
+   "image_id": 413713,
+   "class": "bench",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bench_d1b743712f58.jpg"
+  },
+  {
+   "image_id": 558449,
+   "class": "bench",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bench not chairs",
+   "asked": "bench not chairs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bench_6c0226dc4276.jpg"
+  },
+  {
+   "image_id": 71182,
+   "class": "bicycle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bicycle incl trikes not motorcycles",
+   "asked": "bicycle incl trikes not motorcycles - is there one here? (if boxed, is the box one?)",
+   "file": "bicycle_05adea350c4a.jpg"
+  },
+  {
+   "image_id": 438620,
+   "class": "bicycle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bicycle incl trikes not motorcycles",
+   "asked": "bicycle incl trikes not motorcycles - is there one here? (if boxed, is the box one?)",
+   "file": "bicycle_895a3be80f7c.jpg"
+  },
+  {
+   "image_id": 443525,
+   "class": "bicycle",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "bicycle incl trikes not motorcycles",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_de4dd2c23f15.jpg"
+  },
+  {
+   "image_id": 447602,
+   "class": "bicycle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bicycle incl trikes not motorcycles",
+   "asked": "bicycle incl trikes not motorcycles - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bicycle_55803673f21a.jpg"
+  },
+  {
+   "image_id": 64909,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_e047bf81ae10.jpg"
+  },
+  {
+   "image_id": 72989,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_e8b6600e52fc.jpg"
+  },
+  {
+   "image_id": 160822,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_170c6c44a08d.jpg"
+  },
+  {
+   "image_id": 161386,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_eb48ceb08a0d.jpg"
+  },
+  {
+   "image_id": 242092,
+   "class": "bird",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?)",
+   "file": "bird_f597f876eb68.jpg"
+  },
+  {
+   "image_id": 344618,
+   "class": "bird",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_b69a1fe883e4.jpg"
+  },
+  {
+   "image_id": 394271,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_3b033cef6589.jpg"
+  },
+  {
+   "image_id": 437632,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bird_60d7c6a58d84.jpg"
+  },
+  {
+   "image_id": 471579,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "bird incl dead not food - is there one here? (if boxed, is the box one?)",
+   "file": "bird_21ed7f044d4e.jpg"
+  },
+  {
+   "image_id": 516316,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_ea01677cab14.jpg"
+  },
+  {
+   "image_id": 532667,
+   "class": "bird",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "bird incl dead not food",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_185011f63421.jpg"
+  },
+  {
+   "image_id": 95185,
+   "class": "boat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "boat_e19a3b833e1d.jpg"
+  },
+  {
+   "image_id": 386694,
+   "class": "boat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "boat_707fd774785a.jpg"
+  },
+  {
+   "image_id": 406119,
+   "class": "boat",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?)",
+   "file": "boat_5629d2479d37.jpg"
+  },
+  {
+   "image_id": 470882,
+   "class": "boat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "boat_eaddd7842f45.jpg"
+  },
+  {
+   "image_id": 501191,
+   "class": "boat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "boat_65c74f710e56.jpg"
+  },
+  {
+   "image_id": 574077,
+   "class": "boat",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "boat any watercraft",
+   "asked": "boat any watercraft - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "boat_8f30147cb0c3.jpg"
+  },
+  {
+   "image_id": 172342,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "book_101d3f85ee66.jpg"
+  },
+  {
+   "image_id": 275585,
+   "class": "book",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "book_cf80fc902b53.jpg"
+  },
+  {
+   "image_id": 322816,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_9516579b9eac.jpg"
+  },
+  {
+   "image_id": 339177,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_1b3cf1060a96.jpg"
+  },
+  {
+   "image_id": 490400,
+   "class": "book",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "book_f55ae7c57af1.jpg"
+  },
+  {
+   "image_id": 500077,
+   "class": "book",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?)",
+   "file": "book_ef8f113c637a.jpg"
+  },
+  {
+   "image_id": 540498,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "book_deb890e9a151.jpg"
+  },
+  {
+   "image_id": 557344,
+   "class": "book",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "book incl magazines",
+   "asked": "book incl magazines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "book_4fe61d2dee55.jpg"
+  },
+  {
+   "image_id": 107783,
+   "class": "bottle",
+   "finding": "present",
+   "arm": "test_random",
+   "vote": "Good",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bottle_fdbf98f59c5b.jpg"
+  },
+  {
+   "image_id": 183247,
+   "class": "bottle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?)",
+   "file": "bottle_9c9ff0187a92.jpg"
+  },
+  {
+   "image_id": 279199,
+   "class": "bottle",
+   "finding": "present",
+   "arm": "test_random",
+   "vote": "Good",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bottle_3128cbcd4ed2.jpg"
+  },
+  {
+   "image_id": 340523,
+   "class": "bottle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bottle_f365456c3c37.jpg"
+  },
+  {
+   "image_id": 360408,
+   "class": "bottle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?)",
+   "file": "bottle_741791fb24d5.jpg"
+  },
+  {
+   "image_id": 474859,
+   "class": "bottle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?)",
+   "file": "bottle_4d6d82f62714.jpg"
+  },
+  {
+   "image_id": 512657,
+   "class": "bottle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bottle incl jars",
+   "asked": "bottle incl jars - is there one here? (if boxed, is the box one?)",
+   "file": "bottle_a6fe79ea314e.jpg"
+  },
+  {
+   "image_id": 66632,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_1ef2e36886ed.jpg"
+  },
+  {
+   "image_id": 124347,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_834ae7c41326.jpg"
+  },
+  {
+   "image_id": 165542,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_513d087b74ec.jpg"
+  },
+  {
+   "image_id": 226658,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_3d393dc2261e.jpg"
+  },
+  {
+   "image_id": 249130,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_e6fffb79b8bb.jpg"
+  },
+  {
+   "image_id": 254879,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_33891fbc4ada.jpg"
+  },
+  {
+   "image_id": 290619,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_acde2482c56f.jpg"
+  },
+  {
+   "image_id": 304391,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_609d80be6b70.jpg"
+  },
+  {
+   "image_id": 306080,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_random",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_563c370a23b9.jpg"
+  },
+  {
+   "image_id": 384391,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_bc0b13e05f46.jpg"
+  },
+  {
+   "image_id": 389731,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_1042328562a5.jpg"
+  },
+  {
+   "image_id": 434753,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_f00f3329bedd.jpg"
+  },
+  {
+   "image_id": 467726,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_8c7964711634.jpg"
+  },
+  {
+   "image_id": 473124,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_a964016e4245.jpg"
+  },
+  {
+   "image_id": 474499,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_a64cb0d7f031.jpg"
+  },
+  {
+   "image_id": 500196,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_6ce32999ff3c.jpg"
+  },
+  {
+   "image_id": 512634,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_718bfe7fad8c.jpg"
+  },
+  {
+   "image_id": 548772,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_7c4935d6e672.jpg"
+  },
+  {
+   "image_id": 556956,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_adbd3fabcd3a.jpg"
+  },
+  {
+   "image_id": 558190,
+   "class": "bowl",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_671f1d744db0.jpg"
+  },
+  {
+   "image_id": 570066,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bowl_4ecb5710b206.jpg"
+  },
+  {
+   "image_id": 571279,
+   "class": "bowl",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bowl incl plates not planters or wrappers",
+   "asked": "bowl incl plates not planters or wrappers - is there one here? (if boxed, is the box one?)",
+   "file": "bowl_7422010f8cfe.jpg"
+  },
+  {
+   "image_id": 90787,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bus_653fa1885390.jpg"
+  },
+  {
+   "image_id": 102735,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bus_3c9d9d0c239a.jpg"
+  },
+  {
+   "image_id": 153011,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bus_9175af9a25d1.jpg"
+  },
+  {
+   "image_id": 171585,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bus_b7e672b0ad8c.jpg"
+  },
+  {
+   "image_id": 193760,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bus_0ae1c39d4e07.jpg"
+  },
+  {
+   "image_id": 332732,
+   "class": "bus",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?)",
+   "file": "bus_5343f6a9027e.jpg"
+  },
+  {
+   "image_id": 378561,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "bus incl coaches not trams - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "bus_bff326e21e44.jpg"
+  },
+  {
+   "image_id": 380797,
+   "class": "bus",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "bus incl coaches not trams",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_5b88f00de5f1.jpg"
+  },
+  {
+   "image_id": 134297,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_15891c462b6c.jpg"
+  },
+  {
+   "image_id": 150772,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "cell phone not landlines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "cell_phone_35bebc35fa71.jpg"
+  },
+  {
+   "image_id": 240903,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "cell phone not landlines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "cell_phone_4122dccd49e8.jpg"
+  },
+  {
+   "image_id": 313437,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "cell phone not landlines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "cell_phone_6d7ca1e8eee2.jpg"
+  },
+  {
+   "image_id": 325693,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "cell phone not landlines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "cell_phone_a827b580d7b8.jpg"
+  },
+  {
+   "image_id": 450399,
+   "class": "cell phone",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "cell phone not landlines",
+   "asked": "cell phone not landlines - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "cell_phone_2227be9e9af7.jpg"
+  },
+  {
+   "image_id": 11075,
+   "class": "chair",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "chair_6e743c5d42a2.jpg"
+  },
+  {
+   "image_id": 24385,
+   "class": "chair",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "chair_df83a2051114.jpg"
+  },
+  {
+   "image_id": 60171,
+   "class": "chair",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "chair_7079b9a5fdb1.jpg"
+  },
+  {
+   "image_id": 147076,
+   "class": "chair",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "chair_ff45eaa15c5d.jpg"
+  },
+  {
+   "image_id": 268992,
+   "class": "chair",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?)",
+   "file": "chair_0fb9a2f6b53d.jpg"
+  },
+  {
+   "image_id": 288852,
+   "class": "chair",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "chair_93ba22042794.jpg"
+  },
+  {
+   "image_id": 299933,
+   "class": "chair",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?)",
+   "file": "chair_db91e1263aef.jpg"
+  },
+  {
+   "image_id": 357435,
+   "class": "chair",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "chair_5efbd073bf97.jpg"
+  },
+  {
+   "image_id": 471405,
+   "class": "chair",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "chair incl stools not couches",
+   "asked": "chair incl stools not couches - is there one here? (if boxed, is the box one?)",
+   "file": "chair_0c1fdc5d882d.jpg"
+  },
+  {
+   "image_id": 113338,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?)",
+   "file": "clock_b03f5033917d.jpg"
+  },
+  {
+   "image_id": 144863,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_4db10fdeef3a.jpg"
+  },
+  {
+   "image_id": 363349,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_75460bfa3b61.jpg"
+  },
+  {
+   "image_id": 392201,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_a2d1c8fe0312.jpg"
+  },
+  {
+   "image_id": 402305,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_b3c0659a4f76.jpg"
+  },
+  {
+   "image_id": 403291,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_e4913d972f59.jpg"
+  },
+  {
+   "image_id": 461458,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_01a7b01682e4.jpg"
+  },
+  {
+   "image_id": 478652,
+   "class": "clock",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "clock not watches",
+   "asked": "clock not watches - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "clock_dda2be92e11a.jpg"
+  },
+  {
+   "image_id": 5703,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_3806ca4f80b4.jpg"
+  },
+  {
+   "image_id": 6484,
+   "class": "dining table",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_5ef8040cbc3f.jpg"
+  },
+  {
+   "image_id": 129407,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_9d9f00201b47.jpg"
+  },
+  {
+   "image_id": 144633,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_e685ea79ff76.jpg"
+  },
+  {
+   "image_id": 209530,
+   "class": "dining table",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_0478e06e79fc.jpg"
+  },
+  {
+   "image_id": 240972,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_05313ab3705d.jpg"
+  },
+  {
+   "image_id": 257071,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_35d6af49096e.jpg"
+  },
+  {
+   "image_id": 408405,
+   "class": "dining table",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_ad83e31c2ae4.jpg"
+  },
+  {
+   "image_id": 453755,
+   "class": "dining table",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_10cd4981f01d.jpg"
+  },
+  {
+   "image_id": 504152,
+   "class": "dining table",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_8eaa18e5ae60.jpg"
+  },
+  {
+   "image_id": 566988,
+   "class": "dining table",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "dining table surface in dining use",
+   "asked": "dining table surface in dining use - is there one here? (if boxed, is the box one?)",
+   "file": "dining_table_7f02d74c4da0.jpg"
+  },
+  {
+   "image_id": 41311,
+   "class": "dog",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dog not wolves",
+   "asked": "dog not wolves - is there one here? (if boxed, is the box one?)",
+   "file": "dog_319c7fba88ba.jpg"
+  },
+  {
+   "image_id": 69729,
+   "class": "dog",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dog not wolves",
+   "asked": "dog not wolves - is there one here? (if boxed, is the box one?)",
+   "file": "dog_c2fdc8d7cad8.jpg"
+  },
+  {
+   "image_id": 143416,
+   "class": "dog",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dog not wolves",
+   "asked": "dog not wolves - is there one here? (if boxed, is the box one?)",
+   "file": "dog_cb2954f6585f.jpg"
+  },
+  {
+   "image_id": 249619,
+   "class": "dog",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "dog not wolves",
+   "asked": "dog not wolves - is there one here? (if boxed, is the box one?)",
+   "file": "dog_299f67cb3abb.jpg"
+  },
+  {
+   "image_id": 13158,
+   "class": "enclosed road vehicle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
+   "file": "enclosed_road_vehicle_860fa4fd4b8e.jpg"
+  },
+  {
+   "image_id": 52020,
+   "class": "enclosed road vehicle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
+   "file": "enclosed_road_vehicle_78e41d7a1d05.jpg"
+  },
+  {
+   "image_id": 127424,
+   "class": "enclosed road vehicle",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_2d2e2c1dcc55.jpg"
+  },
+  {
+   "image_id": 173547,
+   "class": "enclosed road vehicle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
+   "file": "enclosed_road_vehicle_765d3fca892b.jpg"
+  },
+  {
+   "image_id": 214975,
+   "class": "enclosed road vehicle",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
+   "file": "enclosed_road_vehicle_52d509a5bc53.jpg"
+  },
+  {
+   "image_id": 395498,
+   "class": "enclosed road vehicle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
+   "file": "enclosed_road_vehicle_60c25c2867ee.jpg"
+  },
+  {
+   "image_id": 543713,
+   "class": "enclosed road vehicle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "enclosed road vehicle not bus or bike",
+   "asked": "enclosed road vehicle not bus or bike - is there one here? (if boxed, is the box one?)",
+   "file": "enclosed_road_vehicle_00576907645e.jpg"
+  },
+  {
+   "image_id": 66520,
+   "class": "fire hydrant",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "fire hydrant not standpipes",
+   "asked": "fire hydrant not standpipes - is there one here? (if boxed, is the box one?)",
+   "file": "fire_hydrant_f7b26f912ae7.jpg"
+  },
+  {
+   "image_id": 125084,
+   "class": "fire hydrant",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "fire hydrant not standpipes",
+   "asked": "fire hydrant not standpipes - is there one here? (if boxed, is the box one?)",
+   "file": "fire_hydrant_1355060d0e65.jpg"
+  },
+  {
+   "image_id": 258860,
+   "class": "fire hydrant",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "fire hydrant not standpipes",
+   "asked": "fire hydrant not standpipes - is there one here? (if boxed, is the box one?)",
+   "file": "fire_hydrant_3f0b09a7e83b.jpg"
+  },
+  {
+   "image_id": 421010,
+   "class": "fire hydrant",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "fire hydrant not standpipes",
+   "asked": "fire hydrant not standpipes - is there one here? (if boxed, is the box one?)",
+   "file": "fire_hydrant_4c1bc8087435.jpg"
+  },
+  {
+   "image_id": 75663,
+   "class": "fork",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "fork incl sporks not strainers",
+   "asked": "fork incl sporks not strainers - is there one here? (if boxed, is the box one?)",
+   "file": "fork_c5022aac1d43.jpg"
+  },
+  {
+   "image_id": 190372,
+   "class": "fork",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "fork incl sporks not strainers",
+   "asked": "fork incl sporks not strainers - is there one here? (if boxed, is the box one?)",
+   "file": "fork_4b2a7f85f53d.jpg"
+  },
+  {
+   "image_id": 212633,
+   "class": "fork",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "fork incl sporks not strainers",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_73340d396bb5.jpg"
+  },
+  {
+   "image_id": 261858,
+   "class": "fork",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "fork incl sporks not strainers",
+   "asked": "fork incl sporks not strainers - is there one here? (if boxed, is the box one?)",
+   "file": "fork_4a6d7ff0ba5f.jpg"
+  },
+  {
+   "image_id": 390608,
+   "class": "fork",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "fork incl sporks not strainers",
+   "asked": "fork incl sporks not strainers - is there one here? (if boxed, is the box one?)",
+   "file": "fork_3588dfb6d154.jpg"
+  },
+  {
+   "image_id": 18656,
+   "class": "frisbee",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "frisbee disc",
+   "asked": "frisbee disc - is there one here? (if boxed, is the box one?)",
+   "file": "frisbee_70997d8e90f0.jpg"
+  },
+  {
+   "image_id": 408057,
+   "class": "frisbee",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "frisbee disc",
+   "asked": "frisbee disc - is there one here? (if boxed, is the box one?)",
+   "file": "frisbee_361c24f3c154.jpg"
+  },
+  {
+   "image_id": 3219,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?)",
+   "file": "keyboard_70d19cb4ddd6.jpg"
+  },
+  {
+   "image_id": 133050,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?)",
+   "file": "keyboard_0257a2227947.jpg"
+  },
+  {
+   "image_id": 162109,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?)",
+   "file": "keyboard_76ed32156d3d.jpg"
+  },
+  {
+   "image_id": 341712,
+   "class": "keyboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "keyboard computer not piano",
+   "asked": "keyboard computer not piano, a laptop's own is Bad - is there one here? (if boxed, is the box one?)",
+   "file": "keyboard_bb45d2f69112.jpg"
+  },
+  {
+   "image_id": 397500,
+   "class": "kite",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "kite incl parasails and parachutes",
+   "asked": "kite incl parasails and parachutes - is there one here? (if boxed, is the box one?)",
+   "file": "kite_e94ca995aadf.jpg"
+  },
+  {
+   "image_id": 437660,
+   "class": "kite",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "kite incl parasails and parachutes",
+   "asked": "kite incl parasails and parachutes - is there one here? (if boxed, is the box one?)",
+   "file": "kite_52238e4950ec.jpg"
+  },
+  {
+   "image_id": 286442,
+   "class": "knife",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "knife incl butter knives and servers",
+   "asked": "knife incl butter knives and servers - is there one here? (if boxed, is the box one?)",
+   "file": "knife_3a762715e4e3.jpg"
+  },
+  {
+   "image_id": 310376,
+   "class": "knife",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "knife incl butter knives and servers",
+   "asked": "knife incl butter knives and servers - is there one here? (if boxed, is the box one?)",
+   "file": "knife_d9bcee043ac1.jpg"
+  },
+  {
+   "image_id": 436859,
+   "class": "knife",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "knife incl butter knives and servers",
+   "asked": "knife incl butter knives and servers - is there one here? (if boxed, is the box one?)",
+   "file": "knife_dbe2be8a2d48.jpg"
+  },
+  {
+   "image_id": 445759,
+   "class": "knife",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "knife incl butter knives and servers",
+   "asked": "knife incl butter knives and servers - is there one here? (if boxed, is the box one?)",
+   "file": "knife_ebbaf4d414ff.jpg"
+  },
+  {
+   "image_id": 37502,
+   "class": "laptop",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_6701c04f35d9.jpg"
+  },
+  {
+   "image_id": 150164,
+   "class": "laptop",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_23cbc1af27f6.jpg"
+  },
+  {
+   "image_id": 280732,
+   "class": "laptop",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_f1514c77e559.jpg"
+  },
+  {
+   "image_id": 295688,
+   "class": "laptop",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_5e475c27fe56.jpg"
+  },
+  {
+   "image_id": 339913,
+   "class": "laptop",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_50d1417fc161.jpg"
+  },
+  {
+   "image_id": 471528,
+   "class": "laptop",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_a4058ba09fce.jpg"
+  },
+  {
+   "image_id": 498997,
+   "class": "laptop",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_0d1bc212874e.jpg"
+  },
+  {
+   "image_id": 504608,
+   "class": "laptop",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "laptop not a monitor",
+   "asked": "laptop not a monitor - is there one here? (if boxed, is the box one?)",
+   "file": "laptop_b89cedf22cf4.jpg"
+  },
+  {
+   "image_id": 19131,
+   "class": "microwave",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "microwave oven not toaster",
+   "asked": "microwave oven not toaster - is there one here? (if boxed, is the box one?)",
+   "file": "microwave_a03db4ff6b99.jpg"
+  },
+  {
+   "image_id": 111104,
+   "class": "microwave",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "microwave oven not toaster",
+   "asked": "microwave oven not toaster - is there one here? (if boxed, is the box one?)",
+   "file": "microwave_7083cf8191ff.jpg"
+  },
+  {
+   "image_id": 437464,
+   "class": "microwave",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "microwave oven not toaster",
+   "asked": "microwave oven not toaster - is there one here? (if boxed, is the box one?)",
+   "file": "microwave_f886d355434d.jpg"
+  },
+  {
+   "image_id": 467705,
+   "class": "microwave",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "microwave oven not toaster",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_00fce38f7ac1.jpg"
+  },
+  {
+   "image_id": 545734,
+   "class": "microwave",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "microwave oven not toaster",
+   "asked": "microwave oven not toaster - is there one here? (if boxed, is the box one?)",
+   "file": "microwave_d61b6df7f65c.jpg"
+  },
+  {
+   "image_id": 169562,
+   "class": "motorcycle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "motorcycle incl scooters",
+   "asked": "motorcycle incl scooters - is there one here? (if boxed, is the box one?)",
+   "file": "motorcycle_31ce96fcbb27.jpg"
+  },
+  {
+   "image_id": 230593,
+   "class": "motorcycle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "motorcycle incl scooters",
+   "asked": "motorcycle incl scooters - is there one here? (if boxed, is the box one?)",
+   "file": "motorcycle_aa3d0b6cf1db.jpg"
+  },
+  {
+   "image_id": 334373,
+   "class": "motorcycle",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "motorcycle incl scooters",
+   "asked": "motorcycle incl scooters - is there one here? (if boxed, is the box one?)",
+   "file": "motorcycle_6dc279a5aea5.jpg"
+  },
+  {
+   "image_id": 339547,
+   "class": "motorcycle",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "motorcycle incl scooters",
+   "asked": "motorcycle incl scooters - is there one here? (if boxed, is the box one?)",
+   "file": "motorcycle_31aa85c60fd6.jpg"
+  },
+  {
+   "image_id": 387948,
+   "class": "motorcycle",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "motorcycle incl scooters",
+   "asked": "motorcycle incl scooters - is there one here? (if boxed, is the box one?)",
+   "file": "motorcycle_b6a704e0e237.jpg"
+  },
+  {
+   "image_id": 198641,
+   "class": "mouse",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "mouse computer not animal",
+   "asked": "mouse computer not animal - is there one here? (if boxed, is the box one?)",
+   "file": "mouse_886b12855c54.jpg"
+  },
+  {
+   "image_id": 274477,
+   "class": "mouse",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "mouse computer not animal",
+   "asked": "mouse computer not animal - is there one here? (if boxed, is the box one?)",
+   "file": "mouse_cbe2cbc67eee.jpg"
+  },
+  {
+   "image_id": 394481,
+   "class": "mouse",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "mouse computer not animal",
+   "asked": "mouse computer not animal - is there one here? (if boxed, is the box one?)",
+   "file": "mouse_3f5f469a8fa3.jpg"
+  },
+  {
+   "image_id": 420922,
+   "class": "mouse",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "mouse computer not animal",
+   "asked": "mouse computer not animal - is there one here? (if boxed, is the box one?)",
+   "file": "mouse_4499ed448dff.jpg"
+  },
+  {
+   "image_id": 443460,
+   "class": "mouse",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "mouse computer not animal",
+   "asked": "mouse computer not animal - is there one here? (if boxed, is the box one?)",
+   "file": "mouse_7c756848002c.jpg"
+  },
+  {
+   "image_id": 352794,
+   "class": "orange",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "orange citrus fruit",
+   "asked": "orange citrus fruit - is there one here? (if boxed, is the box one?)",
+   "file": "orange_9248e795f6be.jpg"
+  },
+  {
+   "image_id": 33114,
+   "class": "parking meter",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "parking meter head not post",
+   "asked": "parking meter head not post - is there one here? (if boxed, is the box one?)",
+   "file": "parking_meter_cb032836d2ec.jpg"
+  },
+  {
+   "image_id": 279714,
+   "class": "parking meter",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "parking meter head not post",
+   "asked": "parking meter head not post - is there one here? (if boxed, is the box one?)",
+   "file": "parking_meter_087d9fbe3f9a.jpg"
+  },
+  {
+   "image_id": 310181,
+   "class": "parking meter",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "parking meter head not post",
+   "asked": "parking meter head not post - is there one here? (if boxed, is the box one?)",
+   "file": "parking_meter_44f2c22f9419.jpg"
+  },
+  {
+   "image_id": 555597,
+   "class": "parking meter",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "parking meter head not post",
+   "asked": "parking meter head not post - is there one here? (if boxed, is the box one?)",
+   "file": "parking_meter_5e487552a260.jpg"
+  },
+  {
+   "image_id": 41018,
+   "class": "person",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "person whole not garment",
+   "asked": "person whole not garment - is there one here? (if boxed, is the box one?)",
+   "file": "person_9e418a560c63.jpg"
+  },
+  {
+   "image_id": 131043,
+   "class": "person",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "person whole not garment",
+   "asked": "person whole not garment - is there one here? (if boxed, is the box one?)",
+   "file": "person_2a7692430b76.jpg"
+  },
+  {
+   "image_id": 185373,
+   "class": "person",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "person whole not garment",
+   "asked": "person whole not garment - is there one here? (if boxed, is the box one?)",
+   "file": "person_266599e392d4.jpg"
+  },
+  {
+   "image_id": 281820,
+   "class": "person",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "person whole not garment",
+   "asked": "person whole not garment - is there one here? (if boxed, is the box one?)",
+   "file": "person_b3568aff1825.jpg"
+  },
+  {
+   "image_id": 318146,
+   "class": "person",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "person whole not garment",
+   "asked": "person whole not garment - is there one here? (if boxed, is the box one?)",
+   "file": "person_c2cd7c3b00ca.jpg"
+  },
+  {
+   "image_id": 519707,
+   "class": "person",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "person whole not garment",
+   "asked": "person whole not garment - is there one here? (if boxed, is the box one?)",
+   "file": "person_8dab53298d29.jpg"
+  },
+  {
+   "image_id": 32739,
+   "class": "remote",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "remote control handheld",
+   "asked": "remote control handheld - is there one here? (if boxed, is the box one?)",
+   "file": "remote_36eafcebdd68.jpg"
+  },
+  {
+   "image_id": 166043,
+   "class": "remote",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "remote control handheld",
+   "asked": "remote control handheld - is there one here? (if boxed, is the box one?)",
+   "file": "remote_b146530bc5fa.jpg"
+  },
+  {
+   "image_id": 266443,
+   "class": "scissors",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "scissors not shears or pliers",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_fcac45a50a64.jpg"
+  },
+  {
+   "image_id": 46812,
+   "class": "single serving drinking vessel",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "single serving drinking vessel any stem - is there one here? (if boxed, is the box one?)",
+   "file": "single_serving_drinking_vessel_00f08233ee84.jpg"
+  },
+  {
+   "image_id": 72258,
+   "class": "single serving drinking vessel",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "single serving drinking vessel any stem - is there one here? (if boxed, is the box one?)",
+   "file": "single_serving_drinking_vessel_88ca2f444800.jpg"
+  },
+  {
+   "image_id": 281557,
+   "class": "single serving drinking vessel",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "single serving drinking vessel any stem - is there one here? (if boxed, is the box one?)",
+   "file": "single_serving_drinking_vessel_8eee39f84043.jpg"
+  },
+  {
+   "image_id": 350639,
+   "class": "single serving drinking vessel",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "single serving drinking vessel any stem - is there one here? (if boxed, is the box one?)",
+   "file": "single_serving_drinking_vessel_a3e1fb5a0ef5.jpg"
+  },
+  {
+   "image_id": 562059,
+   "class": "single serving drinking vessel",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "single serving drinking vessel any stem",
+   "asked": "single serving drinking vessel any stem - is there one here? (if boxed, is the box one?)",
+   "file": "single_serving_drinking_vessel_0bdc02be3698.jpg"
+  },
+  {
+   "image_id": 35498,
+   "class": "sink",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "sink basin not counter",
+   "asked": "sink basin not counter - is there one here? (if boxed, is the box one?)",
+   "file": "sink_a338ca6a48d2.jpg"
+  },
+  {
+   "image_id": 40716,
+   "class": "sink",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "sink basin not counter",
+   "asked": "sink basin not counter - is there one here? (if boxed, is the box one?)",
+   "file": "sink_e5b129c0583a.jpg"
+  },
+  {
+   "image_id": 252998,
+   "class": "sink",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "sink basin not counter",
+   "asked": "sink basin not counter - is there one here? (if boxed, is the box one?)",
+   "file": "sink_79fe808a744d.jpg"
+  },
+  {
+   "image_id": 492065,
+   "class": "sink",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "sink basin not counter",
+   "asked": "sink basin not counter - is there one here? (if boxed, is the box one?)",
+   "file": "sink_16e1a03b425b.jpg"
+  },
+  {
+   "image_id": 561514,
+   "class": "sink",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "sink basin not counter",
+   "asked": "sink basin not counter - is there one here? (if boxed, is the box one?)",
+   "file": "sink_ba112f7757e1.jpg"
+  },
+  {
+   "image_id": 220372,
+   "class": "skateboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skateboard deck",
+   "asked": "skateboard deck - is there one here? (if boxed, is the box one?)",
+   "file": "skateboard_d6c8554d7b3b.jpg"
+  },
+  {
+   "image_id": 266556,
+   "class": "skateboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skateboard deck",
+   "asked": "skateboard deck - is there one here? (if boxed, is the box one?)",
+   "file": "skateboard_08b10e441291.jpg"
+  },
+  {
+   "image_id": 360175,
+   "class": "skateboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skateboard deck",
+   "asked": "skateboard deck - is there one here? (if boxed, is the box one?)",
+   "file": "skateboard_54a5bd0a6580.jpg"
+  },
+  {
+   "image_id": 383129,
+   "class": "skateboard",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "skateboard deck",
+   "asked": "skateboard deck - is there one here? (if boxed, is the box one?)",
+   "file": "skateboard_bb637d965e78.jpg"
+  },
+  {
+   "image_id": 454044,
+   "class": "skateboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skateboard deck",
+   "asked": "skateboard deck - is there one here? (if boxed, is the box one?)",
+   "file": "skateboard_f994c0647dc3.jpg"
+  },
+  {
+   "image_id": 7989,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_9bb0cddd57e6.jpg"
+  },
+  {
+   "image_id": 26448,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_5588b8ebe265.jpg"
+  },
+  {
+   "image_id": 40534,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_985b41dc8802.jpg"
+  },
+  {
+   "image_id": 84884,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_b375e02ca772.jpg"
+  },
+  {
+   "image_id": 129361,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_ec3343afc0ba.jpg"
+  },
+  {
+   "image_id": 130413,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_c55f6d0e109f.jpg"
+  },
+  {
+   "image_id": 188958,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_8b721bb2e116.jpg"
+  },
+  {
+   "image_id": 248445,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_08c19ec15a1f.jpg"
+  },
+  {
+   "image_id": 262869,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_d67f964c67cd.jpg"
+  },
+  {
+   "image_id": 263418,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_e4b7ddf8db5b.jpg"
+  },
+  {
+   "image_id": 296099,
+   "class": "skis",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_59287d2a9e9f.jpg"
+  },
+  {
+   "image_id": 314379,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_6e3080444d90.jpg"
+  },
+  {
+   "image_id": 406075,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_a81f77d33a1c.jpg"
+  },
+  {
+   "image_id": 452676,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_06a5a3841708.jpg"
+  },
+  {
+   "image_id": 514518,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_b83cf951a363.jpg"
+  },
+  {
+   "image_id": 523360,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_90a1e44cefb6.jpg"
+  },
+  {
+   "image_id": 523816,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_ae01f7c2df32.jpg"
+  },
+  {
+   "image_id": 546395,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_cb70d6fe0b28.jpg"
+  },
+  {
+   "image_id": 561361,
+   "class": "skis",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_f7fcb01dd061.jpg"
+  },
+  {
+   "image_id": 579696,
+   "class": "skis",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "skis pair not poles",
+   "asked": "skis pair not poles - is there one here? (if boxed, is the box one?)",
+   "file": "skis_1297bad5e534.jpg"
+  },
+  {
+   "image_id": 761,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_e85fd32071b4.jpg"
+  },
+  {
+   "image_id": 30719,
+   "class": "snowboard",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_59ed3e20f490.jpg"
+  },
+  {
+   "image_id": 34880,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_7bc691729101.jpg"
+  },
+  {
+   "image_id": 53455,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_79eefa58a722.jpg"
+  },
+  {
+   "image_id": 74340,
+   "class": "snowboard",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_d9e58ded0011.jpg"
+  },
+  {
+   "image_id": 139294,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_f847beb9f7d6.jpg"
+  },
+  {
+   "image_id": 193902,
+   "class": "snowboard",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_03d0b7d7daa2.jpg"
+  },
+  {
+   "image_id": 258023,
+   "class": "snowboard",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_69411beb78a0.jpg"
+  },
+  {
+   "image_id": 289323,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_d761545b4c31.jpg"
+  },
+  {
+   "image_id": 324310,
+   "class": "snowboard",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_61210466de1d.jpg"
+  },
+  {
+   "image_id": 423502,
+   "class": "snowboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "snowboard not skis",
+   "asked": "snowboard not skis - is there one here? (if boxed, is the box one?)",
+   "file": "snowboard_4c0978e9bda4.jpg"
+  },
+  {
+   "image_id": 66041,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_2f4490e3625a.jpg"
+  },
+  {
+   "image_id": 211819,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_234a08927e21.jpg"
+  },
+  {
+   "image_id": 227713,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_ded0dbf2e61e.jpg"
+  },
+  {
+   "image_id": 229494,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_d1c46ac69d34.jpg"
+  },
+  {
+   "image_id": 363431,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_aa87dbc7f56f.jpg"
+  },
+  {
+   "image_id": 379767,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_d9c66b3f9338.jpg"
+  },
+  {
+   "image_id": 462908,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_dd400317197b.jpg"
+  },
+  {
+   "image_id": 508872,
+   "class": "spoon",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_05e326cecfe1.jpg"
+  },
+  {
+   "image_id": 559728,
+   "class": "spoon",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "spoon incl plastic not spatulas or sporks",
+   "asked": "spoon incl plastic not spatulas or sporks - is there one here? (if boxed, is the box one?)",
+   "file": "spoon_d69c6935292a.jpg"
+  },
+  {
+   "image_id": 16839,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "flagged",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "stop sign not other signs - is there one here? (if boxed, is the box one?)",
+   "file": "stop_sign_6a7d1b45b449.jpg"
+  },
+  {
+   "image_id": 50355,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_658fadb0cbea.jpg"
+  },
+  {
+   "image_id": 101491,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "stop sign not other signs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "stop_sign_93eb1a2ffdcc.jpg"
+  },
+  {
+   "image_id": 110869,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "stop sign not other signs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "stop_sign_7a8153a44137.jpg"
+  },
+  {
+   "image_id": 138148,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "stop sign not other signs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "stop_sign_598c10991c13.jpg"
+  },
+  {
+   "image_id": 475389,
+   "class": "stop sign",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "stop sign not other signs",
+   "asked": "stop sign not other signs - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "stop_sign_f4f15d36ef3e.jpg"
+  },
+  {
+   "image_id": 130413,
+   "class": "surfboard",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "surfboard not snowboard",
+   "asked": "surfboard not snowboard - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "surfboard_9ba0c9642aac.jpg"
+  },
+  {
+   "image_id": 172690,
+   "class": "surfboard",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "surfboard not snowboard",
+   "asked": "surfboard not snowboard - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "surfboard_a6eeba87f138.jpg"
+  },
+  {
+   "image_id": 551685,
+   "class": "surfboard",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "surfboard not snowboard",
+   "asked": "surfboard not snowboard - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "surfboard_e987c1524682.jpg"
+  },
+  {
+   "image_id": 556600,
+   "class": "surfboard",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "surfboard not snowboard",
+   "asked": "surfboard not snowboard - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "surfboard_2b97f0f5f094.jpg"
+  },
+  {
+   "image_id": 394729,
+   "class": "tennis racket",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tennis racket not other rackets",
+   "asked": "tennis racket not other rackets - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tennis_racket_b9e5fdf1cee0.jpg"
+  },
+  {
+   "image_id": 411774,
+   "class": "tennis racket",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tennis racket not other rackets",
+   "asked": "tennis racket not other rackets - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tennis_racket_56af19b32293.jpg"
+  },
+  {
+   "image_id": 579073,
+   "class": "tennis racket",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tennis racket not other rackets",
+   "asked": "tennis racket not other rackets - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tennis_racket_2e3f11c2113e.jpg"
+  },
+  {
+   "image_id": 14756,
+   "class": "tie",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tie necktie incl bow ties",
+   "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tie_030b83116284.jpg"
+  },
+  {
+   "image_id": 76619,
+   "class": "tie",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tie necktie incl bow ties",
+   "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tie_e7de8e47eedb.jpg"
+  },
+  {
+   "image_id": 90061,
+   "class": "tie",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tie necktie incl bow ties",
+   "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tie_bd4ac993d166.jpg"
+  },
+  {
+   "image_id": 303847,
+   "class": "tie",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tie necktie incl bow ties",
+   "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tie_86f7c68a10af.jpg"
+  },
+  {
+   "image_id": 369341,
+   "class": "tie",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "tie necktie incl bow ties",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_cd0395c5b953.jpg"
+  },
+  {
+   "image_id": 467931,
+   "class": "tie",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tie necktie incl bow ties",
+   "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tie_50536f9d347e.jpg"
+  },
+  {
+   "image_id": 534942,
+   "class": "tie",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tie necktie incl bow ties",
+   "asked": "tie necktie incl bow ties - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tie_56dd076fc3ef.jpg"
+  },
+  {
+   "image_id": 289746,
+   "class": "toothbrush",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "toothbrush manual or electric",
+   "asked": "toothbrush manual or electric - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "toothbrush_a899032400c7.jpg"
+  },
+  {
+   "image_id": 110175,
+   "class": "traffic light",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "traffic light not street sign",
+   "asked": "traffic light not street sign - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "traffic_light_dceced3dcf02.jpg"
+  },
+  {
+   "image_id": 229132,
+   "class": "traffic light",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "traffic light not street sign",
+   "asked": "traffic light not street sign - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "traffic_light_8312b54053a6.jpg"
+  },
+  {
+   "image_id": 242867,
+   "class": "traffic light",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "traffic light not street sign",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_d07f9120ab4e.jpg"
+  },
+  {
+   "image_id": 413951,
+   "class": "traffic light",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "traffic light not street sign",
+   "asked": "traffic light not street sign - is there one here? (if boxed, is the box one?)",
+   "file": "traffic_light_3e64ec530330.jpg"
+  },
+  {
+   "image_id": 475244,
+   "class": "traffic light",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "traffic light not street sign",
+   "asked": "traffic light not street sign - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "traffic_light_3d5ea119813a.jpg"
+  },
+  {
+   "image_id": 523344,
+   "class": "traffic light",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "traffic light not street sign",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_9d9245009cf4.jpg"
+  },
+  {
+   "image_id": 34842,
+   "class": "tv",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_a3f27159932d.jpg"
+  },
+  {
+   "image_id": 50942,
+   "class": "tv",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?)",
+   "file": "tv_df1be0cc1844.jpg"
+  },
+  {
+   "image_id": 68162,
+   "class": "tv",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_5673935d3a75.jpg"
+  },
+  {
+   "image_id": 136458,
+   "class": "tv",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_dbddd15d446b.jpg"
+  },
+  {
+   "image_id": 163045,
+   "class": "tv",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_999183c8b099.jpg"
+  },
+  {
+   "image_id": 250124,
+   "class": "tv",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_d8aba6732309.jpg"
+  },
+  {
+   "image_id": 348843,
+   "class": "tv",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_978367369a3c.jpg"
+  },
+  {
+   "image_id": 430889,
+   "class": "tv",
+   "finding": "present",
+   "arm": "flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?)",
+   "file": "tv_5ee07bf0defd.jpg"
+  },
+  {
+   "image_id": 556855,
+   "class": "tv",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "tv incl computer monitors",
+   "asked": "tv incl computer monitors - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "tv_649d053ee6d5.jpg"
+  },
+  {
+   "image_id": 88567,
+   "class": "umbrella",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "umbrella incl parasols not canopies",
+   "asked": "umbrella incl parasols not canopies - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "umbrella_0e264519457e.jpg"
+  },
+  {
+   "image_id": 430567,
+   "class": "umbrella",
+   "finding": "not_positive",
+   "arm": "test_flagged",
+   "vote": "Bad",
+   "rule": "umbrella incl parasols not canopies",
+   "asked": "umbrella incl parasols not canopies - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "umbrella_1fd66830d62d.jpg"
+  },
+  {
+   "image_id": 139994,
+   "class": "vase or potted plant",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "vase or potted plant incl cut flowers",
+   "asked": "vase or potted plant incl cut flowers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "vase_or_potted_plant_faf3701b7a82.jpg"
+  },
+  {
+   "image_id": 238768,
+   "class": "vase or potted plant",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "vase or potted plant incl cut flowers",
+   "asked": "vase or potted plant incl cut flowers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "vase_or_potted_plant_f5b5582c7271.jpg"
+  },
+  {
+   "image_id": 288627,
+   "class": "vase or potted plant",
+   "finding": "present",
+   "arm": "test_flagged",
+   "vote": "Good",
+   "rule": "vase or potted plant incl cut flowers",
+   "asked": "vase or potted plant incl cut flowers - is there one here? (if boxed, is the box one?) [test set]",
+   "file": "vase_or_potted_plant_5e30532108e1.jpg"
+  },
+  {
+   "image_id": 531948,
+   "class": "vase or potted plant",
+   "finding": "not_positive",
+   "arm": "control_recheck",
+   "vote": "Bad",
+   "rule": "vase or potted plant incl cut flowers",
+   "asked": "coco_better recheck - is the boxed object the class on the banner?",
+   "file": "recheck_e97bc98dbc34.jpg"
+  }
+ ]
+}

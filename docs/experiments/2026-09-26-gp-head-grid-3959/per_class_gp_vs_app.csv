@@ -1,0 +1,69 @@
+dataset,cls,n,dcost,doracle,app_cost
+coco_better,airplane,12,0.015,0.0,0.14
+coco_better,apple,8,0.032,0.02,0.181
+coco_better,bag or luggage,12,0.002,0.012,0.531
+coco_better,banana,8,0.016,-0.003,0.24
+coco_better,baseball bat,12,-0.003,0.002,0.116
+coco_better,bench,12,-0.008,-0.025,0.661
+coco_better,bicycle,12,0.051,0.007,0.367
+coco_better,bird,12,0.027,-0.009,0.387
+coco_better,boat,12,0.064,0.02,0.275
+coco_better,book,12,0.064,0.033,0.48
+coco_better,bottle,12,0.082,0.045,0.487
+coco_better,bowl,10,0.108,0.043,0.447
+coco_better,bus,12,0.041,0.025,0.331
+coco_better,cell phone,12,0.039,0.018,0.366
+coco_better,chair,9,-0.03,-0.039,0.757
+coco_better,clock,12,0.019,0.019,0.451
+coco_better,dining table,12,0.034,0.019,0.547
+coco_better,dog,12,0.067,0.028,0.391
+coco_better,enclosed road vehicle,12,0.095,0.076,0.48
+coco_better,fire hydrant,12,0.06,0.021,0.337
+coco_better,fork,12,0.096,0.059,0.298
+coco_better,frisbee,12,-0.019,0.002,0.171
+coco_better,keyboard,11,0.169,0.125,0.302
+coco_better,kite,12,0.005,-0.001,0.164
+coco_better,knife,10,0.039,0.042,0.473
+coco_better,laptop,12,0.085,0.056,0.387
+coco_better,microwave,12,0.145,0.104,0.29
+coco_better,motorcycle,12,0.069,0.03,0.274
+coco_better,mouse,12,0.069,0.041,0.194
+coco_better,orange,8,0.048,0.0,0.161
+coco_better,parking meter,12,0.068,0.028,0.286
+coco_better,person,10,0.038,-0.017,0.389
+coco_better,remote,12,0.051,0.054,0.287
+coco_better,scissors,12,0.082,0.049,0.338
+coco_better,single serving drinking vessel,12,0.061,0.051,0.514
+coco_better,sink,12,0.064,0.021,0.387
+coco_better,skateboard,12,-0.018,-0.005,0.179
+coco_better,skis,12,0.026,0.01,0.127
+coco_better,snowboard,12,0.01,0.008,0.092
+coco_better,spoon,11,0.122,0.067,0.456
+coco_better,stop sign,12,0.087,0.056,0.374
+coco_better,surfboard,12,-0.014,-0.008,0.127
+coco_better,tennis racket,12,0.016,-0.0,0.115
+coco_better,tie,12,-0.008,-0.016,0.387
+coco_better,toothbrush,12,0.0,0.014,0.24
+coco_better,traffic light,12,0.033,0.001,0.244
+coco_better,tv,12,0.104,0.079,0.497
+coco_better,umbrella,12,-0.005,-0.019,0.435
+coco_better,vase or potted plant,12,0.053,0.016,0.566
+coco_val,baseball bat,16,0.017,0.005,0.085
+coco_val,bear,16,-0.033,-0.001,0.119
+coco_val,bed,16,-0.001,-0.002,0.207
+coco_val,cat,16,0.019,0.007,0.082
+coco_val,cell phone,16,0.013,-0.007,0.426
+coco_val,clock,16,0.019,0.005,0.422
+coco_val,dining table,16,0.023,-0.001,0.335
+coco_val,elephant,16,-0.018,-0.001,0.082
+coco_val,giraffe,16,0.007,0.002,0.036
+coco_val,microwave,16,0.025,0.012,0.248
+coco_val,oven,16,0.022,0.009,0.2
+coco_val,refrigerator,16,-0.02,-0.008,0.265
+coco_val,scissors,16,0.053,0.008,0.364
+coco_val,sink,16,0.03,0.02,0.144
+coco_val,sports ball,16,0.045,0.017,0.211
+coco_val,toilet,16,0.009,0.004,0.067
+coco_val,toothbrush,16,0.032,0.0,0.279
+coco_val,train,16,0.016,0.006,0.088
+coco_val,zebra,16,-0.019,0.001,0.075

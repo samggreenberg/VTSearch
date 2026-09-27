@@ -21,13 +21,21 @@ import logging
 import numpy as np
 import pytest
 
-pytest.importorskip("toponymy")
-
-from vtscore.projection.signpost_build import build_region_labels  # noqa: E402
-from vtscore.projection.umap_projection import Projection  # noqa: E402
+from vtscore.projection.signpost_build import build_region_labels
+from vtscore.projection.umap_projection import Projection
 from vtscore.utils.hashing import content_md5
 
 pytestmark = pytest.mark.slow
+
+
+@pytest.fixture(autouse=True)
+def _require_toponymy():
+    # Skip inside a fixture, not at module level: importing toponymy JIT-compiles
+    # pynndescent's numba kernels (~20s), and a module-level importorskip runs at
+    # *collection*, so every xdist worker paid it on every run even though the
+    # default `not slow` filter deselects both tests here.
+    pytest.importorskip("toponymy")
+
 
 _DIM = 16
 _WORDS = {

@@ -8,16 +8,23 @@
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
 # same machinery walked a second time along the Inclusion axis — where
-# the *user* wants it — and then the epilogue that closed the cut-rule question
-# for good.
+# the *user* wants it. Then the places the loop never asks about, the data the
+# experiments run on, the region-voting idea (whose measured verdict waits for
+# the Results section with the runs still reporting), and logos.
 #
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in the reports the presenter notes cite (see #3246, #3265).
 #
-# The outline fragment appears six times: once bare, as the opening list, and
-# then once before each section marked with `+at1` … `+at5`. It is one slide
-# shown six ways rather than six slides — `build.py` numbers it 1a…1f — and the
-# last showing, with "The End" marked, is the deck's closing slide.
+# The outline fragment appears ten times: once bare, as the opening list, and
+# then once before each section marked with `+at1` … `+at8`. It is one slide
+# shown ten ways rather than ten slides — `build.py` numbers it 1a…1j — and the
+# last showing, `+end`, is the deck's closing slide: it is the only one that
+# shows "The End", as its marked line.
+#
+# This is the master deck: every fragment a talk might want is named here, and
+# a talk cuts its own manifest from it. Section 8, Step by Step, is the one most
+# talks cut — it is a how-to for users, not an argument for data scientists — and
+# a talk *for* users moves it up to follow section 1 instead.
 
 theme: vtsearch
 
@@ -56,74 +63,70 @@ slides:
   inclusion-tilt
   inclusion-acq
 
-  # 4 — Regions
-  outline-hold-the-line +at4
-  voting-modes
-  evt-midpoint
-  evt-gumbel
-  evt-close
-
-  # 5 — The End
-  outline-hold-the-line +at5
-
-  # Appendix — after the end, for questions. The Train/Check result is a
-  # results slide, not an idea: the argument carries the change, this carries
-  # the sweep that justified it, and it comes up only if someone asks.
-  split-fraction-result
-
-  # Appendix — the Coverage Atlas: how autopilot decides what to ask when the
-  # answer is not "whatever is nearest the line". Parked after the end for now
-  # because section 1 is deliberately three beats to the threshold and this is
-  # a fourth; the argument it belongs in is *Pics on a Plane*'s last page, which
-  # already says the threshold decides what gets asked, and the honest reading
-  # of these four is "and here is the half of that the threshold does not do".
-  # Move them in front of section 2 when section 1 can afford them.
+  # 4 — Exploration: the Coverage Atlas, how autopilot decides what to ask
+  # when the answer is not "whatever is nearest the line". It follows Preference
+  # because Second Cut has just said the threshold decides what gets asked, and
+  # the honest reading of these four is "and here is the half of that the
+  # threshold does not do".
   #
   # The order is the argument, not the code: the blind spot the atlas exists
   # for, the structure, the second job that structure also does, and how badly
   # it does it. That last one stays last whatever happens to the rest — it is
   # the only slide here that reports a loss, and a loss read before the
   # mechanism is just a reason not to listen.
+  outline-hold-the-line +at4
   atlas-blindspot
   atlas-cells
   atlas-depth
   atlas-pvalues
 
-  # Appendix — what "logo detection" actually means. Parked after the end for
-  # now, to be worked into the argument later: it is the `book` slide's claim
-  # made a second time, in the one domain where a room expects a concept to
-  # have a published spec sheet. Eight results for one query, arriving one at a
-  # time, and the presenter asks about each without answering.
-  logo-grid
+  # 5 — Experiments: the photographs the experiments run on. Every dataset
+  # arrives on one card, "Data, Set" (`make-data-cards.py`): the sets somebody
+  # else made, a slide of what they do not give you, then what we built from
+  # them, in the same card — COCO into COCO Better (`coco_better` in code;
+  # the slides use the name a person would say).
+  #
+  # The figures are generated from the config the pile builds against, so a
+  # rebuilt dataset is a re-run of the figure scripts rather than an edit here —
+  # but the presenter notes carry numbers too, and those are hand-written.
+  outline-hold-the-line +at5
+  data-set-coco
+  data-coco-better-complement
+  data-coco-problems
+  data-set-coco-better
 
-  # Appendix — the data. Ten slides that come *before* any experimental
-  # result that used them, and sit here only because the deck does not show
-  # those results yet (#3958). Move them in front of the results section when
-  # it arrives rather than leaving them parked.
-  #
-  # The order is the dependency order, not the order they were built: the four
-  # sets somebody else made, then the two we made out of them. Visual Genome
-  # and COCO have to be on screen before `vg_scale`'s construction makes any
-  # sense, because two of its five steps are "and then we used COCO".
-  #
-  # `data-coco-quarry-complement` is the successor's argument rather than its
-  # card, which is why it sits after `vg_scale`'s three and carries no counts:
-  # `coco_quarry` is not built yet (see docs/plans/coco-quarry.md), and the one
-  # thing about it that is already decided is the one this slide draws — what
-  # exhaustive annotation buys that a designation cannot. Give it a card of its
-  # own once there is a built set to count.
-  #
-  # Both `vg_scale` and DocMarks are moving. The figures are generated from the
-  # config the pile builds against and from the DocMarks datasheet, so a rebuilt
-  # dataset is a re-run of `make-dataset-figs.py` rather than an edit here — but
-  # the presenter notes carry numbers too, and those are hand-written.
-  data-visual-genome
-  data-coco-val
-  data-caltech101
-  data-vg-box
-  data-vg-scale-build
-  data-vg-scale-bands
-  data-vg-scale-cells
-  data-coco-quarry-complement
-  data-docmarks-build
-  data-docmarks-shape
+  # 6 — Regions
+  outline-hold-the-line +at6
+  voting-modes
+  evt-midpoint
+  evt-gumbel
+
+  # 7 — Logos. The logo slide opens it because it introduces the idea of logo
+  # detection before the room is asked to find logos on documents. It is the
+  # `book` slide's claim made a second time, in the one domain where a room
+  # expects a concept to have a published spec sheet: eight results for one
+  # query, arriving one at a time, and the presenter asks about each without
+  # answering. Then the same "Data, Set" card as section 5, for the document
+  # sources and FullMarks, built from the FullMarks datasheet.
+  outline-hold-the-line +at7
+  logo-grid
+  data-set-fullmarks-sources
+  data-fullmarks-problems
+  data-set-fullmarks
+  data-fullmarks-shape
+
+  # 8 — Step by Step: the tool as a how-to (#4202). Section 1 shows the same
+  # session as an argument; this shows it as instructions, every click marked
+  # with a numbered red disc and the numbers keyed down the side, so the pages
+  # still work as a handout with nobody talking over them. One session, shot
+  # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
+  # detector, train it, load a pile it never saw, and Find.
+  outline-hold-the-line +at8
+  steps-load-train
+  steps-make-detector
+  steps-train
+  steps-load-test
+  steps-find
+
+  # The End
+  outline-hold-the-line +end

@@ -972,13 +972,15 @@ class DetectorContext:
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
         "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
-        # Region box the cached ``label_embeddings`` entry was built against,
-        # keyed by stable_element_id.  ``None`` means the cached vector is
-        # image-level; a 4-tuple means it was pooled from that box.  Lets
+        # Region box the cached ``label_embeddings`` entry is final for, keyed
+        # by stable_element_id: the element's box when resolving it again
+        # would give the same vector (pooled from it, or a box the embedder
+        # can't use), ``None`` for no box or a failed pool to retry.  Lets
         # ``populate_label_embeddings`` detect a region→none (or any region
         # edit) transition and re-resolve instead of returning a stale
         # region-pooled vector keyed to an element that no longer has a
-        # region.  See logical-bug-audit finding M4.
+        # region (logical-bug-audit finding M4), while an unchanged box
+        # skips re-resolution (#4192).
         "label_embedding_regions",
         # Cross-dataset local features (StructuralFeatures) for the labelset's
         # elements, keyed by stable_element_id.  Re-derived from each element's
@@ -1006,6 +1008,13 @@ class DetectorContext:
         # ``label_embeddings``.
         "label_score_regions",
         "model",  # nn.Sequential | None (current trained MLP)
+        # Signature of the labelset ``model`` was trained from
+        # (:func:`~vtscore.detectors.model_loading.labelset_signature`), or
+        # None when unknown.  Stamped by every writer of ``model``; Find reuses
+        # the cached head only while it still matches the detector's saved
+        # labelset, because nothing that changes the labels drops ``model``
+        # (issue #4204).  In-memory only, never persisted.
+        "model_labels_sig",  # tuple | None
         # Structural (SIFT/VLAD) detectors carry a *second* learned object next
         # to the retrieval MLP: the match-statistic verification classifier
         # (None until trained / for non-structural detectors).  In-memory only,
@@ -1113,6 +1122,7 @@ class DetectorContext:
         self.label_negative_regions: dict[str, list[Any]] = {}
         self.label_score_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
+        self.model_labels_sig: tuple | None = None
         # Match-statistic verification classifier for structural detectors;
         # None for non-structural detectors and until first trained.
         self.verification_classifier: Any = None  # nn.Sequential | None
@@ -1539,8 +1549,10 @@ def invalidate_loaded_detector_models() -> None:
     ``det_ctx.model`` / ``det_ctx.threshold`` (``/api/find-label``,
     ``/api/find``, ``/api/auto-detect``) retrains under the new setting.
 
-    Sort / vote paths already retrain every call, so this is purely about
-    making the cached-MLP consumers honour live setting changes.
+    Only a learned sort retrains; a vote does not.  Label changes are caught
+    separately, by the labelset signature those consumers check before reusing
+    ``det_ctx.model`` (issue #4204), so this is purely about making them honour
+    live setting changes.
     """
     with _state_lock:
         for ctx in loaded_detector_contexts():

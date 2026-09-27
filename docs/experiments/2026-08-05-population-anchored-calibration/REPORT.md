@@ -1,5 +1,7 @@
 # Population-anchored calibration: fusing the haystack into the trained threshold
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** Run B's `coco_val × siglip` environment (and very likely `coco_val × siglip2`) read **un-normalised** vectors (#4099). That environment drove the head-to-head margin (−0.010 of the pooled −0.0045). **κ=0.3 still wins without it:** −0.0031 over 5/5 environments, and −0.0022 over 4/4 with both COCO environments dropped. The binary "dead heat vs `cap50`" rests on the COCO environments; do not take it as given in #3550. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 > # ⚠️ SEEDING CAVEAT — these runs did not start the way the app does
 >
 > **Recorded 2026-08-26 (#3156).** Autopilot seeds its first three Good votes from

@@ -41,7 +41,7 @@ a negative holds no instance of the class and therefore has no size *for the
 class*. Each arm has exactly one false-positive rate. Any table in the report
 carrying three FPRs per arm is wrong by construction, not merely unsupported.
 
-`quarry_export.py --check-bands` asserts the shared pool for every class before
+`coco_better_export.py --check-bands` asserts the shared pool for every class before
 the array is submitted, and `launch_bands.sh prepare` refuses the launch if it
 fails. That check is not ceremony: #3667 changed what a negative *is* and #3986
 changed which pool it comes from, both after the guarantee was first written down.
@@ -58,14 +58,14 @@ second study.
 
 | | |
 |---|---|
-| dataset | `coco_quarry` — COCO 2017, 25 classes x 3 bands, boxes adjudicated throughout |
+| dataset | `coco_better` — COCO 2017, 25 classes x 3 bands, boxes adjudicated throughout |
 | categories | all 75 (`CALIB_CATEGORY_MODE=all`) |
 | columns | `siglip` (whole-image) and `siglip+dinov3_patch` (region) |
 | seeds | 20 |
 | horizon | 150 clicks |
 | everything else | shipped defaults |
 
-**`coco_quarry`, not `vg_scale`.** The matrix is a claim about object size, and
+**`coco_better`, not `vg_scale`.** The matrix is a claim about object size, and
 VG's boxes sit on a smaller instance than the frame's main one 8.3% of the time
 (#3924) — an error that moves an image's *band*, which is this study's axis. On
 COCO the band is derived from exhaustive annotation.
@@ -131,7 +131,7 @@ before.
   of a band, so `bus@small` will be the thinnest square in the matrix, and a rate
   over a dozen images must be visibly that.
 - **The natural band shares ride along as a covariate**, from
-  `quarry_export.py --mix-census`. A class whose small band is rare in the wild
+  `coco_better_export.py --mix-census`. A class whose small band is rare in the wild
   *and* hard in the matrix is a different finding from one that is merely rare.
 - The mandatory figures: the quality-over-clicks pair via `curves.py`, the
   `viewer.html`, and the matrix itself as a heatmap **per column**.

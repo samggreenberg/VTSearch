@@ -291,7 +291,7 @@ rules about *fragments*, which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1f` however far apart its six pages fall — which is the same rule a
+  `1a … 1i` however far apart its nine pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -299,8 +299,8 @@ rules about *fragments*, which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees six times from printing the same four paragraphs
-into the speaker's hand six times.
+keeps a slide the room sees nine times from printing the same four paragraphs
+into the speaker's hand nine times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with the final stage large beside the notes and every page of the group under
@@ -315,7 +315,7 @@ estimates the fit (`NOTES_LINES`, `NOTES_CHARS_PER_LINE`) conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown six times owes six lettered
+group across the whole deck, so a fragment shown nine times owes nine lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
@@ -379,8 +379,8 @@ plot can be regenerated when the underlying numbers move —
 be unreadable in its slot.
 
 **Screenshots of the app are generated too.** `figs/ui-make-detector*.webp`,
-`figs/ui-train-loop*.webp`, `figs/ui-find*.webp` and `figs/ui-region-voting.webp`
-come from `figs/src/shoot-ui-figs.mjs`, which builds a corpus of real
+`figs/ui-train-loop*.webp`, `figs/ui-find*.webp`, `figs/ui-steps-*.webp` and
+`figs/ui-region-voting.webp` come from `figs/src/shoot-ui-figs.mjs`, which builds a corpus of real
 photographs out of COCO val2017 (`figs/src/coco_fixture.py` downloads it and
 files it by subject), trains a detector on **books** by voting — the deck's
 running example, and a concept with real near-misses in that pile — and drives
@@ -397,28 +397,38 @@ sheet of the top of the ranking with no app around it, built by
 composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
 
-The first three groups are **one session**, shot in the order a user works:
-create the detector through the modal, answer what autopilot serves until the
-Good and Bad piles have something in them, then run the trained head over
-`photos-prod` — a second COCO corpus that shares no frame with the one the
-votes came from, so the Find slide's claim that it is scoring unseen media is
-enforced by `coco_fixture.DISJOINT_FROM` rather than asserted in a caption.
-Nothing is staged through the API that a slide says was done by hand: the
-button `train-loop` clicks is chosen from the served item's own file name, so
-the piles are a real session's.
+The intro groups are **one session**, shot in the order a user works, from an
+app with nothing in it: import `photos` through the Add Dataset dialog, create
+the detector through the modal, answer what autopilot serves until the Good and
+Bad piles have something in them, import `photos-prod` the same way, then run
+the trained head over it — a second COCO corpus that shares no frame with the
+one the votes came from, so the Find slide's claim that it is scoring unseen
+media is enforced by `coco_fixture.DISJOINT_FROM` rather than asserted in a
+caption. Nothing is staged through the API that a slide says was done by hand:
+the button `train-loop` clicks is chosen from the served item's own file name,
+so the piles are a real session's.
 
-The expensive steps are idempotent — the corpora are downloaded, filed and
-embedded only if absent — so a re-run after a GUI change is the captures plus a
-few minutes of clicking. The intro detector is deliberately *not*: it is deleted
-and re-made every run, because the first shot's subject is a dashboard that does
-not have one yet.
-It deliberately does **not** reuse the docs shots in
-`docs/user/screenshots.manifest.ts`: those are taken against the synthetic
-`syn-imgs` fixture because the user guide walks the reader through that dataset,
-and a slide is the audience's first sight of the tool, where flat coloured
-shapes make the product look like a toy. **A GUI change that moves the docs
-screenshots moves these too** — reshoot both, or the deck keeps showing an app
-that no longer exists.
+The **Step-By-Step** figures (`figs/ui-steps-*.webp`, section 8) are that same
+session photographed a second time at the moments a user has to click, with a
+red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
+with the user guide's screenshots). Where a moment is also an intro frame, the
+two are shot back to back — clean, then numbered — so the two sections show one
+session rather than two. The disc size is set for the slot (`CALLOUT_SCALE`):
+its digit lands at 22px on the slide, above the type floor.
+
+The COCO download is idempotent, but the session is deliberately *not*: its
+datasets and detector are deleted and rebuilt every run, because the first
+shot's subject is an app with nothing in it. That costs a re-embed of both piles
+(~470 photographs, a few minutes on CPU) per run.
+
+The corpus and the detector are the **Book example**
+(`scripts/screenshots/book-example.mjs`), which the user guide's screenshots use
+too (#4202) — they were shot against a synthetic fixture of flat coloured
+shapes until then. The frames are still taken by separate harnesses, because a
+slide wants a narrower window, a padded 16:9 crop, WebP and a real session's
+votes, where the guide wants both themes and a fixed vote baseline. **A GUI
+change that moves the docs screenshots moves these too** — reshoot both, or the
+deck keeps showing an app that no longer exists.
 
 **Never drop a report figure straight onto a slide.** It was sized for a page,
 and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`

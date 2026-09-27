@@ -1,12 +1,12 @@
 # 2026-09-01 — a caution in a runbook was read as a measured limit (#3343)
 
-**Study:** #3343 DocMarks full-scale build, the 216k-page UCSF pull.
+**Study:** #3343 FullMarks full-scale build, the 216k-page UCSF pull.
 **Cost:** ~2 days of wall clock. The pull ran at 1.94 pages/s for two days and
 finishes at 8.58. Nothing failed; it was just slow, which is why nobody looked.
 
 ## What happened
 
-The issue and `docmarks/GRID-RUNBOOK.md` both say the UCSF pull cannot be
+The issue and `fullmarks/GRID-RUNBOOK.md` both say the UCSF pull cannot be
 parallelised "without being rude to UCSF and probably rate-limited". That is
 good advice and it was written before anyone had pulled at scale. It was then
 treated, for two days and by me, as a statement about UCSF's *measured*

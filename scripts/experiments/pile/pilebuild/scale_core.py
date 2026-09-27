@@ -5,7 +5,7 @@ Lifted out of `pilebuild/loaders/vg_scale.py` when Visual Genome was retired
 label dict and answers *which cell does this image belong to*, which is the same
 question over any exhaustively annotated source.
 
-**It lives apart from any loader on purpose.** `coco_quarry` and the retired
+**It lives apart from any loader on purpose.** `coco_better` and the retired
 `vg_scale` were only ever comparable because they banded, designated, drew
 negatives and built their media dicts through the *same objects* rather than the
 same intentions -- the reason :func:`band_for` was split out in the first place,
@@ -45,14 +45,20 @@ def band_for(boxes: Sequence[Sequence[float]], W: int, H: int) -> str:
     rule would answer a drift question with its own drift.
 
     *boxes* must be non-empty and in the pixel space of ``(W, H)``.
+
+    Areas are capped at the frame: COCO stores ``[x, y, w, h]`` unclipped, so a
+    full-frame box can overhang by a rounding error, and ``large`` now runs to
+    the whole frame rather than stopping at 0.80. :data:`OVERSIZE` is therefore
+    unreachable for well-formed boxes; it stays as the answer for ones that
+    are not (a NaN area).
     """
     area = float(W * H)
     ux0 = min(b[0] for b in boxes)
     uy0 = min(b[1] for b in boxes)
     ux1 = max(b[2] for b in boxes)
     uy1 = max(b[3] for b in boxes)
-    union = max(0.0, ux1 - ux0) * max(0.0, uy1 - uy0) / area
-    largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in boxes) / area
+    union = min(1.0, max(0.0, ux1 - ux0) * max(0.0, uy1 - uy0) / area)
+    largest = min(1.0, max((b[2] - b[0]) * (b[3] - b[1]) for b in boxes) / area)
     # Scattered instances in *this* image: the union box describes the scatter
     # rather than the object, so the image is excluded from every band of this
     # class rather than banded by a box no user would drag.
@@ -106,8 +112,9 @@ def band_candidates(
 
     *largest* bands each pair on its largest instance and records ONLY that box
     in ``boxes_for``, which is what the media's regions -- and so the simulated
-    drag -- are built from (#4096). A single box cannot be scattered, so only an
-    oversize one still misses every band. A reviewer's designation still wins.
+    drag -- are built from (#4096). A single box cannot be scattered, and no box
+    is too big for ``large``, so every pair bands. A reviewer's designation
+    still wins.
     """
     classes = tuple(classes) if classes is not None else pc.SCALE_CLASSES
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in pc.BOX_BANDS} for c in classes}
@@ -132,7 +139,7 @@ def band_candidates(
             if picked is None and largest:
                 picked = [largest_box(bs)]
             band = band_for(picked or bs, W, H)
-            if band not in pc.BOX_BANDS:  # scattered, or bigger than a region
+            if band not in pc.BOX_BANDS:  # scattered
                 continue
             supply[name][band].append(iid)
             boxes_for[(iid, pc.scale_cell(name, band))] = picked if largest else bs
@@ -402,12 +409,12 @@ def scale_media(
     """One scale-family media dict, or ``None`` if the bytes do not decode.
 
     **Single-sourced because comparability lives in the shape, not just the
-    rule.** `coco_quarry` and `vg_scale` are only comparable if a cell means the
+    rule.** `coco_better` and `vg_scale` are only comparable if a cell means the
     same thing in both, and that is as true of `evaluable_categories` and
     `coco_scored` as it is of the band: a second copy of this dict would drift
     in a field nobody diffs. The same argument split :func:`band_for` out, and
     the loaders differ in the one place they genuinely must -- where the pixels
-    come from. `vg_scale` reads a file per image; `coco_quarry` reads a member
+    come from. `vg_scale` reads a file per image; `coco_better` reads a member
     out of a staged zip (#3991).
 
     *data* is decoded header-only as a corruption check: a file that will not

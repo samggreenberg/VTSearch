@@ -1,5 +1,5 @@
 {
- "detector": "coco_quarry tv - is this a tv?",
+ "detector": "coco_better tv - is this a tv?",
  "good": [
   {
    "cid": null,

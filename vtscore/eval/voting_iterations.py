@@ -55,6 +55,8 @@ from vtscore.eval.arms_anchored import (
     _anchored_variant_rows,
 )
 from vtscore.eval.arms_fit_quality import _fit_quality_rows
+from vtscore.eval.live_threshold_rules import check_live_threshold
+from vtscore.eval.live_threshold_rules import live_threshold as retired_live_threshold
 from vtscore.eval.arms_fold_count import _fold_count_variant_rows, parse_fold_count_schedule
 from vtscore.eval.arms_inclusion import _cut_inclusion_rows, _inclusion_sweep_rows
 from vtscore.eval.arms_safe_gmm import _safe_gmm_variant_rows
@@ -413,7 +415,14 @@ def _safe_threshold_for_step(
     haystack_seconds: list[float] = []
     for model in fold_models[:n_folds]:
         t_hay = time.monotonic()
-        fids, fscores = score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
+        if callable(model) and not hasattr(model, "parameters"):
+            # A standalone trainer's fold model (the #3959 GP folds): a bare
+            # ``predict`` callable on the whole-image matrix, in the same id
+            # order the final model's trainer-agnostic pass above uses.
+            fids = sorted(sim_ids)
+            fscores = np.asarray(model(np.asarray(X_all_clips))).ravel().tolist()
+        else:
+            fids, fscores = score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
         hay = _hay(fscores, fids)
         haystack_seconds.append(time.monotonic() - t_hay)
         fold_haystacks.append(hay)
@@ -654,6 +663,7 @@ def _evaluate_on_test(
     inclusion: int,
     region_aware: bool = False,
     style_obj: Any = None,
+    scored_sink: "list[Any] | None" = None,
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
@@ -669,6 +679,9 @@ def _evaluate_on_test(
     exactly the live detector's inference for patch datasets (an image scores
     by its best-matching row).  Otherwise each media is scored by its single
     whole-image vector through the step's trainer-agnostic ``predict``.
+
+    *scored_sink*, when given, receives the ``(scores, labels)`` arrays so a
+    caller can derive more metrics from the same pass (issue #3959).
     """
     import numpy as np  # noqa: PLC0415
 
@@ -705,6 +718,8 @@ def _evaluate_on_test(
     )
 
     cost, fpr, fnr = operating_cost(scores_arr, labels_arr, threshold, *inclusion_weights(inclusion))
+    if scored_sink is not None:
+        scored_sink.extend((scores_arr, labels_arr))
 
     det = detection_metrics(scores_arr, labels_arr, threshold)
     return {
@@ -715,6 +730,45 @@ def _evaluate_on_test(
         "auroc": round(_auroc(scores_arr, labels_arr), 6),
         "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
     }
+
+
+def _standalone_calibration_row(
+    threshold: float,
+    details: dict[str, Any],
+    scored: list[Any],
+    inclusion: int,
+) -> dict[str, Any]:
+    """The calibration study's base row for a standalone (style-less) trainer.
+
+    :func:`~vtscore.eval.row_metrics.operating_metrics` on the test scores
+    :func:`_evaluate_on_test` already computed, with the step's fold orderings
+    (when its trainer kept any) as the calibration set, so ``oracle_cost``,
+    ``regret`` and ``threshold_provenance`` mean on a ``gp_*`` row exactly what
+    they mean on the app's.  The provenance is the shipped estimator's when the
+    safe-threshold path set one, else the trainer's own ``threshold_rule``.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    scores, labels = scored
+    fold_orderings = details.get("fold_orderings") or []
+    cal_scores = np.array([s for sc, _ in fold_orderings for s in sc]) if fold_orderings else None
+    cal_labels = np.array([lb for _, lbs in fold_orderings for lb in lbs]) if fold_orderings else None
+    row = operating_metrics(
+        scores,
+        labels,
+        threshold,
+        inclusion,
+        cal_scores,
+        cal_labels,
+        pool_variant="max",
+        provenance=str(details.get("provenance") or details.get("threshold_rule") or "standalone"),
+        n_pool_rows=1.0,
+    )
+    if "xcal_threshold" in details:
+        row["xcal_threshold"] = round6(float(details["xcal_threshold"]))
+    if cal_scores is not None:
+        row["n_cal_scores"] = int(cal_scores.size)
+    return row
 
 
 def _calibration_metric_rows(
@@ -1430,6 +1484,7 @@ def simulate_voting_iterations(  # noqa: C901
     pick_sink: Optional[list[dict[str, Any]]] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
+    live_threshold: Optional[str] = None,
     skyline_arms: Optional[list[str]] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
@@ -1673,6 +1728,15 @@ def simulate_voting_iterations(  # noqa: C901
             rule that moves the cut below ``k = 0`` moves which media get voted
             from the first fitted step on.  The ``__cutincl`` frame's re-cuts
             are the paired, reporting-only view of the same rules.
+        live_threshold: A **retired** live threshold rule (issue #4184), one of
+            :data:`~vtscore.eval.live_threshold_rules.LIVE_THRESHOLD_RULES`, or
+            ``None`` (default) for the shipped fold-anchored cut.  The named rule
+            replaces the step's live cut after the fused path has fitted it -
+            reporting, acquisition and every later vote read it - so, like
+            *live_cut_rule*, it is a run-level arm.  The acquisition offset does
+            not apply under it: the retired rules predate the offset and have no
+            inclusion-aware form, so acquisition aims at the reporting cut.
+            Needs *safe_thresholds*; exclusive with *live_cut_rule*.
 
         standalone_cut: How a ``gp_*`` trainer's cross-calibration cut reaches
             its final model (issue #3954).  ``"raw"`` (the default, and what
@@ -1685,6 +1749,13 @@ def simulate_voting_iterations(  # noqa: C901
             :func:`vtscore.eval.step_trainers._rank_transferred_threshold`.
             Only the ``gp_*`` trainers honour it; ``"rank"`` with any other
             trainer is an error, as is a region-aware dataset.
+            ``"anchored"`` (issue #3959) is the GP-native rule: the GP fits its
+            own calibration folds on the app's splits and the **shipped**
+            fold-anchored estimator runs on them - each fold's mixture on that
+            fold GP's haystack scores, anchored by its held-out votes, carried
+            to the final GP by quantile.  Needs *safe_thresholds* (that is where
+            the estimator runs); see
+            :func:`vtscore.eval.step_trainers._gp_train_and_calibrate`.
         test_bands: Report the miss rate **per size band** beside the headline
             one (issue #4044).  ``"auto"`` takes every band the target's class
             has; a list names them; ``None`` (the default) turns the whole thing
@@ -1720,6 +1791,7 @@ def simulate_voting_iterations(  # noqa: C901
     # three minutes in on an argument combination readable at the door is a
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
+    check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
     # they have to be taken off the unfiltered pool (#4044).
@@ -1858,18 +1930,33 @@ def simulate_voting_iterations(  # noqa: C901
     # get the decomposition on the column that has one instead of dying on the
     # column that doesn't, and the skip is loud here and visible in the frame
     # (no `skyline_*` rows, NaN decomposition columns) rather than silent.
+    #
+    # **v2 (#4159): a patch column under REGION voting gets `skyline_train_full`
+    # with oracle boxes.** Owner ruling on #3321's open item: supervise with each
+    # positive's ground-truth box and every image, which is exactly what
+    # `_train_and_calibrate(region_voting=True)` already does for a mortal Good
+    # vote -- the sim user drags the GT box -- so the skyline still differs from a
+    # mortal step in the labels and nothing else. It needs datasets whose
+    # positives carry the box (`coco_better` carries exactly one per positive,
+    # #4096). The cross-fitted bracket stays whole-image only: cross-fitting a
+    # box-supervised head over the TEST split is a second design nobody has made.
     if skyline_arms and (style_obj is None or style_obj.name != _WHOLE_IMAGE_STYLE):
         import warnings  # noqa: PLC0415
 
-        warnings.warn(
-            f"skyline_arms={skyline_arms} skipped for style={style or 'none'!r}: the supervised "
-            f"skyline is scoped to the {_WHOLE_IMAGE_STYLE!r} column in v1, because a patch "
-            "column's skyline needs a supervision decision (GT boxes vs. multiple-instance) "
-            "that is still open - see issue #3321.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-        skyline_arms = []
+        keep = [a for a in skyline_arms if a == SKYLINE_TRAIN_FULL] if (region_voting and style_obj is not None) else []
+        dropped = [a for a in skyline_arms if a not in keep]
+        if dropped:
+            why = (
+                "the cross-fitted bracket is whole-image only"
+                if region_voting and style_obj is not None
+                else "a patch column's skyline is defined only under region voting (oracle boxes, #4159)"
+            )
+            warnings.warn(
+                f"skyline_arms={dropped} skipped for style={style or 'none'!r}: {why}; see issues #3321, #4159.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        skyline_arms = keep
     blend_schedule, calibration_fraction = _resolve_production_defaults(
         blend_schedule=blend_schedule,
         calibration_fraction=calibration_fraction,
@@ -1890,8 +1977,20 @@ def simulate_voting_iterations(  # noqa: C901
     # The rank-transfer haystack for a ``gp_*`` arm (issue #3954): the
     # simulation set's whole-image vectors, in id order.  ``None`` keeps every
     # trainer on its raw-score cut.
-    if standalone_cut not in ("raw", "rank"):
-        raise ValueError(f"standalone_cut must be 'raw' or 'rank', got {standalone_cut!r}")
+    if standalone_cut not in ("raw", "rank", "anchored"):
+        raise ValueError(f"standalone_cut must be 'raw', 'rank' or 'anchored', got {standalone_cut!r}")
+    fold_anchored = standalone_cut == "anchored"
+    if fold_anchored:
+        if not trainer.startswith("gp_"):
+            raise ValueError(f"standalone_cut='anchored' applies to the gp_* trainers only; got trainer={trainer!r}")
+        if region_aware:
+            raise ValueError(
+                "standalone_cut='anchored' needs a single-vector dataset (the gp_* arms score whole images)"
+            )
+        if not safe_thresholds:
+            raise ValueError(
+                "standalone_cut='anchored' needs safe_thresholds=True: the fold-anchored estimator runs there"
+            )
     haystack_X: "np.ndarray | None" = None
     if standalone_cut == "rank":
         if not trainer.startswith("gp_"):
@@ -2097,6 +2196,7 @@ def simulate_voting_iterations(  # noqa: C901
             fold_count_variants=fold_count_variants,
             calibration_seed=calibration_seed,
             haystack_X=haystack_X,
+            fold_anchored=fold_anchored,
         )
 
         # Apply the shipped safe threshold if enabled
@@ -2104,6 +2204,9 @@ def simulate_voting_iterations(  # noqa: C901
         sim_pooled_ids: list[int] = []
         sim_fold_haystacks: list[Any] = []
         if safe_thresholds:
+            # What the fold computation returned before any fusion: a retired
+            # live rule (#4184) falls back to it where it has nothing to cut on.
+            fold_threshold = threshold
             # The x-cal side of the blend, not the raw fold return: a step whose
             # folds fell back blends NO_GOOD_THRESHOLD (see _blend_xcal_input),
             # and the variant families below re-blend this same input, so their
@@ -2132,6 +2235,23 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_rule=live_cut_rule,
                 )
             )
+            if live_threshold is not None:
+                # A retired rung replaces the shipped cut, and the fit it
+                # replaced is dropped with it so acquisition cannot re-cut an
+                # estimator this arm does not run.
+                threshold, safe_provenance = retired_live_threshold(
+                    live_threshold,
+                    fold_threshold=fold_threshold,
+                    details=details,
+                    haystack_scores=sim_pooled_scores,
+                    ctx=blend_ctx,
+                    schedule=blend_schedule,
+                    fitted_cut=safe_cut,
+                    shipped_threshold=threshold,
+                    shipped_provenance=safe_provenance,
+                    inclusion=inclusion,
+                )
+                safe_cut = None
             if emit_calibration_metrics:
                 details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = safe_provenance
@@ -2182,6 +2302,7 @@ def simulate_voting_iterations(  # noqa: C901
                 repool_topk,
             )
         else:
+            scored: list[Any] = []
             metrics = _evaluate_on_test(
                 step,
                 threshold,
@@ -2191,7 +2312,16 @@ def simulate_voting_iterations(  # noqa: C901
                 inclusion,
                 region_aware=region_aware,
                 style_obj=style_obj,
+                scored_sink=scored,
             )
+            if emit_calibration_metrics and trainer != APP_TRAINER and scored:
+                # A standalone trainer has no style, so it never reaches the
+                # calibration rows above - which is where the oracle cut, the
+                # regret split and the provenance live.  Without them a head
+                # comparison cannot say whether an arm lost on its ranking or
+                # on its cut (the #3954 pilot's open gap), so the same base
+                # row is built here from the same test pass (issue #3959).
+                metrics = {**metrics, **_standalone_calibration_row(threshold, details, scored, inclusion)}
         test_score_seconds = time.monotonic() - t_test
 
         # The per-size breakdown (#4044), at the shipped cut and therefore the

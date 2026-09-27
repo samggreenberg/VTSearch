@@ -86,6 +86,7 @@ _SHARED_CONFTEST_NAMES = (
     "install_startup_contexts",
     "pin_training_budget",
     "freeze_startup_heap",
+    "freeze_collected_heap",
     "add_group_markers",
     "print_summary_and_exit",
 )

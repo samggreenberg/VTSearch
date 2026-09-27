@@ -27,6 +27,7 @@ mis-specification has burned three studies (#2877, #2897, #2905), so
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 from pathlib import Path
 from typing import NamedTuple
@@ -57,7 +58,7 @@ COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 
-#: COCO 2017 **train** pixels -- 118,287 images, 94% of `coco_quarry`'s corpus
+#: COCO 2017 **train** pixels -- 118,287 images, 94% of `coco_better`'s corpus
 #: (#3983, #3991). Staged in the same shared tree as the val zip and referenced
 #: nowhere in this repo until now, which is why #3991 was filed believing an
 #: 18 GB fetch was still owed: it is not, the archive has been there since July.
@@ -82,7 +83,7 @@ COCO_TRAIN_IMAGES = COCO_ROOT / "images" / "train2017"
 
 #: The COCO 2017 *annotations* -- `instances_train2017.json` and
 #: `instances_val2017.json` -- as `coco_anchor.py --fetch` stages them. Named
-#: here because `coco_quarry` reads them at build time and a build input spelled
+#: here because `coco_better` reads them at build time and a build input spelled
 #: only in an `--anchor-dir` argument is a build input nobody can check (#3299).
 #:
 #: Not the same file as :data:`COCO_ANNOTATIONS`, which is the val-only flattened
@@ -92,7 +93,7 @@ COCO_ANCHOR_DIR = Path(os.environ.get("VTS_COCO_ANCHOR_DIR", str(PILE / "coco_an
 #: How many shards the full-corpus patch column is cut into. Chosen so each cell
 #: lands near 4.7 GB, which is what `vg_scale__dinov3_patch.pkl` already is and
 #: therefore a size the harness is known to load.
-COCO_QUARRY_SHARDS = 8
+COCO_BETTER_SHARDS = 8
 
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
@@ -111,7 +112,7 @@ DATASETS: dict[str, dict] = {
     # what it is and five-plus shipped studies are conditioned on the VG-built
     # ones -- they stay readable under their own name, and nothing new is built
     # on them.
-    "coco_quarry": {"boxed": True, "kind": "coco_quarry"},
+    "coco_better": {"boxed": True, "kind": "coco_better"},
     # The same corpus with NO designation draw: every COCO 2017 image embedded,
     # so a cell is a filter over a fixed set rather than a build-time choice.
     # That is what lets `SCALE_N_POS`/`SCALE_N_NEG` and the prevalence axis
@@ -123,13 +124,13 @@ DATASETS: dict[str, dict] = {
     # one `pickle.dump`, and every consumer reads it back through `load_medias`
     # into one dict. A full-corpus `dinov3_patch` cell is ~37 GB of patch grids
     # -- unwritable at any sane `--mem` once the thinned copy is counted, and
-    # unreadable afterwards. The patch column stays on `coco_quarry`.
-    "coco_quarry_full": {"boxed": True, "kind": "coco_quarry", "full_corpus": True, "on_request": True},
+    # unreadable afterwards. The patch column stays on `coco_better`.
+    "coco_better_full": {"boxed": True, "kind": "coco_better", "full_corpus": True, "on_request": True},
     # The patch column over the same full corpus, in shards. One cell would be
     # ~37 GB of grids: `build_pile.py` holds a whole cell in RAM and writes it
     # with one `pickle.dump`, and every consumer reads it back through
     # `load_medias` into one dict, so a single cell is unwritable at any sane
-    # `--mem` and unreadable afterwards. At COCO_QUARRY_SHARDS each is ~4.7 GB --
+    # `--mem` and unreadable afterwards. At COCO_BETTER_SHARDS each is ~4.7 GB --
     # the size of the `vg_scale` patch cell studies already load.
     #
     # The shard is a slice of the EMIT set only. Supply, banding and the clean
@@ -137,14 +138,14 @@ DATASETS: dict[str, dict] = {
     # thing in every shard; the split is by `image_id % n`, so each carries every
     # class and band in proportion rather than an arbitrary contiguous range.
     **{
-        f"coco_quarry_full_s{i}": {
+        f"coco_better_full_s{i}": {
             "boxed": True,
-            "kind": "coco_quarry",
+            "kind": "coco_better",
             "full_corpus": True,
             "on_request": True,
-            "shard": (i, COCO_QUARRY_SHARDS),
+            "shard": (i, COCO_BETTER_SHARDS),
         }
-        for i in range(COCO_QUARRY_SHARDS)
+        for i in range(COCO_BETTER_SHARDS)
     },
     # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
     # free-text vocabulary) rather than the demo pipeline's 100 curated
@@ -229,8 +230,15 @@ DATASETS: dict[str, dict] = {
 #: importing that into the negatives is a different decision from this one.
 SCALE_CROSS_CLASS_NEGATIVES = True
 
-#: The upper cut mirrors ``MAX_VOTED_AREA``: a box covering >80% of the image
-#: is not a region, it is the image.
+#: ``large`` runs to the whole frame, inclusive (:data:`FULL_FRAME`). It used to
+#: stop at 0.80, a cap copied from the Max-Patch study's ``MAX_VOTED_AREA``,
+#: where it dropped *categories* whose typical drag was near-frame because that
+#: study was about region voting. Here it dropped *images* -- a photo whose
+#: object filled more than 80% of it was neither a positive nor a negative for
+#: that class -- and the close-up is the easiest positive a real user meets, so
+#: the cap hid exactly the images a detector should never miss. A near-frame box
+#: pools to near the whole-image vector, which is a real Good vote, not a
+#: degenerate one. Owner ruling, 2026-09-24: fold them into ``large``.
 #:
 #: **The band is a VIEW over every instance, not a replacement for them, and
 #: that is a decision** (2026-09-07).
@@ -264,11 +272,13 @@ SCALE_CROSS_CLASS_NEGATIVES = True
 #: anyone deciding to (#3726).
 PATCH_AREA = 1 / 196
 LEAF_AREA = 1 / 12
-MAX_VOTED_AREA = 0.80
+#: Band edges are half-open (``lo <= area < hi``), so the top edge sits one ulp
+#: above 1.0 to admit a box that is exactly the frame. It still prints as 100%.
+FULL_FRAME = math.nextafter(1.0, math.inf)
 BOX_BANDS: dict[str, tuple[float, float]] = {
     "small": (0.0, PATCH_AREA),
     "medium": (PATCH_AREA, LEAF_AREA),
-    "large": (LEAF_AREA, MAX_VOTED_AREA),
+    "large": (LEAF_AREA, FULL_FRAME),
 }
 
 #: How many categories each banded dataset draws, and the image cap.  Categories
@@ -296,6 +306,21 @@ LVIS_SPLITS = ("train", "val")
 #: out busy scenes -- a street of cars, a table of cups. Owner ruling, 2026-09-22:
 #: use the most obvious instance, which is the largest.
 SCALE_BAND_ON_LARGEST = True
+
+#: The owner's hand corrections to COCO's labels for ``coco_better`` (#4179): one
+#: row per (image, class) a human looked at and found COCO wrong about. Committed
+#: here rather than on scratch because it is a record of someone having looked,
+#: which no rebuild can bring back (#3729). Two findings, and each is applied
+#: through a door ``scale_core`` already has:
+#:
+#: * ``present`` -- COCO holds no such object, a human says one is there. The
+#:   pair goes into ``unbanded`` (so the image leaves the clean pool) and
+#:   ``reviewed_present`` (so it is no cross-class negative for that class). It
+#:   does NOT become a positive: nobody drew a box, and a band is a claim about size.
+#: * ``not_positive`` -- COCO's picked box is not ONE of the class. The pair is
+#:   ``excluded``, like a lump: never a positive, and still no negative, because
+#:   the image may hold a real one elsewhere.
+COCO_BETTER_CORRECTIONS = Path(__file__).resolve().parent / "human_record" / "COCO_BETTER__label_review_4179.json"
 
 
 class LumpRule(NamedTuple):
@@ -525,12 +550,12 @@ def scale_study_exclusion(name: str) -> str | None:
 #: barren draw is capped at :data:`SCALE_N_NEG` in both builds while #3667's
 #: cross-class negatives more than double (6,635 -> 13,991). An earlier
 #: measurement varied the barren component alone and read +0.24 AP; that is a
-#: pool `coco_quarry` never ships, and the #4056 report records the correction.
+#: pool `coco_better` never ships, and the #4056 report records the correction.
 #: A design that let the barren pool scale with its candidate set WOULD inherit
 #: it, so this constrains any future change to how the pool is sized.
 #:
 #: :data:`SCALE_CLASSES_25` still freezes the old roster, and the 25-class build
-#: is preserved at ``/expscratch/sgreenberg/keep/coco-quarry-25-20260920/``, so
+#: is preserved at ``/expscratch/sgreenberg/keep/coco-better-25-20260920/``, so
 #: a published number can be reproduced rather than merely disclaimed.
 #:
 #: **Twenty-five since #3588**, and the thirteen were added on the same terms as
@@ -645,7 +670,7 @@ SCALE_CLASSES: tuple[str, ...] = (
 
 #: The twenty-five *C* held before #4056, frozen as a historical roster.
 #:
-#: Every published `coco_quarry` measurement is conditioned on a shared
+#: Every published `coco_better` measurement is conditioned on a shared
 #: negative pool drawn as *holds none of these twenty-five* -- 49,503 clean
 #: candidates, where the widened roster leaves 16,058. The pool DRAWN is
 #: ``SCALE_N_NEG`` either way, so no cell changes size, but the images in it
@@ -2147,7 +2172,14 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "When only the HANDLE shows, read the food: a handle out of cereal is a "
             "spoon, a handle out of a salad is a fork. The one rule here that infers "
             "from surroundings rather than the object, because the alternative deletes "
-            "every partly buried spoon."
+            "every partly buried spoon. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "SLOTTED SPOON is Good -- a solid bowl with holes in it is still a spoon (a "
+            "slotted turner is a flat spatula, which stays Bad). A handheld MESH strainer, "
+            "skimmer or spider is Bad, like a bowl-style strainer: the line is a solid "
+            "bowl, holes or not, against a mesh or wire basket. COCO agrees: LVIS `ladle` "
+            "is COCO spoon 59% of the time, `strainer` 3.4%. A spoon is MADE FOR FOOD, as "
+            "a bowl is: a plastic kitty-litter scoop is Bad even though it is a slotted "
+            "scoop (owner, same day)."
         ),
     ),
     "bowl": ClassRule(
@@ -2511,7 +2543,13 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "reading, not ours -- a PARASAIL, a paraglider and a PARACHUTE: `parasail` "
             "lands on a COCO kite box 57 times and `parachute` 26, and both are already "
             "folded into this class. Bad: a flag, a banner, a balloon, a bird, a windsock, "
-            "a kite tail or string on its own. A kite lying on the ground still counts."
+            "a kite tail or string on its own. A kite lying on the ground still counts. "
+            "OWNER RULED 2026-09-26 during the #4179 review: the LINE is most of what makes "
+            "a kite, so a paper or foam plane or glider flying free is Bad. And the kite "
+            "itself has to be in frame: someone holding a handle or harness whose strings "
+            "run out of the picture is Bad, because a box cannot hold an object that is not "
+            "in the image. Parachutes, parasails and paragliders stay IN: their rigging "
+            "lines count as the line (owner, same day)."
         ),
     ),
     "knife": ClassRule(
@@ -2524,7 +2562,14 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "peeler, a knife block or a drawer with nothing visible, and a whole "
             "`silverware` or `utensil` box covering a place setting -- vote Good only when "
             "the boxed object IS the knife, the same rule `fork` carries. Where only the "
-            "handle shows, read the blade line, not the food."
+            "handle shows, read the blade line, not the food. OWNER RULED 2026-09-26 during "
+            "the #4179 review: scissors stay Bad EVEN when broken down to one blade on a "
+            "rounded handle -- it is still `scissors`. A SMALL sword (short blade, "
+            "one-handed) is Good: it is a big knife. A LONG or two-handed sword is Bad, a "
+            "weapon rather than a table or kitchen blade (so a ceremonial sabre cutting a "
+            "wedding cake is Bad). The line: a one-handed blade you could use at a table. "
+            "COCO boxes 15% of LVIS `sword` as a knife and leaves 84% unboxed, so Bad is "
+            "also the reading COCO carries."
         ),
     ),
     # The remaining rules were measured as names before ``test`` existed
@@ -2556,7 +2601,13 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "stations. Bad: ticket machines that are not for parking, post boxes, "
             "bollards, utility pillars. 100% pure over 89 LVIS matches -- the cleanest "
             "class in C, so membership is never the question. The risk is the BOX: take "
-            "the head and its housing, not the run of pole down to the pavement."
+            "the head and its housing, not the run of pole down to the pavement. OWNER "
+            "RULED 2026-09-26 during the #4179 review: head only stays, because it is what "
+            "COCO boxes -- median h/w 2.1, only 12% of 1,343 boxes reach h/w 3, and paired "
+            "with LVIS the heights agree (median ratio 0.99, 3% are 1.5x taller). A box "
+            "that does run down the pole is still ONE meter, so Good in a review. "
+            "Electronic meters with a screen and card reader (often a big `P`) are Good, "
+            "single-space or multi-space."
         ),
     ),
     "banana": ClassRule(
@@ -2637,7 +2688,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "appear on 0.3% of these boxes. Also bad: on-screen keyboards. A laptop's "
             "own keyboard belongs here only where COCO boxed it apart from the machine; "
             "otherwise the object is `laptop`, which is its own class in C. 98.5% is "
-            "`computer_keyboard`."
+            "`computer_keyboard`. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "stand-alone NUMPAD is Bad, and a keyboard WITHOUT a numpad (tenkeyless, "
+            "compact) is still Good -- the numpad is neither necessary nor sufficient. "
+            "A phone with a key per letter (a BlackBerry) is Bad: it is `cell phone`, "
+            "its own class in C. The laptop/desktop split stays as ruled, though the "
+            "owner expects it to show in this class's numbers as hard negatives."
         ),
     ),
     "tennis racket": ClassRule(
@@ -2679,7 +2735,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "one object wherever COCO boxed it as one. Bad: SNOWBOARDS, their own class "
             "in C, at 2.3%; and ski poles and boots (`ski_pole`, `ski_boot`, 0.5% each), "
             "which are never this class however tightly they sit beside it. 96.8% is "
-            "`ski`."
+            "`ski`. OWNER RULED 2026-09-26 during the #4179 review: skis means SNOW skis; "
+            "WATER SKIS are Bad. COCO agrees: of 105 LVIS `water_ski` boxes COCO calls 12% "
+            "`skis`, 16% `surfboard` and leaves 70% unboxed."
         ),
         # Plural like `scissors`: COCO boxes the pair (count ratio 2.09 against
         # LVIS's single `ski`), and ruling one ski would reject ~62% of its boxes.
@@ -2731,7 +2789,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "at 0.7%; and a machine under a cover where only the tarp is visible "
             "(`tarp`, 0.5%). The test is the ENGINE, not the size or the step-through "
             "frame: a scooter with a motor is this class, a pedal cycle with a battery "
-            "is `bicycle`. 89% pure."
+            "is `bicycle`. 89% pure. OWNER RULED 2026-09-26 during the #4179 review: the "
+            "engine test decides between TWO-wheelers only. A four-wheeled motorized "
+            "shopping cart or mobility scooter is a cart, not a scooter, so Bad -- as are "
+            "golf carts and powered wheelchairs. COCO agrees: LVIS `golfcart`, "
+            "`wheelchair` and `shopping_cart` land on a COCO motorcycle box 0% of the time."
         ),
     ),
     "tie": ClassRule(
@@ -2776,7 +2838,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "(`wet_suit` 7.8%, `jacket` 5.4%, `dress` 2.7%, `coat` 2.4%, `shirt` 2.2%). "
             "That is not a definitional split -- LVIS boxes the garment where COCO boxes "
             "the wearer, and mutual best match pairs the two. The object is always the "
-            "PERSON, never the garment."
+            "PERSON, never the garment. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "person cut off by the frame is Good as long as the HEAD OR THE TORSO is in "
+            "frame (a head alone is Good). Only an extremity -- a hand, an arm, a foot, "
+            "legs, a pair of shoes -- is Bad. That is COCO's own reading: where LVIS "
+            "boxes a glove or a shoe, a COCO person box is just that part 0.1% of the "
+            "time, and 8.5% of hands and 17% of shoes carry no person box at all."
         ),
     ),
     "remote": ClassRule(
@@ -2879,7 +2946,7 @@ def is_scale_review(detector: str, text_query: str) -> bool:
     """Whether a dashboard detector is a vg_scale review at all.
 
     The dashboard is shared: other projects load their own review queues onto the
-    same app (DocMarks does, 2026-09-17). ``bank_verdicts.py`` exported EVERY voted
+    same app (FullMarks does, 2026-09-17). ``bank_verdicts.py`` exported EVERY voted
     detector, so a foreign queue would have been banked into vg_scale's human
     record as a ``slate`` labelset -- and ``retire_finished.py``, finding that file,
     would then have deleted the other project's finished pairs. Both scripts ask

@@ -228,6 +228,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help=("Path passed to the label importer's ``filepath`` field. Used with --import-labels-into."),
     )
     parser.add_argument(
+        "--label-importer-field",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        dest="label_importer_fields",
+        help=(
+            "Set one of the label importer's fields (repeatable). Used with "
+            "--import-labels-into for importers whose fields are not just a "
+            "file path; --label-importer-file X is shorthand for filepath=X."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         dest="dry_run",
@@ -317,6 +329,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
             "chunk_size",
             "import_labels_into",
             "label_importer_file",
+            "label_importer_fields",
             "dry_run",
         ):
             if getattr(args, conflicting, None):
@@ -477,8 +490,7 @@ def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
     # Optional one-shot label import into a detector before scoring.
     # The merged labelset is picked up by the autodetect pipeline below.
     if args.import_labels_into:
-        if not args.label_importer_file:
-            parser.error("--import-labels-into requires --label-importer-file <path>")
+        field_values = _label_importer_field_values(args, parser)
         # Settings file controls detectors_dir, so apply it first.
         if settings_path:
             from vtsearch.settings import set_settings_path
@@ -488,24 +500,25 @@ def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
             cli_progress.emit(
                 "labels_import_dry_run",
                 text=(
-                    f"DRY RUN: would import labels from {args.label_importer_file!r} "
+                    f"DRY RUN: would import labels with fields {field_values!r} "
                     f"via importer {args.label_importer!r} into detector "
                     f"{args.import_labels_into!r}."
                 ),
                 detector=args.import_labels_into,
                 importer=args.label_importer,
-                filepath=args.label_importer_file,
+                filepath=field_values.get("filepath"),
+                fields=field_values,
             )
             if cli_progress.get_format() == "text":
                 print("", flush=True)
         else:
-            from vtscore.cli import import_labels_into_detector_from_file
+            from vtscore.cli import import_labels_into_detector
 
             try:
-                applied, skipped = import_labels_into_detector_from_file(
+                applied, skipped = import_labels_into_detector(
                     args.import_labels_into,
                     args.label_importer,
-                    args.label_importer_file,
+                    field_values,
                 )
                 cli_progress.emit(
                     "labels_imported",
@@ -520,6 +533,23 @@ def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
             except (FileNotFoundError, ValueError) as exc:
                 cli_progress.emit_error(f"importing labels: {exc}")
                 sys.exit(1)
+
+
+def _label_importer_field_values(args, parser) -> dict[str, str]:
+    """Collect ``--label-importer-file`` / ``--label-importer-field`` into field values."""
+    field_values: dict[str, str] = {}
+    for item in args.label_importer_fields or []:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            parser.error(f"--label-importer-field expects KEY=VALUE, got {item!r}")
+        field_values[key.strip()] = value
+    if args.label_importer_file:
+        if "filepath" in field_values:
+            parser.error("--label-importer-file and --label-importer-field filepath=... both set; pick one")
+        field_values["filepath"] = args.label_importer_file
+    if not field_values:
+        parser.error("--import-labels-into requires --label-importer-file <path> or --label-importer-field KEY=VALUE")
+    return field_values
 
 
 def _dispatch_autodetect(

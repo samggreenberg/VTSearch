@@ -10,6 +10,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.cli.import_labels_into_detector(det_name, importer_name,
+  field_values)`** (issue #4174). Runs a label importer with an arbitrary
+  field mapping and merges its labels into a detector, so importers that read
+  no file work from the CLI and pipeline files. Required fields are now
+  checked and normalized (`validate_cli_field_values`) as for the dataset
+  importer and exporter CLI paths. `import_labels_into_detector_from_file`
+  is kept and delegates with `{"filepath": filepath}`. Pipeline
+  `import_labels:` results now carry `fields` in place of `file`. Additive.
+
+- **`maybe_structural_rerank_example` takes a sequence of templates** (issue
+  #4161). The example-sort Stage-2 re-rank in
+  `vtscore.training.structural_similarity` accepts either one
+  `StructuralFeatures` or a sequence of them (`None` and empty entries are
+  dropped) and scores each candidate as the max over templates, the rule
+  `maybe_structural_rerank` already applies to a detector's RegionYes
+  templates. `query_sort.example_sort_from_paths` now passes every example
+  through it instead of skipping Stage 2 when given more than one. Additive:
+  a single `StructuralFeatures` argument behaves exactly as before.
 - **`PluginField.opened_in_browser`, for a `url` field only the browser opens**
   (issue #4078). Every `field_type="url"` value went through the SSRF guard
   `validate_url`, which refuses `localhost` and private addresses - right for a
@@ -550,6 +568,40 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **`resolve_or_train_detector` no longer returns a head trained on stale
+  labels** (issue #4204). It returned `DetectorContext.model` whenever that was
+  set, but nothing that changes a detector's labels (a vote, `clear_votes`, a
+  dataset-switch rehydrate, a labelset edit) drops it, so Find, Auto-Find and
+  the portable export scored with an outdated head. Every writer of
+  `DetectorContext.model` (`train_from_labelset`,
+  `learned_sort.update_det_ctx_with_trained_model`,
+  `workflow.apply_and_retrain`) now stamps the new
+  `DetectorContext.model_labels_sig` slot with
+  `model_loading.labelset_signature(labelset)`, and the cached head is reused
+  only while `model_loading.cached_head_is_current(det_ctx, labelset)` holds
+  for the labelset in `det_data`. When it doesn't, the head is retrained from
+  that labelset. The signature is the sorted `(label, stable_element_id,
+  region_box)` triples, so a redrawn region counts as a label change; the
+  labelset branch of `build_learned_sort_signature` now uses it too. One
+  consequence: with `det_data=None` the function returns `(None, 0.5, None)`
+  even when a cached head exists, because there are no labels to check it
+  against. A caller that sets `DetectorContext.model` itself must also set
+  `model_labels_sig`, or `resolve_or_train_detector` will retrain instead of
+  reusing it. `labelset_signature` and `cached_head_is_current` are additive.
+
+- **`LoadingTasksTracker.create_task` publishes a new task as running** (issue
+  #4187). The task's tracker started at `ProgressTracker`'s default
+  `status="idle"`, and `create_task` notifies subscribers before the caller's
+  first `update`. So the first frame every loading-tasks subscriber saw said
+  the task was already finished: a client that caught it took a detector
+  load that had not begun for one that was done, and the app's Find route
+  guard opened an unloaded detector to a stream of 409s. The returned tracker
+  now starts at `status="loading"`, via a new keyword-only
+  `ProgressTracker(..., initial_status=...)` (default `"idle"`, so a
+  standalone tracker is unchanged). Every shipped caller already set
+  `"loading"` right after `create_task`, so the only observable difference is
+  that the create-time frame no longer says the work is over.
 
 - **A declared `PluginField.default` now reaches the plugin body** (issue
   #3874). `default` was documented as a pre-filled value but only `argparse`

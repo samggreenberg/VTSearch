@@ -19,6 +19,8 @@ for the cell.
 
 from __future__ import annotations
 
+import re
+
 import pickle
 from pathlib import Path
 from collections.abc import Callable, Iterator
@@ -43,9 +45,35 @@ _DROP_FIELDS = ("media_bytes", "thumbnail_bytes")
 BASE_POOL_VARIANTS = ("", "max")
 
 
+#: Dataset-name prefixes renamed after results were written under the old
+#: name (#4183: COCO Better became COCO Better and FullMarks became FullMarks,
+#: tiers and shards included). Readers map old rows onto the new name, so a
+#: run from before the rename still analyses.
+LEGACY_DATASETS = {"coco_quarry": "coco_better", "docmarks": "fullmarks"}  # rename: keep
+_LEGACY_RE = re.compile(r"^(" + "|".join(LEGACY_DATASETS) + r")")
+
+
+def legacy_datasets(df: pd.DataFrame) -> pd.DataFrame:
+    """*df* with any renamed dataset (``LEGACY_DATASETS``) under its current name."""
+    if "dataset" in df.columns:
+        names = df["dataset"].astype(str)
+        if names.str.match(_LEGACY_RE).any():
+            df = df.assign(dataset=names.str.replace(_LEGACY_RE, lambda m: LEGACY_DATASETS[m.group(1)], regex=True))
+    return df
+
+
 def _blank(s: pd.Series) -> pd.Series:
     """True where a tag column is empty/NaN - i.e. the arm's own base row."""
     return s.isna() | (s.astype(str).str.strip().isin(("", "nan", "None")))
+
+
+def _only_skyline_rows(path: Path) -> bool:
+    """True when every row of a cell file is a supervised-skyline row."""
+    try:
+        df = pd.read_csv(path, usecols=["gmm_variant"])
+    except (ValueError, OSError, pd.errors.EmptyDataError):
+        return False
+    return bool(len(df)) and df["gmm_variant"].astype(str).str.startswith("skyline_").all()
 
 
 def _base_rows(df: pd.DataFrame) -> pd.DataFrame:
@@ -117,7 +145,7 @@ def load_cells(
             # `cut_fallback_kind`, whose values differ between the base rows and
             # the variant rows.  The warning is noise, but it fires once per
             # cell and buries the load line that reports what was dropped.
-            fr = pd.read_csv(f, low_memory=False)
+            fr = legacy_datasets(pd.read_csv(f, low_memory=False))
         except Exception as exc:  # noqa: BLE001 - a truncated cell is data loss to report, not a crash
             bad.append((f.name, repr(exc)[:80]))
             continue
@@ -246,6 +274,14 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
         #: legitimate result, so it is named apart from the cells above.
         "no_base_rows": base["filtered_out"],
     }
+    # A starved cell that ran with skyline arms on still writes the skyline row:
+    # it is emitted once per run whatever the votes did (#3322, and on the
+    # region path since #4159). Such a file is the starvation case above, not a
+    # tag bug, so it moves across rather than tripping the guard.
+    skyline_only = [name for name in prov["no_base_rows"] if _only_skyline_rows(arm_dir / "cells" / name)]
+    if skyline_only:
+        prov["no_positive_found"] = list(prov["no_positive_found"]) + skyline_only
+        prov["no_base_rows"] = [n for n in prov["no_base_rows"] if n not in skyline_only]
     if prov["no_base_rows"]:
         raise SystemExit(
             f"{arm_dir}: base-row filter kept 0 rows in {len(prov['no_base_rows'])} cells - check tag columns"
@@ -289,7 +325,7 @@ class CellWriter:
     """Write a cell in chunks, so the whole of it is never in memory at once.
 
     A cell has always been assembled as one dict and pickled at the end, which
-    is fine while the dict fits.  It stops fitting: DocMarks tier ``l`` is
+    is fine while the dict fits.  It stops fitting: FullMarks tier ``l`` is
     200,000 pages at ~169 KB of ``local_features`` each (measured, #3842), so
     the ``sift_vlad`` cell alone is ~34 GB *before* the page bytes each media
     carries until :func:`_thin` drops them.  Streaming turns that into one
@@ -477,7 +513,7 @@ def load_medias(path: str | Path, repair: bool = False) -> dict[int, dict[str, A
     vectors (:func:`repair_norms`), which is what a harness that trains and
     scores the APP's detector must ask for; it is not the default because this
     reader is shared with pipelines whose vectors never pass through the app
-    (DocMarks' structural descriptors among them), where a norm is data.
+    (FullMarks' structural descriptors among them), where a norm is data.
 
     Tolerates the pre-#2886 ``RegionVector`` nodes in cached pickles; see
     :class:`_StaleRegionVector`.

@@ -1,0 +1,19 @@
+{
+  "matrix": "/expscratch/sgreenberg/fullmarks/votes-4162/matrix-m",
+  "tier": "m",
+  "arms": [
+    "a0_exemplar",
+    "a1_max",
+    "a1p_goods_only"
+  ],
+  "checkpoints": [
+    0,
+    3,
+    5,
+    10,
+    20
+  ],
+  "readouts": [
+    "shared"
+  ]
+}

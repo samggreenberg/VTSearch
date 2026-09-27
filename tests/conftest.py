@@ -25,6 +25,7 @@ from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_ex
 from tests_shared.state_reset import (
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
+    freeze_collected_heap,
     freeze_startup_heap,
     install_startup_contexts,
     pin_training_budget,
@@ -41,6 +42,11 @@ from tests_shared.state_reset import (
 def pytest_collection_modifyitems(items, config):
     """Auto-assign group markers based on the test file's parent directory."""
     add_group_markers(items, root_dir_name="tests")
+
+
+def pytest_collection_finish(session):
+    """Freeze the heap collection built, so ``gc.collect()`` stops rescanning it."""
+    freeze_collected_heap()
 
 
 pin_training_budget()

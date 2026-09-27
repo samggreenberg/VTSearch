@@ -6,7 +6,7 @@
 
 ## Environments
 
-Three pile datasets that depend on none of `vg_scale`, DocMarks or `coco_quarry`, whole-image voting, harness-selected categories, 5 seeds, 150 clicks:
+Three pile datasets that depend on none of `vg_scale`, FullMarks or `coco_better`, whole-image voting, harness-selected categories, 5 seeds, 150 clicks:
 
 | dataset | images | categories | embedders |
 |---|---|---|---|

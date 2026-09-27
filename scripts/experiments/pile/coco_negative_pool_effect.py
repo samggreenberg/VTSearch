@@ -14,7 +14,7 @@ comparable rather than two scales that both say "harder".
 Same positives, same query, two negative sets, one number each:
 
 * **baseline** -- the cell's shipped negatives. NOT the barren 9,900 alone:
-  `coco_quarry` inherits #3667's fix, so a designated positive of another class
+  `coco_better` inherits #3667's fix, so a designated positive of another class
   is an evaluable negative here. Measured on the built cell that is 16,535
   images, 60% barren and 40% cross-class -- not the ~84% barren the issue
   quotes, which is #3670's `vg_scale` figure and does not transfer.
@@ -149,8 +149,8 @@ def main() -> int:
     classes = list(pc.SCALE_CLASSES)
     holders, every = coco_holders(args.anchor_dir, classes)
 
-    full = load_medias(pc.EMBEDDINGS / f"coco_quarry_full__{args.embedder}.pkl")
-    des = load_medias(pc.EMBEDDINGS / f"coco_quarry__{args.embedder}.pkl")
+    full = load_medias(pc.EMBEDDINGS / f"coco_better_full__{args.embedder}.pkl")
+    des = load_medias(pc.EMBEDDINGS / f"coco_better__{args.embedder}.pkl")
     missing = [i for i in every if i not in full]
     if missing:
         print(f"full-corpus cell is missing {len(missing):,} COCO images; cannot measure", file=sys.stderr)

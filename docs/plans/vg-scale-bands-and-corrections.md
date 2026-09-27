@@ -168,6 +168,6 @@ still live; only its image source moves.
 
 <!-- item-sep -->
 
-- [ ] What remains is the migration itself — see [`coco-quarry.md`](coco-quarry.md)
+- [ ] What remains is the migration itself — see [`coco-better.md`](coco-better.md)
 
 <!-- item-sep -->

@@ -53,7 +53,7 @@ IMAGE_DIRS = {
 #: `val2017.zip` and has never held `val2017/`, so a directory-only resolver
 #: found nothing for every COCO media and drew an empty sheet (#3305).
 #: `pilebuild.loaders.coco.load` has always read pixels out of the same zip.
-#: The train zip joins it for `coco_quarry` (#3991): 118,287 STORED members read
+#: The train zip joins it for `coco_better` (#3991): 118,287 STORED members read
 #: in place, never extracted -- see :data:`pile_config.COCO_TRAIN_ZIP`. Listing
 #: both is what lets one sheet draw a val image and a train image side by side;
 #: `locate` tries them in order and a name resolves in exactly one.

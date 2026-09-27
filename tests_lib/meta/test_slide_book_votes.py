@@ -7,12 +7,13 @@ Two slides later `shoot-ui-figs.mjs` drives a real voting session, and the
 button it clicks is decided by which COCO folder the frame is filed in — which
 counts every one of those as a book, because COCO's annotators did.
 
-So the shoot carries an override list, and the deck contradicts itself in front
-of the room the moment the two drift apart: #3779 caught the session voting
-**Good** on the very shelf of box sets the intro had just held up as the
-canonical not-a-book. Neither file can import the other — one is Python for
-matplotlib, one is JavaScript for Playwright — so the agreement is checked
-here.
+So the Book example carries an override list (`NOT_A_BOOK` in
+`scripts/screenshots/book-example.mjs`, shared by the slide shoot and the user
+guide's screenshot fixtures), and the deck contradicts itself in front of the
+room the moment the two drift apart: #3779 caught the session voting **Good**
+on the very shelf of box sets the intro had just held up as the canonical
+not-a-book. Neither file can import the other — one is Python for matplotlib,
+one is JavaScript for Playwright — so the agreement is checked here.
 
 Read by parsing, not by importing: `make-book-figs` pulls in matplotlib and
 `coco_fixture` at module scope, and this tier imports neither.
@@ -24,9 +25,9 @@ import ast
 import re
 from pathlib import Path
 
-SLIDES = Path(__file__).resolve().parents[2] / "slides" / "figs" / "src"
-BOOK_FIGS = SLIDES / "make-book-figs.py"
-SHOOT = SLIDES / "shoot-ui-figs.mjs"
+REPO = Path(__file__).resolve().parents[2]
+BOOK_FIGS = REPO / "slides" / "figs" / "src" / "make-book-figs.py"
+BOOK_EXAMPLE = REPO / "scripts" / "screenshots" / "book-example.mjs"
 
 
 def _literal(source: str, name: str) -> object:
@@ -48,9 +49,9 @@ def _not_books() -> set[str]:
 
 
 def _overrides() -> set[str]:
-    """The COCO files the shoot script refuses to vote Good on."""
-    block = re.search(r"const NOT_A_BOOK = new Set\(\[(.*?)\]\);", SHOOT.read_text(), re.DOTALL)
-    assert block, "shoot-ui-figs.mjs no longer declares a NOT_A_BOOK set"
+    """The COCO files the Book example refuses to vote Good on."""
+    block = re.search(r"const NOT_A_BOOK = new Set\(\[(.*?)\]\);", BOOK_EXAMPLE.read_text(), re.DOTALL)
+    assert block, "book-example.mjs no longer declares a NOT_A_BOOK set"
     return set(re.findall(r"'([^']+\.jpg)'", block.group(1)))
 
 
@@ -60,7 +61,7 @@ def test_shoot_overrides_match_the_intro_figures_verdicts() -> None:
         "the voting session and the intro figure disagree about what a book is.\n"
         f"  only the figure says not-a-book: {sorted(figure - shoot)}\n"
         f"  only the shoot says not-a-book:  {sorted(shoot - figure)}\n"
-        "Update NOT_A_BOOK in slides/figs/src/shoot-ui-figs.mjs, or RANKING in make-book-figs.py."
+        "Update NOT_A_BOOK in scripts/screenshots/book-example.mjs, or RANKING in make-book-figs.py."
     )
 
 

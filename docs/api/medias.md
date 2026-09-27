@@ -549,7 +549,11 @@ Same as example sort but uses one or more files already on the server in
 the user's `example_media/` directory. With multiple filenames the haystack is ranked
 against the centroid (mean of the L2-normalised embeddings) of all
 examples — this is how Autopilot's Good phase sorts for a detector seeded
-with several media examples. `crop_params` describes a single example, so
+with several media examples. On a structural (SIFT/VLAD) dataset that
+centroid order is then geometrically re-ranked against *every* example as a
+template, max over templates, so two crops of different marks each surface
+their own instances rather than being averaged into a query that matches
+neither. `crop_params` describes a single example, so
 it is rejected (400) when more than one filename is given.
 
 → `{"results": [...], "threshold": 0.5123}`

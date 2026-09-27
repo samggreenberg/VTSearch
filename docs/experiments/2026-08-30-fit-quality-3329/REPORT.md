@@ -1,5 +1,7 @@
 # Is anything in VTSearch a *good* fit? (issue #3329)
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** Part 2's `coco_val × siglip` atlas was built on **un-normalised** vectors (norms 12–19, #4099). The line "under siglip an atlas built on coco_val reads VG as z = −15" and siglip's 0.71 detection figure are artefacts of that. Without the cell, siglip separates 1.0. Neither shipped item moves: the gate is driven by `dinov3_patch`, and median KS stays 0.10. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 [#3329](https://github.com/samggreenberg/VTSearch/issues/3329) asked one
 question — *"we have ways to get the BEST fit in each of these cases, but I
 don't ever look to see if it's a GOOD fit"* — and listed eleven fits to check.

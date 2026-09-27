@@ -1,0 +1,213 @@
+"""The roster — the hand-picked classes an eval actually runs on.
+
+FullMarks is not trying to be an exhaustive inventory of every mark in every
+source.  It is trying to answer one question — *can this pipeline find a given
+stamp in a pile of documents* — and that question is answered better by two
+dozen classes whose every instance a human has checked than by four hundred
+classes assembled by a threshold nobody validated.
+
+So the corpus has two populations with completely different standards of
+evidence:
+
+* **roster classes** — a small, named, checked-in set.  Every instance is
+  adjudicated in or out by hand, and every confusable pair is adjudicated same
+  or different.  Nothing enters by heuristic.
+* **distractors** — everything else, unlabelled and unexamined, in whatever
+  quantity the tier budget allows.  They need no labels; they only need to be
+  safe to score against, which ``fullmarks_config.CONTAMINATES`` decides.
+
+That split is what makes the eval trustworthy at a cost a person can actually
+pay.  Verifying 24 classes exhaustively is an afternoon; verifying 400 is not,
+and a benchmark whose labels nobody checked is a benchmark whose numbers nobody
+should quote.
+
+The roster file is small and human-editable on purpose — it is a decision, not
+an artifact:
+
+    {
+      "name": "spods-v1",
+      "notes": "why these",
+      "classes": ["spods/logo_00042_0", "spods/stamp_00117_1", ...]
+    }
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Optional, Sequence
+
+
+@dataclass
+class Roster:
+    """The chosen classes, plus provenance for why they were chosen."""
+
+    name: str
+    classes: list[str] = field(default_factory=list)
+    notes: str = ""
+
+    def __contains__(self, class_id: str) -> bool:
+        return class_id in set(self.classes)
+
+    def __len__(self) -> int:
+        return len(self.classes)
+
+
+def load(path: Path) -> Roster:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    classes = list(dict.fromkeys(payload.get("classes", [])))
+    return Roster(name=payload.get("name", path.stem), classes=classes, notes=payload.get("notes", ""))
+
+
+def save(roster: Roster, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "name": roster.name,
+        "notes": roster.notes,
+        "classes": sorted(roster.classes),
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def check(roster: Roster, available: Sequence[str]) -> tuple[list[str], list[str]]:
+    """``(present, missing)`` — roster entries that do and do not exist.
+
+    A missing entry is reported rather than ignored.  Class ids move when the
+    clustering threshold moves, so a roster naming a class that no longer exists
+    is the signal that the roster and the corpus have drifted apart — which is
+    exactly the failure that would otherwise show up as a quietly smaller eval.
+    """
+    have = set(available)
+    present = [c for c in roster.classes if c in have]
+    missing = [c for c in roster.classes if c not in have]
+    return present, missing
+
+
+def starter(name: str, candidates: Sequence[dict[str, Any]], size: int = 24) -> Roster:
+    """A first-draft roster from the top *size* shortlist candidates.
+
+    Meant as a starting point for a human to edit, never as the final word: the
+    ranking can order candidates by every measurable proxy and still cannot tell
+    whether a mark is *interesting*.  ``shortlist.py`` prints the table and the
+    contact sheet that make that judgement possible.
+    """
+    return Roster(
+        name=name,
+        classes=[c["class_id"] for c in candidates[:size]],
+        notes=(
+            f"first draft from the top {size} shortlist candidates; edit by hand before running the membership audit"
+        ),
+    )
+
+
+#: Per-class pages a person reviewed and rejected, kept outside ``classes.json``
+#: so a rebuild -- which regenerates every class's metadata -- restores them.
+REVIEWED_NEGATIVES = "reviewed_negatives.json"
+
+
+def load_reviewed_negatives(path: Path, key: str = "classes") -> dict[str, list[str]]:
+    """Per class, the stored page ids under *key*: ``classes`` (reviewed negatives) or ``excluded``."""
+    if not path.exists():
+        return {}
+    return {cid: list(ids) for cid, ids in json.loads(path.read_text(encoding="utf-8")).get(key, {}).items()}
+
+
+def save_reviewed_negatives(
+    store: dict[str, list[str]], path: Path, excluded: Optional[dict[str, list[str]]] = None
+) -> None:
+    """Write the store.  ``excluded`` holds pages a reviewer saw carry the mark where it cannot be an instance."""
+    payload: dict[str, Any] = {"classes": {cid: sorted(set(ids)) for cid, ids in sorted(store.items())}}
+    if excluded:
+        payload["excluded"] = {cid: sorted(set(ids)) for cid, ids in sorted(excluded.items()) if ids}
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def attach_reviewed_negatives(
+    classes: dict[str, dict[str, Any]],
+    store: dict[str, list[str]],
+    excluded: Optional[dict[str, list[str]]] = None,
+) -> int:
+    """Put each class's stored reviewed negatives (and exclusions) on its metadata; a positive is never either."""
+    n = 0
+    for cid, meta in classes.items():
+        positives = set(meta.get("page_ids", []))
+        ids = sorted(set(store.get(cid, ())) - positives)
+        if ids:
+            meta["reviewed_negative_page_ids"] = ids
+            n += len(ids)
+        out = sorted(set((excluded or {}).get(cid, ())) - positives)
+        if out:
+            meta["excluded_page_ids"] = out
+    return n
+
+
+def eligible_pages(
+    class_meta: dict[str, Any],
+    pages_by_source: dict[str, list[str]],
+    verified_negative_sources: Optional[Sequence[str]] = None,
+    *,
+    industry_of: Optional[dict[str, Optional[str]]] = None,
+) -> dict[str, list[str]]:
+    """Split the corpus into what may be scored against this class.
+
+    Three populations, and the distinction matters for what a number means:
+
+    * ``positive`` — adjudicated instances of the mark.
+    * ``known_negative`` — pages from a source that was exhaustively checked for
+      this class, so their *absence* of the mark is a verified fact.  These are
+      the valuable negatives: same scanner, same paper, same era, and known
+      clean.  A SPODS page carrying a different mark is the hardest possible
+      negative for a SPODS class, and exhaustive verification is what makes it
+      usable instead of a contamination risk.
+    * ``presumed_negative`` — pages from a contamination-safe source that nobody
+      checked individually.  Fine in bulk, and the only way to reach 200k.
+
+    **Eligibility is decided per page, not per source** (#3904).  The class's
+    ``eligible_distractor_sources`` can only say ``ucsf``, but the rule it was
+    resolved from is finer: a Tobacco800 class must not be scored against
+    UCSF's *Tobacco* pages -- the same IIT-CDIP archive, where its letterhead
+    recurs unlabelled -- while UCSF's other industries are safe.  Read from the
+    source list alone, all 158 / 3,182 / 10,662 UCSF Tobacco pages in tiers
+    s / m / l were scored as negatives for the ten Tobacco800 classes.  So when
+    the class names its ``source``, each page is put to
+    ``fullmarks_config.eligible_distractor`` with its industry from *industry_of*.
+
+    **Reviewed pages beat the source rule** (#3921).  A page in the class's
+    ``reviewed_negative_page_ids`` -- a person saw it and rejected the mark --
+    is a known negative in every pool.  A source in
+    ``fullmarks_config.REVIEW_ONLY_SOURCES`` is never verified wholesale, even
+    when *verified_negative_sources* names it: its unreviewed pages go to the
+    contamination rule instead, so a UCSF class keeps only its reviewed UCSF
+    pages, and a Tobacco800 class extended onto UCSF gains its accepted UCSF
+    pages as positives and its rejected ones as negatives while every other
+    UCSF Tobacco page stays out.  A page in ``excluded_page_ids`` -- seen to
+    carry the mark where it could not be made an instance -- is in no pool.
+    """
+    import fullmarks_config as cfg  # noqa: PLC0415
+
+    positives = set(class_meta.get("page_ids", []))
+    excluded = set(class_meta.get("excluded_page_ids", [])) - positives
+    reviewed = set(class_meta.get("reviewed_negative_page_ids", [])) - positives - excluded
+    verified = set(verified_negative_sources or ()) - cfg.REVIEW_ONLY_SOURCES
+    eligible = set(class_meta.get("eligible_distractor_sources", []))
+    class_source = class_meta.get("source")
+    industry_of = industry_of or {}
+
+    known: list[str] = []
+    presumed: list[str] = []
+    for source, page_ids in sorted(pages_by_source.items()):
+        for page_id in page_ids:
+            if page_id in positives or page_id in excluded:
+                continue
+            if page_id in reviewed or source in verified:
+                known.append(page_id)
+            elif source in eligible and (
+                class_source is None or cfg.eligible_distractor(class_source, source, industry_of.get(page_id))
+            ):
+                presumed.append(page_id)
+    return {
+        "positive": sorted(positives),
+        "known_negative": sorted(known),
+        "presumed_negative": sorted(presumed),
+    }

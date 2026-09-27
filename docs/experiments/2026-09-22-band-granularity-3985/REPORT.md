@@ -1,6 +1,6 @@
 # COCO boxes a pile as one object — and it is three faults, not one
 
-**Issues:** #3985, #3992, #4096. **Dataset:** `coco_quarry`, *C* = 52.
+**Issues:** #3985, #3992, #4096. **Dataset:** `coco_better`, *C* = 52.
 **Date:** 2026-09-22. **Unit rulings, 176 owner votes, the fruit and book remedy, and largest-instance banding, 2026-09-22.**
 
 ## Verdict
@@ -194,7 +194,7 @@ The build has 153 cells, 15,298 positives and 9,900 negatives, with the same
 
 **Rebuilt and verified 2026-09-22** (job 677654, v100, commit `316e078a8`).
 `--verify` passes for all five columns. Against the previous build, kept at
-`keep/coco-quarry-52-20260922/`:
+`keep/coco-better-52-20260922/`:
 
 - **147 of 153 cells have identical membership**, and all 10,900 negatives and
   spares are the same images. Selection is a per-image hash, so the filter

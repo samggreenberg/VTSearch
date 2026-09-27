@@ -1,5 +1,7 @@
 # VTSearch at production defaults: what each configuration gives a user
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** The `coco_val × siglip` rows here were measured on **un-normalised** vectors (norms 12–19, #4099): the COCO SigLIP reference row, the COCO `dinov3 − siglip` and `siglip − siglip2_l` contrasts, and the COCO 10-vote curve. The headlines do not move with them dropped: rule inefficiency −0.014 → −0.014, and ≤2-positive runs 5.7% → 5.9%. In RESULT-horizon-250.md, the VG+COCO column goes from −0.011 ± 0.005 to −0.010 ± 0.006, which is below 2 SE. The box-band column still carries that conclusion. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 > # ⚠️ SEEDING CAVEAT — these runs did not start the way the app does
 >
 > **Recorded 2026-08-26 (#3156).** Autopilot seeds its first three Good votes from
@@ -320,7 +322,9 @@ HAC leaf is 1/12:
 |---|---|---|
 | `vg_box_small` | 0 → **1/196** (0.5 %) | below what the patch grid can resolve at all |
 | `vg_box_medium` | 1/196 → **1/12** (8 %) | resolvable by patches, smaller than one HAC leaf |
-| `vg_box_large` | 1/12 → **0.80** | above 80 % a box is not a region, it is the image |
+| `vg_box_large` | 1/12 → **0.80**\* | above 80 % a box is not a region, it is the image |
+
+> **\*** Band edges changed on 2026-09-24: `large` now runs to the whole frame, and the 0.80 cap this run used is gone. See [`large` runs to the whole frame](../../../scripts/experiments/pile/README.md#large-runs-to-the-whole-frame-2026-09-24).
 
 ![Cost, AP and fnr against box-area band](figures/fig_scale_bands.png)
 
@@ -720,7 +724,7 @@ representations and seeds; the count of positive images is in brackets.
   `intersection` (95), `barn` (57).
 - The boxes-off arm uses the `visual_genome_m` and `coco_val` lists above.
 
-**How the box bands were built** (`scan_vg_boxes.py` (retired with Visual Genome — see `docs/plans/coco-quarry.md`)):
+**How the box bands were built** (`scan_vg_boxes.py` (retired with Visual Genome — see `docs/plans/coco-better.md`)):
 scan all ~108k Visual Genome images across `VG_100K` and `VG_100K_2` with the full
 free-text vocabulary from `objects.json`; normalise pixel boxes against dimensions
 read from each JPEG header; take 40 categories and 12,000 images per band,

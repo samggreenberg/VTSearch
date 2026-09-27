@@ -37,6 +37,7 @@ curated for exactly that reason; these rules are a net under it, not a proof.
 from __future__ import annotations
 
 import ast
+import functools
 import importlib.util
 import re
 import sys
@@ -45,6 +46,10 @@ from pathlib import Path
 import pytest
 
 from tests_shared.markdown_surface import DOC_READING_SOURCES, MARKDOWN_TEST_SURFACE
+
+# The sweeps below parse every test file, and two of them parse the same files;
+# on one worker the parse cache in `_parsed` serves both (issue #4152).
+pytestmark = pytest.mark.xdist_group("markdown-surface")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -101,15 +106,51 @@ def _code_strings(tree: ast.AST) -> list[str]:
     ]
 
 
+@functools.cache
+def _parsed(rel: str) -> tuple[str, tuple[str, ...], tuple[str, ...]] | None:
+    """A tracked file's text, code strings and imported names, parsed once.
+
+    Only what the sweeps read is kept, never the tree itself: a cached AST of
+    every test file is millions of live objects that each later production
+    ``gc.collect()`` on this worker would have to rescan (issue #4152).
+    """
+    text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="ignore")
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:  # pragma: no cover - the repo does not carry unparseable Python
+        return None
+    imported: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.append(node.module)
+            imported.extend(f"{node.module}.{alias.name}" for alias in node.names)
+    return text, tuple(_code_strings(tree)), tuple(imported)
+
+
 def _doc_paths_named(path: Path, text: str) -> set[str]:
     """Tracked markdown paths this file names in code (see the module docstring)."""
     try:
         tree = ast.parse(text)
     except SyntaxError:  # pragma: no cover - the repo does not carry unparseable Python
         return set()
+    return _doc_paths_in(text, _code_strings(tree))
+
+
+def _doc_paths_in_file(rel: str) -> set[str]:
+    """:func:`_doc_paths_named` for a tracked file, through the parse cache."""
+    parsed = _parsed(rel)
+    if parsed is None:  # pragma: no cover
+        return set()
+    text, literals, _imported = parsed
+    return _doc_paths_in(text, literals)
+
+
+def _doc_paths_in(text: str, literals) -> set[str]:
     anchored = bool(_REPO_ROOT_ANCHOR.search(text))
     found = set()
-    for literal in _code_strings(tree):
+    for literal in literals:
         if "/" in literal and literal in TRACKED_MD:
             found.add(literal)
         elif anchored and literal in ROOT_MD:
@@ -166,7 +207,7 @@ class TestRegistryIsComplete:
         for rel in _python_under(SOURCE_ROOTS):
             if rel in DOC_READING_SOURCES:
                 continue
-            named = _doc_paths_named(REPO_ROOT / rel, (REPO_ROOT / rel).read_text(encoding="utf-8", errors="ignore"))
+            named = _doc_paths_in_file(rel)
             if named:
                 offenders[rel] = sorted(named)
         assert not offenders, (
@@ -186,7 +227,7 @@ class TestNoDocReaderOutsideTheSurface:
         for rel in _python_under(TEST_ROOTS):
             if _in_surface(rel):
                 continue
-            named = _doc_paths_named(REPO_ROOT / rel, (REPO_ROOT / rel).read_text(encoding="utf-8", errors="ignore"))
+            named = _doc_paths_in_file(rel)
             if named:
                 offenders[rel] = sorted(named)
         assert not offenders, (
@@ -203,26 +244,19 @@ class TestNoDocReaderOutsideTheSurface:
         for rel in _python_under(TEST_ROOTS):
             if _in_surface(rel):
                 continue
-            text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="ignore")
-            try:
-                tree = ast.parse(text)
-            except SyntaxError:  # pragma: no cover
+            parsed = _parsed(rel)
+            if parsed is None:  # pragma: no cover
                 continue
+            _text, literals, imported = parsed
             referenced = set()
-            for literal in _code_strings(tree):
+            for literal in literals:
                 for source, toks in tokens.items():
                     if any(tok in literal for tok in toks):
                         referenced.add(source)
-            for node in ast.walk(tree):
-                names: list[str] = []
-                if isinstance(node, ast.Import):
-                    names = [alias.name for alias in node.names]
-                elif isinstance(node, ast.ImportFrom) and node.module:
-                    names = [node.module] + [f"{node.module}.{alias.name}" for alias in node.names]
-                for name in names:
-                    for source, toks in tokens.items():
-                        if any(name == tok or name.startswith(tok + ".") for tok in toks):
-                            referenced.add(source)
+            for name in imported:
+                for source, toks in tokens.items():
+                    if any(name == tok or name.startswith(tok + ".") for tok in toks):
+                        referenced.add(source)
             if referenced:
                 offenders[rel] = sorted(referenced)
         assert not offenders, (

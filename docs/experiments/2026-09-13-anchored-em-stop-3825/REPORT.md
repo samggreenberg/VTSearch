@@ -1,5 +1,7 @@
 # The anchored refit was never converging, and 1e-3 is not the fix (issue #3825)
 
+> **⚠️ Raw-cell note (#4128, 2026-09-23).** The `coco_val × siglip` environment read **un-normalised** vectors (#4099), and it drove the adverse `ll1e-8` A/B headline: +0.035 ± 0.017 on its 14 cells. Without it the headline is +0.00069 ± 0.0033, which only strengthens shipping `ll1e-8`. See the [#4128 recheck](../2026-09-23-coco-siglip-recheck-4128/REPORT.md).
+
 [#3825](https://github.com/samggreenberg/VTSearch/issues/3825) came out of
 [#3585](https://github.com/samggreenberg/VTSearch/issues/3585)'s own
 measurement. Having made the *initialiser* five times cheaper, #3585 timed the

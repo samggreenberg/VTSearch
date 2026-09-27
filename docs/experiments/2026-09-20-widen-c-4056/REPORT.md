@@ -1,6 +1,6 @@
 # Widening *C* to 53 costs nothing in supply, and almost nothing in accuracy
 
-**Issue:** #4056. **Dataset:** `coco_quarry`, COCO 2017 train+val, 123,287
+**Issue:** #4056. **Dataset:** `coco_better`, COCO 2017 train+val, 123,287
 images. **Date:** 2026-09-20. **Corrected 2026-09-20** — see *The correction*.
 
 ## Verdict
@@ -31,7 +31,7 @@ Three statistics agree on the same reading, and they are not redundant:
 
 ![The pool really does empty, and it reaches the benchmark anyway](figures/widening-empties-the-pool.png)
 
-**What a reader should do with a published `coco_quarry` number:** nothing, for
+**What a reader should do with a published `coco_better` number:** nothing, for
 any conclusion that survives 0.03 AP, and re-read the cell against the current
 build for anything finer. Rankings are untouched.
 
@@ -48,7 +48,7 @@ read **+0.2447 ± 0.0230** (`siglip`) easier. Every number in that measurement i
 reproducible and none of it is retracted.
 
 **What was wrong was treating it as what a rebuild does.** A real
-`coco_quarry` cell's negatives are barren **plus** #3667's cross-class
+`coco_better` cell's negatives are barren **plus** #3667's cross-class
 negatives, and the rebuild moves both:
 
 | | *C* = 25 | *C* = 53 |
@@ -65,7 +65,7 @@ builds, so the emptiness the first instrument found is real but reaches a
 fixed-size slice — and that slice's share of the cell falls from 60% to 42% as
 the cross-class negatives more than double. The configuration the simulation
 measured, where the barren component is the whole pool *and* varies with the
-roster, is not a state `coco_quarry` ever occupies.
+roster, is not a state `coco_better` ever occupies.
 
 **The lesson is the one #3986 learned the hard way two hours earlier and this
 report did not apply to itself**: a probe that changes one component of a
@@ -119,7 +119,7 @@ asserts it and refuses to report a difference if it fails. `build_pile.py
 --verify` passes.
 
 **The 25-class build is preserved** at
-`/expscratch/sgreenberg/keep/coco-quarry-25-20260920/`, byte-for-byte, because a
+`/expscratch/sgreenberg/keep/coco-better-25-20260920/`, byte-for-byte, because a
 rebuild here is a *replace*: every old cell's negatives were drawn as *holds
 none of the 25* and cannot survive a wider *C*. `SCALE_CLASSES_25` freezes the
 roster; the copy is what makes that promise keepable rather than rhetorical.

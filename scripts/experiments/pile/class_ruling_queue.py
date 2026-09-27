@@ -64,7 +64,7 @@ MAX_SIDE = 900
 #: * only then upscale, to ``MIN_SIDE``.
 #:
 #: Widening makes "which object is the question?" ambiguous, so the target is
-#: outlined -- the same convention the DocMarks queues use.
+#: outlined -- the same convention the FullMarks queues use.
 MIN_WINDOW = 480
 MIN_SIDE = 640
 QUALITY = 85
@@ -221,7 +221,7 @@ def main() -> int:
     )
     print(f"\nwrote {len(manifest)} crops to {outdir}")
     print(f"size: median {kb[len(kb) // 2]:.0f} KB, p90 {kb[int(0.9 * len(kb))]:.0f} KB, max {kb[-1]:.0f} KB")
-    print("(budget from the DocMarks passes: ~124 KB median / ~169 KB p90)")
+    print("(budget from the FullMarks passes: ~124 KB median / ~169 KB p90)")
     return 0
 
 

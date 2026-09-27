@@ -230,6 +230,7 @@ def _train_and_calibrate(
     fold_count_variants: list[int] | None = None,
     calibration_seed: int = CALIBRATION_SPLIT_SEED,
     haystack_X: Any = None,
+    fold_anchored: bool = False,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
 
@@ -238,6 +239,11 @@ def _train_and_calibrate(
     (:func:`_rank_transferred_threshold`); ``None`` leaves every path on its
     raw-score rule.  It is ignored by the app path, whose shipped estimator
     already transfers by rank.
+
+    *fold_anchored* (``gp_*`` path only, issue #3959) makes the GP path hand
+    back its own calibration fold models and held-out orderings, drawn on the
+    app's splits, so the shipped fold-anchored estimator can run on the GP's
+    posteriors (see :func:`_gp_train_and_calibrate`).
 
     *head* selects the head on both production paths (see :data:`HEADS`):
     ``"linear_svm"`` (the default, :data:`PRODUCTION_HEAD`) trains the head the
@@ -307,7 +313,10 @@ def _train_and_calibrate(
             calibration_fraction=calibration_fraction,
             calibration_seed=calibration_seed,
             haystack_X=haystack_X,
+            fold_anchored=fold_anchored,
         )
+    if fold_anchored:
+        raise ValueError(f"fold_anchored applies to the gp_* trainers only; got trainer={trainer!r}")
     return _svm_train_and_calibrate(
         trainer,
         good_votes,
@@ -815,6 +824,7 @@ def _gp_train_and_calibrate(
     calibration_fraction: float,
     calibration_seed: int = CALIBRATION_SPLIT_SEED,
     haystack_X: Any = None,
+    fold_anchored: bool = False,
 ) -> tuple[StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Gaussian-process path (issue #3954) - single-vector only, like the SVM path.
 
@@ -833,7 +843,24 @@ def _gp_train_and_calibrate(
     ``autopilot_uncertainty`` / ``autopilot_maxvar`` strategies read to choose
     the next question.  The fold count and split are the app's; nothing about
     the calibration rule is GP-aware.
+
+    *fold_anchored* is the GP-native threshold (issue #3959).  The calibration
+    folds are drawn by the app's own
+    :func:`~vtscore.training.thresholds.compute_fold_orderings` (same dithered
+    split sizes, same stratified draws off ``RandomState(calibration_seed)``),
+    with a GP fitted in place of the torch head on each fold.  The fold models
+    and their held-out orderings go back in *details* under the keys the app
+    path uses, so the shipped fold-anchored estimator
+    (:func:`vtscore.eval.voting_iterations._safe_threshold_for_step`) fits each
+    fold's mixture on **that fold GP's own** haystack scores, anchored by its
+    held-out votes, and carries the cut to the final GP by quantile.  No raw
+    score crosses between models, which is what broke the transferred cuts in
+    the #3954 pilot.  The returned threshold is the plain conformal cut of the
+    same folds (the fallback blend's x-cal side), and a fold fallback is
+    reported as production reports it.  Mutually exclusive with *haystack_X*.
     """
+    if fold_anchored and haystack_X is not None:
+        raise ValueError("fold_anchored and the rank-transferred cut (haystack_X) are two different rules; pick one")
     from vtscore.eval.sweep_trainers import resolve_trainer  # noqa: PLC0415
 
     X = np.array(
@@ -851,7 +878,18 @@ def _gp_train_and_calibrate(
     train_seconds = time.monotonic() - t_train
 
     t_xcal = time.monotonic()
-    if haystack_X is None:
+    details: dict[str, Any]
+    if fold_anchored:
+        threshold, details = _gp_fold_orderings(
+            trainer_fn,
+            X,
+            y,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            calibration_seed=calibration_seed,
+        )
+    elif haystack_X is None:
         threshold = _cross_calibrated_threshold(
             X,
             y,
@@ -861,7 +899,7 @@ def _gp_train_and_calibrate(
             calibrate_count=calibrate_count,
             cal_fraction=calibration_fraction,
         )
-        rule = "xcal_raw"
+        details = {"threshold_rule": "xcal_raw"}
     else:
         threshold = _rank_transferred_threshold(
             X,
@@ -874,7 +912,7 @@ def _gp_train_and_calibrate(
             calibrate_count=calibrate_count,
             cal_fraction=calibration_fraction,
         )
-        rule = "xcal_rank"
+        details = {"threshold_rule": "xcal_rank"}
     xcal_seconds = time.monotonic() - t_xcal
 
     def predict(X_test: Any) -> "np.ndarray":
@@ -898,8 +936,65 @@ def _gp_train_and_calibrate(
         threshold,
         n_labels,
         {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds},
-        {"threshold_rule": rule},
+        details,
     )
+
+
+def _gp_fold_orderings(
+    trainer_fn: Any,
+    X: "np.ndarray",
+    y: "np.ndarray",
+    *,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    calibration_seed: int,
+) -> tuple[float, dict[str, Any]]:
+    """The GP's calibration folds on the app's splits, shaped like the app path's *details*.
+
+    Returns ``(conformal_threshold, details)`` with ``fold_models`` (one
+    ``predict(X) -> P(positive)`` callable per fold), ``fold_orderings``,
+    ``fold_fallback`` and ``provenance`` - the keys
+    :func:`vtscore.eval.voting_iterations._safe_threshold_for_step` reads.
+    Each fold GP is fitted with the final model's pinned seed (42), as the
+    app's fold heads share its pinned training seed.
+    """
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        classify_threshold_provenance,
+        compute_fold_orderings,
+        threshold_from_fold_orderings,
+    )
+
+    def fold_fit(X_tr: "np.ndarray", y_tr: "np.ndarray") -> Any:
+        fitted = trainer_fn(np.asarray(X_tr, dtype=np.float32), np.asarray(y_tr).astype(np.int32), 42)
+        return lambda X_q: _as_scores(fitted(np.asarray(X_q, dtype=np.float32)))
+
+    fold_models: list[Any] = []
+    orderings, fallback = compute_fold_orderings(
+        list(X),
+        [float(v) for v in y],
+        int(X.shape[1]),
+        rng=np.random.RandomState(calibration_seed),
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        model_sink=fold_models,
+        fold_fit=fold_fit,
+    )
+    if fallback is not None:
+        return fallback, {
+            "threshold_rule": "fold_anchored",
+            "provenance": classify_threshold_provenance(fallback),
+            "fold_orderings": [],
+            "fold_models": [],
+            "fold_fallback": fallback,
+        }
+    return threshold_from_fold_orderings(orderings, inclusion), {
+        "threshold_rule": "fold_anchored",
+        "provenance": classify_threshold_provenance(None),
+        "fold_orderings": orderings,
+        "fold_models": fold_models,
+        "fold_fallback": None,
+    }
 
 
 def _rank_transferred_threshold(

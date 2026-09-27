@@ -2680,23 +2680,44 @@ def _argmin_cut(scores: np.ndarray, labels: np.ndarray, inclusion: int) -> float
     return best
 
 
-def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, grid: np.ndarray) -> np.ndarray:
-    """``(w_f·FPR + w_n·FNR) / (w_f + w_n)`` over a grid of cut positions.
+#: The smallest share of the cost the cheaper error is *drawn* at. At k = ±10
+#: the true share is about a thousandth, which is a flat line on any drawing —
+#: and a flat line says the cheap error is free, which is exactly what a price
+#: of 1/1024 does not mean. So the drawing floors it here: every error still
+#: raises the curve, visibly and by a little, and the steps the expensive error
+#: makes stay the steps the eye compares. Exaggerated, and the notes say so;
+#: the argmin the figure is about is unaffected, because the band where both
+#: curves sit at zero has no error of either kind in it to price.
+KNOB_CHEAP_SHARE = 0.18
 
-    Divided by the weights' sum only so the two ends of the knob — which price
-    the two errors a thousand to one in opposite directions — can be drawn on
-    one vertical scale. It is a rescaling by a positive constant, so it moves
-    neither the curve's shape nor its argmin, which are the two things the
-    figure reads off it.
+
+def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, grid: np.ndarray) -> np.ndarray:
+    """``(w_f·FPR + w_n·FNR) / (w_f + w_n)`` over a grid of cut positions, as drawn.
+
+    Divided by the weights' sum so the two ends of the knob — which price the
+    two errors a thousand to one in opposite directions — can be drawn on one
+    vertical scale, and with the cheaper error's share floored at
+    `KNOB_CHEAP_SHARE` so it can be seen at all. Neither moves the curve's
+    zero band or its argmin, which are the two things the figure reads off it.
     """
     fpr_weight, fnr_weight = inclusion_cost_weights(inclusion)
+    fpr_share = fpr_weight / (fpr_weight + fnr_weight)
+    fpr_share = min(max(fpr_share, KNOB_CHEAP_SHARE), 1.0 - KNOB_CHEAP_SHARE)
     neg, pos = scores[labels == 0], scores[labels == 1]
     fpr = np.array([float((neg > t).mean()) for t in grid])
     fnr = np.array([float((pos <= t).mean()) for t in grid])
-    return (fpr_weight * fpr + fnr_weight * fnr) / (fpr_weight + fnr_weight)
+    return fpr_share * fpr + (1.0 - fpr_share) * fnr
 
 
-def _incl_panel(ax: plt.Axes, y_base: float, top: float, *, votes: bool = True) -> None:
+def _incl_panel(
+    ax: plt.Axes,
+    y_base: float,
+    top: float,
+    *,
+    votes: bool = True,
+    x0: float = INCL_PANEL_X0,
+    w: float = INCL_PANEL_W,
+) -> None:
     """Part 2's shared evidence row: a score axis, and the held-out votes on it.
 
     **No histogram.** Both rules this section compares — the retired cost search
@@ -2711,7 +2732,6 @@ def _incl_panel(ax: plt.Axes, y_base: float, top: float, *, votes: bool = True) 
     model scored which half is the fact the whole progression turns on — and
     `M_1(D_{-1})` goes with the bars, because the corpus is no longer on screen.
     """
-    x0, w = INCL_PANEL_X0, INCL_PANEL_W
     _range_line(ax, x0, x0 + w, y_base, z=5)
     if votes:
         ax.text(x0, top + LABEL_GAP, _sub("M_1(D_2)"), ha="left", va="bottom", fontsize=16, color=INK)
@@ -2829,6 +2849,14 @@ def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
 #: of white a third of the figure deep.
 KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_base"] + RANGE_FOOT + 0.25
 
+#: The knob figure's own panel, wider than the one the rest of Part 2 shares.
+#: This figure is short enough that, centred on the slide, its top row already
+#: sits below the title notch, so it needs no indent: it runs from the left
+#: margin and spends the column of white the indent used to leave under the
+#: headline. `save()`'s notch check is what holds that claim.
+KNOB_PANEL_X0 = 0.9
+KNOB_PANEL_W = INCL_CANVAS_W - KNOB_PANEL_X0 - 0.9
+
 
 def knob_flow_fig() -> None:
     """Schematic of the knob that did not turn — Part 2's opening figure (#3218).
@@ -2867,7 +2895,7 @@ def knob_flow_fig() -> None:
 def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = _incl_figure(KNOB_CANVAS_H)
-    x0, w = INCL_PANEL_X0, INCL_PANEL_W
+    x0, w = KNOB_PANEL_X0, KNOB_PANEL_W
 
     # The cost panel's own labels sit above it, so the object gap below the cut's
     # name is measured to *them* rather than to the curves they name; `_incl_rows`
@@ -2877,25 +2905,63 @@ def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.
     cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
 
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
-    _incl_panel(ax, y_base, panel_top)
+    _incl_panel(ax, y_base, panel_top, x0=x0, w=w)
 
-    # ── stage 2: the only cuts the search can return ──────────────────────────
-    # A tick per observed vote score. Shorter than the progression's own cut
-    # notch and in soft grey: these are candidates, not a decision.
-    if stage >= 2:
-        for score in scores:
-            ax.plot([x0 + score * w] * 2, [y_base - 0.18, y_base], color=SOFT, linewidth=1.6, zorder=5)
-
-    # ── stage 3: what a cut costs, at the two ends of the knob ────────────────
-    # Drawn together because the whole content is that they agree. At k = +10 a
-    # miss is priced 1024:1 and the curve is essentially the false-negative
-    # rate; at k = -10 it is essentially the false-positive rate. Between the
-    # top ✗ and the bottom ✓ neither error is possible, so both curves sit on
-    # zero — and every cut in that band is optimal at every setting of a knob
-    # whose two ends are three orders of magnitude apart.
+    # ── stages 2-3: what a cut costs, at one end of the knob and then both ────
+    # One curve first, so the room reads how a cost curve is built before it
+    # is asked to compare two: at k = -10 a false alarm is priced a thousand to
+    # one, so the curve falls a step at every ✗ the cut passes. Then the other
+    # end, its mirror. Between the top ✗ and the bottom ✓ neither error is
+    # possible, so both sit on zero — and every cut in that band is optimal at
+    # every setting of a knob whose two ends are three orders of magnitude
+    # apart.
+    #
+    # Weighted like the three prices on the slide before (`COST_WEIGHTS`): light
+    # for the end that fears false alarms, bold for the end that fears misses.
+    # Both solid, for the reason given there — one quantity at two settings.
     band_lo, band_hi = float(scores[labels == 0].max()), float(scores[labels == 1].min())
     band_mid = (band_lo + band_hi) / 2
+    grid = np.linspace(0.0, 1.0, 800)
+    ends = ((-10, COST_WEIGHTS[0], 0.035), (10, COST_WEIGHTS[-1], 0.965))
+    for reveal, (inclusion, weight, name_at) in enumerate(ends, start=2):
+        if stage < reveal:
+            continue
+        curve = _normalised_cost(scores, labels, inclusion, grid)
+        ax.plot(
+            x0 + grid * w,
+            cost_base + curve * cost_h,
+            color=INK,
+            linewidth=weight,
+            solid_joinstyle="miter",
+            zorder=3,
+        )
+        ax.text(
+            x0 + name_at * w,
+            cost_label_y,
+            _sub(rf"k = {inclusion:+d}"),
+            ha="right" if inclusion > 0 else "left",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+    if stage >= 2:
+        _range_line(ax, x0, x0 + w, cost_base, z=4)
+        # The row's name is the definition of the knob, which is the one thing
+        # every rule in this section shares — and putting it here rather than in
+        # the slide's own copy means the pair of figures carries it, so the walk
+        # figure's identical row is read against the same sentence.
+        ax.text(
+            x0 + band_mid * w,
+            cost_label_y,
+            _sub(r"cost = w_f\cdot FPR + w_n\cdot FNR"),
+            ha="center",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
     if stage >= 3:
+        # The band arrives with the second curve, because it is what the two
+        # agree on: the one stretch where both are at zero.
         ax.add_patch(
             Rectangle(
                 (x0 + band_lo * w, cost_base),
@@ -2919,58 +2985,16 @@ def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.
                 linewidth=1.4,
                 zorder=0,
             )
-        grid = np.linspace(0.0, 1.0, 800)
-        for inclusion, style, name_at in ((10, "solid", 0.965), (-10, (0, (4, 3)), 0.035)):
-            curve = _normalised_cost(scores, labels, inclusion, grid)
-            ax.plot(
-                x0 + grid * w,
-                cost_base + curve * cost_h,
-                color=INK,
-                linewidth=2.2,
-                linestyle=style,
-                zorder=3,
-            )
-            ax.text(
-                x0 + name_at * w,
-                cost_label_y,
-                _sub(rf"k = {inclusion:+d}"),
-                ha="right" if inclusion > 0 else "left",
-                va="bottom",
-                fontsize=15,
-                color=INK,
-            )
-        _range_line(ax, x0, x0 + w, cost_base, z=4)
-        # The row's name is the definition of the knob, which is the one thing
-        # every rule in this section shares — and putting it here rather than in
-        # the slide's own copy means the pair of figures carries it, so the walk
-        # figure's identical row is read against the same sentence.
-        ax.text(
-            x0 + band_mid * w,
-            cost_label_y,
-            _sub(r"cost = w_f\cdot FPR + w_n\cdot FNR"),
-            ha="center",
-            va="bottom",
-            fontsize=16,
-            color=INK,
-        )
-        ax.text(
-            x0 + band_mid * w,
-            cost_base + LABEL_GAP,
-            "zero, either way",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=SOFT,
-        )
 
     # ── stage 4: turn the knob, twenty-one times, and watch ───────────────────
-    # Twenty-one cuts land on one score, so the reveal is one notch — named θ,
-    # like every other cut in the deck, and not narrated. The three sentences
-    # that used to stand here ("no ✗ ranks above a ✓", "so the search has one
-    # optimum, at every price", "θ at all 21 stops") were the presenter's lines
-    # written onto the slide; they are in the fragment's notes, where the rest
-    # of the deck keeps its prose (#3301).
+    # The search only ever looked at the observed vote scores — a soft tick
+    # under each — and twenty-one cuts land on one of them, so the reveal is
+    # one notch: named θ, like every other cut in the deck, and not narrated.
+    # The ticks used to be a build page of their own, which drew nothing the
+    # room could see arrive; they come in with the answer they constrain.
     if stage >= 4:
+        for score in scores:
+            ax.plot([x0 + score * w] * 2, [y_base - 0.18, y_base], color=SOFT, linewidth=1.6, zorder=5)
         cuts = [_argmin_cut(scores, labels, k) for k in INCL_KNOB]
         for cut in cuts:
             ax.plot([x0 + cut * w] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
@@ -3428,32 +3452,42 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 #: being width-limited in the slot and the type starts shrinking.
 ACQ_CANVAS_H = 13.46
 
-#: The acquisition figure's panel and the ranking bar under it.
-#: Shifted right with the rest of Part 2 to clear the title notch (#3242).
-#: This figure's blocker was not its score axis but the loop: `D_0` sits in the
-#: top-left corner and the return arrow enters it horizontally, so the whole
-#: drawing — rail, block and panel — moves right together rather than the panel
-#: alone. It had the room: the old layout left the right third of the canvas
-#: empty, which is exactly what the shift spends.
-ACQ_PANEL_X0, ACQ_PANEL_W, ACQ_PANEL_H = 11.05, 10.3, 2.0
+#: The acquisition figure's two halves, and they are deliberately *not*
+#: stacked on one x axis. The histogram is a score axis and the ranking bar is
+#: a rank axis — not the same scale, not even linearly related — and drawn
+#: flush under one another they read as one axis twice, with the cut on the
+#: bar looking as if it should sit under θ on the histogram. So the calibration
+#: half (the histogram) is slid left and the selection half (the ranking and
+#: its zoom) slid right, overlapping only in the middle.
+#:
+#: `M_0` stays where the top row needs it — the `train` arrow out of `D_0` has
+#: a minimum length (`arrow_len_for`), and `D_0` cannot move left into the
+#: title notch — so the score arrow lands on the histogram right of centre.
+ACQ_HIST_X0, ACQ_HIST_W, ACQ_PANEL_H = 7.4, 9.6, 2.0
+ACQ_M0_X = 14.14
+ACQ_RANK_X0, ACQ_RANK_W = 12.4, 10.3
 ACQ_GAUGE_H = 0.34
 
-#: The zoom strip: how many items of the ranking it shows, and how tall a cell
-#: is. Twenty-one is chosen from the drawing's own numbers rather than for
-#: looks — one step of the knob moves this estimator's cut about eight items of
-#: six thousand, so a window of twenty-one is the smallest that holds both cuts
-#: *and* the gap between them at their true separation.
-ACQ_ZOOM_CELLS = 21
+#: The zoom strip is inset from the ranking it enlarges by this much at each
+#: end: an enlargement drawn exactly as wide as the thing it enlarges reads as
+#: a second copy of it rather than as a closer look at one part.
+ACQ_ZOOM_INSET = 0.8
 ACQ_ZOOM_H = 0.62
+
+#: How many items the zoom shows either side of the two cuts. The window is
+#: sized from the drawing's own numbers rather than for looks: it holds both
+#: cuts *and* the gap between them at their true separation, which at the
+#: shipped offset is some twenty-six items of six thousand, plus this margin.
+ACQ_ZOOM_MARGIN = 5
 
 #: How far the zoomed ranking hangs below the full one, leaving room for the
 #: callout lines that tie the two together and for the pick's own name.
 ACQ_ZOOM_DROP = 1.2
 
 #: Which cells of the zoom carry votes rather than unlabeled media, as
-#: `(index, is_good)`. Two of twenty-one: near the cut almost everything is
+#: `(index, is_good)`. Three of thirty-six: near the cut almost everything is
 #: unlabeled, which is the whole reason there is something to ask about.
-ACQ_ZOOM_VOTES = ((3, False), (17, True))
+ACQ_ZOOM_VOTES = ((3, False), (14, True), (23, True))
 
 
 def acq_flow_fig() -> None:
@@ -3475,18 +3509,18 @@ def acq_flow_fig() -> None:
 
     The direction is the opposite of the intuition from the cost weights, so the
     figure draws it at its true size rather than at a legible one: on this
-    corpus one step of the knob is about eight items in six thousand, which is
-    why the ranking is zoomed rather than merely notched twice. The gap is small
-    and it compounds — every pick it changes changes a vote, and every vote
-    retrains the model, which is the arrow that closes the loop back to D₀.
+    corpus the shipped offset moves the cut some twenty-six items in six
+    thousand, which is why the ranking is zoomed rather than merely notched
+    twice. The gap is small and it compounds — every pick it changes changes a
+    vote, and every vote retrains the model, which is the arrow that closes the
+    loop back to D₀.
 
-    Measured record, and it is not a clean one:
-    ``coco_val × siglip2`` found an interior optimum at −3 (positives per 100
-    votes 4 → 18, average precision 0.696 → 0.817), ``visual_genome_m × siglip``
-    rejected −3 against a +0.01 tolerance, and only −1 passed in both. The
-    region-voting leg is void pending a re-run (#2943), and a supply-dependent
-    offset is the open frontier (#2910). See
-    ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md``.
+    Measured record, and it is not a clean one: ``coco_val × siglip2`` found an
+    interior optimum at −3 (positives per 100 votes 4 → 18, average precision
+    0.696 → 0.817), ``visual_genome_m × siglip`` rejected −3 on labels that miss
+    a quarter of the true positives, and the verified-label pile (#3319) went
+    past −4 and shipped it. The history lives beside the constant, in
+    :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`.
     """
     folds, final = _xquant_populations()
     last = _acq_flow_stage(ACQ_FLOW_STAGES, folds, final)
@@ -3515,7 +3549,8 @@ def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str,
 def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = _incl_figure(ACQ_CANVAS_H)
-    x0, w = ACQ_PANEL_X0, ACQ_PANEL_W
+    hx0, hw = ACQ_HIST_X0, ACQ_HIST_W
+    x0, w = ACQ_RANK_X0, ACQ_RANK_W
 
     cut = _xquant_cut(folds, final)
     k_acq = acquisition_inclusion(0)
@@ -3534,7 +3569,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     block_y0 = block_top - block_h
     row_y = block_y0 + block_h / 2
 
-    m0x = x0 + 0.30 * w
+    m0x = ACQ_M0_X
     score_len = arrow_len_for("score")
     panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
     y_base = panel_top - ACQ_PANEL_H
@@ -3552,14 +3587,15 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
     zoom_top = gauge_y0 - ACQ_ZOOM_DROP
     zoom_y0 = zoom_top - ACQ_ZOOM_H
-    cell_w = w / ACQ_ZOOM_CELLS
-    # The window is centred on the reporting cut and holds the acquisition cut at
-    # its true distance: one step of the knob is about eight items in six
-    # thousand here, and drawing that gap wider than it is would be the one lie
-    # the figure could tell that actually matters.
+    zx0, zw = x0 + ACQ_ZOOM_INSET, w - 2 * ACQ_ZOOM_INSET
+    # The window holds both cuts at their true distance, centred between them:
+    # drawing that gap wider or narrower than it is would be the one lie the
+    # figure could tell that actually matters.
     gap_cells = (q_acq - q_report) * final.size
-    report_cell = (ACQ_ZOOM_CELLS - gap_cells) / 2
-    zoom_report_x = x0 + report_cell * cell_w
+    zoom_cells = int(np.ceil(gap_cells)) + 2 * ACQ_ZOOM_MARGIN
+    cell_w = zw / zoom_cells
+    report_cell = (zoom_cells - gap_cells) / 2
+    zoom_report_x = zx0 + report_cell * cell_w
     zoom_acq_x = zoom_report_x + gap_cells * cell_w
     # The app ranks descending and takes the first position at or below the cut,
     # so the pick is the item the cut falls *into*, not the one above it.
@@ -3570,8 +3606,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     ask_y = cut_label_bottom - OBJECT_GAP - CAP_16 - LABEL_GAP
     conclusion_y = ask_y - OBJECT_GAP - 0.24
 
-    def row_name(y: float, text: str, size: float = 15.0) -> None:
-        ax.text(x0 - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
+    def row_name(x: float, y: float, text: str, size: float = 15.0) -> None:
+        ax.text(x - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
 
     # ── stage 1: where the calibration talk left off ──────────────────────────
     ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
@@ -3586,11 +3622,11 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
         "score",
         z=2.1,
     )
-    ax.text(x0 + w, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
-    _score_histogram(ax, x0, y_base, w, ACQ_PANEL_H, None, final, fill="plain", mu_labels=False)
-    _theta_notch(ax, x0 + theta_report * w, y_base, _sub(r"\theta_{report}"))
+    ax.text(hx0 + hw, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
+    _score_histogram(ax, hx0, y_base, hw, ACQ_PANEL_H, None, final, fill="plain", mu_labels=False)
+    _theta_notch(ax, hx0 + theta_report * hw, y_base, _sub(r"\theta_{report}"))
     _quantile_gauge(ax, x0, gauge_y0, w, ACQ_GAUGE_H, q_report, "")
-    row_name(gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
+    row_name(x0, gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
 
     # ── stage 2: job one — the cut read as a decision boundary ───────────────
     if stage >= 2:
@@ -3615,13 +3651,13 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
     # ── stage 3: job two reads the same number as a rank, so zoom in ─────────
     if stage >= 3:
-        for i in range(ACQ_ZOOM_CELLS):
+        for i in range(zoom_cells):
             kind = "unlabeled"
             for idx, good in ACQ_ZOOM_VOTES:
                 if idx == i:
                     kind = "good" if good else "bad"
-            _acq_cell(ax, x0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
-        for target in (x0, x0 + w):
+            _acq_cell(ax, zx0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
+        for target in (zx0, zx0 + zw):
             ax.plot(
                 [x0 + q_report * w, target],
                 [gauge_y0, zoom_top],
@@ -3629,33 +3665,36 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
                 linewidth=1.4,
                 zorder=0,
             )
-        row_name(zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
+        row_name(zx0, zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
+        # The two cuts' names sit *between* them, each against its own tick: the
+        # gap is wide enough to hold both, and a name hung outside the window
+        # would widen the figure and shrink everything in the slot.
         ax.plot([zoom_report_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
         ax.text(
-            zoom_report_x - LABEL_GAP,
+            zoom_report_x + LABEL_GAP,
             zoom_y0 - 0.32 - LABEL_GAP,
             _sub(r"\theta_{report}"),
-            ha="right",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-
-    # ── stage 4: the second cut, one step of the knob further up the ranking ──
-    if stage >= 4:
-        ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
-        ax.text(
-            zoom_acq_x + LABEL_GAP,
-            zoom_y0 - 0.32 - LABEL_GAP,
-            _sub(rf"\theta_{{acq}}\ \ (k = {k_acq})"),
             ha="left",
             va="top",
             fontsize=16,
             color=INK,
         )
-        _acq_cell(ax, x0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+
+    # ── stage 4: the second cut, a few steps of the knob further up the ranking
+    if stage >= 4:
+        ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
         ax.text(
-            x0 + (pick_index + 0.5) * cell_w,
+            zoom_acq_x - LABEL_GAP,
+            zoom_y0 - 0.32 - LABEL_GAP,
+            _sub(rf"\theta_{{acq}}\ \ (k = {k_acq})"),
+            ha="right",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+        _acq_cell(ax, zx0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+        ax.text(
+            zx0 + (pick_index + 0.5) * cell_w,
             zoom_top + LABEL_GAP,
             "ask about this one",
             ha="center",
@@ -3670,7 +3709,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     # step has to say is that the threshold chooses what gets voted on, which a
     # clean rectangular return says more plainly than a shortcut.
     if stage >= 5:
-        pick_cx = x0 + (pick_index + 0.5) * cell_w
+        pick_cx = zx0 + (pick_index + 0.5) * cell_w
         ax.plot(
             [pick_cx, pick_cx, rail_x, rail_x],
             [cut_label_bottom - OBJECT_GAP, ask_y, ask_y, row_y],
@@ -3707,45 +3746,92 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
 
 def blend_schedule_fig() -> None:
+    """Slide 13: how far the blend lets the cross-calibrated cut move, per voting mode.
+
+    Two panels, because the two modes no longer share a *kind* of schedule and
+    one set of axes would force them to. Region voting still averages, so its
+    panel is a weight over votes: ``slow_cap50`` against the historical ramp it
+    replaced. Binary voting ships ``corridor20`` (#3551), which is a clamp, not
+    a weight — a weight axis cannot draw it — so its panel is the score axis
+    itself, with the band the x-cal cut is kept inside.
+
+    Everything here is computed from the shipped registry
+    (`production_schedule_for`), so the slide moves when the schedule does.
+    """
+    from types import SimpleNamespace
+
+    from vtscore.training.blend_schedules import production_schedule_for
+
+    region = production_schedule_for(region_voting=True)
+    binary = production_schedule_for(region_voting=False)
+
+    fig = plt.figure(figsize=(12.8, 7.2))
+    # ── left: region voting, a weight over votes ─────────────────────────────
+    ax = fig.add_axes([0.40, 0.56, 0.57, 0.33])
     n = np.arange(0, 121)
-    fig, ax = plt.subplots(figsize=(11.5, 6.5))
-    for name, color, style, label, xy, ha, va in (
-        ("prod", SOFT, (0, (4, 3)), "historical ramp:\npure x-cal by 20 votes", (40, 0.96), "left", "top"),
-        ("cap50", BLUE, (0, (1, 1.6)), "cap50 — binary voting", (23, 0.42), "left", "top"),
-        ("slow_cap50", BLUE, "solid", "slow_cap50 — region voting", (44, 0.55), "left", "bottom"),
-    ):
-        w = [
+
+    def curve(name: str) -> list[float]:
+        return [
             get_schedule(name).weight(BlendContext(n_labels=int(k), n_good=int(k) // 2, n_bad=int(k) - int(k) // 2))
             for k in n
         ]
-        ax.plot(n, w, color=color, linestyle=style, linewidth=2.4)
-        ax.annotate(label, xy=xy, ha=ha, va=va, fontsize=15, color=color)
+
+    ax.plot(n, curve("prod"), color=SOFT, linestyle=(0, (4, 3)), linewidth=2.2)
+    ax.plot(n, curve(region), color=BLUE, linewidth=2.8)
+    ax.annotate("the old ramp: all x-cal by 20 votes", xy=(60, 0.90), ha="left", va="top", fontsize=15, color=SOFT)
+    ax.annotate(
+        f"{region}: never past half", xy=(50, 0.5), xytext=(50, 0.60), ha="left", va="bottom", fontsize=15, color=BLUE
+    )
     ax.set_xlim(0, 122)
-    ax.set_ylim(-0.02, 1.08)
-    ax.set_yticks([0, 0.5, 1.0], ["pure\nGMM", "0.5", "pure\nx-cal"])
-    ax.set_xlabel("votes")
-    # Short enough not to overflow the (shortened) axes above the title notch;
-    # the tick labels already read "pure GMM" to "pure x-cal", so the axis name
-    # only has to name the quantity, not re-explain the ends.
-    # Anchored to the bottom of the axis, out of the title reserve's own band:
-    # the reserve is only the *top* left corner, so a label that lives low on
-    # the left costs the drawing nothing.
-    ax.set_ylabel("weight on the x-cal cut", loc="bottom")
+    ax.set_ylim(-0.03, 1.12)
+    ax.set_yticks([0, 0.5, 1.0], ["GMM", "half", "x-cal"])
+    ax.set_xlabel("votes", labelpad=2)
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
-    # Full-bleed: no in-figure title (the slide's headline is the title, drawn
-    # over the top-left corner), and the axes are *indented* past the reserve
-    # rather than pushed under it. Pushing the plot down to `top=0.55` cleared
-    # the corner by spending half the slide, which `slides/STYLE.md` names as
-    # the wrong repair for exactly this shape: the blocker is horizontal, so
-    # the fix is horizontal (#3246).
-    # Indented past the title reserve, which ends at figure x 0.281 here — and
-    # further than the reserve alone needs. Centring the y-label on its axis
-    # (rather than parking it at the bottom, as it used to be) puts a 2.4-inch
-    # rotated string across the middle of the left margin, and the only way a
-    # *centred* label clears the reserve is horizontally. The width this costs
-    # the plot goes to the legend, which lives in the same margin.
-    fig.subplots_adjust(left=0.40, right=0.98, top=0.93, bottom=0.135)
+    fig.text(
+        0.40, 0.955, "region voting: a weight that stops at half", fontsize=17, fontweight="bold", color=INK, va="top"
+    )
+
+    # ── right: binary voting, a clamp on the score axis ──────────────────────
+    ax = fig.add_axes([0.06, 0.07, 0.91, 0.30])
+    mu_lo, mu_hi, sd = 0.22, 0.78, 0.09
+    xs = np.linspace(0, 1, 400)
+    for mu, colour in ((mu_lo, RED), (mu_hi, GREEN)):
+        ax.fill_between(xs, 0, np.exp(-0.5 * ((xs - mu) / sd) ** 2), color=colour, alpha=0.18, linewidth=0)
+        ax.plot(xs, np.exp(-0.5 * ((xs - mu) / sd) ** 2), color=colour, linewidth=1.8)
+    fit = SimpleNamespace(mu_lo=mu_lo, mu_hi=mu_hi)
+    gmm = (mu_lo + mu_hi) / 2
+    ctx = BlendContext(n_labels=10, n_good=5, n_bad=5)
+    schedule = get_schedule(binary)
+    lo_edge = schedule.combine(-10.0, gmm, ctx, fit)
+    hi_edge = schedule.combine(10.0, gmm, ctx, fit)
+    ax.axvspan(lo_edge, hi_edge, color=BLUE, alpha=0.16, linewidth=0)
+    ax.plot([gmm, gmm], [0, 1.18], color=BLUE, linewidth=2.2)
+    ax.text(gmm, 1.22, _sub(r"\theta_G"), ha="center", va="bottom", fontsize=16, color=BLUE)
+    ax.text(mu_lo, -0.10, _sub(r"\mu_{lo}"), ha="center", va="top", fontsize=15, color=RED)
+    ax.text(mu_hi, -0.10, _sub(r"\mu_{hi}"), ha="center", va="top", fontsize=15, color=GREEN)
+    ax.annotate(
+        "",
+        xy=(hi_edge, 0.55),
+        xytext=(0.93, 0.55),
+        arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.8},
+    )
+    ax.text(0.93, 0.62, "a wild x-cal cut\nis pulled back", ha="center", va="bottom", fontsize=15, color=INK)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1.45)
+    ax.axis("off")
+    ax.plot([0, 1], [0, 0], color=SOFT, linewidth=1.2)
+    width = round((hi_edge - gmm) / (mu_hi - gmm), 2)
+    fig.text(
+        0.06,
+        0.47,
+        f"binary voting: a band {width:.0%} of the way to each mean",
+        fontsize=17,
+        fontweight="bold",
+        color=INK,
+        va="top",
+    )
+    fig.text(0.06, 0.425, f"{binary} — the same at every vote count", fontsize=15, color=SOFT, va="top")
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
@@ -3975,52 +4061,6 @@ def anchored_fig() -> None:
     save(fig, OUT, "calib-anchored-em.png")
 
 
-def decomposition_fig() -> None:
-    # docs/experiments/2026-08-04-gmm-cut/REPORT-2881.md — the #2879 re-measure of #2836's
-    # decomposition (region arm, ramp 6-20): total excess cost 0.0686.
-    terms = [
-        ("identification", 0.0057),
-        ("prior / loss", 0.0111),
-        ("Gaussian\nmisspecification", 0.0129),
-        ("sim → test\ntransfer", 0.0389),
-    ]
-    fig, ax = plt.subplots(figsize=(11.5, 6.5))
-    ys = np.arange(len(terms))
-    for y, (name, v) in zip(ys, terms):
-        emphasized = name.startswith("sim")
-        ax.barh(y, v, height=0.55, color=BLUE if emphasized else "#9aa4b0", zorder=2)
-        ax.annotate(
-            f"{v:.4f}",
-            xy=(v, y),
-            xytext=(6, 0),
-            textcoords="offset points",
-            va="center",
-            fontsize=15,
-            color=BLUE if emphasized else SOFT,
-            fontweight="bold" if emphasized else "normal",
-        )
-    ax.set_yticks(ys, [t[0] for t in terms])
-    ax.set_xlim(0, 0.047)
-    ax.set_xticks([])
-    ax.spines["left"].set_visible(False)
-    ax.spines["bottom"].set_visible(False)
-    ax.tick_params(left=False)
-    # Full-bleed: the in-figure title is gone (the slide's headline says the
-    # same thing, over this band), but the units line stays — it is the one
-    # thing the bars do not say for themselves.
-    ax.annotate(
-        "excess cost vs the test oracle, region arm",
-        xy=(0, 1.0),
-        xycoords="axes fraction",
-        xytext=(0, 8),
-        textcoords="offset points",
-        fontsize=15,
-        color=SOFT,
-    )
-    fig.subplots_adjust(left=0.175, right=0.98, top=0.55, bottom=0.06)
-    save(fig, OUT, "calib-error-decomposition.png", column=FULL_BLEED, tight=False)
-
-
 # ═══════════════════════════════════════════════════════════════════════════
 # Part 3 — the three teaching figures (issue #3246).
 #
@@ -4046,9 +4086,10 @@ COST_STAGES = 5
 #: cross; the arithmetic that moves one to the other.
 CROSSING_STAGES = 4
 
-#: How many stages the region-maximum figure reveals in: one item's regions and
-#: the max over them; the corpus of maxima; the two tail families fitted to it.
-REGION_MAX_STAGES = 3
+#: How many stages the region-maximum figure reveals in: two photographs cut
+#: into regions; each region's score and the max over them; the corpus of
+#: maxima; the two tail families fitted to it.
+REGION_MAX_STAGES = 4
 
 #: The cost weightings the knob figure draws, as (price of a false alarm, price
 #: of a miss, label). Symmetric about the middle one on purpose: the slide's
@@ -4149,12 +4190,24 @@ def cost_knob_fig() -> None:
     save(final, OUT, "calib-cost-knob.png", column=FULL_BLEED, box=box)
 
 
+#: The cost figure's own canvas: the slide's 16:9 at nearly the teaching
+#: figures' scale, so its type stays their size. Wider and shorter than
+#: `TEACH_CANVAS` on purpose. That canvas was indented past the title notch and
+#: left a column of white under the headline; this one spans the slide and
+#: drops the whole drawing below the notch instead (`COST_TOP_RESERVE`), which
+#: costs a little height and buys the width the panel is read across.
+COST_CANVAS = (20.6, 11.6)
+#: Canvas units kept clear at the top for the headline: the notch's 172px at
+#: this canvas's 62px a unit, plus the object gap under it.
+COST_TOP_RESERVE = 3.1
+
+
 def _cost_knob_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the cost figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in COST_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, TEACH_CANVAS[0])
-    ax.set_ylim(0, TEACH_CANVAS[1])
+    ax.set_xlim(0, COST_CANVAS[0])
+    ax.set_ylim(0, COST_CANVAS[1])
     ax.set_axis_off()
 
     bad, good = _ranked_votes()
@@ -4172,10 +4225,12 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # 1.5 of right margin stays: the slide draws its own page number in the
     # bottom-right corner, and a slider label run out to the canvas edge lands
     # on top of it.
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 1.5
-    rank_y = TEACH_CANVAS[1] - 1.9
+    # The ranking's line sits at the height of the previous slide's score axis
+    # (see `COST_AXIS_LABEL_X`), and the panel gives up the difference.
+    x0, w = 4.0, COST_CANVAS[0] - 4.0 - 1.5
+    rank_y = COST_CANVAS[1] - COST_TOP_RESERVE - 0.97
     panel_top = rank_y - 2.15
-    panel_h = 5.0
+    panel_h = 3.38
     panel_base = panel_top - panel_h
 
     cuts = np.linspace(0.0, 1.0, 501)
@@ -4200,8 +4255,20 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
             fontsize=30,
             color=GREEN if keep else RED,
         )
-    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "the same ten items", ha="left", va="bottom", fontsize=16, color=INK)
-    ax.text(x0 + w, rank_y + SCORE_LABEL_LIFT, "score", ha="right", va="bottom", fontsize=15, color=SOFT)
+    # The previous slide's axis label, word for word, in the same place on the
+    # slide and at the same rendered size: flicking between the two, the
+    # photographs go and the label does not move. So it is centred on the
+    # *slide* (`COST_AXIS_LABEL_X`), not on this line, which starts right of
+    # the prices' column. `make-book-figs.py` draws the same string.
+    ax.text(
+        COST_AXIS_LABEL_X,
+        rank_y + COST_AXIS_LABEL_LIFT,
+        "“bookness”, low to high",
+        ha="center",
+        va="bottom",
+        fontsize=COST_AXIS_LABEL_PT,
+        color=SOFT,
+    )
 
     # ── stages 2-4: one cost rule, three prices, three cuts ───────────────────
     # The rule names the panel rather than sitting in a row of its own: the
@@ -4255,23 +4322,43 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 5: the control that sets the ratio ──────────────────────────────
+    # Down in the corner with the prices, not under the ranking. It sets the
+    # ratio those three labels name, so that is where it belongs; drawn across
+    # the full width under the panel, a rail with a knob in the middle read as a
+    # second copy of the score axis, as though the knob picked an item.
     if stage >= COST_STAGES:
-        _incl_slider(ax, x0, panel_base - 1.2, w)
+        _incl_slider(ax, COST_SLIDER_X0, panel_base - COST_SLIDER_DROP, COST_SLIDER_W)
     return fig
 
 
 #: The slider's stops, and the two ends it is labelled by.
-INCL_STOPS = 13
+INCL_STOPS = 9
 INCL_SLIDER_H = 0.34
+
+#: Where the slider sits: the bottom-left corner, centred under the column of
+#: three prices it sets, and stopping short of the panel so its end label does
+#: not run under the curves.
+COST_SLIDER_X0 = 1.45
+COST_SLIDER_W = 2.2
+#: How far under the panel's floor the rail runs.
+COST_SLIDER_DROP = 1.15
+
+#: The axis label, placed so it lands where `book-rank`'s does on its slide:
+#: centred on the slide rather than on this figure's (indented) axis, and at
+#: the same rendered size. Measured, not derived — if either figure's framing
+#: changes, re-measure both labels in slide pixels and move this one.
+COST_AXIS_LABEL_X = 10.30
+COST_AXIS_LABEL_LIFT = 0.30
+COST_AXIS_LABEL_PT = 12.8
 
 
 def _incl_slider(ax: plt.Axes, x0: float, y: float, w: float) -> None:
     """The Inclusion control, drawn as the thing the room will actually see.
 
-    A rail with thirteen stops and the two ends named in the units the previous
-    row just established — each step up doubles the price of a miss, each step
-    down doubles the price of a false alarm. That is the whole definition, and
-    every rule in the section it opens shares it.
+    A rail with its stops, the knob in the middle, and the two ends numbered.
+    Each step up doubles the price of a miss and each step down doubles the
+    price of a false alarm — the ratio the labels above it name. That is the
+    whole definition, and every rule in the section it opens shares it.
     """
     _range_line(ax, x0, x0 + w, y, z=3)
     for i in range(INCL_STOPS):
@@ -4287,9 +4374,9 @@ def _incl_slider(ax: plt.Axes, x0: float, y: float, w: float) -> None:
             zorder=4,
         )
     )
-    ax.text(x0, y - LABEL_GAP, "−10  no false alarms", ha="left", va="top", fontsize=15, color=INK)
+    ax.text(x0, y - LABEL_GAP, "−10", ha="center", va="top", fontsize=15, color=INK)
     ax.text(x0 + w / 2, y + INCL_SLIDER_H + LABEL_GAP, "Inclusion", ha="center", va="bottom", fontsize=16, color=INK)
-    ax.text(x0 + w, y - LABEL_GAP, "miss nothing  +10", ha="right", va="top", fontsize=15, color=INK)
+    ax.text(x0 + w, y - LABEL_GAP, "+10", ha="center", va="top", fontsize=15, color=INK)
 
 
 #: The mixture the crossing figure argues over: (weight, mean, variance) for
@@ -4370,15 +4457,6 @@ def _crossing_stage(stage: int) -> plt.Figure:
         ax.plot([x0 + mu * w] * 2, [shape_base, top], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
         ax.text(x0 + mu * w, shape_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=16, color=INK)
     _range_line(ax, x0, x0 + w, shape_base, z=5)
-    ax.text(
-        x0,
-        shape_base + shape_h + LABEL_GAP,
-        "two components, same shape",
-        ha="left",
-        va="bottom",
-        fontsize=16,
-        color=INK,
-    )
 
     # ── stage 2: the shipped rule — halfway between the means ─────────────────
     if stage >= 2:
@@ -4403,7 +4481,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
         ax.text(
             x0,
             weighted_base + weighted_h + LABEL_GAP,
-            _sub(r"\pi_{lo} = 0.91") + "  of the corpus is Bad, so its curve is ten times the other's",
+            _sub(r"\pi_{lo} = 0.91"),
             ha="left",
             va="bottom",
             fontsize=16,
@@ -4454,14 +4532,64 @@ REGION_GRID = (3, 4)
 REGION_RANGE = (0.33, 0.82)
 REGION_BINS = 42
 
-#: Per-region scores for that one item, row-major. Hand-set rather than drawn,
-#: because the point is which cell is the maximum and by how much, and a random
-#: draw that makes two cells tie makes the slide argue with itself.
-REGION_SCORES = (
-    (0.11, 0.19, 0.44, 0.23),
-    (0.16, 0.62, 0.81, 0.35),
-    (0.09, 0.28, 0.41, 0.14),
-)
+#: The two photographs the max figure opens on, by COCO val2017 id: one
+#: holding a book (a doll's "Goody Two Shoes"), and one holding none — a dog on
+#: a couch, with cushions for a detector to be tempted by.
+REGION_PHOTOS = (167159, 347930)
+
+
+@functools.cache
+def _region_photo(image_id: int) -> tuple:
+    """`(4:3 image, [book boxes in its pixels])` for one COCO val2017 frame."""
+    import json
+
+    from PIL import Image
+
+    import coco_fixture
+
+    coco_fixture.ensure_corpus()
+    coco = json.loads(coco_fixture.ANNOTATIONS.read_text())
+    meta = next(i for i in coco["images"] if i["id"] == image_id)
+    book = next(c["id"] for c in coco["categories"] if c["name"] == "book")
+    image = Image.open(coco_fixture.IMAGES / meta["file_name"]).convert("RGB")
+    width, height = image.size
+    side = int(round(height * 4 / 3)) if width / height > 4 / 3 else width
+    tall = height if width / height > 4 / 3 else int(round(width * 3 / 4))
+    dx, dy = (width - side) // 2, (height - tall) // 2
+    image = image.crop((dx, dy, dx + side, dy + tall))
+    boxes = [
+        (x - dx, y - dy, w, h)
+        for a in coco["annotations"]
+        if a["image_id"] == image_id and a["category_id"] == book
+        for x, y, w, h in [a["bbox"]]
+    ]
+    return image, boxes
+
+
+def _region_scores(image_id: int, seed: int) -> np.ndarray:
+    """Illustrative per-region scores: a little of everything, and a lot of book.
+
+    Each region scores a noisy baseline — every region of every photograph
+    resembles *something* — plus a share proportional to how much of it the
+    photograph's COCO book box covers. So the book's own regions win when there
+    is a book, and when there is none the grid still has a spread, and a top.
+    Seeded, so the slide is the same every time it is drawn.
+    """
+    image, boxes = _region_photo(image_id)
+    rows, cols = REGION_GRID
+    width, height = image.size
+    rng = np.random.default_rng(seed)
+    scores = 0.10 + 0.30 * rng.random((rows, cols))
+    for r in range(rows):
+        for c in range(cols):
+            x0, y0 = c * width / cols, r * height / rows
+            x1, y1 = x0 + width / cols, y0 + height / rows
+            cover = sum(
+                max(0.0, min(x1, bx + bw) - max(x0, bx)) * max(0.0, min(y1, by + bh) - max(y0, by))
+                for bx, by, bw, bh in boxes
+            ) / ((x1 - x0) * (y1 - y0))
+            scores[r, c] += 0.8 * cover
+    return np.round(np.clip(scores, 0.0, 0.95), 2)
 
 
 def region_max_fig() -> None:
@@ -4505,64 +4633,70 @@ def _region_max_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     rows, cols = REGION_GRID
-    cell = 1.08
-    grid_x0 = 6.2
-    grid_top = TEACH_CANVAS[1] - 0.65
-    grid_y0 = grid_top - rows * cell
-    best = max(((r, c) for r in range(rows) for c in range(cols)), key=lambda rc: REGION_SCORES[rc[0]][rc[1]])
-
-    # ── stage 1: one item, its regions, and the maximum over them ─────────────
-    for r in range(rows):
-        for c in range(cols):
-            score = REGION_SCORES[r][c]
-            won = (r, c) == best
-            ax.add_patch(
-                Rectangle(
-                    (grid_x0 + c * cell, grid_top - (r + 1) * cell),
-                    cell,
-                    cell,
-                    facecolor=UNLABELED_FILL if not won else "white",
-                    edgecolor=INK if won else RULE,
-                    linewidth=2.6 if won else 1.2,
-                    zorder=3 if won else 2,
+    photo_w, photo_h = 4.6, 3.45
+    photo_top = TEACH_CANVAS[1] - 0.5
+    for slot, (image_id, seed) in enumerate(zip(REGION_PHOTOS, (3, 7), strict=True)):
+        image, _ = _region_photo(image_id)
+        scores = _region_scores(image_id, seed)
+        px0 = 6.2 + slot * (photo_w + 2.2)
+        py0 = photo_top - photo_h
+        ax.imshow(image, extent=(px0, px0 + photo_w, py0, photo_top), zorder=1, aspect="auto")
+        best = np.unravel_index(int(np.argmax(scores)), scores.shape)
+        cw, ch = photo_w / cols, photo_h / rows
+        # Stage 1 is the photographs and the grid alone, so the room can see
+        # what is *in* each picture before a number goes over every region of it.
+        numbered = stage >= 2
+        for r in range(rows):
+            for c in range(cols):
+                won = numbered and (r, c) == tuple(best)
+                ax.add_patch(
+                    Rectangle(
+                        (px0 + c * cw, photo_top - (r + 1) * ch),
+                        cw,
+                        ch,
+                        facecolor="none",
+                        edgecolor=INK if won else "white",
+                        linewidth=3.0 if won else 1.2,
+                        zorder=3 if won else 2,
+                    )
                 )
-            )
-            ax.text(
-                grid_x0 + (c + 0.5) * cell,
-                grid_top - (r + 0.5) * cell,
-                f"{score:.2f}",
-                ha="center",
-                va="center",
-                fontsize=15,
-                color=INK if won else SOFT,
-                fontweight="bold" if won else "normal",
-                zorder=4,
-            )
-    ax.text(
-        grid_x0 + cols * cell + OBJECT_GAP,
-        grid_y0 + rows * cell / 2,
-        "one item, scored\nregion by region",
-        ha="left",
-        va="center",
-        fontsize=16,
-        color=INK,
-    )
-    ax.text(
-        grid_x0,
-        grid_y0 - LABEL_GAP,
-        "score(item) = max over its regions = " + f"{REGION_SCORES[best[0]][best[1]]:.2f}",
-        ha="left",
-        va="top",
-        fontsize=17,
-        color=INK,
-    )
+                if not numbered:
+                    continue
+                ax.text(
+                    px0 + (c + 0.5) * cw,
+                    photo_top - (r + 0.5) * ch,
+                    f"{scores[r, c]:.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=15,
+                    color=INK,
+                    fontweight="bold" if won else "normal",
+                    zorder=4,
+                    bbox={
+                        "boxstyle": "round,pad=0.15",
+                        "facecolor": "white",
+                        "alpha": 0.85 if won else 0.7,
+                        "edgecolor": "none",
+                    },
+                )
+        if not numbered:
+            continue
+        ax.text(
+            px0,
+            py0 - LABEL_GAP,
+            ("a book" if slot == 0 else "no book") + f":  max = {scores.max():.2f}",
+            ha="left",
+            va="top",
+            fontsize=17,
+            color=INK,
+        )
 
-    # ── stage 2: every item is a maximum, so the corpus is a pile of maxima ───
+    # ── stage 3: every item is a maximum, so the corpus is a pile of maxima ───
     panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
     panel_h = 3.75
     y_base = 1.5
     sample = _maxima()
-    if stage >= 2:
+    if stage >= 3:
         lo, hi = REGION_RANGE
         density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
         sy = panel_h / float(density.max())
@@ -4580,7 +4714,7 @@ def _region_max_stage(stage: int) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 3: the two tail families, fitted to the same maxima ─────────────
+    # ── stage 4: the two tail families, fitted to the same maxima ─────────────
     if stage >= REGION_MAX_STAGES:
         lo, hi = REGION_RANGE
         density, _edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
@@ -4925,5 +5059,4 @@ if __name__ == "__main__":
     blend_schedule_fig()
     split_fraction_fig()
     anchored_fig()
-    decomposition_fig()
     print("wrote figures to", OUT)

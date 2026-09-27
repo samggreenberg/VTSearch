@@ -251,7 +251,7 @@ class TestColdFindIsTheAppsLabelsetTraining:
         monkeypatch.setattr(
             lt_mod,
             "_resolve_uncached_embedding",
-            lambda elem, snap, **kw: resolved.append(elem.md5) or _basis(1),
+            lambda elem, snap, **kw: resolved.append(elem.md5) or lt_mod._LabelVector(_basis(1), None),
         )
         monkeypatch.setattr(lt_mod, "_resolve_score_rows", lambda *a, **kw: None)
 
