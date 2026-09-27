@@ -2720,7 +2720,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "one object wherever COCO boxed it as one. Bad: SNOWBOARDS, their own class "
             "in C, at 2.3%; and ski poles and boots (`ski_pole`, `ski_boot`, 0.5% each), "
             "which are never this class however tightly they sit beside it. 96.8% is "
-            "`ski`."
+            "`ski`. OWNER RULED 2026-09-26 during the #4179 review: skis means SNOW skis; "
+            "WATER SKIS are Bad. COCO agrees: of 105 LVIS `water_ski` boxes COCO calls 12% "
+            "`skis`, 16% `surfboard` and leaves 70% unboxed."
         ),
         # Plural like `scissors`: COCO boxes the pair (count ratio 2.09 against
         # LVIS's single `ski`), and ruling one ski would reject ~62% of its boxes.
