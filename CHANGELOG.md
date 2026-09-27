@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Find scores with the detector's current labels, not the ones it had when
+  it last trained** (issue #4204). After you changed a detector's labels
+  without a Learned sort in between (voting under a text, example or random
+  sort, clearing the votes, or flipping labels in the dashboard's saved-label
+  review), Find kept giving the old detector's verdicts until the app was
+  restarted. A new browser page didn't help, because the cached model lives on
+  the server. Find now reuses the cached model only while it was trained from
+  the detector's saved labels, and retrains when they have changed. The
+  legacy multi-dataset Find does the same. Learned sort's own cache now also
+  counts a redrawn region as a label change.
+
 - **Find (and Train) on an unloaded detector waits for the load to finish**
   (issue #4187). The route sometimes opened as soon as the detector load
   started, showing an empty page and a stream of "Detector is not loaded"

@@ -90,7 +90,8 @@ def resolve_or_train_detector(
 
     Tries the loaded :class:`~vtscore.state.core.DetectorContext` first, when
     its head was trained from the labelset in *det_data*
-    (:func:`cached_head_is_current`).  Falls back to training on demand from the detector's labelset via
+    (:func:`cached_head_is_current`).  Falls back to training on demand from
+    the detector's labelset via
     :func:`~vtscore.detectors.labelset_training.train_from_labelset`, which
     resolves each element (in-dataset by origin ▸ md5 ▸ name, else through its
     origin importer), pools a Good element's ``region_box`` down to the raw
