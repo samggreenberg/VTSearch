@@ -936,7 +936,9 @@ def train_from_labelset(
     """Populate the embedding cache, build (X, y), train, and store on *det_ctx*.
 
     Returns ``True`` when an MLP was trained (need ≥1 good and ≥1 bad cached
-    vector); otherwise leaves ``det_ctx.model`` untouched.
+    vector); otherwise leaves ``det_ctx.model`` untouched.  A trained head is
+    stamped with *labelset*'s signature, so Find reuses it only until the
+    labels change (issue #4204).
 
     *snap* does two jobs, and a caller that scores something other than what it
     loaded needs them separated.  It is the snapshot the labelset's elements
@@ -986,7 +988,10 @@ def train_from_labelset(
         voted_ids=voted_ids,
         haystack=haystack.medias if haystack is not None else None,
     )
+    from vtscore.detectors.model_loading import labelset_signature
+
     det_ctx.model = mlp
+    det_ctx.model_labels_sig = labelset_signature(labelset)
     det_ctx.threshold = threshold
     return True
 

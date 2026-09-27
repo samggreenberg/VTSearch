@@ -22,9 +22,59 @@ entry point the detector-load and learned-sort paths use.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vtscore.concurrency.progress import update_find_progress
+
+if TYPE_CHECKING:
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.state.core import DetectorContext
+
+
+def labelset_signature(labelset: "LabelSet | None") -> tuple | None:
+    """The identity of the training labels in *labelset*, or ``None`` for none.
+
+    Sorted ``(label, stable_element_id, region_box)`` triples: the three things
+    about an element that change the head trained from it.  Metadata and
+    provenance are left out because training never reads them.  The region box
+    is in because a Good label's box decides which patch it pools to, so
+    redrawing one changes the detector as surely as flipping a label.
+
+    Stable across a JSON round-trip, so the signature of a labelset in memory
+    equals the signature of the same labelset read back from the detector file.
+    ``None`` in, ``None`` out: callers with no labelset (the raw-vote learned
+    sort) get a signature that no labelset matches.
+    """
+    if labelset is None:
+        return None
+    from vtscore.detectors.labelset_elements import stable_element_id
+
+    return tuple(
+        sorted(
+            (
+                el.label,
+                stable_element_id(el),
+                tuple(float(v) for v in el.region_box) if el.region_box is not None else (),
+            )
+            for el in labelset.elements
+        )
+    )
+
+
+def cached_head_is_current(det_ctx: "DetectorContext", labelset: "LabelSet") -> bool:
+    """Whether *det_ctx* holds a head trained from exactly *labelset*.
+
+    ``det_ctx.model`` is a cache, and nothing that changes a detector's labels
+    drops it: a vote, clearing the votes, a dataset switch and the dashboard's
+    saved-label review all leave it in place.  Only a learned sort replaces it.
+    So Find would keep scoring with the head from the last learned sort, or the
+    last Find, until the app restarted (issue #4204).  Each writer of
+    ``det_ctx.model`` records the signature of the labels it trained from, and a
+    consumer reuses the head only while *labelset* (the one it just read from
+    the detector file) still has that signature.  This also rejects the head a
+    background learned sort stores after newer votes have already landed.
+    """
+    return det_ctx.model is not None and det_ctx.model_labels_sig == labelset_signature(labelset)
 
 
 def resolve_or_train_detector(
@@ -38,8 +88,10 @@ def resolve_or_train_detector(
 ) -> tuple[Any | None, float, dict | None]:
     """Return (mlp, threshold, diagnostic) for *detector_id*.
 
-    Tries the loaded :class:`~vtscore.state.core.DetectorContext` first.  Falls
-    back to training on demand from the detector's labelset via
+    Tries the loaded :class:`~vtscore.state.core.DetectorContext` first, when
+    its head was trained from the labelset in *det_data*
+    (:func:`cached_head_is_current`).  Falls back to training on demand from
+    the detector's labelset via
     :func:`~vtscore.detectors.labelset_training.train_from_labelset`, which
     resolves each element (in-dataset by origin ▸ md5 ▸ name, else through its
     origin importer), pools a Good element's ``region_box`` down to the raw
@@ -81,13 +133,13 @@ def resolve_or_train_detector(
         # → "Per-detector primary embedder".
         snap_embedder = keying_embedder_for_snap(det_ctx, snap)
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
-    if det_ctx is not None and det_ctx.model is not None:
+    labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
+    if det_ctx is not None and cached_head_is_current(det_ctx, labelset):
         return det_ctx.model, det_ctx.threshold, None
 
     if det_data is None:
         return None, 0.5, None
 
-    labelset = LabelSet.from_dict(det_data.get("labelset") or {})
     if not labelset.elements:
         return None, 0.5, None
 
