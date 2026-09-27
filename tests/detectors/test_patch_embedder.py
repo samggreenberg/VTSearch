@@ -1011,9 +1011,8 @@ class TestRegionAwareTraining:
         assert not np.allclose(det_ctx.label_embeddings[eid], media_embedding(media))
 
     def test_populate_label_embeddings_repools_when_region_box_set(self):
-        """Region-voted elements re-pool on every call so region_box edits
-        propagate without an explicit cache invalidation.  Image-level
-        elements keep their cached vector across calls (fast path)."""
+        """A region_box edit re-pools, so the edit propagates without an
+        explicit cache invalidation."""
         from vtscore.datasets.labelset import LabeledElement, LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
         from vtscore.detectors.labelset_training import populate_label_embeddings
@@ -1128,6 +1127,41 @@ class TestRegionAwareTraining:
         expected = nearest_patch_to_box(media["patch_grid"], (0.5, 0.5, 1.0, 1.0))
         np.testing.assert_allclose(det_ctx.label_embeddings[eid], expected, atol=1e-6)
         assert det_ctx.label_embedding_regions[eid] == (0.5, 0.5, 1.0, 1.0)
+
+    def test_in_dataset_region_vote_on_whole_image_detector_never_reaches_the_file(self, monkeypatch):
+        """A boxed label whose media is in the snapshot trains on that media's
+        stored vector, on every pass, without resolving its origin file - so
+        the per-vote retrain on the labels' own dataset is not what re-embeds
+        boxed labels from file (#4192's follow-up)."""
+        import vtscore.detectors.labelset_training as lt
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.state.core import DetectorContext
+        from vtsearch.state import medias
+
+        def _no_file(*_a, **_k):
+            raise AssertionError("an in-dataset label must not be resolved from its file")
+
+        monkeypatch.setattr(lt, "_embed_one", _no_file)
+
+        cid = 9006
+        vec = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        media = {
+            "id": cid,
+            "md5": "md5-siglip",
+            "media_type": "image",
+            "embedder": "siglip",
+            "embeddings": {"siglip": vec},
+        }
+        medias[cid] = media
+        elem = LabeledElement(md5=media["md5"], label="good", region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+
+        for _ in range(2):
+            lt.populate_label_embeddings(det_ctx, ls, media_type="image", snap={cid: media})
+
+        np.testing.assert_array_equal(det_ctx.label_embeddings[stable_element_id(elem)], vec)
 
 
 class TestRegionAwareTrainingCrossDataset:
@@ -1406,6 +1440,112 @@ class TestRegionAwareTrainingCrossDataset:
         eid = stable_element_id(elem)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
         assert patch_calls == []
+
+    def test_cross_dataset_region_vote_on_whole_image_embedder_embeds_once(self, monkeypatch, tmp_path):
+        """A whole-image embedder can't use the box, so re-resolving a boxed
+        label gives the same vector: later passes read the cache instead of
+        re-embedding the file (#4192's follow-up - every retrain off the
+        labels' own dataset used to embed each boxed label again)."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        stub, sentinel = self._single_vector_stub()
+        embeds = []
+        real_embed = stub.embed_media
+
+        def _counting_embed(_media):
+            embeds.append(_media)
+            return real_embed(_media)
+
+        stub.embed_media = _counting_embed
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        for _ in range(3):
+            populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        np.testing.assert_array_equal(det_ctx.label_embeddings[stable_element_id(elem)], sentinel)
+        assert len(embeds) == 1
+
+    def test_cross_dataset_region_vote_with_unchanged_box_pools_once(self, monkeypatch, tmp_path):
+        """A pooled vector is final for its box: while the box is unchanged,
+        later passes skip the ``patch_forward``."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        grid = self._make_grid()
+        stub, _cls = self._patch_capable_stub(grid)
+        forwards = []
+        real_forward = stub.patch_forward
+
+        def _counting_forward(_media):
+            forwards.append(_media)
+            return real_forward(_media)
+
+        stub.patch_forward = _counting_forward
+        self._wire_resolution(monkeypatch, tmp_path, stub)
+
+        box = (0.0, 0.0, 0.5, 0.5)
+        elem = self._cross_dataset_elem(region_box=box)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        for _ in range(3):
+            populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+
+        expected = nearest_patch_to_box(grid, box)
+        np.testing.assert_allclose(det_ctx.label_embeddings[stable_element_id(elem)], expected, atol=1e-6)
+        assert len(forwards) == 1
+
+    def test_cross_dataset_region_vote_retries_a_failed_patch_forward(self, monkeypatch, tmp_path):
+        """The image-level fallback after a failed ``patch_forward`` is not
+        kept: the next pass tries the pool again, and takes it once the
+        forward succeeds."""
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.media.patch_embed import PatchEmbedOutput
+        from vtscore.state.core import DetectorContext
+
+        grid = self._make_grid()
+        fallback = np.zeros(grid.shape[-1], dtype=np.float32)
+        fallback[-1] = 1.0
+        forwards = []
+
+        class _FailsOnceStub:
+            name = "fails-once-stub"
+            supports_patch_regions = True
+
+            def patch_forward(self, _media):
+                forwards.append(_media)
+                if len(forwards) == 1:
+                    return None
+                saliency = np.ones(grid.shape[:2], dtype=np.float32)
+                saliency /= saliency.sum()
+                return PatchEmbedOutput(cls_vec=fallback, patch_grid=grid, patch_saliency=saliency)
+
+            def embed_media(self, _media):
+                return fallback
+
+        self._wire_resolution(monkeypatch, tmp_path, _FailsOnceStub())
+
+        box = (0.0, 0.0, 0.5, 0.5)
+        elem = self._cross_dataset_elem(region_box=box)
+        ls = LabelSet([elem])
+        det_ctx = DetectorContext("d1")
+        eid = stable_element_id(elem)
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        np.testing.assert_array_equal(det_ctx.label_embeddings[eid], fallback)
+
+        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        np.testing.assert_allclose(det_ctx.label_embeddings[eid], nearest_patch_to_box(grid, box), atol=1e-6)
+        assert len(forwards) == 2
 
 
 class TestBadVoteRegionFlooding:

@@ -972,13 +972,15 @@ class DetectorContext:
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
         "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
-        # Region box the cached ``label_embeddings`` entry was built against,
-        # keyed by stable_element_id.  ``None`` means the cached vector is
-        # image-level; a 4-tuple means it was pooled from that box.  Lets
+        # Region box the cached ``label_embeddings`` entry is final for, keyed
+        # by stable_element_id: the element's box when resolving it again
+        # would give the same vector (pooled from it, or a box the embedder
+        # can't use), ``None`` for no box or a failed pool to retry.  Lets
         # ``populate_label_embeddings`` detect a region→none (or any region
         # edit) transition and re-resolve instead of returning a stale
         # region-pooled vector keyed to an element that no longer has a
-        # region.  See logical-bug-audit finding M4.
+        # region (logical-bug-audit finding M4), while an unchanged box
+        # skips re-resolution (#4192).
         "label_embedding_regions",
         # Cross-dataset local features (StructuralFeatures) for the labelset's
         # elements, keyed by stable_element_id.  Re-derived from each element's
