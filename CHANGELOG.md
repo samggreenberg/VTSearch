@@ -74,6 +74,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Autopilot "Update Sort Example?" prompt says what it is asking**
+  (issue #4200). It used to show the current example and ask whether to keep
+  it. It now reports how the sort has gone ("You've clicked 10 times and only
+  found 1 positive while sorting based on …") and lays out the two answers
+  side by side: **Keep clicking** that sort for the next interval on the
+  left, **Supply a different sort** (text or media example) on the right.
+
 - **Structural (instance-matching) search is ~3x faster on both of its hot
   paths** (#3900). Ingest with the `sift_vlad` embedder no longer runs SIFT
   detection at the source's full resolution: detection cost scales with pixel

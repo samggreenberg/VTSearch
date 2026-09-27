@@ -2,47 +2,49 @@
   @if (view === 'prompt') {
     <div class="resort-prompt">
       <p class="prompt-text">
-        Your current example:
-        <strong>{{ currentExampleDisplay() }}</strong>
+        You've clicked {{ clicksPhrase() }} and only found {{ positivesPhrase() }}
+        while sorting based on <strong>{{ currentSortLabel() }}</strong>.
+        You could keep clicking, or supply a different sort. Which would you like to do?
       </p>
-      <p class="prompt-text">Would you like to supply a different example to sort by, or keep your current one?</p>
 
-      <div class="example-columns">
-        <div class="example-col">
-          <label class="form-label">New text example</label>
-          <div class="text-input-row">
-            <input
-              class="form-input"
-              [(ngModel)]="pendingText"
-              placeholder="e.g. dog barking sounds"
-              title="Enter a text description to sort by"
-              (keydown.enter)="$event.preventDefault(); submitText()"
-            />
-            <button type="button" class="btn btn--primary btn--sm" (click)="submitText()" [disabled]="!pendingText.trim()" title="Use this text as the new sort example">Use</button>
-          </div>
+      <div class="choice-columns">
+        <div class="choice-col">
+          <button type="button" class="btn btn--secondary keep-btn" (click)="onKeep()" title="Continue sorting with the current example">
+            <span>Keep clicking <strong>{{ currentSortLabel() }}</strong>@if (keepLabelsCount()) { for {{ keepLabelsCount() }} more labels}.</span>
+          </button>
         </div>
-        <div class="example-col">
-          <label class="form-label">New media example</label>
-          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media…</button>
-          <input
-            #fileInput
-            type="file"
-            class="hidden-file-input"
-            (change)="onLocalFileSelected($event)"
-          />
-          <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File…</button>
+        <div class="choice-col choice-col--alt">
+          <h4 class="choice-heading">Supply a different sort</h4>
+          <div class="example-group">
+            <label class="form-label">Text example</label>
+            <div class="text-input-row">
+              <input
+                class="form-input"
+                [(ngModel)]="pendingText"
+                placeholder="e.g. dog barking sounds"
+                title="Enter a text description to sort by"
+                (keydown.enter)="$event.preventDefault(); submitText()"
+              />
+              <button type="button" class="btn btn--primary btn--sm" (click)="submitText()" [disabled]="!pendingText.trim()" title="Use this text as the new sort example">Use</button>
+            </div>
+          </div>
+          <div class="example-group">
+            <label class="form-label">Media example</label>
+            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse loaded media to pick a new example">Browse Media…</button>
+            <input
+              #fileInput
+              type="file"
+              class="hidden-file-input"
+              (change)="onLocalFileSelected($event)"
+            />
+            <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="fileInput.click()" title="Upload a media file from your computer">Upload File…</button>
+          </div>
         </div>
       </div>
 
       @if (error()) {
         <p class="error-text">{{ error() }}</p>
       }
-    </div>
-  }
-
-  @if (view === 'prompt') {
-    <div modal-footer>
-      <button class="btn btn--secondary" (click)="onKeep()" title="Continue sorting with the current example">Keep Current{{ keepLabelsCount() ? ' for ' + keepLabelsCount() + ' more labels' : '' }}</button>
     </div>
   }
 

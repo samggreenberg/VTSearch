@@ -202,6 +202,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly showResortPrompt = signal(false);
   resortCurrentType: 'text' | 'media' = 'text';
   resortCurrentDisplay = '';
+  /** Labels cast, and how many of them were positive, since the current
+   *  example sort began (Autopilot start or the last swapped-in example).
+   *  Unlike `resortVoteCount`, these survive a "keep": the prompt reports the
+   *  whole run of the sort it is asking about. */
+  resortSortClicks = 0;
+  resortSortPositives = 0;
   private resortInterval = 10;
   private resortVoteCount = 0;
   private resortNextThreshold = 0;
@@ -1083,7 +1089,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.sortRunner.scheduleLearnedSort(false);
     }
-    this.checkResortPrompt();
+    this.checkResortPrompt(event);
   }
 
   // --- Indicators ---
@@ -1154,6 +1160,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
+    this.resetResortSortTally();
 
     const state = this.autopilotStateService.state;
     const phase = state.phase;
@@ -1216,7 +1223,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // --- Re-sort prompt ---
 
-  private checkResortPrompt(): void {
+  private checkResortPrompt(event: { id: number; vote: 'good' | 'bad' }): void {
     // Only show during autopilot's "good" phase (sorting by example in top mode)
     if (!this.autopilotStateService.running) return;
     // Retrain mode uses learned sort instead of text/example; there is no
@@ -1232,6 +1239,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (phase !== 'good') return;
 
     this.resortVoteCount++;
+    this.resortSortClicks++;
+    // Local vote state is reconciled before the vote event fires, so this
+    // skips a click that toggled an existing positive off.
+    if (event.vote === 'good' && this.voteState.goodVotes.has(event.id)) {
+      this.resortSortPositives++;
+    }
     if (this.resortVoteCount >= this.resortNextThreshold) {
       // Determine current example info for the prompt
       if (this.labelSession.textQuery) {
@@ -1259,6 +1272,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.resortVoteCount = 0;
     // Reset threshold back to the base interval
     this.resortNextThreshold = this.resortInterval;
+    this.resetResortSortTally();
 
     if (result.type === 'text') {
       this.labelSession.textQuery = result.value;
@@ -1275,6 +1289,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.sortState.setSelectMode('top');
       this.triggerAutopilotMediaSort();
     }
+  }
+
+  private resetResortSortTally(): void {
+    this.resortSortClicks = 0;
+    this.resortSortPositives = 0;
   }
 
   onResortClosed(): void {

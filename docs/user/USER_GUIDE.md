@@ -1256,9 +1256,13 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   detector seed**, and **Crop, then use as detector seed…**. The crop
   options open the **crop modal**, where you trim an image region or
   audio span before using the item as a sort example or detector seed.
-- **The Autopilot resort prompt.** When you sort by an example and then
-  move on, VTSearch may ask whether to update the sort to your new
-  example (**Update Sort Example?**) or **Keep Current**. A new example
+- **The Autopilot resort prompt.** While Autopilot is looking for
+  positives by sorting on an example, VTSearch periodically stops to say
+  how that sort is going (**Update Sort Example?**): how many items you
+  have labelled with it and how few positives it has turned up. On the
+  left, **Keep clicking** carries on with the same sort for a set number
+  of labels (the interval grows each time you keep it); on the right,
+  **Supply a different sort** swaps in a new example. A new example
   can be typed as text, picked from the loaded media (**Browse Media…**),
   uploaded from your computer (**Upload File…**), or fetched by any of
   the same single-item sources the New Detector modal offers - a path on
