@@ -114,6 +114,14 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
 
 ## What the report says
 
+**The report is about the app as it is now (owner, 2026-09-27):** how it is
+doing, where it does well or poorly, and WHY. It is not a contest with an
+earlier review or a bench that no longer exists: "We're not fighting some
+internal fight against the version that no longer exists." A delta against the
+previous review gets one short note at most, never a section or the framing.
+Spend the effort on the why: for each class that does poorly, look at its images
+and say what the app gets wrong.
+
 The report goes in `docs/experiments/<date>-state-of-the-app/REPORT.md` and
 carries these sections, in this order:
 
