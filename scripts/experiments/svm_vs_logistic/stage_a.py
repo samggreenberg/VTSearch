@@ -28,6 +28,7 @@ bottom.  The test half is never touched by it.
 from __future__ import annotations
 
 import argparse
+import os
 import gzip
 import csv
 import json
@@ -44,7 +45,9 @@ sys.path.insert(0, str(HERE.parent / "calibration"))
 
 import heads as H  # noqa: E402
 
-DATADIR = Path("/expscratch/sgreenberg/svmlog-3197/datadir/embeddings")
+# #3197's private unit-norm datadir.  Since #4137 the pile itself is unit-norm,
+# so a later study (#4114, on coco_better) points this at the pile instead.
+DATADIR = Path(os.environ.get("SVMLOG_EMBEDDINGS", "/expscratch/sgreenberg/svmlog-3197/datadir/embeddings"))
 PILE = Path("/expscratch/sgreenberg/vts-cache/datadir/embeddings")
 SEEDS = (0, 1, 2, 3, 4)
 SIZES = (4, 8, 16, 32)  # Good votes per set; Bad votes = RATIO x this
