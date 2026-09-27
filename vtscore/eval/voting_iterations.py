@@ -628,6 +628,7 @@ def _band_metrics(
     region_aware: bool = False,
     style_obj: Any = None,
     neg_ids: Optional[list[int]] = None,
+    target_category: str = "",
 ) -> dict[str, float]:
     """FNR per size band at the shipped cut, plus the count behind each (#4044).
 
@@ -690,6 +691,9 @@ def _band_metrics(
             _score_media_ids(step, clips_dict, ids, region_aware=region_aware, style_obj=style_obj),
             dtype=np.float64,
         )
+        # The per-image evidence behind a cross-band miss rate, so a report can
+        # show which images an arm missed. Off unless VTS_DUMP_TEST_SCORES is set.
+        maybe_dump_predictions(clips_dict, ids, scores, [1] * n, threshold, target_category, suffix=f"__band_{band}")
         # Every id in a cohort is a positive of its own band's cell, so the miss
         # rate is just the share scoring under the cut.
         fnr = float(np.mean(scores < threshold))
@@ -2415,6 +2419,7 @@ def simulate_voting_iterations(  # noqa: C901
             region_aware=region_aware,
             style_obj=style_obj,
             neg_ids=band_neg_ids,
+            target_category=target_category,
         )
 
         # Score the remaining pool with the fresh model so the next step's
