@@ -414,7 +414,7 @@ def paired_mix(
     if not cells:
         raise ValueError(f"{cls!r} has no banded cells in this pool, so it cannot be mixed")
     requested = resolve_mix(medias, cls, mix)
-    present = {parse_cell(c)[1] for c in cells}
+    present = {b for b in (parse_cell(c)[1] for c in cells) if b is not None}
     # A band the corpus has no cell for (`apple@small` was dropped for supply)
     # cannot contribute. Renormalise over the bands that exist and record both.
     shares = {b: w for b, w in requested.items() if b in present and w > 0}

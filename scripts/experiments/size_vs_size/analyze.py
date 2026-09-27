@@ -257,7 +257,9 @@ def heatmaps(pool: pd.DataFrame, figdir: Path, t: int) -> list[str]:
             ax.set_title(f"{metric} ({arrow})")
             ax.axvline(2.5, color="white", lw=1.5)
             ax.axhline(2.5, color="white", lw=1.5)
-        fig.suptitle(f"Train size x test size at click {t}, {emb}: mean over classes; bold = best train size per column")
+        fig.suptitle(
+            f"Train size x test size at click {t}, {emb}: mean over classes; bold = best train size per column"
+        )
         fig.tight_layout()
         name = f"matrix_t{t}_{emb.replace('+', '_')}.png"
         fig.savefig(figdir / name, dpi=130)
@@ -357,9 +359,15 @@ def main() -> int:
     shares = json.loads((args.exp / "mix_shares.json").read_text())
 
     df, prov = _cells_io.load_arm(args.exp / "results")
-    print(f"read {prov['n_read']}/{prov['n_files']} cell files, {len(df):,} base rows; no-positive {len(prov['no_positive_found'])}")
-    keep = [c for c in df.columns if c in {"dataset", "embedder", "category", "seed", "t", "fpr", "n_test_neg"}
-            or c.startswith(("fnr_", "auroc_", "n_test_pos_"))]
+    print(
+        f"read {prov['n_read']}/{prov['n_files']} cell files, {len(df):,} base rows; no-positive {len(prov['no_positive_found'])}"
+    )
+    keep = [
+        c
+        for c in df.columns
+        if c in {"dataset", "embedder", "category", "seed", "t", "fpr", "n_test_neg"}
+        or c.startswith(("fnr_", "auroc_", "n_test_pos_"))
+    ]
     df = df[keep]
 
     # Complete seeds only: a seed missing some of its cells would pool a subset.
@@ -404,11 +412,20 @@ def main() -> int:
                 lines += [f"### {metric}", "", md_matrix(pools, metric, emb), ""]
             if base is not None:
                 b = base.groupby(["test"])[[f"text_{m}" for m in METRICS]].mean()
-                lines += ["Text sort alone (click 0): "
-                          + "; ".join(f"{te}: cost {b.loc[te, 'text_cost']:.2f}, auroc {b.loc[te, 'text_auroc']:.2f}"
-                                      for te in TEST_ORDER if te in b.index), ""]
+                lines += [
+                    "Text sort alone (click 0): "
+                    + "; ".join(
+                        f"{te}: cost {b.loc[te, 'text_cost']:.2f}, auroc {b.loc[te, 'text_auroc']:.2f}"
+                        for te in TEST_ORDER
+                        if te in b.index
+                    ),
+                    "",
+                ]
             c = con[(con["metric"].isin(["cost", "auroc"]))]
-            lines += ["| metric | test | train | minus train | diff | SE | classes | a better in |", "|---|---|---|---|---|---|---|---|"]
+            lines += [
+                "| metric | test | train | minus train | diff | SE | classes | a better in |",
+                "|---|---|---|---|---|---|---|---|",
+            ]
             for _, r in c.iterrows():
                 verdict = "" if r["resolvable"] else " (not resolvable)"
                 lines.append(
@@ -435,7 +452,10 @@ def main() -> int:
         for test in ("S", "M", "L", "SMLn"):
             sub = vf[vf["dataset"] == f"test {test}"]
             curves.quality_vs_clicks(
-                sub, figdir / f"curves_test_{test}", arms=arms, metric="cost",
+                sub,
+                figdir / f"curves_test_{test}",
+                arms=arms,
+                metric="cost",
                 baseline=vb[vb["dataset"] == f"test {test}"] if vb is not None else None,
             )
         viewer.build_viewer(
