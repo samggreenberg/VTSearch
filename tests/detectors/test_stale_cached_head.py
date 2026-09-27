@@ -100,7 +100,8 @@ class TestFindRetrainsAfterLabelsChange:
         )
         load_detector_and_wait(client, detector_id)
         _find(client, detector_id)
-        assert get_detector_context(detector_id).model is not None
+        det_ctx = get_detector_context(detector_id)
+        assert det_ctx is not None and det_ctx.model is not None
 
         path = _detector_path("stale-head-disk")
         data = _read_detector(path)
@@ -162,6 +163,7 @@ class TestLegacyFindConfig:
         detector_id = _detector_with_votes(client, "legacy-find")
         _find(client, detector_id)
         entry = get_detector(detector_id)
+        assert entry is not None
         assert "live_mlp" in _build_detector_config(entry)
 
         assert client.post("/api/find/end-session").status_code == 200
