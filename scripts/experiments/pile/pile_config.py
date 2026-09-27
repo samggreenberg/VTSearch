@@ -307,6 +307,21 @@ LVIS_SPLITS = ("train", "val")
 #: use the most obvious instance, which is the largest.
 SCALE_BAND_ON_LARGEST = True
 
+#: The owner's hand corrections to COCO's labels for ``coco_better`` (#4179): one
+#: row per (image, class) a human looked at and found COCO wrong about. Committed
+#: here rather than on scratch because it is a record of someone having looked,
+#: which no rebuild can bring back (#3729). Two findings, and each is applied
+#: through a door ``scale_core`` already has:
+#:
+#: * ``present`` -- COCO holds no such object, a human says one is there. The
+#:   pair goes into ``unbanded`` (so the image leaves the clean pool) and
+#:   ``reviewed_present`` (so it is no cross-class negative for that class). It
+#:   does NOT become a positive: nobody drew a box, and a band is a claim about size.
+#: * ``not_positive`` -- COCO's picked box is not ONE of the class. The pair is
+#:   ``excluded``, like a lump: never a positive, and still no negative, because
+#:   the image may hold a real one elsewhere.
+COCO_BETTER_CORRECTIONS = Path(__file__).resolve().parent / "human_record" / "COCO_BETTER__label_review_4179.json"
+
 
 class LumpRule(NamedTuple):
     """How LVIS decides whether one class's picked COCO box is ONE object (#3985)."""
@@ -2157,7 +2172,14 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "When only the HANDLE shows, read the food: a handle out of cereal is a "
             "spoon, a handle out of a salad is a fork. The one rule here that infers "
             "from surroundings rather than the object, because the alternative deletes "
-            "every partly buried spoon."
+            "every partly buried spoon. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "SLOTTED SPOON is Good -- a solid bowl with holes in it is still a spoon (a "
+            "slotted turner is a flat spatula, which stays Bad). A handheld MESH strainer, "
+            "skimmer or spider is Bad, like a bowl-style strainer: the line is a solid "
+            "bowl, holes or not, against a mesh or wire basket. COCO agrees: LVIS `ladle` "
+            "is COCO spoon 59% of the time, `strainer` 3.4%. A spoon is MADE FOR FOOD, as "
+            "a bowl is: a plastic kitty-litter scoop is Bad even though it is a slotted "
+            "scoop (owner, same day)."
         ),
     ),
     "bowl": ClassRule(
@@ -2521,7 +2543,13 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "reading, not ours -- a PARASAIL, a paraglider and a PARACHUTE: `parasail` "
             "lands on a COCO kite box 57 times and `parachute` 26, and both are already "
             "folded into this class. Bad: a flag, a banner, a balloon, a bird, a windsock, "
-            "a kite tail or string on its own. A kite lying on the ground still counts."
+            "a kite tail or string on its own. A kite lying on the ground still counts. "
+            "OWNER RULED 2026-09-26 during the #4179 review: the LINE is most of what makes "
+            "a kite, so a paper or foam plane or glider flying free is Bad. And the kite "
+            "itself has to be in frame: someone holding a handle or harness whose strings "
+            "run out of the picture is Bad, because a box cannot hold an object that is not "
+            "in the image. Parachutes, parasails and paragliders stay IN: their rigging "
+            "lines count as the line (owner, same day)."
         ),
     ),
     "knife": ClassRule(
@@ -2534,7 +2562,14 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "peeler, a knife block or a drawer with nothing visible, and a whole "
             "`silverware` or `utensil` box covering a place setting -- vote Good only when "
             "the boxed object IS the knife, the same rule `fork` carries. Where only the "
-            "handle shows, read the blade line, not the food."
+            "handle shows, read the blade line, not the food. OWNER RULED 2026-09-26 during "
+            "the #4179 review: scissors stay Bad EVEN when broken down to one blade on a "
+            "rounded handle -- it is still `scissors`. A SMALL sword (short blade, "
+            "one-handed) is Good: it is a big knife. A LONG or two-handed sword is Bad, a "
+            "weapon rather than a table or kitchen blade (so a ceremonial sabre cutting a "
+            "wedding cake is Bad). The line: a one-handed blade you could use at a table. "
+            "COCO boxes 15% of LVIS `sword` as a knife and leaves 84% unboxed, so Bad is "
+            "also the reading COCO carries."
         ),
     ),
     # The remaining rules were measured as names before ``test`` existed
@@ -2566,7 +2601,13 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "stations. Bad: ticket machines that are not for parking, post boxes, "
             "bollards, utility pillars. 100% pure over 89 LVIS matches -- the cleanest "
             "class in C, so membership is never the question. The risk is the BOX: take "
-            "the head and its housing, not the run of pole down to the pavement."
+            "the head and its housing, not the run of pole down to the pavement. OWNER "
+            "RULED 2026-09-26 during the #4179 review: head only stays, because it is what "
+            "COCO boxes -- median h/w 2.1, only 12% of 1,343 boxes reach h/w 3, and paired "
+            "with LVIS the heights agree (median ratio 0.99, 3% are 1.5x taller). A box "
+            "that does run down the pole is still ONE meter, so Good in a review. "
+            "Electronic meters with a screen and card reader (often a big `P`) are Good, "
+            "single-space or multi-space."
         ),
     ),
     "banana": ClassRule(
@@ -2647,7 +2688,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "appear on 0.3% of these boxes. Also bad: on-screen keyboards. A laptop's "
             "own keyboard belongs here only where COCO boxed it apart from the machine; "
             "otherwise the object is `laptop`, which is its own class in C. 98.5% is "
-            "`computer_keyboard`."
+            "`computer_keyboard`. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "stand-alone NUMPAD is Bad, and a keyboard WITHOUT a numpad (tenkeyless, "
+            "compact) is still Good -- the numpad is neither necessary nor sufficient. "
+            "A phone with a key per letter (a BlackBerry) is Bad: it is `cell phone`, "
+            "its own class in C. The laptop/desktop split stays as ruled, though the "
+            "owner expects it to show in this class's numbers as hard negatives."
         ),
     ),
     "tennis racket": ClassRule(
@@ -2689,7 +2735,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "one object wherever COCO boxed it as one. Bad: SNOWBOARDS, their own class "
             "in C, at 2.3%; and ski poles and boots (`ski_pole`, `ski_boot`, 0.5% each), "
             "which are never this class however tightly they sit beside it. 96.8% is "
-            "`ski`."
+            "`ski`. OWNER RULED 2026-09-26 during the #4179 review: skis means SNOW skis; "
+            "WATER SKIS are Bad. COCO agrees: of 105 LVIS `water_ski` boxes COCO calls 12% "
+            "`skis`, 16% `surfboard` and leaves 70% unboxed."
         ),
         # Plural like `scissors`: COCO boxes the pair (count ratio 2.09 against
         # LVIS's single `ski`), and ruling one ski would reject ~62% of its boxes.
@@ -2741,7 +2789,11 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "at 0.7%; and a machine under a cover where only the tarp is visible "
             "(`tarp`, 0.5%). The test is the ENGINE, not the size or the step-through "
             "frame: a scooter with a motor is this class, a pedal cycle with a battery "
-            "is `bicycle`. 89% pure."
+            "is `bicycle`. 89% pure. OWNER RULED 2026-09-26 during the #4179 review: the "
+            "engine test decides between TWO-wheelers only. A four-wheeled motorized "
+            "shopping cart or mobility scooter is a cart, not a scooter, so Bad -- as are "
+            "golf carts and powered wheelchairs. COCO agrees: LVIS `golfcart`, "
+            "`wheelchair` and `shopping_cart` land on a COCO motorcycle box 0% of the time."
         ),
     ),
     "tie": ClassRule(
@@ -2786,7 +2838,12 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "(`wet_suit` 7.8%, `jacket` 5.4%, `dress` 2.7%, `coat` 2.4%, `shirt` 2.2%). "
             "That is not a definitional split -- LVIS boxes the garment where COCO boxes "
             "the wearer, and mutual best match pairs the two. The object is always the "
-            "PERSON, never the garment."
+            "PERSON, never the garment. OWNER RULED 2026-09-26 during the #4179 review: a "
+            "person cut off by the frame is Good as long as the HEAD OR THE TORSO is in "
+            "frame (a head alone is Good). Only an extremity -- a hand, an arm, a foot, "
+            "legs, a pair of shoes -- is Bad. That is COCO's own reading: where LVIS "
+            "boxes a glove or a shoe, a COCO person box is just that part 0.1% of the "
+            "time, and 8.5% of hands and 17% of shoes carry no person box at all."
         ),
     ),
     "remote": ClassRule(

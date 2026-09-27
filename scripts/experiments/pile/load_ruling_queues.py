@@ -78,7 +78,8 @@ def main() -> int:
         default="",
         help="e.g. 'coco_better {cls} - is the red box around {unit}?'. When given, every "
         "subdirectory of --queues is registered under it and QUESTION is ignored. {unit} is "
-        "the class's ClassRule.unit, falling back to 'ONE <class>'.",
+        "the class's ClassRule.unit, falling back to 'ONE <class>'. The literal 'manifest' "
+        "takes each queue's name from its manifest's `name` instead (#4179).",
     )
     ap.add_argument("--wait", type=int, default=600)
     ap.add_argument(
@@ -125,7 +126,11 @@ def main() -> int:
             man = d / "manifest.json"
             if not man.exists():
                 continue
-            cls = json.loads(man.read_text())["class"]
+            m = json.loads(man.read_text())
+            cls = m["class"]
+            if args.name_template == "manifest":
+                questions[cls] = m["name"]
+                continue
             rule = pc.SCALE_CLASS_RULES.get(cls)
             unit = (rule.unit if rule else "") or f"ONE {cls}"
             questions[cls] = args.name_template.format(cls=cls, unit=unit)
