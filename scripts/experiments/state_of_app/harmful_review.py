@@ -60,7 +60,12 @@ MIXED = "mixed"
 #: The bands a control positive is drawn from (see its use).
 CONTROL_BANDS = ("medium", "large")
 #: Good means "there is a <class> here" for every question; the two readings of it.
-VERDICT = {(0, "Good"): "label_error", (0, "Bad"): "correct_negative", (1, "Good"): "correct_positive", (1, "Bad"): "label_error"}
+VERDICT = {
+    (0, "Good"): "label_error",
+    (0, "Bad"): "correct_negative",
+    (1, "Good"): "correct_positive",
+    (1, "Bad"): "label_error",
+}
 
 
 def _rule_name(cls: str) -> str:
@@ -119,7 +124,11 @@ def build(args) -> int:
             "class": cls,
             "label": lab,
             "arm": r.get("arm", "flagged"),
-            **{k: (None if pd.isna(r.get(k)) else float(r.get(k))) for k in ("z", "resid", "n_clicks", "n_embedders", "beat_share") if k in r},
+            **{
+                k: (None if pd.isna(r.get(k)) else float(r.get(k)))
+                for k in ("z", "resid", "n_clicks", "n_embedders", "beat_share")
+                if k in r
+            },
             "band": band_of.get((iid, cls, lab)),
             "box": None,
             "coco_holds": sorted(labels.get(iid, {})),
@@ -316,7 +325,9 @@ def bank(args) -> int:
             r = json.loads(line)
             banked[(r["queue"], r["file"])] = r
     fresh = sum((r["queue"], r["file"]) not in banked for r in rows)
-    changed = sum((r["queue"], r["file"]) in banked and banked[(r["queue"], r["file"])]["vote"] != r["vote"] for r in rows)
+    changed = sum(
+        (r["queue"], r["file"]) in banked and banked[(r["queue"], r["file"])]["vote"] != r["vote"] for r in rows
+    )
     banked.update({(r["queue"], r["file"]): r for r in rows})
     out.write_text("".join(json.dumps(r) + "\n" for r in banked.values()))
     print(f"{len(banked)} verdicts banked ({fresh} new, {changed} changed), {missing} unanswered live -> {out}")
@@ -364,7 +375,13 @@ def refresh(args) -> int:
         resp = api(
             args.api,
             "/api/dataset/import/server_folder",
-            {"path": str(folder), "media_type": "image", "recursive": "false", "dig_archives": "false", "dataset_name": tmp},
+            {
+                "path": str(folder),
+                "media_type": "image",
+                "recursive": "false",
+                "dig_archives": "false",
+                "dataset_name": tmp,
+            },
             method="POST",
         )
         if "_error" in resp:
@@ -553,7 +570,9 @@ def recheck_controls(args) -> int:
     items = []
     for r in bad:
         it = {k: r[k] for k in ("image_id", "class", "label")}
-        it.update(arm="control_recheck", was_file=r["file"], box=largest_box(labels[r["image_id"]][r["class"]]), band=None)
+        it.update(
+            arm="control_recheck", was_file=r["file"], box=largest_box(labels[r["image_id"]][r["class"]]), band=None
+        )
         zp, member = members[f"{it['image_id']:012d}.jpg"]
         zf = zc.setdefault(zp, zipfile.ZipFile(zp))
         im = _draw(Image.open(io.BytesIO(zf.read(member))).convert("RGB"), it, MIXED, font)
@@ -562,7 +581,9 @@ def recheck_controls(args) -> int:
         im.save(outdir / it["file"], quality=QUALITY, optimize=True, subsampling=0)
         items.append(it)
     name = "coco_better recheck - is the boxed object the class on the banner?"
-    (args.out / MIXED / "manifest.json").write_text(json.dumps({"class": MIXED, "name": name, "items": items}, indent=1))
+    (args.out / MIXED / "manifest.json").write_text(
+        json.dumps({"class": MIXED, "name": name, "items": items}, indent=1)
+    )
     print(f"{len(items)} controls re-asked with their box -> {args.out}")
     return 0
 
@@ -638,7 +659,10 @@ def clear(args) -> int:
     from load_ruling_queues import api, datasets  # noqa: PLC0415
     from vtscore.detectors.store import _slug  # noqa: PLC0415
 
-    banked = {(json.loads(x)["queue"], json.loads(x)["file"]) for x in (args.queues / "verdicts.jsonl").read_text().splitlines()}
+    banked = {
+        (json.loads(x)["queue"], json.loads(x)["file"])
+        for x in (args.queues / "verdicts.jsonl").read_text().splitlines()
+    }
     dets = {d["name"]: d for d in api(args.api, "/api/detectors/registry")["detectors"]}
     dss = datasets(args.api)
     gone = []
@@ -669,7 +693,9 @@ def clear(args) -> int:
     left_d = {d["name"] for d in api(args.api, "/api/detectors/registry")["detectors"]}
     left_s = set(datasets(args.api))
     back = [n for n in gone if n in left_d or n in left_s]
-    print(f"{len(gone)} cleared; {len(left_d)} detectors / {len(left_s)} datasets left; unpaired {sorted(left_d ^ left_s)}; came back {back}")
+    print(
+        f"{len(gone)} cleared; {len(left_d)} detectors / {len(left_s)} datasets left; unpaired {sorted(left_d ^ left_s)}; came back {back}"
+    )
     return 1 if back or (left_d ^ left_s) else 0
 
 
@@ -678,7 +704,10 @@ def _app_url(port: int = 11850) -> str:
     import subprocess  # noqa: PLC0415
 
     out = subprocess.run(
-        ["squeue", "-h", "-n", "vtsearch", "-t", "RUNNING", "-o", "%N"], capture_output=True, text=True, check=True
+        ["squeue", "-h", "-n", "vtsearch", "-t", "RUNNING", "-o", "%N"],  # noqa: S607 - SLURM is on PATH on the GRID
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.split()
     if len(out) != 1:
         raise SystemExit(f"expected one running vtsearch job, found {out or 'none'}; pass --api")
@@ -697,8 +726,12 @@ def main() -> int:
     b.add_argument("--min-per-class", type=int, default=5)
     b.add_argument("--control-share", type=float, default=0.1)
     b.add_argument("--min-controls", type=int, default=2)
-    b.add_argument("--min-embedders", type=int, default=3, help="test_side.py lists: keep pairs this many embedders flag")
-    b.add_argument("--asked-in", type=Path, nargs="*", default=[], help="queue roots whose (image, class) pairs are not re-asked")
+    b.add_argument(
+        "--min-embedders", type=int, default=3, help="test_side.py lists: keep pairs this many embedders flag"
+    )
+    b.add_argument(
+        "--asked-in", type=Path, nargs="*", default=[], help="queue roots whose (image, class) pairs are not re-asked"
+    )
     b.add_argument("--name-suffix", default="", help="appended to every queue name, e.g. ' [test set]'")
     b.add_argument(
         "--extend",
@@ -736,7 +769,16 @@ def main() -> int:
     SUFFIX = getattr(args, "name_suffix", "")
     if hasattr(args, "api") and not args.api:
         args.api = _app_url()
-    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge, "recheck-controls": recheck_controls, "export": export}[args.cmd](args)
+    return {
+        "build": build,
+        "bank": bank,
+        "refresh": refresh,
+        "clear": clear,
+        "rezoom": rezoom,
+        "merge": merge,
+        "recheck-controls": recheck_controls,
+        "export": export,
+    }[args.cmd](args)
 
 
 if __name__ == "__main__":

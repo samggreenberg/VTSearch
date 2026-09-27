@@ -130,7 +130,9 @@ def main() -> int:
     for cls in sorted(negs_of):
         pool = sorted(i for i in negs_of[cls] if (i, cls) not in flagged)
         for iid in rng.sample(pool, min(args.random_neg, len(pool))):
-            rand.append({"image_id": iid, "class": cls, "label": 0, "n_flags": 0, "n_embedders": 0, "arm": "test_random"})
+            rand.append(
+                {"image_id": iid, "class": cls, "label": 0, "n_flags": 0, "n_embedders": 0, "arm": "test_random"}
+            )
     pairs = pd.concat([pairs.sort_values(["n_flags", "beat_share"], ascending=False), pd.DataFrame(rand)])
     pairs.to_csv(args.out / "test_pairs.csv", index=False)
     f = pairs[pairs["arm"] == "test_flagged"]
