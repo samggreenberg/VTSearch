@@ -49,22 +49,15 @@ def _lookups_for_snap(
     return build_media_lookup(snap)
 
 
-def _patch_output_from_file(
-    file_path: Path,
-    *,
-    media_type: str,
-    embedder_name: str,
-):
-    """Re-derive a media's :class:`PatchEmbedOutput` from its file, or ``None``.
+def _patch_embedder(*, media_type: str, embedder_name: str):
+    """The embedder the cross-dataset patch path forwards through, or ``None``.
 
-    Resolves the embedder (the detector's, else the media type's default) and
-    runs :meth:`MediaEmbedder.patch_forward`.  Returns ``None`` when the
-    embedder doesn't support patch regions or the forward pass produces no
-    output.  Shared by the Good-vote nearest-patch path and the Bad-vote flood
-    path so both see the identical grid cross-dataset.
+    Resolves the detector's embedder, else the media type's default, and
+    returns it only when it produces a patch grid.  ``None`` therefore means
+    "there is no patch space to pool a ``region_box`` from" - the expected
+    state for a whole-image embedder, not a failure.
     """
     from vtscore.media import embedders_for_type, get_embedder
-    from vtscore.media.embedder import media_from_path
 
     embedder = None
     if embedder_name:
@@ -79,6 +72,28 @@ def _patch_output_from_file(
         embedder = avail[0]
 
     if not getattr(embedder, "supports_patch_regions", False):
+        return None
+    return embedder
+
+
+def _patch_output_from_file(
+    file_path: Path,
+    *,
+    media_type: str,
+    embedder_name: str,
+):
+    """Re-derive a media's :class:`PatchEmbedOutput` from its file, or ``None``.
+
+    Resolves the embedder via :func:`_patch_embedder` and runs
+    :meth:`MediaEmbedder.patch_forward`.  Returns ``None`` when the
+    embedder doesn't support patch regions or the forward pass produces no
+    output.  Shared by the Good-vote nearest-patch path and the Bad-vote flood
+    path so both see the identical grid cross-dataset.
+    """
+    from vtscore.media.embedder import media_from_path
+
+    embedder = _patch_embedder(media_type=media_type, embedder_name=embedder_name)
+    if embedder is None:
         return None
 
     try:
@@ -158,12 +173,17 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
     When *elem* carries a ``region_box`` and the active embedder supports
     patch regions, the resolved file is patch-forwarded and the raw patch under
     the box is taken via :func:`nearest_patch_to_box` so the
-    user's region-level training intent survives a dataset switch.  Logs a
-    warning and falls
-    back to a full-file embedding when the patch path is unavailable -
-    legacy single-vector embedders, an origin carrying a clipper we'd
-    have to replay against an unknown patch grid, or a failed forward
-    pass.
+    user's region-level training intent survives a dataset switch.  Falls
+    back to a full-file embedding when the patch path is unavailable, logged
+    at the level its cause deserves:
+
+    * a whole-image embedder has no patch space, so the box stays on the
+      label unused - expected, and logged at DEBUG only.  A WARNING here
+      fired once per boxed label per retrain (#4192);
+    * an origin carrying a clipper we'd have to replay against an unknown
+      patch grid - a known limitation, WARNING;
+    * a patch-capable embedder whose forward pass produced nothing - a real
+      failure, WARNING.
     """
     from vtscore.detectors.resolver import (
         _apply_clip_and_embed,
@@ -179,29 +199,40 @@ def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> 
         params = origin.get("params", {}) if isinstance(origin, dict) else {}
         has_clipper = isinstance(params, dict) and bool(params.get("clipper"))
 
-        if elem.region_box is not None and not has_clipper:
-            pooled = _patch_pooled_from_file(
-                file_path,
-                media_type=media_type,
-                embedder_name=embedder_name,
-                region_box=elem.region_box,
-            )
-            if pooled is not None:
-                return pooled
-            log.warning(
-                "labelset_training: region_box on %r cannot be honored cross-dataset "
-                "(embedder=%r does not support patch regions or patch_forward "
-                "produced no output); falling back to image-level embedding",
-                elem.origin_name or elem.filename or "<unknown>",
-                embedder_name or "<default>",
-            )
-        elif elem.region_box is not None and has_clipper:
-            log.warning(
-                "labelset_training: region_box on %r cannot be honored cross-dataset "
-                "because the origin carries a clipper; falling back to image-level "
-                "embedding",
-                elem.origin_name or elem.filename or "<unknown>",
-            )
+        if elem.region_box is not None:
+            if _patch_embedder(media_type=media_type, embedder_name=embedder_name) is None:
+                # The in-dataset path's ``patch_capable`` gate reaches the same
+                # image-level vector silently; a box is legitimate data to keep
+                # for a later region detector, not a fault.
+                log.debug(
+                    "labelset_training: region_box on %r unused; embedder=%r is whole-image, "
+                    "training on the image-level embedding",
+                    elem.origin_name or elem.filename or "<unknown>",
+                    embedder_name or "<default>",
+                )
+            elif not has_clipper:
+                pooled = _patch_pooled_from_file(
+                    file_path,
+                    media_type=media_type,
+                    embedder_name=embedder_name,
+                    region_box=elem.region_box,
+                )
+                if pooled is not None:
+                    return pooled
+                log.warning(
+                    "labelset_training: region_box on %r cannot be honored cross-dataset "
+                    "(embedder=%r patch_forward produced no output); falling back to "
+                    "image-level embedding",
+                    elem.origin_name or elem.filename or "<unknown>",
+                    embedder_name or "<default>",
+                )
+            else:
+                log.warning(
+                    "labelset_training: region_box on %r cannot be honored cross-dataset "
+                    "because the origin carries a clipper; falling back to image-level "
+                    "embedding",
+                    elem.origin_name or elem.filename or "<unknown>",
+                )
 
         if has_clipper:
             result = _apply_clip_and_embed(file_path, media_type, origin, embedder_name)
@@ -278,9 +309,9 @@ def _resolve_uncached_embedding(
     # resolved file when ``elem.region_box`` is set and the embedder
     # supports patch regions, then takes the nearest raw patch so
     # region votes survive a dataset switch.  When the patch path isn't
-    # available (legacy single-vector embedder, clipper-bearing origin,
-    # failed forward pass) it logs a warning and returns the image-level
-    # embedding - the only signal we have left to offer training.
+    # available (whole-image embedder, clipper-bearing origin, failed
+    # forward pass) it returns the image-level embedding - the only signal
+    # we have left to offer training - warning only for the last two.
     emb = _embed_one(elem, media_type=media_type, embedder_name=embedder_name)
     return np.asarray(emb) if emb is not None else None
 
