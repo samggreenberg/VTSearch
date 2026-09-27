@@ -453,6 +453,12 @@ def main() -> int:
         "Takes a bare class in --cell",
     )
     ap.add_argument("--mix-census", action="store_true", help="per-class band shares, then exit")
+    ap.add_argument(
+        "--mix-census-json",
+        type=Path,
+        help="with --mix-census, also write {class: {band: share}} here: the natural mix a "
+        "CALIB_TRAIN_MIXES=natural run reads as CALIB_MIX_SHARES (#4160)",
+    )
     ap.add_argument("--check-bands", help="assert this class's bands share one negative pool, then exit")
     args = ap.parse_args()
 
@@ -470,7 +476,8 @@ def main() -> int:
 
     if args.mix_census:
         print(f"\n{'class':<16}{'small':>9}{'medium':>9}{'large':>9}{'total':>9}   shares S/M/L")
-        for r in mix_census(members):
+        census = mix_census(members)
+        for r in census:
             c = r["counts"]
             sh = r["shares"]
             got = "/".join(f"{sh.get(b, 0):.2f}" for b in ("small", "medium", "large"))
@@ -478,6 +485,10 @@ def main() -> int:
                 f"{r['class']:<16}{c.get('small', 0):>9,}{c.get('medium', 0):>9,}"
                 f"{c.get('large', 0):>9,}{r['total']:>9,}   {got}"
             )
+        if args.mix_census_json:
+            shares = {r["class"]: r["shares"] for r in census if r["shares"]}
+            args.mix_census_json.write_text(json.dumps(shares, indent=2, sort_keys=True) + "\n")
+            log(f"wrote {len(shares)} classes' shares to {args.mix_census_json}")
         return 0
 
     if args.check_bands:

@@ -132,6 +132,11 @@ ENVX="$ENVX CALIB_CELL_ORDER=$CALIB_CELL_ORDER"
 # grid that silently ran without it is a grid that answered the old question,
 # and nothing in the output would say so except three columns of NaN.
 ENVX="$ENVX CALIB_TEST_BANDS=$CALIB_TEST_BANDS"
+# #4160's knobs. `CALIB_TRAIN_MIXES` DOES reach the cell list -- it adds a
+# `<class>@mix-<name>` cell per class -- so, like CALIB_CELL_ORDER, the launcher's
+# count and each task's list have to see the same value.
+ENVX="$ENVX CALIB_TRAIN_MIXES=${CALIB_TRAIN_MIXES:-} CALIB_MIX_SHARES=${CALIB_MIX_SHARES:-}"
+ENVX="$ENVX CALIB_TEST_BAND_AUROC=${CALIB_TEST_BAND_AUROC:-0}"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES CALIB_SAFE_THRESHOLDS=$CALIB_SAFE_THRESHOLDS"
 ENVX="$ENVX CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQUIRE_SEED_QUERY"

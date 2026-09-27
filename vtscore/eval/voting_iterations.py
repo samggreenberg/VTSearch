@@ -498,6 +498,34 @@ def _check_test_bands(
         )
 
 
+def _check_train_mix(
+    train_mix: "Optional[str | dict[str, float]]",
+    target_category: str,
+    target_prevalence: Optional[float],
+) -> None:
+    """Refuse a ``train_mix`` request the run cannot honour, at the door (#4160).
+
+    The target has to name the mixed cell the retag writes (``car@mix-equal``),
+    so a row's ``category`` says which arm it is. A pure band there would put a
+    mixed arm's rows under a pure arm's name. Prevalence thinning is refused for
+    the reason :func:`_check_test_bands` gives: the mix's split is a replay of
+    the pure arms' splits and thinning moves the pool the replay reads.
+    """
+    if train_mix is None:
+        return
+    band = scale_bands.parse_cell(target_category)[1]
+    if not scale_bands.is_mix_band(band):
+        raise ValueError(
+            f"train_mix needs a mixed target such as 'car@mix-equal', got {target_category!r}; "
+            "a pure band there would report a mixed arm under a pure arm's name"
+        )
+    if target_prevalence is not None:
+        raise ValueError(
+            "train_mix and target_prevalence cannot both be set: the mix replays the pure "
+            "arms' splits, and prevalence thinning changes the pool that replay reads"
+        )
+
+
 def _resolve_band_cohorts(
     unfiltered: dict[int, dict[str, Any]],
     target_category: str,
@@ -599,6 +627,7 @@ def _band_metrics(
     *,
     region_aware: bool = False,
     style_obj: Any = None,
+    neg_ids: Optional[list[int]] = None,
 ) -> dict[str, float]:
     """FNR per size band at the shipped cut, plus the count behind each (#4044).
 
@@ -624,12 +653,27 @@ def _band_metrics(
     an empty dict are **not** the same answer: nobody looked, versus the band
     has no held-out positives, which is why the counts go NaN in the first case
     and 0 in the second.
+
+    *neg_ids*, when given, are the run's held-out negatives, and each band also
+    gets ``auroc_<band>``: its cohort ranked against those negatives (#4160).
+    That is the threshold-free half. An arm can lose a band on its ranking or
+    on its cut, and the FNR alone cannot tell the two apart. It costs one more
+    scoring pass over the negatives, so it is opt-in (NaN otherwise).
     """
     import numpy as np  # noqa: PLC0415
 
+    from vtscore.eval.label_curve import _auroc  # noqa: PLC0415
+
     nan = float("nan")
     out: dict[str, float] = {}
+    neg_scores = None
+    if cohorts is not None and neg_ids:
+        neg_scores = np.asarray(
+            _score_media_ids(step, clips_dict, neg_ids, region_aware=region_aware, style_obj=style_obj),
+            dtype=np.float64,
+        )
     for band in scale_bands.REPORTED_BANDS:
+        out[f"auroc_{band}"] = nan
         if cohorts is None:
             out[f"n_test_pos_{band}"] = nan
             out[f"fnr_{band}"] = nan
@@ -651,6 +695,9 @@ def _band_metrics(
         fnr = float(np.mean(scores < threshold))
         out[f"fnr_{band}"] = round(fnr, 6)
         out[f"recall_{band}"] = round(1.0 - fnr, 6)
+        if neg_scores is not None and len(neg_scores):
+            labels = np.concatenate([np.ones(n), np.zeros(len(neg_scores))])
+            out[f"auroc_{band}"] = round(_auroc(np.concatenate([scores, neg_scores]), labels), 6)
     return out
 
 
@@ -1489,6 +1536,8 @@ def simulate_voting_iterations(  # noqa: C901
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
     test_bands: Optional[list[str] | str] = None,
+    train_mix: "Optional[str | dict[str, float]]" = None,
+    test_band_auroc: bool = False,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1771,6 +1820,19 @@ def simulate_voting_iterations(  # noqa: C901
             FPR: the bands share their negatives, so the row's single ``fpr`` is
             the whole of that half.  Incompatible with ``target_prevalence``,
             which moves the pool the replay depends on.
+        train_mix: Train on the class at a **mix of sizes** (issue #4160):
+            ``"natural"`` or a per-band weight mapping. *target_category* is
+            then a mixed cell (``car@mix-equal``) whose positives are drawn by
+            :func:`~vtscore.eval.scale_bands.paired_mix` from the pure bands'
+            sim halves at *seed*, and whose test positives are the pure bands'
+            held-out cohorts.  The split is that function's rather than
+            :func:`_split_media_ids`'s, because re-splitting the mixed pool
+            would train on images a pure arm tests on.  With ``test_bands`` the
+            per-band columns are the same images the pure arms report.  ``None``
+            (the default) changes nothing.
+        test_band_auroc: Under ``test_bands``, also rank each band's cohort
+            against the held-out negatives (``auroc_<band>``, #4160).  Off by
+            default because it scores the negatives a second time each step.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -1791,11 +1853,21 @@ def simulate_voting_iterations(  # noqa: C901
     # three minutes in on an argument combination readable at the door is a
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
+    _check_train_mix(train_mix, target_category, target_prevalence)
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
     # they have to be taken off the unfiltered pool (#4044).
     unfiltered = clips_dict
+
+    mix_split: Optional[tuple[list[int], list[int], dict[str, list[int]]]] = None
+    if train_mix is not None:
+        cls, mix_label = scale_bands.parse_cell(target_category)
+        assert mix_label is not None  # `_check_train_mix` refused this at the door
+        clips_dict, mix_sim, mix_test, mix_cohorts, _ = scale_bands.paired_mix(
+            clips_dict, cls, train_mix, sim_fraction=sim_fraction, seed=seed, label=mix_label
+        )
+        mix_split = (mix_sim, mix_test, mix_cohorts)
 
     # One filter for the whole cell, before anything reads a label: on a
     # scale-banded dataset an image can hold the category at the wrong size,
@@ -1845,17 +1917,23 @@ def simulate_voting_iterations(  # noqa: C901
         clips_dict = downsampled
     realized_prevalence = round(_prevalence(clips_dict, target_category), 6)
 
-    sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
-
-    band_cohorts = _resolve_band_cohorts(
-        unfiltered,
-        target_category,
-        test_bands=test_bands,
-        sim_fraction=sim_fraction,
-        seed=seed,
-        own_test_ids=test_ids,
-        target_prevalence=target_prevalence,
-    )
+    if mix_split is None:
+        sim_ids, test_ids = _split_media_ids(clips_dict, sim_fraction, rng)
+        band_cohorts = _resolve_band_cohorts(
+            unfiltered,
+            target_category,
+            test_bands=test_bands,
+            sim_fraction=sim_fraction,
+            seed=seed,
+            own_test_ids=test_ids,
+            target_prevalence=target_prevalence,
+        )
+    else:
+        # The mixed arm's split is `paired_mix`'s: re-splitting the mixed pool
+        # would train on images a pure arm holds out.
+        sim_ids, test_ids, all_cohorts = mix_split
+        wanted = None if test_bands in (None, "auto") else set(test_bands)
+        band_cohorts = {b: ids for b, ids in all_cohorts.items() if wanted is None or b in wanted}
 
     # Ensure the test set has both positive and negative medias.  Routes through
     # ``media_is_positive`` so multi-label (Visual Genome) images - where the
@@ -1864,6 +1942,7 @@ def simulate_voting_iterations(  # noqa: C901
     test_neg = [cid for cid in test_ids if not media_is_positive(clips_dict[cid], target_category)]
     if not test_pos or not test_neg:
         return []
+    band_neg_ids = test_neg if (test_bands and test_band_auroc) else None
 
     # A patch dataset exposes a ``patch_grid`` per media; such datasets are
     # scored region-aware (max-pool over the image's score rows) the same way
@@ -2335,6 +2414,7 @@ def simulate_voting_iterations(  # noqa: C901
             band_cohorts if test_bands else None,
             region_aware=region_aware,
             style_obj=style_obj,
+            neg_ids=band_neg_ids,
         )
 
         # Score the remaining pool with the fresh model so the next step's
