@@ -1138,8 +1138,10 @@ class TestRegionAwareTrainingCrossDataset:
     user's region intent isn't silently downgraded to a full-image embedding
     (bug H2).
 
-    Falls back (with a warning) to the image-level embedding only when the
-    chosen embedder can't produce a patch grid.
+    Falls back to the image-level embedding when no patch grid can be had:
+    silently for a whole-image embedder (the box is legitimate data it just
+    can't use, #4192), with a warning when a patch-capable embedder's forward
+    pass produces nothing.
     """
 
     def _make_grid(self, h: int = 4, w: int = 4, d: int = 16) -> np.ndarray:
@@ -1295,13 +1297,13 @@ class TestRegionAwareTrainingCrossDataset:
         np.testing.assert_allclose(second, nearest_patch_to_box(grid, bot_right), atol=1e-6)
         assert not np.allclose(first, second), "Region edit must re-resolve, not reuse the cached vector"
 
-    def test_cross_dataset_region_vote_falls_back_with_warning_for_single_vector_embedder(
+    def test_cross_dataset_region_vote_on_whole_image_embedder_falls_back_without_warning(
         self, monkeypatch, tmp_path, caplog
     ):
-        """Legacy single-vector embedders can't produce a patch grid.  The
-        element still trains (we don't drop the vote), but the cached
-        embedding is the full-image vector and a warning surfaces the
-        silent downgrade."""
+        """A whole-image embedder (SigLIP, CLIP, ...) can't produce a patch
+        grid.  The element still trains on the full-image vector, and nothing
+        is logged at WARNING: a box on a binary detector is legitimate data,
+        and the fallback is the correct behaviour for that embedder (#4192)."""
         import logging
 
         from vtscore.datasets.labelset import LabelSet
@@ -1316,19 +1318,27 @@ class TestRegionAwareTrainingCrossDataset:
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
 
-        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_training"):
+        with caplog.at_level(logging.DEBUG, logger="vtscore.detectors.labelset_training"):
             populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
 
         eid = stable_element_id(elem)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
-        assert any("region_box" in r.message and "patch regions" in r.message for r in caplog.records), (
-            f"Expected a region-downgrade warning; got: {[r.message for r in caplog.records]}"
+        warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+        assert warnings == [], f"A box on a whole-image embedder must not warn; got: {warnings}"
+        assert any(r.levelno == logging.DEBUG and "region_box" in r.getMessage() for r in caplog.records), (
+            f"Expected the unused-box DEBUG line; got: {[r.getMessage() for r in caplog.records]}"
         )
 
-    def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(self, monkeypatch, tmp_path):
+    def test_cross_dataset_region_vote_returns_none_when_embedder_patch_forward_fails(
+        self, monkeypatch, tmp_path, caplog
+    ):
         """``patch_forward`` returning ``None`` (failed decode, etc.)
         downgrades to the image-level fallback rather than skipping the
-        element entirely, keeping the vote in the training set."""
+        element entirely, keeping the vote in the training set - and, unlike
+        the whole-image case, warns: a patch-capable embedder producing no
+        grid is a real failure."""
+        import logging
+
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id
         from vtscore.detectors.labelset_training import populate_label_embeddings
@@ -1352,10 +1362,15 @@ class TestRegionAwareTrainingCrossDataset:
         elem = self._cross_dataset_elem(region_box=(0.0, 0.0, 0.5, 0.5))
         ls = LabelSet([elem])
         det_ctx = DetectorContext("d1")
-        populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
+        with caplog.at_level(logging.WARNING, logger="vtscore.detectors.labelset_training"):
+            populate_label_embeddings(det_ctx, ls, media_type="image", snap={})
 
         eid = stable_element_id(elem)
         np.testing.assert_array_equal(det_ctx.label_embeddings[eid], sentinel)
+        assert any(
+            r.levelno == logging.WARNING and "region_box" in r.getMessage() and "patch_forward" in r.getMessage()
+            for r in caplog.records
+        ), f"Expected a region-downgrade warning; got: {[r.getMessage() for r in caplog.records]}"
 
     def test_cross_dataset_no_region_box_unchanged(self, monkeypatch, tmp_path):
         """Image-level cross-dataset elements (no ``region_box``) must hit
