@@ -34,7 +34,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "calibration"))
 
-ARMS = ("svm", "linear", "mlp", "linconv", "svmc01", "svmc10")
+ARMS = ("svm", "linear", "mlp", "linconv", "svmc01", "svmc10", "lrconv")
 CHECKPOINTS = (10, 20, 40, 80, 150)
 METRICS = ("cost", "oracle_cost", "regret", "average_precision", "auroc", "f1", "fnr", "fpr", "n_good")
 KEYS = ["dataset", "embedder", "category", "seed"]
