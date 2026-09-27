@@ -525,6 +525,48 @@ def merge(args) -> int:
     return rc
 
 
+def recheck_controls(args) -> int:
+    """One queue re-asking every control voted Bad, now WITH its banded box drawn.
+
+    A control is one of the class's own positives, shown whole and unboxed, so a
+    Bad can be a real label error or a small object nobody found. Drawing the
+    box (zoomed where small) separates the two: Bad with the box in view is an
+    error, Good was a miss. Reads the banked verdicts of every ``--queues`` root.
+    """
+    from PIL import Image, ImageFont  # noqa: PLC0415
+
+    from pilebuild.loaders.coco_better import read_coco_labels  # noqa: PLC0415
+    from pilebuild.scale_core import largest_box  # noqa: PLC0415
+
+    bad, seen = [], set()
+    for root in args.queues:
+        for x in (root / "verdicts.jsonl").read_text().splitlines():
+            r = json.loads(x)
+            if r["arm"] == "control" and r["vote"] == "Bad" and r["file"] not in seen:
+                seen.add(r["file"])
+                bad.append(r)
+    labels, _, _ = read_coco_labels(pc.COCO_ANCHOR_DIR, pc.SCALE_CLASSES)
+    members, zc = _zip_members(), {}
+    font = ImageFont.load_default(size=34)
+    outdir = args.out / MIXED / "images"
+    outdir.mkdir(parents=True, exist_ok=True)
+    items = []
+    for r in bad:
+        it = {k: r[k] for k in ("image_id", "class", "label")}
+        it.update(arm="control_recheck", was_file=r["file"], box=largest_box(labels[r["image_id"]][r["class"]]), band=None)
+        zp, member = members[f"{it['image_id']:012d}.jpg"]
+        zf = zc.setdefault(zp, zipfile.ZipFile(zp))
+        im = _draw(Image.open(io.BytesIO(zf.read(member))).convert("RGB"), it, MIXED, font)
+        stem = hashlib.sha1(f"recheck:{it['image_id']}:{it['class']}".encode()).hexdigest()[:12]  # noqa: S324
+        it["file"] = f"recheck_{stem}.jpg"
+        im.save(outdir / it["file"], quality=QUALITY, optimize=True, subsampling=0)
+        items.append(it)
+    name = "coco_better recheck - is the boxed object the class on the banner?"
+    (args.out / MIXED / "manifest.json").write_text(json.dumps({"class": MIXED, "name": name, "items": items}, indent=1))
+    print(f"{len(items)} controls re-asked with their box -> {args.out}")
+    return 0
+
+
 def clear(args) -> int:
     """Remove every FULLY answered queue from the dashboard, after proving its votes are banked.
 
@@ -620,6 +662,9 @@ def main() -> int:
     g.add_argument("--into", type=Path, required=True)
     g.add_argument("--from", dest="source", type=Path, required=True)
     g.add_argument("--detectors", type=Path, default=Path("/expscratch/sgreenberg/vtsearch-data/detectors"))
+    rc = sub.add_parser("recheck-controls")
+    rc.add_argument("--queues", type=Path, nargs="+", required=True)
+    rc.add_argument("--out", type=Path, required=True)
     z = sub.add_parser("rezoom")
     z.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     z.add_argument("--queues", type=Path, required=True)
@@ -632,7 +677,7 @@ def main() -> int:
     SUFFIX = getattr(args, "name_suffix", "")
     if hasattr(args, "api") and not args.api:
         args.api = _app_url()
-    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge}[args.cmd](args)
+    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge, "recheck-controls": recheck_controls}[args.cmd](args)
 
 
 if __name__ == "__main__":
