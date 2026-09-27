@@ -127,10 +127,36 @@ def expand(df: pd.DataFrame, shares: dict[str, dict[str, float]], wf: float, wn:
     return pd.concat(parts, ignore_index=True)
 
 
-def at_click(long: pd.DataFrame, t: int) -> pd.DataFrame:
-    """Each run's row at click *t*, or its last row if it ended earlier."""
+RUN_KEYS = ["embedder", "cls", "seed", "train", "test"]
+
+
+def at_click(long: pd.DataFrame, t: int, expected: pd.DataFrame, base: pd.DataFrame | None) -> pd.DataFrame:
+    """Each run's row at click *t*, or its last row if it ended earlier.
+
+    A run with no row by click *t* has not yet had a Good and a Bad vote, so the
+    app had no detector on screen and the user had only the text sort. It is
+    scored at the text sort (``starved = 1``) rather than dropped: starvation
+    differs by training size, and dropping it would score each arm on the runs
+    it happened to get going.
+    """
     sub = long[long["t"] <= t].sort_values("t")
-    return sub.groupby(["embedder", "cls", "seed", "train", "test"], as_index=False).last()
+    got = sub.groupby(RUN_KEYS, as_index=False).last()
+    got["starved"] = 0
+    missing = expected.merge(got[RUN_KEYS], on=RUN_KEYS, how="left", indicator=True)
+    missing = missing[missing["_merge"] == "left_only"].drop(columns="_merge")
+    if missing.empty:
+        return got
+    if base is None:
+        raise SystemExit(f"{len(missing)} runs have no row by click {t} and there is no --baseline to score them at")
+    b = base.rename(columns={f"text_{m}": m for m in ("fpr", "fnr", "recall", "cost", "auroc", "f1")})
+    fill = missing.merge(
+        b[["embedder", "cls", "seed", "test", "fpr", "fnr", "recall", "cost", "auroc", "f1"]],
+        on=["embedder", "cls", "seed", "test"],
+        how="left",
+    )
+    fill["t"] = 0
+    fill["starved"] = 1
+    return pd.concat([got, fill], ignore_index=True)
 
 
 def pooled(final: pd.DataFrame, metric: str) -> pd.DataFrame:
@@ -348,8 +374,23 @@ def main() -> int:
     ap.add_argument("--no-viewer", action="store_true")
     args = ap.parse_args()
 
+    import os
+
+    shape = json.loads((args.exp / "results" / "grid_shape.json").read_text())
+    # The grid's own enumeration, so completeness is read off the cells the
+    # array was asked for rather than off the rows that came back.
+    os.environ.update(
+        CALIB_DATASETS=",".join(shape["datasets"]),
+        CALIB_COCO_BETTER_EMBEDDERS=",".join(shape["embedders"]),
+        CALIB_N_SEEDS=str(shape["n_seeds"]),
+        CALIB_CELL_ORDER=shape["cell_order"],
+        CALIB_CATEGORY_MODE="all",
+        CALIB_TRAIN_MIXES="equal,natural",
+        CALIB_MIX_SHARES=str(args.exp / "mix_shares.json"),
+    )
     import _cells_io
     import experiment_config as cfg
+    import run_cells
     from vtscore.training.thresholds import inclusion_cost_weights
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -371,20 +412,38 @@ def main() -> int:
     df = df[keep]
 
     # Complete seeds only: a seed missing some of its cells would pool a subset.
-    n_cells_per_seed = df.groupby("seed")[["embedder", "category"]].apply(lambda g: len(g.drop_duplicates()))
-    full = int(n_cells_per_seed.max())
-    complete = sorted(int(s) for s, n in n_cells_per_seed.items() if n == full)
+    # A cell is done when its file exists, rows or not: a run that never found
+    # a positive writes a header and is a result, not a gap.
+    prepare = json.loads((args.exp / "results" / "prepare_info.json").read_text())
+    cells = cfg.array_cells(run_cells._categories_by_dataset(prepare))
+    done = {
+        int(p.stem.split("_")[1])
+        for p in (args.exp / "results" / "cells").glob("task_[0-9]*.csv")
+        if "__" not in p.stem
+    }
+    grid = pd.DataFrame(cells)
+    grid["done"] = [i in done for i in range(len(cells))]
+    by_seed = grid.groupby("seed")["done"].all()
+    complete = sorted(int(sd) for sd, ok in by_seed.items() if ok)
     if args.seeds:
-        complete = [s for s in complete if s < args.seeds]
-    dropped = sorted(set(n_cells_per_seed.index) - set(complete))
-    print(f"seeds complete: {len(complete)} ({full} cells each); dropped partial: {dropped}")
+        complete = [sd for sd in complete if sd < args.seeds]
+    print(f"seeds complete: {len(complete)} of {len(by_seed)} ({len(cells) // len(by_seed)} cells each)")
     df = df[df["seed"].isin(complete)]
+    grid = grid[grid["seed"].isin(complete)]
+    cb = grid["category"].str.partition("@")
+    expected = pd.DataFrame(
+        {"embedder": grid["embedder"], "cls": cb[0], "seed": grid["seed"], "train": cb[2].map(TRAIN)}
+    )
+    expected = expected.merge(pd.DataFrame({"test": TEST_ORDER}), how="cross")
 
     long = expand(df, shares, wf, wn)
     ts = [int(x) for x in args.ts.split(",") if x]
     base = pd.read_csv(args.baseline) if args.baseline and args.baseline.exists() else None
     if base is not None:
         base = base[base["seed"].isin(complete)]
+        # The mixed test sizes are a cohort-weighted mean of the bands, so a
+        # class without a small band has SML= over two bands, in the baseline
+        # as in the arms.
 
     lines = [
         "# Size vs size (#4160): analysis summary",
@@ -395,8 +454,14 @@ def main() -> int:
     ]
     all_final, all_pool, all_con = [], [], []
     for t in ts:
-        final = at_click(long, t)
+        final = at_click(long, t, expected, base)
         final["click"] = t
+        starved = final[final["test"] == "SMLn"].groupby("train")["starved"].mean()
+        lines += [
+            f"Runs with no detector yet at click {t} (scored at the text sort): "
+            + ", ".join(f"{tr} {starved.get(tr, 0):.0%}" for tr in TRAIN_ORDER),
+            "",
+        ]
         all_final.append(final)
         pools = pd.concat([pooled(final, m) for m in (*METRICS, "fpr")], ignore_index=True)
         pools["click"] = t
@@ -421,7 +486,7 @@ def main() -> int:
                     ),
                     "",
                 ]
-            c = con[(con["metric"].isin(["cost", "auroc"]))]
+            c = con[(con["metric"].isin(["cost", "auroc"]))] if not con.empty else con
             lines += [
                 "| metric | test | train | minus train | diff | SE | classes | a better in |",
                 "|---|---|---|---|---|---|---|---|",
