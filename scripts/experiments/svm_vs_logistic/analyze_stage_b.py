@@ -42,9 +42,17 @@ CLUSTER = ["dataset", "embedder", "category"]
 
 
 def env_of(df: pd.DataFrame) -> pd.Series:
-    return (
+    """The stratum a row reports under: dataset/embedder, plus the scale band.
+
+    A ``class@band`` category (``coco_better``, #4114) reports per band, so the
+    head comparison is read across the bands rather than averaged over them;
+    categories with no band keep the plain dataset/embedder stratum.
+    """
+    env = (
         df["dataset"].str.replace("visual_genome_m", "vg").str.replace("caltech101_m", "caltech") + "/" + df["embedder"]
     )
+    band = df["category"].astype(str).str.extract(r"@(\w+)$", expand=False)
+    return env.where(band.isna(), env + "@" + band.fillna(""))
 
 
 def load(root: Path) -> tuple[pd.DataFrame, dict]:
