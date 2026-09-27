@@ -209,7 +209,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     # The grid: every cell any rung measured, plus every cell the baseline
     # anchors.  A cell missing from one rung is either starved there (filled)
-    # or lost there (dropped from that rung, and counted).
+    # or lost there (dropped from that rung, and counted).  Lost is a file that
+    # died mid-write *or* one that never landed: a task that timed out writes
+    # nothing, and filling its cell with text cost would pass it off as starved.
     seen = pd.concat([f[CELL] for f in frames.values()], ignore_index=True)
     grid = pd.concat([seen, baseline[CELL]], ignore_index=True).drop_duplicates().reset_index(drop=True)
     lines.append(f"Grid: {len(grid)} cells (union of every rung's cells and the baseline's).")
@@ -218,13 +220,18 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     mats: dict[str, pd.DataFrame] = {}
     ap_mats: dict[str, pd.DataFrame] = {}
     curve_rows = []
-    lines += ["| rung | cells | lost | filled-only | coverage@10 | coverage@50 |", "|---|---|---|---|---|---|"]
+    lines += [
+        "| rung | cells | lost | of which missing | filled-only | coverage@10 | coverage@50 |",
+        "|---|---|---|---|---|---|---|",
+    ]
     for order, label in enumerate(labels, start=1):
         if label not in frames:
             continue
         frame = frames[label]
-        lost = len(provs[label].get("unreadable") or []) + len(provs[label].get("zero_byte") or [])
         present = frame[CELL].drop_duplicates()
+        starved = len(provs[label].get("no_positive_found") or [])
+        missing = max(len(grid) - len(present) - starved, 0)
+        lost = len(provs[label].get("unreadable") or []) + len(provs[label].get("zero_byte") or []) + missing
         cells = grid if lost == 0 else present
         m, shown_mask = filled_matrix(frame, cells, text_cost, args.horizon)
         mats[label] = m
@@ -242,7 +249,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         curve_rows.append(s)
         filled_only = len(cells) - len(present) if lost == 0 else 0
         lines.append(
-            f"| {label} | {len(cells)} | {lost} | {filled_only} | {cov.get(10, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
+            f"| {label} | {len(cells)} | {lost} | {missing} | {filled_only} "
+            f"| {cov.get(10, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
         )
     lines.append("")
     curve = pd.concat(curve_rows, ignore_index=True)[

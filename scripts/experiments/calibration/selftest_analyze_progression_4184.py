@@ -10,6 +10,8 @@ recovers them:
   filled with its text-sort cost at every click, not dropped - so that rung's
   mean is ``(17 * level + text) / 18``, and the paired step says so exactly;
 * a rung that lost a file (zero bytes) drops only that cell from its mean;
+* so does a rung whose file never landed (a timed-out task writes nothing),
+  rather than filling it with text cost as though it had starved;
 * the rung premise is read off the rows: acquisition may leave the reporting
   cut only on ``r7_acq4``, and a mislabelled rule fails the run;
 * the figures and the viewer build on the result without crashing.
@@ -73,7 +75,7 @@ def _rows(rung: str, cat: str, seed: int, *, live: str | None = None) -> pd.Data
     return pd.DataFrame(rows)
 
 
-def build(root: Path, *, mislabel: bool = False, lose: bool = False) -> str:
+def build(root: Path, *, mislabel: bool = False, lose: bool = False, drop: bool = False) -> str:
     specs = []
     for rung in LEVEL:
         cells = root / rung / "cells"
@@ -88,6 +90,8 @@ def build(root: Path, *, mislabel: bool = False, lose: bool = False) -> str:
                     df.iloc[0:0].to_csv(f, index=False)  # header-only: never found a positive
                 elif lose and rung == "r1_xcal" and (cat, seed) == ("f", 2):
                     f.write_bytes(b"")  # died mid-write: data loss
+                elif drop and rung == "r7_acq4" and (cat, seed) == ("f", 2):
+                    pass  # never landed: the task timed out before writing
                 else:
                     df.to_csv(f, index=False)
         specs.append(f"{root / rung}={rung}")
@@ -157,6 +161,12 @@ def main() -> int:
     curve = pd.read_csv(out / "progression_curve.csv").set_index(["rung", "t"])
     check(int(curve.loc[("r1_xcal", 10), "n"]) == 17, "a lost file drops only that cell", failures)
     check(int(curve.loc[("r2_gmm", 10), "n"]) == 18, "...and only from the rung that lost it", failures)
+
+    rc, out = run(drop=True)
+    curve = pd.read_csv(out / "progression_curve.csv").set_index(["rung", "t"])
+    check(int(curve.loc[("r7_acq4", 10), "n"]) == 17, "a file that never landed is lost, not filled", failures)
+    check(abs(curve.loc[("r7_acq4", 10), "mean"] - 0.4) < TOL, "...so the rung's level is not diluted", failures)
+    check("| r7_acq4 | 17 | 1 | 1 |" in (out / "REPORT_progression.md").read_text(), "...and it is counted", failures)
 
     rc, out = run(mislabel=True)
     report = (out / "REPORT_progression.md").read_text()
