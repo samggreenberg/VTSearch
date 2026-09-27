@@ -531,6 +531,7 @@ async function voteServed(page) {
     await page.waitForTimeout(500);
   }
   const good = isBook(before);
+  if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
   await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
   // The vote retrains the head and re-sorts, and autopilot then serves a
   // different item. Waiting on the served item *changing* waits for all of it;
@@ -543,7 +544,35 @@ async function voteServed(page) {
     )
     .catch(() => {});
   await page.waitForTimeout(1800);
+  await assertVoted(before, good);
   return good;
+}
+
+/**
+ * Fail the run if the vote just cast did not land on *filename*.
+ *
+ * The read-then-click in `voteServed` has a window in which autopilot can swap
+ * the served item, and on a loaded box it does: a session shot while another
+ * app was embedding put a paperback in the Bad pile. The slides call these
+ * piles a real session's answers, so a vote that landed on the wrong photo is
+ * not something to photograph around — re-run on a quieter box.
+ */
+async function assertVoted(filename, good) {
+  const dataset = app.named(await app.datasets(), TRAIN_DATASET);
+  const detector = app.named(await app.detectors(), BOOK_DETECTOR);
+  const votes = await app.api('/api/votes', { dataset: dataset.id, detector: detector.id });
+  const ids = good ? votes.good : votes.bad;
+  const meta = ids.length
+    ? await app.api('/api/medias/batch', {
+        method: 'POST', dataset: dataset.id, detector: detector.id, body: { ids },
+      })
+    : [];
+  if (!meta.some((m) => m.filename === filename)) {
+    throw new Error(
+      `the ${good ? 'Good' : 'Bad'} click meant for ${filename} landed on another item; `
+        + 're-run on a quieter box (see voteServed)'
+    );
+  }
 }
 
 /**

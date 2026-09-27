@@ -50,8 +50,19 @@ function ramFreeMB(): number {
   }
 }
 
-/** Injected before every capture: kill animations so frames are stable. */
-const STILL_CSS = `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}`;
+/**
+ * Injected before every capture: kill animations so frames are stable, and hide
+ * the toast stack.
+ *
+ * The toasts are an artefact of the harness rather than of the product: it
+ * drives a dev checkout, where `static/` is a build artefact that goes stale the
+ * moment anything is committed, so `BuildSkewService` puts a large
+ * non-dismissing "this page is running an out-of-date build" banner across the
+ * top of every frame. The slide shooter hides it for the same reason.
+ */
+const STILL_CSS =
+  `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
+  `vt-toast-container,.toast-stack{display:none!important}`;
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp
@@ -211,6 +222,15 @@ function makeHelpers(page: Page): Helpers {
       // Clicking a thumbnail selects the item; the centre viewer + Good/Bad
       // buttons only render once something is selected. A named item is
       // clicked by its file name (the thumbnail's alt text).
+      //
+      // Manual mode lists nothing until it has a sort, and a fresh detector's
+      // default is an empty Text sort ("Choose a sort order above"). Rank by
+      // the trained detector, as a user would once there are votes.
+      if (!(await page.locator('.thumbnail-wrap:visible').count())) {
+        await page.locator('.sort-radio', { hasText: 'Learned' }).first().click();
+        await page.waitForSelector('.thumbnail-wrap', { timeout: 60000 });
+        await wait(1500);
+      }
       const thumb = filename
         ? page.locator(`.thumbnail-wrap:has(img[alt="${filename}"])`).first()
         : page.locator('.thumbnail-wrap:visible').first();
@@ -285,11 +305,17 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     // when Playwright serialises an evaluate callback into the page that helper
     // is undefined. Shim it (as a raw string so it isn't itself rewritten),
     // and inject the still-frame CSS, on every navigation.
+    //
+    // An init script runs before the parser has built anything, when there is
+    // no <head> and no documentElement to append to — so the style goes in at
+    // DOMContentLoaded. (Appending straight away threw on the null and was
+    // swallowed, which is how the still-frame CSS went unapplied unnoticed.)
     await page.addInitScript({
       content:
         `globalThis.__name = globalThis.__name || function (f) { return f; };` +
-        `(function(){var s=document.createElement('style');s.textContent=${JSON.stringify(STILL_CSS)};` +
-        `(document.head||document.documentElement).appendChild(s);})();`,
+        `(function(){var add=function(){var s=document.createElement('style');s.textContent=${JSON.stringify(STILL_CSS)};` +
+        `(document.head||document.documentElement).appendChild(s);};` +
+        `if(document.head){add();}else{document.addEventListener('DOMContentLoaded',add,{once:true});}})();`,
     });
     await shot.recipe(page, h);
     await applyTheme(page, theme);
@@ -326,7 +352,8 @@ async function main() {
           results.push({ id: shot.id, theme, ok: true });
         } catch (e: any) {
           console.log(`FAIL: ${String(e?.message || e).split('\n')[0]}`);
-          results.push({ id: shot.id, theme, ok: false, err: String(e?.message || e).split('\n')[0] });
+          results.push({ id: shot.id, theme, ok: false, err: String(e?.message || e).split("\n")[0] });
+          if (process.env.SHOT_DEBUG) console.log(String(e?.stack || e));
         }
       }
     }

@@ -85,7 +85,7 @@ picture show where to click, in order.
 The example uses two folders of photographs: `photos` to train the
 detector on, and `photos-prod`, a second set that shares no photo with the
 first, to run the finished detector over. Any two folders of your own work
-the same way, and so does audio, text, video or documents.
+the same way, whether they hold photos, audio, text, video or documents.
 
 ### Step 1: Load a training dataset
 
@@ -181,8 +181,9 @@ Back on the dashboard:
 
 Find scores every photo in the dataset and opens the results:
 
-1. The photos, best match first. The detector's verdicts so far are
-   counted on the right as *Unverified Good* and *Unverified Bad*.
+1. The photos, best match first. How many the detector calls a match, and
+   how many it doesn't, is counted on the right as *Unverified Good* and
+   *Unverified Bad*.
 2. Click any photo to look at it, and confirm or correct the detector
    with **Good** or **Bad**. Checking is optional.
 3. The photos you check collect in **Verified Good** and **Verified Bad**.
@@ -757,7 +758,7 @@ The verification view's action buttons let you act on the result:
   calls plus a chart of how wrong matches and missed matches change as
   you adjust inclusion - the clearest way to see the trade-off the
   inclusion stepper controls.
-- **Export** - send the good set to clipboard, a file, email, a webhook,
+- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.png" /><img src="assets/icon-export.light.png" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
   or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
   [Browse](#browse-exploring-a-dataset-spatially) view.
@@ -1096,7 +1097,7 @@ you can map just the matched items and use **Verified Good** /
 
 ## Exporting your work
 
-From the Labeling or Find view, the right panel's **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.png" /><img src="assets/icon-export.light.png" alt="The Export button" height="24" /></picture> button
+From the Labeling or Find view, the right panel's **Export** button
 saves your current labels. Formats (by their display names):
 
 <picture>

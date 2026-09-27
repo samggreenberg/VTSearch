@@ -348,8 +348,8 @@ export const SHOTS: Shot[] = [
     'button[title="Help (?)"]', async (page, h) => { await cleanDashboard(page, h); }),
   icon('icon-achievements', 'achievements', 'The Achievements (trophy) button',
     'button[title^="Achievements:"]', async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-export', 'exporting-your-work', 'The Export button',
-    '.export-btn', async (_page, h) => { await h.enterLabelView(); }),
+  icon('icon-export', 'find-scoring-and-verifying', 'The Export button in the Find view',
+    '.goods-actions button[aria-label="Export"]', async (page, h) => { await openFind(page, h); }),
   icon('icon-stats', 'find-scoring-and-verifying', 'The Stats button in the Find view',
     'button[aria-label="Stats"]', async (page, h) => { await openFind(page, h); }),
 
