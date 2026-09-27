@@ -12,6 +12,7 @@ recovers them:
 * a rung that lost a file (zero bytes) drops only that cell from its mean;
 * so does a rung whose file never landed (a timed-out task writes nothing),
   rather than filling it with text cost as though it had starved;
+* a baseline cut on other test sets (a stale pool) fails the run;
 * the rung premise is read off the rows: acquisition may leave the reporting
   cut only on ``r7_acq4``, and a mislabelled rule fails the run;
 * the figures and the viewer build on the result without crashing.
@@ -70,12 +71,13 @@ def _rows(rung: str, cat: str, seed: int, *, live: str | None = None) -> pd.Data
                 "pool_variant": "max",
                 "threshold_provenance": "fold_anchored[2/2]",
                 "seed_mode": "text",
+                "n_test_pos": 10,
             }
         )
     return pd.DataFrame(rows)
 
 
-def build(root: Path, *, mislabel: bool = False, lose: bool = False, drop: bool = False) -> str:
+def build(root: Path, *, mislabel: bool = False, lose: bool = False, drop: bool = False, stale: bool = False) -> str:
     specs = []
     for rung in LEVEL:
         cells = root / rung / "cells"
@@ -104,6 +106,7 @@ def build(root: Path, *, mislabel: bool = False, lose: bool = False, drop: bool 
                 "seed": s,
                 "supports_text": 1,
                 "text_cost": TEXT,
+                "n_test_pos": 9 if stale else 10,
                 "text_AP": 0.3,
             }
             for c in CATS
@@ -167,6 +170,10 @@ def main() -> int:
     check(int(curve.loc[("r7_acq4", 10), "n"]) == 17, "a file that never landed is lost, not filled", failures)
     check(abs(curve.loc[("r7_acq4", 10), "mean"] - 0.4) < TOL, "...so the rung's level is not diluted", failures)
     check("| r7_acq4 | 17 | 1 | 1 |" in (out / "REPORT_progression.md").read_text(), "...and it is counted", failures)
+
+    rc, out = run(stale=True)
+    report = (out / "REPORT_progression.md").read_text()
+    check(rc == 1 and "tested on a different set" in report, "a stale baseline fails the run", failures)
 
     rc, out = run(mislabel=True)
     report = (out / "REPORT_progression.md").read_text()

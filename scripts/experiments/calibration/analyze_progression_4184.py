@@ -105,6 +105,34 @@ def premise_failures(label: str, frame: pd.DataFrame) -> list[str]:
     return bad
 
 
+def baseline_mismatches(raw: pd.DataFrame, frames: dict[str, pd.DataFrame]) -> list[str]:
+    """Every rung whose cells were not tested on the sets the baseline was cut on.
+
+    The notch and every pre-detector click are read off the baseline, so it has
+    to describe the same held-out images the cells were graded on.  A baseline
+    built before the pool changed pairs each cell with a stranger's test set and
+    raises nothing: #4184's first analysis did, with a 09-25 baseline that
+    matched 30 of 702 cells.  ``n_test_pos`` is the fingerprint both sides write.
+    """
+    if "n_test_pos" not in raw.columns:
+        return ["baseline has no `n_test_pos` column - cannot check it was cut on these cells' test sets"]
+    base = raw.groupby(CELL)["n_test_pos"].first()
+    bad = []
+    for label, frame in frames.items():
+        if "n_test_pos" not in frame.columns:
+            bad.append(f"{label}: no `n_test_pos` column - cannot pair it with the baseline")
+            continue
+        cells = frame.groupby(CELL)["n_test_pos"].first()
+        both = cells.to_frame("cell").join(base.rename("base"), how="inner")
+        off = int((both["cell"] != both["base"]).sum())
+        if off:
+            bad.append(
+                f"{label}: {off}/{len(both)} cells were tested on a different set from the baseline's "
+                "- it was built from another pool; rebuild it with `launch_progression_4184.sh baseline`"
+            )
+    return bad
+
+
 def filled_matrix(
     frame: pd.DataFrame,
     cells: pd.DataFrame,
@@ -212,6 +240,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     if len(arms_seen) > 1:
         failures.append(f"rungs ran on different pools: {pools}")
     lines.append(f"Pool: `{arms_seen[0] if len(arms_seen) == 1 else arms_seen}` (prevalence arm).")
+    failures += baseline_mismatches(pd.read_csv(args.baseline), frames)
     lines.append("")
     if failures:
         lines += ["## Premise failures", "", *[f"- {f}" for f in failures], ""]
