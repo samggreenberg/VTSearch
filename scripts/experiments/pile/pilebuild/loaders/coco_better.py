@@ -225,6 +225,33 @@ def _lvis_boxes(lvis_dir: Path, wanted: dict[str, str]) -> dict[int, dict[str, l
     return lvis
 
 
+def human_corrections(path: Path | None = None) -> tuple[set[tuple[int, str]], set[tuple[int, str]]]:
+    """``(present, not_positive)`` from the committed owner review (#4179).
+
+    See :data:`pile_config.COCO_BETTER_CORRECTIONS` for what each finding does.
+    A missing file is no corrections, so a checkout without the record builds
+    what it always built. A row naming a class outside C, or a finding this does
+    not know, is refused rather than skipped: a correction that silently does
+    nothing is the failure the record exists to prevent.
+    """
+    path = path or pc.COCO_BETTER_CORRECTIONS
+    if not path.exists():
+        return set(), set()
+    present: set[tuple[int, str]] = set()
+    not_positive: set[tuple[int, str]] = set()
+    for row in json.loads(path.read_text())["rows"]:
+        pair = (int(row["image_id"]), row["class"])
+        if pair[1] not in pc.SCALE_CLASSES:
+            raise SystemExit(f"coco_better: correction for {pair} names a class outside C")
+        if row["finding"] == "present":
+            present.add(pair)
+        elif row["finding"] == "not_positive":
+            not_positive.add(pair)
+        else:
+            raise SystemExit(f"coco_better: unknown finding {row['finding']!r} for {pair}")
+    return present, not_positive
+
+
 def _share_inside(inner: list[float], outer: list[float]) -> float:
     """Fraction of *inner*'s area that lies within *outer* (both ``[x0, y0, x1, y1]``)."""
     ix = max(0.0, min(inner[2], outer[2]) - max(inner[0], outer[0]))
@@ -276,6 +303,7 @@ class _Plan(NamedTuple):
     coco_scored: set[int]
     emit_ids: set[int]
     where: str
+    reviewed_present: set[tuple[int, str]]
 
 
 def _plan(dataset: str) -> _Plan:
@@ -287,12 +315,19 @@ def _plan(dataset: str) -> _Plan:
     # review whose membership has to be preserved. Both helpers take the empty
     # case rather than a separate code path.
     excluded = lump_exclusions(labels)
+    present, not_positive = human_corrections()
+    excluded |= not_positive
+    if present or not_positive:
+        log(
+            f"  coco_better: owner corrections (#4179): {len(present):,} present-not-boxed, "
+            f"{len(not_positive):,} not-a-positive"
+        )
     for cls in pc.SCALE_LUMP_FILTER:
         held = sum(1 for by_name in labels.values() if by_name.get(cls))
         gone = sum(1 for _, c in excluded if c == cls)
         log(f"  coco_better: {cls}: {gone:,} of {held:,} images not positives (not ONE by LVIS)")
     supply, boxes_for, clean = band_candidates(
-        labels, box_dims, unbanded=set(), classes=classes, excluded=excluded, largest=pc.SCALE_BAND_ON_LARGEST
+        labels, box_dims, unbanded=present, classes=classes, excluded=excluded, largest=pc.SCALE_BAND_ON_LARGEST
     )
     coco_scored = set(labels)  # every image; COCO answered for all eighty
 
@@ -342,7 +377,9 @@ def _plan(dataset: str) -> _Plan:
         index, count = shard
         emit_ids = {iid for iid in emit_ids if iid % count == index}
     where = f" (FULL CORPUS shard {shard[0]}/{shard[1]})" if shard else (" (FULL CORPUS)" if full else "")
-    return _Plan(labels, box_dims, filenames, boxes_for, cells, neg_set, positive_in, coco_scored, emit_ids, where)
+    return _Plan(
+        labels, box_dims, filenames, boxes_for, cells, neg_set, positive_in, coco_scored, emit_ids, where, present
+    )
 
 
 def _label_fields(plan: _Plan, iid: int) -> dict:
@@ -357,7 +394,7 @@ def _label_fields(plan: _Plan, iid: int) -> dict:
         coco_scored=plan.coco_scored,
         exhaustive=plan.coco_scored,
         reviewed_absent=set(),
-        reviewed_present=set(),
+        reviewed_present=plan.reviewed_present,
     )
 
 
@@ -395,7 +432,7 @@ def load(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
                     coco_scored=plan.coco_scored,
                     exhaustive=plan.coco_scored,
                     reviewed_absent=set(),
-                    reviewed_present=set(),
+                    reviewed_present=plan.reviewed_present,
                     embedder_name=embedder_name,
                     importer="coco_better",
                 )

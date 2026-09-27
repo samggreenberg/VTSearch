@@ -307,6 +307,21 @@ LVIS_SPLITS = ("train", "val")
 #: use the most obvious instance, which is the largest.
 SCALE_BAND_ON_LARGEST = True
 
+#: The owner's hand corrections to COCO's labels for ``coco_better`` (#4179): one
+#: row per (image, class) a human looked at and found COCO wrong about. Committed
+#: here rather than on scratch because it is a record of someone having looked,
+#: which no rebuild can bring back (#3729). Two findings, and each is applied
+#: through a door ``scale_core`` already has:
+#:
+#: * ``present`` -- COCO holds no such object, a human says one is there. The
+#:   pair goes into ``unbanded`` (so the image leaves the clean pool) and
+#:   ``reviewed_present`` (so it is no cross-class negative for that class). It
+#:   does NOT become a positive: nobody drew a box, and a band is a claim about size.
+#: * ``not_positive`` -- COCO's picked box is not ONE of the class. The pair is
+#:   ``excluded``, like a lump: never a positive, and still no negative, because
+#:   the image may hold a real one elsewhere.
+COCO_BETTER_CORRECTIONS = Path(__file__).resolve().parent / "human_record" / "COCO_BETTER__label_review_4179.json"
+
 
 class LumpRule(NamedTuple):
     """How LVIS decides whether one class's picked COCO box is ONE object (#3985)."""

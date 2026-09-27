@@ -567,6 +567,62 @@ def recheck_controls(args) -> int:
     return 0
 
 
+def export(args) -> int:
+    """The committed correction record (``pile_config.COCO_BETTER_CORRECTIONS``) from the banked verdicts.
+
+    One row per (image, class) found wrong. A first-pass ``control`` vote is
+    NOT a finding: the control was shown unboxed, so a Bad there is settled only
+    by its ``control_recheck`` row, drawn with the box. The same file banked
+    under two queue names (a merge) is one answer.
+
+    Each row carries ``rule`` -- the class rule's name, which is the wording the
+    reviewer saw -- and no ``rule_digest``: several rule bodies were edited during
+    the review to record rulings the reviewer was already applying, so no single
+    digest is honestly the one an answer was cast under (``pile_config.rule_stamp``:
+    absence means unknown).
+    """
+    seen: dict[str, dict] = {}
+    for root in args.queues:
+        for x in (root / "verdicts.jsonl").read_text().splitlines():
+            r = json.loads(x)
+            seen.setdefault(r["file"], r)
+    rows, skipped = [], collections.Counter()
+    for r in seen.values():
+        if r["arm"] == "control":
+            skipped["control (first pass, unboxed)"] += 1
+            continue
+        found = None
+        if r["label"] == 0 and r["vote"] == "Good":
+            found = "present"
+        elif r["label"] == 1 and r["vote"] == "Bad":
+            found = "not_positive"
+        if found is None:
+            continue
+        rows.append(
+            {
+                "image_id": r["image_id"],
+                "class": r["class"],
+                "finding": found,
+                "arm": r["arm"],
+                "vote": r["vote"],
+                "rule": _rule_name(r["class"]),
+                "asked": r["queue"],
+                "file": r["file"],
+            }
+        )
+    rows.sort(key=lambda r: (r["class"], r["image_id"]))
+    doc = {
+        "source": "#4179 owner hand review of the State of the App flags (click-side z<-3; test-side "
+        "3+ of 5 embedders; random arm; controls re-asked boxed), 2026-09-25/26",
+        "n_answered": len(seen),
+        "rows": rows,
+    }
+    args.out.write_text(json.dumps(doc, indent=1) + "\n")
+    c = collections.Counter(r["finding"] for r in rows)
+    print(f"{len(rows)} findings ({dict(c)}) from {len(seen)} answers; skipped {dict(skipped)} -> {args.out}")
+    return 0
+
+
 def clear(args) -> int:
     """Remove every FULLY answered queue from the dashboard, after proving its votes are banked.
 
@@ -665,6 +721,9 @@ def main() -> int:
     rc = sub.add_parser("recheck-controls")
     rc.add_argument("--queues", type=Path, nargs="+", required=True)
     rc.add_argument("--out", type=Path, required=True)
+    e = sub.add_parser("export")
+    e.add_argument("--queues", type=Path, nargs="+", required=True)
+    e.add_argument("--out", type=Path, default=pc.COCO_BETTER_CORRECTIONS)
     z = sub.add_parser("rezoom")
     z.add_argument("--api", default=None, help="default: the running `vtsearch` job, found with squeue")
     z.add_argument("--queues", type=Path, required=True)
@@ -677,7 +736,7 @@ def main() -> int:
     SUFFIX = getattr(args, "name_suffix", "")
     if hasattr(args, "api") and not args.api:
         args.api = _app_url()
-    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge, "recheck-controls": recheck_controls}[args.cmd](args)
+    return {"build": build, "bank": bank, "refresh": refresh, "clear": clear, "rezoom": rezoom, "merge": merge, "recheck-controls": recheck_controls, "export": export}[args.cmd](args)
 
 
 if __name__ == "__main__":

@@ -580,3 +580,97 @@ class TestRelabel:
         with pytest.raises(SystemExit) as err:
             mod.relabel(full, {999_999: {}})
         assert "would not emit" in str(err.value)
+
+
+class TestOwnerCorrections:
+    """#4179: the owner's hand review reaches the build through doors `scale_core` already has.
+
+    A negative a human found holding the class leaves the clean pool and that
+    class's cells without becoming a positive (no box, so no band); a positive a
+    human found wrong is excluded like a lump. Anything the loader cannot apply is
+    refused, because a correction that silently does nothing is the failure the
+    record exists to prevent.
+    """
+
+    @staticmethod
+    def _record(tmp_path: Path, rows: list[dict]) -> Path:
+        p = tmp_path / "corrections.json"
+        p.write_text(json.dumps({"rows": rows}))
+        return p
+
+    def test_a_missing_record_is_no_corrections(self, mod, tmp_path: Path):
+        assert mod.human_corrections(tmp_path / "absent.json") == (set(), set())
+
+    def test_findings_are_split(self, mod, tmp_path: Path, monkeypatch):
+        import pile_config as pc
+
+        monkeypatch.setattr(pc, "SCALE_CLASSES", ("bus", "clock"))
+        p = self._record(
+            tmp_path,
+            [
+                {"image_id": 3, "class": "bus", "finding": "present"},
+                {"image_id": 1, "class": "bus", "finding": "not_positive"},
+            ],
+        )
+        assert mod.human_corrections(p) == ({(3, "bus")}, {(1, "bus")})
+
+    @pytest.mark.parametrize(
+        "row",
+        [
+            {"image_id": 1, "class": "zebra", "finding": "present"},
+            {"image_id": 1, "class": "bus", "finding": "maybe"},
+        ],
+    )
+    def test_an_unappliable_row_is_refused(self, mod, tmp_path: Path, monkeypatch, row):
+        import pile_config as pc
+
+        monkeypatch.setattr(pc, "SCALE_CLASSES", ("bus", "clock"))
+        with pytest.raises(SystemExit):
+            mod.human_corrections(self._record(tmp_path, [row]))
+
+    def test_the_plan_applies_both_findings(self, mod, tmp_path: Path, monkeypatch):
+        """Image 1 a bus (voted not one), 2 a clock (voted also holding a bus), 3 empty (voted a bus)."""
+        import pile_config as pc
+
+        anchor = tmp_path / "coco_anchor"
+        anchor.mkdir()
+        _annotations(
+            anchor / "instances_val2017.json",
+            [{"id": i, "w": 100, "h": 100, "file": f"{i:012d}.jpg"} for i in (1, 2, 3)],
+            [
+                {"id": 10, "image_id": 1, "category_id": 1, "bbox": [10, 10, 40, 40], "iscrowd": 0},
+                {"id": 20, "image_id": 2, "category_id": 2, "bbox": [10, 10, 40, 40], "iscrowd": 0},
+            ],
+        )
+        _annotations(anchor / "instances_train2017.json", [], [])
+        monkeypatch.setattr(pc, "COCO_ANCHOR_DIR", anchor)
+        monkeypatch.setattr(pc, "LVIS_DIR", _lvis(tmp_path, {}))
+        monkeypatch.setattr(pc, "SCALE_CLASSES", ("bus", "clock"))
+        monkeypatch.setattr(pc, "SCALE_CLASS_MERGES", {})
+        monkeypatch.setattr(pc, "SCALE_LUMP_FILTER", {})
+        monkeypatch.setattr(pc, "SCALE_DROPPED_CELLS", frozenset())
+        mod._CORPUS.clear()
+
+        def plan(rows):
+            monkeypatch.setattr(pc, "COCO_BETTER_CORRECTIONS", self._record(tmp_path, rows))
+            return mod._plan("coco_better")
+
+        before = plan([])
+        assert 1 in before.positive_in and 3 in before.neg_set
+        assert any(c.startswith("bus@") for c in mod._label_fields(before, 2)["evaluable_categories"])
+
+        after = plan(
+            [
+                {"image_id": 1, "class": "bus", "finding": "not_positive"},
+                {"image_id": 2, "class": "bus", "finding": "present"},
+                {"image_id": 3, "class": "bus", "finding": "present"},
+            ]
+        )
+        assert 1 not in after.positive_in, "a positive voted not-one is excluded"
+        assert 1 not in after.neg_set, "and it is no negative either: it may hold a real bus"
+        assert 3 not in after.neg_set, "a clean image voted holding a bus leaves the pool"
+        assert 3 not in after.positive_in, "without becoming a positive: nobody drew a box"
+        ev = mod._label_fields(after, 2)["evaluable_categories"]
+        assert not any(c.startswith("bus@") for c in ev), "a clock positive voted holding a bus is no bus negative"
+        assert any(c.startswith("clock@") for c in ev), "it stays a positive for its own class"
+        mod._CORPUS.clear()
