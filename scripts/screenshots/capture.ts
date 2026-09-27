@@ -7,7 +7,8 @@
  * "What shipped"): the box is RAM-tight (~3.7 GB), so the harness connects to a
  * SINGLE already-running app (started by refresh.sh) rather than booting its own
  * per run — two app instances would load the image embedder twice and risk OOM.
- * Determinism still holds because the synthetic generator uses a fixed seed.
+ * Determinism still holds because the fixtures are the Book example's COCO
+ * corpora (`book-example.mjs`), a pure function of the COCO download.
  *
  * Usage:
  *   tsx capture.ts                 # capture every shot, both themes
@@ -18,11 +19,15 @@
 import { type Browser, type BrowserContext, type Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { launchChromium } from './launch.mjs';
+// @ts-expect-error - plain .mjs helper, shared with the slide shooter
+import { drawCallouts, resolveBox } from './callouts.mjs';
+// @ts-expect-error - plain .mjs helper, shared with the slide shooter
+import { BOOK_DETECTOR, REGION_DATASET, TRAIN_DATASET } from './book-example.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { execSync } from 'node:child_process';
-import { SHOTS, type Helpers, type Shot, type Theme, type Annotation } from '../../docs/user/screenshots.manifest.ts';
+import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
 
 const APP = process.env.APP || 'http://localhost:5000';
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +65,9 @@ async function maskVolatile(page: Page): Promise<void> {
       let n: Node | null;
       const hits: Text[] = [];
       while ((n = it.nextNode())) {
+        // `re` is global, so `test` advances `lastIndex`; reset it per node or
+        // a match in one text node makes the next one start mid-string.
+        re.lastIndex = 0;
         if (n.textContent && re.test(n.textContent)) hits.push(n as Text);
       }
       for (const t of hits) t.textContent = t.textContent!.replace(re, replace);
@@ -75,59 +83,19 @@ async function maskVolatile(page: Page): Promise<void> {
       el.textContent = (el.textContent || '').replace(/[\d.]+\s*[GM]B\s+free\s+of/i, '— free of');
     });
     // version stamp "v 2026-..." already covered by the date rule.
-  });
-}
-
-/** Draw declarative callouts as an absolutely-positioned overlay, pre-capture. */
-async function annotate(page: Page, annotations: Annotation[]): Promise<void> {
-  await page.evaluate((anns) => {
-    const layer = document.createElement('div');
-    layer.id = '__shot_annotations';
-    Object.assign(layer.style, {
-      position: 'fixed', inset: '0', zIndex: '2147483647', pointerEvents: 'none',
+    // The fixture corpora live under `<checkout>/data/slide-fixtures/`, which is
+    // a different path on every machine. Show it as `/data/<corpus>` — in text
+    // and in the importer's path field, whose value is set without an input
+    // event, so the form keeps the real path it validated against.
+    const fixtureRe = /\S*\/data\/slide-fixtures\//g;
+    walk(fixtureRe, () => '/data/');
+    document.querySelectorAll('input').forEach((el) => {
+      const input = el as HTMLInputElement;
+      if (input.value.includes('/data/slide-fixtures/')) {
+        input.value = input.value.replace(fixtureRe, '/data/');
+      }
     });
-    document.body.appendChild(layer);
-    const accent = '#e8453c';
-    for (const a of anns) {
-      let box: { x: number; y: number; w: number; h: number } | null = null;
-      if (typeof a.target === 'string') {
-        // first matching, visible element
-        const els = Array.from(document.querySelectorAll(a.target)) as HTMLElement[];
-        const el = els.find((e) => e.getBoundingClientRect().width > 0);
-        if (el) {
-          const r = el.getBoundingClientRect();
-          box = { x: r.x, y: r.y, w: r.width, h: r.height };
-        }
-      } else {
-        box = a.target;
-      }
-      if (!box) continue;
-      const pad = 4;
-      const d = document.createElement('div');
-      Object.assign(d.style, {
-        position: 'absolute',
-        left: `${box.x - pad}px`, top: `${box.y - pad}px`,
-        width: `${box.w + pad * 2}px`, height: `${box.h + pad * 2}px`,
-        border: `3px solid ${accent}`, borderRadius: '8px',
-        boxShadow: a.kind === 'highlight' ? `0 0 0 4000px rgba(0,0,0,0.28)` : 'none',
-        boxSizing: 'border-box',
-      });
-      layer.appendChild(d);
-      if (a.label) {
-        const l = document.createElement('div');
-        l.textContent = a.label;
-        const labelAbove = box.y > 60;
-        Object.assign(l.style, {
-          position: 'absolute',
-          left: `${box.x - pad}px`,
-          top: labelAbove ? `${box.y - pad - 30}px` : `${box.y + box.h + pad + 6}px`,
-          background: accent, color: '#fff', font: '600 14px system-ui, sans-serif',
-          padding: '3px 9px', borderRadius: '6px', whiteSpace: 'nowrap',
-        });
-        layer.appendChild(l);
-      }
-    }
-  }, annotations);
+  });
 }
 
 function makeHelpers(page: Page): Helpers {
@@ -136,11 +104,29 @@ function makeHelpers(page: Page): Helpers {
   // Dashboard rows are <vt-dataset-card>/<vt-detector-card> with a
   // button.select-checkbox[aria-checked]. Selection persists server-side, so
   // ensure the desired state idempotently rather than toggling.
-  const ensureCardSelected = async (cardTag: string, name: string) => {
-    const card = page.locator(cardTag, { hasText: name }).first();
-    await card.waitFor({ timeout: 20000 });
-    const cb = card.locator('.select-checkbox').first();
-    if ((await cb.getAttribute('aria-checked')) !== 'true') await cb.click();
+  //
+  // Tick exactly the named row and untick the rest: the fixtures include
+  // `photos` and `photos-prod`, and two datasets ticked at once is a combined
+  // selection (Train and Find then mean something else). Match the name cell
+  // exactly — `photos` is a prefix of `photos-prod`, so a substring match would
+  // tick both.
+  const selectOnly = async (cardTag: string, name: string) => {
+    const rows = page.locator(cardTag);
+    await rows.first().waitFor({ timeout: 20000 });
+    let found = false;
+    for (let i = 0; i < (await rows.count()); i++) {
+      const row = rows.nth(i);
+      const cell = row.locator('.name-cell').first();
+      const label = (await cell.count()) ? ((await cell.textContent()) || '').trim() : '';
+      const want = label === name;
+      found ||= want;
+      const cb = row.locator('.select-checkbox').first();
+      if (((await cb.getAttribute('aria-checked')) === 'true') !== want) {
+        await cb.click();
+        await wait(350);
+      }
+    }
+    if (!found) throw new Error(`no ${cardTag} row named ${name}`);
     await wait(400);
   };
   const h: Helpers = {
@@ -171,12 +157,6 @@ function makeHelpers(page: Page): Helpers {
       await page.locator('.importer-picker .tab', { hasText: 'Demo' }).click();
       await wait(700);
     },
-    async openImporterSynthetic() {
-      await h.openImporterDemo();
-      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).click();
-      await page.waitForSelector('#field-size', { timeout: 10000 });
-      await wait(500);
-    },
     async openSettings() {
       await page.locator('button[title="Settings"]').click();
       await page.waitForSelector('.side-tab', { timeout: 10000 });
@@ -186,29 +166,55 @@ function makeHelpers(page: Page): Helpers {
       await page.locator('button[title="Create a new detector"]').click();
       await wait(800);
     },
+    async openFolderImporter() {
+      await h.openImporter();
+      await page.locator('.importer-picker .tab', { hasText: 'Files' }).click();
+      await wait(500);
+      await page.locator('.importer-subtab', { hasText: 'Folder' }).click();
+      await page.waitForSelector('#sf-path-input', { timeout: 10000 });
+      await wait(500);
+    },
+    async fillFolderImporter(path) {
+      await page.locator('#sf-path-input').fill(path);
+      await page.locator('#sf-path-input').blur();
+      // The importer samples the folder and names the media type it found;
+      // wait for that line so the shot shows the form as a user sees it.
+      await page.getByText(/Detected:/).first().waitFor({ timeout: 20000 });
+      await wait(600);
+    },
     async selectDatasetRow(name) {
-      await ensureCardSelected('tr[vt-dataset-card]', name);
+      await selectOnly('tr[vt-dataset-card]', name);
     },
     async selectDetectorRow(name) {
-      await ensureCardSelected('tr[vt-detector-card]', name);
+      await selectOnly('tr[vt-detector-card]', name);
     },
-    async enterLabelView() {
+    async enterLabelView(dataset = TRAIN_DATASET, detector = BOOK_DETECTOR) {
       await h.dashboard();
-      await h.selectDatasetRow('syn-imgs');
-      await h.selectDetectorRow('doc-demo');
+      await h.selectDatasetRow(dataset);
+      await h.selectDetectorRow(detector);
       await page.getByRole('button', { name: 'Train', exact: true }).click();
       // label view: wait for the three panels
-      await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 30000 });
+      await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 60000 });
       await wait(2000);
     },
     async leftTab(name) {
+      // The tab strip is hidden while the left panel is collapsed to its rail,
+      // and panel state persists across runs — expand it first.
+      if ((await page.locator('.left-tab').count()) === 0) {
+        await page.locator('.collapse-toggle').first().click();
+        await wait(1200);
+      }
       await page.locator('.left-tab', { hasText: name }).first().click();
       await wait(800);
     },
-    async serveItem() {
+    async serveItem(filename) {
       // Clicking a thumbnail selects the item; the centre viewer + Good/Bad
-      // buttons only render once something is selected.
-      await page.locator('.thumbnail-wrap:visible').first().click();
+      // buttons only render once something is selected. A named item is
+      // clicked by its file name (the thumbnail's alt text).
+      const thumb = filename
+        ? page.locator(`.thumbnail-wrap:has(img[alt="${filename}"])`).first()
+        : page.locator('.thumbnail-wrap:visible').first();
+      await thumb.click();
       await page.waitForSelector('.btn-good', { timeout: 15000 }).catch(() => {});
       await wait(900);
     },
@@ -217,8 +223,7 @@ function makeHelpers(page: Page): Helpers {
       // Browse moved into the dataset row's ⋯ overflow menu (the inline eye is
       // gone; it now only renders as a *disabled* projection-building button).
       // Open the overflow menu, then click its "Browse dataset" item.
-      const card = page.locator('tr[vt-dataset-card]', { hasText: 'syn-imgs' }).first();
-      await card.locator('.overflow-btn').first().click();
+      await h.overflowMenu(TRAIN_DATASET);
       await page.locator('.context-menu .menu-item', { hasText: 'Browse dataset' }).first().click();
       await page.waitForURL(/browse/i, { timeout: 15000 }).catch(() => {});
       // First visit builds the UMAP projection (progress bar); wait it out.
@@ -231,8 +236,33 @@ function makeHelpers(page: Page): Helpers {
         .catch(() => {});
       await wait(3000);
     },
+    async overflowMenu(name) {
+      const row = page
+        .locator('tr[vt-dataset-card], tr[vt-detector-card]')
+        .filter({ has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${name}\\s*$`) }) })
+        .first();
+      await row.locator('.overflow-btn').first().click();
+      await page.waitForSelector('.context-menu', { timeout: 10000 });
+      await wait(400);
+    },
   };
   return h;
+}
+
+/** The viewport box *shot.clip* frames, grown by its `pad`. */
+async function clipBox(page: Page, clip: NonNullable<Shot['clip']>) {
+  const box = await resolveBox(page, clip.target);
+  if (!box) throw new Error(`clip target not found: ${JSON.stringify(clip.target)}`);
+  const pad = clip.pad ?? 0;
+  const vp = page.viewportSize() ?? VIEWPORT;
+  const x = Math.max(0, box.x - pad);
+  const y = Math.max(0, box.y - pad);
+  return {
+    x,
+    y,
+    width: Math.min(vp.width, box.x + box.w + pad) - x,
+    height: Math.min(vp.height, box.y + box.h + pad) - y,
+  };
 }
 
 async function applyTheme(page: Page, theme: Theme): Promise<void> {
@@ -264,14 +294,14 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     await shot.recipe(page, h);
     await applyTheme(page, theme);
     await maskVolatile(page);
-    if (shot.annotations?.length) await annotate(page, shot.annotations);
+    if (shot.annotations?.length) await drawCallouts(page, shot.annotations);
     await page.waitForTimeout(300);
     // Re-assert volatile-text masking right before capture: the dashboard usage
     // gauges poll on an interval and re-render live values into the DOM after
     // the first mask, so mask again once the frame has settled.
     await maskVolatile(page);
     if (shot.clip) {
-      await page.locator(shot.clip.selector).first().screenshot({ path: out });
+      await page.screenshot({ path: out, clip: await clipBox(page, shot.clip) });
     } else {
       await page.screenshot({ path: out });
     }
