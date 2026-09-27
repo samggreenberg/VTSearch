@@ -43,8 +43,11 @@ const APP = process.env.APP || 'http://localhost:5000';
 const log = (...a) => console.log('[fixtures]', ...a);
 const app = appClient(APP, log);
 
-// The votes that train `Books`: a handful of each, as a first session would
-// have. The count is load-bearing for `autopilot-progress` — autopilot moves
+// The votes that train `Books`: a first session's worth, about what the slide
+// deck's recorded session ends on (twelve Good, fifteen Bad). Fewer is not a
+// detector anyone would ship — at eight and six, Find called 189 of the 240
+// test photos a match, which is a picture of the tool not working. The count
+// is also load-bearing for `autopilot-progress` — autopilot moves
 // through its phases on vote counts, and this baseline puts it in Refine
 // Boundary — so change it and that shot's active phase moves with it.
 //
@@ -52,7 +55,10 @@ const app = appClient(APP, log);
 // — rectangular, printed things — because that is what makes the ranking in
 // the results shots look like a detector that learned *book* rather than
 // *indoors*.
-const BOOK_VOTES = { good: 8, bad: { laptop: 2, tv: 2, keyboard: 1, 'cell-phone': 1 } };
+const BOOK_VOTES = {
+  good: 12,
+  bad: { laptop: 3, tv: 3, keyboard: 2, 'cell-phone': 2, clock: 2, chair: 2, vase: 1 },
+};
 
 await app.dropDetectors('doc-demo');
 await app.dropDatasets('syn-imgs', 'syn-patch');

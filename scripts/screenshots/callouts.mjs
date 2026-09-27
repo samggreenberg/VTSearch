@@ -8,8 +8,12 @@
  *   - `box`       — a red outline round the target, with an optional label pill
  *   - `highlight` — the same outline, with everything else dimmed
  *   - `step`      — a numbered marker: the outline plus a filled red disc
- *                   carrying `step` (1, 2, 3 …) on its top-left corner, and an
- *                   optional label pill beside the disc
+ *                   carrying `step` (1, 2, 3 …), and an optional label pill
+ *                   beside the disc. `at` puts the disc against the target's
+ *                   `left` edge (the default), `right`, `top` or `bottom` edge,
+ *                   or on its top-left `corner`. Beside rather than on top: a
+ *                   disc on the corner sits on whatever labels the control, and
+ *                   those labels are half of what the picture is showing.
  *
  * `step` exists for the click-by-click material (#4202): someone meeting the
  * interface for the first time cannot find "the + button" from a sentence, so
@@ -37,8 +41,8 @@ const SIZES = {
   stroke: 4,
   pad: 5,
   radius: 9,
-  disc: 44,
-  discFont: 27,
+  disc: 38,
+  discFont: 23,
   labelFont: 18,
 };
 
@@ -120,11 +124,19 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
         });
         layer.appendChild(d);
         if (a.kind === 'step') {
-          // The disc straddles the outline's top-left corner, pulled back on
-          // screen when the target hugs a viewport edge.
+          // The disc touches the outline on the side `at` names, pulled back
+          // on screen when the target hugs a viewport edge.
           const r = sizes.disc / 2;
-          const cx = clamp(x - pad, r + 2, vw - r - 2);
-          const cy = clamp(y - pad, r + 2, vh - r - 2);
+          const touch = r + pad - sizes.stroke;
+          const [px, py] = {
+            left: [x - touch, y + h / 2],
+            right: [x + w + touch, y + h / 2],
+            top: [x + w / 2, y - touch],
+            bottom: [x + w / 2, y + h + touch],
+            corner: [x - pad, y - pad],
+          }[a.at || 'left'];
+          const cx = clamp(px, r + 2, vw - r - 2);
+          const cy = clamp(py, r + 2, vh - r - 2);
           const disc = document.createElement('div');
           disc.textContent = String(a.step);
           Object.assign(disc.style, {
@@ -136,7 +148,13 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
             boxShadow: '0 1px 4px rgba(0,0,0,0.4)',
           });
           layer.appendChild(disc);
-          if (a.label) pill(a.label, cx + r + sizes.pad, cy - sizes.labelFont * 0.75);
+          if (a.label) {
+            // On the far side of the disc from the target, so it covers neither.
+            const l = pill(a.label, cx + r + sizes.pad, cy - sizes.labelFont * 0.75);
+            if (a.at === 'left' || !a.at) {
+              l.style.left = `${Math.max(4, cx - r - sizes.pad - l.getBoundingClientRect().width)}px`;
+            }
+          }
         } else if (a.label) {
           const above = y > 60;
           pill(a.label, x - pad, above ? y - pad - sizes.labelFont * 2 : y + h + pad + 6);

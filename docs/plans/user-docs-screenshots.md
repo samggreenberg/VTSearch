@@ -13,8 +13,8 @@ pixel-diff tolerance) are the remaining work.
   already-running app against the real `data/` dir (a RAM-driven choice — a
   second instance would load the image embedder twice and OOM the ~3.7 GB box).
   The plan's original intent was a temp data dir per run. Revisit if pixel-diff
-  drift from shared state becomes a problem; the synthetic seed already covers
-  content stability.
+  drift from shared state becomes a problem; the deterministic COCO selection
+  and the fixed vote baseline already cover content stability.
 
 <!-- item-sep -->
 
@@ -25,8 +25,9 @@ pixel-diff tolerance) are the remaining work.
 <!-- item-sep -->
 
 - **`autopilot-progress` phase.** Captured with phase 3 (Refine Boundary) active
-  thanks to the 9-vote `doc-demo` fixture; if the fixture vote count changes,
-  the active phase in this shot moves with it.
+  thanks to the 27-vote `Books` fixture (`BOOK_VOTES` in `ensure-fixtures.mjs`);
+  if the fixture vote count changes, the active phase in this shot moves with
+  it.
 
 <!-- item-sep -->
 
@@ -72,11 +73,24 @@ demos.md only (dev/ops docs get none). Themes = both light + dark (each logical
 shot yields a `{light,dark}` pair). Annotations = declared in the manifest,
 drawn by the harness as a pre-capture DOM overlay — never hand-edited.
 
-**Fixture = the synthetic dataset.** The built-in Synthetic Dataset generator
-(🏭) makes fake image/audio/video media with no download; a fixed size + seed
-gives stable, ordered content, so all scriptable shots use it (offline,
-reproducible). A couple of shots that must show the *demo picker itself*
-screenshot the picker UI, not a downloaded dataset.
+**Fixture = the Book example.** Every shot is taken against the same worked
+example the slide deck uses: a few hundred COCO val2017 photographs filed by
+subject, and a `Books` detector trained on them (#4202). The shared definition
+lives in `scripts/screenshots/book-example.mjs`; `slides/figs/src/coco_fixture.py`
+builds the corpora (a one-off ~1 GB download, then a directory check). The
+selection is a pure function of the download, so the shots are as
+reproducible as the synthetic fixture they replaced — which made flat coloured
+shapes, and a user guide taught on a problem nobody has. Shots that must show
+the *demo picker itself* screenshot the picker UI, not a downloaded dataset.
+
+**Callouts.** A manifest `annotations` entry is a `box`, a `highlight`, or a
+numbered `step` marker (a red disc carrying 1, 2, 3 … beside the control); the
+click-by-click pictures in the guide's *Step by step* section are made of the
+last. `scripts/screenshots/callouts.mjs` draws all three, and the slide shooter
+uses the same drawer. A shot's `clip` can also frame a single control with a
+little padding — the guide's **inline crops**, embedded mid-sentence with a
+`height` and no `width` so the in-app Help panel keeps them in the line of
+text.
 
 ### 1. The manifest — single source of truth
 
@@ -92,26 +106,29 @@ interface Shot {
   embeddedIn: string;          // "docs/user/USER_GUIDE.md#autopilot"
   caption: string;             // alt text + (optional) figure caption
   themes: ("light"|"dark")[];  // each yields a separate file
-  recipe: RecipeStep[];        // deterministic steps to reach the frame
-  clip?: { selector: string }; // element to frame; omit for full viewport
+  recipe: (page, helpers) => Promise<void>;  // steps to reach the frame
+  clip?: { target: Target; pad?: number };   // what to frame; omit for full viewport
   annotations?: Annotation[];  // declarative callouts, drawn pre-capture
 }
 
 interface Annotation {
-  target: string | { x:number; y:number; w:number; h:number };
-  kind: "box" | "arrow" | "highlight";
+  target: Target;              // selector, {selector, hasText|name}, or a box
+  kind: "box" | "highlight" | "step";
+  step?: number;               // the number on a `step` marker
+  at?: "left" | "right" | "top" | "bottom" | "corner";  // where it sits
   label?: string;
 }
 ```
 
 ### 2. The harness — `scripts/screenshots/capture.ts`
 
-For each shot × theme: boot the app once (synthetic-dataset fixture), set
+For each shot × theme: boot the app once (Book-example fixtures), set
 deterministic knobs, run the recipe, apply the theme, inject declarative
 annotations as an absolutely-positioned DOM overlay computed from each `target`'s
 bounding rect, then capture (`clip` element if given, else viewport) → PNG.
 
-**Determinism knobs (non-negotiable):** synthetic dataset (fixed size + seed);
+**Determinism knobs (non-negotiable):** the Book example's corpora (a
+deterministic selection from COCO) and a fixed vote baseline;
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`); mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text);

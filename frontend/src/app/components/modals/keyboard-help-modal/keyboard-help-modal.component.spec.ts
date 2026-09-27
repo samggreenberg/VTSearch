@@ -84,6 +84,23 @@ describe('KeyboardHelpModalComponent — in-app guide anchors', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('keeps an inline crop in its sentence, sized by height alone', async () => {
+    // The guide sets small crops of buttons into running text (#4202). The
+    // stylesheet tells them from full screenshots by "height, no width", so
+    // both the placement and the attribute have to survive rendering and
+    // sanitisation.
+    const body = await loadGuide(
+      'Click <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.png" />' +
+        '<img src="assets/icon-train.light.png" alt="The Train button" height="24" /></picture> to start.',
+    );
+
+    const img = body.querySelector('img') as HTMLImageElement;
+    expect(img.closest('p')?.textContent).toContain('to start.');
+    expect(img.getAttribute('height')).toBe('24');
+    expect(img.hasAttribute('width')).toBe(false);
+    expect(img.getAttribute('src')).toMatch(/^assets\/docs\/assets\/icon-train\.(light|dark)\.png$/);
+  });
+
   it('leaves non-anchor links alone', async () => {
     const body = await loadGuide('[Docs](https://example.com/docs)');
 

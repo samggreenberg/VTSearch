@@ -48,6 +48,11 @@ export interface Annotation {
   kind: 'box' | 'highlight' | 'step';
   /** The number on a `step` disc. */
   step?: number;
+  /**
+   * Which side of the target a `step` disc sits against (default `left`); pick
+   * the side with room, so the disc covers nothing the picture is showing.
+   */
+  at?: 'left' | 'right' | 'top' | 'bottom' | 'corner';
   /** Text rendered next to the callout. */
   label?: string;
 }
@@ -194,10 +199,10 @@ export const SHOTS: Shot[] = [
       'Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of photos on the server, (4) Import',
     themes: BOTH,
     annotations: [
-      { target: { selector: '.importer-picker .tab', hasText: 'Files' }, kind: 'step', step: 1 },
+      { target: { selector: '.importer-picker .tab', hasText: 'Files' }, kind: 'step', step: 1, at: 'top' },
       { target: { selector: '.importer-subtab', hasText: 'Folder' }, kind: 'step', step: 2 },
-      { target: '#sf-path-input', kind: 'step', step: 3, label: 'Your folder' },
-      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 4 },
+      { target: '#sf-path-input', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 4, at: 'right' },
     ],
     async recipe(_page, h) {
       await h.dashboard();
@@ -212,9 +217,9 @@ export const SHOTS: Shot[] = [
       'Step 2: in the New Detector dialog, (1) describe what you are looking for, (2) name the detector, (3) Create',
     themes: BOTH,
     annotations: [
-      { target: '.example-panel input.form-input', kind: 'step', step: 1, label: 'What you want' },
+      { target: '.example-panel input.form-input', kind: 'step', step: 1 },
       { target: '#detector-name', kind: 'step', step: 2 },
-      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 3, at: 'right' },
     ],
     async recipe(page, h) {
       await h.dashboard();
@@ -251,9 +256,9 @@ export const SHOTS: Shot[] = [
       'Step 2: Autopilot shows one photo at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right',
     themes: BOTH,
     annotations: [
-      { target: '.btn-good', kind: 'step', step: 1 },
+      { target: '.btn-good', kind: 'step', step: 1, at: 'right' },
       { target: '.btn-bad', kind: 'step', step: 2 },
-      { target: '.panel-right', kind: 'step', step: 3, label: 'Your answers' },
+      { target: '.panel-right', kind: 'step', step: 3 },
     ],
     async recipe(page, h) {
       await autopilotServing(page, h);
@@ -266,10 +271,10 @@ export const SHOTS: Shot[] = [
       'Step 3: the same Folder importer, (3) pointed at a second folder of photos the detector has never seen, then (4) Import',
     themes: BOTH,
     annotations: [
-      { target: { selector: '.importer-picker .tab', hasText: 'Files' }, kind: 'step', step: 1 },
+      { target: { selector: '.importer-picker .tab', hasText: 'Files' }, kind: 'step', step: 1, at: 'top' },
       { target: { selector: '.importer-subtab', hasText: 'Folder' }, kind: 'step', step: 2 },
-      { target: '#sf-path-input', kind: 'step', step: 3, label: 'A second folder' },
-      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 4 },
+      { target: '#sf-path-input', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 4, at: 'right' },
     ],
     async recipe(_page, h) {
       await h.dashboard();
@@ -299,12 +304,13 @@ export const SHOTS: Shot[] = [
     id: 'step-find-results',
     embeddedIn: STEPS,
     caption:
-      'Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right, ready to export (3)',
+      'Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
     themes: BOTH,
     annotations: [
-      { target: '.panel-left', kind: 'step', step: 1, label: 'Best matches first' },
-      { target: '.btn-good', kind: 'step', step: 2 },
+      { target: '.panel-left', kind: 'step', step: 1, at: 'corner' },
+      { target: '.btn-good', kind: 'step', step: 2, at: 'right' },
       { target: '.panel-right', kind: 'step', step: 3 },
+      { target: '.goods-actions button[aria-label="Export"]', kind: 'step', step: 4, at: 'bottom' },
     ],
     async recipe(page, h) {
       await openFind(page, h);

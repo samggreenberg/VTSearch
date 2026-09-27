@@ -15,11 +15,16 @@
 # The deck is ideas, not experiments: it presents findings, and the studies
 # behind them live in the reports the presenter notes cite (see #3246, #3265).
 #
-# The outline fragment appears nine times: once bare, as the opening list, and
-# then once before each section marked with `+at1` … `+at7`. It is one slide
-# shown nine ways rather than nine slides — `build.py` numbers it 1a…1i — and the
+# The outline fragment appears ten times: once bare, as the opening list, and
+# then once before each section marked with `+at1` … `+at8`. It is one slide
+# shown ten ways rather than ten slides — `build.py` numbers it 1a…1j — and the
 # last showing, `+end`, is the deck's closing slide: it is the only one that
 # shows "The End", as its marked line.
+#
+# This is the master deck: every fragment a talk might want is named here, and
+# a talk cuts its own manifest from it. Section 8, Step by Step, is the one most
+# talks cut — it is a how-to for users, not an argument for data scientists — and
+# a talk *for* users moves it up to follow section 1 instead.
 
 theme: vtsearch
 
@@ -109,6 +114,19 @@ slides:
   data-fullmarks-problems
   data-set-fullmarks
   data-fullmarks-shape
+
+  # 8 — Step by Step: the tool as a how-to (#4202). Section 1 shows the same
+  # session as an argument; this shows it as instructions, every click marked
+  # with a numbered red disc and the numbers keyed down the side, so the pages
+  # still work as a handout with nobody talking over them. One session, shot
+  # once (`shoot-ui-figs.mjs`), from an empty app: load a pile of photos, make a
+  # detector, train it, load a pile it never saw, and Find.
+  outline-hold-the-line +at8
+  steps-load-train
+  steps-make-detector
+  steps-train
+  steps-load-test
+  steps-find
 
   # The End
   outline-hold-the-line +end

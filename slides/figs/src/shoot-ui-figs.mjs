@@ -4,18 +4,28 @@
  *   node slides/figs/src/shoot-ui-figs.mjs            # every shot
  *   node slides/figs/src/shoot-ui-figs.mjs train-loop # one group
  *
- * Four groups, and the first three are one continuous session rather than
- * three unrelated frames — they are the deck's click-by-click introduction to
- * the tool, and they are shot in the order a user does them:
+ * Five groups, and the first four are one continuous session rather than
+ * unrelated frames — they are the deck's click-by-click introduction to the
+ * tool, and they are shot in the order a user does them:
  *
+ *   steps          `figs/ui-steps-*[.buildN].webp`         — the same session,
+ *                                                            numbered (#4202)
  *   make-detector  `figs/ui-make-detector[.buildN].webp`  — name the concept
  *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
  *   find           `figs/ui-find*.webp`                    — score unseen media
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
  *
- * The detector in the first group is the detector the second group trains and
- * the third group runs, created on camera through the same modal a user would
- * use. Nothing is staged through the API that the slide claims was done by
+ * The session starts from an app with nothing in it. Both piles of photographs
+ * are imported through the Add Dataset dialog, the detector is created through
+ * the New Detector dialog, and the detector the train loop votes on is the one
+ * `find` runs. Nothing is staged through the API that a slide shows being done
+ * by hand.
+ *
+ * The `steps` group is the Step-By-Step section's figures: the moments of the
+ * session a user has to click through, photographed a second time with red
+ * numbered markers on the controls (`scripts/screenshots/callouts.mjs`). Where
+ * a moment is also an intro frame, it is shot twice in a row — clean, then
+ * numbered — so the two sections of the deck show one session, not two. Nothing is staged through the API that the slide claims was done by
  * hand: `train-loop` votes by clicking Good and Bad, and which button it
  * clicks is decided by the filename of whatever autopilot chose to serve — so
  * the piles that accumulate in the right-hand panel are a real session's, and
@@ -29,34 +39,51 @@
  * pictures stacked down one side of it (#3779). It is composed into the same
  * box a screenshot occupies, so the slide's build reveals into the same frame.
  *
- * These do not reuse the light-theme frames of the same-named shots in
- * `docs/user/screenshots.manifest.ts`, and that is deliberate. The docs shots are deliberately taken against the
- * synthetic fixture — the user guide talks the reader through `syn-imgs`, and
- * flat coloured shapes make a drawn region box unambiguous — but on a slide the
- * same frame is the audience's *first* sight of the tool, and what it shows
- * them is somebody voting on procedurally generated triangles. Nobody has that
- * problem. The screenshots have to look like the job.
+ * The corpus is the Book example (`scripts/screenshots/book-example.mjs`),
+ * which the user guide's screenshots share: a few hundred COCO val2017
+ * photographs filed by subject, with `book` — the deck's running example — as
+ * a real concept among real near-misses (a laptop, a monitor, a keyboard:
+ * rectangular, printed, shelved). `coco_fixture.py` downloads and materialises
+ * it. The detector is trained on books, by voting, exactly as a user would —
+ * the ranking in the captured frame is a real ranking from a real trained head.
  *
- * So this harness keeps the docs fixtures untouched and builds its own corpus
- * out of COCO val2017: a few hundred real photographs filed by subject, with
- * `book` — the deck's running example — as a real concept among real
- * near-misses (a laptop, a monitor, a keyboard: rectangular, printed, shelved).
- * `coco_fixture.py` downloads and materialises it. The detector is trained on
- * books, by voting, exactly as a user would — the ranking in the captured frame
- * is a real ranking from a real trained head.
+ * The frames are still shot here rather than taken from the docs harness: a
+ * slide wants a narrower window, a different crop, WebP, and a real session's
+ * votes, where the guide wants a fixed vote baseline and both themes.
  *
  * Like `scripts/screenshots/refresh.sh`, this drives a SINGLE running app
  * rather than booting its own: the box is RAM-tight and two instances would
  * load the image embedder twice. Start one with `python app.py --local` first,
  * or let this script start one.
  *
- * The expensive steps are idempotent — the two corpora are downloaded, filed
- * and embedded only if absent — so a re-run after a UI change is the captures
- * plus one session's worth of clicking. The session itself is not: the intro
- * detector is deleted and re-created every run, because a run that reused last
- * run's votes would be shooting a screen nobody ever sat in front of.
+ * The download is idempotent — COCO is fetched and the corpora filed only if
+ * absent — but the session is not: its datasets and detector are deleted and
+ * rebuilt every run, because the first frame's whole subject is an app with
+ * nothing in it, and a run that reused last run's votes would be shooting a
+ * screen nobody ever sat in front of. That costs one re-embed of both piles
+ * (about 470 photographs) per run. It deletes only the Book example's own
+ * datasets and detectors (the docs harness rebuilds them on its next run); a
+ * dataset of anyone else's would still show on the empty dashboard, and the
+ * run says so.
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
+import { clearCallouts, drawCallouts } from '../../../scripts/screenshots/callouts.mjs';
+import {
+  appClient,
+  BOOK_DETECTOR,
+  BOOK_TEXT,
+  corpusPath,
+  framesOf,
+  HERO_REGION,
+  isBook,
+  REGION_BOX,
+  REGION_DATASET,
+  REGION_DETECTOR,
+  REGION_VOTES,
+  shownPath,
+  TEST_DATASET,
+  TRAIN_DATASET,
+} from '../../../scripts/screenshots/book-example.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,7 +92,6 @@ const APP = process.env.APP || 'http://localhost:5000';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../..');
 const FIGS = resolve(HERE, '..');
-const FIXTURE_BUILDER = join(REPO, 'slides', 'figs', 'src', 'coco_fixture.py');
 
 // A screenshot's text renders at (slot width / CSS width) of its authored size,
 // so what matters is not how many pixels the PNG has but how wide the browser
@@ -118,36 +144,6 @@ const SCALE = 2;
 const SHOT_MARGIN = 0.088;
 const SHOT_RIGHT = 0.027;
 
-// The intro sequence's detector: created on camera in `make-detector`, trained
-// in `train-loop`, and run over unseen media in `find`. Deleted and rebuilt on
-// every run, because the first group's whole subject is a detector that does
-// not exist yet — an idempotent "create it only if absent" would shoot the
-// modal over a detector already in the list.
-const INTRO_DETECTOR = 'Books';
-const INTRO_TEXT = 'book';
-
-// The frames the deck has already called *not* a book, by COCO file name.
-//
-// COCO files a frame under `book` when its largest box is annotated as one,
-// and its annotators counted DVD box-set spines, magazines, spiral notebooks
-// and boxed game manuals. The intro slide takes exactly those frames and puts
-// them in its bottom row — the ones the room will argue about — and the deck's
-// user answers no to them. So when autopilot serves one, the vote is the
-// deck's, not COCO's: `000000125062.jpg` is the shelf of "The Office" box sets
-// behind three teddy bears, and voting Good on it two slides after showing it
-// as the canonical *not* a book is the deck contradicting itself in front of
-// the room (#3779).
-//
-// This list is the `false` half of `make-book-figs.RANKING`, and
-// `tests_lib/meta/test_slide_book_votes.py` fails if the two drift apart.
-const NOT_A_BOOK = new Set([
-  '000000125062.jpg', // dvd — a shelf of box sets
-  '000000375278.jpg', // magazine
-  '000000176446.jpg', // notebook — spiral bound
-  '000000379842.jpg', // gamecase — a boxed game manual
-  '000000016249.jpg', // newspaper
-]);
-
 // Where `train-loop` stops to take a picture, as a running vote count. The
 // first five pages advance one vote at a time, because the claim the slide is
 // making is that a session is one question repeated — a page that jumps from
@@ -172,27 +168,12 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // twenty minutes the deck says the whole task is worth.
 const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
-const REGION_VOTES = {
-  good: [
-    'book/000000262938.jpg', 'book/000000520077.jpg',
-    'book/000000542776.jpg', 'book/000000395701.jpg',
-  ],
-  bad: { laptop: 2, tv: 1, dog: 1 },
-};
+// The numbered markers on the Step-By-Step frames, scaled for the slot. The
+// app is drawn at about 0.74x on the slide (870 of 1180 CSS px), and the
+// numbers are text the room has to read, so they answer to the 20px type
+// floor (`slides/STYLE.md`): the drawer's 23px digit at 1.3x lands at 22px.
+const CALLOUT_SCALE = 1.3;
 
-// The region shot wants the opposite of a portrait: a photo where the book is
-// a *part* of the frame, so that a box drawn round it is visibly a claim about
-// where the evidence is rather than a box round the whole picture. Hence one
-// named frame with a measured box rather than a preference list.
-//
-// It used to be a bookcase behind a television, with the box round one shelf.
-// That taught the wrong thing twice over: a frame already filled with books
-// makes the box look like a crop rather than a claim, and a box round a third
-// of fourteen tiny spines is not a region anyone would actually draw (#3296).
-// This is one book — a boxed game on a bed, a fifth of the frame — beside a
-// camera lens, a phone and a remote that are not books. The box is COCO's own
-// `book` annotation on that frame, as a fraction of the displayed image, which
-// is why it is tight on the object rather than eyeballed round it.
 // The contact sheet on the Find slide: how many frames, and how they are laid
 // out. Four by three, not six by four: this corpus's books are *rooms with
 // shelves in them* — COCO files a frame by its largest box — so at 24 frames
@@ -226,10 +207,8 @@ const DEFAULT_LAYOUT = {
   panel_pct_right: { image: 300 },
 };
 
-const HERO_REGION = 'book/000000396729.jpg';
-const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
-
 const log = (...a) => console.log('[slide-shots]', ...a);
+const app = appClient(APP, log);
 
 /**
  * Screenshot, pad it out to 16:9, then re-encode as WebP.
@@ -282,168 +261,27 @@ function compose(png, name) {
     { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
   );
 }
+/**
+ * Shoot the page as it stands with *callouts* drawn over it, then take them off.
+ *
+ * The Step-By-Step frames are the session's own moments with numbers on them,
+ * so the caller shoots the clean frame (if the intro wants one) and this one
+ * back to back, without the page changing in between.
+ */
+async function shootNumbered(page, name, callouts) {
+  await drawCallouts(page, callouts, { scale: CALLOUT_SCALE });
+  await page.waitForTimeout(200);
+  await shoot(page, name);
+  await clearCallouts(page);
+}
+
+const step = (n, target, at) => ({ target, kind: 'step', step: n, ...(at ? { at } : {}) });
+const datasetRow = (name) => ({ selector: 'tr[vt-dataset-card]', name });
+const detectorRow = (name) => ({ selector: 'tr[vt-detector-card]', name });
+const dashButton = (hasText) => ({ selector: '.dashboard-actions .btn--primary', hasText });
+
 const only = process.argv.slice(2);
 const wanted = (id) => only.length === 0 || only.includes(id);
-
-// ── the corpus ───────────────────────────────────────────────────────────────
-// COCO val2017, filed by subject, so "book" is a real concept with real
-// near-misses in the pile. Which frames land in which category is decided by
-// `coco_fixture.py` — deterministically, from the annotations — so the corpus
-// is a pure function of the download and this file does not have to hold a
-// second copy of the plan.
-
-function buildCorpus(name) {
-  return execFileSync('python', [FIXTURE_BUILDER, name], {
-    cwd: REPO,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  }).trim();
-}
-
-// ── talking to the app ───────────────────────────────────────────────────────
-
-async function api(path, { method = 'GET', body, dataset, detector } = {}) {
-  const headers = { 'content-type': 'application/json' };
-  if (dataset) headers['X-Dataset-Id'] = dataset;
-  if (detector) headers['X-Detector-Id'] = detector;
-  const r = await fetch(APP + path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`${method} ${path} -> ${r.status} ${await r.text()}`);
-  return r.json();
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function waitFor(what, predicate, timeoutMs = 1_800_000) {
-  const until = Date.now() + timeoutMs;
-  while (Date.now() < until) {
-    const hit = await predicate();
-    if (hit) return hit;
-    await sleep(2000);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
-
-const datasets = async () => (await api('/api/datasets/registry')).datasets || [];
-const detectors = async () => (await api('/api/detectors/registry')).detectors || [];
-const named = (rows, name) => rows.find((r) => r.name === name);
-
-async function ensureDataset(name, embedder) {
-  const existing = named(await datasets(), name);
-  if (existing) {
-    log(`dataset ${name} exists (${existing.num_items} items)`);
-    // Registered is not loaded. A fresh import leaves the dataset in memory, so
-    // the first run never needed this; a re-run against a restarted app finds
-    // it on disk and unloaded, and every call after this one 409s with
-    // `dataset_not_loaded`. Idempotent means idempotent across restarts too.
-    if (!existing.loaded) {
-      await api(`/api/datasets/registry/${existing.id}/load`, { method: 'POST' });
-      await waitFor(`dataset ${name} to load`, async () => named(await datasets(), name)?.loaded);
-    }
-    return existing;
-  }
-  const path = buildCorpus(name);
-  log(`importing ${name} (${embedder}) — embedding takes a while on CPU`);
-  await api('/api/dataset/import/server_folder', {
-    method: 'POST',
-    body: {
-      path,
-      media_type: 'image',
-      recursive: 'true',
-      reference_files: 'true',
-      dataset_name: name,
-      embedder,
-    },
-  });
-  const row = await waitFor(`dataset ${name}`, async () => named(await datasets(), name));
-  log(`imported ${name} (${row.num_items} items)`);
-  return row;
-}
-
-async function ensureDetector(name, dataset) {
-  const existing = named(await detectors(), name);
-  const row =
-    existing ||
-    (
-      await api('/api/detectors/registry', {
-        method: 'POST',
-        dataset: dataset.id,
-        body: { name, media_type: 'image', text_query: 'a photo of a book', trainable: true },
-      })
-    ).detector;
-  await api('/api/detectors/registry/load', {
-    method: 'POST',
-    dataset: dataset.id,
-    body: { detector_id: row.id },
-  });
-  await waitFor('detector load', async () => named(await detectors(), name)?.loaded);
-  return row;
-}
-
-/**
- * Vote the way a user would: Good on books, Bad on the things that keep coming
- * back with them. Enough votes to have a trained head and a plausible pair of
- * piles, few enough to still look like the first two minutes of a session —
- * which is the situation the deck is describing.
- */
-async function ensureVotes(dataset, detector, plan) {
-  const ids = (await api('/api/medias/ids', { dataset: dataset.id, detector: detector.id })).map(
-    (m) => m.id
-  );
-  const meta = await api('/api/medias/batch', {
-    method: 'POST',
-    dataset: dataset.id,
-    detector: detector.id,
-    body: { ids },
-  });
-  const byCategory = {};
-  const byName = {};
-  for (const m of meta) {
-    const category = m.filename.split('/')[0];
-    (byCategory[category] ||= []).push(m.id);
-    byName[m.filename] = m.id;
-  }
-  const pick = (category, n) => (byCategory[category] || []).slice(0, n);
-  const good = plan.good.map((name) => {
-    const id = byName[name];
-    if (!id) throw new Error(`${name} is not in the ${dataset.name} corpus`);
-    return id;
-  });
-  const bad = Object.entries(plan.bad).flatMap(([category, n]) => pick(category, n));
-
-  const vote = async (id, target) => {
-    for (let attempt = 0; attempt < 20; attempt++) {
-      const r = await fetch(`${APP}/api/medias/${id}/vote`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'X-Dataset-Id': dataset.id,
-          'X-Detector-Id': detector.id,
-        },
-        body: JSON.stringify({ target }),
-      });
-      if (r.ok) return;
-      // 409 is "the detector is still settling"; anything else is a real error.
-      if (r.status !== 409) throw new Error(`vote ${id} -> ${r.status}`);
-      await sleep(1000);
-    }
-    throw new Error(`vote ${id} still 409 after retries`);
-  };
-  for (const id of good) await vote(id, 'good');
-  for (const id of bad) await vote(id, 'bad');
-  for (const id of ids.filter((i) => !good.includes(i) && !bad.includes(i))) await vote(id, 'none');
-  await sleep(3000);
-  log(`voted ${good.length} good / ${bad.length} bad`);
-  // Remembered so the centre viewer can be given an item nobody has answered
-  // yet. A frame showing an already-voted item has its Good button filled in,
-  // and the whole point of that panel is that the tool is *asking* (#3246).
-  const voted = new Set();
-  for (const m of meta) if (good.includes(m.id) || bad.includes(m.id)) voted.add(m.filename);
-  return voted;
-}
 
 // ── capture ──────────────────────────────────────────────────────────────────
 
@@ -523,47 +361,6 @@ async function serveItem(page, prefer = [], voted = new Set()) {
   await page.waitForTimeout(1500);
 }
 
-/**
- * Delete the intro detector if a previous run left one behind.
- *
- * The first shot's subject is the dialog you use to make a detector, on a
- * dashboard that does not have one yet; the second and third shots then need
- * *this* detector's votes and nobody else's. Both wants are the same want, and
- * neither survives reuse.
- */
-async function resetIntroDetector() {
-  for (const row of await detectors()) {
-    if (row.name !== INTRO_DETECTOR) continue;
-    await api(`/api/detectors/registry/${row.id}`, { method: 'DELETE' });
-    log(`removed the previous ${INTRO_DETECTOR} detector`);
-  }
-}
-
-/**
- * Un-register the production pile, so the dashboard build opens on one dataset.
- *
- * The same decision as `resetIntroDetector`, and for the same reason: the
- * make-detector build's whole subject is a user who has *nothing* yet, and a
- * dashboard already holding a second pile makes the audience carry a thing the
- * story does not use for three more slides (#3779). Ordering the import after
- * that group is enough on a cold box and not on a warm one — the pickle is on
- * disk and the app registers it at startup — so the shot has to be made
- * unconditional rather than left to depend on what the last run happened to
- * leave behind.
- *
- * It costs one re-embed of 240 frames per run, which is the price of a
- * reproducible first frame. The corpus itself stays on disk; only the vectors
- * are recomputed, and `No Persisted Vectors` (see `CLAUDE.md`) is why they are
- * not something that could have been kept anyway.
- */
-async function resetProdDataset() {
-  for (const row of await datasets()) {
-    if (row.name !== 'photos-prod') continue;
-    await api(`/api/datasets/registry/${row.id}`, { method: 'DELETE' });
-    log('removed the previous photos-prod dataset');
-  }
-}
-
 /** Untick every row of *tag*, so the dashboard shows a clean card. */
 async function deselectAll(page, tag) {
   const checked = `${tag} .select-checkbox[aria-checked="true"]`;
@@ -598,27 +395,86 @@ async function selectOnly(page, tag, name) {
 
 async function openDashboard(page) {
   await page.goto(`${APP}/#/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.dash-table', { timeout: 60000 });
+  // An empty registry — the session's first frame — renders a placeholder
+  // rather than the table, so wait for either.
+  await page.waitForSelector('.dash-table, .empty-state', { timeout: 60000 });
   await page.waitForTimeout(1500);
 }
 
 /**
- * Step 1 — name the concept.
+ * Step 1 and Step 4 — load a folder of photographs, through the dialog.
  *
- * Four pages, and they are four clicks: the dashboard with a pile of media and
- * no detector, the dialog, the dialog with the concept written into it, and the
- * dashboard with the detector that was not there before. The dataset row is
- * selected first because the modal takes its media type and its embedder from
- * whatever is active — a detector created against nothing is a detector the
- * next two shots could not use.
+ * Two numbered pages each: the dashboard with its **+**, then the Add Dataset
+ * dialog on Files → Folder with the folder typed in and Import waiting. Then
+ * Import is clicked for real and the run waits out the embedding, because the
+ * rest of the session is shot against this dataset — the dialog in the slide
+ * is the import that made it.
+ *
+ * The real path is typed, so the importer's media-type detection runs against
+ * the real folder; the field is then *shown* as `/data/<corpus>` (see
+ * `shownPath`) by setting the element's value without an input event, which
+ * leaves the form's model — and so the import — on the real path.
+ */
+async function shootImport(page, name, figure) {
+  await openDashboard(page);
+  await page.mouse.move(700, 120);
+  await page.waitForTimeout(400);
+  await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]')]);
+
+  await page.locator('button[title="Import a new dataset"]').click();
+  await page.waitForSelector('.importer-picker .tab-bar', { timeout: 15000 });
+  await page.locator('.importer-picker .tab', { hasText: 'Files' }).click();
+  await page.waitForTimeout(500);
+  await page.locator('.importer-subtab', { hasText: 'Folder' }).click();
+  await page.waitForSelector('#sf-path-input', { timeout: 10000 });
+  await page.locator('#sf-path-input').fill(corpusPath(name));
+  await page.locator('#sf-path-input').blur();
+  await page.getByText(/Detected:/).first().waitFor({ timeout: 20000 });
+  await page.waitForTimeout(700);
+  const typed = await page.locator('#sf-dataset-name').inputValue();
+  if (typed !== name) throw new Error(`the importer named the dataset ${typed}, not ${name}`);
+  await page.locator('#sf-path-input').evaluate((el, shown) => { el.value = shown; }, shownPath(name));
+  await shootNumbered(page, figure, [
+    step(2, { selector: '.importer-picker .tab', hasText: 'Files' }, 'top'),
+    step(3, { selector: '.importer-subtab', hasText: 'Folder' }),
+    step(4, '#sf-path-input'),
+    step(5, { selector: 'vt-modal .btn--primary', hasText: 'Import' }, 'right'),
+  ]);
+
+  await page.locator('vt-modal .btn--primary', { hasText: 'Import' }).click();
+  log(`importing ${name} through the dialog — embedding takes a while on CPU`);
+  await app.waitFor(`dataset ${name}`, async () => app.named(await app.datasets(), name)?.loaded);
+  // Registered is not finished: the row says so while it embeds.
+  await page.waitForFunction((n) => {
+    const row = [...document.querySelectorAll('tr[vt-dataset-card]')]
+      .find((r) => r.querySelector('.name-cell')?.textContent.trim() === n);
+    return row && !/Embedding|Loading/.test(row.textContent);
+  }, name, { timeout: 1_800_000 });
+  await page.waitForTimeout(1500);
+}
+
+/**
+ * Step 2 — name the concept.
+ *
+ * Three intro pages, and they are the clicks: the dashboard with a pile of
+ * media and no detector, the dialog, the dialog with the concept written into
+ * it. The dataset row is selected first because the modal takes its media type
+ * and its embedder from whatever is active — a detector created against
+ * nothing is a detector the next two shots could not use.
+ *
+ * The first and last of them are shot again, numbered, for the Step-By-Step
+ * slide: the **+**, then the phrase, the name, and Create.
  */
 async function shootMakeDetector(page) {
   await openDashboard(page);
-  await selectOnly(page, 'tr[vt-dataset-card]', 'photos');
+  await selectOnly(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await deselectAll(page, 'tr[vt-detector-card]');
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
   await shoot(page, 'ui-make-detector.build1');
+  await shootNumbered(page, 'ui-steps-make-detector.build1', [
+    step(1, 'button[title="Create a new detector"]'),
+  ]);
 
   await page.locator('button[title="Create a new detector"]').click();
   await page.waitForSelector('.new-detector-form', { timeout: 20000 });
@@ -628,10 +484,15 @@ async function shootMakeDetector(page) {
   // The text tab is the default, and it is the one the deck's argument needs:
   // the whole claim of the slide before this is that the concept is a phrase
   // somebody can say and not a query they can write.
-  await page.locator('.example-panel input.form-input').first().fill(INTRO_TEXT);
-  await page.locator('#detector-name').fill(INTRO_DETECTOR);
+  await page.locator('.example-panel input.form-input').first().fill(BOOK_TEXT);
+  await page.locator('#detector-name').fill(BOOK_DETECTOR);
   await page.waitForTimeout(700);
   await shoot(page, 'ui-make-detector');
+  await shootNumbered(page, 'ui-steps-make-detector', [
+    step(2, '.example-panel input.form-input'),
+    step(3, '#detector-name'),
+    step(4, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
+  ]);
 
   // The detector is still created — the next two groups are the same session —
   // but the dashboard it lands back on is not photographed. "And now there is a
@@ -640,7 +501,7 @@ async function shootMakeDetector(page) {
   // is the frame it should end on.
   await page.getByRole('button', { name: /^Creat/ }).last().click();
   await page.waitForSelector('.new-detector-form', { state: 'detached', timeout: 60000 });
-  await waitFor(`the ${INTRO_DETECTOR} detector`, async () => named(await detectors(), INTRO_DETECTOR));
+  await app.waitFor(`the ${BOOK_DETECTOR} detector`, async () => app.named(await app.detectors(), BOOK_DETECTOR));
   await page.waitForTimeout(1500);
 }
 
@@ -669,7 +530,7 @@ async function voteServed(page) {
     before = now;
     await page.waitForTimeout(500);
   }
-  const good = (before || '').startsWith('book/') && !NOT_A_BOOK.has((before || '').split('/').pop());
+  const good = isBook(before);
   await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
   // The vote retrains the head and re-sorts, and autopilot then serves a
   // different item. Waiting on the served item *changing* waits for all of it;
@@ -686,19 +547,38 @@ async function voteServed(page) {
 }
 
 /**
- * Step 2 — answer, and answer again.
+ * Step 3 — answer, and answer again.
  *
  * Six pages of one screen: the votes cast so far accumulate in the right-hand
  * panel and nothing else on the slide moves, which is the build rule and also
  * the honest description of the interaction. Autopilot is collapsed to its rail
  * for the reason `collapseIntoAutopilot` gives — what is left is the item and
  * the two buttons.
+ *
+ * The Step-By-Step slide gets two numbered pages out of it: the dashboard with
+ * the pile and the detector ticked and Train waiting, and the first question
+ * with Good and Bad marked.
  */
 async function shootTrainLoop(page) {
-  await enterLabelView(page, 'photos', INTRO_DETECTOR);
+  await openDashboard(page);
+  await selectOnly(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
+  await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
+  await page.mouse.move(700, 60);
+  await page.waitForTimeout(400);
+  await shootNumbered(page, 'ui-steps-train.build1', [
+    step(1, datasetRow(TRAIN_DATASET)),
+    step(2, detectorRow(BOOK_DETECTOR)),
+    step(3, dashButton('Train')),
+  ]);
+
+  await enterLabelView(page, TRAIN_DATASET, BOOK_DETECTOR);
   await collapseIntoAutopilot(page);
   await page.waitForSelector('.btn-good', { timeout: 120000 });
   await page.waitForTimeout(1500);
+  await shootNumbered(page, 'ui-steps-train', [
+    step(4, '.btn-good', 'right'),
+    step(5, '.btn-bad'),
+  ]);
 
   let cast = 0;
   const tally = { good: 0, bad: 0 };
@@ -757,14 +637,19 @@ async function shootFind(page) {
   // The layout goes in first and the page is reloaded to read it, because the
   // app reads its settings at load and a hash navigation is not a load. The
   // dashboard frame below is unaffected: it has no media panels.
-  await api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
+  await app.api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
-  await selectOnly(page, 'tr[vt-dataset-card]', 'photos-prod');
-  await selectOnly(page, 'tr[vt-detector-card]', INTRO_DETECTOR);
+  await selectOnly(page, 'tr[vt-dataset-card]', TEST_DATASET);
+  await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
   await shoot(page, 'ui-find.build1');
+  await shootNumbered(page, 'ui-steps-find.build1', [
+    step(1, datasetRow(TEST_DATASET)),
+    step(2, detectorRow(BOOK_DETECTOR)),
+    step(3, dashButton('Find')),
+  ]);
 
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
@@ -774,6 +659,13 @@ async function shootFind(page) {
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 })
     .catch(() => {});
   await page.waitForTimeout(3000);
+
+  // The Step-By-Step slide's last page: the results a user lands on, best
+  // first, and the button that sends them somewhere.
+  await shootNumbered(page, 'ui-steps-find', [
+    step(4, '.panel-left', 'corner'),
+    step(5, '.goods-actions button[aria-label="Export"]', 'bottom'),
+  ]);
 
   // What came back, with no tool around it. See `results_grid.py`.
   await shootFindGrid();
@@ -811,7 +703,7 @@ async function shootFind(page) {
   });
   await scrollResults(page, Math.max(0, centred));
   await shoot(page, 'ui-find-line');
-  await api('/api/settings', { method: 'PUT', body: DEFAULT_LAYOUT });
+  await app.api('/api/settings', { method: 'PUT', body: DEFAULT_LAYOUT });
 }
 
 /**
@@ -843,7 +735,7 @@ async function shootFindGrid() {
       String(VIEWPORT.height * SCALE),
       String(GRID_COLS),
       String(GRID_ROWS),
-      'photos-prod',
+      TEST_DATASET,
     ],
     { cwd: REPO, maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] }
   );
@@ -852,8 +744,30 @@ async function shootFindGrid() {
 }
 
 
-async function shootRegionVoting(page, voted) {
-  await enterLabelView(page, 'photo-regions', 'books-regions');
+/**
+ * The region-voting frame, on its own pile and its own detector.
+ *
+ * A second detector, not the session's: a detector binds an embedder *type* at
+ * creation, and a patch dataset offers `patch_semantic` where the SigLIP one
+ * offers `semantic`. Point `Books` at `photo-regions` and the app correctly
+ * refuses the pair — which is the whole reason region voting needs its own
+ * dataset in the first place.
+ */
+async function shootRegionVoting(page) {
+  const regions = await app.ensureDataset(REGION_DATASET, 'dinov2_patch');
+  const detector = await app.ensureDetector(REGION_DETECTOR, regions);
+  const meta = await app.mediaIndex(regions, detector);
+  const votes = {
+    good: REGION_VOTES.good,
+    bad: Object.entries(REGION_VOTES.bad).flatMap(([category, n]) => framesOf(meta, category, n)),
+  };
+  await app.setVotes(regions, detector, votes);
+  // The centre viewer is given an item nobody has answered yet: a frame showing
+  // an already-voted item has its Good button filled in, and the whole point of
+  // that panel is that the tool is *asking* (#3246).
+  const voted = new Set([...votes.good, ...votes.bad]);
+
+  await enterLabelView(page, REGION_DATASET, REGION_DETECTOR);
   await leftTab(page, 'Manual');
   await serveItem(page, [HERO_REGION], voted);
   await collapseIntoAutopilot(page);
@@ -908,7 +822,7 @@ async function ensureApp() {
     stdio: 'ignore',
     detached: false,
   });
-  await waitFor('the app', async () => {
+  await app.waitFor('the app', async () => {
     try {
       return (await fetch(APP + '/api/version')).ok;
     } catch {
@@ -917,26 +831,40 @@ async function ensureApp() {
   }, 300000);
 }
 
-// The three intro shots are one session and are taken together: the detector
-// `make-detector` creates is the one `train-loop` votes on and `find` runs, so
-// asking for a later group alone would shoot it against whatever the last full
-// run left behind.
-const INTRO = ['make-detector', 'train-loop', 'find'];
+// The intro shots are one session and are taken together: the datasets `steps`
+// imports are the ones `make-detector` and `train-loop` work on, and the
+// detector `make-detector` creates is the one `train-loop` votes on and `find`
+// runs, so asking for one group alone would shoot it against whatever the last
+// full run left behind.
+const INTRO = ['steps', 'make-detector', 'train-loop', 'find'];
 const intro = INTRO.some(wanted);
 
-await ensureApp();
-if (intro) await ensureDataset('photos', 'siglip');
-let regionsVoted = new Set();
-if (wanted('region-voting')) {
-  // A second detector, not the same one: a detector binds an embedder *type*
-  // at creation, and a patch dataset offers `patch_semantic` where the SigLIP
-  // one offers `semantic`. Point `books` at `photo-regions` and the app
-  // correctly refuses the pair — which is the whole reason region voting needs
-  // its own dataset in the first place.
-  const regions = await ensureDataset('photo-regions', 'dinov2_patch');
-  regionsVoted = await ensureVotes(regions, await ensureDetector('books-regions', regions), REGION_VOTES);
+/**
+ * The whole click-by-click session, from an app with nothing in it.
+ *
+ * The order is the user's, and the slides': load the photos, make the
+ * detector, train it, load the photos it has never seen, and Find. The second
+ * pile arrives only after training — it used to be imported up front through
+ * the API, which put a dataset on the make-detector dashboard that the story
+ * does not use for three more slides (#3779) — so the Find click in the
+ * captured session is still the click a user makes, on a pile that finished
+ * embedding while nobody was looking.
+ */
+async function shootSession(page) {
+  await app.dropDetectors(BOOK_DETECTOR, REGION_DETECTOR);
+  await app.dropDatasets(TRAIN_DATASET, TEST_DATASET, REGION_DATASET);
+  const strangers = (await app.datasets()).map((d) => d.name);
+  if (strangers.length) {
+    log(`warning: the first frame is meant to show an empty app, but it holds ${strangers.join(', ')}`);
+  }
+  await shootImport(page, TRAIN_DATASET, 'ui-steps-load-train');
+  await shootMakeDetector(page);
+  await shootTrainLoop(page);
+  await shootImport(page, TEST_DATASET, 'ui-steps-load-test');
+  await shootFind(page);
 }
 
+await ensureApp();
 const browser = await launchChromium();
 try {
   const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: SCALE });
@@ -948,23 +876,9 @@ try {
       document.head.appendChild(s);
     });
   }, STILL_CSS);
-  if (intro) {
-    await resetProdDataset();
-    await resetIntroDetector();
-    await shootMakeDetector(page);
-    // The pile the detector has never seen, imported *after* the dashboard has
-    // been photographed and before anything waits on it. The order is the
-    // slide's, not the script's convenience: the make-detector build opens on a
-    // user who has one dataset and no detector, and a dashboard already holding
-    // a second pile makes the audience carry a thing the story does not use for
-    // three more slides (#3779). Still ahead of `shootFind`, so the Find click
-    // in the captured session is the click a user makes and not a five-minute
-    // wait dressed up as one.
-    await ensureDataset('photos-prod', 'siglip');
-    await shootTrainLoop(page);
-    await shootFind(page);
-  }
-  if (wanted('region-voting')) await shootRegionVoting(page, regionsVoted);
+  if (intro) await shootSession(page);
+  // After the session, so its datasets never sit on the session's dashboards.
+  if (wanted('region-voting')) await shootRegionVoting(page);
 } finally {
   await browser.close();
   if (appProcess) appProcess.kill();

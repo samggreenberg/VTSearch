@@ -9,7 +9,7 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/user/assets/dashboard-loaded.dark.png" />
-  <img src="docs/user/assets/dashboard-loaded.light.png" alt="The VTSearch dashboard with a synthetic dataset loaded and a trained detector listed in the sidebar" width="720" />
+  <img src="docs/user/assets/dashboard-loaded.light.png" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
 </picture>
 
 > **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
