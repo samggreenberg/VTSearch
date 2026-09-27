@@ -2162,7 +2162,9 @@ SCALE_CLASS_RULES: dict[str, ClassRule] = {
             "slotted turner is a flat spatula, which stays Bad). A handheld MESH strainer, "
             "skimmer or spider is Bad, like a bowl-style strainer: the line is a solid "
             "bowl, holes or not, against a mesh or wire basket. COCO agrees: LVIS `ladle` "
-            "is COCO spoon 59% of the time, `strainer` 3.4%."
+            "is COCO spoon 59% of the time, `strainer` 3.4%. A spoon is MADE FOR FOOD, as "
+            "a bowl is: a plastic kitty-litter scoop is Bad even though it is a slotted "
+            "scoop (owner, same day)."
         ),
     ),
     "bowl": ClassRule(
