@@ -17,6 +17,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The folder importer's Browse opens at the folder you typed** (issue
+  #4207). In **Add Dataset → Files → Folder**, clicking **Browse** after
+  typing a path opened the browser at the server root, replaced the path with
+  `/`, and re-ran media-type detection on the whole filesystem. The browser
+  now opens inside the typed folder, and opening it leaves the field and the
+  detection alone; only navigating in the browser changes them. A typed path
+  that doesn't exist opens the browser at the root, still without touching
+  the field.
+
 - **Find scores with the detector's current labels, not the ones it had when
   it last trained** (issue #4204). After you changed a detector's labels
   without a Learned sort in between (voting under a text, example or random
