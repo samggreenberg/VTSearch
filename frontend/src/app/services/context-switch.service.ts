@@ -9,6 +9,21 @@ import { DetectorsRegistryApiService } from './detectors-registry-api.service';
 import { ProgressEventsService } from './progress-events.service';
 import { LoadingTask } from '../models/api.models';
 
+/** A task row's identity across reuse. Loads of one dataset or detector share
+ *  a task id (`_regload_<id>`, `_detload_<id>`), and a finished row lingers
+ *  on the channel for seconds afterwards (5s, or 30s with an error), so the
+ *  id alone cannot tell this load's row from the last one's; `created_at`
+ *  can. */
+function rowKey(task: LoadingTask): string {
+  return `${task.task_id}@${task.created_at}`;
+}
+
+/** Keys of the rows on *tasks* that have already settled: leftovers of
+ *  earlier loads, which a waiter must not read as its own load finishing. */
+function settledRowKeys(tasks: LoadingTask[]): ReadonlySet<string> {
+  return new Set(tasks.filter((t) => t.status === 'idle').map(rowKey));
+}
+
 interface ActiveSwitch {
   requestId: number;
   datasetId: string;
@@ -207,6 +222,8 @@ export class ContextSwitchService {
 
   private runDatasetLoad(current: ActiveSwitch, datasetId: string): Observable<void> {
     return new Observable<void>((sub) => {
+      // Taken before the POST, so nothing this load publishes can be in it.
+      const leftovers = settledRowKeys(this.progressEvents.loadingTasks());
       this.datasetsRegistryApi
         .loadRegistered(datasetId)
         .pipe(
@@ -223,7 +240,7 @@ export class ContextSwitchService {
         )
         .subscribe({
           next: (resp) => {
-            this.waitForDatasetLoad(current, datasetId, resp?.task_id ?? '').subscribe({
+            this.waitForDatasetLoad(current, datasetId, resp?.task_id ?? '', leftovers).subscribe({
               next: () => {
                 sub.next();
                 sub.complete();
@@ -236,6 +253,8 @@ export class ContextSwitchService {
 
   private runDetectorLoad(current: ActiveSwitch, detectorId: string): Observable<void> {
     return new Observable<void>((sub) => {
+      // See runDatasetLoad.
+      const leftovers = settledRowKeys(this.progressEvents.detectorLoadingTasks());
       this.detectorsRegistryApi
         .loadDetector(detectorId)
         .pipe(
@@ -250,7 +269,7 @@ export class ContextSwitchService {
         )
         .subscribe({
           next: (resp) => {
-            this.waitForDetectorLoad(current, detectorId, resp?.task_id ?? '').subscribe({
+            this.waitForDetectorLoad(current, detectorId, resp?.task_id ?? '', leftovers).subscribe({
               next: () => {
                 sub.next();
                 sub.complete();
@@ -278,11 +297,19 @@ export class ContextSwitchService {
    * An empty ``taskId`` (the already-loaded / synchronous fast path that
    * starts no tracked background task) falls back to the prior id-based
    * "channel is quiet for this dataset" check, preserving that behavior.
+   *
+   * *leftovers* are the rows that had already settled before the load was
+   * requested. Task ids are reused per dataset, so a previous load's
+   * finished row can still be on the channel under this very ``taskId``
+   * when the response lands; matching it would read an old load's "idle"
+   * as this one finishing (issue #4187). Those rows are skipped, and the
+   * wait starts at the first row this load published.
    */
   private waitForDatasetLoad(
     current: ActiveSwitch,
     datasetId: string,
     taskId: string,
+    leftovers: ReadonlySet<string>,
   ): Observable<void> {
     return new Observable<void>((sub) => {
       let seen = false;
@@ -293,7 +320,7 @@ export class ContextSwitchService {
             if (!taskId) {
               return !tasks.some((t) => t.dataset_id === datasetId && t.status !== 'idle');
             }
-            const task = tasks.find((t) => t.task_id === taskId);
+            const task = tasks.find((t) => t.task_id === taskId && !leftovers.has(rowKey(t)));
             if (task) {
               seen = true;
               // A load that settled WITH an error must not promote the
@@ -319,11 +346,13 @@ export class ContextSwitchService {
   }
 
   /** Detector counterpart of {@link waitForDatasetLoad}; same SSE-lag race,
-   *  same task-id guard, same id-based fallback when no task is tracked. */
+   *  same task-id guard, same leftover-row skip, same id-based fallback when
+   *  no task is tracked. */
   private waitForDetectorLoad(
     current: ActiveSwitch,
     detectorId: string,
     taskId: string,
+    leftovers: ReadonlySet<string>,
   ): Observable<void> {
     return new Observable<void>((sub) => {
       let seen = false;
@@ -334,7 +363,7 @@ export class ContextSwitchService {
             if (!taskId) {
               return !tasks.some((t) => t.detector_id === detectorId && t.status !== 'idle');
             }
-            const task = tasks.find((t) => t.task_id === taskId);
+            const task = tasks.find((t) => t.task_id === taskId && !leftovers.has(rowKey(t)));
             if (task) {
               seen = true;
               if (task.status === 'idle' && task.error) {

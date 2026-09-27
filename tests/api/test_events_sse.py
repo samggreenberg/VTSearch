@@ -201,6 +201,31 @@ class TestLoadingTasksTrackerSubscriptions:
         finally:
             tracker.remove_task("t1")
 
+    def test_create_task_publishes_a_running_row(self):
+        """A new task's first frame must not read as finished (issue #4187).
+
+        ``create_task`` publishes the row before the caller's first
+        ``update``, and ``"idle"`` is the terminal status the Find/Train
+        route guard waits for. A client that caught an ``"idle"`` first
+        frame promoted a detector whose load had not started, and the Find
+        view opened to a stream of 409 ``detector_not_loaded``.
+        """
+        tracker = LoadingTasksTracker()
+        received: list[list[dict]] = []
+        tracker.subscribe(received.append)
+
+        inner = tracker.create_task("t1", name="One")
+        try:
+            assert received[0][0]["status"] == "loading"
+            assert inner.get()["status"] == "loading"
+            assert tracker.has_active_tasks() is True
+        finally:
+            tracker.remove_task("t1")
+
+    def test_bare_progress_tracker_still_starts_idle(self):
+        """Only a task is born running; a long-lived tracker rests at idle."""
+        assert ProgressTracker().get()["status"] == "idle"
+
     def test_inner_tracker_update_propagates_to_outer(self):
         tracker = LoadingTasksTracker()
         received: list[list[dict]] = []

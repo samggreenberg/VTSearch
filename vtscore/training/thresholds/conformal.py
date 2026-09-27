@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import math
 import time
+from collections.abc import Callable
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -692,6 +693,64 @@ def compute_grouped_fold_node_scores(
     return fold_node_data, None
 
 
+def _torch_fold_ordering(
+    X_np: np.ndarray,
+    y_np: np.ndarray,
+    train_idx: np.ndarray,
+    cal_idx: np.ndarray,
+    input_dim: int,
+    hidden_dim: int | None,
+    model_sink: list | None,
+) -> tuple[list[float], list[float]]:
+    """One fold of :func:`compute_fold_orderings` under the app's own head."""
+    import torch  # noqa: PLC0415
+
+    from vtscore.training.mlp import train_model  # noqa: PLC0415
+    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+
+    X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
+    y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
+    X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
+
+    model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim)
+    if model_sink is not None:
+        model_sink.append(model)
+
+    with torch.no_grad():
+        X_cal = X_cal.to(next(model.parameters()).device)
+        # Sanitize non-finite sigmoids (destabilised fold model): the
+        # orderings are cached, swept for the Stats chart, and averaged
+        # into ``DetectorContext.threshold`` - a NaN here would silently
+        # break every downstream ``score >= threshold`` comparison and
+        # leak NaN into JSON responses.
+        scores = sigmoid_to_finite_scores(model(X_cal))
+    return scores, y_np[cal_idx].tolist()
+
+
+def _fold_fit_ordering(
+    fold_fit: "Callable[[np.ndarray, np.ndarray], Callable[[np.ndarray], np.ndarray]]",
+    X_np: np.ndarray,
+    y_np: np.ndarray,
+    train_idx: np.ndarray,
+    cal_idx: np.ndarray,
+    model_sink: list | None,
+) -> tuple[list[float], list[float]]:
+    """One fold of :func:`compute_fold_orderings` under a caller-supplied estimator.
+
+    Fits on the fold's training rows, scores its held-out rows, and replaces a
+    non-finite score with :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`
+    as the torch path does, so a degenerate fit cannot leak NaN into the cut.
+    """
+    from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL  # noqa: PLC0415
+
+    predict = fold_fit(X_np[train_idx], y_np[train_idx])
+    if model_sink is not None:
+        model_sink.append(predict)
+    raw = np.asarray(predict(X_np[cal_idx]), dtype=np.float64).ravel()
+    s = NON_FINITE_SCORE_SENTINEL
+    return np.nan_to_num(raw, nan=s, posinf=s, neginf=s).tolist(), y_np[cal_idx].tolist()
+
+
 def compute_fold_orderings(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -704,6 +763,7 @@ def compute_fold_orderings(
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
     seconds_sink: list[float] | None = None,
+    fold_fit: "Callable[[np.ndarray, np.ndarray], Callable[[np.ndarray], np.ndarray]] | None" = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -757,7 +817,17 @@ def compute_fold_orderings(
     linear in K), and the folds at ``calibrate_count=k`` are exactly the first
     *k* folds at any larger count drawn from the same ``rng`` - the splits are
     nested, so one run at Kmax yields every smaller K's calibration for free.
+
+    *fold_fit* (row-wise path only; eval harness only, issue #3959) replaces the
+    torch head with any estimator: ``fold_fit(X_train, y_train)`` returns a
+    ``predict(X) -> P(positive)`` callable, which scores the fold's held-out
+    split and is what *model_sink* receives.  Everything else - the dithered
+    split sizes, the stratified draws, the *rng* stream - is this function's,
+    so a non-torch head calibrates on exactly the splits the app's head would
+    have drawn from the same labels.  Production callers never pass it.
     """
+    if groups is not None and fold_fit is not None:
+        raise ValueError("fold_fit applies to the row-wise path only")
     if groups is not None:
         return _compute_fold_orderings_grouped(
             X_list,
@@ -793,10 +863,6 @@ def compute_fold_orderings(
     if len(pos_idx) < 2 or len(neg_idx) < 2:
         return [], 0.5
 
-    import torch  # noqa: PLC0415
-
-    from vtscore.training.mlp import train_model  # noqa: PLC0415
-
     calibrate_count = max(1, calibrate_count)
 
     def _per_class_n_train(class_total: int) -> int:
@@ -814,25 +880,10 @@ def compute_fold_orderings(
         train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
         cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
 
-        X_train = torch.tensor(X_np[train_idx], dtype=torch.float32)
-        y_train = torch.tensor(y_np[train_idx], dtype=torch.float32).unsqueeze(1)
-        X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
-
-        model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim)
-        if model_sink is not None:
-            model_sink.append(model)
-
-        with torch.no_grad():
-            from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
-
-            X_cal = X_cal.to(next(model.parameters()).device)
-            # Sanitize non-finite sigmoids (destabilised fold model): the
-            # orderings are cached, swept for the Stats chart, and averaged
-            # into ``DetectorContext.threshold`` - a NaN here would silently
-            # break every downstream ``score >= threshold`` comparison and
-            # leak NaN into JSON responses.
-            scores = sigmoid_to_finite_scores(model(X_cal))
-        orderings.append((scores, y_np[cal_idx].tolist()))
+        if fold_fit is not None:
+            orderings.append(_fold_fit_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, model_sink))
+        else:
+            orderings.append(_torch_fold_ordering(X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink))
         if seconds_sink is not None:
             seconds_sink.append(time.monotonic() - t_fold)
 
