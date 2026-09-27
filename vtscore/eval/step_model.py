@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.labels import region_box_for_category
-from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
+from vtscore.training.mlp import LINEAR_HEAD, LINEAR_LOGREG_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
 
 
 @dataclass
@@ -71,8 +71,11 @@ class StepModel:
 #: candidate, a hidden layer auto-sized from the vote count
 #: (:func:`~vtscore.training.mlp._auto_hidden_dim`).  The choice is threaded into
 #: the calibration folds too, exactly as production threads one sentinel through
-#: ``_train_and_score_xy``.
-HEADS: tuple[str, ...] = ("mlp", "linear", "linear_svm")
+#: ``_train_and_score_xy``.  ``"linear_logreg"`` is the logistic loss fitted to
+#: convergence by scikit-learn (:data:`~vtscore.training.mlp.LINEAR_LOGREG_HEAD`,
+#: issue #4114), the in-loop test of #3197's finding that ``"linear"`` loses on
+#: its fit, not its loss.
+HEADS: tuple[str, ...] = ("mlp", "linear", "linear_svm", "linear_logreg")
 
 
 #: The voting simulation's ``trainer`` value naming the **app's own pipeline**:
@@ -126,6 +129,8 @@ def resolve_hidden_dim(head: str, n_votes: int) -> int:
         return LINEAR_SVM_HEAD
     if head == "linear":
         return LINEAR_HEAD
+    if head == "linear_logreg":
+        return LINEAR_LOGREG_HEAD
     if head == "mlp":
         return _auto_hidden_dim(n_votes)
     raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
