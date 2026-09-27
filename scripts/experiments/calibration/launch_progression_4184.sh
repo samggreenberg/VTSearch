@@ -94,6 +94,9 @@ export CALIB_CELL_ORDER="${CALIB_CELL_ORDER:-seed}"
 # 150 votes: the deck's session is "a few minutes, twenty-seven questions", and
 # r7's measured worth is speed (#3319) - both live well inside 150.
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
+# Gzipped cells: measured 3.3 MB -> 178 KB per cell on the r1 sizing run, so
+# the 5,040 cells are ~1 GB instead of ~19 GB on a volume that had 7 GB free.
+export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}"
 
 # --- ops -----------------------------------------------------------------------
 export CALIB_PARTITION=cpu
@@ -268,8 +271,8 @@ case "$MODE" in
     for rung in $ALL_RUNGS; do
       rung_env "$rung"
       set_exp "$rung"
-      n="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null | wc -l)"
-      z="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv' -size 0 2>/dev/null | wc -l)"
+      n="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l)"
+      z="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size 0 2>/dev/null | wc -l)"
       q="$(squeue -u "$USER" -h -n "$CALIB_JOB_NAME" -o %i 2>/dev/null | wc -l)"
       printf '%-12s %5s cells written  %3s zero-byte  %3s queued/running jobs\n' "$rung" "$n" "$z" "$q"
     done

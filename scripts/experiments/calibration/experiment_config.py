@@ -920,6 +920,13 @@ STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 #: detector exists yet, so an arm's mining behaviour is invisible without it.
 EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
 
+#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
+#: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
+#: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
+#: ``_cells_paths`` reads both spellings, so every analyzer that goes through
+#: it is unaffected.
+CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "0") == "1"
+
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
 #: is bounded by positives, not pool size: once autopilot has exhausted them,
