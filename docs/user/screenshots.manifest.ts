@@ -4,7 +4,7 @@
  *
  * One entry per *logical* shot. `themes` expands automatically: an entry with
  * `themes: ["light","dark"]` yields two files,
- * `docs/user/assets/<id>.<theme>.png` (output path is derived from id+theme,
+ * `docs/user/assets/<id>.<theme>.webp` (output path is derived from id+theme,
  * never stored, so the manifest can't drift from the filesystem).
  *
  * `recipe` is an async function rather than a step array: several shots need
@@ -49,8 +49,9 @@ export interface Annotation {
   /** The number on a `step` disc. */
   step?: number;
   /**
-   * Which side of the target a `step` disc sits against (default `left`); pick
-   * the side with room, so the disc covers nothing the picture is showing.
+   * Which side of the target a `step` disc sits against (default `left`), or a
+   * `box` / `highlight` label (default `top`); pick the side with room, so the
+   * mark covers nothing the picture is showing.
    */
   at?: 'left' | 'right' | 'top' | 'bottom' | 'corner';
   /** Text rendered next to the callout. */
@@ -103,7 +104,7 @@ export interface Helpers {
 }
 
 export interface Shot {
-  /** Stable, kebab-case, unique. Output is docs/user/assets/<id>.<theme>.png. */
+  /** Stable, kebab-case, unique. Output is docs/user/assets/<id>.<theme>.webp. */
   id: string;
   /** "docs/user/USER_GUIDE.md#anchor" — which doc + heading this embeds into. */
   embeddedIn: string;
@@ -140,15 +141,19 @@ const dashButton = (hasText: 'Train' | 'Find'): Target => ({
  * An inline crop: one control, framed with a little of its surroundings, for
  * setting into a sentence beside the words that name it. Both themes, like
  * every shot, so the in-app Help panel can match the app's theme.
+ *
+ * Takes an object with a literal `id:` so `scripts/screenshots/wiring-check.py`,
+ * which finds shot ids by that key, sees these shots like any other.
  */
-function icon(
-  id: string,
-  anchor: string,
-  caption: string,
-  target: Target,
-  recipe: Shot['recipe'],
-): Shot {
-  return { id, embeddedIn: `${GUIDE}#${anchor}`, caption, themes: BOTH, clip: { target, pad: 6 }, recipe };
+function icon(s: { id: string; anchor: string; caption: string; target: Target; recipe: Shot['recipe'] }): Shot {
+  return {
+    id: s.id,
+    embeddedIn: `${GUIDE}#${s.anchor}`,
+    caption: s.caption,
+    themes: BOTH,
+    clip: { target: s.target, pad: 6 },
+    recipe: s.recipe,
+  };
 }
 
 /** Clean overview: nothing ticked, cursor parked where no row is hovered. */
@@ -318,40 +323,100 @@ export const SHOTS: Shot[] = [
   },
 
   // ── Inline crops: the controls the prose names, pictured beside the words ─
-  icon('icon-add-dataset', 'step-1-load-a-training-dataset', 'The + button on the Datasets card',
-    'button[title="Import a new dataset"]', async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-new-detector', 'step-2-make-a-detector-and-train-it', 'The + button on the Detectors card',
-    'button[title="Create a new detector"]', async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-train', 'step-2-make-a-detector-and-train-it', 'The Train button',
-    dashButton('Train'), async (page, h) => {
+  icon({
+    id: 'icon-add-dataset',
+    anchor: 'step-1-load-a-training-dataset',
+    caption: 'The + button on the Datasets card',
+    target: 'button[title="Import a new dataset"]',
+    recipe: async (page, h) => { await cleanDashboard(page, h); },
+  }),
+  icon({
+    id: 'icon-new-detector',
+    anchor: 'step-2-make-a-detector-and-train-it',
+    caption: 'The + button on the Detectors card',
+    target: 'button[title="Create a new detector"]',
+    recipe: async (page, h) => { await cleanDashboard(page, h); },
+  }),
+  icon({
+    id: 'icon-train',
+    anchor: 'step-2-make-a-detector-and-train-it',
+    caption: 'The Train button',
+    target: dashButton('Train'),
+    recipe: async (page, h) => {
       await h.dashboard();
       await h.selectDatasetRow(TRAIN_DATASET);
       await h.selectDetectorRow(BOOK_DETECTOR);
       await page.mouse.move(700, 60);
-    }),
-  icon('icon-find', 'step-4-run-the-detector-on-the-new-dataset', 'The Find button',
-    dashButton('Find'), async (page, h) => {
+    },
+  }),
+  icon({
+    id: 'icon-find',
+    anchor: 'step-4-run-the-detector-on-the-new-dataset',
+    caption: 'The Find button',
+    target: dashButton('Find'),
+    recipe: async (page, h) => {
       await h.dashboard();
       await h.selectDatasetRow(TEST_DATASET);
       await h.selectDetectorRow(BOOK_DETECTOR);
       await page.mouse.move(700, 60);
-    }),
-  icon('icon-good', 'step-2-make-a-detector-and-train-it', 'The Good vote button',
-    '.btn-good', async (page, h) => { await autopilotServing(page, h); }),
-  icon('icon-bad', 'step-2-make-a-detector-and-train-it', 'The Bad vote button',
-    '.btn-bad', async (page, h) => { await autopilotServing(page, h); }),
-  icon('icon-overflow', 'dashboard-managing-datasets-and-detectors', 'The ⋯ row menu',
-    { selector: 'tr[vt-dataset-card] .overflow-btn' }, async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-settings', 'settings-tabs', 'The Settings (gear) button',
-    'button[title="Settings"]', async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-help', 'tips-and-shortcuts', 'The Help (?) button',
-    'button[title="Help (?)"]', async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-achievements', 'achievements', 'The Achievements (trophy) button',
-    'button[title^="Achievements:"]', async (page, h) => { await cleanDashboard(page, h); }),
-  icon('icon-export', 'find-scoring-and-verifying', 'The Export button in the Find view',
-    '.goods-actions button[aria-label="Export"]', async (page, h) => { await openFind(page, h); }),
-  icon('icon-stats', 'find-scoring-and-verifying', 'The Stats button in the Find view',
-    'button[aria-label="Stats"]', async (page, h) => { await openFind(page, h); }),
+    },
+  }),
+  icon({
+    id: 'icon-good',
+    anchor: 'step-2-make-a-detector-and-train-it',
+    caption: 'The Good vote button',
+    target: '.btn-good',
+    recipe: async (page, h) => { await autopilotServing(page, h); },
+  }),
+  icon({
+    id: 'icon-bad',
+    anchor: 'step-2-make-a-detector-and-train-it',
+    caption: 'The Bad vote button',
+    target: '.btn-bad',
+    recipe: async (page, h) => { await autopilotServing(page, h); },
+  }),
+  icon({
+    id: 'icon-overflow',
+    anchor: 'dashboard-managing-datasets-and-detectors',
+    caption: 'The ⋯ row menu',
+    target: { selector: 'tr[vt-dataset-card] .overflow-btn' },
+    recipe: async (page, h) => { await cleanDashboard(page, h); },
+  }),
+  icon({
+    id: 'icon-settings',
+    anchor: 'settings-tabs',
+    caption: 'The Settings (gear) button',
+    target: 'button[title="Settings"]',
+    recipe: async (page, h) => { await cleanDashboard(page, h); },
+  }),
+  icon({
+    id: 'icon-help',
+    anchor: 'tips-and-shortcuts',
+    caption: 'The Help (?) button',
+    target: 'button[title="Help (?)"]',
+    recipe: async (page, h) => { await cleanDashboard(page, h); },
+  }),
+  icon({
+    id: 'icon-achievements',
+    anchor: 'achievements',
+    caption: 'The Achievements (trophy) button',
+    target: 'button[title^="Achievements:"]',
+    recipe: async (page, h) => { await cleanDashboard(page, h); },
+  }),
+  icon({
+    id: 'icon-export',
+    anchor: 'find-scoring-and-verifying',
+    caption: 'The Export button in the Find view',
+    target: '.goods-actions button[aria-label="Export"]',
+    recipe: async (page, h) => { await openFind(page, h); },
+  }),
+  icon({
+    id: 'icon-stats',
+    anchor: 'find-scoring-and-verifying',
+    caption: 'The Stats button in the Find view',
+    target: 'button[aria-label="Stats"]',
+    recipe: async (page, h) => { await openFind(page, h); },
+  }),
 
   // ── The rest of the guide ────────────────────────────────────────────────
   {
@@ -405,10 +470,39 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await h.dashboard();
       await h.openFolderImporter();
-      await h.fillFolderImporter(corpusPath(TRAIN_DATASET));
+      // The browser opens at the server root, so walk it down to the corpus
+      // the way a user would: double-click one folder at a time.
       await page.locator('vt-modal button', { hasText: 'Browse' }).first().click();
-      await page.waitForSelector('.file-browser, .browser-table, table', { timeout: 15000 }).catch(() => {});
-      await h.wait(1200);
+      await page.waitForSelector('.vfb-row', { timeout: 15000 });
+      for (const segment of corpusPath(TRAIN_DATASET).split('/').filter(Boolean)) {
+        const row = page
+          .locator('.vfb-row')
+          .filter({ has: page.locator('.vfb-name', { hasText: new RegExp(`^${segment}$`) }) })
+          .first();
+        await row.scrollIntoViewIfNeeded();
+        await row.dblclick();
+        await page.waitForFunction(
+          (s) => [...document.querySelectorAll('.vfb-crumb')].some((c) => c.textContent?.trim() === s),
+          segment,
+          { timeout: 15000 },
+        );
+        await h.wait(300);
+      }
+      await page.getByText(/Detected:/).first().waitFor({ timeout: 20000 });
+      // The breadcrumbs spell out the checkout's own path; show them as the
+      // path field is shown (`/data/photos`, see maskVolatile): hide every
+      // crumb before `data`, and `slide-fixtures`, with the `/` before each.
+      await page.evaluate(() => {
+        const crumbs = [...document.querySelectorAll('.vfb-breadcrumbs .vfb-crumb')].slice(1) as HTMLElement[];
+        const data = crumbs.findIndex((c) => c.textContent?.trim() === 'data');
+        crumbs.forEach((c, i) => {
+          if (i >= data && c.textContent?.trim() !== 'slide-fixtures') return;
+          c.style.display = 'none';
+          const sep = c.previousElementSibling as HTMLElement | null;
+          if (sep?.classList.contains('vfb-crumb-sep')) sep.style.display = 'none';
+        });
+      });
+      await h.wait(600);
     },
   },
   {
@@ -417,7 +511,7 @@ export const SHOTS: Shot[] = [
     caption: 'The three-panel labeling layout: media list (left), viewer (centre), vote piles (right)',
     themes: BOTH,
     annotations: [
-      { target: '.panel-left', kind: 'box', label: 'Left: media list & sort' },
+      { target: '.panel-left', kind: 'box', label: 'Left: media list' },
       { target: '.panel-center', kind: 'box', label: 'Centre: viewer + Good/Bad' },
       { target: '.panel-right', kind: 'box', label: 'Right: your vote piles' },
     ],
@@ -462,10 +556,12 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${GUIDE}#manual-mode-for-power-users`,
     caption: 'The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion slider',
     themes: BOTH,
+    // Labels to the right: the three rows are stacked tight, so a label above
+    // each box would sit on the row before it.
     annotations: [
-      { target: '.sort-mode-group, vt-sort-bar', kind: 'box', label: 'Sort mode' },
-      { target: '.select-mode-group, vt-select-mode', kind: 'box', label: 'Selection strategy' },
-      { target: '.inclusion-selector, vt-inclusion-slider', kind: 'box', label: 'Inclusion slider' },
+      { target: '.sort-mode-group, vt-sort-bar', kind: 'box', label: 'Sort mode', at: 'right' },
+      { target: '.select-mode-group, vt-select-mode', kind: 'box', label: 'Selection strategy', at: 'right' },
+      { target: '.inclusion-selector, vt-inclusion-slider', kind: 'box', label: 'Inclusion slider', at: 'right' },
     ],
     async recipe(_page, h) {
       await h.enterLabelView();

@@ -523,13 +523,21 @@ async function voteServed(page) {
   // in the Bad pile of a session the slide describes as truthful (#3779). The
   // wait after the previous vote is a *change* plus a fixed delay, and a fixed
   // delay is exactly the thing that is right until the box is busy.
+  //
+  // Stable is not enough on its own: while the next item loads, the viewer
+  // shows a generic alt ("Image media"), and on a busy box that placeholder can
+  // hold still for a whole tick. Read as a file name it is "not a book", and
+  // the Bad click then lands on whatever loads next. So only a corpus file name
+  // — `<category>/<file>` — counts as served.
+  const served = (alt) => /^[^/\s]+\/[^/]+\.\w+$/.test(alt || '');
   let before = null;
-  for (let tick = 0; tick < 40; tick++) {
+  for (let tick = 0; tick < 120; tick++) {
     const now = await viewer.getAttribute('alt');
-    if (now && now === before) break;
+    if (served(now) && now === before) break;
     before = now;
     await page.waitForTimeout(500);
   }
+  if (!served(before)) throw new Error(`the viewer never settled on a served item (alt ${before})`);
   const good = isBook(before);
   if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
   await page.locator(good ? '.btn-good' : '.btn-bad').first().click();

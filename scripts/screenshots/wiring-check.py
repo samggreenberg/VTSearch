@@ -4,9 +4,9 @@
 Asserts three invariants from docs/plans/user-docs-screenshots.md:
 
   (a) every shot id in docs/user/screenshots.manifest.ts has BOTH theme files
-      (`<id>.light.png` and `<id>.dark.png`) on disk under docs/user/assets/;
+      (`<id>.light.webp` and `<id>.dark.webp`) on disk under docs/user/assets/;
   (b) every screenshot the user-facing docs embed (USER_GUIDE.md, README.md,
-      demos.md) — i.e. each `assets/<id>.<theme>.png` reference — resolves to a
+      demos.md) — i.e. each `assets/<id>.<theme>.webp` reference — resolves to a
       real manifest id;
   (c) every shot id listed in the reshoot queue
       (docs/user/screenshots-reshoot-queue.md) resolves to a real manifest id,
@@ -37,8 +37,8 @@ DOCS = [
 # `id: 'kebab-case'` inside a SHOTS entry. The Shot interface uses
 # `id: string;` (no quotes), so it is not matched.
 ID_RE = re.compile(r"^\s*id:\s*'([a-z0-9-]+)'", re.MULTILINE)
-# Any embedded asset reference, e.g. assets/dashboard-loaded.dark.png
-REF_RE = re.compile(r"assets/([a-z0-9-]+)\.(light|dark)\.png")
+# Any embedded asset reference, e.g. assets/dashboard-loaded.dark.webp
+REF_RE = re.compile(r"assets/([a-z0-9-]+)\.(light|dark)\.webp")
 # A reshoot-queue table row: the shot id is the first backticked token in a
 # Markdown table row (a line starting with `|`). The header and `|----|`
 # separator rows carry no backticks, so they don't match.
@@ -61,9 +61,9 @@ def main() -> int:
     # (a) every manifest id has both theme files on disk.
     for sid in ids:
         for theme in THEMES:
-            png = ASSETS / f"{sid}.{theme}.png"
-            if not png.exists():
-                errors.append(f"missing asset for manifest id '{sid}': {png.relative_to(ROOT)}")
+            path = ASSETS / f"{sid}.{theme}.webp"
+            if not path.exists():
+                errors.append(f"missing asset for manifest id '{sid}': {path.relative_to(ROOT)}")
 
     # (b) every embedded reference in the docs maps to a manifest id.
     for doc in DOCS:
@@ -72,7 +72,7 @@ def main() -> int:
         for match in REF_RE.finditer(doc.read_text(encoding="utf-8")):
             ref_id = match.group(1)
             if ref_id not in id_set:
-                errors.append(f"{doc.relative_to(ROOT)} embeds 'assets/{ref_id}.*.png' with no matching manifest id")
+                errors.append(f"{doc.relative_to(ROOT)} embeds 'assets/{ref_id}.*.webp' with no matching manifest id")
 
     # (c) every shot id queued for reshoot maps to a manifest id.
     queued = 0

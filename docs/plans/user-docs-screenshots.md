@@ -96,7 +96,7 @@ text.
 
 `docs/user/screenshots.manifest.ts` (TS so the harness imports it directly). One
 entry per **logical** shot; `themes: ["light","dark"]` expands to two files.
-Output path is derived (`docs/user/assets/<id>.<theme>.png`), not stored, so the
+Output path is derived (`docs/user/assets/<id>.<theme>.webp`), not stored, so the
 manifest can't drift from the filesystem. `embeddedIn` records the doc + anchor
 each shot belongs to, so the wiring check can prove docs and manifest agree.
 
@@ -125,7 +125,14 @@ interface Annotation {
 For each shot × theme: boot the app once (Book-example fixtures), set
 deterministic knobs, run the recipe, apply the theme, inject declarative
 annotations as an absolutely-positioned DOM overlay computed from each `target`'s
-bounding rect, then capture (`clip` element if given, else viewport) → PNG.
+bounding rect, then capture (`clip` element if given, else viewport) → WebP.
+
+**WebP, not PNG** (#4202). The shots are photographs behind UI chrome, which PNG
+is bad at: a full-window shot is 2.4–3.4 MB lossless — close to the 4 MB
+large-file hook and ~100 MB of history per full refresh — and quantizing to 256
+colours bands the photos and still leaves 1.4 MB. WebP at quality 90 is
+0.35–0.5 MB. Playwright captures PNG; `capture.ts` re-encodes it with Pillow
+(deterministic, so `check.sh` can still compare bytes).
 
 **Determinism knobs (non-negotiable):** the Book example's corpora (a
 deterministic selection from COCO) and a fixed vote baseline;
@@ -136,7 +143,7 @@ stub randomness the UI exposes (never rely on unseeded draws).
 
 ### 3. Driver scripts — `scripts/screenshots/`
 
-- `refresh.sh` — regenerate **every** PNG from the manifest in place; then
+- `refresh.sh` — regenerate **every** shot from the manifest in place; then
   `git diff --stat docs/user/assets/` is the precise list of shots the GUI
   change moved. The everyday refresh.
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
@@ -152,7 +159,7 @@ stub randomness the UI exposes (never rely on unseeded draws).
 2. In a browser-ready session, run `scripts/screenshots/refresh.sh`.
 3. `git diff docs/user/assets/` shows exactly which shots moved; review like any
    diff.
-4. Commit the regenerated PNGs. `check.sh` is the optional pre-release tripwire.
+4. Commit the regenerated images. `check.sh` is the optional pre-release tripwire.
 
 ### The reshoot queue (for sessions that can't render)
 
@@ -163,7 +170,7 @@ instead records the affected shot id(s) in
 **`docs/user/screenshots-reshoot-queue.md`** — a tracked list of known-stale
 shots. `wiring-check.py` validates every queued id is a real manifest id, so the
 queue can't reference a renamed/deleted shot. A later browser-capable session
-**drains** it: run `refresh.sh`, commit the PNGs, delete the drained rows.
+**drains** it: run `refresh.sh`, commit the images, delete the drained rows.
 CLAUDE.md → "Screenshot reshoots" points contributors here.
 
 ## Doc-embedding convention (locked 2026-06-07)
@@ -174,8 +181,8 @@ One image is shown, always matching the **viewer's** theme. The embed is a
 
 ```html
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/<id>.dark.png" />
-  <img src="assets/<id>.light.png" alt="<caption>" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/<id>.dark.webp" />
+  <img src="assets/<id>.light.webp" alt="<caption>" width="720" />
 </picture>
 ```
 

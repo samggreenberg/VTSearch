@@ -6,6 +6,7 @@
  * Three kinds:
  *
  *   - `box`       — a red outline round the target, with an optional label pill
+ *                   above it (or `at: 'right'` / `'bottom'`)
  *   - `highlight` — the same outline, with everything else dimmed
  *   - `step`      — a numbered marker: the outline plus a filled red disc
  *                   carrying `step` (1, 2, 3 …), and an optional label pill
@@ -156,8 +157,17 @@ export async function drawCallouts(page, callouts, { scale = 1 } = {}) {
             }
           }
         } else if (a.label) {
-          const above = y > 60;
-          pill(a.label, x - pad, above ? y - pad - sizes.labelFont * 2 : y + h + pad + 6);
+          // Above the box by default (below it when there is no room above);
+          // `at: 'right'` beside it, for targets stacked too tight to label
+          // from above without covering the one before.
+          const mid = y + h / 2 - sizes.labelFont * 0.75;
+          const tall = sizes.labelFont * 2;
+          if (a.at === 'right') pill(a.label, x + w + pad + 8, mid);
+          else if (a.at !== 'bottom' && y > 60) pill(a.label, x - pad, y - pad - tall);
+          // No room above: below the box — or, for a target that runs to the
+          // bottom of the viewport (a whole panel), inside the top of it.
+          else if (y + h + pad + 6 + tall <= vh) pill(a.label, x - pad, y + h + pad + 6);
+          else pill(a.label, x + pad + 4, y + pad + 6);
         }
       }
     },

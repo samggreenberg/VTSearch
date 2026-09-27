@@ -515,11 +515,11 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 
 ## Screenshot reshoots (when you change the GUI)
 
-User-facing docs embed screenshots captured by a Playwright harness that **needs a real browser**. The cloud container *does* have one (see "Environment Notes" below), so the default when you change a framed GUI surface is to **reshoot in the same session**: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, and commit the regenerated PNGs. **Do not let that drift go silently unrecorded.**
+User-facing docs embed screenshots captured by a Playwright harness that **needs a real browser**. The cloud container *does* have one (see "Environment Notes" below), so the default when you change a framed GUI surface is to **reshoot in the same session**: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, and commit the regenerated screenshots. **Do not let that drift go silently unrecorded.**
 
 Only when a reshoot genuinely isn't possible — no browser, or the shot needs a fixture the harness doesn't build — add the affected shot id(s) to the **reshoot queue**: `docs/user/screenshots-reshoot-queue.md`. Each id must match an entry in `docs/user/screenshots.manifest.ts`; the wiring check (`scripts/screenshots/wiring-check.py`, gated in `run-tests.sh`) fails if a queued id has no matching shot, so the queue can't rot. To know whether a change touches a shot, scan the manifest's `embeddedIn` / `caption` fields for the surface you modified (e.g. a modal, a panel, a toolbar).
 
-If you *do* have a browser this session, drain the queue instead of growing it: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, commit the regenerated PNGs, and delete the drained rows. The full system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
+If you *do* have a browser this session, drain the queue instead of growing it: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, commit the regenerated screenshots, and delete the drained rows. The full system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
 
 ## No Persisted Vectors or MLPs (CRITICAL)
 

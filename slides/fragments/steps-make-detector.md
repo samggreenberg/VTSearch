@@ -3,7 +3,7 @@
 
 ![bg fit](figs/ui-steps-make-detector.webp)
 
-## Step 2:<br>Make a Detector
+## Step 2: Make<br>a Detector
 
 <div class="side steps">
 

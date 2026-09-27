@@ -3,7 +3,7 @@
 
 ![bg fit](figs/ui-steps-find.webp)
 
-## Step 5:<br>Find the Books
+## Step 5: Find<br>the Books
 
 <div class="side steps">
 

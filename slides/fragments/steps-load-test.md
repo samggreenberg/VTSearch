@@ -3,7 +3,7 @@
 
 ![bg fit](figs/ui-steps-load-test.webp)
 
-## Step 4:<br>Load New Photos
+## Step 4: Load<br>New Photos
 
 <div class="side steps">
 

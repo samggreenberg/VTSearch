@@ -3,7 +3,7 @@
 
 ![bg fit](figs/ui-steps-load-train.webp)
 
-## Step 1:<br>Load Photos
+## Step 1: Load<br>Photos
 
 <div class="side steps">
 

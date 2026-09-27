@@ -1,7 +1,7 @@
 /**
  * User-docs screenshot capture harness. Reads docs/user/screenshots.manifest.ts
  * and, for each shot × theme, drives a running VTSearch app in headless
- * chromium and writes docs/user/assets/<id>.<theme>.png.
+ * chromium and writes docs/user/assets/<id>.<theme>.webp.
  *
  * Design notes specific to this machine (see docs/plans/user-docs-screenshots.md
  * "What shipped"): the box is RAM-tight (~3.7 GB), so the harness connects to a
@@ -26,7 +26,7 @@ import { BOOK_DETECTOR, REGION_DATASET, TRAIN_DATASET } from './book-example.mjs
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
 
 const APP = process.env.APP || 'http://localhost:5000';
@@ -285,6 +285,33 @@ async function clipBox(page: Page, clip: NonNullable<Shot['clip']>) {
   };
 }
 
+/**
+ * Write a Playwright PNG capture out as WebP.
+ *
+ * The shots are real photographs behind UI chrome (the Book example), which is
+ * the one thing PNG is bad at: a full-window shot is 2.4–3.4 MB lossless, near
+ * the repo's 4 MB large-file cap and ~100 MB of history per full refresh, and
+ * the 256-colour quantizing that used to hold them under a cap bands the photos
+ * and still left 1.4 MB. WebP at quality 90 is 0.35–0.5 MB and indistinguishable
+ * at the size the guide shows them — the same trade `slides/README.md` records
+ * for the deck's screenshots. Pillow (a project dependency) does the encode,
+ * because Playwright writes only PNG and JPEG; the encoder is deterministic, so
+ * `check.sh` can still compare bytes.
+ */
+function encodeWebp(png: Buffer, out: string): void {
+  execFileSync(
+    'python',
+    [
+      '-c',
+      'import sys;from io import BytesIO;from PIL import Image;'
+        + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
+        + '.save(sys.argv[1],"WEBP",quality=90,method=6)',
+      out,
+    ],
+    { input: png, stdio: ['pipe', 'inherit', 'inherit'] },
+  );
+}
+
 async function applyTheme(page: Page, theme: Theme): Promise<void> {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
   await page.waitForTimeout(250);
@@ -298,7 +325,7 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     reducedMotion: 'reduce',
   });
   const page = await ctx.newPage();
-  const out = resolve(ASSETS, `${shot.id}.${theme}.png`);
+  const out = resolve(ASSETS, `${shot.id}.${theme}.webp`);
   try {
     const h = makeHelpers(page);
     // tsx/esbuild rewrites named functions with a `__name(fn,"name")` helper;
@@ -326,11 +353,10 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     // gauges poll on an interval and re-render live values into the DOM after
     // the first mask, so mask again once the frame has settled.
     await maskVolatile(page);
-    if (shot.clip) {
-      await page.screenshot({ path: out, clip: await clipBox(page, shot.clip) });
-    } else {
-      await page.screenshot({ path: out });
-    }
+    const png = shot.clip
+      ? await page.screenshot({ clip: await clipBox(page, shot.clip) })
+      : await page.screenshot();
+    encodeWebp(png, out);
     return out;
   } finally {
     await ctx.close();

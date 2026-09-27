@@ -90,15 +90,15 @@ describe('KeyboardHelpModalComponent — in-app guide anchors', () => {
     // both the placement and the attribute have to survive rendering and
     // sanitisation.
     const body = await loadGuide(
-      'Click <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.png" />' +
-        '<img src="assets/icon-train.light.png" alt="The Train button" height="24" /></picture> to start.',
+      'Click <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" />' +
+        '<img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> to start.',
     );
 
     const img = body.querySelector('img') as HTMLImageElement;
     expect(img.closest('p')?.textContent).toContain('to start.');
     expect(img.getAttribute('height')).toBe('24');
     expect(img.hasAttribute('width')).toBe(false);
-    expect(img.getAttribute('src')).toMatch(/^assets\/docs\/assets\/icon-train\.(light|dark)\.png$/);
+    expect(img.getAttribute('src')).toMatch(/^assets\/docs\/assets\/icon-train\.(light|dark)\.webp$/);
   });
 
   it('leaves non-anchor links alone', async () => {

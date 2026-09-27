@@ -60,8 +60,8 @@ which item to show next and when each phase ends - so most users never
 need to think about sort modes or selection strategies directly.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-loaded.dark.png" />
-  <img src="assets/dashboard-loaded.light.png" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-loaded.dark.webp" />
+  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
 </picture>
 
 > Every screenshot in this guide follows one example: a few hundred
@@ -89,7 +89,7 @@ the same way, whether they hold photos, audio, text, video or documents.
 
 ### Step 1: Load a training dataset
 
-On the dashboard, click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-add-dataset.dark.png" /><img src="assets/icon-add-dataset.light.png" alt="The + button on the Datasets card" height="24" /></picture> at the top right of the
+On the dashboard, click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-add-dataset.dark.webp" /><img src="assets/icon-add-dataset.light.webp" alt="The + button on the Datasets card" height="24" /></picture> at the top right of the
 **Datasets** card. In the **Add Dataset** dialog:
 
 1. Click the **Files** tab.
@@ -100,8 +100,8 @@ On the dashboard, click the **+** <picture><source media="(prefers-color-scheme:
 4. Click **Import**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-train.dark.png" />
-  <img src="assets/step-import-train.light.png" alt="Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of photos on the server, (4) Import" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-train.dark.webp" />
+  <img src="assets/step-import-train.light.webp" alt="Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of photos on the server, (4) Import" width="720" />
 </picture>
 
 The dataset appears on the **Datasets** card. VTSearch works out a
@@ -112,7 +112,7 @@ own, see [Loading a dataset](#loading-a-dataset).
 
 ### Step 2: Make a detector and train it
 
-Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-new-detector.dark.png" /><img src="assets/icon-new-detector.light.png" alt="The + button on the Detectors card" height="24" /></picture> at the top right of the **Detectors** card. In
+Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-new-detector.dark.webp" /><img src="assets/icon-new-detector.light.webp" alt="The + button on the Detectors card" height="24" /></picture> at the top right of the **Detectors** card. In
 the **New Detector** dialog:
 
 1. Describe what you are looking for, in a word or a phrase: `book`.
@@ -120,8 +120,8 @@ the **New Detector** dialog:
 3. Click **Create**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-new-detector.dark.png" />
-  <img src="assets/step-new-detector.light.png" alt="Step 2: in the New Detector dialog, (1) describe what you are looking for, (2) name the detector, (3) Create" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-new-detector.dark.webp" />
+  <img src="assets/step-new-detector.light.webp" alt="Step 2: in the New Detector dialog, (1) describe what you are looking for, (2) name the detector, (3) Create" width="720" />
 </picture>
 
 The description only gives the detector somewhere to start; from here on,
@@ -129,24 +129,24 @@ your answers teach it. Back on the dashboard:
 
 1. Tick the training dataset (`photos`).
 2. Tick the new detector (`Books`).
-3. Click **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.png" /><img src="assets/icon-train.light.png" alt="The Train button" height="24" /></picture>.
+3. Click **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture>.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-train.dark.png" />
-  <img src="assets/step-train.light.png" alt="Step 2: tick (1) the training dataset and (2) the new detector, then (3) Train" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-train.dark.webp" />
+  <img src="assets/step-train.light.webp" alt="Step 2: tick (1) the training dataset and (2) the new detector, then (3) Train" width="720" />
 </picture>
 
 VTSearch opens the labeling view, and Autopilot shows you one photo at a
 time. For each one:
 
-1. Click **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.png" /><img src="assets/icon-good.light.png" alt="The Good vote button" height="24" /></picture> (or press `→`) if it is what you are looking for.
-2. Click **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.png" /><img src="assets/icon-bad.light.png" alt="The Bad vote button" height="24" /></picture> (or press `←`) if it is not.
+1. Click **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> (or press `→`) if it is what you are looking for.
+2. Click **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or press `←`) if it is not.
 3. Your answers collect on the right. The detector retrains after every
    one, and Autopilot picks the next photo from what it has just learned.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-vote.dark.png" />
-  <img src="assets/step-vote.light.png" alt="Step 2: Autopilot shows one photo at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-vote.dark.webp" />
+  <img src="assets/step-vote.light.webp" alt="Step 2: Autopilot shows one photo at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right" width="720" />
 </picture>
 
 Answer the hard cases too. A shelf of DVD box sets is exactly the kind of
@@ -162,8 +162,8 @@ the **Folder** importer at the second folder (`photos-prod` here). The
 detector never saw any of these photos while you were training it.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-test.dark.png" />
-  <img src="assets/step-import-test.light.png" alt="Step 3: the same Folder importer, (3) pointed at a second folder of photos the detector has never seen, then (4) Import" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-test.dark.webp" />
+  <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of photos the detector has never seen, then (4) Import" width="720" />
 </picture>
 
 ### Step 4: Run the detector on the new dataset
@@ -172,11 +172,11 @@ Back on the dashboard:
 
 1. Tick the new dataset (`photos-prod`).
 2. Tick the trained detector (`Books`).
-3. Click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.png" /><img src="assets/icon-find.light.png" alt="The Find button" height="24" /></picture>.
+3. Click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Find button" height="24" /></picture>.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-find.dark.png" />
-  <img src="assets/step-find.light.png" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Find" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-find.dark.webp" />
+  <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Find" width="720" />
 </picture>
 
 Find scores every photo in the dataset and opens the results:
@@ -192,8 +192,8 @@ Find scores every photo in the dataset and opens the results:
    [Exporting your work](#exporting-your-work)).
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/step-find-results.dark.png" />
-  <img src="assets/step-find-results.light.png" alt="Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/step-find-results.dark.webp" />
+  <img src="assets/step-find-results.light.webp" alt="Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
 </picture>
 
 That is the whole loop. The rest of this guide covers each part in more
@@ -203,15 +203,15 @@ depth.
 
 ## Loading a dataset
 
-Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-add-dataset.dark.png" /><img src="assets/icon-add-dataset.light.png" alt="The + button on the Datasets card" height="24" /></picture> button on the **Datasets** card to open the
+Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-add-dataset.dark.webp" /><img src="assets/icon-add-dataset.light.webp" alt="The + button on the Datasets card" height="24" /></picture> button on the **Datasets** card to open the
 **Add Dataset** dialog. Its top row of tabs is one tab per *category* of source; picking a
 category shows the importers in it as a second row of tabs, and picking an
 importer shows its form underneath. Both rows stay on screen, so switching
 sources is always one click away.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/dataset-panel.dark.png" />
-  <img src="assets/dataset-panel.light.png" alt="The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Services and Files tabs import your own data" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dataset-panel.dark.webp" />
+  <img src="assets/dataset-panel.light.webp" alt="The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Services and Files tabs import your own data" width="720" />
 </picture>
 
 VTSearch ships two populated categories, which boil down to two choices:
@@ -252,8 +252,8 @@ dropdown, then click the dataset you want. Each row carries a readiness
 badge telling you whether it is already cached or still needs downloading.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.png" />
-  <img src="assets/importer-picker.light.png" alt="The Demo importer on Downloaded Media: the per-media-type dropdown and the demo-dataset catalogue with per-row readiness badges" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.webp" />
+  <img src="assets/importer-picker.light.webp" alt="The Demo importer on Downloaded Media: the per-media-type dropdown and the demo-dataset catalogue with per-row readiness badges" width="720" />
 </picture>
 
 Every other importer shows a small form for the fields it needs. The
@@ -262,8 +262,8 @@ opens a file browser on the server's disk so you can click your way to the
 folder instead of typing it:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/importer-form.dark.png" />
-  <img src="assets/importer-form.light.png" alt="The Folder importer with its server file browser open on a folder of photographs, one subfolder per subject" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/importer-form.dark.webp" />
+  <img src="assets/importer-form.light.webp" alt="The Folder importer with its server file browser open on a folder of photographs, one subfolder per subject" width="720" />
 </picture>
 
 ### Advanced import options
@@ -407,8 +407,8 @@ matches the vectors you supplied.
 Once a dataset is loaded, VTSearch shows three panels left to right:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/three-panel.dark.png" />
-  <img src="assets/three-panel.light.png" alt="The three-panel labeling layout: media list (left), viewer (centre), vote piles (right)" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/three-panel.dark.webp" />
+  <img src="assets/three-panel.light.webp" alt="The three-panel labeling layout: media list (left), viewer (centre), vote piles (right)" width="720" />
 </picture>
 
 - **Left panel** - the sort bar, your selection-strategy controls,
@@ -416,7 +416,7 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
   sort). This is where you pick what to look at next.
 - **Centre panel** - the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
-  two big vote buttons: **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.png" /><img src="assets/icon-good.light.png" alt="The Good vote button" height="24" /></picture> (green) and **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.png" /><img src="assets/icon-bad.light.png" alt="The Bad vote button" height="24" /></picture> (red).  On
+  two big vote buttons: **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> (green) and **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (red).  On
   image datasets whose embedder supports regions - a region-aware or
   pattern-matching embedder - the centre panel also supports **region
   voting** - see "Region voting on images" below.
@@ -440,8 +440,8 @@ You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-vote.dark.png" />
-  <img src="assets/autopilot-vote.light.png" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-vote.dark.webp" />
+  <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
 ### The four phases
@@ -485,14 +485,14 @@ comfortable with the flow and want more vertical room for the
 media list.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.png" />
-  <img src="assets/autopilot-progress.light.png" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
 
 Most people never touch these, but the **Autopilot** tab in the Settings
-modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.png" /><img src="assets/icon-settings.light.png" alt="The Settings (gear) button" height="24" /></picture> at the top right) exposes:
+modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) exposes:
 
 - **# Good to start** - how many good votes phase 1 requires (default 3).
 - **# Bad to start** - how many bad votes phase 2 requires (default 4).
@@ -518,8 +518,8 @@ diversity sampling with no voting).
 The Manual tab shows three control rows above the media list.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/manual-controls.dark.png" />
-  <img src="assets/manual-controls.light.png" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion stepper" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/manual-controls.dark.webp" />
+  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion stepper" width="720" />
 </picture>
 
 ### 1. Sort mode
@@ -589,8 +589,8 @@ tells the detector "this specific part is what I like", and the learned
 sort uses that hint to find similar regions elsewhere in the dataset.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/region-voting.dark.png" />
-  <img src="assets/region-voting.light.png" alt="A photo with a region drawn round the one book in it (8 resize handles), ready to submit a good vote" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/region-voting.dark.webp" />
+  <img src="assets/region-voting.light.webp" alt="A photo with a region drawn round the one book in it (8 resize handles), ready to submit a good vote" width="720" />
 </picture>
 
 The binary vote experience is **unchanged**: `→` is good, `←` is
@@ -677,13 +677,13 @@ media types have no region affordance.
 
 ## Creating a detector
 
-Every search starts from a detector. Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-new-detector.dark.png" /><img src="assets/icon-new-detector.light.png" alt="The + button on the Detectors card" height="24" /></picture> button on
+Every search starts from a detector. Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-new-detector.dark.webp" /><img src="assets/icon-new-detector.light.webp" alt="The + button on the Detectors card" height="24" /></picture> button on
 the **Detectors** card on the Dashboard to open the **New Detector** modal.
 It has two tabs:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/new-detector.dark.png" />
-  <img src="assets/new-detector.light.png" alt="The New Detector modal on the Blank tab: seed from a text description or a media example, then pick the embedder type" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/new-detector.dark.webp" />
+  <img src="assets/new-detector.light.webp" alt="The New Detector modal on the Blank tab: seed from a text description or a media example, then pick the embedder type" width="720" />
 </picture>
 
 - **Blank** - start a fresh detector that learns from your votes as you
@@ -727,13 +727,13 @@ seed** option (see [Tips and shortcuts](#tips-and-shortcuts)).
 **Find** scores an entire dataset with a detector and drops you into a
 dedicated **three-pane verification view** so you can confirm or correct
 the detector's calls before exporting. Start it from the Dashboard:
-select a dataset row and a detector row, then click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.png" /><img src="assets/icon-find.light.png" alt="The Find button" height="24" /></picture> in
+select a dataset row and a detector row, then click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Find button" height="24" /></picture> in
 the action bar (VTSearch scores every item, showing progress while it
 runs).
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.png" />
-  <img src="assets/find-view.light.png" alt="The Find verification view: work queue (left), the viewer with Good/Bad (centre), and the Verified Good / Verified Bad piles (right)" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
+  <img src="assets/find-view.light.webp" alt="The Find verification view: work queue (left), the viewer with Good/Bad (centre), and the Verified Good / Verified Bad piles (right)" width="720" />
 </picture>
 
 - **Left pane** - the **work queue** of items the detector hasn't been
@@ -754,18 +754,18 @@ The verification view's action buttons let you act on the result:
   re-scores the dataset with the improved detector; every item you have
   already verified keeps the call *you* made, so re-scoring never undoes
   your work.
-- **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-stats.dark.png" /><img src="assets/icon-stats.light.png" alt="The Stats button in the Find view" height="24" /></picture> - open the results modal: a breakdown of the detector's
+- **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-stats.dark.webp" /><img src="assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture> - open the results modal: a breakdown of the detector's
   calls plus a chart of how wrong matches and missed matches change as
   you adjust inclusion - the clearest way to see the trade-off the
   inclusion stepper controls.
-- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.png" /><img src="assets/icon-export.light.png" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
+- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
   or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
   [Browse](#browse-exploring-a-dataset-spatially) view.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.png" />
-  <img src="assets/find-stats.light.png" alt="The Find view's Detector Stats modal: detector-vs-verified counts, how much of this dataset looks unlike the one the detector was trained on, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
+  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal: detector-vs-verified counts, how much of this dataset looks unlike the one the detector was trained on, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes" width="720" />
 </picture>
 
 ### How far to trust the score
@@ -802,8 +802,8 @@ button and no separate view-settings modal). It carries just two
 controls, remembered per media type:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/view-options.dark.png" />
-  <img src="assets/view-options.light.png" alt="The inline view-controls toolbar: thumbnail size and focus mode" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/view-options.dark.webp" />
+  <img src="assets/view-options.light.webp" alt="The inline view-controls toolbar: thumbnail size and focus mode" width="720" />
 </picture>
 
 - **Thumbnail size** - the two image icons shrink or grow the
@@ -812,8 +812,8 @@ controls, remembered per media type:
   with a threshold line marking the good/bad cut:
 
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.png" />
-    <img src="assets/results-grid.light.png" alt="The left-panel media list after training - ranked thumbnails with a threshold line" width="320" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.webp" />
+    <img src="assets/results-grid.light.webp" alt="The left-panel media list after training - ranked thumbnails with a threshold line" width="320" />
   </picture>
 - **Focus mode** - Click-focus means you select an item by
   clicking it. Hover-focus means just moving your cursor over
@@ -829,8 +829,8 @@ preference**: it's set when the server starts and shown read-only on the
 Settings modal's **Server** tab. Once set:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.png" />
-  <img src="assets/settings-appearance.light.png" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/settings-appearance.dark.webp" />
+  <img src="assets/settings-appearance.light.webp" alt="The Settings, Appearance pane: theme picker, toggles, and the per-type Scroll Style controls" width="720" />
 </picture>
 
 - The dataset importer and new-detector dialogs stop asking which
@@ -850,7 +850,7 @@ per-user override.
 
 ## Settings tabs
 
-The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.png" /><img src="assets/icon-settings.light.png" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
+The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
 eight tabs:
 
 - **Appearance** - theme, animations, the metadata panel, the
@@ -888,8 +888,8 @@ The Dashboard is your inventory view. Two tables stacked vertically
 with bulk-action and per-card controls.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-manage.dark.png" />
-  <img src="assets/dashboard-manage.light.png" alt="A dataset row and a detector row selected, with the per-row overflow (⋯) menu open" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-manage.dark.webp" />
+  <img src="assets/dashboard-manage.light.webp" alt="A dataset row and a detector row selected, with the per-row overflow (⋯) menu open" width="720" />
 </picture>
 
 - **Datasets** - every dataset on the server. Each row shows
@@ -898,7 +898,7 @@ with bulk-action and per-card controls.
   button, which disappears once the dataset is loaded. The name has a
   pencil for **Rename**, **Delete** is an inline button, and the
   remaining actions (**Browse**, **Stats**, and - on multi-user
-  deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.png" /><img src="assets/icon-overflow.light.png" alt="The ⋯ row menu" height="24" /></picture> overflow
+  deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.webp" /><img src="assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> overflow
   menu.
 - **Detectors** - every saved detector, split across two tabs:
   - **Drafts** holds detectors you're still building or evaluating.
@@ -931,7 +931,7 @@ or clean up several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them, then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.png" /><img src="assets/icon-train.light.png" alt="The Train button" height="24" /></picture> button in the action
+row to select them, then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
@@ -960,8 +960,8 @@ arranges every item on a two-dimensional map - similar items land near
 each other - and renders it as a pannable, zoomable density map.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.png" />
-  <img src="assets/browse-view.light.png" alt="The Browse map: a pannable square-tile map of a dataset of photographs, with the legend and minimap on the right" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.webp" />
+  <img src="assets/browse-view.light.webp" alt="The Browse map: a pannable square-tile map of a dataset of photographs, with the legend and minimap on the right" width="720" />
 </picture>
 
 Browse is a way to *see
@@ -1101,8 +1101,8 @@ From the Labeling or Find view, the right panel's **Export** button
 saves your current labels. Formats (by their display names):
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/export-picker.dark.png" />
-  <img src="assets/export-picker.light.png" alt="The exporter with a chosen format and its configuration form" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/export-picker.dark.webp" />
+  <img src="assets/export-picker.light.webp" alt="The exporter with a chosen format and its configuration form" width="720" />
 </picture>
 
 - **Server JSON File** - saves a JSON file on the server.
@@ -1186,8 +1186,8 @@ whole-item-only scoring mode.
 Two ways to bring in existing work:
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/import-detector.dark.png" />
-  <img src="assets/import-detector.light.png" alt="The Load-sort detector picker: choose a saved detector to score a fresh dataset" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/import-detector.dark.webp" />
+  <img src="assets/import-detector.light.webp" alt="The Load-sort detector picker: choose a saved detector to score a fresh dataset" width="720" />
 </picture>
 
 - **Labels** - the right panel's **Import Labels** button (also the
@@ -1207,14 +1207,14 @@ Two ways to bring in existing work:
 ## Achievements
 
 VTSearch has an optional light gamification layer. When **Enable
-achievements** is on (Settings → Appearance), a **trophy button** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-achievements.dark.png" /><img src="assets/icon-achievements.light.png" alt="The Achievements (trophy) button" height="24" /></picture>
+achievements** is on (Settings → Appearance), a **trophy button** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-achievements.dark.webp" /><img src="assets/icon-achievements.light.webp" alt="The Achievements (trophy) button" height="24" /></picture>
 appears; click it to open the **Achievements** panel, which lists the
 achievements and your tier progress on each. As you use the app, hitting
 a milestone fires a small **unlock toast**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/achievements.dark.png" />
-  <img src="assets/achievements.light.png" alt="The Achievements panel: total score and tiered milestones (Bronze/Silver/Gold/Platinum) with progress to the next tier" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="assets/achievements.dark.webp" />
+  <img src="assets/achievements.light.webp" alt="The Achievements panel: total score and tiered milestones (Bronze/Silver/Gold/Platinum) with progress to the next tier" width="720" />
 </picture>
 
 A few achievements unlock via a **code phrase** rather than usage: docs
@@ -1233,7 +1233,7 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   let you switch the active dataset or detector without going back to the
   Dashboard, and offer an "Add New" shortcut to create one.
 - **Keyboard shortcuts and the in-app guide.** Press **`?`** any time, or
-  click the **?** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-help.dark.png" /><img src="assets/icon-help.light.png" alt="The Help (?) button" height="24" /></picture> at the top right, to open the help sheet. It has two tabs: a **Keyboard shortcuts**
+  click the **?** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-help.dark.webp" /><img src="assets/icon-help.light.webp" alt="The Help (?) button" height="24" /></picture> at the top right, to open the help sheet. It has two tabs: a **Keyboard shortcuts**
   reference and a **User guide** that renders this document inside the
   app (matching your theme).
 - **Step back and forward through the queue.** `→` and `←` cast the
