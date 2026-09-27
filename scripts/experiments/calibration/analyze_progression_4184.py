@@ -202,6 +202,16 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         frame["arm"] = label
         frames[label] = frame
         failures += premise_failures(label, frame)
+    # Every rung must run on the same pool: the #4201 haystack arm is a second
+    # grid, and a rung borrowed from the other one would pair against nothing.
+    pools = {
+        label: sorted({str(v) for v in f.get("prevalence_arm", pd.Series(dtype=str)).dropna().unique()})
+        for label, f in frames.items()
+    }
+    arms_seen = sorted({a for v in pools.values() for a in v})
+    if len(arms_seen) > 1:
+        failures.append(f"rungs ran on different pools: {pools}")
+    lines.append(f"Pool: `{arms_seen[0] if len(arms_seen) == 1 else arms_seen}` (prevalence arm).")
     lines.append("")
     if failures:
         lines += ["## Premise failures", "", *[f"- {f}" for f in failures], ""]

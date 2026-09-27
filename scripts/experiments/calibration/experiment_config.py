@@ -920,6 +920,14 @@ STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 #: detector exists yet, so an arm's mining behaviour is invisible without it.
 EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
 
+#: Thin the simulation half's negatives so positives are this fraction of the
+#: pool the cut rules read (issue #4184/#4201).  Unset = natural prevalence.
+#: The test set and band cohorts are untouched, so a cell pairs with its
+#: natural twin; see ``vtscore.eval.voting_iterations.thin_haystack``.
+HAYSTACK_PREVALENCE = (
+    float(os.environ["CALIB_HAYSTACK_PREVALENCE"]) if os.environ.get("CALIB_HAYSTACK_PREVALENCE") else None
+)
+
 #: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
 #: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
 #: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.

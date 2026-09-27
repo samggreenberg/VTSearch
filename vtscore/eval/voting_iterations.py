@@ -202,6 +202,41 @@ def _downsample_to_prevalence(
     return {cid: clips_dict[cid] for cid in clips_dict if cid in keep}
 
 
+def thin_haystack(
+    clips_dict: dict[int, dict[str, Any]],
+    sim_ids: list[int],
+    target_category: str,
+    prevalence: float,
+    seed: int,
+) -> list[int]:
+    """*sim_ids* with its negatives thinned so positives are ~*prevalence* of it (#4184).
+
+    The **haystack** arm: what the cut rules see changes, what they are graded
+    on does not.  Only the simulation half is touched - after the split, from
+    its own RNG - so the held-out test set, every band's cohort and the run's
+    own ``RandomState(seed)`` stream are exactly the natural run's, and a cell
+    pairs with its natural twin.  Cost is FPR + FNR, which does not depend on
+    prevalence, so the pairing is a like-for-like comparison of cut rules.
+
+    All positives are kept.  A pool already at or above *prevalence* comes back
+    unchanged.  ``text_baseline.py`` calls this too, so the click-0 notch is cut
+    over the same thinned pool the rungs vote in.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not 0.0 < prevalence < 1.0:
+        raise ValueError(f"haystack_prevalence must be in (0, 1), got {prevalence!r}")
+    pos = [cid for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)]
+    neg = [cid for cid in sim_ids if not media_is_positive(clips_dict[cid], target_category)]
+    keep_neg = int(round(len(pos) * (1.0 - prevalence) / prevalence))
+    if not pos or keep_neg >= len(neg):
+        return list(sim_ids)
+    # A stream of its own, so thinning draws nothing from the run's RNG.
+    rng = np.random.RandomState([seed, 4184])
+    kept = set(int(c) for c in rng.choice(np.array(sorted(neg), dtype=np.int64), size=keep_neg, replace=False))
+    return [cid for cid in sim_ids if cid in kept or media_is_positive(clips_dict[cid], target_category)]
+
+
 def _split_media_ids(
     clips_dict: dict[int, dict[str, Any]],
     sim_fraction: float,
@@ -1457,6 +1492,7 @@ def simulate_voting_iterations(  # noqa: C901
     trainer: str = APP_TRAINER,
     head: Optional[str] = None,
     target_prevalence: Optional[float] = None,
+    haystack_prevalence: Optional[float] = None,
     style: Optional[str] = None,
     emit_calibration_metrics: bool = False,
     repool_variants: Optional[list[str]] = None,
@@ -1545,6 +1581,11 @@ def simulate_voting_iterations(  # noqa: C901
             harness.  The arm is skipped (returns ``[]``) if it would leave
             fewer than :data:`_MIN_PREVALENCE_POSITIVES` positives, to keep the
             test-set FNR estimable.
+        haystack_prevalence: When set (e.g. ``0.05``), the *simulation* half's
+            negatives are thinned after the split so its positives are that
+            fraction of it - see :func:`thin_haystack`.  Unlike
+            ``target_prevalence`` the test set is untouched, so it combines with
+            ``test_bands`` and each cell pairs with its natural twin (#4184).
         sim_fraction: Fraction of medias used for simulated voting.
         safe_thresholds: The shipped threshold path - fuse the haystack score
             distribution into the trained cut (the fold-anchored estimator, see
@@ -1791,6 +1832,8 @@ def simulate_voting_iterations(  # noqa: C901
     # three minutes in on an argument combination readable at the door is a
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
+    if target_prevalence is not None and haystack_prevalence is not None:
+        raise ValueError("target_prevalence and haystack_prevalence are two different arms; set one")
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
@@ -1856,6 +1899,14 @@ def simulate_voting_iterations(  # noqa: C901
         own_test_ids=test_ids,
         target_prevalence=target_prevalence,
     )
+
+    # After the split and the cohorts, so neither moves (#4184).
+    if haystack_prevalence is not None:
+        sim_ids = thin_haystack(clips_dict, sim_ids, target_category, haystack_prevalence, seed)
+        prevalence_arm = f"haystack_{haystack_prevalence:g}"
+        realized_prevalence = round(
+            sum(1 for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)) / len(sim_ids), 6
+        )
 
     # Ensure the test set has both positive and negative medias.  Routes through
     # ``media_is_positive`` so multi-label (Visual Genome) images - where the
