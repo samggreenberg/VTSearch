@@ -428,6 +428,8 @@ def main() -> int:
     if args.seeds:
         complete = [sd for sd in complete if sd < args.seeds]
     print(f"seeds complete: {len(complete)} of {len(by_seed)} ({len(cells) // len(by_seed)} cells each)")
+    if not complete:
+        raise SystemExit("no seed has all of its cells yet; nothing paired to analyse")
     df = df[df["seed"].isin(complete)]
     grid = grid[grid["seed"].isin(complete)]
     cb = grid["category"].str.partition("@")
