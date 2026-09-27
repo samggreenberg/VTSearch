@@ -186,8 +186,8 @@ case "$MODE" in
     for arm in $ALL_ARMS; do
       arm_env "$arm"
       set_exp "$arm"
-      n="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null | wc -l)"
-      z="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv' -size 0 2>/dev/null | wc -l)"
+      n="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l)"
+      z="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size 0 2>/dev/null | wc -l)"
       q="$(squeue -u "$USER" -h -n "$CALIB_JOB_NAME" -o %i 2>/dev/null | wc -l)"
       printf '%-8s %5s cells written  %3s zero-byte  %3s queued/running jobs\n' "$arm" "$n" "$z" "$q"
     done
