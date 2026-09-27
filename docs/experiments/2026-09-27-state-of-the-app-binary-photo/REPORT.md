@@ -152,9 +152,11 @@ machete) and bowl (toilet bowls, a cup holding a toothbrush):
 Each Bad click on a sibling is a correct label, and it should teach the head
 the contrast. But the loop shows the *same few* siblings again and again, so
 the clicks go to separating the class from its nearest neighbour while the
-positives stay unfound. Two of those sheets still hold images that look like
-label errors outside the lists #4179 reviewed: a dog's food dish for `bowl`,
-and a person cutting with what may be a knife.
+positives stay unfound. At thumbnail size two of those images looked like label
+errors: a dog's food dish for `bowl` and a person cutting with a knife. At full
+size they are a frisbee (77193) and a man putting toothpaste on a toothbrush
+(160893): correct negatives, and look-alikes of exactly the kind this section
+describes.
 
 ### Where clicking loses to typing
 
