@@ -189,7 +189,11 @@ run_preflight() {
   [[ -x "$WT/scripts/experiments/preflight.sh" ]] || return 0
   local div=()
   [[ -n "$RUNG_DIVERGES" ]] && div=(--diverges "$RUNG_DIVERGES")
-  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 10 \
+  # Gzipped, all seven rungs write ~1 GB (5,040 cells x ~190 KB); 3 GB is that
+  # with headroom.  Plain cells would need ~19 GB - raise this if the knob is off.
+  local need=3
+  [[ "$CALIB_CELLS_GZIP" == "1" ]] || need=25
+  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb "$need" \
     "${div[@]}" --job-name "$CALIB_JOB_NAME" --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
     echo "preflight FAILED ($CALIB_JOB_NAME)" >&2
     [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
