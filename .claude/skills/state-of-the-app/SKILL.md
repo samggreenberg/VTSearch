@@ -23,6 +23,10 @@ same edit.
   - **SigLIP binary:** `siglip`, `whole_image`.
   - **DINOv3 region:** `siglip+dinov3_patch`, `max_patch`, opened on SigLIP's
     text sort.
+- **A review runs Binary Photo only by default (owner, 2026-09-26).** Region
+  Photo is so slow (~5 h a seed) that it runs only when the owner asks for it
+  explicitly: "We'll do that explicitly at some point when we need it." Never
+  launch region cells as part of a routine review, a smoke run included.
 - **One report per production path (owner, 2026-09-24):** "State of the App:
   Binary Photo" and "State of the App: Region Photo". A future "Document Logo"
   report follows the same shape. Each goes in its own directory,
@@ -99,6 +103,11 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   so every cell would have run in duplicate and raced its twin on the same
   output files. Only the `prepare` checks need a compute node. After any
   submission, count the jobs.
+- **`analyze.sh` needs `results/grid_shape.json`, and only `launch.sh cells`
+  writes it.** A run built from `subset` or `redo` (a smoke run, or seeds
+  widened by index) has none, and `analyze.sh` then dies inside
+  `experiment_config.py` on `int('')`. Write one by hand with the seeds the
+  run really holds; the 2026-09-26 smoke run's is the example.
 - **Before a report is written,** check that `prepare_info.json` lists all 144
   cells for BOTH paths. `CALIB_REQUIRE_SEED_QUERY=1` silently drops a class
   that has no typed query.
