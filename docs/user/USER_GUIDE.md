@@ -79,9 +79,9 @@ need to think about sort modes or selection strategies directly.
 
 This walkthrough assumes VTSearch is already running and open in your
 browser; if it isn't, see [SETUP.md](../SETUP.md) (or ask whoever runs
-your server for its address). No data of your own? Load a demo dataset
-instead of Step 1 (see [Loading a dataset](#loading-a-dataset)) and follow
-the rest unchanged.
+your server for its address). No data of your own? Load demo datasets in
+Steps 1 and 3 instead (the **Demo** tab of the same dialog; see
+[Loading a dataset](#loading-a-dataset)); everything else is the same.
 
 Four steps take you from a folder of photos to a detector that finds what
 you are looking for in photos it has never seen. The red numbers in each

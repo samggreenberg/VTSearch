@@ -134,7 +134,11 @@ class RedisStreamLabelImporter(LabelImporter):
         PluginField(
             key="redis_url",
             label="Redis URL",
-            field_type="url",
+            # Not "url": that field type is SSRF-checked by the framework and
+            # accepts http(s) only, so a redis:// value would be rejected.
+            # A plain text field gets no such check - vet the host yourself
+            # if users you don't trust can set it.
+            field_type="text",
             description="redis:// or rediss:// URL.",
             required=True,
         ),

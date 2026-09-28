@@ -114,8 +114,10 @@ for the importer-side instance attributes that feed into the loader):
 
 Folder-style importers usually delegate everything after the download
 to `vtscore.datasets.loader.load_dataset_from_folder`, which walks the
-folder, embeds files (skipping any whose name appears in
-`self.content_vectors`), and assigns IDs. Service-style importers
+folder, assigns IDs, and stamps any vectors supplied in
+`self.content_vectors`. It does not embed: the load pipeline's embed stage
+(`vtscore.datasets.stages.embedding.embed_missing`) fills in every media
+still lacking a vector. Service-style importers
 build the dicts directly (see the [worked example](#worked-example)
 below).
 
@@ -265,8 +267,10 @@ at the module's `IMPORTER` sentinel. After `pip install`, the importer
 appears in `list_importers()`, the `/api/dataset/all-importers`
 endpoint, and `python app.py --list-plugins`.
 
-Built-in plugins win on name clashes; a broken third-party entry point
-emits a warning and is skipped (it can't block other plugins).
+Built-in plugins win on name clashes. A third-party entry point whose
+import raises is logged as a warning and kept as a tombstone - left out of
+`list_importers()`, re-raising its error if `get_importer()` hands it out -
+so it can't block other plugins.
 
 ## Testing pattern
 

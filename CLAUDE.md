@@ -572,8 +572,8 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 ## Commands
 
 - **Run tests (CPU, fast)**: `./run-tests.sh` (runs every gate listed under "What `run-tests.sh` gates" below, then pytest)
-- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs the cheap serial gates — linters, doc checks, snapshot drift — first, but a group run **skips the heavy whole-repo gates** (pyright, pip-audit, and the frontend gates unless the group is `core`/`frontend`) to keep the inner loop fast; it says so in its output. `VTSEARCH_FULL_GATES=1` forces them. A **full** `./run-tests.sh` runs everything and is mandatory before pushing. `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
-- **Run tests for a slides-only change**: `./run-tests.sh slides` (~4s; the four gates a deck can trip. This is the *complete* gate for a change confined to `slides/` — see the Test Groups table — and it refuses to run if the branch touches anything else)
+- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs the cheap serial gates — linters, doc checks, snapshot drift — first, but a group run **skips the heavy whole-repo gates** (pyright, pip-audit, the vulture whitelist check, and the frontend gates unless the group is `core`/`frontend`) to keep the inner loop fast; it says so in its output. `VTSEARCH_FULL_GATES=1` forces them. A **full** `./run-tests.sh` runs everything and is mandatory before pushing. `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
+- **Run tests for a slides-only change**: `./run-tests.sh slides` (~8s; only the stage-1 gates a deck can trip. This is the *complete* gate for a change confined to `slides/` — see the Test Groups table — and it refuses to run if the branch touches anything else)
 - **Run tests for a markdown-only change**: nothing to type — a bare `./run-tests.sh` detects that the branch changes only tracked markdown and narrows itself, announcing what it skipped. `./run-tests.sh docs` asserts the same thing explicitly (and blocks if the branch changes anything else); `VTSEARCH_FULL_GATES=1 ./run-tests.sh` opts out
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
@@ -611,7 +611,7 @@ No CI runs tests — the repo's one workflow only publishes slide decks — so a
 
 Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after).
 
-**Stage 1 — cheap gates, serial, fail-fast (~10s total, every invocation):**
+**Stage 1 — cheap gates, serial, fail-fast (~10s total; every invocation except `vtscore-clean`, and a `slides` run keeps only the rows that can see a deck):**
 
 | Gate | Command it runs | Notes |
 |------|-----------------|-------|
@@ -631,7 +631,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve, no headline breaks more than once (the two-line ceiling in `slides/STYLE.md`; *where* a two-line headline breaks needs a browser and lives in `slides/balance-titles.mjs`). Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
 | Eval/app sync | `scripts/check-eval-app-sync.py` | Digests both sides of every mirror, so `harness-changed` is as loud as `app-changed`. Re-pin with `--update` **after** reconciling the two. |
 
-**Stage 2 — frontend production build, serial (full run and the `core` / `frontend` groups):** `cd frontend && npm run build:prod`. Any `▲ [WARNING]` line is a hard failure. Runs *before* pytest because some tests serve the built bundle out of `static/`. Skipped with a notice if `frontend/node_modules` is absent.
+**Stage 2 — frontend production build, serial (full run and the `core` / `frontend` groups):** `cd frontend && npm run build:prod`. Any `▲ [WARNING]` line is a hard failure. Runs *before* pytest because some tests serve the built bundle out of `static/`. When `frontend/node_modules` is absent, `scripts/check-frontend-gate.py` decides up front (before stage 1): if the branch changes nothing under `frontend/` the frontend gates (build, `npm audit`, Vitest) are skipped and named in the verdict; if it does, or there is no `origin/dev` to diff against, the run is **blocked**.
 
 **Stage 3 — heavy gates, concurrent with pytest (pytest streams in the foreground; lane results print after it):**
 
@@ -646,7 +646,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 
 **Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, the vulture whitelist check, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing** — with two exceptions, `slides` and `docs`, whose narrower scope is a proof rather than a gamble (see the Test Groups table). Both block themselves the moment the diff stops matching.
 
-**The `docs` narrowing does not wait to be asked.** A bare `./run-tests.sh` looks at what the branch changes relative to `dev` and, when the answer is tracked markdown and nothing else, keeps the whole of stage 1 and cuts pytest to the tests that can open a doc. That is deliberate: the case it fixes — a session that writes one plan file and pays 3.5 minutes to prove its prose lints — arrives by running the command everybody runs, so a group name you had to remember would never have been typed. The pruning prints a banner listing the changed files and every lane it skipped, and `VTSEARCH_FULL_GATES=1` turns it off.
+**The `docs` narrowing does not wait to be asked:** a bare `./run-tests.sh` on a markdown-only branch narrows itself, prints a banner listing the changed files and every lane it skipped, and `VTSEARCH_FULL_GATES=1` turns it off (see the `docs` note under Test Groups).
 
 ## Test Groups
 
@@ -671,9 +671,9 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `docs` | n/a | Markdown-only gate — see the note below the table. Auto-engages on a bare run. |
 | `gpu` | lib only | CUDA-only tests (excluded by default) |
 
-The `meta` group is the one whose subject is *this repository* rather than the product: a reader asking "what does VTSearch do?" would never open a file in it, and a reader asking "how is this repo built and checked?" would. That is the whole membership test — packaging and requirements files, Dockerfiles, docs and their anchors, SCSS text, `scripts/` (including the experiment tooling under `scripts/experiments/`), `.claude/hooks/`, the `run-tests.sh` gates' own self-tests, and the shared test harness. It exists because those tests had silted into `core` (issue #3421), so the fast inner loop for "basic app functionality" was running a Dockerfile text parser and five gate self-tests. It lives under `tests_lib/` because every member satisfies the library tier's contract trivially (it imports no product code at all), which keeps `./run-tests.sh vtscore-clean` proving it. **Do not put a test here just because it is slow, awkward, or hard to file** — that is how `core` became a junk drawer in the first place.
+The `meta` group is the one whose subject is *this repository* rather than the product: a reader asking "what does VTSearch do?" would never open a file in it, and a reader asking "how is this repo built and checked?" would. That is the whole membership test — packaging and requirements files, Dockerfiles, docs and their anchors, SCSS text, `scripts/` (including the experiment tooling under `scripts/experiments/`), `.claude/hooks/`, the `run-tests.sh` gates' own self-tests, and the shared test harness. It exists because those tests had silted into `core` (#3421). It lives under `tests_lib/` because every member satisfies the library tier's contract trivially (it imports no product code at all), which keeps `./run-tests.sh vtscore-clean` proving it. **Do not put a test here just because it is slow, awkward, or hard to file** — that is how `core` became a junk drawer in the first place.
 
-The `slides` group runs `ruff`, `codespell`, `check-docs.py`, and `slides/build.py --check`; no Python tests, no whole-repo gates. **The one group that also gates a push**, because a change confined to `slides/` cannot reach the rest of the repo: nothing imports `slides/build.py`, `pyrightconfig.json` excludes it, and no test in either tree reads a deck. Self-policing — the group refuses to run when the branch changes anything outside `slides/`, so the exemption can't be taken by mistake. Also runs as part of the full `./run-tests.sh`.
+The `slides` group runs only the stage-1 gates that can see a deck (stale tree, `ruff check`/`ruff format --check`, `codespell`, `check-docs.py`, `slides/build.py --check`); no Python tests, no whole-repo gates. **The one group that also gates a push**, because a change confined to `slides/` cannot reach the rest of the repo: nothing imports `slides/build.py`, `pyrightconfig.json` excludes it, and no test in either tree reads a deck. Self-policing — the group refuses to run when the branch changes anything outside `slides/`, so the exemption can't be taken by mistake. Also runs as part of the full `./run-tests.sh`.
 
 The `docs` group is the same exemption one step wider, and it is the only one that **engages by itself**: a bare `./run-tests.sh` narrows to it when the branch changes nothing but tracked markdown. It keeps the *whole* of stage 1 — those gates are precisely the ones that read markdown (`check-docs.py`, `codespell`, the doc-inventory and screenshot-wiring snapshots, the deck preflight) — and skips pyright, pip-audit, the vulture whitelist check, the frontend build/audit/unit suite, and all of pytest except the tests that can open a doc. ~35s against ~3.5min (measured warm: 12s of gates, 23s of pytest).
 
@@ -689,7 +689,7 @@ That last clause is the load-bearing one, and it is checked rather than asserted
 
 The default filter lives in `pyproject.toml`'s `addopts`: `-m 'not gpu and not slow' --timeout=300 --timeout-method=thread`.
 
-- **Default** (`./run-tests.sh` with no group, or a bare `pytest`): fast CPU tests only (~35s). Excludes `gpu` and `slow`.
+- **Default** (`./run-tests.sh` with no group, or a bare `pytest`): fast CPU tests only. Excludes `gpu` and `slow`.
 - **`slow`**: 3 tests, in **two** trees — one CLI subprocess test that spawns `python app.py --autodetect` (`tests/cli/test_cli_main_subprocess.py`, ~16s) and two real-`toponymy` fit tests (`tests_lib/projection/test_toponymy_smoke.py`, module-level `pytestmark`, ~1 min each; `importorskip`ped when toponymy isn't installed). Run with `python -m pytest tests/ tests_lib/ -m slow` — passing only `tests/` silently misses two thirds of them.
 - **`gpu`**: CUDA-only tests (`tests_lib/gpu/test_gpu.py`). Run with `-m gpu`.
 - **All tests**: `-m ''`.
@@ -708,7 +708,7 @@ Testing can crash the session. To avoid losing work, follow this workflow:
 
    Two consequences worth knowing before you run it:
    - **Do not pipe the run through `tail`/`grep`.** If the harness backgrounds a pipeline, nothing flushes until the whole pipeline ends, so the output file sits empty and you can't watch progress. Run the script bare and read the tail of the output file afterwards.
-   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay well inside 10 minutes, run one group at a time — a group run skips the heavy whole-repo gates (pyright, pip-audit, and the frontend gates unless the group is `core`/`frontend`) and typically finishes in well under a minute warm.
+   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay well inside 10 minutes, run one group at a time — a group run skips the heavy whole-repo gates (pyright, pip-audit, the vulture whitelist check, and the frontend gates unless the group is `core`/`frontend`) and typically finishes in well under a minute warm.
 3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 
@@ -717,10 +717,13 @@ This ensures work is recoverable if the session crashes during a test run.
 ## Reading Test Results (IMPORTANT)
 
 A `./run-tests.sh` run prints its verdict as its very last output, in a `====`-bordered block:
-- `RUN PASSED (all gates green; pytest summary above)` → all good
+- `RUN PASSED (all gates green; pytest summary above)` → all good (the `slides` / markdown-only / `frontend` runs print their own `RUN PASSED (<scope>-only; …)` variant)
+- `RUN PASSED, EXCEPT N GATE(S) THAT DID NOT RUN:` + a list → everything that ran is green, but this is **not** the full gate (a group run's skipped pyright/pip-audit/vulture, or frontend gates skipped for missing `node_modules`)
 - `RUN FAILED: pytest, pyright` → those gates failed; each failing gate's `TESTS BLOCKED` banner and log tail were printed above
 
-Because the heavy gates run concurrently with pytest and report after it, pytest's own summary block (`ALL 1600 TESTS PASSED (3 skipped, total: 1603)` / `TESTS FAILED: 2 failed, ...`) sits *above* the lane report in a full run — it is still the place to read pytest's counts, and it is the last output of a bare `pytest` invocation.
+A stage-1 failure stops the run early with a `TESTS BLOCKED: <reason>` block and no verdict banner.
+
+Because the heavy gates run concurrently with pytest and report after it, pytest's own summary block (`ALL <n> TESTS PASSED (<k> skipped, total: <t>)` / `TESTS FAILED: 2 failed, ...`) sits *above* the lane report in a full run — it is still the place to read pytest's counts, and it is the last output of a bare `pytest` invocation.
 
 **ONLY look at these summary blocks** (bordered by `====` lines) to determine pass/fail. Many test names contain the word "error" (e.g., `test_memory_errors.py`, `TestErrorResponseFormat`). These test **error-handling behavior**; they are not failures.
 
@@ -739,7 +742,7 @@ All mutable global state is reset automatically before each test via two autouse
    - Progress cache and progress trackers
    - Login provider and dataset/model registries
 
-2. **`isolated_settings`** — Redirects `SETTINGS_PATH` to a per-test temp file so settings writes never touch `data/settings.json`. Yields the temp path for tests that need to inspect the file.
+2. **`isolated_settings`** — Redirects both settings tiers (server `settings.json` and per-user `user_settings.json`) to a per-test temp dir so writes never touch `data/`. Yields a path-like whose `read_text()` returns the merged JSON, for tests that need to inspect it.
 
 **When writing new tests:**
 - Do NOT add per-file or per-class autouse fixtures to clear autorun state, reset settings, or reset votes — `conftest.py` handles all of this automatically.
@@ -823,7 +826,7 @@ def slow_load():
 
 ## Environment Notes (Claude Code on the web)
 
-- **Chromium *is* available — check before assuming it isn't.** The cloud container ships a Playwright chromium under `PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). This entry used to say the opposite, and that stale claim was load-bearing: it is why GUI behaviour got *reasoned about* from the spec instead of *watched* (see issue #2898, where two rounds of frontend fixes were shipped without anyone ever opening a tab). So when a question is "what does the browser actually do here?", go and look.
+- **Chromium *is* available — check before assuming it isn't.** The cloud container ships a Playwright chromium under `PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers`). When a question is "what does the browser actually do here?", go and look rather than reasoning from the spec (#2898 shipped two rounds of frontend fixes without anyone opening a tab).
   - The container's chromium revision does **not** necessarily match the one the `playwright` npm pin wants, so a bare `chromium.launch()` can fail with `Executable doesn't exist` even though a perfectly good browser is present. Do **not** run `npx playwright install` (the environment sets `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`). Use `scripts/screenshots/launch.mjs`'s `launchChromium()`, which tries the pinned build and falls back to whatever is in the browsers directory; `CHROMIUM_PATH` overrides both.
   - This does not change the **test suite**, which stays deliberately browser-free: the frontend unit suite runs on **Vitest + jsdom** (the Angular 21 `@angular/build:unit-test` builder) and Karma is gone, while the Python backend tests (`./run-tests.sh`) never needed a browser. Keep it that way — a browser-dependent gate would be slow and machine-sensitive. The browser is for *investigation* and for the screenshot harness, not for `run-tests.sh`.
   - A jsdom stub is not a browser. `window.open` is the cautionary example: the Vitest specs returned a truthy fake handle, so they cheerfully passed against code that could never work in Chrome. When a behaviour depends on real browser semantics (popups, user activation, navigation, focus), verify it in chromium *as well as* in the unit suite.
@@ -837,6 +840,7 @@ def slow_load():
 - [`docs/CLI.md`](docs/CLI.md) — CLI flags and autodetect workflow.
 - [`docs/ML.md`](docs/ML.md) — training/scoring details.
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — production/offline deployment, env vars, data directory, troubleshooting.
+- [`docs/EVAL.md`](docs/EVAL.md) — the `vtscore.eval` harness and calibration experiments.
 - [`docs/EXTENDING.md`](docs/EXTENDING.md) + [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md) + [`docs/EXTENDING-media.md`](docs/EXTENDING-media.md) + [`docs/EXTENDING-processors.md`](docs/EXTENDING-processors.md) — how to add plugins.
 - [`vtscore/docs/README.md`](vtscore/docs/README.md) — the library tier's own doc set (quickstart, concepts, per-package reference, tutorials, FAQ).
 - [`slides/STYLE.md`](slides/STYLE.md) — house rules for every slide deck (no running footer, real subscripts, colour reserved for meaning, the 20px type floor, the opening outline); [`slides/README.md`](slides/README.md) is the build mechanics.
