@@ -37,6 +37,17 @@ What follows is what the app still owes.
 
   Every consumer of the cut has to handle the two states with no promise on
   purpose (#4247).
+- **When nothing is promised, fall back to today's cut, labelled** (owner,
+  2026-09-28). The line, the matches and every match action (Export, To
+  Dataset, Browse, AutoRun) keep working at the Inclusion 0 cut, with the
+  control saying why no promise is made. A floor that can't be met never
+  empties the results.
+- **The floor is per detector, seeded from the user's last value** (owner,
+  2026-09-28), as Inclusion is today (#3416). A floor one detector can meet,
+  another may not.
+- **The control shows the floor and its state, not the estimate** (owner,
+  2026-09-28). No "about 60% of these should be right": the lower bound stays
+  internal.
 - **What waits on the GRID, and what doesn't.**
   - #4222 decides how often the gate opens.
   - #4221 decides the estimator's remaining knobs: the transfer coordinate,
@@ -52,11 +63,6 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 - **X's range and default,** and whether X is free or a few presets. #4220
   priced 25/50/75/90%.
-- **Whether the app shows its estimate** ("about 60% of these should be
-  right"). Showing it invites users to check the app against it.
-- **Per user or per detector.** Inclusion is cached per detector and seeded
-  from the user's setting (#3416). A floor one detector can meet, another may
-  not.
 - **Headless runs.** Do AutoRun and CLI autodetect cut at the user's floor, and
   does the CLI get a flag?
 - **Retiring Inclusion from the extension surface.** `get_inclusion` /
@@ -73,7 +79,7 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
-- [ ] #4247 — What the app does when no cut is promised (Opus 4.8)
+- [ ] #4247 — When no cut is promised, fall back to today's cut and label it (Opus 4.8)
 
 <!-- item-sep -->
 
