@@ -332,6 +332,10 @@
           "hide_autopilot": {
             "type": "boolean"
           },
+          "hide_ingest_eta": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "import_defaults_by_media_type": {
             "additionalProperties": {},
             "type": "object"
@@ -398,6 +402,14 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "show_usage_bars": {
+            "enum": [
+              "hide",
+              "default",
+              "view"
+            ],
+            "type": "string"
           },
           "solo_embedder_per_media_type": {
             "additionalProperties": {
@@ -5811,6 +5823,14 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "show_usage_bars": {
+            "enum": [
+              "hide",
+              "default",
+              "view"
+            ],
+            "type": "string"
           },
           "solo_embedder_per_media_type": {
             "nullable": true

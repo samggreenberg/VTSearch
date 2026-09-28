@@ -10,6 +10,67 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.utils.synthetic.describe_image_dataset()` and
+  `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
+  seed)` draws, without drawing it: one dict per picture with its `filename`,
+  `kind`, `background` and `objects` (each a shape, a colour name and a box; a
+  face also its `expression` and whether it is `smiling`). The ground truth of
+  a generated set - which pictures are the yellow smileys, and where.
+
+- **`create_media_type=` on `vtscore.cli.import_labels_into_detector`, and
+  `vtscore.cli.DetectorNotFoundError`** (issue #4238). With a registered media
+  type, a missing detector is created from the imported labels - the JSON the
+  Dashboard's New Detector writes, plus a `vtscore.detectors.registry` entry
+  owned by `get_current_user()` - instead of failing; nothing is written when
+  the import yields no `good`/`bad` label. A missing detector without it raises
+  `DetectorNotFoundError`, a `ValueError` subclass carrying `det_name`, so
+  existing `except ValueError` callers are unaffected. Additive: the keyword
+  defaults to `""`, which keeps the old behaviour.
+
+- **`override_detectors=` on the four `vtscore.cli.autodetect_*_main` entry
+  points** (issue #4235). A list of detector names to train and score in
+  place of the settings file's `autofind_detectors`, which the run then does
+  not consult (the file is never modified) - the same override the pipeline
+  YAML's `detectors:` already drove through the private `_run_source`. The
+  `dry_run_plan` event gains a `detectors_source` field (`"autofind"` or
+  `"override"`), and its `autofind_detectors` lists the override when one is
+  given. Additive: the keyword defaults to `None`, which reads the settings
+  list as before.
+
+- **ETA-less progress trackers and `CoreConfig.hide_ingest_eta`** (issue
+  #4233). `ProgressTracker(..., publish_eta=False)` and
+  `LoadingTasksTracker.create_task(..., publish_eta=False)` build a tracker
+  whose `eta_seconds` stays `None` while the bar itself updates as usual.
+  The new `CoreConfig.hide_ingest_eta` field (default `False`) and
+  `vtscore.concurrency.progress.ingest_eta_hidden()` let a deployment turn
+  the estimate off for dataset imports, staging imports and labelset
+  missing-media fetches. Both keywords default to `True`, so existing
+  callers and hand-built `CoreConfig(...)` instances are unaffected.
+
+- **`items=` on `notify()` and `PluginBase.notify()`** (issue #4232). A
+  notification can carry the list of specific things it is about - every
+  skipped file, every dropped row - as `items`, one entry each. The app shows
+  them behind the toast's *Details* toggle with a *Copy list* button, where a
+  comma-joined `detail` was cut off at 2000 characters; the CLI prints one per
+  line (text mode) or an `items` array (JSON mode), and the log records them.
+  Capped at `MAX_ITEMS` (1000) entries of `MAX_ITEM_CHARS` (300) characters,
+  the last slot saying how many were cut. `Notification` gains an `items`
+  field (a tuple, `None` when absent) and `to_dict()` an `"items"` key.
+  `embed_missing()` also takes an optional `failures=` dict, which it fills
+  with a user-facing reason per item it left without a vector. Additive: both
+  keywords default to `None`.
+
+- **`save_dataset=` on the four `vtscore.cli.autodetect_*_main` entry points**
+  (issue #4226). With `save_dataset=True` the source is imported through the
+  GUI load pipeline (`_run_importer_in_background`) and registered in the
+  dataset registry before detection, which then scores the saved pickle; no
+  applicable detector ends the run with a `detection_skipped` event instead of
+  an error, and combining it with `stream_results=True` is refused. The
+  keyword defaults to `False`, so existing callers keep the temporary
+  behaviour. New `cli_progress` events: `dataset_saved`, `detection_skipped`.
+  Pipeline files gain a `tempimport` key; a file without it now saves its
+  dataset, and `stream_results: true` requires `tempimport: true`.
+
 - **`vtscore.cli.import_labels_into_detector(det_name, importer_name,
   field_values)`** (issue #4174). Runs a label importer with an arbitrary
   field mapping and merges its labels into a detector, so importers that read
@@ -304,6 +365,23 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **`generate_image_dataset` draws a small world of cartoon smiley faces**
+  (issue #4240). The two ideas (a smiley, or shapes, on a plain background at
+  256x256) become three kinds at 512x512: a `face` in one of seven colours
+  with one of seven expressions, `shapes` (stars added), and a `scene` of
+  several small faces and shapes; backgrounds gain polka dots, stripes, checks
+  and gradients. File names are `face_` / `shapes_` / `scene_` plus the index
+  (were `smiley_` / `shapes_`). Each picture is now seeded on `(seed, index)`
+  rather than `seed + index`, which had made two seeds share nearly every
+  picture - so a `(count, seed)` still always gives the same files, but not
+  the files it gave before. The signature is unchanged.
+
+- **The `synthetic` importer takes a `seed`** (issue #4240): a third,
+  optional field (default `1`; the seed used to be a fixed `42`), recorded in
+  the origin. Its cache folder is now `<media_type>_<size>_seed<seed>`, plus a
+  `_v<n>` for a generator whose drawing has changed, so no cache written
+  before this is reused.
 
 - **Context-registry lookups no longer take `_state_lock`** (issue #3869).
   `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only

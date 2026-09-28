@@ -27,6 +27,7 @@ from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
     CancelledError,
     clear_thread_progress,
+    ingest_eta_hidden,
     loading_tasks,
     set_thread_progress,
 )
@@ -281,10 +282,12 @@ def _start_import_task(
 
     The two import pipelines below — a full dataset load and a combine-flow
     staging import — open identically: mint a task id, create the per-task
-    tracker (so two concurrent imports never interleave one channel), start the
-    timing recorder that labels each measured phase, and snapshot the user who
-    asked for the work.  Only the family name, the step structure, and the
-    tracker's extra fields differ, so they are parameters here.
+    tracker (so two concurrent imports never interleave one channel, and with
+    no ETA when the deployment hides ingest ETAs — see
+    :func:`~vtscore.concurrency.progress.ingest_eta_hidden`), start the timing
+    recorder that labels each measured phase, and snapshot the user who asked
+    for the work.  Only the family name, the step structure, and the tracker's
+    extra fields differ, so they are parameters here.
 
     The caller writes its own first ``tracker.update`` (rather than this
     function writing a generic one) because the load flow subscribes its
@@ -301,6 +304,7 @@ def _start_import_task(
         embedder=embedder,
         extra_fields=extra_fields,
         step_weights=weights,
+        publish_eta=not ingest_eta_hidden(),
     )
     recorder = record_task(
         tracker,
@@ -728,7 +732,7 @@ def _run_origin_load_in_background(
                     apply_custom_metadata_md5(ctx.medias)
                     _tag_origins(ctx.medias, origin)
                     _apply_clipper_stage(ctx, pacer, clipper, clipper_params, chain_steps)
-                    _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
+                    embed_failures = _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
                     # Step 4 (finalize) bundles several sub-stages. Route them
                     # through a FinalizeProgress proxy so each maps into its own
                     # ordered slice of the step-4 bar instead of independently
@@ -737,7 +741,7 @@ def _run_origin_load_in_background(
                     # serialize/disk-write window. See FinalizeProgress.
                     fin = FinalizeProgress(pacer, media_type)
                     fin.begin("cleanup")
-                    _drop_none_embeddings_stage(ctx, fin)
+                    _drop_none_embeddings_stage(ctx, fin, embed_failures)
                     # Re-lazify clips from reference (thin) parents now that
                     # embedding is done: strip their materialized bytes so the
                     # dataset stores recipes, not duplicated clip payloads.

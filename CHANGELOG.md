@@ -15,7 +15,51 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
+  #4240). The **Demo → Synthetic Media** image generator used to draw one
+  smiley or a few flat shapes on a plain background. It now draws round
+  cartoon faces in seven colours and seven expressions, piles of shapes and
+  busy little scenes, on plain, polka-dot, striped, checked or gradient
+  backgrounds, with enough near-misses (a frowning yellow face, a smiling
+  orange one, a yellow disc) that "find the yellow smiley faces" is a real
+  search. A new **Seed** field picks which set is made: the same seed always
+  makes the same media, and two seeds make two sets with nothing in common.
+  A synthetic dataset imported before this keeps its old pictures; import
+  Synthetic Media again for the new ones.
+
+- **`--create-detector` makes the detector `--import-labels-into` names**
+  (issue #4238). A label file and a dataset are now enough for a headless run:
+  `--autodetect --import-labels-into NAME --create-detector --label-importer-file …`
+  creates NAME from the imported labels when it doesn't exist, then scores the
+  dataset with it. The detector is registered like one made with **New
+  Detector**, so it shows up on the Dashboard's Drafts tab for the user the run
+  ran as. Its media type comes from the source (a pickle's recorded type, or the
+  importer's `--media-type`), or from `--detector-media-type`. Without the flag
+  a missing detector still fails, now saying which flag would create it.
+  Pipeline files take `import_labels.create: true` and
+  `import_labels.media_type`.
+
 ### Fixed
+
+- **"Dropped N item(s) whose embedding failed" now says which items, and why**
+  (issue #4232). The warning ended with "See the server log for which embedder
+  declined", which a GUI user has no way to do. It now names the embedder and
+  what went wrong (it returned no vector for those items, crashed on the batch,
+  returned the wrong number of vectors, or none is installed for the media
+  type), and its new **Details** button lists every dropped item by file name,
+  with **Copy list** to put the list on your clipboard, one item per line.
+
+- **Find no longer runs a detector hidden on the other Dashboard tab**
+  (issue #4228). With a single detector on the AutoRun tab and none in
+  Drafts, the Dashboard selected that detector even while Drafts was
+  showing, and reselected it on every registry refresh after you switched
+  away from AutoRun, so Find stayed enabled with nothing visible selected.
+  Moving your only draft to AutoRun did the same. The detector selection
+  now only ever holds rows on the visible tab: Drafts stays empty, Find is
+  disabled until you select a detector you can see, and picking a detector
+  from the top bar switches to its tab.
 
 - **The folder importer's Browse opens at the folder you typed** (issue
   #4207). In **Add Dataset → Files → Folder**, clicking **Browse** after
@@ -94,6 +138,37 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The User Guide is illustrated with the yellow smiley example** (issue
+  #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows
+  a detector learning to find the yellow smiley faces among Synthetic Media's
+  drawings, instead of books in COCO photographs, and *Step by step* says which
+  Size and Seed make the very same pictures, so you can follow along without
+  any data of your own.
+
+- **`--import-labels-into` runs the detector it imports into, and only that
+  one** (issue #4235). Importing labels from the command line used to merge
+  them into the detector and then score with whatever was on the settings
+  file's Auto-Find list, so the detector you had just labelled only ran if you
+  had first opened the UI and moved it to **AutoRun**. Now
+  `--autodetect --import-labels-into NAME --label-importer-file …` scores with
+  NAME alone, whether or not it is on AutoRun, and nothing else on AutoRun
+  runs with it. A pipeline file's `import_labels:` block does the same unless
+  the file also lists `detectors:`. `--dry-run` shows the detector under
+  `Detectors (1; overrides the settings' Auto-Find list)`.
+
+- **`--autodetect` saves the dataset it imports to the dashboard** (issue
+  #4226). A CLI run used to import a dataset, score it, and throw it away. It
+  now imports through the same pipeline as **Add dataset**, saves the result,
+  and scores that saved copy, so the next time the UI is opened the dataset is
+  there (owned by `--user`, or the default user). With no Auto-Find detector
+  for the dataset, the import still succeeds and the run exits 0 with a
+  `Detection skipped` note, which makes `--autodetect` a plain headless import
+  too. **Add `--tempimport` to keep the old import-and-discard behaviour** —
+  cron jobs that should not grow the dashboard need it. `--tempimport` implies
+  `--autodetect`. `--stream-results` now requires `--tempimport`, since a
+  streamed source is never held whole and so cannot be saved. Pipeline files
+  follow the same default and take a `tempimport: true` key.
+
 - **The Autopilot "Update Sort Example?" prompt says what it is asking**
   (issue #4200). It used to show the current example and ask whether to keep
   it. It now reports how the sort has gone ("You've clicked 10 times and only
@@ -116,6 +191,32 @@ not list every commit. Use `git log` for the full history.
   GPU when there is one.
 
 ### Added
+
+- **Operators can hide the ETA on import progress bars** (issue #4233). On
+  some servers an import's speed is too erratic to predict, and its
+  remaining-time estimate could climb from "About 10 sec left" to "About
+  45 min left" in a single import. Setting `--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA=1` or `"hide_ingest_eta": true` in the server
+  settings file removes the estimate from dataset imports, staging imports
+  and labelset missing-media fetches. Those bars still fill and show their
+  counts, and every other progress bar keeps its estimate. Settings ▸ Server
+  shows whether the switch is on.
+
+- **A friendlier first run on the Dashboard** (issue #4227). An empty
+  Datasets or Detectors panel now shows a working **+** inside its "Click + to
+  add one." message, with an arrow to the real **+** in the panel header so
+  you know where it lives next time. While there are no detectors, the
+  **Drafts** / **AutoRun** tabs are dimmed and locked to Drafts, and the
+  disabled Combine and Delete icons beside **+** are fainter. Once a new
+  detector with no labels is selected next to a matching dataset, a
+  "Click Train to teach your new detector." hint points at **Train**. The
+  RAM / Disk bars now stay hidden until you have a detector; **Settings →
+  Appearance → RAM / Disk bars** switches them to always (**View**) or never
+  (**Hide**). In the New Detector dialog the examples no longer assume sound
+  ("e.g. large books", "e.g. Large Book Detector"), the hint under the example
+  tabs names only what that tab takes, a typed description becomes a
+  title-cased "… Detector" name, and Enter in the name field creates the
+  detector.
 
 - **A click-by-click walkthrough in the user guide** (#4202). The guide opens
   with *Step by step: your first search* — load a folder of photos, make a

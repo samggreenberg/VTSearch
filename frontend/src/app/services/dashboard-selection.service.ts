@@ -42,6 +42,12 @@ export type SelectionState = 'none' | 'some' | 'all';
  * over the selection and the registry, and the one write-out that isn't a
  * read (mirroring an unambiguous single pick into the active-context intent)
  * is a single `effect` rather than a call at every mutation site.
+ *
+ * The detector selection only ever holds rows the visible tab shows. Every
+ * write funnels through `write`, which drops a detector the registry places
+ * on the other tab, so no caller (the registry auto-select, a prune after a
+ * row hops tabs, a pulldown pick) can leave a hidden row feeding Train, Find
+ * or the section actions (#4228).
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardSelectionService {
@@ -141,8 +147,16 @@ export class DashboardSelectionService {
    * `additive` (Ctrl/Cmd, or a checkbox click) toggles a single id in/out of
    * a multi-selection; otherwise it's a plain single-select that toggles off
    * when it's already the sole pick.
+   *
+   * The pulldown lists detectors from both tabs, so a pick can name a row the
+   * grid isn't showing; its tab is brought forward first, so what gets
+   * selected is always something the user can see.
    */
   toggle(kind: SelectionKind, id: string, additive: boolean): void {
+    if (kind === 'detector') {
+      const home = this.tabOf(id);
+      if (home) this.setDetectorTab(home);
+    }
     const current = this.sets[kind]();
     if (additive) {
       const next = new Set(current);
@@ -187,9 +201,23 @@ export class DashboardSelectionService {
     this.write(kind, next);
   }
 
+  /** The tab a detector's row lives on, or `null` while the registry doesn't
+   *  list it yet (a just-created detector, selected ahead of the refresh that
+   *  will carry it). */
+  private tabOf(id: string): DetectorTab | null {
+    const entry = this.datasetState.detectorById().get(id);
+    if (!entry) return null;
+    return entry.autofind ? 'autorun' : 'drafts';
+  }
+
   /** Publish a new set, skipping the write when nothing changed so an
-   *  idempotent prune/reselect doesn't re-run every downstream `computed`. */
+   *  idempotent prune/reselect doesn't re-run every downstream `computed`.
+   *  A detector the registry places on the hidden tab is dropped here. */
   private write(kind: SelectionKind, next: ReadonlySet<string>): void {
+    if (kind === 'detector') {
+      const tab = this.tab();
+      next = new Set([...next].filter((id) => (this.tabOf(id) ?? tab) === tab));
+    }
     const current = this.sets[kind]();
     if (current.size === next.size && [...next].every((id) => current.has(id))) return;
     this.sets[kind].set(next);

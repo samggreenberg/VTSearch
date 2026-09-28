@@ -6,17 +6,19 @@
 
 # Command-line interface
 
-Everything here goes through one entry point, `python app.py`. With no workflow flag it starts the web server; with `--autodetect` or `--pipeline` it runs detectors over a dataset and exports the hits without starting the server; with `--list-plugins` it prints what is installed and exits. `python app.py --help` lists every flag.
+Everything here goes through one entry point, `python app.py`. With no workflow flag it starts the web server; with `--autodetect` or `--pipeline` it imports a dataset, saves it to the dashboard, runs detectors over it, and exports the hits without starting the server (`--tempimport` discards the dataset instead of saving it); with `--list-plugins` it prints what is installed and exits. `python app.py --help` lists every flag.
 
-- [Auto-detect (run detectors on a dataset)](#auto-detect-run-detectors-on-a-dataset) — the headless scoring run: sources, exporters, streaming, [dry runs](#dry-run-mode), [label import](#importing-labels-into-a-detector), [progress output](#progress-output-format)
+- [Auto-detect (run detectors on a dataset)](#auto-detect-run-detectors-on-a-dataset) — the headless scoring run: sources, [saving the dataset or `--tempimport`](#saving-the-dataset-to-the-dashboard---tempimport), exporters, streaming, [dry runs](#dry-run-mode), [label import](#importing-labels-into-a-detector), [progress output](#progress-output-format)
 - [Pipeline file](#pipeline-file) — the same run declared in YAML, for cron and CI
 - [Web server modes](#web-server-modes) — port, logging, gunicorn, login providers, and the admin-set restrictions (solo media type, hidden plugins, retention, …)
 - [Inspecting plugins and the API schema](#inspecting-plugins-and-the-api-schema)
 
 ## Auto-detect (run detectors on a dataset)
 
-Score every item in a dataset with the detectors flagged for
-Auto-Find and output the items each model predicts as "Good."
+Import a dataset, save it to the dashboard, score every item with the
+detectors flagged for Auto-Find, and output the items each model predicts as
+"Good." Add `--tempimport` to score it without keeping it (see [Saving the
+dataset to the dashboard](#saving-the-dataset-to-the-dashboard---tempimport)).
 
 Models are specified via a **settings file** (`--settings`) whose
 `autofind_detectors` list names registered models.  Each name
@@ -25,6 +27,9 @@ detector name, not the name itself (see [Detector file
 names](#detector-file-names) below); the CLI re-resolves the
 labelset's origins, embeds them with the dataset's embedder, trains a
 head, and applies it to the dataset.  See below for the exact format.
+`--import-labels-into NAME` replaces that list for the run: NAME is then the
+only detector scored (see [Importing labels into a
+detector](#importing-labels-into-a-detector)).
 
 ### Which user's Auto-Find list runs
 
@@ -44,8 +49,51 @@ python app.py --autodetect --dataset data.pkl --user alice --api-key "$ALICE_KEY
 
 The key is checked against `data/api_keys.json` (the same file the server's
 `--login api_key` uses); on success the run reads `alice`'s Auto-Find list and
-results exporter. Without `--user`, the `default` user (and the `--settings`
-file) applies.
+results exporter, and the imported dataset is saved to `alice`'s dashboard.
+Without `--user`, the `default` user (and the `--settings` file) applies.
+
+### Saving the dataset to the dashboard (`--tempimport`)
+
+By default the CLI **keeps what it imports**. The source (`--dataset` or
+`--importer`) is imported through the same load pipeline the dashboard's
+**Add dataset** uses — clipping, embedding, duplicate collapse, the saved
+`.pkl` under `data/saved_datasets/` and the registry entry — so the next time
+the UI is opened (or right away, if a server is running against the same data
+directory) the dataset is on the dashboard, owned by the user the run ran as.
+Detection then runs over that saved copy, so its hits are the ones Find would
+give on that dashboard row.
+
+```bash
+# Import a folder, save it to the dashboard, and run the Auto-Find detectors on it.
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json
+```
+
+With a saving run the import is the point and detection is the extra: when no
+Auto-Find detector is configured, or none applies to the dataset's media type,
+the dataset is still saved and the run ends with a `Detection skipped: …` note
+and exit status 0. That also makes `--autodetect` with an empty Auto-Find list
+a plain headless import.
+
+A `--dataset` pickle is **copied** in (the dashboard deletes a dataset's pickle
+when the dataset is deleted, so it never adopts your file). Pointing
+`--dataset` at a pickle the dashboard already holds (one under
+`data/saved_datasets/`) imports nothing new; the run just scores it.
+
+**`--tempimport`** makes the run temporary instead — the behaviour
+`--autodetect` had before datasets were saved: the source is scored straight
+from the importer and nothing is kept. Having no applicable detector is then an
+error, since the run would do nothing. `--tempimport` implies `--autodetect`,
+though spelling out both reads better in scripts:
+
+```bash
+# Score and discard: nothing is added to the dashboard.
+python app.py --autodetect --tempimport --dataset data.pkl --settings settings.json
+```
+
+A saving run holds the whole dataset in memory while it imports, exactly as a
+GUI import does; `--chunk-size` then bounds only the scoring pass over the saved
+copy. `--stream-results` exists for sources too large to hold, so it **requires
+`--tempimport`** — the run is refused otherwise.
 
 **From a pickle file:**
 
@@ -90,15 +138,16 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-s
 python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
 ```
 
-`--chunk-size` bounds the *loading and embedding* working set, but the default
-flow still accumulates every hit in memory and buffers the whole result set
-before the exporter writes it. For a media source with more items (and more
-hits) than fit in RAM — e.g. a folder tree of billions of images — add
-`--stream-results` (requires `--chunk-size` and a streaming-capable exporter:
-`server_json_file`, `server_csv_file`, `gui`, `webhook`, or `email_smtp`):
+`--chunk-size` bounds the *loading and embedding* working set of a
+`--tempimport` run, but the default flow still accumulates every hit in memory
+and buffers the whole result set before the exporter writes it. For a media
+source with more items (and more hits) than fit in RAM — e.g. a folder tree of
+billions of images — add `--stream-results` (requires `--tempimport`,
+`--chunk-size` and a streaming-capable exporter: `server_json_file`,
+`server_csv_file`, `gui`, `webhook`, or `email_smtp`):
 
 ```bash
-python app.py --autodetect --importer server_folder --path /data/images \
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
   --media-type image --settings settings.json --chunk-size 500 \
   --stream-results --exporter server_json_file --filepath hits.ndjson
 ```
@@ -269,6 +318,7 @@ Source:
     path: /data/sounds
     media_type: audio
   Chunk size: whole dataset
+  Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)
 
 Settings: settings.json
 Auto-Find detectors (2):
@@ -281,7 +331,8 @@ Exporter: server_json_file
 
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included), so a
-streaming run can be sanity-checked before it starts.
+streaming run can be sanity-checked before it starts. The `Save to dashboard`
+line says whether the run would keep the dataset; a dry run never saves it.
 
 `--dry-run` validates importer and exporter names, checks that the
 dataset pickle (if given) exists, verifies required CLI fields are
@@ -289,7 +340,11 @@ populated, and reports any detector JSON files that are missing; so
 typos in a cron-style invocation fail immediately instead of after a
 multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
 is announced as part of the plan but skipped (no detector JSON is
-modified).
+modified), and the plan lists that detector alone, under
+`Detectors (1; overrides the settings' Auto-Find list)`. In
+`--progress-format json` the `dry_run_plan` event's `autofind_detectors` lists
+whichever detectors the run would score, and `detectors_source` says where they
+came from: `autofind` (the settings file) or `override` (`--import-labels-into`).
 
 ### Importing labels into a detector
 
@@ -304,12 +359,22 @@ headlessly. Three flags work together:
 | `--label-importer-file PATH` | The label file to read. Shorthand for `--label-importer-field filepath=PATH`. |
 | `--label-importer-field KEY=VALUE` | Set any one of the label importer's fields; repeat it for several. This is how you drive a label importer that reads something other than a file. |
 | `--label-importer NAME` | Which label importer to run. Defaults to `server_json_file`; `python app.py --list-label-importers` shows the rest. |
+| `--create-detector` | Create the detector from the imported labels if it doesn't exist yet (see [Creating the detector](#creating-the-detector)). |
+| `--detector-media-type TYPE` | Media type for a detector `--create-detector` creates. Defaults to the source's. |
 
 `--import-labels-into` needs at least one of `--label-importer-file` or
 `--label-importer-field`.
 
+**The detector you import into is the one the run scores with.** The settings
+file's `autofind_detectors` list (the Dashboard's **AutoRun** tab) is not
+consulted, so the detector need not be on AutoRun, and nothing else on AutoRun
+runs alongside it. Labelling a detector and running it over a new dataset is
+therefore a single command that never needs the UI. The settings file still
+supplies everything else it normally does — `detectors_dir`, and the Auto-Find
+results exporter when there is no `--exporter`.
+
 ```bash
-# Merge new labels, then run Auto-Find with the enlarged labelset.
+# Merge new labels into "Dog Barks", then score the dataset with it alone.
 python app.py --autodetect --dataset data.pkl --settings settings.json \
     --import-labels-into "Dog Barks" --label-importer-file new_labels.json
 
@@ -324,6 +389,43 @@ The two server-side importers expect labels keyed by media MD5:
 and `server_csv_file` reads a header row of `md5,label`. Only `good` and `bad`
 labels are accepted; entries with any other label, and `(md5, label)` pairs the
 detector already holds, are skipped and reported in the count.
+
+#### Creating the detector
+
+Without `--create-detector` the detector must already exist; a name with no
+detector ends the run with `Detector 'NAME' not found.` before any media is
+loaded. With it, a missing detector is created from the imported labels, so a
+labelled detector can go from a label file to hits without ever being made in
+the UI:
+
+```bash
+# Create "Dog Barks" from the label file, then score the folder with it.
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio \
+    --import-labels-into "Dog Barks" --create-detector --label-importer-file dog_barks.json
+```
+
+The detector is written and registered the way the Dashboard's **New Detector**
+does it, owned by the user the run runs as (`--user`, or the default user), so
+it appears on that user's **Drafts** tab afterwards. When it already exists,
+`--create-detector` changes nothing: the labels are merged into it as usual, so
+the same command works on every run of a cron job.
+
+Its **media type** is `--detector-media-type` when given, otherwise the
+source's: the `media_type` recorded in a `--dataset` pickle, or the importer's
+`--media-type` field. A source that declares neither (a legacy pickle, or an
+importer with no media type field, such as `local_folder`) needs
+`--detector-media-type`, and the run says so before loading anything. Set it
+also when the detector should differ from the source, e.g. `image` to score
+video frames through a converter.
+
+The labels have to be able to train a head: at least one `good` and one `bad`
+that resolve. Labels keyed only by MD5 (the `server_json_file` / `server_csv_file`
+shape) resolve against the dataset the run is scoring, so they work when those
+items are in it. An import with no `good` or `bad` label creates nothing.
+
+Under `--dry-run` the announcement names the detector it would create and its
+media type, and nothing is written; the plan lists the detector as `MISSING`,
+since it does not exist yet.
 
 The import is a **one-shot mutation of the detector JSON on disk**: the merged
 labelset persists after the run, which is why it happens before scoring rather
@@ -362,6 +464,19 @@ A `notification` never ends the run, at any level — including
 `"level": "error"`, which reports something the code continued past. The
 fatal-error record is the separate `error` event.
 
+A saving run (no `--tempimport`) reports the dataset it kept as a
+`dataset_saved` event carrying its registry `dataset_id`, `name`, `num_items`
+and `pkl_path` (`already_saved` is true when the pickle was already on the
+dashboard), and a run that had no detector to use as `detection_skipped` with a
+`reason`. While the import runs, its progress arrives as ordinary `progress`
+events:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --progress-format json \
+  | jq -r 'select(.event == "dataset_saved") | .dataset_id'
+```
+
 A media the scorer cannot embed — a corrupt image, an unresolvable thin path, a
 pre-computed vector of the wrong width — is **skipped**, not fatal: one bad file
 must not take a long run down with it. Each skip is reported as a
@@ -397,7 +512,9 @@ python app.py --pipeline pipeline.yaml
 ```
 
 The YAML supports every knob the `--autodetect` flag set does. It cannot be
-combined with the other autodetect flags; declare everything inline.
+combined with the other autodetect flags; declare everything inline. Like the
+flags, a pipeline run saves its dataset to the dashboard unless the file sets
+`tempimport: true`.
 
 ```yaml
 # Pick exactly one source.
@@ -415,7 +532,8 @@ importer:
 settings: settings.json
 
 # Optional. When set, overrides settings.json's `autofind_detectors` list
-# for this run only. The file on disk is NOT modified.
+# for this run only. The file on disk is NOT modified. When absent and
+# `import_labels:` is set, the run scores with `import_labels.detector` alone.
 detectors:
   - Dog Barks
   - Cat Meows
@@ -423,9 +541,14 @@ detectors:
 # Optional. Process medias in batches of N. Same as --chunk-size.
 chunk_size: 1000
 
+# Optional. Discard the imported dataset after detection instead of saving
+# it to the dashboard (same as --tempimport). Off by default.
+tempimport: false
+
 # Optional. Stream each chunk's hits straight to the exporter instead of
-# accumulating them (same as --stream-results). Requires chunk_size and a
-# streaming-capable exporter. Output is chunk-ordered, not globally sorted.
+# accumulating them (same as --stream-results). Requires tempimport: true,
+# chunk_size and a streaming-capable exporter. Output is chunk-ordered, not
+# globally sorted.
 stream_results: false
 
 # Optional. With stream_results, also emit below-threshold hits (label=bad).
@@ -435,13 +558,16 @@ keep_negatives: false
 # Optional. One-shot merge of external labels into a detector before
 # scoring (same as --import-labels-into / --label-importer /
 # --label-importer-field). `importer` takes the same name + fields shape
-# as `importer:` and `exporter:`, so any label importer works.
+# as `importer:` and `exporter:`, so any label importer works. Unless
+# `detectors:` is set, this detector is then the only one the run scores.
 import_labels:
   detector: Dog Barks             # the detector's name, not its filename slug
   importer:
     name: server_json_file         # default: server_json_file
     fields:
       filepath: new_labels.json
+  create: false                    # true = create the detector if missing (--create-detector)
+  # media_type: audio              # with create: the new detector's type (--detector-media-type)
 
 # Optional. Where results go. Defaults to the `gui` exporter (console).
 exporter:
@@ -678,6 +804,26 @@ can't have the restriction loosened by a stray flag. The same override is
 available as the `VTSEARCH_SEMANTIC_ONLY` environment variable (`1` /
 `true` / `yes` / `on`) for the gunicorn-launched Docker images; an
 explicit `--semantic-only` flag wins over it.
+
+**Hide ingest ETAs** (`--hide-ingest-eta`): drop the remaining-time
+estimate from ingest progress bars (dataset imports, staging imports,
+and a labelset's missing-media fetch), for a deployment where those jobs
+are too erratic for any timing profile to predict:
+
+```bash
+python app.py --hide-ingest-eta
+```
+
+The bars still fill and show their counts, so users can see an import
+is moving; they just don't show a remaining-time estimate. Every other
+progress bar keeps its ETA. Like `--semantic-only`, this is a
+**server-wide override** that can only switch the estimates off: there
+is no `--no-hide-ingest-eta`, the persisted `hide_ingest_eta` setting in
+the settings file can turn it on too, and neither is editable via the
+Settings dialog or the settings API (the Settings ▸ Server tab reports
+it). The env-var equivalent is `VTSEARCH_HIDE_INGEST_ETA`; an explicit
+flag wins over it. See
+[When ingest ETAs can't be trusted](DEPLOYMENT.md#when-ingest-etas-cant-be-trusted).
 
 ## Inspecting plugins and the API schema
 

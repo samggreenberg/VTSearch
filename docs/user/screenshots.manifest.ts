@@ -17,8 +17,8 @@
  */
 
 import type { Page } from 'playwright';
-// @ts-expect-error - plain .mjs helper, shared with the slide shooter
-import { BOOK_DETECTOR, BOOK_TEXT, corpusPath, REGION_BOX, REGION_DATASET, REGION_DETECTOR, HERO_REGION, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/book-example.mjs';
+// @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
+import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -29,8 +29,8 @@ export type Theme = 'light' | 'dark';
  *   '.btn-good'                    first visible match of a CSS selector
  *   { selector, hasText }          …whose text contains hasText
  *   { selector, name }             …whose `.name-cell` reads exactly name (a
- *                                  dashboard row — `photos` is a prefix of
- *                                  `photos-prod`, so hasText would match both)
+ *                                  dashboard row — `drawings` is a prefix of
+ *                                  `drawings-new`, so hasText would match both)
  *   { x, y, w, h }                 an explicit viewport box
  */
 export type Target =
@@ -88,8 +88,8 @@ export interface Helpers {
   /** Open the ⋯ overflow menu of the dataset or detector row called *name*. */
   overflowMenu(name: string): Promise<void>;
   /**
-   * Select a dataset + detector (default: the training pile and `Books`) and
-   * click Train → label view.
+   * Select a dataset + detector (default: the training pile and
+   * `Yellow Smileys`) and click Train → label view.
    */
   enterLabelView(dataset?: string, detector?: string): Promise<void>;
   /** In the label view, switch the left-panel tab (Autopilot / Manual). */
@@ -175,7 +175,7 @@ async function cleanDashboard(page: Page, h: Helpers): Promise<void> {
 async function openFind(page: Page, h: Helpers): Promise<void> {
   await h.dashboard();
   await h.selectDatasetRow(TEST_DATASET);
-  await h.selectDetectorRow(BOOK_DETECTOR);
+  await h.selectDetectorRow(DETECTOR);
   // Find scores every item, then opens the three-pane verification view.
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
@@ -201,7 +201,7 @@ export const SHOTS: Shot[] = [
     id: 'step-import-train',
     embeddedIn: STEPS,
     caption:
-      'Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of photos on the server, (4) Import',
+      'Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of pictures on the server, (4) Import',
     themes: BOTH,
     annotations: [
       { target: { selector: '.importer-picker .tab', hasText: 'Files' }, kind: 'step', step: 1, at: 'top' },
@@ -231,8 +231,8 @@ export const SHOTS: Shot[] = [
       await h.selectDatasetRow(TRAIN_DATASET);
       await h.openNewDetector();
       await page.waitForSelector('.new-detector-form', { timeout: 20000 });
-      await page.locator('.example-panel input.form-input').first().fill(BOOK_TEXT);
-      await page.locator('#detector-name').fill(BOOK_DETECTOR);
+      await page.locator('.example-panel input.form-input').first().fill(DETECTOR_TEXT);
+      await page.locator('#detector-name').fill(DETECTOR);
       await h.wait(600);
     },
   },
@@ -243,13 +243,13 @@ export const SHOTS: Shot[] = [
     themes: BOTH,
     annotations: [
       { target: datasetRow(TRAIN_DATASET), kind: 'step', step: 1 },
-      { target: detectorRow(BOOK_DETECTOR), kind: 'step', step: 2 },
+      { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
       { target: dashButton('Train'), kind: 'step', step: 3 },
     ],
     async recipe(page, h) {
       await h.dashboard();
       await h.selectDatasetRow(TRAIN_DATASET);
-      await h.selectDetectorRow(BOOK_DETECTOR);
+      await h.selectDetectorRow(DETECTOR);
       await page.mouse.move(700, 60);
       await h.wait(400);
     },
@@ -258,7 +258,7 @@ export const SHOTS: Shot[] = [
     id: 'step-vote',
     embeddedIn: STEPS,
     caption:
-      'Step 2: Autopilot shows one photo at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right',
+      'Step 2: Autopilot shows one picture at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right',
     themes: BOTH,
     annotations: [
       { target: '.btn-good', kind: 'step', step: 1, at: 'right' },
@@ -273,7 +273,7 @@ export const SHOTS: Shot[] = [
     id: 'step-import-test',
     embeddedIn: STEPS,
     caption:
-      'Step 3: the same Folder importer, (3) pointed at a second folder of photos the detector has never seen, then (4) Import',
+      'Step 3: the same Folder importer, (3) pointed at a second folder of pictures the detector has never seen, then (4) Import',
     themes: BOTH,
     annotations: [
       { target: { selector: '.importer-picker .tab', hasText: 'Files' }, kind: 'step', step: 1, at: 'top' },
@@ -294,13 +294,13 @@ export const SHOTS: Shot[] = [
     themes: BOTH,
     annotations: [
       { target: datasetRow(TEST_DATASET), kind: 'step', step: 1 },
-      { target: detectorRow(BOOK_DETECTOR), kind: 'step', step: 2 },
+      { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
       { target: dashButton('Find'), kind: 'step', step: 3 },
     ],
     async recipe(page, h) {
       await h.dashboard();
       await h.selectDatasetRow(TEST_DATASET);
-      await h.selectDetectorRow(BOOK_DETECTOR);
+      await h.selectDetectorRow(DETECTOR);
       await page.mouse.move(700, 60);
       await h.wait(400);
     },
@@ -309,7 +309,7 @@ export const SHOTS: Shot[] = [
     id: 'step-find-results',
     embeddedIn: STEPS,
     caption:
-      'Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
+      'Step 4: Find ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
     themes: BOTH,
     annotations: [
       { target: '.panel-left', kind: 'step', step: 1, at: 'corner' },
@@ -345,7 +345,7 @@ export const SHOTS: Shot[] = [
     recipe: async (page, h) => {
       await h.dashboard();
       await h.selectDatasetRow(TRAIN_DATASET);
-      await h.selectDetectorRow(BOOK_DETECTOR);
+      await h.selectDetectorRow(DETECTOR);
       await page.mouse.move(700, 60);
     },
   }),
@@ -357,7 +357,7 @@ export const SHOTS: Shot[] = [
     recipe: async (page, h) => {
       await h.dashboard();
       await h.selectDatasetRow(TEST_DATASET);
-      await h.selectDetectorRow(BOOK_DETECTOR);
+      await h.selectDetectorRow(DETECTOR);
       await page.mouse.move(700, 60);
     },
   }),
@@ -423,7 +423,7 @@ export const SHOTS: Shot[] = [
     id: 'dashboard-loaded',
     embeddedIn: `${GUIDE}#what-vtsearch-does`,
     caption:
-      'The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them',
+      'The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them',
     themes: BOTH,
     async recipe(page, h) {
       await cleanDashboard(page, h);
@@ -465,7 +465,7 @@ export const SHOTS: Shot[] = [
     id: 'importer-form',
     embeddedIn: `${GUIDE}#loading-a-dataset`,
     caption:
-      "The Folder importer with its server file browser open on a folder of photographs, one subfolder per subject",
+      'The Folder importer with its server file browser open on the folder of drawings',
     themes: BOTH,
     async recipe(page, h) {
       await h.dashboard();
@@ -490,13 +490,13 @@ export const SHOTS: Shot[] = [
       }
       await page.getByText(/Detected:/).first().waitFor({ timeout: 20000 });
       // The breadcrumbs spell out the checkout's own path; show them as the
-      // path field is shown (`/data/photos`, see maskVolatile): hide every
-      // crumb before `data`, and `slide-fixtures`, with the `/` before each.
+      // path field is shown (`/data/drawings`, see maskVolatile): hide every
+      // crumb before `data`, and `doc-fixtures`, with the `/` before each.
       await page.evaluate(() => {
         const crumbs = [...document.querySelectorAll('.vfb-breadcrumbs .vfb-crumb')].slice(1) as HTMLElement[];
         const data = crumbs.findIndex((c) => c.textContent?.trim() === 'data');
         crumbs.forEach((c, i) => {
-          if (i >= data && c.textContent?.trim() !== 'slide-fixtures') return;
+          if (i >= data && c.textContent?.trim() !== 'doc-fixtures') return;
           c.style.display = 'none';
           const sep = c.previousElementSibling as HTMLElement | null;
           if (sep?.classList.contains('vfb-crumb-sep')) sep.style.display = 'none';
@@ -572,18 +572,21 @@ export const SHOTS: Shot[] = [
   {
     id: 'region-voting',
     embeddedIn: `${GUIDE}#region-voting-on-images`,
-    caption: 'A photo with a region drawn round the one book in it (8 resize handles), ready to submit a good vote',
+    caption: 'A drawing with a region drawn round the one yellow smiley face in it (8 resize handles), ready to submit a good vote',
     themes: BOTH,
     annotations: [
       { target: '.region-box', kind: 'box', label: 'Vote good on this region' },
     ],
     // Region voting needs a patch-region-aware embedder, so this shot uses the
-    // `photo-regions` fixture (embedded with DINOv2 patch) and its own detector.
-    // The frame and the box are the slide deck's (see `book-example.mjs`): one
-    // book, a fifth of the photo, beside things that are not books — so the
-    // rectangle is visibly a claim about where the evidence is. The rectangle
-    // is a real canvas drag.
+    // `drawing-regions` fixture (embedded with DINOv2 patch) and its own
+    // detector. The frame is a scene with one yellow smiley in it, beside a
+    // yellow face that is not smiling (see `smiley-example.mjs`), so the
+    // rectangle is visibly a claim about where the evidence is; the box is the
+    // generator's own box for that smiley. The rectangle is a real canvas drag.
     async recipe(page, h) {
+      const hero = corpus(REGION_DATASET).pictures.find((p: { filename: string }) => p.filename === HERO_REGION);
+      if (!hero) throw new Error(`${HERO_REGION} is not in the ${REGION_DATASET} corpus`);
+      const region = regionBox(hero);
       await h.enterLabelView(REGION_DATASET, REGION_DETECTOR);
       await h.leftTab('Manual');
       await h.serveItem(HERO_REGION);
@@ -591,7 +594,7 @@ export const SHOTS: Shot[] = [
       await h.wait(600);
       // The rendered *picture*, not the <img> element: the viewer sizes the
       // element to the whole centre panel with `object-fit: contain`, so the
-      // photo is a letterboxed rectangle inside it.
+      // picture is a letterboxed rectangle inside it.
       const box = await page.locator('img.image-element').first().evaluate((el) => {
         const img = el as HTMLImageElement;
         const r = img.getBoundingClientRect();
@@ -600,10 +603,10 @@ export const SHOTS: Shot[] = [
         const hh = img.naturalHeight * scale;
         return { x: r.x + (r.width - w) / 2, y: r.y + (r.height - hh) / 2, width: w, height: hh };
       });
-      const x0 = box.x + box.width * REGION_BOX.x0;
-      const y0 = box.y + box.height * REGION_BOX.y0;
-      const x1 = box.x + box.width * REGION_BOX.x1;
-      const y1 = box.y + box.height * REGION_BOX.y1;
+      const x0 = box.x + box.width * region.x0;
+      const y0 = box.y + box.height * region.y0;
+      const x1 = box.x + box.width * region.x1;
+      const y1 = box.y + box.height * region.y1;
       await page.mouse.move(x0, y0);
       await page.mouse.down();
       await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 8 });
@@ -645,7 +648,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'settings-appearance',
     embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
-    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
+    caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
     themes: BOTH,
     async recipe(_page, h) {
       await h.dashboard();
@@ -665,7 +668,7 @@ export const SHOTS: Shot[] = [
     async recipe(_page, h) {
       await h.dashboard();
       await h.selectDatasetRow(TRAIN_DATASET);
-      await h.selectDetectorRow(BOOK_DETECTOR);
+      await h.selectDetectorRow(DETECTOR);
       // Open the dataset row's ⋯ overflow menu so the shot shows where Browse,
       // Stats, Rename, and (for detectors) Export now live.
       await h.overflowMenu(TRAIN_DATASET);
@@ -674,7 +677,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'browse-view',
     embeddedIn: `${GUIDE}#browse-exploring-a-dataset-spatially`,
-    caption: 'The Browse map: a pannable square-tile map of a dataset of photographs, with the legend and minimap on the right',
+    caption: 'The Browse map: a pannable square-tile map of a dataset of drawings, with the legend and minimap on the right',
     themes: BOTH,
     annotations: [
       { target: '.browse-side-meta', kind: 'box', label: 'Legend + minimap' },
@@ -736,7 +739,7 @@ export const SHOTS: Shot[] = [
       await page.waitForSelector('.tab-bar', { timeout: 15000 });
       // Blank is the default tab; seed the text example so the field reads as a
       // real description rather than placeholder text.
-      await page.locator('.example-panel input.form-input').first().fill(BOOK_TEXT).catch(() => {});
+      await page.locator('.example-panel input.form-input').first().fill(DETECTOR_TEXT).catch(() => {});
       await h.wait(600);
     },
   },

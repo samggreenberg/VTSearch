@@ -187,6 +187,15 @@ class TestNotificationSubscriber:
         cli_progress.notification_subscriber(self._note(level=level, message="Hi"))
         assert capsys.readouterr().err == f"{label}: Hi\n"
 
+    def test_text_mode_puts_each_item_on_its_own_line(self, capsys):
+        cli_progress.notification_subscriber(self._note(items=("a.pdf", "b.pdf")))
+        assert capsys.readouterr().err == "Warning: Skipped 3 files\n  - a.pdf\n  - b.pdf\n"
+
+    def test_json_mode_carries_the_items(self, capsys):
+        cli_progress.set_format("json")
+        cli_progress.notification_subscriber(self._note(items=("a.pdf", "b.pdf")))
+        assert json.loads(capsys.readouterr().out.strip())["items"] == ["a.pdf", "b.pdf"]
+
     def test_json_mode_emits_notification_event_on_stdout(self, capsys):
         cli_progress.set_format("json")
         cli_progress.notification_subscriber(self._note(detail="a, b, c", source="Server Folder"))

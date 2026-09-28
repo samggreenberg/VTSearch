@@ -62,13 +62,15 @@ need to think about sort modes or selection strategies directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-loaded.dark.webp" />
-  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
+  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them" width="720" />
 </picture>
 
-> Every screenshot in this guide follows one example: a few hundred
-> everyday photographs, and a detector that learns to find the ones with
-> **books** in them. The photos come from the public COCO dataset, and the
-> same example runs through the VTSearch slide deck. Screenshots come in light
+> Every screenshot in this guide follows one example: a few hundred cartoon
+> drawings - faces in every colour and mood, piles of shapes, busy little
+> scenes - and a detector that learns to find the **yellow smiley faces**
+> among them. VTSearch draws the pictures itself, so you can make the very
+> same ones and follow along (see
+> [Step by step](#step-by-step-your-first-search)). Screenshots come in light
 > and dark variants and follow your theme automatically - the in-app Help
 > panel shows the one matching your current theme, and on GitHub/GitLab the
 > `<picture>` element above picks the variant matching your site appearance.
@@ -79,18 +81,23 @@ need to think about sort modes or selection strategies directly.
 
 This walkthrough assumes VTSearch is already running and open in your
 browser; if it isn't, see [SETUP.md](../SETUP.md) (or ask whoever runs
-your server for its address). No data of your own? Load demo datasets in
-Steps 1 and 3 instead (the **Demo** tab of the same dialog; see
-[Loading a dataset](#loading-a-dataset)); everything else is the same.
+your server for its address).
 
-Four steps take you from a folder of photos to a detector that finds what
-you are looking for in photos it has never seen. The red numbers in each
-picture show where to click, in order.
+Four steps take you from a folder of pictures to a detector that finds what
+you are looking for in pictures it has never seen. The red numbers in each
+screenshot show where to click, in order.
 
-The example uses two folders of photographs: `photos` to train the
-detector on, and `photos-prod`, a second set that shares no photo with the
-first, to run the finished detector over. Any two folders of your own work
-the same way, whether they hold photos, audio, text, video or documents.
+The example uses two folders of drawings: `drawings` to train the detector
+on, and `drawings-new`, a second set that shares no drawing with the first,
+to run the finished detector over. Any two folders of your own work the same
+way, whether they hold photos, audio, text, video or documents.
+
+**No data of your own?** The drawings come from VTSearch's own
+**Synthetic Media** demo, so you can make the very same ones. In Steps 1
+and 3, use the **Demo** tab of the same dialog instead of **Files**: pick
+**Synthetic Media**, set **Size** to 240, and set **Seed** to 1 for the
+training set (Step 1) and to 2 for the new one (Step 3). Name them `drawings`
+and `drawings-new` to match the screenshots. Everything else is the same.
 
 ### Step 1: Load a training dataset
 
@@ -106,12 +113,12 @@ On the dashboard, click the **+** <picture><source media="(prefers-color-scheme:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-train.dark.webp" />
-  <img src="assets/step-import-train.light.webp" alt="Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of photos on the server, (4) Import" width="720" />
+  <img src="assets/step-import-train.light.webp" alt="Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of pictures on the server, (4) Import" width="720" />
 </picture>
 
 The dataset appears on the **Datasets** card. VTSearch works out a
 fingerprint for every item as it imports them, which takes a minute or two
-for a few hundred photos on an ordinary computer. For the other ways to
+for a few hundred pictures on an ordinary computer. For the other ways to
 bring data in, including ready-made demo datasets that need no data of your
 own, see [Loading a dataset](#loading-a-dataset).
 
@@ -120,8 +127,9 @@ own, see [Loading a dataset](#loading-a-dataset).
 Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-new-detector.dark.webp" /><img src="assets/icon-new-detector.light.webp" alt="The + button on the Detectors card" height="24" /></picture> at the top right of the **Detectors** card. In
 the **New Detector** dialog:
 
-1. Describe what you are looking for, in a word or a phrase: `book`.
-2. Give the detector a name: `Books`.
+1. Describe what you are looking for, in a word or a phrase:
+   `yellow smiley face`.
+2. Give the detector a name: `Yellow Smileys`.
 3. Click **Create**.
 
 <picture>
@@ -129,11 +137,13 @@ the **New Detector** dialog:
   <img src="assets/step-new-detector.light.webp" alt="Step 2: in the New Detector dialog, (1) describe what you are looking for, (2) name the detector, (3) Create" width="720" />
 </picture>
 
-The description only gives the detector somewhere to start; from here on,
-your answers teach it. Back on the dashboard:
+The description only gives the detector somewhere to start:
+`yellow smiley face` puts the yellow faces first, but it is not sure which
+of them are smiling. From here on, your answers teach it. Back on the
+dashboard:
 
-1. Tick the training dataset (`photos`).
-2. Tick the new detector (`Books`).
+1. Tick the training dataset (`drawings`).
+2. Tick the new detector (`Yellow Smileys`).
 3. Click **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture>.
 
 <picture>
@@ -141,42 +151,43 @@ your answers teach it. Back on the dashboard:
   <img src="assets/step-train.light.webp" alt="Step 2: tick (1) the training dataset and (2) the new detector, then (3) Train" width="720" />
 </picture>
 
-VTSearch opens the labeling view, and Autopilot shows you one photo at a
+VTSearch opens the labeling view, and Autopilot shows you one picture at a
 time. For each one:
 
 1. Click **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> (or press `→`) if it is what you are looking for.
 2. Click **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or press `←`) if it is not.
 3. Your answers collect on the right. The detector retrains after every
-   one, and Autopilot picks the next photo from what it has just learned.
+   one, and Autopilot picks the next picture from what it has just learned.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-vote.dark.webp" />
-  <img src="assets/step-vote.light.webp" alt="Step 2: Autopilot shows one photo at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right" width="720" />
+  <img src="assets/step-vote.light.webp" alt="Step 2: Autopilot shows one picture at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right" width="720" />
 </picture>
 
-Answer the hard cases too. A shelf of DVD box sets is exactly the kind of
-photo Autopilot will ask about, and whether it counts as a book is your
-call: the detector learns where *you* draw the line. Twenty or thirty
+Answer the hard cases too. A yellow face that is frowning, or an orange one
+that is smiling, is exactly the kind of picture Autopilot will ask about, and
+whether it counts as a yellow smiley is your call: the detector learns where
+*you* draw the line. Twenty or thirty
 answers is usually enough, and the phase list on the left shows how far
 along you are (see [Autopilot](#autopilot-the-guided-workflow)).
 
 ### Step 3: Load a test dataset
 
-Load the photos you want to search the same way as in Step 1, but point
-the **Folder** importer at the second folder (`photos-prod` here). The
-detector never saw any of these photos while you were training it.
+Load the pictures you want to search the same way as in Step 1, but point
+the **Folder** importer at the second folder (`drawings-new` here). The
+detector never saw any of these pictures while you were training it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-test.dark.webp" />
-  <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of photos the detector has never seen, then (4) Import" width="720" />
+  <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of pictures the detector has never seen, then (4) Import" width="720" />
 </picture>
 
 ### Step 4: Run the detector on the new dataset
 
 Back on the dashboard:
 
-1. Tick the new dataset (`photos-prod`).
-2. Tick the trained detector (`Books`).
+1. Tick the new dataset (`drawings-new`).
+2. Tick the trained detector (`Yellow Smileys`).
 3. Click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Find button" height="24" /></picture>.
 
 <picture>
@@ -184,21 +195,21 @@ Back on the dashboard:
   <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Find" width="720" />
 </picture>
 
-Find scores every photo in the dataset and opens the results:
+Find scores every picture in the dataset and opens the results:
 
-1. The photos, best match first. How many the detector calls a match, and
+1. The pictures, best match first. How many the detector calls a match, and
    how many it doesn't, is counted on the right as *Unverified Good* and
    *Unverified Bad*.
-2. Click any photo to look at it, and confirm or correct the detector
+2. Click any picture to look at it, and confirm or correct the detector
    with **Good** or **Bad**. Checking is optional.
-3. The photos you check collect in **Verified Good** and **Verified Bad**.
+3. The pictures you check collect in **Verified Good** and **Verified Bad**.
 4. **Export** sends the matches - checked or not - to a file, the
    clipboard, an email and more (see
    [Exporting your work](#exporting-your-work)).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-find-results.dark.webp" />
-  <img src="assets/step-find-results.light.webp" alt="Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
+  <img src="assets/step-find-results.light.webp" alt="Step 4: Find ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
 </picture>
 
 That is the whole loop. The rest of this guide covers each part in more
@@ -232,7 +243,11 @@ VTSearch ships two populated categories, which boil down to two choices:
     are instant.
   - **🏭 Synthetic Media** - fabricates images, audio, or video on the
     fly. This is the quickest way to try VTSearch, since nothing is
-    downloaded at all.
+    downloaded at all. Its images are the cartoon faces, shapes and scenes
+    this guide's screenshots are taken on. **Seed** picks which set it
+    makes: the same seed always makes the same media, and two seeds make two
+    sets with nothing in common - one to train a detector on and one it has
+    never seen.
 - **Import your own** (the **Files** tab) - two importers, both reading
   from the **server's** filesystem (VTSearch has no browser-side upload
   importer; media must already be somewhere the server can see):
@@ -269,7 +284,7 @@ folder instead of typing it:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-form.dark.webp" />
-  <img src="assets/importer-form.light.webp" alt="The Folder importer with its server file browser open on a folder of photographs, one subfolder per subject" width="720" />
+  <img src="assets/importer-form.light.webp" alt="The Folder importer with its server file browser open on the folder of drawings" width="720" />
 </picture>
 
 ### Advanced import options
@@ -596,7 +611,7 @@ sort uses that hint to find similar regions elsewhere in the dataset.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/region-voting.dark.webp" />
-  <img src="assets/region-voting.light.webp" alt="A photo with a region drawn round the one book in it (8 resize handles), ready to submit a good vote" width="720" />
+  <img src="assets/region-voting.light.webp" alt="A drawing with a region drawn round the one yellow smiley face in it (8 resize handles), ready to submit a good vote" width="720" />
 </picture>
 
 The binary vote experience is **unchanged**: `→` is good, `←` is
@@ -696,9 +711,12 @@ It has two tabs:
   label. Pick its **Media type** (locked to the active dataset's type
   when you have one selected; hidden entirely on a solo-media-type
   server), give it a **Detector name**, and seed it under **Example**
-  one of two ways: the **Text** tab takes a short description ("e.g. dog
-  barking sounds"), and the media tab next to it (named for the media
-  type, e.g. **Image**) takes one or more **media examples**. The
+  one of two ways: the **Text** tab takes a short description ("e.g.
+  large books"), and the media tab next to it (named for the media
+  type, e.g. **Image**) takes one or more **media examples**. A typed
+  description also fills in the name, title-cased with "Detector" on the
+  end ("large books" becomes **Large Books Detector**) until you type a
+  name of your own; pressing Enter in the name field clicks **Create**. The
   quickest way to supply one is the drop zone
   right there on the tab - drag a file from your computer onto it, or
   click it to browse. For anything else, the **Browse Images…** button
@@ -865,7 +883,9 @@ per-user override.
 The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
 eight tabs:
 
-- **Appearance** - theme, animations, the metadata panel, the
+- **Appearance** - theme, animations, the Dashboard's **RAM / Disk
+  bars** (**Default** shows them once you have a detector; **View** and
+  **Hide** show them always or never), the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
   (focus mode and thumbnail size).
 - **Auto-Find** - what exporter to send auto-run results to. (Which
@@ -930,7 +950,14 @@ with bulk-action and per-card controls.
   A detector lives on exactly one tab at a time, and every user
   curates their own AutoRun list. The typical loop: build and test a
   detector in **Drafts**, move it to **AutoRun** once you trust it,
-  and move it back to Drafts later if it needs more tuning.
+  and move it back to Drafts later if it needs more tuning. Until you
+  have a detector at all, both tabs are dimmed and the grid stays on
+  Drafts, where a new detector lands.
+
+  Only detectors on the tab you're looking at can be selected, so
+  **Train** and **Find** always act on rows you can see. Switching
+  tabs clears the detector selection, and picking a detector from the
+  top bar switches to its tab.
 
 The **+** button on each card creates a new dataset (the Add Dataset
 dialog) or a new detector (the [New Detector](#creating-a-detector)
@@ -943,7 +970,8 @@ or clean up several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them, then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
+row to select them (a detector you just made, with no labels yet, gets a
+"Click Train to teach your new detector." hint), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
@@ -973,7 +1001,7 @@ each other - and renders it as a pannable, zoomable density map.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.webp" />
-  <img src="assets/browse-view.light.webp" alt="The Browse map: a pannable square-tile map of a dataset of photographs, with the legend and minimap on the right" width="720" />
+  <img src="assets/browse-view.light.webp" alt="The Browse map: a pannable square-tile map of a dataset of drawings, with the legend and minimap on the right" width="720" />
 </picture>
 
 Browse is a way to *see

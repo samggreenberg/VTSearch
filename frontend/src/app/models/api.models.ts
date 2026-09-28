@@ -136,6 +136,11 @@ export interface ServerNotification {
   source?: string | null;
   /** Unix seconds. */
   timestamp?: number;
+  /**
+   * The specific things the message is about (skipped files, dropped items),
+   * one per entry. Shown behind the toast's Details toggle, with Copy list.
+   */
+  items?: string[] | null;
 }
 
 // --- Datasets ---

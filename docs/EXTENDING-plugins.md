@@ -189,7 +189,7 @@ don't pick one get a letter instead of inheriting yours), and its
 | `validate_cli_field_values(fv)` | Raises `ValueError` if any required field is missing, then runs the normalization pass below |
 | `to_dict()`                     | JSON-serialisable plugin metadata for API responses      |
 | `get_field_options(key, values)` | Override for `dynamic_options` fields — see [Dynamic field options](#dynamic-field-options) |
-| `notify(message, level=, detail=)` | Toast the user without failing — see [Notifying the user](#notifying-the-user-toasts) |
+| `notify(message, level=, detail=, items=)` | Toast the user without failing — see [Notifying the user](#notifying-the-user-toasts) |
 
 ### Framework-side field normalization
 
@@ -333,7 +333,8 @@ def run(self, field_values):
         self.notify(
             f"Skipped {len(skipped)} unreadable files",
             level="warning",
-            detail=", ".join(skipped[:10]),
+            detail="They could not be decoded as PDF.",
+            items=skipped,
         )
     return medias
 ```
@@ -342,7 +343,8 @@ def run(self, field_values):
 |-----------|-------------|
 | `message` | Headline, one short sentence. Truncated at 300 characters |
 | `level`   | `"info"` (default), `"success"`, `"warning"`, or `"error"`. The first two fade after a few seconds; the last two stay until the user dismisses them |
-| `detail`  | Optional second line with the specifics — which files, which endpoint, how many. Truncated at 2000 characters |
+| `detail`  | Optional second line with the specifics — which endpoint, how many, why. Truncated at 2000 characters |
+| `items`   | Optional list of the things the message is about, one string each — every skipped file, not the first ten. The toast shows them behind a **Details** toggle with a **Copy list** button. At most 1000 entries of 300 characters |
 
 Your `display_name` is attached automatically as the notification's source,
 so the toast says which plugin spoke. Code that isn't a `PluginBase`
@@ -1545,7 +1547,7 @@ find-results pickers by construction.
 `export()` / `export_cli()` receive the **fully-materialised** results dict, so
 they buffer every hit in memory. For a media source larger than RAM (e.g. a
 folder tree of billions of images scanned via
-`--autodetect --chunk-size N --stream-results`), an exporter can instead write
+`--autodetect --tempimport --chunk-size N --stream-results`), an exporter can instead write
 each hit as it is scored, by opting in:
 
 ```python

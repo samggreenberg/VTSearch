@@ -1279,6 +1279,11 @@ describe('LabelViewComponent', () => {
   describe('fresh entry carries the sort over (#4092)', () => {
     async function enterWithVotes(): Promise<void> {
       flushInitialRequests();
+      // Tick so the effect watching `votesLoaded` arms the entry seed *now*.
+      // Left to the scheduled CD it arms a macrotask later, so the seed's
+      // 300ms would start inside the 400ms below and the margin would be
+      // whatever that CD pass took to arrive, which a loaded run can exceed.
+      TestBed.tick();
       // The entry seed is deferred a beat, as the pair-switch one is.
       await new Promise<void>((resolve) => setTimeout(resolve, 400));
     }
@@ -1463,6 +1468,8 @@ describe('LabelViewComponent', () => {
       flushInitialRequests();
       flushDetectorRegistry();
       TestBed.inject(AutopilotStateService).clear();
+      // Arm the entry seed now so the wait below reliably outlasts it.
+      TestBed.tick();
       await new Promise<void>((resolve) => setTimeout(resolve, 400));
       httpMock.match('/api/sort');
       // The user's own sort: Text, "aaa". The new detector's hint is different,
@@ -1485,6 +1492,8 @@ describe('LabelViewComponent', () => {
       flushInitialRequests();
       flushDetectorRegistry();
       TestBed.inject(AutopilotStateService).clear();
+      // Arm the entry seed now so the wait below reliably outlasts it.
+      TestBed.tick();
       await new Promise<void>((resolve) => setTimeout(resolve, 400));
       component.sortState.setSortMode('learned');
       component.sortState.setTextQuery('aaa');

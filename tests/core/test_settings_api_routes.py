@@ -84,6 +84,25 @@ class TestSettingsAPI:
         res = client.put("/api/settings", json={"show_animations": "True"})
         assert res.status_code == 422
 
+    def test_show_usage_bars_defaults_to_default(self, client):
+        """The Dashboard RAM / Disk bars start in "default" mode (#4227)."""
+        res = client.get("/api/settings")
+        assert res.status_code == 200
+        assert res.get_json()["show_usage_bars"] == "default"
+
+    @pytest.mark.parametrize("mode", ["hide", "default", "view"])
+    def test_update_show_usage_bars(self, client, mode):
+        from vtsearch import settings as settings_mod
+
+        res = client.put("/api/settings", json={"show_usage_bars": mode})
+        assert res.status_code == 200
+        assert res.get_json()["show_usage_bars"] == mode
+        assert settings_mod.get_show_usage_bars() == mode
+
+    def test_update_show_usage_bars_rejects_unknown_mode(self, client):
+        res = client.put("/api/settings", json={"show_usage_bars": "show"})
+        assert res.status_code == 422
+
     def test_update_volume(self, client):
         res = client.put(
             "/api/settings",

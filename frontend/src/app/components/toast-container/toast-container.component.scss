@@ -216,6 +216,25 @@
   }
 }
 
+// An item list (``Toast.items``): every dropped file, say. Scrolls inside a
+// fixed height so a thousand entries cannot push the toast off the screen.
+.toast__items {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  list-style: none;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  line-height: 1.35;
+
+  li {
+    word-break: break-all;
+  }
+}
+
 .toast__raw {
   margin-top: var(--space-md);
 

@@ -279,7 +279,7 @@ the *pickle* loader, which still reads the whole file at once.
 `for det_name in detector_names:` loop), `vtsearch/routes/detectors/scoring.py`
 
 **Partly shipped** (see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)):
-`--autodetect --chunk-size N --stream-results` scores chunk by chunk and streams
+`--autodetect --tempimport --chunk-size N --stream-results` scores chunk by chunk and streams
 hits straight to the exporter, so the *target* side no longer holds all N items,
 all hits, or the full export in RAM; folder enumeration is lazy; each chunk is
 embedded one at a time.
