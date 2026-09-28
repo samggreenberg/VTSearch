@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
     from vtscore.training.thresholds import FoldAnchoredCut
 
+from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector, pick_provenance
@@ -267,6 +268,20 @@ def _pool_uncertainty(
     embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
     spread = np.asarray(step.predict_std(embs), dtype=np.float64).ravel()
     return {cid: float(s) for cid, s in zip(pool_ids, spread)}
+
+
+def _no_recut(_inclusion: float) -> None:
+    """The re-cut of a step with no fold-anchored fit: there is none to re-derive.
+
+    Handed to :func:`~vtscore.detectors.cost_trend.smart_cut`, which then keeps
+    the step's reporting line: the schedule blend, a retired rung's cut, or the
+    conformal cut of an arm with safe thresholds off.  Only an arm reporting at
+    an inclusion other than :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`
+    ever asks, and for the conformal case the app's seam
+    (``recut_detector_threshold``) would re-cut the fold orderings instead - a
+    difference ``progress.smart_status`` declares, off the default arm.
+    """
+    return None
 
 
 def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
@@ -2454,6 +2469,7 @@ def simulate_voting_iterations(  # noqa: C901
                     len(bad_votes),
                     remaining_unlabeled=len(pool),
                     span=atlas.span_info() if atlas is not None else None,
+                    last_vote_good=is_positive,
                 )
             continue
 
@@ -2486,6 +2502,7 @@ def simulate_voting_iterations(  # noqa: C901
         sim_pooled_scores: list[float] | None = None
         sim_pooled_ids: list[int] = []
         sim_fold_haystacks: list[Any] = []
+        safe_cut = None
         if safe_thresholds:
             # What the fold computation returned before any fusion: a retired
             # live rule (#4184) falls back to it where it has nothing to cut on.
@@ -2655,7 +2672,17 @@ def simulate_voting_iterations(  # noqa: C901
         # indicator needs the labelset error cost, Stable the prediction flips
         # over the still-unlabeled pool, Span the atlas's coverage.
         if flow is not None:
-            recent_steps.append((step, threshold))
+            # Scored at the model's own Inclusion 0 cut and priced at that
+            # inclusion, as the app's Smart is, whatever this arm reports at
+            # (issue #4243).  A step with no fitted cut to re-derive keeps its
+            # reporting line, which is then inclusion-blind.
+            # The line was served at the operating point's inclusion - none at
+            # all when a precision floor promised its own cut (#4245).
+            _line = details.get("reporting_line")
+            _served = _line.inclusion if _line is not None else inclusion
+            recent_steps.append(
+                (step, smart_cut(threshold, _served, safe_cut.threshold_at if safe_cut is not None else _no_recut))
+            )
             # The app regresses over its last SMART_WINDOW *models*; here every
             # step trains one, so the last SMART_WINDOW steps are the same set.
             del recent_steps[:-SMART_WINDOW]
@@ -2665,7 +2692,7 @@ def simulate_voting_iterations(  # noqa: C901
                     good_votes,
                     bad_votes,
                     clips_dict,
-                    inclusion,
+                    SMART_INCLUSION,
                     region_aware=region_aware,
                     style_obj=style_obj,
                 ),
@@ -2680,6 +2707,7 @@ def simulate_voting_iterations(  # noqa: C901
                 len(bad_votes),
                 remaining_unlabeled=len(pool),
                 span=atlas.span_info() if atlas is not None else None,
+                last_vote_good=is_positive,
             )
 
         # Identifying columns shared by every row this step emits.

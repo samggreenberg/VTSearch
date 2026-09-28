@@ -24,11 +24,11 @@
     "harness": "44b89eef2937825af3f2467d5f3618810719dce2593fe4bdd0f91c1994aed2f6"
   },
   "progress.eval_geometry": {
-    "app": "fbed55ebc65191fe4c2df1489f43ecc1c079d11c1b0fe0729896ec3353f5bb36",
+    "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
     "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
   },
   "progress.smart_status": {
-    "app": "2e99faef386bd339968c72fbb65eb11c7075174c55bc8a10e34ddc26b406fa1b",
+    "app": "204c114a077dd75d1499887d8866faa7ff5842516ce73f7193f7fcb835e533f0",
     "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
   },
   "progress.span_status": {

@@ -168,6 +168,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Smart indicator measures every detector at Inclusion 0** (issue
+  #4243). Smart asks whether the detector is still getting better, by
+  re-scoring the recent detectors against your current votes. It used to
+  price their mistakes at your Inclusion and measure each at the line it
+  showed you. It now counts a false alarm and a miss equally, at the line
+  each detector would draw at Inclusion 0, whatever Inclusion you have set.
+  Nothing changes at the default Inclusion. This keeps the light steady once
+  a precision floor, rather than Inclusion, sets the line (#4224).
+
 - **The User Guide is illustrated with the yellow smiley example** (issue
   #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows
   a detector learning to find the yellow smiley faces among Synthetic Media's
