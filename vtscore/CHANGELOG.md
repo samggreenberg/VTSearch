@@ -50,6 +50,22 @@ instead, since every commit on `dev` is effectively a new app release.)
     `train_and_threshold` reads the active detector's floor itself, as it
     reads its inclusion.
 
+- **Whether a line is a promise travels with it** (issue #4247), all additive:
+  - `vtscore.state.core.detector_floor_state(ctx, min_precision)`: the
+    floor's verdict on a detector's current line, as
+    `{min_precision, status, calibration_positives}`. `status` is `promised`,
+    `unreachable` or `insufficient_evidence` (the last two: the line is the
+    unpromised Inclusion 0 cut), or `None` when no floor is set.
+  - `resolve_or_train_detector(..., ctx_sink=None)`: a list that receives the
+    detector context whose head and threshold are returned, so a caller can
+    ask that context for its verdict.
+  - CLI autodetect: each detector's result, and each entry of the streaming
+    header's `detectors`, carries a `floor` beside `threshold`. A detector
+    whose floor promises nothing is still scored at its Inclusion 0 cut, and a
+    new `detector_unpromised` progress event says so. `threshold` is unchanged:
+    one float, the cut the hits were taken at. Exporters that write the
+    payload verbatim (`server_json_file`, `webhook`) carry `floor` along.
+
 - **Eval: the default arm draws the app's line** (issue #4245).
   `simulate_voting_iterations` and both `run_voting_iterations_eval` drivers
   take `min_precision` (`None` = the app's default floor, `"off"` = the

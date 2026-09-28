@@ -239,8 +239,9 @@ def _load_and_train_detectors(
     whichever it is handed (issue #3647).  ``None`` keeps the loaded medias as
     the haystack, for callers with no scoring pass to agree with.
 
-    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float}}`` map.
-    Raises :class:`ValueError` if a detector cannot be trained - for example
+    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float, "floor": dict, ...}}``
+    map; ``floor`` is what the precision floor says about ``threshold``
+    (:func:`_record_floor_state`).  Raises :class:`ValueError` if a detector cannot be trained - for example
     when none of its labels' origin files are resolvable from the CLI
     environment.
     """

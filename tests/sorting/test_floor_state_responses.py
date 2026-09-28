@@ -80,7 +80,7 @@ class TestFindLabel:
         ctx = get_active_detector_context()
         if status == "insufficient_evidence":
             assert data["threshold"] == round(ctx.anchored_cut_cache.threshold_at(0), 4)
-            assert any(r["label"] == "good" for r in data["results"])
+            assert any(r["score"] >= data["threshold"] for r in data["results"])
 
 
 class TestLearnedSort:
