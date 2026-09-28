@@ -78,6 +78,17 @@ REPORTED_BANDS: tuple[str, ...] = ("small", "medium", "large")
 MIX_BAND = "mix"
 
 
+def is_mix_band(band: Optional[str]) -> bool:
+    """Whether *band* names a synthetic mixed cell rather than a pure size.
+
+    ``mix`` is :func:`project_mix`'s default; ``mix-<name>`` is how a study
+    running several mixes side by side names them (``car@mix-equal``,
+    ``car@mix-natural``, #4160).  Neither is ever one of
+    :data:`REPORTED_BANDS`, so a mixed arm's own cell cannot be read as a size.
+    """
+    return band is not None and (band == MIX_BAND or band.startswith(MIX_BAND + "-"))
+
+
 def parse_cell(category: str) -> tuple[str, Optional[str]]:
     """``("car", "small")`` for ``"car@small"``; ``("dog", None)`` for ``"dog"``.
 
@@ -116,7 +127,7 @@ def unreportable_bands(medias: dict[Any, dict[str, Any]], cls: str) -> list[str]
     empty.
     """
     bands = [parse_cell(c)[1] for c in cells_of_class(medias, cls)]
-    return sorted({b for b in bands if b and b not in REPORTED_BANDS and b != MIX_BAND})
+    return sorted({b for b in bands if b and b not in REPORTED_BANDS and not is_mix_band(b)})
 
 
 def band_of(media: dict[str, Any], cls: str) -> Optional[str]:
@@ -130,7 +141,7 @@ def band_of(media: dict[str, Any], cls: str) -> Optional[str]:
     for cell in media.get("categories") or ():
         if cell.startswith(prefix):
             band = cell[len(prefix) :]
-            if band != MIX_BAND:
+            if not is_mix_band(band):
                 return band
     return None
 
@@ -184,7 +195,7 @@ def band_cohorts(
     out: dict[str, list[int]] = {}
     for cell in cells_of_class(medias, cls):
         this_band = parse_cell(cell)[1]
-        if this_band is None or this_band == MIX_BAND:
+        if this_band is None or is_mix_band(this_band):
             continue
         if wanted is not None and this_band not in wanted:
             continue
@@ -357,6 +368,128 @@ def project_mix(
         "available_by_band": {band: len(ids) for band, ids in sorted(by_band.items())},
     }
     return out, report
+
+
+def paired_mix(
+    medias: dict[Any, dict[str, Any]],
+    cls: str,
+    mix: "str | dict[str, float]",
+    *,
+    sim_fraction: float,
+    seed: int,
+    label: str = MIX_BAND,
+) -> tuple[dict[Any, dict[str, Any]], list[Any], list[Any], dict[str, list[Any]], dict[str, Any]]:
+    """A mixed-size arm whose per-band test cohorts are the pure arms' own (#4160).
+
+    :func:`project_mix` builds a mixed cell for a run on its own.  Put beside the
+    pure arms in a train-size x test-size table, it cannot be tested fairly: the
+    harness would re-split the mixed pool, so the mix would train on images that
+    sit in a pure band's held-out cohort, and ``fnr_small`` on the mixed arm
+    would partly be read off its own training images.
+
+    So the split is taken here rather than by the harness:
+
+    * **Train positives** are drawn only from each band's *sim* half, the
+      images that band's pure arm may train on at *seed*, at the requested
+      shares.  Their number is the mean of the pure arms' sim-positive counts, so
+      the mixed arm votes over the same number of positives at the same
+      prevalence as a pure arm. It differs only in their sizes.
+    * **Test positives** are the union of the pure arms' held-out cohorts, which
+      is exactly what :func:`band_cohorts` returns for any of them.  The mixed
+      arm's ``fnr_<band>`` is therefore read off the same images as every pure
+      arm's, and its headline ``fnr`` is the pooled miss rate over all three.
+    * **Negatives** are the class's shared pool, split by the harness's own rule
+      over that pool alone.  Every arm has one FPR, as before.
+
+    Returns ``(medias, sim_ids, test_ids, cohorts, report)``.  *medias* holds
+    only the chosen images, retagged to ``cls@<label>`` as :func:`project_mix`
+    retags. Positives in a sim half that the quota did not draw are left out, not
+    demoted: they hold the class.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.labels import evaluable_pool, media_is_evaluable, media_is_positive  # noqa: PLC0415
+
+    cells = [c for c in cells_of_class(medias, cls) if not is_mix_band(parse_cell(c)[1])]
+    if not cells:
+        raise ValueError(f"{cls!r} has no banded cells in this pool, so it cannot be mixed")
+    requested = resolve_mix(medias, cls, mix)
+    present = {b for b in (parse_cell(c)[1] for c in cells) if b is not None}
+    # A band the corpus has no cell for (`apple@small` was dropped for supply)
+    # cannot contribute. Renormalise over the bands that exist and record both.
+    shares = {b: w for b, w in requested.items() if b in present and w > 0}
+    total = sum(shares.values())
+    if total <= 0:
+        raise ValueError(f"mix {requested!r} names no band that {cls!r} has (bands: {sorted(present)})")
+    shares = {b: w / total for b, w in sorted(shares.items())}
+
+    sim_pos: dict[str, list[Any]] = {}
+    cohorts: dict[str, list[Any]] = {}
+    for cell in cells:
+        band = parse_cell(cell)[1]
+        assert band is not None
+        pool = evaluable_pool(medias, cell)
+        held = set(holdout_ids(list(pool), sim_fraction, seed))
+        sim_pos[band] = sorted(cid for cid in pool if cid not in held and media_is_positive(pool[cid], cell))
+        cohorts[band] = sorted(cid for cid in held if media_is_positive(pool[cid], cell))
+
+    n_sim_positives = int(round(float(np.mean([len(v) for v in sim_pos.values()]))))
+    quota = _quota(shares, n_sim_positives, {b: len(sim_pos.get(b, [])) for b in shares})
+    rng = np.random.RandomState(seed)
+    chosen: dict[str, list[Any]] = {}
+    for band in sorted(sim_pos):
+        order = rng.permutation(len(sim_pos[band]))
+        chosen[band] = [sim_pos[band][i] for i in order[: quota.get(band, 0)]]
+
+    # The class's shared negatives: scorable against one of its cells, holding
+    # none of them -- the pool every pure arm draws its one FPR from.
+    negatives = sorted(
+        cid
+        for cid, media in medias.items()
+        if band_of(media, cls) is None and any(media_is_evaluable(media, cell) for cell in cells)
+    )
+    held_neg = set(holdout_ids(negatives, sim_fraction, seed)) if negatives else set()
+
+    mixed_cell = f"{cls}{BAND_SEPARATOR}{label}"
+    cell_of_band = {parse_cell(c)[1]: c for c in cells}
+    out: dict[Any, dict[str, Any]] = {}
+    for band, ids in [*chosen.items(), *cohorts.items()]:
+        own = cell_of_band[band]
+        for cid in ids:
+            media = dict(medias[cid])
+            media["categories"] = sorted({*(media.get("categories") or ()), mixed_cell})
+            media["evaluable_categories"] = sorted({*(media.get("evaluable_categories") or ()), mixed_cell})
+            regions = media.get("regions")
+            if regions:
+                media["regions"] = [({**r, "label": mixed_cell} if r.get("label") == own else r) for r in regions]
+            out[cid] = media
+    for cid in negatives:
+        media = dict(medias[cid])
+        media["evaluable_categories"] = sorted({*(media.get("evaluable_categories") or ()), mixed_cell})
+        out[cid] = media
+
+    sim_ids = sorted([cid for ids in chosen.values() for cid in ids] + [c for c in negatives if c not in held_neg])
+    test_ids = sorted([cid for ids in cohorts.values() for cid in ids] + sorted(held_neg))
+    leaked = set(sim_ids) & set(test_ids)
+    if leaked:
+        raise AssertionError(f"paired_mix put {len(leaked)} images in both halves (e.g. {sorted(leaked)[:5]})")
+
+    realised = {band: len(ids) for band, ids in chosen.items() if ids}
+    n_drawn = sum(realised.values())
+    report = {
+        "cell": mixed_cell,
+        "class": cls,
+        "requested_mix": {band: round(share, 6) for band, share in requested.items()},
+        "effective_mix": {band: round(share, 6) for band, share in shares.items()},
+        "realised_mix": {band: round(n / n_drawn, 6) for band, n in realised.items()} if n_drawn else {},
+        "sim_positives_by_band": realised,
+        "n_sim_positives": n_drawn,
+        "n_sim_positives_requested": n_sim_positives,
+        "available_sim_positives_by_band": {band: len(ids) for band, ids in sorted(sim_pos.items())},
+        "test_positives_by_band": {band: len(ids) for band, ids in sorted(cohorts.items())},
+        "n_negatives": len(negatives),
+    }
+    return out, sim_ids, test_ids, cohorts, report
 
 
 def _rank(cell: str, iid: Any) -> str:

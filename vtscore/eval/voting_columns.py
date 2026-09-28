@@ -260,6 +260,11 @@ BAND_COLUMNS: tuple[str, ...] = (
     "n_test_pos_small",
     "n_test_pos_medium",
     "n_test_pos_large",
+    #: Each cohort ranked against the run's held-out negatives (#4160): the
+    #: threshold-free half of the per-band reading. NaN unless asked for.
+    "auroc_small",
+    "auroc_medium",
+    "auroc_large",
 )
 
 

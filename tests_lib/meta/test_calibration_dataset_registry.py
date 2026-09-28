@@ -127,3 +127,35 @@ class TestCocoBetterIsRunnable:
         """The two sets exist to be read against each other, so a query that
         drifted between them would put a seeding axis inside the source axis."""
         assert cfg.EXPERIMENT_QUERIES["coco_better"] == cfg.EXPERIMENT_QUERIES["vg_scale"]
+
+
+class TestTrainMixCells:
+    """#4160: a mixed cell is enumerated per class and opens on its class's text."""
+
+    def test_a_mixed_cell_takes_its_pure_bands_text(self, cfg):
+        text = cfg.seed_query_text("coco_better", "bus@small")
+        assert text
+        assert cfg.seed_query_text("coco_better", "bus@mix-equal") == text
+
+    def test_mixes_add_one_cell_per_banded_class(self, cfg, monkeypatch):
+        monkeypatch.setattr(cfg, "TRAIN_MIXES", ["equal", "natural"])
+        cats = ["apple@medium", "apple@large", "bus@small", "bus@medium", "bus@large", "solo@small"]
+        got = cfg.with_train_mixes(cats)
+        assert got[: len(cats)] == cats
+        assert got[len(cats) :] == ["apple@mix-equal", "apple@mix-natural", "bus@mix-equal", "bus@mix-natural"]
+
+    def test_no_mixes_adds_nothing(self, cfg, monkeypatch):
+        monkeypatch.setattr(cfg, "TRAIN_MIXES", [])
+        assert cfg.with_train_mixes(["bus@small"]) == ["bus@small"]
+
+    def test_the_equal_mix_weights_every_band(self, cfg):
+        assert cfg.train_mix_for("bus@mix-equal") == {"small": 1.0, "medium": 1.0, "large": 1.0}
+        assert cfg.train_mix_for("bus@small") is None
+
+    def test_the_natural_mix_reads_the_corpus_shares(self, cfg, monkeypatch, tmp_path):
+        shares = tmp_path / "shares.json"
+        shares.write_text('{"bus": {"small": 0.05, "medium": 0.27, "large": 0.68}}')
+        monkeypatch.setattr(cfg, "MIX_SHARES_PATH", str(shares))
+        assert cfg.train_mix_for("bus@mix-natural") == {"small": 0.05, "medium": 0.27, "large": 0.68}
+        with pytest.raises(KeyError):
+            cfg.train_mix_for("dog@mix-natural")
