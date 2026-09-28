@@ -2,12 +2,11 @@ import { ChangeDetectionStrategy, Component, DestroyRef, effect, HostListener, i
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
-import { EMPTY, Subject, timer } from 'rxjs';
-import { catchError, filter, switchMap, take, takeUntil } from 'rxjs/operators';
+import { EMPTY, timer } from 'rxjs';
+import { catchError, filter, switchMap, take } from 'rxjs/operators';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
 import { DatasetsRegistryApiService } from '../../services/datasets-registry-api.service';
 import { DatasetsUiApiService } from '../../services/datasets-ui-api.service';
-import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
@@ -23,7 +22,8 @@ import { DashboardModalsService } from '../../services/dashboard-modals.service'
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { BrowsePrepService } from '../../services/browse-prep.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask, ProgressEvent } from '../../models/api.models';
+import { AutoRunService } from '../../services/autorun.service';
+import { CleanerSelection, DatasetRegistryEntry, ImporterInfo, LoadingTask } from '../../models/api.models';
 import { DemoDatasetEntry } from '../../generated/api-client/models/demo-dataset-entry';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressEventsService } from '../../services/progress-events.service';
@@ -31,7 +31,6 @@ import {
   ProgressBarState,
   ProgressHeader,
   formatProgressHeader,
-  formatProgressMessage,
   progressBarState,
 } from '../../utils/format-progress';
 import { sortRowsByColumn } from '../../utils/sort-rows';
@@ -42,7 +41,6 @@ import {
 } from '../../services/dashboard-columns.service';
 import { JobProgressComponent } from '../job-progress/job-progress.component';
 import { SkeletonComponent } from '../skeleton/skeleton.component';
-import { AutoDetectResultsModalComponent } from '../modals/autodetect-results-modal/autodetect-results-modal.component';
 import { DatasetCardComponent } from './dataset-card/dataset-card.component';
 import { DetectorCardComponent } from './detector-card/detector-card.component';
 import {
@@ -64,7 +62,6 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
   standalone: true,
   imports: [
     JobProgressComponent,
-    AutoDetectResultsModalComponent,
     DatasetCardComponent,
     DetectorCardComponent,
     CombineDatasetsModalComponent,
@@ -86,7 +83,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private datasetsUiApi = inject(DatasetsUiApiService);
-  private detectorsFindApi = inject(DetectorsFindApiService);
   private detectorsRegistryApi = inject(DetectorsRegistryApiService);
   private toast = inject(ToastService);
   private dialog = inject(VtDialogService);
@@ -103,6 +99,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   browsePrep = inject(BrowsePrepService);
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
+  private autorun = inject(AutoRunService);
 
   /** The highlighted rows, owned by `DashboardSelectionService` (a root
    *  singleton, so the top bar reads them without this component and they
@@ -216,7 +213,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private readonly destroyRef = inject(DestroyRef);
-  private findPolling$ = new Subject<void>();
   /** Registry ids this mount has already seen, so `reconcileSelection` can
    *  tell "just appeared" from "was here when we arrived". Component state on
    *  purpose: a fresh mount has seen nothing, so a returning user's existing
@@ -412,8 +408,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // Off the Dashboard there are no tables to mirror; the pulldown reverts
     // to showing the active/loaded context.
     this.dashSelection.setDashboardVisible(false);
-    this.findPolling$.next();
-    this.findPolling$.complete();
   }
 
   get datasets(): DatasetRegistryEntry[] {
@@ -889,6 +883,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  /** How many of the user's AutoRun detectors are for *dataset*'s media type:
+   *  the ones its ⋯ "Run AutoRun" would run. */
+  autorunDetectorCountFor(dataset: DatasetRegistryEntry): number {
+    return this.autorunDetectors.filter((d) => d.media_type === dataset.media_type).length;
+  }
+
+  /** The dataset ⋯ "Run AutoRun": run the user's AutoRun detectors on it now.
+   *  The run is a background task shown inline on the row, and its results
+   *  dialog opens when it finishes (`AutoRunService`). AutoRun scores a
+   *  dataset in memory, so an unloaded one is loaded first. */
+  runAutorun(dataset: DatasetRegistryEntry): void {
+    if (dataset.loaded) {
+      this.autorun.run(dataset.id);
+      return;
+    }
+    this.datasetsRegistryApi.loadRegistered(dataset.id).subscribe({
+      next: (response) => {
+        if (!response.task_id) {
+          this.autorun.run(dataset.id);
+          return;
+        }
+        // Fires once the load settles, and not at all if it fails.
+        this.loadingTasksSvc.startProgressPolling(response.task_id, () => this.autorun.run(dataset.id));
+      },
+    });
+  }
+
   /** Launch the VTSBrowse view for a dataset. Loads the dataset (if needed)
    *  AND builds its projection first — with progress shown inline on the
    *  dataset's row — so missing loads or projections surface here on the
@@ -1070,6 +1091,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       dataset_name?: string;
       build_projection?: boolean;
       merge_near_duplicates?: boolean;
+      autorun?: boolean;
     };
     const params: Record<string, string | string[] | Record<string, number | string> | CleanerSelection[]> = {};
     if (extras.embedder) params['embedder'] = extras.embedder;
@@ -1088,6 +1110,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (userName) params['dataset_name'] = userName;
     if (extras.build_projection) params['build_projection'] = 'true';
     if (extras.merge_near_duplicates) params['merge_near_duplicates'] = 'true';
+    if (extras.autorun !== undefined) params['autorun'] = extras.autorun ? 'true' : 'false';
     this.datasetsCrudApi.loadDemo(demo.name, params).subscribe({
       next: (response) => {
         this.loadingTasksSvc.startProgressPolling(response.task_id);
@@ -1360,128 +1383,5 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // See `onLabel`; the route guard owns context + loading.
     this.findLoading.set(true);
     this.router.navigate(['/find', dataset.id, model.id]);
-  }
-
-  /** Old Find window: runs multi-dataset multi-detector find and shows results modal. */
-  onOldFind(): void {
-    const datasetIds = [...this.selectedDatasetIds];
-    const detectorIds = [...this.selectedDetectorIds];
-    const findParams = { dataset_ids: datasetIds, detector_ids: detectorIds };
-
-    this.datasetState.setLoading(true);
-    this.datasetState.setProgressMessage('Checking labels…');
-
-    // Pre-flight: check if any labels fail to resolve
-    this.detectorsFindApi.findCheckLabels(findParams).subscribe({
-      next: async (checkResult) => {
-        const warnings = checkResult.warnings || [];
-        if (warnings.length > 0) {
-          // Build warning message
-          const lines = warnings.map(
-            (w) => `${w.failed_labels} of ${w.total_labels} labels failed to resolve for "${w.detector_name}".`,
-          );
-          const message = lines.join('\n') + '\n\nDo you want to continue?';
-          const ok = await this.dialog.confirm(message, 'warning');
-          if (!ok) {
-            this.datasetState.setLoading(false);
-            return;
-          }
-        }
-        this.runFind(findParams);
-      },
-      error: () => {
-        // If check-labels fails, proceed with Find anyway
-        this.runFind(findParams);
-      },
-    });
-  }
-
-  private startFindProgressPolling(): void {
-    this.findPolling$.next(); // cancel previous
-    this.progressEvents.find$
-      .pipe(takeUntil(this.findPolling$), takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (progress: ProgressEvent) => {
-          if (!progress || progress.status === 'idle') return;
-
-          this.datasetState.setProgressMessage(
-            formatProgressMessage(progress, 'Running Find…'),
-          );
-        },
-      });
-  }
-
-  private stopFindProgressPolling(): void {
-    this.findPolling$.next();
-  }
-
-  private runFind(findParams: Record<string, unknown>): void {
-    this.datasetState.setProgressMessage('Running Find…');
-    this.startFindProgressPolling();
-
-    this.detectorsFindApi.find(findParams).subscribe({
-      next: (response: any) => {
-        this.stopFindProgressPolling();
-        this.datasetState.setLoading(false);
-
-        // Convert /api/find response to AutoDetectResultsData format
-        const mapHit = (r: any) => ({
-          md5: r.md5 || '',
-          filename: r.filename || '',
-          origin_name: r.origin_name || '',
-          origin: r.origin,
-          dataset_name: r.dataset_name || '',
-          detector_verdicts: r.detector_verdicts || {},
-        });
-
-        const hits = (response.results || []).map(mapHit);
-        const negativeHits = (response.negative_results || []).map(mapHit);
-
-        const detectorNames: string[] = response.detectors || [];
-        const detectorResults: Record<string, any> = {};
-
-        if (detectorNames.length <= 1) {
-          // Single detector: one result group
-          const label = detectorNames[0] || 'Find';
-          detectorResults[label] = {
-            detector_name: label,
-            total_hits: hits.length,
-            hits,
-            negative_hits: negativeHits,
-          };
-        } else {
-          // Multiple detectors: group hits by detector
-          for (const name of detectorNames) {
-            const detectorHits = hits.filter(
-              (h: any) => h.detector_verdicts?.[name]?.verdict === 'Good',
-            );
-            const detectorNegHits = negativeHits.filter(
-              (h: any) => h.detector_verdicts?.[name]?.verdict !== 'Good',
-            );
-            detectorResults[name] = {
-              detector_name: name,
-              total_hits: detectorHits.length,
-              hits: detectorHits,
-              negative_hits: detectorNegHits,
-            };
-          }
-        }
-
-        this.modals.openFindResults({
-          media_type: response.media_type || 'unknown',
-          detectors_run: detectorNames.length,
-          results: detectorResults,
-          detectors: detectorNames,
-          datasets: response.datasets || [],
-          multiple_datasets: response.multiple_datasets || false,
-          multiple_detectors: response.multiple_detectors || false,
-        });
-      },
-      error: () => {
-        this.stopFindProgressPolling();
-        this.datasetState.setLoading(false);
-        // Global error interceptor surfaces the failure in the banner.
-      },
-    });
   }
 }

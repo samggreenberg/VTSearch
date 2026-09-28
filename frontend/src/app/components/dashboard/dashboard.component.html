@@ -130,6 +130,7 @@
                 [dimmed]="isContextSwitching && !isDatasetSelected(dataset.id)"
                 [loadingTask]="browsePrep.displayTask(dataset.id) ?? loadingTasksSvc.getInlineTask(dataset.id)"
                 [taskKind]="browsePrep.taskKind(dataset.id)"
+                [autorunDetectorCount]="autorunDetectorCountFor(dataset)"
                 [deleting]="deletingDatasetId() === dataset.id"
                 (rowClick)="!isContextSwitching && toggleDatasetSelection(dataset.id, $event)"
                 (checkboxToggle)="!isContextSwitching && toggleDatasetCheckbox(dataset.id)"
@@ -138,6 +139,7 @@
                 (delete)="deleteDataset(dataset)"
                 (load)="loadDataset(dataset)"
                 (browse)="browseDataset(dataset)"
+                (autorun)="runAutorun(dataset)"
                 (security)="editDatasetSecurity(dataset)"
                 (cancelTask)="onCancelDatasetTask($event)"
                 (dismissTask)="onDismissDatasetTask($event)"
@@ -387,13 +389,6 @@
     [targetModelName]="modals.addLabels.detectorName"
     (closed)="modals.closeAddLabels()"
     (imported)="onAddLabelsImported()"
-  />
-}
-
-@if (modals.findResults.open) {
-  <vt-autodetect-results-modal
-    [data]="modals.findResults.data"
-    (closed)="modals.closeFindResults()"
   />
 }
 

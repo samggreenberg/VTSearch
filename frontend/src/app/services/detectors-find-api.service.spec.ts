@@ -18,16 +18,16 @@ describe('DetectorsFindApiService', () => {
 
   afterEach(() => httpMock.verify());
 
-  it('findLabel should POST', () => {
-    service.findLabel({ detector_id: 'm1' }).subscribe();
-    const req = httpMock.expectOne('/api/find-label');
-    expect(req.request.method).toBe('POST');
+  it('getAutorunRun should GET the run by id', () => {
+    service.getAutorunRun('_autorun_1').subscribe();
+    const req = httpMock.expectOne('/api/autorun/runs/_autorun_1');
+    expect(req.request.method).toBe('GET');
     req.flush({});
   });
 
-  it('find should POST', () => {
-    service.find({ dataset_ids: [], detector_ids: [] }).subscribe();
-    const req = httpMock.expectOne('/api/find');
+  it('findLabel should POST', () => {
+    service.findLabel({ detector_id: 'm1' }).subscribe();
+    const req = httpMock.expectOne('/api/find-label');
     expect(req.request.method).toBe('POST');
     req.flush({});
   });

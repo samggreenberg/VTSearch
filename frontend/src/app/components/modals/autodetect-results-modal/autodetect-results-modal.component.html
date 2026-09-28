@@ -1,6 +1,9 @@
-<vt-modal title="Auto-Detect Results" [open]="true" (closed)="close()">
+<vt-modal title="AutoRun Results" [open]="true" (closed)="close()">
   <!-- Summary -->
   <div class="results-summary">
+    @if (data().dataset_name) {
+      <span><strong>Dataset:</strong> {{ data().dataset_name }}</span>
+    }
     <span><strong>Media Type:</strong> {{ data().media_type }}</span>
     <span><strong>Detectors Run:</strong> {{ data().detectors_run }}</span>
     @if (exportSides === 'good') {
@@ -15,9 +18,8 @@
   <!-- Stale Auto-Find references (detector files deleted out from under the list) -->
   @if (data().missing_detectors?.length) {
     <div class="auto-export-status auto-export-status--error">
-      &#9888; Skipped {{ data().missing_detectors!.length }} Auto-Find detector(s) whose
+      &#9888; Skipped {{ data().missing_detectors!.length }} AutoRun detector(s) whose
       file no longer exists: {{ data().missing_detectors!.join(', ') }}.
-      Remove them from your Auto-Find list in Settings.
     </div>
   }
 
@@ -133,5 +135,15 @@
 
   <div class="export-actions" modal-footer>
     <button class="btn btn--secondary" (click)="close()">Close</button>
+    @if (activeExporter; as exp) {
+      <button
+        class="btn btn--primary"
+        (click)="exportResults()"
+        [disabled]="exporting() || displayHits.length === 0"
+        [title]="'Send the listed results to ' + (exp.display_name || exp.name)"
+      >
+        {{ exporting() ? 'Exporting…' : 'Export' }}
+      </button>
+    }
   </div>
 </vt-modal>

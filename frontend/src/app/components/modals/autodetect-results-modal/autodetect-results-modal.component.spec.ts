@@ -5,11 +5,13 @@ import { AutoDetectResultsModalComponent } from './autodetect-results-modal.comp
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { ToastService } from '../../../services/toast.service';
 
 describe('AutoDetectResultsModalComponent', () => {
   let component: AutoDetectResultsModalComponent;
   let fixture: ComponentFixture<AutoDetectResultsModalComponent>;
   let httpMock: HttpTestingController;
+  let toast: { success: ReturnType<typeof vi.fn> };
 
   const mockData = {
     media_type: 'audio',
@@ -30,7 +32,11 @@ describe('AutoDetectResultsModalComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AutoDetectResultsModalComponent],
-      providers: [...provideZoneless(), ...provideHttpTesting()],
+      providers: [
+        ...provideZoneless(),
+        ...provideHttpTesting(),
+        { provide: ToastService, useFactory: () => (toast = { success: vi.fn() }) },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(AutoDetectResultsModalComponent);
@@ -190,6 +196,50 @@ describe('AutoDetectResultsModalComponent', () => {
       await settleZoneless(fixture);
       expect(component.autoExportUrl()).toBeNull();
       expect(fixture.nativeElement.querySelector('.auto-export-open')).toBeNull();
+    });
+  });
+
+  // The dialog used to render an exporter picker with no button to run it.
+  describe('Export', () => {
+    it('renders an Export button for the chosen exporter', async () => {
+      await flushInit();
+      const btn = Array.from(fixture.nativeElement.querySelectorAll('.export-actions button')).find(
+        (b) => (b as HTMLElement).textContent?.trim() === 'Export',
+      ) as HTMLButtonElement | undefined;
+      expect(btn).toBeTruthy();
+      expect(btn!.disabled).toBe(false);
+    });
+
+    it('exports exactly the listed rows: the chosen side moves into hits', async () => {
+      await flushInit();
+      component.exportSides = 'bad';
+      const bad = component.exportPayload().results['detector1'];
+      expect(bad.hits.map((h) => h.md5)).toEqual(['ghi789']);
+      expect(bad.negative_hits).toEqual([]);
+      expect(bad.total_hits).toBe(1);
+
+      component.exportSides = 'both';
+      const both = component.exportPayload().results['detector1'];
+      expect(both.hits.map((h) => h.label)).toEqual(['good', 'good', 'bad']);
+    });
+
+    it('sends the run to the chosen exporter as find_results and confirms', async () => {
+      await flushInit();
+      component.selectedExporter.set('csv');
+      component.onExporterChange();
+      component.exportFieldValues['path'] = '/tmp/out.csv';
+      component.exportResults();
+
+      const req = httpMock.expectOne('/api/exporters/export');
+      expect(req.request.body.exporter_name).toBe('csv');
+      expect(req.request.body.payload_kind).toBe('find_results');
+      expect(req.request.body.field_values).toEqual({ path: '/tmp/out.csv' });
+      expect(req.request.body.results.results.detector1.hits.length).toBe(2);
+      expect(component.exporting()).toBe(true);
+      req.flush({ success: true, message: 'Saved.' });
+
+      expect(component.exporting()).toBe(false);
+      expect(toast.success).toHaveBeenCalledWith(expect.objectContaining({ message: 'Exported 2 results to csv' }));
     });
   });
 });

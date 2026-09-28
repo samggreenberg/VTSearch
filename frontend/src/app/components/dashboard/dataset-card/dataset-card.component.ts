@@ -40,6 +40,9 @@ export class DatasetCardComponent {
   readonly selected = input(false);
   readonly dimmed = input(false);
   readonly loadingTask = input<LoadingTask | undefined>(undefined);
+  /** How many of the user's AutoRun detectors are for this dataset's media
+   *  type; enables the menu's "Run AutoRun" when non-zero. */
+  readonly autorunDetectorCount = input(0);
 
   /** True while this row's delete-confirm dialog is open (driven by the
    *  dashboard's `deletingDatasetId`). Spins the trash icon to 90° while open;
@@ -87,6 +90,7 @@ export class DatasetCardComponent {
   readonly delete = output<void>();
   readonly load = output<void>();
   readonly browse = output<void>();
+  readonly autorun = output<void>();
   readonly security = output<void>();
   readonly cancelTask = output<string>();
   readonly dismissTask = output<string>();
@@ -126,10 +130,11 @@ export class DatasetCardComponent {
    *  Browse, Delete) so the ⋯ button reads as "more" while right-click stays
    *  complete. */
   private openMenuAt(x: number, y: number, overflow: boolean): void {
-    const items = buildDatasetCardMenuItems(this.dataset(), {
-      isDefaultLogin: this.isDefaultLogin(),
-      isOwner: this.isOwner,
-    });
+    const items = buildDatasetCardMenuItems(
+      this.dataset(),
+      { isDefaultLogin: this.isDefaultLogin(), isOwner: this.isOwner },
+      this.autorunDetectorCount(),
+    );
     this.contextMenuItems = overflow ? overflowMenuItems(items) : items;
     this.contextMenuX = x;
     this.contextMenuY = y;
@@ -152,6 +157,9 @@ export class DatasetCardComponent {
         break;
       case 'browse':
         this.browse.emit();
+        break;
+      case 'autorun':
+        this.autorun.emit();
         break;
       case 'security':
         this.security.emit();
