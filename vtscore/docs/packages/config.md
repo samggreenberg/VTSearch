@@ -14,10 +14,6 @@ place library code is allowed to read environment variables directly.
 from `vtscore/config/__init__.py`, so `vtscore.config.X` and
 `from vtscore.config import X` are the import paths for all of it; the
 submodules are an internal organisation, not a second public surface.
-**Related:** [`cli.md`](cli.md) for the CLI entry points that build a
-`CoreConfig` before running, and
-[`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
-seam exists at all.
 
 ## Contents
 
@@ -375,3 +371,12 @@ care which path produced the config.
   `CoreConfig` and routing it explicitly.
 - No persisted embeddings, no persisted model weights. This config
   module does not introduce a place to cache them.
+
+---
+
+## Cross-references
+
+- [`architecture.md`](../architecture.md#the-coreconfig-bridge) - why the `CoreConfig` seam exists.
+- [`cli.md`](cli.md) - the CLI entry points that build a `CoreConfig` before running.
+- [`embedding.md`](embedding.md) - `get_torch_device()` and the concurrency defaults built on `resolve_device()`.
+- [`security.md`](security.md) - server-path access rules.

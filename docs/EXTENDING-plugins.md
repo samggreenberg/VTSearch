@@ -1025,8 +1025,8 @@ is never worth blocking an import over.
    daemon thread.
 3. `POST /api/dataset/import/<name>/options` invokes `get_field_options()`
    to populate dynamic-options dropdowns (see above).
-4. The `dataset` channel on `GET /api/events` (SSE) streams progress
-   bar data.
+4. The import runs as a loading task, so the `loading-tasks` channel on
+   `GET /api/events` (SSE) streams its progress bar data.
 
 ### Progress reporting
 

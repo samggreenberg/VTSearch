@@ -20,8 +20,8 @@ POST   /api/detectors/cancel/<task_id>                Cancel a load task.
 
 Migrated to ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``, except for ``POST /from-labelset/<importer>``, which
-takes plugin-dependent fields and stays on plain Flask (see
-"Routes absent from the spec" in ``docs/API.md``).
+takes plugin-dependent fields and declares no schema (see
+"Routes with no typed schema" in ``docs/API.md``).
 """
 
 from __future__ import annotations
@@ -260,7 +260,7 @@ def register_detector_route(body: dict):
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
-# raise 422.  See "Routes absent from the spec" in ``docs/API.md``.
+# raise 422.  See "Routes with no typed schema" in ``docs/API.md``.
 # ---------------------------------------------------------------------------
 
 

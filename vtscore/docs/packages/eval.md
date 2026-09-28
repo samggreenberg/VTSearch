@@ -394,7 +394,7 @@ matter; Brier and F1@0.5 are kept as diagnostics. See
 
 ```bash
 python -m vtscore.eval.label_curve_main \
-    --datasets esc50_s flowers102_s \
+    --datasets esc50_s caltech101_s \
     --trainers mlp svm_linear svm_rbf \
     --label-counts 5 10 20 50 100 200 \
     --seeds 0 1 2 3 4 \
@@ -528,3 +528,11 @@ from liblinear, scored and thresholded exactly as production does.
 - **No Flask, no settings.** Every threshold knob (`inclusion`,
   `calibrate_count`, `calibration_fraction`, `sim_fraction`) is a
   function argument, not a global lookup.
+
+---
+
+## Cross-references
+
+- [`docs/EVAL.md`](../../../docs/EVAL.md) - the user-facing eval guide.
+- [`detectors.md`](detectors.md) and [`training.md`](training.md) - the shipped pipeline the default arm delegates to.
+- [`coverage.md`](coverage.md) - the atlas behind Autopilot's New phase.

@@ -371,12 +371,13 @@ dataset:
   projection package.
 
 A **`DetectorContext`** holds all mutable state belonging to one loaded
-detector:
+detector. The main groups (the full field list is in
+[packages/state.md](packages/state.md)):
 
 - Vote state: `good_votes`, `bad_votes`, `label_history`, `vote_click_times`,
-  `vote_region_boxes`.
+  `vote_region_boxes`, `vote_provenance`.
 - Cached training artefacts: `training_medias`, `label_embeddings`,
-  `model`, `threshold`, `calibration_cache`.
+  `model`, `model_labels_sig`, `threshold`, `calibration_cache`.
 - Cached labelset: `cached_labelset`, `cached_labelset_mtime`,
   `cached_labelset_media_type` (so a re-train doesn't re-parse JSON).
 - Cross-dataset counts: `labelset_good_count`, `labelset_bad_count` -

@@ -548,3 +548,14 @@ media type's demo datasets (`vtscore/datasets/config.py`, via
 automatically adds its demos here; there is no central registration
 step. `load_demo_dataset(name, medias)` keys into this dict; the
 `demo` importer enumerates it for its picker.
+
+---
+
+## Cross-references
+
+- [`concepts.md`](../concepts.md) - media items, origins, labelsets.
+- [`state.md`](state.md) - `DatasetContext`, the in-memory home of a loaded `medias` dict.
+- [`converters.md`](converters.md) - `run_converters_on_folder`, which importers call for multi-media imports.
+- [`embedding.md`](embedding.md) - the embed stage's vector helpers and the cached matrix.
+- [`security.md`](security.md) - `safe_pickle_load` and server-path confinement.
+- [`../extending/dataset-importers.md`](../extending/dataset-importers.md) - writing a `DatasetImporter`.

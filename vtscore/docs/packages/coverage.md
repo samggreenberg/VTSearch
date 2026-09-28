@@ -12,10 +12,6 @@ it on a context is separate, in `vtscore/state/coverage.py`; see
 [`state.md`](state.md#coverage-atlas) for that half and for the
 `build_coverage_atlas*` / `coverage_atlas_*` API the app calls.
 
-Related docs: [`state.md`](state.md) for the wiring and the atlas's place on
-`DatasetContext`; [`detectors.md`](detectors.md) for the evidence-coverage
-report built on the same idea.
-
 ## Contents
 
 | Module | Concern |
@@ -69,3 +65,10 @@ its docstring records the measured deviation and what it costs.
 
 `vtscore.state.coverage_atlas` remains as a deprecated alias that re-exports
 this package and warns on import. Import from `vtscore.coverage` instead.
+
+---
+
+## Cross-references
+
+- [`state.md`](state.md#coverage-atlas) - building, replaying and caching an atlas for a live dataset.
+- [`detectors.md`](detectors.md) - the Span indicator that reads atlas coverage, and the labelset-kNN evidence-coverage report.

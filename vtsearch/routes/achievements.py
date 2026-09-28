@@ -23,7 +23,7 @@ GET  /api/achievements/docs/<doc_id>/raw
 Migrated to ``flask_smorest`` so the JSON routes are described in
 ``/api/openapi.json``. The raw-markdown route stays undecorated (it
 serves ``text/plain``, not JSON); it's still attached to the same
-``Blueprint`` and Flask routes it normally, just absent from the spec.
+``Blueprint``, so it appears in the spec with no response schema.
 """
 
 from __future__ import annotations

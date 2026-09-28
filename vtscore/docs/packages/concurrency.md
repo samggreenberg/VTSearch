@@ -4,11 +4,6 @@ The runtime plumbing for background work: independent layers for running
 a task off-request, reporting how far it has got, letting the user cancel
 it, and capping how many run at once.
 
-Related docs: [`state.md`](state.md) for the contexts these jobs and
-trackers operate against; [`security.md`](security.md) for the
-safe-load helpers used during dataset import; [`timing.md`](timing.md)
-for the per-step duration model that turns a step index into an ETA.
-
 **Import from the defining module.** `vtscore/concurrency/` has no
 `__init__.py` - it is a PEP 420 implicit namespace package, so it exports
 nothing of its own and `from vtscore.concurrency import JobManager` raises
@@ -40,6 +35,7 @@ true of `vtscore.security`.
 - [`events.py`](#eventspy)
 - [User notifications](#user-notifications)
 - [Stall diagnostics](#stall-diagnostics)
+- [Cross-references](#cross-references)
 
 ---
 
@@ -638,3 +634,12 @@ with one thread on top is a GIL hold (the dump names the frame); no CPU
 consumed is a process that was not scheduled (memory pressure, a paged-out
 cgroup); CPU spread over threads is contention, which the lock and phase
 lines then locate.
+
+---
+
+## Cross-references
+
+- [`state.md`](state.md) - the contexts these jobs and trackers operate against.
+- [`timing.md`](timing.md) - the per-step duration model that turns a step index into an ETA.
+- [`datasets.md`](datasets.md#concurrency-gates) - the two `ConcurrencyGate`s that pace dataset loads.
+- [`cli.md`](cli.md) - `cli_progress.notification_subscriber`, the headless consumer of `notify()`.

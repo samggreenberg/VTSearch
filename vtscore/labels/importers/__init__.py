@@ -8,7 +8,7 @@ Usage::
 
     from vtscore.labels.importers import get_label_importer, list_label_importers
 
-    importer = get_label_importer("csv")
+    importer = get_label_importer("server_csv_file")
     for imp in list_label_importers():
         print(imp.name, imp.display_name)
 """

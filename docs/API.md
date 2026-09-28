@@ -1,7 +1,8 @@
 <!-- This file is served raw at GET /api/achievements/docs/api/raw and its
-     footer phrase is hash-matched in vtsearch/achievements.py. Don't remove
-     or reword the "Readme Reader code phrase" line without updating
-     achievements.py to match. See CLAUDE.md. -->
+     footer phrase is hash-matched against _DOCS_RAW in
+     vtsearch/achievements_catalog.py (tests/core/test_achievements.py checks
+     the two agree). Don't remove or reword the "Readme Reader code phrase"
+     line without updating achievements_catalog.py to match. -->
 
 # HTTP API Reference
 

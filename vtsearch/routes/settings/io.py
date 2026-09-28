@@ -18,7 +18,7 @@ POST /api/settings-importers/import/<importer_name>
     described in the OpenAPI spec; runtime validation goes through
     :func:`validate_plugin_args` (per-plugin schema built from the
     importer's :attr:`fields`), so missing required fields / invalid
-    select values raise 422.  See "Routes absent from the spec" in
+    select values raise 422.  See "Routes with no typed schema" in
     ``docs/API.md``.
 
 GET  /api/settings-exporters
@@ -129,7 +129,7 @@ def settings_importer_field_options(body: dict, importer_name: str):
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
-# raise 422.  See "Routes absent from the spec" in ``docs/API.md``.
+# raise 422.  See "Routes with no typed schema" in ``docs/API.md``.
 # ---------------------------------------------------------------------------
 
 

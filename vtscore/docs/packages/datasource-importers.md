@@ -10,10 +10,6 @@ can pull it from the same kinds of places a whole dataset can come from:
 a URL, a file already on the server, a third-party service. Without it,
 exemplar media would be upload-only.
 
-Related docs: [`plugins.md`](plugins.md) for the registry machinery this
-family is built on; [`datasets.md`](datasets.md) for its bulk sibling and
-for `MediaSource`, which is how an origin gets re-resolved later.
-
 ## Contents
 
 | Module | Concern |
@@ -123,3 +119,10 @@ example-media picker.
 |------|----------|-------|
 | `server_file` | `server` | One `path` field (type `server_path`). Re-validates through `validate_server_filepath` against the per-user base dir, then records the **validated** path as the origin's `path` param |
 | `url_download` | `services` | One `url` field. Filename is taken from the URL path (fallback `download.bin`); origin is `{"url": ...}`, resolved later by the `url_download` `MediaSource`. The URL passes `vtscore.security.validate_url` (SSRF guard) at normalisation time and is re-checked on every redirect hop at fetch time |
+
+---
+
+## Cross-references
+
+- [`plugins.md`](plugins.md) - the registry machinery this family is built on.
+- [`datasets.md`](datasets.md#importers) - the bulk sibling, and [`MediaSource`](datasets.md#media-sources), which is how an origin gets re-resolved later.

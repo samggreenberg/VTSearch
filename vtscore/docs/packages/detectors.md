@@ -700,3 +700,13 @@ training clipper without reading the detector JSON.
   `override_detector_context` pattern in `workflow.apply_and_retrain`
   is the canonical way to bind a context for the duration of a
   background-thread operation.
+
+---
+
+## Cross-references
+
+- [`training.md`](training.md) - the heads, cross-calibration and threshold estimators this package calls.
+- [`state.md`](state.md) - `DetectorContext`, vote proxies and `override_detector_context`.
+- [`datasets.md`](datasets.md#domain-objects) - `Origin`, `LabeledElement`, `LabelSet`.
+- [`embedding.md`](embedding.md) - vector access, binding and the cached matrix used for scoring.
+- [`cli.md`](cli.md) - the autodetect pipeline that trains detectors headlessly.
