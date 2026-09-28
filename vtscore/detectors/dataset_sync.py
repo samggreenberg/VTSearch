@@ -373,8 +373,9 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
     the dataset about to be scored uses a different embedder than the one
     the cached MLP was trained on, clear the embedder-tagged scoring
     caches (``model``, ``threshold``, ``last_learned_scores``,
-    ``training_medias``, ``calibration_cache``) so the next scoring /
-    learned-sort call rebuilds against *new_embedder*.
+    ``training_medias``, and the three threshold estimators -
+    ``calibration_cache``, ``anchored_cut_cache``, ``precision_floor_cache``)
+    so the next scoring / learned-sort call rebuilds against *new_embedder*.
 
     Deliberately leaves ``label_embeddings`` and ``embedder`` alone:
 
@@ -414,7 +415,11 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
         det_ctx.threshold = 0.5
         det_ctx.last_learned_scores.clear()
         det_ctx.training_medias.clear()
+        # Every estimator fitted on the old space's scores goes with its model:
+        # a re-cut (an Inclusion slide, a floor change) must not read them.
         det_ctx.calibration_cache = None
+        det_ctx.anchored_cut_cache = None
+        det_ctx.precision_floor_cache = None
     return True
 
 

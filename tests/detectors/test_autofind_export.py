@@ -1,6 +1,6 @@
 """Tests for the Auto-Find server-side results auto-export.
 
-Covers :func:`vtsearch.routes.detectors.scoring._run_autofind_export`, which
+Covers :func:`vtsearch.autorun_detectors.run_autofind_export`, which
 hands an autodetect run's results to the exporter configured under
 ``autofind_exporter``.
 """
@@ -11,7 +11,7 @@ import json
 from unittest.mock import patch
 
 from vtsearch import settings
-from vtsearch.routes.detectors.scoring import _run_autofind_export
+from vtsearch.autorun_detectors import run_autofind_export
 
 _SAMPLE_RESULTS = {
     "media_type": "audio",
@@ -31,13 +31,13 @@ _SAMPLE_RESULTS = {
 class TestAutofindExport:
     def test_no_exporter_returns_none(self, isolated_settings):
         settings.set_autofind_exporter("")
-        assert _run_autofind_export(dict(_SAMPLE_RESULTS)) is None
+        assert run_autofind_export(dict(_SAMPLE_RESULTS)) is None
 
     def test_unknown_exporter_reports_error(self, isolated_settings):
         # The raw setter skips the route-layer registry check, so a stale /
         # bogus name can reach the function; it must report rather than raise.
         settings.set_autofind_exporter("no_such_exporter")
-        status = _run_autofind_export(dict(_SAMPLE_RESULTS))
+        status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["exporter"] == "no_such_exporter"
         assert status["success"] is False
@@ -47,7 +47,7 @@ class TestAutofindExport:
         out = tmp_path / "autofind_results.json"
         settings.set_autofind_exporter("server_json_file")
         settings.set_autofind_exporter_field_values({"server_json_file": {"filepath": str(out)}})
-        status = _run_autofind_export(dict(_SAMPLE_RESULTS))
+        status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["exporter"] == "server_json_file"
         assert status["success"] is True
@@ -63,7 +63,7 @@ class TestAutofindExportOpenUrl:
     def test_open_url_reaches_the_status_block(self, isolated_settings):
         settings.set_autofind_exporter("open_url")
         settings.set_autofind_exporter_field_values({"open_url": {"url_template": "https://example.com/r?ids={ids}"}})
-        status = _run_autofind_export(dict(_SAMPLE_RESULTS))
+        status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["success"] is True
         assert status["open_url"] == "https://example.com/r?ids=abc"
@@ -76,7 +76,7 @@ class TestAutofindExportOpenUrl:
         sink the request - and must not be handed a shape it cannot read.
         """
         settings.set_autofind_exporter("portable_detector")
-        status = _run_autofind_export(dict(_SAMPLE_RESULTS))
+        status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         assert status["success"] is False
         assert "cannot export find results" in status["error"]
@@ -96,7 +96,7 @@ class TestAutofindExportOpenUrl:
             "export_find_results",
             return_value={"message": "Shown.", "open_url": "javascript:alert(1)"},
         ):
-            status = _run_autofind_export(dict(_SAMPLE_RESULTS))
+            status = run_autofind_export(dict(_SAMPLE_RESULTS))
         assert status is not None
         # The export itself ran, so it stays a success — only the URL is lost.
         assert status["success"] is True

@@ -284,7 +284,7 @@ placeholder into a filename. Every substituted value is run through
 cannot escape the directory implied by an admin-configured template.
 
 **Declaring the variable is also what makes the GUI show the value.**
-Run-now plugin forms (the Export modal, the Auto-Detect results export)
+Run-now plugin forms (the Export modal, the AutoRun Results export)
 resolve a field's *declared* `template_vars` client-side when they build
 the form, so a field carrying `default="{detector_name}"` opens showing
 the detector's actual name instead of the raw placeholder — the user can
@@ -1424,7 +1424,7 @@ with three **payload kinds**. Implement a method per kind you support:
 
 | Kind | Method | Payload | Produced by |
 |------|--------|---------|-------------|
-| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}}` | `POST /api/auto-detect`, Auto-Find auto-export, CLI `--autodetect` |
+| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}}` | `POST /api/auto-detect`, a background AutoRun (after an import, or a dataset's Run AutoRun), Auto-Find auto-export, the AutoRun Results dialog's **Export** (which moves the side it lists into `hits`), CLI `--autodetect` |
 | `labelset` | `export_labelset()` | `{"labels": [LabeledElement], "selected_columns": [...]}` | the Export modal |
 | `detector_bundles` | `export_cli_detectors()` | the trained classifiers | CLI `--pipeline` / `--autodetect` |
 
@@ -1627,7 +1627,7 @@ What each surface does with the key:
 | Surface | Behaviour |
 |---------|-----------|
 | Export modal | An `opens_url` exporter gets a blank tab opened inside the click handler, which is navigated when the export returns — a tab opened from the response instead is what popup blockers stop. If the blocker refuses even that, the success toast carries an **Open** action and stays up until dismissed |
-| Auto-Find auto-export (`POST /api/auto-detect`) | Offered as an **Open** button on the Auto-Detect Results modal's status line — not opened on arrival, since the response is async and would be blocked |
+| Auto-Find auto-export (`POST /api/auto-detect`, background AutoRun) | Offered as an **Open** button on the AutoRun Results dialog's status line — not opened on arrival, since the results arrive asynchronously and would be blocked |
 | CLI (`--exporter`) | No browser: the URL is printed under the confirmation message, and rides along as an `open_url` field on the `export_complete` event under `--progress-format json` |
 
 Every path re-validates the URL with
@@ -1784,8 +1784,9 @@ classifier:
    detector file under `data/detectors/` (named after a slug of the
    detector name, e.g. `Dog Barks` → `dog_barks.json`).
 2. Toggle its Auto-Find flag with
-   `PUT /api/detectors/registry/<id>/autofind` so it runs from
-   `/api/auto-detect` and the CLI's `--autodetect` flow.
+   `PUT /api/detectors/registry/<id>/autofind` so it runs on every web
+   import, from a dataset's Run AutoRun, from `/api/auto-detect`, and in
+   the CLI's `--autodetect` flow.
 3. The trained head itself lives only in RAM; it's trained on demand
    from the labelset's origins each time the model is loaded or scored.
 

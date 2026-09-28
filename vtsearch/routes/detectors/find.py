@@ -530,7 +530,8 @@ def _score_with_cold_detector(
     # active detector), so it takes the user's persisted value - what its
     # ``DetectorContext.inclusion`` would be seeded with on first load.  Leaving
     # these at the call's defaults cut every cold Find at inclusion 0 with two
-    # calibration splits, whatever the user had set.
+    # calibration splits, whatever the user had set.  The precision floor is
+    # read the same way (#4245), and is cut on the corpus this Find decides.
     cfg = CoreConfig.from_settings()
     labelset = _cold_labelset(dc)
     media_type = dc["detector_data"].get("media_type", "audio")
@@ -563,6 +564,7 @@ def _score_with_cold_detector(
             calibration_fraction=cfg.calibration_fraction,
             rows=rows,
             on_progress=_on_label,
+            min_precision=cfg.min_precision,
         )
         if model is None:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")

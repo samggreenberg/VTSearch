@@ -134,6 +134,14 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # single fold yields only ~4 positive scores, i.e. ~4 usable knob positions;
 # a second fold doubles that for one extra fold fit.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
+# The precision floor a user who has set none gets (#4245): the cut returns as
+# much as it can while at least half of it is estimated right, and falls back
+# to the Inclusion 0 cut when it can promise nothing (owner, 2026-09-28).  A
+# stored ``None`` is a user who cleared the floor, and the Inclusion knob draws
+# their line.  Re-exported as
+# ``vtscore.training.thresholds.DEFAULT_MIN_PRECISION``; defined here so the
+# settings layer can read it without importing the training stack.
+DEFAULT_MIN_PRECISION = 0.5
 MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5

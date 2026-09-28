@@ -117,6 +117,11 @@ class CalibrationFolds(NamedTuple):
     fold models in fold order, which the fold-anchored threshold
     (:func:`fold_anchored_gmm_threshold`) scores the haystack with so the
     anchors and the population it fits share one scale.
+
+    Which training rows each fold held out is not a field here - adding one
+    would break every caller that unpacks the three - but a ``holdout_sink``
+    on :func:`calibration_folds` / :func:`calibration_folds_cached` receives it
+    (see :func:`compute_fold_orderings`).
     """
 
     orderings: list[tuple[list[float], list[float]]]
@@ -135,7 +140,7 @@ def calibration_folds(
     rng: "np.random.RandomState | None" = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
-    held_out_sink: list[list[int]] | None = None,
+    holdout_sink: list | None = None,
 ) -> CalibrationFolds:
     """Train the K calibration folds, keeping their models (uncached).
 
@@ -143,6 +148,9 @@ def calibration_folds(
     fresh ``RandomState(CALIBRATION_SPLIT_SEED)``, matching
     :func:`calibration_folds_cached`, so an uncached call (``det_ctx is None``)
     and a cached one produce the same folds for the same labelset.
+
+    *holdout_sink* receives, per fold, the training row behind each held-out
+    score (see :func:`compute_fold_orderings`).
     """
     models: list = []
     orderings, fallback = compute_fold_orderings(
@@ -156,7 +164,7 @@ def calibration_folds(
         groups=groups,
         score_rows_by_group=score_rows_by_group,
         model_sink=models,
-        held_out_sink=held_out_sink,
+        holdout_sink=holdout_sink,
     )
     return CalibrationFolds(orderings, fallback, models)
 
@@ -172,11 +180,12 @@ def calibration_folds_cached(
     det_ctx: Any = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
+    holdout_sink: list | None = None,
 ) -> CalibrationFolds:
     """Memoized :func:`calibration_folds` keyed on the calibration inputs.
 
     When *det_ctx* is provided, caches the inclusion-independent folds on
-    ``det_ctx.calibration_cache`` as ``(key, folds)`` and reuses them whenever
+    ``det_ctx.calibration_cache`` as ``(key, folds, holdout_rows)`` and reuses them whenever
     the (labels, calibrate settings) key matches.  This is the common case
     during interactive sorting: the user toggles ``inclusion`` or loads a new
     media item, the labels stay the same, and the only work left is re-running
@@ -191,7 +200,8 @@ def calibration_folds_cached(
     shipped threshold needs them on every retrain, cache hit or miss: the
     fold-anchored estimator scores the haystack through each fold model.  They
     are process-scoped in-memory state like ``DetectorContext.model`` and are
-    never serialised.
+    never serialised.  So are the held-out rows *holdout_sink* receives, which
+    a cache hit hands back as a fresh computation would.
     """
     key = None
     if det_ctx is not None:
@@ -206,8 +216,11 @@ def calibration_folds_cached(
         )
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
+            if holdout_sink is not None:
+                holdout_sink.extend(list(rows) for rows in (cached[2] if len(cached) > 2 else ()))
             return cached[1]
 
+    holdouts: list[list[int]] = []
     folds = calibration_folds(
         X_list,
         y_list,
@@ -218,9 +231,12 @@ def calibration_folds_cached(
         rng=np.random.RandomState(CALIBRATION_SPLIT_SEED),
         groups=groups,
         score_rows_by_group=score_rows_by_group,
+        holdout_sink=holdouts,
     )
     if det_ctx is not None and key is not None:
-        det_ctx.calibration_cache = (key, folds)
+        det_ctx.calibration_cache = (key, folds, tuple(tuple(rows) for rows in holdouts))
+    if holdout_sink is not None:
+        holdout_sink.extend(holdouts)
     return folds
 
 
@@ -617,6 +633,7 @@ def _compute_fold_orderings_grouped(
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
     seconds_sink: list[float] | None = None,
+    holdout_sink: list | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Bag-aware variant of :func:`compute_fold_orderings`.
 
@@ -627,7 +644,8 @@ def _compute_fold_orderings_grouped(
     scores by its best region, as at inference).
 
     *score_rows_by_group* overrides which rows a calibration group collapses
-    over - see :func:`compute_fold_orderings`.
+    over - see :func:`compute_fold_orderings`.  *holdout_sink* receives each
+    fold's held-out bags as the first training row of each, in ordering order.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
         X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim, seconds_sink
@@ -636,6 +654,8 @@ def _compute_fold_orderings_grouped(
         return [], fallback
     if model_sink is not None:
         model_sink.extend(model for model, _cal in folds)
+    if holdout_sink is not None:
+        holdout_sink.extend([rows_by_group[g][0] for g in cal] for _model, cal in folds)
 
     orderings: list[tuple[list[float], list[float]]] = []
     for model, cal_groups in folds:
@@ -660,6 +680,7 @@ def compute_grouped_fold_node_scores(
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
     seconds_sink: list[float] | None = None,
+    holdout_sink: list | None = None,
 ) -> tuple[list[tuple[list[np.ndarray], list[float]]], float | None]:
     """Bag-aware calibration folds, returning each held-out group's node scores.
 
@@ -677,7 +698,8 @@ def compute_grouped_fold_node_scores(
     *model_sink*, when given, receives each trained fold model in fold order -
     the #2852 fold-anchored eval arm scores the haystack with the same fold
     models the orderings came from, so the anchors and the population it fits
-    share one score scale without a retrain.
+    share one score scale without a retrain.  *holdout_sink* receives each
+    fold's held-out bags as :func:`_compute_fold_orderings_grouped` gives them.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
         X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim, seconds_sink
@@ -686,6 +708,8 @@ def compute_grouped_fold_node_scores(
         return [], fallback
     if model_sink is not None:
         model_sink.extend(model for model, _cal in folds)
+    if holdout_sink is not None:
+        holdout_sink.extend([rows_by_group[g][0] for g in cal] for _model, cal in folds)
 
     fold_node_data: list[tuple[list[np.ndarray], list[float]]] = []
     for model, cal_groups in folds:
@@ -753,6 +777,22 @@ def _fold_fit_ordering(
     return np.nan_to_num(raw, nan=s, posinf=s, neginf=s).tolist(), y_np[cal_idx].tolist()
 
 
+def _row_wise_fold_ordering(
+    fold_fit: "Callable[[np.ndarray, np.ndarray], Callable[[np.ndarray], np.ndarray]] | None",
+    X_np: np.ndarray,
+    y_np: np.ndarray,
+    train_idx: np.ndarray,
+    cal_idx: np.ndarray,
+    input_dim: int,
+    hidden_dim: int | None,
+    model_sink: list | None,
+) -> tuple[list[float], list[float]]:
+    """One row-wise fold of :func:`compute_fold_orderings`: *fold_fit*'s estimator, or the app's head without one."""
+    if fold_fit is not None:
+        return _fold_fit_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, model_sink)
+    return _torch_fold_ordering(X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink)
+
+
 def compute_fold_orderings(
     X_list: list[np.ndarray],
     y_list: list[float],
@@ -766,7 +806,7 @@ def compute_fold_orderings(
     model_sink: list | None = None,
     seconds_sink: list[float] | None = None,
     fold_fit: "Callable[[np.ndarray, np.ndarray], Callable[[np.ndarray], np.ndarray]] | None" = None,
-    held_out_sink: list[list[int]] | None = None,
+    holdout_sink: list | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -811,6 +851,11 @@ def compute_fold_orderings(
     nothing and the models stay fold-local as before.  *seconds_sink* likewise
     receives each fold's wall clock, which is what makes the *cost* half of the
     fold-count question (issue #2897) measurable without a second run.
+    *holdout_sink* likewise receives, per fold, the training row behind each
+    held-out score in ordering order (the first row of each bag on the grouped
+    path), so a caller can tell which votes a fold held out - the precision
+    floor calibrates only on votes the learned sort chose (#4245).  Read-only:
+    none of these sinks changes a split, a fit or an ordering.
 
     The folds are **independent repeated splits**, not a partition: every fold
     re-draws a stratified ``calibration_fraction`` holdout from the same labels,
@@ -828,11 +873,6 @@ def compute_fold_orderings(
     split sizes, the stratified draws, the *rng* stream - is this function's,
     so a non-torch head calibrates on exactly the splits the app's head would
     have drawn from the same labels.  Production callers never pass it.
-
-    *held_out_sink* (row-wise path only; eval harness only, issue #4224),
-    when given, receives each fold's held-out row indices into *X_list*, in
-    the order its ordering's scores come back - so a study can tell *which*
-    votes calibrated the cut (e.g. which phase surfaced them).  Read-only.
     """
     if groups is not None and fold_fit is not None:
         raise ValueError("fold_fit applies to the row-wise path only")
@@ -849,6 +889,7 @@ def compute_fold_orderings(
             score_rows_by_group=score_rows_by_group,
             model_sink=model_sink,
             seconds_sink=seconds_sink,
+            holdout_sink=holdout_sink,
         )
     n = len(X_list)
     if n < 4:
@@ -881,20 +922,18 @@ def compute_fold_orderings(
     n_train_neg = _per_class_n_train(len(neg_idx))
 
     orderings: list[tuple[list[float], list[float]]] = []
-    # A throwaway list when no sink is given, so recording costs no branch.
-    held_out = held_out_sink if held_out_sink is not None else []
     for _ in range(calibrate_count):
         t_fold = time.monotonic()
         pos_perm = _rng.permutation(pos_idx)
         neg_perm = _rng.permutation(neg_idx)
         train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
         cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
-        held_out.append([int(i) for i in cal_idx])
 
-        if fold_fit is not None:
-            orderings.append(_fold_fit_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, model_sink))
-        else:
-            orderings.append(_torch_fold_ordering(X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink))
+        orderings.append(
+            _row_wise_fold_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, input_dim, hidden_dim, model_sink)
+        )
+        if holdout_sink is not None:
+            holdout_sink.append([int(i) for i in cal_idx])
         if seconds_sink is not None:
             seconds_sink.append(time.monotonic() - t_fold)
 

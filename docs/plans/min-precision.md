@@ -48,20 +48,22 @@ What follows is what the app still owes.
 - **The control shows the floor and its state, not the estimate** (owner,
   2026-09-28). No "about 60% of these should be right": the lower bound stays
   internal.
-- **The evidence must be votes the learned model's sort chose** (#4222,
-  `docs/experiments/2026-09-28-textgood-4222/REPORT.md`). A posterior fitted
-  on a biased sample is unbiased only if the sample was chosen by the score it
-  is fitted on. The text-sort opening chooses by the typed query's score:
-  - with the opening's Good round at 20, the gate opened for 60% of COCO Better
-    cells (0.44% pool) by vote 50, and 51–71% of the promises it then made
-    broke;
-  - on today's 3-Good opening the same estimator breaks 6%, because the
-    opening is too short to matter.
-
-  So which votes feed the fold orderings is a wiring decision, not a knob:
-  #4245 should record each vote's surfacing context and calibrate the floor
-  only on votes a learned sort surfaced. The gate counts evidence; it can't
-  tell whether that evidence was drawn fairly.
+- **Only the learned sort's own draws calibrate the promise** (owner,
+  2026-09-28, from #4222). Votes picked by another ranker (the text-sort
+  opening, the coverage atlas's New picks, a list sorted by anything but the
+  model) train the model but stay out of the evidence and the gate. Whether the
+  atlas's picks are fair enough to count is #4261.
+  - **What the filter buys, and what it doesn't** (#4256, report on its PR). It keeps a long
+    text-walk opening from breaking promises by keeping the gate shut. With the
+    opening's Good round at 20, all votes break 69% of X = 50% promises at the
+    0.44% pool. Learned-sort votes break 0 of 19, but promise in only 0.71% of
+    frames. The filter does **not** make the posterior unbiased: learned-sort
+    draws were chosen on an earlier model's score too. With a consistent
+    reference pool they still break 83% (today's g3 opening). The promise's
+    safety rests on the shipped pool's in-sample offset (#4221). The
+    selection-free route is random verification (#4257).
+- **The default floor is 50%, and a set floor wins over Inclusion** (owner,
+  2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
 - **What waits on the GRID, and what doesn't.**
   - #4222 answered how the opening moves the gate. A longer text walk opens it
     but breaks the promise (above). A moderate one (Good target 6) is the only
@@ -80,15 +82,24 @@ What follows is what the app still owes.
 
 These are the questions #4224 raised that no issue below can settle alone:
 
-- **X's range and default,** and whether X is free or a few presets. #4220
-  priced 25/50/75/90%.
-- **Headless runs.** Do AutoRun and CLI autodetect cut at the user's floor, and
-  does the CLI get a flag?
+- **Whether X is free or a few presets** in the control (#4246). #4220 priced
+  25/50/75/90%. The backend takes any value in `[0.01, 1]`.
+- **Does the CLI get a flag for the floor?** Headless runs (AutoRun, CLI
+  autodetect, the cold Find path) already cut at the user's floor.
 - **Retiring Inclusion from the extension surface.** `get_inclusion` /
   `set_inclusion`, `CoreConfig.inclusion`, the `inclusion_value=` parameters on
   `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
   are public `vtscore` API. Per CLAUDE.md they are deprecated with an
   `[Unreleased]` note, not deleted, and the break is raised before it is made.
+- **Verify the floor by audit?** #4257 priced random verification
+  ([`REPORT.md`](../experiments/2026-09-28-random-verification/REPORT.md)). The
+  user audits a uniform sample of the returned set. That keeps the promise at
+  every prevalence tested, with no calibration-positive gate. But the sets a
+  floor can honestly return are small, so at 0.44% and 0.1% most audited
+  promises end with the user having read the whole set. Two questions follow for
+  #4246 and #4247. Does the control ever ask for audit votes? And below what
+  promisable size does it just show the top k and let the user's votes be the
+  verification?
 
 ## Open work
 
@@ -114,6 +125,10 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
+- [ ] #4253 — Measure four ways to price Smart's error cost under the floor (Opus 4.8)
+
+<!-- item-sep -->
+
 - [ ] #4248 — Precision floor under region voting (Opus 4.8)
 
 <!-- item-sep -->
@@ -122,18 +137,22 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
+- [ ] #4261 — Should Autopilot's New-phase (atlas) votes calibrate the floor? (Sonnet 5)
+
+<!-- item-sep -->
+
 - **Re-derive `provenance-partitioned-calibration.md` before running it.** That
   plan is motivated by the conformal miss budget. Top-of-list review votes bias
   calibration positives high, so the FNR budget over-promises. Its metrics are
   in Inclusion units (FNR excess at Inclusion 0–3). A posterior fitted on
-  score-picked votes is unbiased only when the picking score is the one the
-  posterior is fitted on (#4224's feasibility note). #4222 showed the failure
-  when it isn't: text-sort-picked votes broke 51–71% of gated promises. So the
-  problem **does** transfer to the floor for any vote a different ranker
-  surfaced (the text opening, a list sorted by the typed query). For review of
-  the model's own sorted list it is plausible but unmeasured. The partition
-  itself is the fix #4245 needs. Restate this plan's hypotheses as violation
-  rate at X, and run it.
+  score-picked votes was thought unbiased under *score-only* selection, which
+  is what reviewing the model's own sorted list is (#4224's feasibility note).
+  #4256 measured it, and it does not hold: learned-sort draws alone, with a
+  consistent reference pool, break 83% of the X = 50% promises. So the problem
+  does transfer to the floor. Votes selected by a *different* ranker are worse
+  (#4222: text-sort selection broke 51% of the X = 50% promises at a 20-Good
+  opening). Before it runs, restate its hypotheses as violation rate at X, or
+  retire it in favour of random verification (#4257).
 
 <!-- item-sep -->
 

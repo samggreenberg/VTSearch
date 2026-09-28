@@ -48,7 +48,7 @@
       [eta]="taskProgressInfo.eta"
       [bar]="taskBar"
       [smooth]="true"
-      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : 'Cancel this dataset load'"
+      [cancelTitle]="taskKind() === 'projection' ? 'Cancel building the map' : effectiveTaskKind === 'autorun' ? 'Stop this AutoRun' : 'Cancel this dataset load'"
       [cancelling]="taskCancelling"
       (cancel)="onCancelTask()"
     />

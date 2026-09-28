@@ -454,6 +454,22 @@ def combine_detectors(body: dict):  # noqa: C901
     }
     _write_detector(new_path, new_data)
 
+    # The Dashboard lists the detector *registry*, not the detectors folder, so
+    # a combined detector written without an entry exists on disk and never
+    # shows up - and retrying under the same name then 409s.
+    from vtscore.detectors.registry import register_detector
+    from vtsearch.auth import get_current_user
+
+    register_detector(
+        name=new_name,
+        media_type=media_type,
+        num_training=len(merged),
+        text_query=text_query,
+        examples=merged_examples,
+        embedder_type=combined_type,
+        created_by=get_current_user(),
+    )
+
     return {
         "success": True,
         "name": new_name,

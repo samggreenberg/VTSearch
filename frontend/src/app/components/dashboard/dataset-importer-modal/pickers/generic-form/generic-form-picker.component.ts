@@ -71,6 +71,10 @@ export class GenericFormPickerComponent {
   readonly buildProjectionChange = output<boolean>();
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
+  /** The Add Dataset dialog's "Run AutoRun" choice for this import, sent as
+   *  ``autorun``; ``null`` (the box is hidden) sends nothing, so the user's
+   *  remembered ``autorun_on_import`` setting decides server-side. */
+  readonly autorun = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
 
@@ -459,10 +463,12 @@ export class GenericFormPickerComponent {
     }
     submitValues['build_projection'] = this.buildProjection() ? 'true' : 'false';
     submitValues['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
+    const autorun = this.autorun();
+    if (autorun !== null) submitValues['autorun'] = autorun ? 'true' : 'false';
 
     const fileField = importer.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
-      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection()).subscribe({
+      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection(), autorun).subscribe({
         next: () => {
           this.submitting.set(false);
           this.offerSaveImportDefaults();

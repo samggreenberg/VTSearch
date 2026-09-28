@@ -157,6 +157,11 @@
   <vt-keyboard-help-modal (closed)="onKeyboardHelpClosed()" />
 }
 }
+@defer (when autorun.results()) {
+@if (autorun.results(); as run) {
+  <vt-autodetect-results-modal [data]="run" (closed)="autorun.closeResults()" />
+}
+}
 <vt-dialog-host />
 <vt-achievement-unlock-host />
 }
