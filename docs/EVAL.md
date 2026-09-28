@@ -15,9 +15,19 @@ python -m vtscore.eval --plot-dir eval_output
 This will:
 
 1. Download each demo dataset (cached after first run).
-2. Run **text sort** (embedding-based ranking) and **learned sort** (neural net trained on simulated votes) evaluations.
+2. Run **text sort** (embedding-based ranking) and **learned sort** (the app's detector head trained on simulated votes) evaluations.
 3. Print a summary table to the terminal.
 4. Save visualisation charts as PNGs in `eval_output/`.
+
+### Finding past studies
+
+Every completed study is written up under `docs/experiments/<date>-<slug>/`, and its launchers live under `scripts/experiments/`. There is deliberately no index file: the date prefix sorts `ls docs/experiments/` chronologically, and each `REPORT.md` opens with its question as the heading and its verdict right under it, so
+
+```bash
+head -n 8 docs/experiments/*/REPORT.md
+```
+
+is an always-current index. Check it before starting a study — the question may already be answered. A study that is planned but not yet run holds only a `PLAN.md` or `PREREG.md`.
 
 ## Prerequisites
 

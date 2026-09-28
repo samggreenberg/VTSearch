@@ -22,7 +22,7 @@ is the library contract.
 ## Contents
 
 - [How a source is found](#how-a-source-is-found)
-- [`MediaSource` members](#mediasource-members)
+- [The contract](#the-contract)
 - [`FetchedItem`: returning more than a path](#fetcheditem-returning-more-than-a-path)
 - [Where the file goes](#where-the-file-goes)
 - [Worked example](#worked-example)
@@ -55,7 +55,7 @@ The built-in factories: `server_folder`, `http_archive`, `local_archive`,
 `local_archive_member`, `server_files`, `url_download`
 (`list_media_sources()` returns them).
 
-## `MediaSource` members
+## The contract
 
 `MediaSource` ([`vtscore/datasets/sources/base.py`](../../datasets/sources/base.py))
 is an ABC.

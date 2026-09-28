@@ -345,24 +345,15 @@ against it simultaneously; both contexts are independently registered.
 
 ### How does the library know which context to operate on?
 
-Resolution chain, highest precedence first:
+Through a resolution chain - explicit override, installed resolver hook,
+thread-local binding, then a shared empty fallback - spelled out in
+[architecture.md §Resolution chain](architecture.md#resolution-chain-for-active-context).
 
-1. `override_detector_context()` context manager (detector only - there is
-   no dataset counterpart)
-2. Installed resolver hook (`register_*_context_resolver`)
-3. Thread-local set via `set_thread_*_context()` / `thread_*_context()`
-4. The request-missing sentinel, when a host app says it is inside a
-   request that named no dataset / detector: reads see an empty context and
-   writes raise `RequestMissingContextError`
-5. A process-wide **empty fallback context** for CLI and library callers
-
-`get_active_context()` / `get_active_detector_context()` therefore always
-return a context object - they never return `None`. Outside an app, that
-object is the shared empty fallback, which is a footgun worth knowing
-about: two library callers that both skip step 3 will write into the same
-context. Bind one explicitly with `set_thread_dataset_context(ctx)`.
-
-See [architecture.md §Resolution chain](architecture.md#resolution-chain-for-active-context).
+The part that bites: `get_active_context()` / `get_active_detector_context()`
+never return `None`. Outside an app they return the shared empty fallback,
+so two library callers that both skip binding will write into the same
+context. Bind one explicitly with `set_thread_dataset_context(ctx)` /
+`set_thread_detector_context(ctx)`.
 
 ### Why does my background thread see no active context?
 
@@ -481,11 +472,11 @@ and `torch.random.fork_rng()` to isolate the dropout RNG. Two parallel
 
 ### Is the embedder cache thread-safe?
 
-Reads are; concurrent first-time loads of the same backbone may
-download the weights twice (the second download overwrites the first
-with identical bytes). The cost is one wasted HTTP request; the result
-is correct. If you're spawning many workers from cold, pre-warm with
-`vtscore.embedding.preload_predicted_embedders(extra_media_types=None,
+Yes. `MediaEmbedder.load_models()` takes a per-class lock, so when several
+threads hit a cold embedder at once, one performs the load and the rest
+wait for it and return. Forward passes are serialised across all embedders
+by a shared embed lock. If you're spawning many workers from cold, pre-warm
+with `vtscore.embedding.preload_predicted_embedders(extra_media_types=None,
 extra_embedders=None)` - with no arguments it warms whatever the registries
 predict this deployment will need.
 

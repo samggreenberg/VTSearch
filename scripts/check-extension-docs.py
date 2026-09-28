@@ -84,6 +84,7 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ("vtscore/docs/extending/label-importers.md", "The contract", ("LabelImporter",)),
     ("vtscore/docs/extending/labelset-sources.md", "The contract", ("LabelsetSource",)),
     ("vtscore/docs/extending/media-types.md", "The `MediaType` contract", ("MediaType",)),
+    ("vtscore/docs/extending/media-sources.md", "The contract", ("MediaSource",)),
     ("vtscore/docs/extending/results-exporters.md", "The contract", ("ResultsExporter",)),
 ]
 

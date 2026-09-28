@@ -772,7 +772,7 @@ Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
 `frontend`, `slides`, `docs` (plus `gpu` and `vtscore-clean`, which run
 separately). A bare `./run-tests.sh` on a branch that changes only markdown
 narrows itself to the `docs` gate automatically. See
-[`CLAUDE.md`](../CLAUDE.md#test-groups) for what each group covers and which
+[`docs/TESTING.md`](TESTING.md#test-groups) for what each group covers and which
 gates a group run skips.
 
 You can also run pytest directly:
@@ -813,15 +813,10 @@ ones a first install is most likely to want; the installer's own switches
 | `VTSEARCH_DATA_DIR` | `<repo root>/data` | Where all runtime state lives (settings, datasets, detectors, model cache, demo downloads). Point it outside the checkout to keep state across re-clones. |
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `INFO`/`DEBUG` also enable the per-request access log. `python app.py -v`/`-vv` is the CLI shortcut. |
-| `VTSEARCH_LOG_FILE` | unset | Also append every log record (and the stall watchdog's thread dump) to this file; the SLURM launcher sets it under `data/logs/`. |
 | `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | Directory for HuggingFace model cache |
 | `VTSEARCH_PORT` | `5000` | Port for the `python app.py` dev server (also `--port`). Lets several instances share a host, e.g. co-located SLURM jobs. Gunicorn uses `VTSEARCH_BIND` instead. |
-| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |
-| `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
-| `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
-| `VTSEARCH_TIMEOUT` | `0` | Gunicorn worker timeout in seconds (`0` = disabled; long imports / training would otherwise SIGKILL the worker) |
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configuration, including the full env-var reference and gunicorn tuning.
+The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_TIMEOUT`), log files, threading and offline variables — is [DEPLOYMENT.md § Environment variables](DEPLOYMENT.md#environment-variables).
 
 ## Next steps
 

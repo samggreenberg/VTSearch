@@ -286,7 +286,7 @@ the library API only - no Flask, no `vtsearch.settings`, no
 
 - `tests_lib/io/` for importers, exporters, label importers, sources
 - `tests_lib/datasets/` for synthesis / load behaviour
-- `tests_lib/detectors/` for embedders, clippers, converters
+- `tests_lib/detectors/` for embedders and clippers (converters: see [converters.md](converters.md#testing-pattern))
 - `tests_lib/core/` for media types, registry behaviour
 
 Drop a file in the matching folder and pytest picks it up via the

@@ -123,10 +123,16 @@ filesystem-hygiene check, not an authentication one.
    activated the same way — add a branch there, or call
    `set_login_provider()` from your own startup code before the server
    starts serving.
-2. The `before_request` middleware calls `provider.get_user(request)` and
-   stores the result in `g.user`.
-3. Routes call `get_current_user()` to read `g.user`.
+2. The `before_request` middleware (`vtsearch/hooks.py`) calls
+   `provider.get_user(request)` and stores the result in `g.user`; when the
+   provider's `enforce_auth()` is true it also 401s unauthenticated `/api/*`
+   requests (the `/api/auth/*` endpoints excepted).
+3. Routes read the user through `get_current_user()`, never `g.user` directly.
 4. `GET /api/auth/status` calls `provider.status_dict(request)`.
+
+The full request flow, user resolution outside a request, and how per-user
+settings and data directories hang off the username are in
+[ARCHITECTURE.md § Authentication and multi-user support](ARCHITECTURE.md#authentication-and-multi-user-support).
 
 ### Built-in providers
 
@@ -137,22 +143,6 @@ filesystem-hygiene check, not an authentication one.
 features) and `ApiKeyLoginProvider` (`--login api_key`: `Authorization:
 Bearer` keys hashed in `data/api_keys.json`); both are worked examples of
 the interface.
-
-### Current scope
-
-Per-dataset runtime state (`medias`, diversity tree, display name) is
-isolated in `DatasetContext` objects, and per-detector state (votes,
-label history, click times, learned scores, inclusion, labelset source)
-is isolated in `DetectorContext` objects. The frontend sends
-`X-Dataset-Id` / `X-Detector-Id` headers, and a `before_request`
-middleware resolves the active contexts per request, so multiple users
-can work with different datasets/models simultaneously.
-
-The auth infrastructure supports ownership tracking (`created_by` on
-datasets and detectors) and per-user data
-directories via `get_user_data_dir(username, base)`. **Settings remain
-globally shared** across all users; there is no per-user settings
-isolation yet.
 
 ---
 

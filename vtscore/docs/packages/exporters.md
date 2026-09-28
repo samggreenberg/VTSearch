@@ -28,7 +28,7 @@ external source) are not here; they live in
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/exporters/base.py` | The `ResultsExporter` ABC, `PAYLOAD_KINDS`, and their siblings |
+| `vtscore/exporters/base.py` | The `ResultsExporter` ABC, `PAYLOAD_KINDS`, `UnsupportedPayloadError`, `resolve_stream_batch_size`, the `LabelsetExporter` alias |
 | `vtscore/exporters/__init__.py` | The auto-discovering registry and its accessors |
 | `vtscore/exporters/server_json_file/` | Write results to a `.json` file on the server |
 | `vtscore/exporters/server_csv_file/` | Write results to a `.csv` file on the server |
@@ -44,6 +44,7 @@ external source) are not here; they live in
 - [Built-in exporters](#built-in-exporters)
 - [Template variables in path fields](#template-variables-in-path-fields)
 - [Writing a custom exporter](#writing-a-custom-exporter)
+- [Cross-references](#cross-references)
 
 ## Registry and accessors
 
@@ -117,7 +118,7 @@ An exporter is a *destination*; what gets sent there is a separate axis.
 subclass overrode - never declared - and is what each picker filters on,
 so an exporter is only offered for the kinds it can actually read.
 Handing it any other kind raises `UnsupportedPayloadError` (a
-`ValueError` subclass, so the route answers 400 rather than 500).
+`ValueError` subclass, so a caller can treat it as bad input).
 
 `ResultsExporter` inherits `PluginBase`, so CLI flags are auto-derived
 from `fields` via `add_cli_arguments()`, JSON metadata comes from
@@ -158,7 +159,10 @@ whole run. An exporter opts in with `supports_streaming` and
 labelset equivalent. Every built-in that delivers a scored run streams,
 except `open_url` - which returns a URL rather than writing anything, so
 it has nothing to write incrementally. `portable_detector` is outside
-the question entirely: it consumes detectors, not hits.
+the question entirely: it consumes detectors, not hits. The
+delivery-style streamers (`webhook`, `email_smtp`) batch hits by a
+`batch_size` field (default 500), coerced by
+`resolve_stream_batch_size(value, default=500)`.
 
 ## `PluginField`
 
@@ -173,24 +177,21 @@ Field semantics - `field_type` literals, `dynamic_options`,
 `depends_on`, number-field type inference - are documented in detail in
 [`plugins.md#pluginfield`](plugins.md#pluginfield).
 
-A `dynamic_options` select is served by
-`POST /api/exporters/field-options/<name>`, which calls the exporter's
-`get_field_options(field_key, current_values)`. Both surfaces that render
-an exporter's fields use it - the app's Export modal and its Auto-Find
-results-exporter settings - so an exporter whose destinations are only
-knowable at runtime fills its dropdown in either place.
+A `dynamic_options` select is filled by the exporter's
+`get_field_options(field_key, current_values)`, which the app calls
+wherever it renders an exporter's fields.
 
 ## Built-in exporters
 
 | Name | Payloads | Target | Notes |
 |------|----------|--------|-------|
-| `server_json_file` | `find_results`, `labelset` | Writes a JSON file to the server filesystem | Atomic write via tmp + rename; supports the `{YYYYMMDD-HHMMSS}` / `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` / `{detector_name}` / `{detector_id}` / `{username}` template variables in the path; default path under `DATA_DIR` |
+| `server_json_file` | `find_results`, `labelset` | Writes a JSON file to the server filesystem | Atomic write via tmp + rename; supports the `{YYYYMMDD-HHMMSS}` / `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` / `{detector_name}` / `{username}` template variables in the path; default path under `DATA_DIR` |
 | `server_csv_file` | `find_results`, `labelset` | Writes a CSV file to the server filesystem | Atomic write; auto-detects which optional clip columns (`clip_start`, `clip_end`, `clip_box`) are present; cells beginning with `=`/`+`/`-`/`@`/`\t`/`\r` are quote-prefixed to defeat formula injection |
-| `webhook` | `find_results`, `labelset` | `POST`s the payload dict as JSON to a URL | Optional `Authorization` header (`password` field), 30s timeout, redirects disabled, URL validated by `vtscore.security.validate_url` (SSRF guard) |
+| `webhook` | `find_results`, `labelset` | `POST`s the payload dict as JSON to a URL | Optional `Authorization` header (`auth_header`, a `password`-type field), 30s timeout, redirects disabled, URL validated by `vtscore.security.validate_url` (SSRF guard) |
 | `open_url` | `find_results`, `labelset` | Formats the labelset into a URL and returns it as `open_url` for the browser to open in a new tab | `opens_url = True`. No network call server-side; substitutes `{ids}` / `{count}` into a user-supplied template, URL-encoding the joined identifiers. Truncates to `max_items` (reported in the message) and refuses a URL over ~2000 characters. The one results-carrying built-in that does not stream |
 | `email_smtp` | `find_results`, `labelset` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
 | `gui` | `find_results`, `labelset` | Displays results in the browser (GUI) or prints to stdout (CLI) | `hidden_from_picker = True`. The default exporter for the web UI's autodetect modal; in CLI mode `export_cli()` prints origin + name of each Good hit |
-| `portable_detector` | `detector_bundles` | Writes one standalone ONNX scoring bundle per trained detector | `hidden_from_picker = True`, CLI-only. See below - it is the one exporter that consumes detectors rather than results |
+| `portable_detector` | `detector_bundles` | Writes one standalone ONNX scoring bundle (zip) per trained detector | `hidden_from_picker = True`, CLI-only. Default path `data/{detector_name}-detector.zip`. See below - it is the one exporter that consumes detectors rather than results |
 
 The Payloads column is not a declaration anywhere in the source: each
 exporter's `supported_payloads` is derived from the methods it overrides,
@@ -221,8 +222,10 @@ Two per-embedder-type caveats: **structural** (SIFT/VLAD) detectors are
 skipped with a note rather than aborting the export, because their
 stage-2 RANSAC verification isn't representable as a scoring-only ONNX
 graph; **patch** (DINOv2/v3, EUPE) detectors export normally but in a
-degraded whole-item-only scoring mode. Use `{detector_name}` in the
-path to disambiguate a multi-detector run.
+degraded whole-item-only scoring mode. The exporter substitutes
+`{detector_name}` per detector itself (it is deliberately not a declared
+`template_var`); a path without it gets the detector name inserted
+before the extension on a multi-detector run.
 
 ### File-format notes
 
@@ -260,11 +263,9 @@ _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 _DEFAULT_CSV_PATH  = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 ```
 
-This is part of the Phase 4 filesystem-seam work: every path placeholder
-resolves against `vtscore.config.DATA_DIR` (which honours
-`$VTSEARCH_DATA_DIR`) so plugin defaults are absolute paths rather than
-implicit-cwd relative paths. Custom exporters writing path defaults
-should follow the same pattern. The `{YYYYMMDD-HHMMSS}` stamp is in both
+Anchoring defaults on `vtscore.config.DATA_DIR` (which honours
+`$VTSEARCH_DATA_DIR`) makes them absolute rather than cwd-relative;
+custom exporters writing path defaults should follow the same pattern. The `{YYYYMMDD-HHMMSS}` stamp is in both
 defaults so consecutive runs do not silently overwrite each other.
 
 The template resolver reads `vtscore.state.current_user.get_current_user`
@@ -309,6 +310,8 @@ rather than shipping one from your own distribution:
   points, `PluginField` reference, schema helpers.
 - [`sync.md`](sync.md) - the `SyncSource` ABC behind labelset/settings
   sources, the bidirectional-sync counterparts to exporters.
+- [`cli.md`](cli.md) - how the autodetect pipeline picks and calls an
+  exporter (`export_cli`, `export_cli_streaming`, `export_cli_detectors`).
 - Repo-level [`docs/EXTENDING-plugins.md`](../../../docs/EXTENDING-plugins.md)
   has the app-tier perspective and walks through the HTTP routes that
   invoke exporters.

@@ -367,14 +367,21 @@ that's your code.
 
 ## Persistent storage
 
-`vtscore` writes to disk in three places. All three are
-`CoreConfig`-driven; nothing is hardcoded.
+`vtscore` writes to disk in the places below. Nothing is a hardcoded
+relative path, but the locations come from two different knobs:
 
 | What | Where | Format |
 |------|-------|--------|
-| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Written by `export_dataset_to_file`. |
-| Detector labelsets | `CoreConfig.detectors_dir / "<slug>.json"` | JSON; origins + labels only, never weights. Written by `vtscore.detectors.store.save_detector`. |
-| Embedder model cache | `CoreConfig.data_dir / "models"` | HuggingFace / torch cache layout |
+| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Written by `vtscore.datasets.export_dataset_to_file`. A registered pickle may also get a derived `<stem>.embmat.npy` / `<stem>.embids.npy` matrix sidecar beside it |
+| Detector labelsets | `CoreConfig.detectors_dir / "<slug>.json"` | JSON; origins + labels only, never weights. Written by `vtscore.detectors.store.save_detector` |
+| Dataset / detector registries | `vtscore.config.DATA_DIR / "dataset_registry.json"`, `.../"detector_registry.json"` | JSON manifests maintained by `vtscore.datasets.registry` / `vtscore.detectors.registry` |
+| Embedder model cache | `vtscore.config.MODELS_CACHE_DIR` | HuggingFace / torch cache layout |
+
+`DATA_DIR` and `MODELS_CACHE_DIR` are resolved **at import time** from
+`$VTSEARCH_DATA_DIR` and `$VTSEARCH_MODELS_DIR` (falling back to the
+repository's `data/` and `data/models/`); a `CoreConfig` with a different
+`data_dir` does not move them. To relocate everything, set the
+environment variables before the first `import vtscore`.
 
 If you want a different layout - say, store detectors in your database
 instead of on disk - you have two options:
@@ -384,14 +391,14 @@ instead of on disk - you have two options:
    [extending/labelset-sources.md](extending/labelset-sources.md)).
    The on-disk JSON still exists as a cache, but your store is the
    source of truth.
-2. **Replace `vtscore.detectors.store` calls.** The store module is
-   small (a few `json.load` / `json.dump` calls); replacing it with
-   your DB equivalent is straightforward. This is more invasive but
-   gives full control.
+2. **Replace `vtscore.detectors.store` calls.** `save_detector` /
+   `load_detector` are thin JSON read/write functions; calling your DB
+   equivalent in their place is straightforward. This is more invasive
+   but gives full control.
 
 For datasets, the analogous plugin is `MediaSource` - implement one
 that resolves an `Origin` back to a file pulled from your storage layer
-(S3, GCS, HDFS, …). See [extending/media-types.md](extending/media-types.md).
+(S3, GCS, HDFS, …). See [extending/media-sources.md](extending/media-sources.md).
 
 ## Authentication and per-user data
 
@@ -444,8 +451,11 @@ you can ignore all of the above and just import what you need:
   and its default embedder at import time. Both return `None` rather than
   raising when the media type's embedder has no text tower / can't embed the
   file.
-- `from vtscore.datasets.loader import load_dataset_from_folder` -
-  works if you don't call `CoreConfig.from_settings()` anywhere.
+- `from vtscore.datasets.loader import load_dataset_from_folder` plus
+  `vtscore.datasets.stages.embedding.embed_missing` - no config needed.
+  Saving or reloading detectors (`vtscore.detectors.store`) and the load
+  pipeline's concurrency gates do call `CoreConfig.from_settings()`, so
+  install Hook 1 before using those.
 
 The library is designed to scale from "one-line numpy operation" to "a
 full Flask + Angular app" without any code path being mandatory in
