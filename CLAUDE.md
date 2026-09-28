@@ -37,6 +37,14 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 
 **This applies on every surface.** Claude Code on the web, the desktop app, the laptop CLI — the convention is repo policy, not a per-session preference, so it holds wherever this file is loaded.
 
+### In a cloud session, retitle it after the issue or PR
+
+A session whose whole opening prompt is `#3421` gets an auto-title that says nothing, and the session list is where the user goes to find this work again. So **when the `set_session_title` tool is available** (the claude-code-remote MCP server, present in cloud sessions on claude.ai/code), rename the session to the item's GitHub title as soon as the number resolves — for an issue, right after step 1's assignment. The lookup that resolved the number already returned the title, so there is nothing extra to fetch; take the session id from `get_session` called with no arguments.
+
+- **Format:** `#3421: <title>`, with the GitHub title verbatim. The number leads so the list scans and searches by it, and it stays bare: a session title is plain text (see "Where `#N` stays bare" below).
+- **Cosmetic, never a gate.** Rename once, at the start. If the call fails, carry on without retrying; nothing in the workflow waits on it.
+- **Where the tool is absent** (the laptop CLI, a local desktop session), skip this silently. If it is listed only as a deferred tool name, load it with `ToolSearch` first.
+
 ### If `#N` is an issue
 
 1. **Assign `samggreenberg` immediately.** The moment the number resolves to an issue — before you read it, before you evaluate it, before any analysis — write `assignees: ["samggreenberg"]`. Evaluation is itself work on the issue, and it is exactly the window in which a second session picks up the same number. Do this even if you go on to disagree with the issue; if you end up walking away, clear the assignee then.
@@ -75,7 +83,7 @@ Four places, and the reason is the same each time: the link either doesn't rende
 - **Inside code fences and inline code spans.** A markdown link renders as literal brackets there. `git log --grep '#3421'` is a command, not a reference.
 - **Anything written to GitHub** — issue comments, PR titles and bodies, review replies. GitHub **autolinks `#N` natively** in those fields, so a markdown link adds a second URL to something that was already clickable. Write `Addressed in #3421`, as the sections below already say.
 - **Closing keywords, specifically.** `Closes #3421` — never `Closes [#3421](https://github.com/samggreenberg/VTSearch/issues/3421)`. That keyword is parsed by GitHub and by `scripts/reconcile-solved-labels.py`; both expect the bare form, and this is the one place where dressing up a reference can silently cost an issue its close. See "Linking a fix PR to its GitHub issue" below for what rides on that keyword.
-- **Commit messages and branch names.** No renderer, so a link is just noise in `git log`.
+- **Commit messages, branch names, and a cloud session's title.** No renderer, so a link is just noise in `git log` or the session list.
 
 Tracked markdown in the repo — this file, `docs/`, `docs/plans/` — is **out of scope** and keeps its bare `#N` convention (plan pointers like `- [ ] #2355 — …` stay exactly as documented below). This rule is about messages, not files.
 
