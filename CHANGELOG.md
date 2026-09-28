@@ -17,6 +17,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
+  #4240). The **Demo → Synthetic Media** image generator used to draw one
+  smiley or a few flat shapes on a plain background. It now draws round
+  cartoon faces in seven colours and seven expressions, piles of shapes and
+  busy little scenes, on plain, polka-dot, striped, checked or gradient
+  backgrounds, with enough near-misses (a frowning yellow face, a smiling
+  orange one, a yellow disc) that "find the yellow smiley faces" is a real
+  search. A new **Seed** field picks which set is made: the same seed always
+  makes the same media, and two seeds make two sets with nothing in common.
+  A synthetic dataset imported before this keeps its old pictures; import
+  Synthetic Media again for the new ones.
+
 - **`--create-detector` makes the detector `--import-labels-into` names**
   (issue #4238). A label file and a dataset are now enough for a headless run:
   `--autodetect --import-labels-into NAME --create-detector --label-importer-file …`
@@ -125,6 +137,13 @@ not list every commit. Use `git log` for the full history.
   A query you are still typing keeps focus, as before.
 
 ### Changed
+
+- **The User Guide is illustrated with the yellow smiley example** (issue
+  #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows
+  a detector learning to find the yellow smiley faces among Synthetic Media's
+  drawings, instead of books in COCO photographs, and *Step by step* says which
+  Size and Seed make the very same pictures, so you can follow along without
+  any data of your own.
 
 - **`--import-labels-into` runs the detector it imports into, and only that
   one** (issue #4235). Importing labels from the command line used to merge
