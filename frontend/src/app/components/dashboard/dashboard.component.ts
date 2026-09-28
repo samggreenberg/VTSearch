@@ -55,6 +55,7 @@ import { LabelImporterModalComponent } from '../modals/label-importer-modal/labe
 import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/dataset-stats-modal.component';
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
+import { PointerArrowComponent } from '../pointer-arrow/pointer-arrow.component';
 import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 @Component({
@@ -73,6 +74,7 @@ import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
     DatasetStatsModalComponent,
     DetectorStatsModalComponent,
     IconComponent,
+    PointerArrowComponent,
     UsageBarComponent,
     SkeletonComponent
 ],
@@ -245,6 +247,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       this.serverSetsAgeOff.set(settings?.dataset_max_age_days != null);
+    });
+    // With no detectors at all, both tabs are disabled and the grid is locked
+    // to Drafts, the only tab a new detector can land on (#4227).
+    effect(() => {
+      if (this.noDetectors && this.detectorTab() !== 'drafts') {
+        this.dashSelection.setDetectorTab('drafts');
+      }
     });
   }
 
@@ -427,6 +436,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   get visibleDetectors(): DetectorRegistryEntry[] {
     return this.detectorTab() === 'autorun' ? this.autorunDetectors : this.draftDetectors;
   }
+
+  /** True once the registry has loaded and holds no detectors in either tab.
+   *  Disables (and dims) the Drafts / AutoRun tabs: with nothing to switch
+   *  between, the strip would only distract a first-time user. */
+  get noDetectors(): boolean {
+    return this.registryLoaded && this.detectors.length === 0;
+  }
+
+  readonly noDetectorsTabHint = 'No detectors yet — click + to create one';
 
   /** Switch detector-grid tabs. The service owns the tab and clears the
    *  per-tab selection; see `DashboardSelectionService.setDetectorTab`. */
@@ -1204,6 +1222,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
    *  actions don't care — to them browse-prep is just more background work. */
   get isNavBusy(): boolean {
     return this.isContextSwitching || this.browsePrep.preparing;
+  }
+
+  /** Whether to show the "Click Train to teach your new detector." hint and
+   *  its arrow (#4227): exactly one detector is selected, it has no training
+   *  labels yet (its #Training cell reads "Empty"), and Train is clickable
+   *  because a compatible dataset is selected too. */
+  get showTrainHint(): boolean {
+    if (!this.labelEnabled || this.isNavBusy) return false;
+    const models = this.resolvedSelectedModels;
+    return models.length === 1 && (models[0].num_training ?? 0) === 0;
+  }
+
+  /** Whether the RAM / Disk usage bars render, per the `show_usage_bars`
+   *  setting: "view" always, "hide" never, and "default" (also the fallback
+   *  before settings load) only once a detector exists, so the first-run
+   *  Dashboard isn't cluttered with server gauges (#4227). */
+  get showUsageBars(): boolean {
+    const mode = this.settingsState.settingsSignal()?.show_usage_bars ?? 'default';
+    if (mode === 'view') return true;
+    if (mode === 'hide') return false;
+    return this.detectors.length > 0;
   }
 
   get labelEnabled(): boolean {

@@ -907,7 +907,8 @@ field lists — this document names the tiers and the shape, not every key.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,
   `inclusion`, `enrich_descriptions`, `calibrate_count`,
-  `calibration_fraction`, `audio_playing`, `show_animations`, `show_metadata`,
+  `calibration_fraction`, `audio_playing`, `show_animations`, `show_usage_bars`,
+  `show_metadata`,
   the `browse_*` canvas preferences, `grid_icon_size_*`, `focus_mode_*`,
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the

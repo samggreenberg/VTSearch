@@ -399,6 +399,14 @@
           "show_metadata": {
             "type": "boolean"
           },
+          "show_usage_bars": {
+            "enum": [
+              "hide",
+              "default",
+              "view"
+            ],
+            "type": "string"
+          },
           "solo_embedder_per_media_type": {
             "additionalProperties": {
               "type": "string"
@@ -5811,6 +5819,14 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "show_usage_bars": {
+            "enum": [
+              "hide",
+              "default",
+              "view"
+            ],
+            "type": "string"
           },
           "solo_embedder_per_media_type": {
             "nullable": true

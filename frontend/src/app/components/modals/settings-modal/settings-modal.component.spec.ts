@@ -150,6 +150,24 @@ describe('SettingsModalComponent', () => {
     httpMock.expectOne('/api/settings').flush(mockSettings);
   });
 
+  it('should update the RAM / Disk bars pulldown and save (#4227)', async () => {
+    await flushInit();
+    component.onUsageBarsModeChange('view');
+    expect(component.settings().show_usage_bars).toBe('view');
+    const req = httpMock.expectOne('/api/settings');
+    expect(req.request.body.show_usage_bars).toBe('view');
+    req.flush(mockSettings);
+  });
+
+  it('should show "Default" in the RAM / Disk bars pulldown when the setting is unset', async () => {
+    await flushInit();
+    component.activeSettingsTab.set('appearance');
+    await settleZoneless(fixture);
+    const select = (fixture.nativeElement as HTMLElement).querySelector('#setting-usage-bars') as HTMLSelectElement;
+    expect([...select.options].map((o) => o.textContent?.trim())).toEqual(['Hide', 'Default', 'View']);
+    expect(select.value).toBe('default');
+  });
+
   it('should default the Graphics pulldown to auto when the setting is unset', async () => {
     await flushInit();
     expect(component.browseGraphics).toBe('auto');

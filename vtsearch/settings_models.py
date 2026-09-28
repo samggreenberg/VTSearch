@@ -40,6 +40,7 @@ __all__ = [
     "GridIconSize",
     "ServerSettings",
     "Theme",
+    "UsageBarsMode",
     "UserSettings",
     "VALID_ANIMATION_MODES",
     "VALID_BROWSE_COLORMAPS",
@@ -49,6 +50,7 @@ __all__ = [
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
     "VALID_THEMES",
+    "VALID_USAGE_BARS_MODES",
 ]
 
 
@@ -59,6 +61,11 @@ Theme = Literal["dark", "light", "highviz", "system"]
 # OS asks for reduced motion; ``"hide"`` always suppresses them; ``"os"`` defers
 # to the platform ``prefers-reduced-motion`` preference.
 AnimationMode = Literal["show", "hide", "os"]
+# Visibility of the Dashboard's RAM / Disk usage bars. ``"view"`` always shows
+# them, ``"hide"`` never does, and ``"default"`` shows them only once the user
+# has at least one detector, so a first-time visitor's empty Dashboard isn't
+# cluttered with server gauges before there's anything to run (issue #4227).
+UsageBarsMode = Literal["hide", "default", "view"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 # VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
@@ -82,6 +89,7 @@ BrowseGraphics = Literal["auto", "full", "reduced"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_ANIMATION_MODES: tuple[str, ...] = ("show", "hide", "os")
+VALID_USAGE_BARS_MODES: tuple[str, ...] = ("hide", "default", "view")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
@@ -331,6 +339,10 @@ class UserSettings(BaseModel):
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
     show_animations: AnimationMode = "show"
+    # Dashboard RAM / Disk usage bars: ``"hide"``, ``"view"``, or ``"default"``
+    # (shown only once a detector exists). See the "RAM / Disk bars" pulldown
+    # in the appearance settings.
+    show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
