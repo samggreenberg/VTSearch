@@ -31,6 +31,16 @@ from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 if TYPE_CHECKING:
     from vtscore.state import DatasetContext
 
+#: Why each media left the embed stage without a vector, keyed by media id.
+#: :func:`embed_missing` fills it in when handed one; the finalize stage's drop
+#: toast reads it, because that toast is the only place a GUI user learns what
+#: happened - the embed stage is the only place that knows (issue #4232).
+EmbedFailures = dict[int, str]
+
+#: Longest exception message quoted in a failure reason.  The reason ends up in
+#: a toast, where a stack-trace-sized ``str(exc)`` would bury everything else.
+_MAX_ERROR_CHARS = 200
+
 
 def _first_media_type(items: Iterable[tuple[int, dict[str, Any]]]) -> str:
     """Return the first non-empty ``media_type`` among *items*, or ``""``."""
@@ -149,19 +159,48 @@ def _stamp_load_embedder(medias: dict[int, dict[str, Any]], requested: str, reso
         _stamp_requested_embedder(medias, resolved)
 
 
-def _warn_no_embedder(medias: dict[int, dict[str, Any]], media_type: str) -> None:
+def _embedder_label(emb) -> str:
+    """The embedder's friendly name for a user-facing reason, e.g. ``"SigLIP"``.
+
+    Falls back to the registry slug when an embedder has no usable
+    ``display_name`` (the base class defaults it to the slug anyway).
+    """
+    label = getattr(emb, "display_name", None)
+    return label if isinstance(label, str) and label else str(emb.name)
+
+
+def _record_failures(failures: EmbedFailures | None, mids: Iterable[int], reason: str) -> None:
+    """Record *reason* for every media in *mids* that has none recorded yet.
+
+    First reason wins: in a multi-embedder load an item that every bound
+    embedder declined is described by the first, which is the one whose
+    vector would have been its primary.
+    """
+    if failures is None:
+        return
+    for mid in mids:
+        failures.setdefault(mid, reason)
+
+
+def _warn_no_embedder(
+    medias: dict[int, dict[str, Any]],
+    media_type: str,
+    failures: EmbedFailures | None = None,
+) -> None:
     """Log that no embedder resolved for *media_type* and how many items it costs.
 
     Returning silently here is how an import "silently" shrinks: nothing
     embeds, and the finalize stage drops every vector-less item with one
     generic line that names neither the media type nor the reason.
     """
+    unembedded = [mid for mid, m in medias.items() if media_embedding(m) is None]
     logging.getLogger(__name__).warning(
         "No embedder is registered for media_type=%r; %d item(s) left unembedded "
         "(they will be dropped at the end of the load)",
         media_type,
-        sum(1 for m in medias.values() if media_embedding(m) is None),
+        len(unembedded),
     )
+    _record_failures(failures, unembedded, f"No embedder is installed for {media_type} media")
 
 
 def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: str) -> None:
@@ -267,6 +306,7 @@ def _run_embed_pass(
     media_type: str,
     missing: list[tuple[int, dict[str, Any]]],
     on_progress: Callable[[str, str, int, int], None],
+    failures: EmbedFailures | None = None,
 ) -> None:
     """Bulk-embed the *missing* items and attach each non-``None`` vector.
 
@@ -276,22 +316,33 @@ def _run_embed_pass(
     concurrent load on this singleton embedder keeps its own tracker), and on a
     bulk-embed failure logs and attaches nothing (items stay at ``None`` for the
     drop-none stage).  Items whose media vanished from *medias* during the call
-    are skipped.
+    are skipped.  Every item left without a vector gets a reason in *failures*.
     """
     if not missing:
         return
     total = len(missing)
     on_progress("embedding", f"Embedding {total} item(s)…", 0, total)
+    who = f"The {_embedder_label(emb)} embedder"
+    missing_ids = [mid for mid, _ in missing]
 
     inputs = [m for _, m in missing]
     try:
         with emb.progress_scope(on_progress):
             vectors = emb.embed_media_bulk(inputs)
-    except Exception:
+    except Exception as exc:
         logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
-        vectors = None
+        error = str(exc).strip()
+        if len(error) > _MAX_ERROR_CHARS:
+            error = error[: _MAX_ERROR_CHARS - 1].rstrip() + "…"
+        _record_failures(
+            failures,
+            missing_ids,
+            f"{who} failed on the whole batch ({type(exc).__name__}{': ' + error if error else ''})",
+        )
+        return
 
     if vectors is None:
+        _record_failures(failures, missing_ids, f"{who} returned nothing for the whole batch")
         return
     embedder_id = emb.name
     # A wrong-length answer cannot be paired with its inputs: ``zip`` would
@@ -306,11 +357,18 @@ def _run_embed_pass(
             total,
             media_type,
         )
+        _record_failures(
+            failures,
+            missing_ids,
+            f"{who} returned {len(vectors)} vector(s) for {total} item(s), so none could be matched to its item",
+        )
         return
     n_failed = 0
+    declined = f"{who} returned no vector (the item may be unreadable, empty, or in a format it cannot decode)"
     for (mid, _), vec in zip(missing, vectors):
         if vec is None:
             n_failed += 1
+            _record_failures(failures, (mid,), declined)
             continue
         media = medias.get(mid)
         if media is None:
@@ -371,6 +429,7 @@ def embed_missing(
     medias: dict[int, dict[str, Any]],
     embedder_name: str = "",
     on_progress: Callable[[str, str, int, int], None] | None = None,
+    failures: EmbedFailures | None = None,
 ) -> None:
     """Embed media items in *medias* that don't already have an embedding.
 
@@ -383,7 +442,11 @@ def embed_missing(
     them in one ``embed_media_bulk`` call.
 
     Items whose bulk-embed call returns ``None`` stay at ``None``; the
-    load pipeline drops them via :func:`_drop_none_embeddings_stage`.
+    load pipeline drops them via :func:`_drop_none_embeddings_stage`.  Pass a
+    *failures* dict to learn why: each such item's id is mapped to a
+    one-sentence, user-facing reason naming the embedder and what went wrong
+    (declined the item, failed the whole batch, returned the wrong number of
+    vectors, or none is installed for the media type).
     Patch-region tensors are also attached here for embedders that
     report ``supports_patch_regions``.
 
@@ -410,7 +473,7 @@ def embed_missing(
 
     emb = _resolve_embedder(medias, embedder_name, media_type)
     if emb is None:
-        _warn_no_embedder(medias, media_type)
+        _warn_no_embedder(medias, media_type, failures)
         return
 
     _stamp_load_embedder(medias, embedder_name, emb.name)
@@ -454,7 +517,7 @@ def embed_missing(
 
     _ensure_model_loaded(emb, on_progress)
 
-    _run_embed_pass(emb, medias, media_type, missing, on_progress)
+    _run_embed_pass(emb, medias, media_type, missing, on_progress, failures)
 
     # Patch-grid pass for embedders that support it (DINOv2/v3/EUPE).  Runs
     # over every patch-capable image still lacking a grid, including ones that
@@ -615,7 +678,7 @@ def _embed_missing_stage(
     ctx: DatasetContext,
     tracker,
     requested_embedders: list[str],
-) -> None:
+) -> EmbedFailures:
     """Run every bound embedder over the context's medias (tracker-routed progress).
 
     Single-embedder datasets resolve to one name and behave exactly as before;
@@ -627,10 +690,15 @@ def _embed_missing_stage(
     Progress is routed through :class:`EmbedLoopProgress` so a multi-embedder
     loop reports cumulative progress across the embed step rather than restarting
     the bar at 0 for each embedder.
+
+    Returns why each item that came out without a vector did so (see
+    :data:`EmbedFailures`), for :func:`_drop_none_embeddings_stage` to show.
     """
     names = _ordered_load_embedders(ctx.medias, requested_embedders)
     progress = EmbedLoopProgress(tracker, len(names))
+    failures: EmbedFailures = {}
     for idx, name in enumerate(names):
         progress.begin(idx)
-        embed_missing(ctx.medias, name, on_progress=progress)
+        embed_missing(ctx.medias, name, on_progress=progress, failures=failures)
     invalidate_embedding_matrix(ctx)
+    return failures

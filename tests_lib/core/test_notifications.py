@@ -8,6 +8,8 @@ from vtscore.concurrency.notifications import (
     DEFAULT_LEVEL,
     LEVELS,
     MAX_DETAIL_CHARS,
+    MAX_ITEM_CHARS,
+    MAX_ITEMS,
     MAX_MESSAGE_CHARS,
     Notification,
     NotificationBroker,
@@ -180,12 +182,72 @@ class TestNotify:
         notify("Headline", level="error", detail="Because reasons", source="Exporter")
 
         payload = collected[0].to_dict()
-        assert set(payload) == {"id", "level", "message", "detail", "source", "timestamp"}
+        assert set(payload) == {"id", "level", "message", "detail", "source", "timestamp", "items"}
         assert payload["level"] == "error"
         assert payload["message"] == "Headline"
         assert payload["detail"] == "Because reasons"
         assert payload["source"] == "Exporter"
         assert isinstance(payload["timestamp"], float)
+        assert payload["items"] is None
+
+
+class TestNotifyItems:
+    """``items=``: the specific things a message is about, behind a Details toggle."""
+
+    def test_items_round_trip_in_order(self, collected):
+        notify("Skipped 3 files", items=["c.pdf", "a.pdf", "b.pdf"])
+
+        assert collected[0].items == ("c.pdf", "a.pdf", "b.pdf")
+        assert collected[0].to_dict()["items"] == ["c.pdf", "a.pdf", "b.pdf"]
+
+    def test_any_iterable_is_accepted(self, collected):
+        notify("Skipped", items=(f"{i}.pdf" for i in range(2)))
+        assert collected[0].items == ("0.pdf", "1.pdf")
+
+    def test_blank_entries_are_dropped_and_an_all_blank_list_is_none(self, collected):
+        notify("One", items=["  a.pdf ", "", "   "])
+        notify("Two", items=["", "  "])
+        notify("Three", items=[])
+
+        assert collected[0].items == ("a.pdf",)
+        assert collected[1].items is None
+        assert collected[2].items is None
+
+    def test_a_bare_string_is_one_item_not_its_characters(self, collected):
+        notify("Skipped", items="notes.pdf")
+        assert collected[0].items == ("notes.pdf",)
+
+    def test_long_lists_are_capped_with_a_count_of_what_was_cut(self, collected):
+        notify("Skipped", items=[f"{i}.pdf" for i in range(MAX_ITEMS + 50)])
+
+        items = collected[0].items
+        assert len(items) == MAX_ITEMS
+        assert items[0] == "0.pdf"
+        assert items[-1] == "… and 51 more"
+
+    def test_each_item_is_truncated(self, collected):
+        notify("Skipped", items=["z" * (MAX_ITEM_CHARS + 10)])
+
+        assert len(collected[0].items[0]) == MAX_ITEM_CHARS
+        assert collected[0].items[0].endswith("…")
+
+    def test_an_iterable_that_raises_does_not_reach_the_caller(self, collected):
+        def exploding():
+            yield "a.pdf"
+            raise RuntimeError("plugin bug")
+
+        note = notify("Still shown", items=exploding())
+
+        assert note.items is None
+        assert collected[0].message == "Still shown"
+
+    def test_items_are_logged_for_headless_runs(self, caplog):
+        with caplog.at_level(logging.INFO, logger="vtscore.concurrency.notifications"):
+            notify("Skipped", level="warning", items=["a.pdf", "b.pdf"])
+
+        records = [r for r in caplog.records if r.name == "vtscore.concurrency.notifications"]
+        message = records[-1].getMessage()
+        assert "a.pdf" in message and "b.pdf" in message
 
 
 class TestPluginBaseNotify:
@@ -196,12 +258,13 @@ class TestPluginBaseNotify:
             display_name = "Widget Exporter"
             fields = []
 
-        WidgetExporter().notify("Partial export", level="warning", detail="2 rows dropped")
+        WidgetExporter().notify("Partial export", level="warning", detail="2 rows dropped", items=["row 4", "row 9"])
 
         assert len(collected) == 1
         assert collected[0].source == "Widget Exporter"
         assert collected[0].level == "warning"
         assert collected[0].detail == "2 rows dropped"
+        assert collected[0].items == ("row 4", "row 9")
 
     def test_plugin_notify_defaults_to_info(self, collected):
         from vtscore.plugins import PluginBase

@@ -375,8 +375,9 @@ def notification_subscriber(notification: Notification) -> None: ...
   `vtscore.concurrency.notifications.notifications` for the life of a
   run so plugin notifications (GUI toasts) aren't dropped headless.
   Text mode: one `Note:` / `Done:` / `Warning:` / `Error:` line on
-  **stderr**. JSON mode: a `notification` event on stdout. Never ends
-  the run, even at `level="error"`.
+  **stderr**, followed by one indented `- item` line per entry in the
+  notification's `items`. JSON mode: a `notification` event on stdout.
+  Never ends the run, even at `level="error"`.
 
 ```python
 from vtscore import cli_progress
@@ -406,7 +407,7 @@ event includes `event` and `ts`; each row lists the extra fields.
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
 | `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors`, `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`      | `progress_callback`                   |
-| `notification`     | `level`, `message`, `detail`, `source`                            | `notification_subscriber`             |
+| `notification`     | `level`, `message`, `detail`, `source`, `items`                   | `notification_subscriber`             |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |
 
 Progress ticks with no `message` and `total <= 0` are dropped, so

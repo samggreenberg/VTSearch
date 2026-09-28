@@ -7,7 +7,8 @@ exact-duplicate media are collapsed, and the coverage atlas is built.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections import Counter
+from typing import TYPE_CHECKING, Any
 
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import media_embedding
@@ -21,10 +22,43 @@ from vtscore.state import (
 from vtscore.datasets.stages._common import _TOTAL_LOAD_STEPS
 
 if TYPE_CHECKING:
+    from vtscore.datasets.stages.embedding import EmbedFailures
     from vtscore.state import DatasetContext
 
+#: Reason given for a dropped item the embed stage recorded nothing about -
+#: e.g. one that reached the finalize stage without a media type to embed by.
+_UNKNOWN_DROP_REASON = "No embedder produced a vector"
 
-def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
+
+def _dropped_item_label(mid: int, media: dict[str, Any]) -> str:
+    """Name a dropped media the way the user would look for it.
+
+    The file it came from, not the internal id (which the user cannot look up,
+    and which is gone the moment the item is dropped).  A clip adds where in
+    that file it sits, since every clip of one file shares its name.
+    """
+    name = str(media.get("origin_name") or media.get("filename") or media.get("media_path") or f"item {mid}")
+    start, end = media.get("clip_start"), media.get("clip_end")
+    if start is not None and end is not None:
+        try:
+            return f"{name} [{float(start):g}–{float(end):g}s]"
+        except (TypeError, ValueError):
+            pass
+    index = media.get("clip_index")
+    if index is not None:
+        return f"{name} (clip {index})"
+    return name
+
+
+def _drop_summary(n_dropped: int, n_total: int, reasons: Counter[str]) -> str:
+    """The toast's detail line: how many were dropped, and why, grouped by reason."""
+    lead = f"{n_dropped:,} of {n_total:,} imported item(s) had no vector after the embed step, so they were left out."
+    if len(reasons) == 1:
+        return f"{lead} {next(iter(reasons))}."
+    return " ".join([lead, *(f"{reason} ({count:,} item(s))." for reason, count in reasons.most_common())])
+
+
+def _drop_none_embeddings_stage(ctx: DatasetContext, tracker, failures: EmbedFailures | None = None) -> None:
     """Drop any media that finished the clipper stage without an embedding.
 
     ``_fixup_clip_md5_and_embeddings`` is best-effort: when its bulk
@@ -36,10 +70,26 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     the load pipeline (dedup, coverage atlas, registry) sees a clean
     dict, and surface the count to the progress tracker so the user
     knows N is lower than the importer reported.
+
+    *failures* is what the embed stage recorded about why each item has no
+    vector (see :func:`~vtscore.datasets.stages.embedding._embed_missing_stage`).
+    The warning toast states those reasons and lists every dropped item by
+    name, since a GUI user has no other way to find out which ones (#4232).
     """
     none_ids = [cid for cid, media in ctx.medias.items() if media_embedding(media) is None]
     if not none_ids:
         return
+
+    failures = failures or {}
+    reason_of = {cid: failures.get(cid, _UNKNOWN_DROP_REASON) for cid in none_ids}
+    reasons = Counter(reason_of.values())
+    # Grouped by reason (commonest first) so a mixed failure reads as blocks.
+    rank = {reason: i for i, (reason, _) in enumerate(reasons.most_common())}
+    ordered = sorted(none_ids, key=lambda cid: rank[reason_of[cid]])
+    labels = [_dropped_item_label(cid, ctx.medias[cid]) for cid in ordered]
+    if len(reasons) > 1:
+        # One reason is already the detail line; several need saying per item.
+        labels = [f"{label} — {reason_of[cid]}" for label, cid in zip(labels, ordered)]
 
     for cid in none_ids:
         del ctx.medias[cid]
@@ -58,11 +108,8 @@ def _drop_none_embeddings_stage(ctx: DatasetContext, tracker) -> None:
     notify(
         f"Dropped {len(none_ids)} item(s) whose embedding failed",
         level="warning",
-        detail=(
-            f"{len(none_ids)} of {len(none_ids) + len(ctx.medias)} imported item(s) had no vector after the "
-            "embed step (the embedder returned nothing for them, or none is registered for their media type). "
-            "See the server log for which embedder declined."
-        ),
+        detail=_drop_summary(len(none_ids), len(none_ids) + len(ctx.medias), reasons),
+        items=labels,
         source="Dataset import",
     )
     tracker.update(

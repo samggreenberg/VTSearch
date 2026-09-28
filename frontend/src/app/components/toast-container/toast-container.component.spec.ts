@@ -73,4 +73,52 @@ describe('ToastContainerComponent', () => {
     await settleZoneless(fixture);
     expect(fixture.nativeElement.querySelectorAll('.toast').length).toBe(0);
   });
+
+  describe('item lists (#4232)', () => {
+    const buttonLabelled = (label: string): HTMLButtonElement | undefined =>
+      Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('.toast__btn')).find(
+        (b) => b.textContent?.trim() === label,
+      );
+
+    it('offers no Details or Copy list on a toast without items', async () => {
+      toast.warning({ message: 'Plain warning', detail: 'Nothing to list' });
+      await settleZoneless(fixture);
+
+      expect(buttonLabelled('Details')).toBeUndefined();
+      expect(buttonLabelled('Copy list')).toBeUndefined();
+    });
+
+    it('keeps the list collapsed until Details is clicked, then shows every item', async () => {
+      toast.warning({ message: 'Dropped 3 item(s)', items: ['a.wav', 'b.wav', 'c.wav'] });
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.toast__items')).toBeNull();
+
+      const details = buttonLabelled('Details');
+      expect(details).toBeTruthy();
+      expect(details?.getAttribute('aria-expanded')).toBe('false');
+      details?.click();
+      await settleZoneless(fixture);
+
+      const rows = Array.from<HTMLElement>(fixture.nativeElement.querySelectorAll('.toast__items li'));
+      expect(rows.map((li) => li.textContent?.trim())).toEqual(['a.wav', 'b.wav', 'c.wav']);
+      expect(buttonLabelled('Hide details')?.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('copies the items one per line and confirms with Copied!', async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+      try {
+        toast.warning({ message: 'Dropped 2 item(s)', items: ['a.wav', 'b.wav'] });
+        await settleZoneless(fixture);
+
+        buttonLabelled('Copy list')?.click();
+        await settleZoneless(fixture);
+
+        expect(writeText).toHaveBeenCalledWith('a.wav\nb.wav');
+        expect(buttonLabelled('Copied!')).toBeTruthy();
+      } finally {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      }
+    });
+  });
 });

@@ -579,15 +579,16 @@ from vtscore.concurrency.notifications import notify
 notify(
     "Skipped 3 unreadable files",
     level="warning",                       # info | success | warning | error
-    detail="page_2.pdf, page_9.pdf, notes.pdf",
+    detail="They could not be decoded as PDF.",
+    items=["page_2.pdf", "page_9.pdf", "notes.pdf"],   # one entry per thing
     source="Server Folder",
 )
 ```
 
 | Name | Description |
 |------|-------------|
-| `notify(message, *, level="info", detail=None, source=None) -> Notification` | Publish and log one message. Never raises |
-| `Notification` | Frozen dataclass: `id`, `level`, `message`, `detail`, `source`, `timestamp`, `.to_dict()` |
+| `notify(message, *, level="info", detail=None, source=None, items=None) -> Notification` | Publish and log one message. Never raises. `items` is shown behind the toast's **Details** toggle with a **Copy list** button; capped at `MAX_ITEMS` entries of `MAX_ITEM_CHARS` characters |
+| `Notification` | Frozen dataclass: `id`, `level`, `message`, `detail`, `source`, `timestamp`, `items`, `.to_dict()` |
 | `NotificationBroker` | `subscribe` / `unsubscribe` / `publish` / `subscriber_count` / `clear_subscribers` |
 | `notifications` | The process-wide broker singleton |
 

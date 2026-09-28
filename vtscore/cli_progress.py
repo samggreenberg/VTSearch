@@ -176,12 +176,16 @@ def notification_subscriber(notification: "Notification") -> None:
     label = _NOTIFICATION_LABEL.get(notification.level, "Note")
     source = f" [{notification.source}]" if notification.source else ""
     detail = f" - {notification.detail}" if notification.detail else ""
+    # The GUI keeps the item list behind a Details toggle; headless there is
+    # nothing to toggle, so each item gets its own indented line.
+    items = "".join(f"\n  - {item}" for item in notification.items or ())
     emit(
         "notification",
-        text=f"{label}:{source} {notification.message}{detail}",
+        text=f"{label}:{source} {notification.message}{detail}{items}",
         stream=None if _format == "json" else sys.stderr,
         level=notification.level,
         message=notification.message,
         detail=notification.detail,
         source=notification.source,
+        items=list(notification.items) if notification.items else None,
     )

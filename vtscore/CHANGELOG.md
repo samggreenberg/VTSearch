@@ -10,6 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`items=` on `notify()` and `PluginBase.notify()`** (issue #4232). A
+  notification can carry the list of specific things it is about - every
+  skipped file, every dropped row - as `items`, one entry each. The app shows
+  them behind the toast's *Details* toggle with a *Copy list* button, where a
+  comma-joined `detail` was cut off at 2000 characters; the CLI prints one per
+  line (text mode) or an `items` array (JSON mode), and the log records them.
+  Capped at `MAX_ITEMS` (1000) entries of `MAX_ITEM_CHARS` (300) characters,
+  the last slot saying how many were cut. `Notification` gains an `items`
+  field (a tuple, `None` when absent) and `to_dict()` an `"items"` key.
+  `embed_missing()` also takes an optional `failures=` dict, which it fills
+  with a user-facing reason per item it left without a vector. Additive: both
+  keywords default to `None`.
+
 - **`save_dataset=` on the four `vtscore.cli.autodetect_*_main` entry points**
   (issue #4226). With `save_dataset=True` the source is imported through the
   GUI load pipeline (`_run_importer_in_background`) and registered in the
