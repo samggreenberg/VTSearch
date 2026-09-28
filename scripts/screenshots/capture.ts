@@ -110,8 +110,8 @@ async function maskVolatile(page: Page): Promise<void> {
     walk(fixtureRe, () => '/data/');
     // Any other path under the checkout (a default file path a form fills
     // in, say) is shown as under a generic install folder.
-    const repoRe = new RegExp(repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/', 'g');
-    walk(repoRe, () => '/opt/vtsearch/');
+    const checkoutRe = new RegExp(repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/', 'g');
+    walk(checkoutRe, () => '/opt/vtsearch/');
     document.querySelectorAll('input').forEach((el) => {
       const input = el as HTMLInputElement;
       if (input.value.includes('/data/doc-fixtures/')) {
