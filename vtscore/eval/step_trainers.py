@@ -705,6 +705,7 @@ def _calibrate_with_details(
         )
 
     # Row-wise path (whole-image styles): no bag flooding, no node re-pooling.
+    held_out: list[list[int]] = []
     all_orderings, fallback = compute_fold_orderings(
         X_list,
         y_list,
@@ -715,6 +716,7 @@ def _calibrate_with_details(
         hidden_dim=hidden_dim,
         model_sink=fold_models,
         seconds_sink=fold_seconds,
+        held_out_sink=held_out,
     )
     if fallback is not None:
         return fallback, {
@@ -733,6 +735,9 @@ def _calibrate_with_details(
             "fold_node_data": None,
             "fold_models": fold_models[:calibrate_count],
             "fold_fallback": None,
+            # Which X_list rows each fold held out, aligned with its ordering
+            # (#4224: tells a study which votes calibrated the cut).
+            "fold_held_out_index": held_out[:calibrate_count],
         },
         all_orderings,
     )

@@ -135,6 +135,7 @@ def calibration_folds(
     rng: "np.random.RandomState | None" = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
+    held_out_sink: list[list[int]] | None = None,
 ) -> CalibrationFolds:
     """Train the K calibration folds, keeping their models (uncached).
 
@@ -155,6 +156,7 @@ def calibration_folds(
         groups=groups,
         score_rows_by_group=score_rows_by_group,
         model_sink=models,
+        held_out_sink=held_out_sink,
     )
     return CalibrationFolds(orderings, fallback, models)
 
@@ -764,6 +766,7 @@ def compute_fold_orderings(
     model_sink: list | None = None,
     seconds_sink: list[float] | None = None,
     fold_fit: "Callable[[np.ndarray, np.ndarray], Callable[[np.ndarray], np.ndarray]] | None" = None,
+    held_out_sink: list[list[int]] | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -825,6 +828,11 @@ def compute_fold_orderings(
     split sizes, the stratified draws, the *rng* stream - is this function's,
     so a non-torch head calibrates on exactly the splits the app's head would
     have drawn from the same labels.  Production callers never pass it.
+
+    *held_out_sink* (row-wise path only; eval harness only, issue #4224),
+    when given, receives each fold's held-out row indices into *X_list*, in
+    the order its ordering's scores come back - so a study can tell *which*
+    votes calibrated the cut (e.g. which phase surfaced them).  Read-only.
     """
     if groups is not None and fold_fit is not None:
         raise ValueError("fold_fit applies to the row-wise path only")
@@ -873,12 +881,15 @@ def compute_fold_orderings(
     n_train_neg = _per_class_n_train(len(neg_idx))
 
     orderings: list[tuple[list[float], list[float]]] = []
+    # A throwaway list when no sink is given, so recording costs no branch.
+    held_out = held_out_sink if held_out_sink is not None else []
     for _ in range(calibrate_count):
         t_fold = time.monotonic()
         pos_perm = _rng.permutation(pos_idx)
         neg_perm = _rng.permutation(neg_idx)
         train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
         cal_idx = np.concatenate([pos_perm[n_train_pos:], neg_perm[n_train_neg:]])
+        held_out.append([int(i) for i in cal_idx])
 
         if fold_fit is not None:
             orderings.append(_fold_fit_ordering(fold_fit, X_np, y_np, train_idx, cal_idx, model_sink))
