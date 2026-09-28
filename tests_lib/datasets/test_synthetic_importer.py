@@ -93,7 +93,9 @@ class TestSyntheticImporterValidation:
     def test_display_name_names_a_non_default_seed(self):
         imp = SyntheticDatasetImporter()
         assert imp.default_display_name({"media_type": "image", "size": "5", "seed": "1"}) == "Synthetic image (5)"
-        assert imp.default_display_name({"media_type": "image", "size": "5", "seed": "2"}) == "Synthetic image (5, seed 2)"
+        assert (
+            imp.default_display_name({"media_type": "image", "size": "5", "seed": "2"}) == "Synthetic image (5, seed 2)"
+        )
 
     @pytest.mark.parametrize(("raw", "seed"), [("", 1), (None, 1), ("7", 7), (" 3 ", 3), (0, 0), ("0", 0)])
     def test_parses_seed(self, raw, seed):
