@@ -392,6 +392,34 @@ async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: 
   throw new Error('no tile found near the middle of the Browse canvas');
 }
 
+/** How far the manual-text-sort shot widens the left panel, in CSS px. */
+const MANUAL_WIDEN = 140;
+
+/**
+ * The remembered left-panel widths (`panel_pct_left`, per media type) from
+ * before a shot dragged the divider. Dragging back does not restore them
+ * exactly: a released divider snaps to fit whole columns of thumbnails.
+ */
+let savedLeftWidths: unknown = null;
+
+/**
+ * Drag the divider between the label view's left and centre panels by *dx*.
+ * The width is remembered per media type, so a shot that drags it saves the
+ * setting first (`savedLeftWidths`) and puts it back in `after`.
+ */
+async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void> {
+  const box = await page.locator('.pane-divider').first().boundingBox();
+  if (!box) throw new Error('no pane divider');
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx / 2, y, { steps: 6 });
+  await page.mouse.move(x + dx, y, { steps: 6 });
+  await page.mouse.up();
+  await h.wait(800);
+}
+
 /** Select a dataset + detector on the dashboard, then Find; wait out scoring. */
 async function openFind(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
@@ -1347,17 +1375,21 @@ export const SHOTS: Shot[] = [
   {
     id: 'manual-text-sort',
     embeddedIn: `${HOWTO}/label-in-manual-mode.md#step-1-switch-to-manual-and-sort-the-list`,
-    caption: 'Step 1: (1) the Manual tab, (2) the Text sort, (3) a description, then (4) Search',
+    caption: 'Step 1: (1) the Manual tab, (2) the Text sort, then (3) a description and Search',
     themes: BOTH,
     annotations: [
       { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
-      { target: { selector: '.sort-mode-group .sort-radio', hasText: 'Text' }, kind: 'step', step: 2, at: 'top' },
-      { target: '.text-sort-input', kind: 'step', step: 3, at: 'right' },
-      { target: '.text-sort-btn', kind: 'step', step: 4, at: 'right' },
+      { target: '.sort-mode-group', kind: 'step', step: 2, at: 'right' },
+      { target: '.sort-mode-content', kind: 'step', step: 3, at: 'right' },
     ],
     async recipe(page, h) {
       await h.enterLabelView();
       await h.leftTab('Manual');
+      savedLeftWidths = (await h.app.api('/api/settings')).panel_pct_left;
+      await dragLeftDivider(page, h, MANUAL_WIDEN);
+      // Top, so the next picture served (and the list's scroll) is the best
+      // match rather than a borderline one.
+      await page.locator('.select-mode-group .sort-radio', { hasText: 'Top' }).first().click();
       await page.locator('.sort-mode-group .sort-radio', { hasText: 'Text' }).first().click();
       await page.waitForSelector('.text-sort-input', { timeout: 10000 });
       await page.locator('.text-sort-input').fill('yellow grinning face with tongue');
@@ -1365,11 +1397,14 @@ export const SHOTS: Shot[] = [
       await page.waitForSelector('.thumbnail-wrap', { timeout: 60000 });
       await h.wait(2500);
     },
-    // The sort mode sticks to the detector; hand the next shot the Learned
-    // sort the rest of the guide is shot on.
-    after: async (page) => {
+    // The sort mode and the panel width stick; hand the next shot the Learned
+    // sort and the width the rest of the guide is shot at.
+    after: async (page, h) => {
       await page.locator('.sort-mode-group .sort-radio', { hasText: 'Learned' }).first().click();
       await page.waitForTimeout(1500);
+      if (savedLeftWidths) {
+        await h.app.api('/api/settings', { method: 'PUT', body: { panel_pct_left: savedLeftWidths } });
+      }
     },
   },
   {
@@ -1431,8 +1466,16 @@ export const SHOTS: Shot[] = [
       await page.waitForSelector('.export-tabs', { timeout: 15000 });
       await page.locator('.export-tab', { hasText: 'Server JSON File' }).first().click();
       await page.waitForSelector('#field-filepath', { timeout: 10000 });
-      await page.mouse.move(720, 500);
-      await page.mouse.wheel(0, 800);
+      // Scroll the dialog's body to its foot, where the path and Save are.
+      // Clicking the half-hidden last tab made the harness scroll it into
+      // view sideways, which a reader's click does not; undo that too.
+      await page.locator('vt-modal .modal-body').first().evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+        for (let node: Element | null = el; node; node = node.parentElement) node.scrollLeft = 0;
+        el.querySelectorAll('*').forEach((child) => {
+          if (child.scrollLeft && !child.classList.contains('table-scroll')) child.scrollLeft = 0;
+        });
+      });
       await h.wait(700);
     },
   },
@@ -1739,13 +1782,18 @@ export const SHOTS: Shot[] = [
       { target: { selector: 'vt-modal tr', hasText: 'In current dataset' }, kind: 'step', step: 2 },
       { target: { selector: 'vt-modal .section-title', hasText: 'Creation' }, kind: 'step', step: 3 },
     ],
+    // Opened after a training session, back on the dashboard by its own
+    // button (not a reload), so the app still has the dataset in hand and
+    // *In current dataset* has something to count.
     async recipe(page, h) {
-      await h.dashboard();
-      await h.selectDatasetRow(TRAIN_DATASET);
-      await h.selectDetectorRow(DETECTOR);
+      await h.enterLabelView();
+      await page.locator('.top-bar-btn', { hasText: 'Dashboard' }).first().click();
+      await page.waitForSelector('.dash-table', { timeout: 30000 });
+      await h.wait(1200);
       await h.overflowMenu(DETECTOR);
       await page.locator('.context-menu .menu-item', { hasText: 'Stats' }).first().click();
       await page.waitForSelector('vt-modal tr', { timeout: 15000 });
+      await page.getByText(/ of \d+ in /).first().waitFor({ timeout: 10000 }).catch(() => {});
       await h.wait(800);
     },
   },

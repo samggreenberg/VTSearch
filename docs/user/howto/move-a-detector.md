@@ -29,8 +29,8 @@ In the **Export Labels** window:
    answers as much as its **Good** ones, and the other end can't rebuild it
    from only one kind.
 2. Click **Server JSON File**.
-3. **Save to (server path)** starts as `data/Yellow Smileys-drawings.json`;
-   change it if you want the file somewhere else.
+3. **Save to (server path)** starts as `data/Yellow Smileys.json`, named after
+   the detector; change it if you want the file somewhere else.
 4. Click **Save**.
 
 <picture>

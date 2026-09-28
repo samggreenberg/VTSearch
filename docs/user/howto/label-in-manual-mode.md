@@ -15,12 +15,12 @@ in each screenshot show where to click, in order.
    pauses, and the controls start out matching the phase it was in.
 2. Next to **Sort**, pick how the list is ranked. **Text** ranks it by a
    description.
-3. Type the description, such as `yellow grinning face with tongue`.
-4. Click **Search** (or press `Enter`). The list re-ranks, best match first.
+3. Type the description, such as `yellow grinning face with tongue`, and
+   click **Search** (or press `Enter`). The list re-ranks, best match first.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/manual-text-sort.dark.webp" />
-  <img src="../assets/manual-text-sort.light.webp" alt="Step 1: (1) the Manual tab, (2) the Text sort, (3) a description, then (4) Search" width="720" />
+  <img src="../assets/manual-text-sort.light.webp" alt="Step 1: (1) the Manual tab, (2) the Text sort, then (3) a description and Search" width="720" />
 </picture>
 
 The other two sorts:
