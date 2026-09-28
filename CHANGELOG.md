@@ -94,6 +94,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **`--autodetect` saves the dataset it imports to the dashboard** (issue
+  #4226). A CLI run used to import a dataset, score it, and throw it away. It
+  now imports through the same pipeline as **Add dataset**, saves the result,
+  and scores that saved copy, so the next time the UI is opened the dataset is
+  there (owned by `--user`, or the default user). With no Auto-Find detector
+  for the dataset, the import still succeeds and the run exits 0 with a
+  `Detection skipped` note, which makes `--autodetect` a plain headless import
+  too. **Add `--tempimport` to keep the old import-and-discard behaviour** —
+  cron jobs that should not grow the dashboard need it. `--tempimport` implies
+  `--autodetect`. `--stream-results` now requires `--tempimport`, since a
+  streamed source is never held whole and so cannot be saved. Pipeline files
+  follow the same default and take a `tempimport: true` key.
+
 - **The Autopilot "Update Sort Example?" prompt says what it is asking**
   (issue #4200). It used to show the current example and ask whether to keep
   it. It now reports how the sort has gone ("You've clicked 10 times and only

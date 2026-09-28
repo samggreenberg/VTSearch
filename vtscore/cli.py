@@ -2,16 +2,19 @@
 
 The only CLI workflow is autodetect: load a dataset (from pickle or via an
 importer), score it against the detectors flagged for Auto-Find in the settings
-file, and export the results.
+file, and export the results.  With ``save_dataset`` the source is first
+imported through the GUI's own load pipeline and registered, so it shows up on
+the dashboard, and the run then scores that saved dataset.
 """
 
 from __future__ import annotations
 
 import logging
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any, Literal
 
 
@@ -83,6 +86,10 @@ def _print_dry_run_source(source_description: dict[str, Any]) -> None:
     if source_description.get("stream_results"):
         neg = "included" if source_description.get("keep_negatives") else "dropped"
         print(f"  Streaming: yes (hits written to the exporter per chunk; negatives {neg})", flush=True)
+    if source_description.get("save_dataset"):
+        print("  Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)", flush=True)
+    else:
+        print("  Save to dashboard: no (--tempimport: the dataset is discarded after detection)", flush=True)
 
 
 def _print_dry_run_plan(
@@ -102,7 +109,10 @@ def _print_dry_run_plan(
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
     if not autofind_detectors:
-        print("Auto-Find detectors: (none - pipeline would abort with an error)", flush=True)
+        if source_description.get("save_dataset"):
+            print("Auto-Find detectors: (none - the dataset would be saved and detection skipped)", flush=True)
+        else:
+            print("Auto-Find detectors: (none - pipeline would abort with an error)", flush=True)
     else:
         summaries = _summarize_autofind_detectors(autofind_detectors)
         print(f"Auto-Find detectors ({len(summaries)}):", flush=True)
@@ -1049,13 +1059,14 @@ class _SourceSpec:
             return _load_importer_chunked(self.importer_name, self.field_values, self.chunk_size)
         return _load_importer_whole(self.importer_name, self.field_values)
 
-    def describe(self, *, stream_results: bool, keep_negatives: bool) -> dict[str, Any]:
+    def describe(self, *, stream_results: bool, keep_negatives: bool, save_dataset: bool = False) -> dict[str, Any]:
         """Build the ``source_description`` block reported by ``--dry-run``."""
         common: dict[str, Any] = {
             "kind": self.kind,
             "chunk_size": self.chunk_size,
             "stream_results": stream_results,
             "keep_negatives": keep_negatives,
+            "save_dataset": save_dataset,
         }
         if self.kind == "pickle":
             return {**common, "dataset": self.dataset_path}
@@ -1133,6 +1144,16 @@ def _run_dry_run(
     _emit_dry_run_plan(sd, settings_path, autofind_detectors, exporter_name, exporter_field_values)
 
 
+class _NoApplicableDetectorsError(ValueError):
+    """No Auto-Find (or override) detector applies to the loaded media.
+
+    A ``ValueError`` so every caller that already reports the message keeps
+    doing so; the subclass only exists so a saving run (``save_dataset``) can
+    tell "nothing to detect with" apart from a real failure and finish with
+    the dataset saved instead of exiting non-zero.
+    """
+
+
 def _train_detectors_for_first_chunk(
     chunk_medias: dict[int, dict[str, Any]],
     media_type: str,
@@ -1156,7 +1177,7 @@ def _train_detectors_for_first_chunk(
         _load_and_train_detectors(detector_names, media_type, chunk_medias, routed) if detector_names else {}
     )
     if not detector_mlps:
-        raise ValueError(
+        raise _NoApplicableDetectorsError(
             f"No Auto-Find detectors found for media type: {media_type}. "
             "Add detectors to the settings file's autofind_detectors list."
         )
@@ -1362,6 +1383,7 @@ def _run_pipeline(
     stream_results: bool = False,
     keep_negatives: bool = False,
     source_description: dict[str, Any] | None = None,
+    skip_without_detectors: bool = False,
 ) -> None:
     """Shared pipeline: read settings, iterate media chunks, score, export.
 
@@ -1377,6 +1399,11 @@ def _run_pipeline(
     used in place of the settings file's ``autofind_detectors``.  The pipeline
     YAML loader uses this to declare detectors inline without mutating the
     settings file on disk.
+
+    *skip_without_detectors* is set by a run that saved its dataset first:
+    there the import is the point and detection is the extra, so having no
+    detector to run - none configured, or none for this media type - ends the
+    run with a note instead of an error.
     """
     from vtscore.config import CoreConfig
 
@@ -1405,25 +1432,276 @@ def _run_pipeline(
         )
         return
 
-    if stream_results:
-        _run_streaming_pipeline(
+    if skip_without_detectors and not (override_detectors or autofind_detectors):
+        # Checked before the source is opened: with nothing to score, reading
+        # the whole dataset back in would be wasted work.
+        _emit_detection_skipped("no Auto-Find detectors are configured")
+        return
+
+    try:
+        if stream_results:
+            _run_streaming_pipeline(
+                media_source,
+                exporter_name=exporter_name,
+                exporter_field_values=exporter_field_values,
+                override_detectors=override_detectors,
+                autofind_detectors=autofind_detectors,
+                keep_negatives=keep_negatives,
+                empty_error=empty_error,
+            )
+            return
+
+        _run_live_pipeline(
             media_source,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
             override_detectors=override_detectors,
             autofind_detectors=autofind_detectors,
-            keep_negatives=keep_negatives,
             empty_error=empty_error,
         )
-        return
+    except _NoApplicableDetectorsError as exc:
+        if not skip_without_detectors:
+            raise
+        _emit_detection_skipped(str(exc))
 
-    _run_live_pipeline(
-        media_source,
+
+def _emit_detection_skipped(reason: str) -> None:
+    """Report that a saving run imported its dataset but had nothing to detect with."""
+    cli_progress.emit(
+        "detection_skipped",
+        text=f"Detection skipped: {reason}. The dataset was still saved to the dashboard.",
+        reason=reason,
+    )
+
+
+def _registered_entry_for_pickle(dataset_path: str) -> dict[str, Any] | None:
+    """Return the registry entry whose saved pickle *is* *dataset_path*, if any.
+
+    Pointing a saving run at a dataset the dashboard already holds (one of the
+    ``ds_<uuid>.pkl`` files under the saved-datasets directory) must not import
+    a second copy of it.
+    """
+    from vtscore.datasets.registry import list_datasets  # noqa: PLC0415
+
+    target = Path(dataset_path).resolve()
+    for entry in list_datasets():
+        pkl_path = entry.get("pkl_path")
+        if pkl_path and Path(pkl_path).resolve() == target:
+            return entry
+    return None
+
+
+def _relay_import_progress() -> Callable[[dict[str, Any]], None]:
+    """Build a load-tracker subscriber that narrates a saving import on the CLI.
+
+    JSON mode forwards every tick as a ``progress`` event, the same stream the
+    embedding stack feeds.  Text mode prints one line per phase rather than per
+    tick: the tracker updates once per embedded item, and a line each would
+    bury the run's real output.
+    """
+    last_phase: list[Any] = [None]
+
+    def relay(snapshot: dict[str, Any]) -> None:
+        status = str(snapshot.get("status") or "")
+        message = str(snapshot.get("message") or "")
+        if cli_progress.get_format() == "json":
+            cli_progress.progress_callback(
+                status, message, int(snapshot.get("current") or 0), int(snapshot.get("total") or 0)
+            )
+            return
+        phase = (status, snapshot.get("step"))
+        if phase == last_phase[0] or status == "idle" or not message:
+            return
+        last_phase[0] = phase
+        cli_progress.emit("import_progress", text=f"Importing: {message}")
+
+    return relay
+
+
+def _wait_for_import(task_id: str) -> str:
+    """Block until the background load *task_id* finishes; return its dataset id.
+
+    The GUI's load pipeline runs on a worker thread and reports through the
+    shared ``loading_tasks`` tracker, which is also where the registry id of
+    the saved dataset is posted.  A Ctrl-C here cancels the load cooperatively
+    - the same stop the dashboard's cancel button sends - so an interrupted run
+    does not leave a half-built dataset registered.
+    """
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+
+    tracker = loading_tasks.get_tracker(task_id)
+    if tracker is None:
+        raise RuntimeError(f"Import task {task_id} was not registered.")
+    done = threading.Event()
+    registered: dict[str, str] = {}
+
+    def on_tasks(rows: list[dict[str, Any]]) -> None:
+        for row in rows:
+            if row.get("task_id") == task_id and row.get("dataset_id"):
+                registered["dataset_id"] = row["dataset_id"]
+        if loading_tasks.is_finished(task_id):
+            done.set()
+
+    relay = _relay_import_progress()
+    tracker.subscribe(relay)
+    loading_tasks.subscribe(on_tasks)
+    try:
+        # The worker may have got some way (or all the way) before the
+        # subscription existed; read the current state once so neither the
+        # dataset id nor the finish is missed.
+        on_tasks(loading_tasks.list_tasks())
+        try:
+            done.wait()
+        except KeyboardInterrupt:
+            loading_tasks.cancel_task(task_id)
+            done.wait()
+            raise
+    finally:
+        loading_tasks.unsubscribe(on_tasks)
+        tracker.unsubscribe(relay)
+
+    error = tracker.get().get("error")
+    if error:
+        raise ValueError(f"Import failed: {error}")
+    dataset_id = registered.get("dataset_id")
+    if not dataset_id:
+        raise ValueError("Import finished but the dataset could not be saved to the registry.")
+    return dataset_id
+
+
+def _release_imported_context(dataset_id: str) -> None:
+    """Drop the in-memory copy the load pipeline left behind for *dataset_id*.
+
+    The GUI keeps a freshly imported dataset resident so the user can browse
+    it; a CLI run reads it back from its pickle for scoring, so holding the
+    import's copy as well would double the run's peak memory.  The background
+    archive-thumbnail warm-up the load kicks off is cancelled for the same
+    reason: nobody will browse this process's copy.
+    """
+    import gc  # noqa: PLC0415
+
+    from vtscore.concurrency.async_jobs import archive_thumbnail_jobs  # noqa: PLC0415
+    from vtscore.datasets.registry import remove_loaded_id  # noqa: PLC0415
+    from vtscore.state.core import unregister_context  # noqa: PLC0415
+
+    for job in archive_thumbnail_jobs.active_jobs():
+        if job.dataset_id == dataset_id:
+            job.cancel()
+    unregister_context(dataset_id)
+    remove_loaded_id(dataset_id)
+    gc.collect()
+
+
+def _save_source_dataset(spec: _SourceSpec) -> dict[str, Any]:
+    """Import *spec*'s source exactly as the GUI would and register the result.
+
+    Runs the dashboard's own load pipeline (clipping, embedding, duplicate
+    collapse, coverage atlas, registry save) rather than the CLI's lighter
+    scoring loader, so the saved dataset is the one a GUI import of the same
+    source would have produced.  A ``--dataset`` pickle goes through the
+    ``pickle`` importer, which copies it into the saved-datasets directory: the
+    registry deletes a dataset's pickle when the dataset is deleted, so it must
+    never adopt a file the user still owns.
+
+    Returns the new registry entry.
+    """
+    from vtscore.datasets.importers import get_importer  # noqa: PLC0415
+    from vtscore.datasets.load_pipeline import _run_importer_in_background  # noqa: PLC0415
+    from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
+
+    if spec.kind == "pickle":
+        existing = _registered_entry_for_pickle(spec.dataset_path)
+        if existing is not None:
+            cli_progress.emit(
+                "dataset_saved",
+                text=(
+                    f"Dataset {existing.get('name', '')!r} is already on the dashboard "
+                    f"(id {existing['id']}); not importing it again."
+                ),
+                dataset_id=existing["id"],
+                name=existing.get("name", ""),
+                num_items=existing.get("num_items", 0),
+                pkl_path=existing.get("pkl_path", ""),
+                already_saved=True,
+            )
+            return existing
+        if not Path(spec.dataset_path).exists():
+            raise FileNotFoundError(f"Dataset file not found: {spec.dataset_path}")
+        importer_name, field_values = "pickle", {"file": spec.dataset_path}
+    else:
+        importer_name, field_values = spec.importer_name, dict(spec.field_values)
+
+    importer = get_importer(importer_name)
+    if importer is None:
+        available = _list_importer_names()
+        raise ValueError(f"Unknown importer: {importer_name}. Available: {', '.join(available)}")
+    importer.validate_cli_field_values(field_values)
+
+    dataset_id = _wait_for_import(_run_importer_in_background(importer, field_values))
+    entry = get_dataset(dataset_id)
+    if entry is None:
+        raise ValueError(f"Saved dataset {dataset_id} is missing from the registry.")
+    _release_imported_context(dataset_id)
+    cli_progress.emit(
+        "dataset_saved",
+        text=(
+            f"Saved dataset {entry.get('name', '')!r} ({entry.get('num_items', 0)} medias) "
+            f"to the dashboard (id {dataset_id})."
+        ),
+        dataset_id=dataset_id,
+        name=entry.get("name", ""),
+        num_items=entry.get("num_items", 0),
+        pkl_path=entry.get("pkl_path", ""),
+        already_saved=False,
+    )
+    return entry
+
+
+#: Why a streaming run cannot save its dataset, shared by every entry point that refuses one.
+_STREAM_CANNOT_SAVE = "streaming never holds the whole dataset in memory, so it cannot save it to the dashboard"
+
+
+def _run_source(
+    spec: _SourceSpec,
+    *,
+    save_dataset: bool,
+    settings_path: str | None = None,
+    exporter_name: str | None = None,
+    exporter_field_values: dict[str, Any] | None = None,
+    override_detectors: list[str] | None = None,
+    dry_run: bool = False,
+    stream_results: bool = False,
+    keep_negatives: bool = False,
+) -> None:
+    """Optionally save *spec*'s dataset to the dashboard, then detect and export.
+
+    Shared by the flag-driven entry points and the YAML pipeline runner, so the
+    two cannot disagree about what a saving run does.  When *save_dataset* is
+    set the source is imported and registered first, and detection then runs
+    over the saved pickle - so its hits are the ones the user will find on that
+    dashboard row.  A temporary run (the pre-#4226 behaviour) scores the source
+    straight from the importer and keeps nothing.
+    """
+    source_description = spec.describe(
+        stream_results=stream_results, keep_negatives=keep_negatives, save_dataset=save_dataset
+    )
+    if save_dataset and not dry_run:
+        if stream_results:
+            raise ValueError(f"--stream-results: {_STREAM_CANNOT_SAVE}. Run it as a temporary import.")
+        entry = _save_source_dataset(spec)
+        spec = _SourceSpec(kind="pickle", dataset_path=entry["pkl_path"], chunk_size=spec.chunk_size)
+    _run_pipeline(
+        spec.load() if not dry_run else iter(()),
+        settings_path=settings_path,
         exporter_name=exporter_name,
         exporter_field_values=exporter_field_values,
         override_detectors=override_detectors,
-        autofind_detectors=autofind_detectors,
-        empty_error=empty_error,
+        empty_error=spec.empty_error,
+        dry_run=dry_run,
+        stream_results=stream_results,
+        keep_negatives=keep_negatives,
+        source_description=source_description,
+        skip_without_detectors=save_dataset,
     )
 
 
@@ -1436,6 +1714,7 @@ def _autodetect(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
 ) -> None:
     """Shared body of the four public ``autodetect_*_main`` entry points.
 
@@ -1445,16 +1724,15 @@ def _autodetect(
     source description, and the "nothing loaded" message.
     """
     try:
-        _run_pipeline(
-            spec.load() if not dry_run else iter(()),
+        _run_source(
+            spec,
+            save_dataset=save_dataset,
             settings_path=settings_path,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
-            empty_error=spec.empty_error,
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
-            source_description=spec.describe(stream_results=stream_results, keep_negatives=keep_negatives),
         )
     except Exception as e:
         cli_progress.emit_error(str(e))
@@ -1470,8 +1748,15 @@ def autodetect_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
 ) -> None:
-    """CLI entry point: run autodetect with all Auto-Find detectors."""
+    """CLI entry point: run autodetect with all Auto-Find detectors.
+
+    With *save_dataset* the source is first saved to the dashboard and the run
+    scores that saved copy; having no applicable detector then ends the run
+    with a note rather than an error.  The default leaves nothing behind,
+    which is what these entry points always did.
+    """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path),
         settings_path=settings_path,
@@ -1480,6 +1765,7 @@ def autodetect_main(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
     )
 
 
@@ -1493,8 +1779,12 @@ def autodetect_importer_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
 ) -> None:
-    """CLI entry point: run autodetect with a named importer and output results."""
+    """CLI entry point: run autodetect with a named importer and output results.
+
+    *save_dataset* behaves as in :func:`autodetect_main`.
+    """
     _autodetect(
         _SourceSpec(kind="importer", importer_name=importer_name, field_values=field_values),
         settings_path=settings_path,
@@ -1503,6 +1793,7 @@ def autodetect_importer_main(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
     )
 
 
@@ -1516,8 +1807,13 @@ def autodetect_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
 ) -> None:
-    """CLI entry point: chunked autodetect on a pickle dataset."""
+    """CLI entry point: chunked autodetect on a pickle dataset.
+
+    *save_dataset* behaves as in :func:`autodetect_main`; *chunk_size* then
+    bounds the scoring pass over the saved copy.
+    """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path, chunk_size=chunk_size),
         settings_path=settings_path,
@@ -1526,6 +1822,7 @@ def autodetect_main_chunked(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
     )
 
 
@@ -1540,8 +1837,14 @@ def autodetect_importer_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
 ) -> None:
-    """CLI entry point: chunked autodetect with a named importer."""
+    """CLI entry point: chunked autodetect with a named importer.
+
+    *save_dataset* behaves as in :func:`autodetect_main`; *chunk_size* then
+    bounds the scoring pass over the saved copy (the import itself is held in
+    memory whole, as a GUI import is).
+    """
     _autodetect(
         _SourceSpec(
             kind="importer",
@@ -1555,4 +1858,5 @@ def autodetect_importer_main_chunked(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
     )

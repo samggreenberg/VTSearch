@@ -22,6 +22,14 @@ Event names emitted today:
 - ``progress``       - a tick from the embedding / loading stack
   fields: ``status`` (str), ``message`` (str?), ``current`` (int?),
   ``total`` (int?), ``pct`` (float? - only when total > 0)
+- ``dataset_saved``  - a saving run registered (or found) its dataset on the
+  dashboard
+  fields: ``dataset_id`` (str), ``name`` (str), ``num_items`` (int),
+  ``pkl_path`` (str), ``already_saved`` (bool - the pickle was already a
+  registered dataset, so nothing new was imported)
+- ``detection_skipped`` - a saving run had no detector to score with; the
+  dataset is still saved and the run exits 0
+  fields: ``reason`` (str)
 - ``notification``   - a non-fatal message a plugin wanted the user to see
   (see :mod:`vtscore.concurrency.notifications`; in the GUI these become
   toasts). The run continues either way, including at ``level="error"``.
