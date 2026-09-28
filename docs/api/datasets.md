@@ -420,8 +420,11 @@ the dataset once it is saved. A sent flag is also remembered as the caller's
 `autorun_on_import` [setting](settings.md), which decides an import that
 sends none (default `true`). The run starts only after the import finished
 successfully, as its own task on the `loading-tasks` channel keyed to the new
-dataset (see [Run AutoRun](#run-autorun-on-a-registered-dataset)); an import
-none of the caller's AutoRun detectors applies to starts nothing.
+dataset (see [Run AutoRun](#run-autorun-on-a-registered-dataset)). When none
+of the caller's AutoRun detectors applies (another media type, or an embedder
+type the dataset lacks) nothing runs; if they have any AutoRun detectors at
+all, a row that is already idle reports it, its `autorun.skipped` holding the
+reason.
 
 ### Demo datasets
 

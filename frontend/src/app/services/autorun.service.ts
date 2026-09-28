@@ -24,7 +24,9 @@ import { ToastService } from './toast.service';
  *    straight away (the user asked for it and is waiting on it);
  *  - any other run - an import's, or a ⋯ run from another tab - announces
  *    itself with a toast whose **View results** button opens the dialog, since
- *    it finishes on its own schedule, possibly while the user is elsewhere.
+ *    it finishes on its own schedule, possibly while the user is elsewhere;
+ *  - an import whose dataset none of the user's AutoRun detectors applies to
+ *    finishes as a `skipped` row, shown as an info toast giving the reason.
  *
  * The dialog itself is mounted once in `AppComponent`, reading {@link results},
  * so a run's results can be opened from any view. Failed runs need nothing
@@ -97,6 +99,16 @@ export class AutoRunService {
       const openNow = this.openWhenDone.delete(task.task_id);
       // Another user's run, or one that failed or was cancelled: nothing to show.
       if (task.error || info.owner !== this.currentUser) continue;
+      if (info.skipped) {
+        // The user asked for AutoRun on this import and none of their
+        // detectors applies; say why rather than leave them waiting.
+        this.toast.info({
+          message: `AutoRun didn't run on "${info.dataset_name}"`,
+          detail: info.skipped,
+          dedupKey: `autorun:${info.run_id}`,
+        });
+        continue;
+      }
       if (openNow) {
         this.openResults(info.run_id);
       } else {

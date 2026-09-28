@@ -126,7 +126,7 @@ def _resolve_names(detector_name: str, media_type: str) -> list[str]:
             raise AutoRunUnavailable(f"Detector '{detector_name}' is not on your AutoRun list", status=404)
         return [detector_name]
     if not names:
-        raise AutoRunUnavailable(f"No AutoRun detectors found for media type: {media_type}")
+        raise AutoRunUnavailable("You have no AutoRun detectors. Move a detector to the AutoRun tab first.")
     return names
 
 
@@ -174,15 +174,16 @@ def plan_autorun(snap: dict, *, detector_name: str = "") -> AutoRunPlan:
     names = _resolve_names(detector_name, media_type)
     detectors, missing = _collect_for_media_type(names, media_type)
     if not detectors:
+        message = f"None of your AutoRun detectors are for {media_type} datasets."
         if missing:
-            raise AutoRunUnavailable(
-                f"No AutoRun detectors found for media type: {media_type}. "
-                f"Missing detector file(s) for: {', '.join(missing)}"
-            )
-        raise AutoRunUnavailable(f"No AutoRun detectors found for media type: {media_type}")
+            message += f" Missing detector file(s) for: {', '.join(missing)}"
+        raise AutoRunUnavailable(message)
     compatible = [trip for trip in detectors if dataset_supplies_detector_type(trip[1], snap)]
     if not compatible:
-        raise AutoRunUnavailable("No AutoRun detectors are compatible with this dataset's embedder types.")
+        raise AutoRunUnavailable(
+            "None of your AutoRun detectors can score this dataset: it has no embedder "
+            "of the kind they were built with."
+        )
     return AutoRunPlan(media_type=media_type, detectors=compatible, missing=missing)
 
 
@@ -487,6 +488,48 @@ def clear_autorun_runs() -> None:
         _runs.clear()
 
 
+def _open_run_task(ctx: DatasetContext, trigger: str, media_type: str) -> tuple[str, dict[str, Any], Any]:
+    """Register a background run's ``loading-tasks`` row; return ``(run_id, block, tracker)``.
+
+    The row is keyed to the dataset (``dataset_id``) so it renders on the
+    dataset's Dashboard row, and carries the ``autorun`` *block* naming the run,
+    its owner and *trigger*.
+    """
+    from vtscore.state.current_user import get_current_user  # noqa: PLC0415
+
+    run_id = f"{TASK_PREFIX}{uuid4().hex[:8]}"
+    dataset_name = ctx.dataset_display_name or ctx.dataset_id
+    block: dict[str, Any] = {
+        "run_id": run_id,
+        "owner": get_current_user(),
+        "trigger": trigger,
+        "dataset_id": ctx.dataset_id,
+        "dataset_name": dataset_name,
+    }
+    tracker = loading_tasks.create_task(
+        run_id,
+        f"AutoRun: {dataset_name}",
+        dataset_id=ctx.dataset_id,
+        media_type=media_type,
+        extra_fields={"autorun": block},
+    )
+    return run_id, block, tracker
+
+
+def _report_skipped_run(ctx: DatasetContext, trigger: str, reason: str) -> str:
+    """Record that an AutoRun had nothing to run, as a row that finishes at once.
+
+    Its ``autorun`` block carries ``skipped`` (the reason), which the owner's
+    browser shows as a notice.  Riding the task row rather than a notification
+    keeps it to the user whose import it was: notifications reach every client.
+    """
+    media_type = ctx.medias[next(iter(ctx.medias))].get("media_type", "") if ctx.medias else ""
+    run_id, block, tracker = _open_run_task(ctx, trigger, media_type)
+    tracker.update("idle", f"AutoRun skipped: {reason}", 0, 0, autorun={**block, "skipped": reason})
+    loading_tasks.mark_finished(run_id)
+    return run_id
+
+
 def _dataset_snapshot(ctx: DatasetContext) -> dict:
     """A shallow copy of *ctx*'s medias, taken under the state lock.
 
@@ -515,7 +558,6 @@ def start_autorun_task(ctx: DatasetContext, *, trigger: str) -> str:
     run id :func:`get_autorun_run` answers to.
     """
     from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
-    from vtscore.state.current_user import get_current_user  # noqa: PLC0415
     from vtsearch.threading import spawn  # noqa: PLC0415
 
     if trigger not in TRIGGERS:
@@ -524,25 +566,9 @@ def start_autorun_task(ctx: DatasetContext, *, trigger: str) -> str:
     snap = _dataset_snapshot(ctx)
     plan = plan_autorun(snap)
 
-    owner = get_current_user()
-    run_id = f"{TASK_PREFIX}{uuid4().hex[:8]}"
-    dataset_id = ctx.dataset_id
-    dataset_name = ctx.dataset_display_name or dataset_id
+    run_id, block, tracker = _open_run_task(ctx, trigger, plan.media_type)
+    dataset_id = block["dataset_id"]
     n_detectors = len(plan.detectors)
-    block: dict[str, Any] = {
-        "run_id": run_id,
-        "owner": owner,
-        "trigger": trigger,
-        "dataset_id": dataset_id,
-        "dataset_name": dataset_name,
-    }
-    tracker = loading_tasks.create_task(
-        run_id,
-        f"AutoRun: {dataset_name}",
-        dataset_id=dataset_id,
-        media_type=plan.media_type,
-        extra_fields={"autorun": block},
-    )
     running_message = f"Running {n_detectors} AutoRun detector{'s' if n_detectors != 1 else ''}…"
     tracker.update("loading", running_message, 0, n_detectors)
 
@@ -627,14 +653,19 @@ def _parse_flag(raw: Any) -> bool | None:
 def _autorun_after_import(ctx: DatasetContext) -> None:
     """The load pipeline's ``post_load`` hook: start AutoRun on the new dataset.
 
-    An import the user's AutoRun detectors don't apply to (none configured,
-    none of this media type, none whose embedder type the dataset binds) is
-    the common case, not an error, so it starts nothing and says nothing.
+    A user with no AutoRun detectors at all has nothing to be told, so that
+    starts nothing and says nothing.  One whose detectors merely don't apply to
+    this dataset (another media type, or an embedder type it lacks) asked for a
+    run and gets none, so the skip is reported to them with its reason
+    (:func:`_report_skipped_run`).
     """
+    from vtsearch.settings import get_autofind_detectors  # noqa: PLC0415
+
     try:
         start_autorun_task(ctx, trigger="import")
-    except AutoRunUnavailable:
-        return
+    except AutoRunUnavailable as exc:
+        if get_autofind_detectors():
+            _report_skipped_run(ctx, "import", exc.message)
 
 
 def import_post_load(raw_flag: Any) -> Callable[[DatasetContext], None] | None:

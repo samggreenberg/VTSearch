@@ -386,7 +386,9 @@ dialog, which lists every item each detector called Good (switch to
 **Bad** or **Both** to see the rest), copies the list to the clipboard,
 and **Export**s the listed rows to any exporter. If you picked a results
 exporter on the Settings **Auto-Find** tab, the run has already sent the
-results there too.
+results there too. If none of your AutoRun detectors can run on the new
+dataset - they are all for another media type, or were built with a kind
+of embedder the dataset doesn't have - a notice says so instead.
 
 To run AutoRun on a dataset you already have - to try a detector you
 just moved to AutoRun, say - pick **Run AutoRun** from the dataset's

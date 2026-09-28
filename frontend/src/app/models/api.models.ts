@@ -280,5 +280,9 @@ export interface AutoRunTaskInfo {
   total_hits?: number;
   missing_detectors?: string[];
   auto_export?: AutoFindExportStatus | null;
+  /** Set on an import's run that had nothing to run (the user's AutoRun
+   *  detectors are for another media type, or need an embedder the dataset
+   *  lacks): the reason. Such a row is idle from its first frame. */
+  skipped?: string;
 }
 

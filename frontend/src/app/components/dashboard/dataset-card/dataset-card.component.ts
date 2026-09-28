@@ -236,10 +236,16 @@ export class DatasetCardComponent {
     return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
+  /** The vocabulary the inline row speaks: a background AutoRun on this
+   *  dataset is not a load, whatever `taskKind` says. */
+  get effectiveTaskKind(): ProgressKind {
+    return this.loadingTask()?.autorun ? 'autorun' : this.taskKind();
+  }
+
   get taskProgressInfo(): ProgressHeader {
     const task = this.loadingTask();
     if (!task) return { header: '', subtitle: '', detail: '', eta: '' };
-    return formatProgressHeader(task, this.taskKind(), task.embedder);
+    return formatProgressHeader(task, this.effectiveTaskKind, task.embedder);
   }
 
   get taskBar(): ProgressBarState {

@@ -95,7 +95,7 @@ class TestRunAutoRunRoute:
         entry, _ctx = _registered_copy("No detectors")
         resp = client.post(f"/api/datasets/registry/{entry['id']}/autorun")
         assert resp.status_code == 400
-        assert "No AutoRun detectors" in resp.get_json()["message"]
+        assert "no AutoRun detectors" in resp.get_json()["message"]
         assert _autorun_tasks() == []
 
     def test_runs_in_the_background_and_keeps_the_results(self, client):
@@ -252,14 +252,34 @@ class TestAutoRunAfterImport:
         assert final["autorun"]["trigger"] == "import"
         assert final["autorun"]["dataset_id"] == ctx.dataset_id
 
-    def test_hook_is_silent_when_no_autorun_detector_applies(self, client):
-        _entry, ctx = _registered_copy("Nothing applies")
+    def test_hook_is_silent_for_a_user_with_no_autorun_detectors(self, client):
+        _entry, ctx = _registered_copy("Nothing to run")
 
         hook = import_post_load("true")
         assert hook is not None
         hook(ctx)  # must not raise: most imports have nothing to run
 
         assert _autorun_tasks() == []
+
+    def test_hook_reports_why_nothing_ran_when_no_detector_applies(self, client):
+        """The user asked for AutoRun and got none: their browser is told why."""
+        _entry, ctx = _registered_copy("Wrong media type")
+        setup_trainable_model_in_registry(
+            "ar-image-only", good_ids=GOOD, bad_ids=BAD, snap=snapshot_medias(), media_type="image"
+        )
+        settings.set_autofind_detectors(["ar-image-only"])
+
+        hook = import_post_load("true")
+        assert hook is not None
+        hook(ctx)
+
+        (row,) = _autorun_tasks()
+        final = wait_for_loading_task(row["task_id"])
+        assert final["status"] == "idle"
+        assert final["error"] is None, "a skip is not a failure; it must not raise an error toast"
+        assert final["autorun"]["trigger"] == "import"
+        assert "audio datasets" in final["autorun"]["skipped"]
+        assert get_autorun_run(row["task_id"], "default") is None
 
 
 class TestImportPostLoad:

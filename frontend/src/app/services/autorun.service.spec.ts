@@ -22,7 +22,7 @@ describe('AutoRunService', () => {
   let serverReset$: Subject<void>;
   let registryApi: { runAutorun: ReturnType<typeof vi.fn> };
   let findApi: { getAutorunRun: ReturnType<typeof vi.fn> };
-  let toast: { success: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn> };
+  let toast: { success: ReturnType<typeof vi.fn>; warning: ReturnType<typeof vi.fn>; info: ReturnType<typeof vi.fn> };
 
   const run = { dataset_id: 'ds1', dataset_name: 'Birds', media_type: 'audio', detectors_run: 1, results: {} };
 
@@ -59,7 +59,7 @@ describe('AutoRunService', () => {
     serverReset$ = new Subject<void>();
     registryApi = { runAutorun: vi.fn(() => of({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' })) };
     findApi = { getAutorunRun: vi.fn(() => of(run)) };
-    toast = { success: vi.fn(), warning: vi.fn() };
+    toast = { success: vi.fn(), warning: vi.fn(), info: vi.fn() };
 
     configureZoneless({
       providers: [
@@ -115,6 +115,14 @@ describe('AutoRunService', () => {
     loadingTasks$.next([finished({ error: 'Cancelled' }, info({ trigger: 'manual' }))]);
     expect(findApi.getAutorunRun).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("explains an import's skipped run instead of announcing results", () => {
+    loadingTasks$.next([finished({}, info({ skipped: 'None of your AutoRun detectors are for audio datasets.' }))]);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.info).toHaveBeenCalledTimes(1);
+    expect(toast.info.mock.calls[0][0].message).toBe('AutoRun didn\'t run on "Birds"');
+    expect(toast.info.mock.calls[0][0].detail).toContain('audio datasets');
   });
 
   it('warns rather than congratulates when the auto-export failed', () => {
