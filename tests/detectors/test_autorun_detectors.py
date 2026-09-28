@@ -363,3 +363,30 @@ class TestImportRoutesPassTheChoice:
         assert resp.status_code == 200, resp.get_json()
         assert captured["post_load"] is None
         assert settings.get_autorun_on_import() is False
+
+
+class TestKeptRuns:
+    """Kept results are bounded by run count and by total hits, oldest first."""
+
+    @staticmethod
+    def _record(n_hits: int) -> dict:
+        hits = [{"id": i} for i in range(n_hits)]
+        return {"owner": "default", "results": {"d": {"hits": hits, "negative_hits": []}}}
+
+    def test_oldest_runs_go_past_the_run_cap(self, monkeypatch):
+        monkeypatch.setattr(autorun_mod, "MAX_KEPT_RUNS", 2)
+        for run_id in ("a", "b", "c"):
+            autorun_mod._keep_run(run_id, self._record(1))
+        assert get_autorun_run("a", "default") is None
+        assert get_autorun_run("b", "default") is not None
+        assert get_autorun_run("c", "default") is not None
+
+    def test_oldest_runs_go_past_the_hit_budget_but_the_newest_stays(self, monkeypatch):
+        monkeypatch.setattr(autorun_mod, "MAX_KEPT_HITS", 10)
+        autorun_mod._keep_run("small", self._record(4))
+        autorun_mod._keep_run("medium", self._record(5))
+        assert get_autorun_run("small", "default") is not None
+        autorun_mod._keep_run("huge", self._record(50))
+        assert get_autorun_run("small", "default") is None
+        assert get_autorun_run("medium", "default") is None
+        assert get_autorun_run("huge", "default") is not None

@@ -21,8 +21,8 @@ Either way a run ends the same: the results go to the user's Auto-Find exporter
 when one is configured (:func:`run_autofind_export`).  A background run's
 results are also held in memory for the user who started it
 (:func:`get_autorun_run`), so the browser can show them in the AutoRun Results
-dialog.  They are hit lists, never vectors, and only the most recent
-:data:`MAX_KEPT_RUNS` runs are kept.
+dialog.  They are hit lists, never vectors, and only the most recent runs are
+kept (:data:`MAX_KEPT_RUNS`, :data:`MAX_KEPT_HITS`).
 """
 
 from __future__ import annotations
@@ -54,6 +54,11 @@ TASK_PREFIX = "_autorun_"
 #: dialog.  A run's hit lists cover every media in the dataset, so this is a
 #: bound on memory, not a history feature.
 MAX_KEPT_RUNS = 16
+
+#: And how many hit entries (Good and Bad, across detectors) they may hold
+#: between them: a few runs over a large dataset are as heavy as many small
+#: ones.  The oldest runs go first; the newest is always kept, whatever its size.
+MAX_KEPT_HITS = 1_000_000
 
 #: What started a background run: a finished web import, or the dataset ⋯
 #: menu's Run AutoRun.  Carried on the task so the browser can tell a run it
@@ -460,12 +465,19 @@ _runs_lock = threading.Lock()
 _runs: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
 
+def _hit_count(record: dict[str, Any]) -> int:
+    return sum(len(r.get("hits", [])) + len(r.get("negative_hits", [])) for r in record.get("results", {}).values())
+
+
 def _keep_run(run_id: str, record: dict[str, Any]) -> None:
+    """Keep *record* for the results dialog, evicting the oldest runs past the caps."""
     with _runs_lock:
         _runs[run_id] = record
         _runs.move_to_end(run_id)
-        while len(_runs) > MAX_KEPT_RUNS:
-            _runs.popitem(last=False)
+        total = sum(_hit_count(r) for r in _runs.values())
+        while len(_runs) > 1 and (len(_runs) > MAX_KEPT_RUNS or total > MAX_KEPT_HITS):
+            _, evicted = _runs.popitem(last=False)
+            total -= _hit_count(evicted)
 
 
 def get_autorun_run(run_id: str, user: str) -> dict[str, Any] | None:
