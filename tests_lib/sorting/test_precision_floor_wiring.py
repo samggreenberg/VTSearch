@@ -464,3 +464,21 @@ def test_the_reference_pool_keeps_the_voted_items_the_corpus_drops():
     assert estimate is not None
     assert estimate.corpus_size == len(clips) - len(good) - len(bad)
     assert estimate._pool.size == len(clips)
+
+
+def test_labels_from_outside_a_learned_ranking_calibrate_nothing():
+    """A caller naming no eligible bag (a label file, examples) gives the floor no evidence."""
+    from vtscore.detectors.training import train_and_threshold
+
+    rng = np.random.default_rng(5)
+    X = [rng.standard_normal(8).astype(np.float32) + (1.5 if i < 6 else 0.0) for i in range(14)]
+    y = [1.0] * 6 + [0.0] * 8
+    snap = {
+        i: {"embeddings": {"test": rng.standard_normal(8).astype(np.float32)}, "embedder": "test", "md5": f"m{i:031d}"}
+        for i in range(40)
+    }
+    groups = [("g" if lab else "b", i) for i, lab in enumerate(y)]
+    ctx = DetectorContext("det-label-file")
+    train_and_threshold(X, y, snap=snap, det_ctx=ctx, groups=groups, calibrating_groups=set())
+    assert ctx.precision_floor_cache is not None
+    assert ctx.precision_floor_cache.calibration_positives == 0
