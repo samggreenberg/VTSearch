@@ -79,6 +79,13 @@ The `linear` arm (old early-stopped logistic head) against the SVM, mean over cl
 
 **On the same votes the two heads barely differ.** In all six cells, cells where the in-loop gap at click 40 was as large as ±0.25 oracle cost, the refitted heads' AP agrees within 0.02 (e.g. `knife@large` 0.16 vs 0.16, `toothbrush@small` 0.08 vs 0.08). So a large gap in a single cell comes from the two heads **collecting different votes**, not from ranking the same votes differently. The 702-cell mean is what measures the head, and the single cells are noisy draws of it. The confusions each head makes are the expected ones, for example scissors and spoons in a `knife@large` cell, and dining tables and ties in a `cell phone@medium` cell.
 
+## What this changes
+
+- **Nothing ships from this run.** The converged logistic head is an eval arm (`head="linear_logreg"`), not reachable from the app.
+- **Region voting is the next measurement: #4213.** The binary result is a band trade (small objects gain, large objects lose AP), so a ship decision needs the region-voting arm read per band too.
+- **The head's C.** Both heads ran at C = 1. #4115's C sweep for the SVM is the natural place to add the logistic head's own C.
+- **Mis-votes.** Not run here, because the result is not a tie; #3197's replay found the converged logistic head more robust to flipped votes.
+
 ## Scope and limits
 
 - **Binary voting, SigLIP only.** Region voting (max-pooling, per-bag sample weights) uses the same `Linear(D,1)` but was not run. The issue requires it before a ship decision; it is the follow-up.
