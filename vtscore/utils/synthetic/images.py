@@ -152,7 +152,12 @@ def _tint(rng: np.random.Generator, rgb: tuple[int, int, int], spread: int = 14)
 
 def _box(cx: float, cy: float, r: float) -> list[float]:
     """The square round a circle, as canvas fractions ``[x0, y0, x1, y1]``."""
-    return [round(max(0.0, cx - r), 4), round(max(0.0, cy - r), 4), round(min(1.0, cx + r), 4), round(min(1.0, cy + r), 4)]
+    return [
+        round(max(0.0, cx - r), 4),
+        round(max(0.0, cy - r), 4),
+        round(min(1.0, cx + r), 4),
+        round(min(1.0, cy + r), 4),
+    ]
 
 
 def _plan_background(rng: np.random.Generator, avoid: str = "") -> dict[str, Any]:
@@ -291,56 +296,103 @@ def _mix(a: list[int] | tuple[int, ...], b: tuple[int, int, int], t: float) -> t
     return (r, g, bb)
 
 
+def _gradient(side: int, colors: list[tuple[int, int, int]]):
+    """A vertical gradient: one column, stretched, as every row is one colour."""
+    from PIL import Image  # noqa: PLC0415
+
+    t = np.linspace(0.0, 1.0, side)[:, None]
+    column = np.asarray(colors[0], dtype=float) * (1 - t) + np.asarray(colors[1], dtype=float) * t
+    strip = Image.fromarray(column.round().astype(np.uint8)[:, None, :], "RGB")
+    return strip.resize((side, side), Image.Resampling.NEAREST)
+
+
+def _dots(draw, side: int, background: dict[str, Any], color: tuple[int, int, int]) -> None:
+    step = background["spacing"] * side
+    dot = background["dot"] * step
+    for row in range(int(side / step) + 2):
+        offset = step / 2 if row % 2 else 0.0
+        for col in range(int(side / step) + 2):
+            cx, cy = col * step + offset, row * step
+            draw.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=color)
+
+
+def _checks(draw, side: int, background: dict[str, Any], color: tuple[int, int, int]) -> None:
+    cell = background["spacing"] * side
+    cells = int(side / cell) + 1
+    for row in range(cells):
+        for col in range(row % 2, cells, 2):
+            draw.rectangle([col * cell, row * cell, (col + 1) * cell, (row + 1) * cell], fill=color)
+
+
+def _stripes(draw, side: int, background: dict[str, Any], color: tuple[int, int, int]) -> None:
+    """Every other band of width *w* across the stripes' normal.
+
+    Each band is a parallelogram long enough to cross the whole canvas.
+    """
+    w = background["spacing"] * side / 2
+    angle = math.radians(background["angle"])
+    nx, ny = math.cos(angle), math.sin(angle)
+    tx, ty = -ny, nx
+    reach = 2 * side
+    extent = [x * nx + y * ny for x in (0, side) for y in (0, side)]
+    for k in range(int(math.floor(min(extent) / w)), int(math.ceil(max(extent) / w)) + 1):
+        if k % 2 == 0:
+            continue
+        u0, u1 = k * w, (k + 1) * w
+        draw.polygon(
+            [
+                (u0 * nx - reach * tx, u0 * ny - reach * ty),
+                (u0 * nx + reach * tx, u0 * ny + reach * ty),
+                (u1 * nx + reach * tx, u1 * ny + reach * ty),
+                (u1 * nx - reach * tx, u1 * ny - reach * ty),
+            ],
+            fill=color,
+        )
+
+
+_PATTERNS = {"dots": _dots, "checks": _checks, "stripes": _stripes}
+
+
 def _draw_background(background: dict[str, Any], side: int):
     from PIL import Image, ImageDraw  # noqa: PLC0415
 
     colors = [_ALL_COLORS[name] for name in background["colors"]]
     style = background["style"]
     if style == "gradient":
-        # One column, stretched: every row of a vertical gradient is one colour.
-        t = np.linspace(0.0, 1.0, side)[:, None]
-        column = np.asarray(colors[0], dtype=float) * (1 - t) + np.asarray(colors[1], dtype=float) * t
-        strip = Image.fromarray(column.round().astype(np.uint8)[:, None, :], "RGB")
-        return strip.resize((side, side), Image.Resampling.NEAREST)
+        return _gradient(side, colors)
     img = Image.new("RGB", (side, side), colors[0])
-    draw = ImageDraw.Draw(img)
-    if style == "dots":
-        step = background["spacing"] * side
-        dot = background["dot"] * step
-        for row in range(int(side / step) + 2):
-            offset = step / 2 if row % 2 else 0.0
-            for col in range(int(side / step) + 2):
-                cx, cy = col * step + offset, row * step
-                draw.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=colors[1])
-    elif style == "checks":
-        cell = background["spacing"] * side
-        cells = int(side / cell) + 1
-        for row in range(cells):
-            for col in range(row % 2, cells, 2):
-                draw.rectangle([col * cell, row * cell, (col + 1) * cell, (row + 1) * cell], fill=colors[1])
-    elif style == "stripes":
-        # Every other band of width *w* across the stripes' normal, each band a
-        # parallelogram long enough to cross the whole canvas.
-        w = background["spacing"] * side / 2
-        angle = math.radians(background["angle"])
-        nx, ny = math.cos(angle), math.sin(angle)
-        tx, ty = -ny, nx
-        reach = 2 * side
-        extent = [x * nx + y * ny for x in (0, side) for y in (0, side)]
-        for k in range(int(math.floor(min(extent) / w)), int(math.ceil(max(extent) / w)) + 1):
-            if k % 2 == 0:
-                continue
-            u0, u1 = k * w, (k + 1) * w
-            draw.polygon(
-                [
-                    (u0 * nx - reach * tx, u0 * ny - reach * ty),
-                    (u0 * nx + reach * tx, u0 * ny + reach * ty),
-                    (u1 * nx + reach * tx, u1 * ny + reach * ty),
-                    (u1 * nx - reach * tx, u1 * ny - reach * ty),
-                ],
-                fill=colors[1],
-            )
+    if style in _PATTERNS:
+        _PATTERNS[style](ImageDraw.Draw(img), side, background, colors[1])
     return img
+
+
+def _draw_eyes(draw, c: float, r: float, expression: str, line: int) -> None:
+    eye_y = c - 0.18 * r
+    for sign in (-1, 1):
+        x = c + sign * 0.34 * r
+        if expression == "wink" and sign == 1:
+            draw.arc([x - 0.11 * r, eye_y - 0.06 * r, x + 0.11 * r, eye_y + 0.14 * r], 200, 340, fill=_INK, width=line)
+        else:
+            draw.ellipse([x - 0.075 * r, eye_y - 0.12 * r, x + 0.075 * r, eye_y + 0.12 * r], fill=_INK)
+        if expression == "angry":
+            draw.line([(c + sign * 0.52 * r, c - 0.46 * r), (c + sign * 0.16 * r, c - 0.3 * r)], fill=_INK, width=line)
+
+
+def _draw_mouth(draw, c: float, r: float, expression: str, line: int) -> None:
+    width = int(line * 1.2)
+    if expression in ("smile", "wink"):
+        draw.arc([c - 0.5 * r, c - 0.15 * r, c + 0.5 * r, c + 0.55 * r], 20, 160, fill=_INK, width=width)
+    elif expression == "grin":
+        draw.chord([c - 0.52 * r, c - 0.02 * r, c + 0.52 * r, c + 0.62 * r], 0, 180, fill=_INK)
+        draw.ellipse([c - 0.2 * r, c + 0.33 * r, c + 0.2 * r, c + 0.57 * r], fill=_TONGUE)
+    elif expression == "frown":
+        draw.arc([c - 0.42 * r, c + 0.28 * r, c + 0.42 * r, c + 0.78 * r], 200, 340, fill=_INK, width=width)
+    elif expression == "angry":
+        draw.arc([c - 0.36 * r, c + 0.34 * r, c + 0.36 * r, c + 0.7 * r], 205, 335, fill=_INK, width=width)
+    elif expression == "surprised":
+        draw.ellipse([c - 0.13 * r, c + 0.24 * r, c + 0.13 * r, c + 0.6 * r], fill=_INK)
+    else:
+        draw.line([(c - 0.33 * r, c + 0.42 * r), (c + 0.33 * r, c + 0.42 * r)], fill=_INK, width=width)
 
 
 def _draw_face(draw, c: float, r: float, obj: dict[str, Any]) -> None:
@@ -352,32 +404,8 @@ def _draw_face(draw, c: float, r: float, obj: dict[str, Any]) -> None:
         for sign in (-1, 1):
             x, y = c + sign * 0.55 * r, c + 0.2 * r
             draw.ellipse([x - 0.12 * r, y - 0.09 * r, x + 0.12 * r, y + 0.09 * r], fill=blush)
-
-    expression = obj["expression"]
-    eye_y = c - 0.18 * r
-    for sign in (-1, 1):
-        x = c + sign * 0.34 * r
-        if expression == "wink" and sign == 1:
-            draw.arc([x - 0.11 * r, eye_y - 0.06 * r, x + 0.11 * r, eye_y + 0.14 * r], 200, 340, fill=_INK, width=line)
-        else:
-            draw.ellipse([x - 0.075 * r, eye_y - 0.12 * r, x + 0.075 * r, eye_y + 0.12 * r], fill=_INK)
-        if expression == "angry":
-            draw.line([(c + sign * 0.52 * r, c - 0.46 * r), (c + sign * 0.16 * r, c - 0.3 * r)], fill=_INK, width=line)
-
-    mouth = int(line * 1.2)
-    if expression in ("smile", "wink"):
-        draw.arc([c - 0.5 * r, c - 0.15 * r, c + 0.5 * r, c + 0.55 * r], 20, 160, fill=_INK, width=mouth)
-    elif expression == "grin":
-        draw.chord([c - 0.52 * r, c - 0.02 * r, c + 0.52 * r, c + 0.62 * r], 0, 180, fill=_INK)
-        draw.ellipse([c - 0.2 * r, c + 0.33 * r, c + 0.2 * r, c + 0.57 * r], fill=_TONGUE)
-    elif expression == "frown":
-        draw.arc([c - 0.42 * r, c + 0.28 * r, c + 0.42 * r, c + 0.78 * r], 200, 340, fill=_INK, width=mouth)
-    elif expression == "angry":
-        draw.arc([c - 0.36 * r, c + 0.34 * r, c + 0.36 * r, c + 0.7 * r], 205, 335, fill=_INK, width=mouth)
-    elif expression == "surprised":
-        draw.ellipse([c - 0.13 * r, c + 0.24 * r, c + 0.13 * r, c + 0.6 * r], fill=_INK)
-    else:
-        draw.line([(c - 0.33 * r, c + 0.42 * r), (c + 0.33 * r, c + 0.42 * r)], fill=_INK, width=mouth)
+    _draw_eyes(draw, c, r, obj["expression"], line)
+    _draw_mouth(draw, c, r, obj["expression"], line)
 
 
 def _draw_shape(draw, c: float, r: float, obj: dict[str, Any]) -> None:

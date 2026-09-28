@@ -321,17 +321,43 @@ CLAP-family embedders consume the files without resampling.
 
 ### `generate_image_dataset`
 
-`vtscore/utils/synthetic/images.py`. Cycles through two ideas at
-256x256 PNG:
+`vtscore/utils/synthetic/images.py`. A small world of cartoon smiley
+faces at 512x512 PNG, drawn 2x supersampled, in three kinds (six faces,
+two shapes and two scenes in every ten pictures):
 
-- `smiley` - a face on a coloured background, with one of four
-  emotions (happy / sad / neutral / angry), random face / skin
-  colour, size, and position.
-- `shapes` - 1–5 coloured circles, squares, and rotated triangles
-  on a plain background.
+- `face` - one round face, in one of seven colours (yellow the
+  commonest, orange the nearest miss) with one of seven expressions:
+  smile, grin or wink (the `SMILING_EXPRESSIONS`), or frown, flat,
+  surprised or angry.
+- `shapes` - 1–5 circles, squares, triangles and stars in the same
+  colours.
+- `scene` - 3–6 small faces and shapes scattered over one background.
+
+Backgrounds are plain, polka-dotted, striped, checked or a gradient, in
+any of the colours. The mix is built so that "the yellow smiley faces"
+is worth training a detector for: a text query finds the yellow faces
+and is less sure which are smiling.
 
 Requires `PIL` (Pillow), imported lazily. Output filenames:
-`<idea>_<index>.png`.
+`<kind>_<index>.png`. Each picture is seeded on `(seed, index)`, so two
+seeds make two sets that share no picture.
+
+`describe_image_dataset(count, seed=42)` returns what the same call
+draws, without drawing it - one dict per picture:
+
+```python
+from vtscore.utils.synthetic import describe_image_dataset
+
+for picture in describe_image_dataset(10, seed=1):
+    face = picture["objects"][0]
+    if picture["kind"] == "face" and face["color"] == "yellow" and face["smiling"]:
+        print(picture["filename"], face["expression"], face["box"])
+```
+
+Its stable keys are `filename`, `kind`, `background` (`style` and colour
+names) and `objects` (each a `shape`, a `color` name and a `box` as
+fractions of the picture; a face also has `expression` and `smiling`).
+The rest are drawing parameters and may change.
 
 ### `generate_video_dataset`
 

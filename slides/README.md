@@ -423,13 +423,13 @@ shot's subject is an app with nothing in it. That costs a re-embed of both piles
 (~470 photographs, a few minutes on CPU) per run.
 
 The corpus and the detector are the **Book example**
-(`scripts/screenshots/book-example.mjs`), which the user guide's screenshots use
-too (#4202) — they were shot against a synthetic fixture of flat coloured
-shapes until then. The frames are still taken by separate harnesses, because a
-slide wants a narrower window, a padded 16:9 crop, WebP and a real session's
-votes, where the guide wants both themes and a fixed vote baseline. **A GUI
-change that moves the docs screenshots moves these too** — reshoot both, or the
-deck keeps showing an app that no longer exists.
+(`scripts/screenshots/book-example.mjs`). The user guide's screenshots were
+shot on it too (#4202), until they moved to generated drawings of their own,
+the Smiley example (`scripts/screenshots/smiley-example.mjs`, #4240), which
+needs no COCO download. The two harnesses still drive one app, so each clears
+the other's datasets and detectors before it shoots. **A GUI change that moves
+the docs screenshots moves these too** — reshoot both, or the deck keeps
+showing an app that no longer exists.
 
 **Never drop a report figure straight onto a slide.** It was sized for a page,
 and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`
