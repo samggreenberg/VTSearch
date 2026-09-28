@@ -13,9 +13,19 @@ keep its promise (``docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`
    which puts every fold on one coordinate - the same rank transfer the shipped
    fused cut uses.
 2. **A posterior in that coordinate.**  ``P(positive | percentile)`` is fitted
-   on those votes (logistic by default).  Autopilot picks items by score, never
-   by label, so a posterior fitted on score-picked votes is unbiased despite the
-   biased sample; only a class-conditional route would need the prior.
+   on those votes (logistic by default).  A posterior fitted on a biased sample
+   is still unbiased **if the sample was chosen by the score it is fitted on** -
+   the learned model's own sort, which is how Autopilot's learned phases pick;
+   only a class-conditional route would need the prior.  **Votes chosen by any
+   other ranker break this.**  The text-sort opening picks by the typed query's
+   score, which carries label information the model's score lacks, so its
+   positives are the easy ones and the fitted curve comes out optimistic.  #4222
+   measured it: with the opening's Good round raised to 20, the gate below opened
+   for 60% of COCO Better cells by vote 50, and 51-71% of the promises it then
+   made broke (6% on today's 3-Good opening).  So the fold orderings a caller
+   passes should hold only votes the learned model's sort surfaced; today's
+   short opening is small enough to get away with it, a longer one is not
+   (#4245).
 3. **Applied to the corpus** through the final model's pool percentiles.  The
    estimated precision of the top *k* is the running mean of the posterior over
    the corpus sorted by score.
@@ -27,7 +37,8 @@ keep its promise (``docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`
    unlabelled scores (``em=True``).
 6. **A gate.**  Below :data:`MIN_CALIBRATION_POSITIVES` positives among the
    calibration votes the estimate breaks most of its promises (83% at X = 50%
-   on COCO Better's natural pool), so it makes none.
+   on COCO Better's default 0.44% pool), so it makes none.  The gate counts
+   evidence; it cannot tell whether that evidence was drawn fairly (item 2).
 
 That yields the three states #4224's control needs
 (:class:`PrecisionFloorStatus`): a promise, "no cut reaches X on this corpus",
@@ -56,8 +67,8 @@ import numpy as np
 
 #: Positives among the calibration folds' held-out votes below which no promise
 #: is made.  #4220: gated here, the fold-rank lower bound with EM breaks 6% of
-#: its X = 50% promises on the natural pool, 1% on a 5% pool and 3% under label
-#: shift; a gate of 5 still breaks 18% on the natural pool.
+#: its X = 50% promises on COCO Better's default 0.44% pool, 1% on a 5% pool and
+#: 3% under label shift; a gate of 5 still breaks 18% on the 0.44% pool.
 MIN_CALIBRATION_POSITIVES = 10
 
 #: Bootstrap refits of the votes behind the lower bound (#4220 used 30).

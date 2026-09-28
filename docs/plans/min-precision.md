@@ -48,14 +48,33 @@ What follows is what the app still owes.
 - **The control shows the floor and its state, not the estimate** (owner,
   2026-09-28). No "about 60% of these should be right": the lower bound stays
   internal.
+- **The evidence must be votes the learned model's sort chose** (#4222,
+  `docs/experiments/2026-09-28-textgood-4222/REPORT.md`). A posterior fitted
+  on a biased sample is unbiased only if the sample was chosen by the score it
+  is fitted on. The text-sort opening chooses by the typed query's score:
+  - with the opening's Good round at 20, the gate opened for 60% of COCO Better
+    cells (0.44% pool) by vote 50, and 51–71% of the promises it then made
+    broke;
+  - on today's 3-Good opening the same estimator breaks 6%, because the
+    opening is too short to matter.
+
+  So which votes feed the fold orderings is a wiring decision, not a knob:
+  #4245 should record each vote's surfacing context and calibrate the floor
+  only on votes a learned sort surfaced. The gate counts evidence; it can't
+  tell whether that evidence was drawn fairly.
 - **What waits on the GRID, and what doesn't.**
-  - #4222 decides how often the gate opens.
+  - #4222 answered how the opening moves the gate. A longer text walk opens it
+    but breaks the promise (above). A moderate one (Good target 6) is the only
+    tested change that helps the detector at both 0.44% and 0.1%. At 0.1% no
+    opening reaches the gate: a pool of ~11,000 holds ~11 positives. The
+    adaptive stop it recommends is still open there.
   - #4221 decides the estimator's remaining knobs: the transfer coordinate,
     pooling the folds' evidence, and the bound level. Those are already
     parameters of `precision_floor_cut`.
 
-  Neither blocks the plumbing, which can land on #4220's defaults and take
-  #4221's answer as a change of arguments.
+  The plumbing can land on #4220's defaults and take #4221's knobs as a change
+  of arguments. It can't take the provenance filter that way: that changes
+  which votes build the fold orderings, so it belongs in #4245 from the start.
 
 ## Open decisions (owner)
 
@@ -107,10 +126,14 @@ These are the questions #4224 raised that no issue below can settle alone:
   plan is motivated by the conformal miss budget. Top-of-list review votes bias
   calibration positives high, so the FNR budget over-promises. Its metrics are
   in Inclusion units (FNR excess at Inclusion 0–3). A posterior fitted on
-  score-picked votes is unbiased under *score-only* selection, which is what
-  reviewing a sorted list is (#4224's feasibility note). So the problem may not
-  transfer to the precision floor at all. Before it runs, restate its
-  hypotheses as violation rate at X, or retire it.
+  score-picked votes is unbiased only when the picking score is the one the
+  posterior is fitted on (#4224's feasibility note). #4222 showed the failure
+  when it isn't: text-sort-picked votes broke 51–71% of gated promises. So the
+  problem **does** transfer to the floor for any vote a different ranker
+  surfaced (the text opening, a list sorted by the typed query). For review of
+  the model's own sorted list it is plausible but unmeasured. The partition
+  itself is the fix #4245 needs. Restate this plan's hypotheses as violation
+  rate at X, and run it.
 
 <!-- item-sep -->
 
