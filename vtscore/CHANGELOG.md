@@ -22,6 +22,16 @@ instead, since every commit on `dev` is effectively a new app release.)
   callers keep working. The eval harness's Smart window reads the same two
   names.
 
+- **A dry stop in the Autopilot opening grammar: `+dry<m>/<w>`** (issue
+  #4222). `vtscore.eval.startup_schedule` rounds can now end early when the
+  round's last `w` picks held fewer than `m` goods, so `g20+dry1/8@top,b4@mid`
+  walks the text sort until 20 goods or until 8 picks in a row come back empty.
+  Allowed on `g` and `n` rounds, refused on `b`. `StartupRound` gains
+  `dry_goods` / `dry_window` (both `0` when there is no dry stop, so existing
+  rounds compare equal), `StartupState` gains `ran_dry()`, and
+  `StartupState.on_click` / `AutopilotFlow.update` take the vote's outcome
+  (`good` / keyword `last_vote_good`), which a dry round requires.
+
 - **`vtscore.utils.synthetic.describe_image_dataset()` and
   `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
   seed)` draws, without drawing it: one dict per picture with its `filename`,
