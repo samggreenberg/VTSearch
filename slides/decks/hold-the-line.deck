@@ -89,6 +89,10 @@ slides:
   data-coco-better-complement
   data-coco-problems
   data-set-coco-better
+  # The whole ladder on COCO Better (#4184): one cost curve per threshold
+  # idea, drawn on a pool thinned to 5% positive by the owner's call; the
+  # natural-pool result is in the notes and the study's REPORT.md.
+  progression
 
   # 6 — Regions
   outline-hold-the-line +at6
