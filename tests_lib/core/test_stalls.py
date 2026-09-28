@@ -315,7 +315,12 @@ class TestFreezeGcAfterPreload:
         result = freeze_gc_after_preload()
         assert result is not None
         frozen, ms = result
-        assert frozen == gc.get_freeze_count() > 0
+        # Not ``==``: a frozen object that dies leaves the permanent
+        # generation, and any thread still alive in this worker (an embedder
+        # warm-up, a registry preload left by an earlier test) can free one
+        # between the function's read and this one. Nothing can *enter* it
+        # without another freeze, so the count can only have fallen.
+        assert 0 < gc.get_freeze_count() <= frozen
         assert ms >= 0.0
 
     @pytest.mark.parametrize("value", ["0", "false", "no", "off", "OFF"])
