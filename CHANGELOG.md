@@ -17,6 +17,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **AutoRun detectors really run on what you import, and on demand** (issue
+  #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
+  detectors run on every imported dataset, but only the CLI's `--autodetect`
+  ever ran them. Now a web import runs the importing user's AutoRun detectors
+  on the new dataset once it is saved: the run shows on the dataset's row
+  (cancellable), its results go to the Auto-Find exporter if one is set, and a
+  notice with **View results** opens them. The Add Dataset dialog has a **Run
+  AutoRun detectors on this dataset** checkbox (shown once you have an AutoRun
+  detector) that remembers how you left it, as the new `autorun_on_import`
+  setting. A dataset's ⋯ menu gains **Run AutoRun**, which runs them on an
+  existing dataset right away and opens the results when done. The **AutoRun
+  Results** dialog (the old Auto-Detect Results dialog, which nothing opened)
+  now has a working **Export** button that sends the rows it lists.
+
 - **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
   #4240). The **Demo → Synthetic Media** image generator used to draw one
   smiley or a few flat shapes on a plain background. It now draws round

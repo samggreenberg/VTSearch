@@ -195,8 +195,28 @@ demand, and returns one result column per detector.
 When an exporter is configured for Auto-Find, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
 extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
-Auto-Find detectors for the media type), **404** (named detector not flagged
-for Auto-Find), **409** (cancelled).
+AutoRun detectors for the media type), **404** (named detector not on the
+caller's AutoRun list), **409** (cancelled).
+
+This is the synchronous, scripted form. The Dashboard runs the same detectors
+in the **background** instead - after a web import (see the `autorun` flag
+under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
+⋯ **Run AutoRun**
+([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)) -
+and keeps each run's results for the user who started it:
+
+### AutoRun results
+
+```
+GET /api/autorun/runs/{run_id}
+```
+
+`run_id` is the background run's `task_id`. Returns the body above
+(`auto_export` included when an exporter ran) plus `run_id`, `dataset_id`,
+`dataset_name`, `trigger` (`"import"` or `"manual"`) and `created_at`.
+Runs live in memory only, and only the most recent few, so **404** covers an
+unknown run, another user's, one that has aged out, and any from before a
+restart alike.
 
 ### Find stats (detector evaluation)
 

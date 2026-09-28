@@ -413,6 +413,16 @@ the returned `task_id` names it on the `loading-tasks` channel of
 [`/api/events`](events.md) (SSE). `task_id` can be `""` in the rare case no task
 was registered. Cancel with `POST /api/dataset/cancel/{task_id}`.
 
+**AutoRun after import.** `load-file`, `load-demo`, `import/{importer_name}`,
+`import-local-folder` and `import-local-files` accept an optional `autorun`
+flag (`"true"` / `"false"`): whether to run the caller's AutoRun detectors on
+the dataset once it is saved. A sent flag is also remembered as the caller's
+`autorun_on_import` [setting](settings.md), which decides an import that
+sends none (default `true`). The run starts only after the import finished
+successfully, as its own task on the `loading-tasks` channel keyed to the new
+dataset (see [Run AutoRun](#run-autorun-on-a-registered-dataset)); an import
+none of the caller's AutoRun detectors applies to starts nothing.
+
 ### Demo datasets
 
 ```
@@ -636,6 +646,28 @@ POST /api/datasets/registry/{dataset_id}/load
 → `{"ok": true, "message": "Loading started", "task_id": "..."}`
 
 403 if access is denied; 404 if the dataset or its saved pickle is missing.
+
+### Run AutoRun on a registered dataset
+
+```
+POST /api/datasets/registry/{dataset_id}/autorun
+```
+
+→ `{"ok": true, "message": "AutoRun started", "task_id": "_autorun_…"}`
+
+Runs the caller's AutoRun detectors that apply to the (loaded) dataset in the
+background - the Dashboard's ⋯ **Run AutoRun**. The task reports on the
+`loading-tasks` channel with the dataset's `dataset_id`, so it renders on the
+dataset's row, and carries an `autorun` block: `{run_id, owner, trigger,
+dataset_id, dataset_name}`, plus `detectors_run`, `total_hits`,
+`missing_detectors` and `auto_export` once it finishes. The results go to the
+caller's Auto-Find exporter when one is set, and are served by
+[`GET /api/autorun/runs/{run_id}`](find.md#autorun-results). Cancel with
+`POST /api/dataset/cancel/{task_id}`.
+
+400 when none of the caller's AutoRun detectors applies (wrong media type, or
+an embedder type the dataset lacks); 403 if access is denied; 404 if the
+dataset is unknown; 409 if it is not loaded.
 
 ### Unload registered dataset
 

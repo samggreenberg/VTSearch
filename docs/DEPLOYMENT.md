@@ -739,14 +739,18 @@ An abridged example; the full field list is `UserSettings` in
 
 - `theme`: `"system"` (the default — follows the OS `prefers-color-scheme`),
   `"dark"`, `"light"`, or `"highviz"`.
-- `autofind_detectors`: detector names to run during `/api/auto-detect` and the
-  CLI `--autodetect` flow, each mapping to a JSON file under `data/detectors/`.
+- `autofind_detectors`: detector names to run on each web import, from a
+  dataset's **Run AutoRun**, during `/api/auto-detect`, and in the CLI
+  `--autodetect` flow, each mapping to a JSON file under `data/detectors/`.
   Every user curates their own list on the Dashboard's AutoRun detector tab
   (`PUT /api/detectors/registry/<id>/autofind`). `autofind_exporter` names the
   results exporter run afterwards (`""` = no auto-export; the CLI then falls
   back to the `gui` exporter), and `autofind_exporter_field_values` keeps each
   exporter's configuration around when the picker switches between them. This is
   the trio that reads through to `data/settings.json` for the `default` user.
+  `autorun_on_import` (default `true`) is whether a web import runs them: the
+  Add Dataset dialog's **Run AutoRun** checkbox starts from it and each import
+  writes it back.
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
   per-media-type UI preferences, keyed by media-type id, so a user can tune
   audio and image datasets independently. Empty entries fall back to the

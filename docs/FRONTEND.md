@@ -282,6 +282,7 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
+| `AutoRunService` | The end of a background AutoRun: opens the results of a run this tab started from a dataset's ⋯ **Run AutoRun**, toasts any other run of the user's (an import's) with a **View results** action, and holds the run the app-root AutoRun Results dialog shows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
@@ -714,7 +715,7 @@ without the stack one keypress closed them all and lost the outer form.
   including the canonical markup and the persistent-tab exception, is in
   [`CLAUDE.md`](../CLAUDE.md) under "Nested-modal back buttons".
 - **Plugin-field forms preview their template variables.** A modal that builds
-  a form from a plugin's `fields` (Export, Auto-Detect results) seeds each
+  a form from a plugin's `fields` (Export, AutoRun Results) seeds each
   value through `PluginTemplateVarsService`, which resolves the *declared*
   `template_vars` — `{detector_name}`, `{username}`, the date parts — so the
   user sees and can edit the value the server would substitute rather than a
