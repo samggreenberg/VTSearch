@@ -60,6 +60,17 @@ def main() -> int:
         help="the arm compared with the SVM: `linear` (#3197) or `lrconv` (#4114)",
     )
     ap.add_argument(
+        "--top-k",
+        type=int,
+        default=0,
+        help="list only images in the top K of either head, where a reader looks (0 = anywhere; #3197's reading)",
+    )
+    ap.add_argument(
+        "--four-ways",
+        action="store_true",
+        help="list positives and negatives each head ranks higher, not only the SVM's side",
+    )
+    ap.add_argument(
         "--both-ways",
         action="store_true",
         help="per stratum, also the cell where the OTHER arm led most (#4114: the gap changes sign by band)",
@@ -135,11 +146,18 @@ def main() -> int:
             "|---|---|---|---|---|",
         ]
         d = rl - rs  # > 0: the SVM ranks it higher
-        for kind, mask, sign in (
+        near_top = np.ones(len(d), dtype=bool) if args.top_k <= 0 else np.minimum(rs, rl) <= args.top_k
+        kinds = [
             ("SVM wins (positive ranked higher)", yt == 1, 1),
             ("SVM losses (negative ranked higher)", yt == 0, 1),
-        ):
-            cand = np.where(mask)[0]
+        ]
+        if args.four_ways:
+            kinds += [
+                (f"{other} wins (positive ranked higher)", yt == 1, -1),
+                (f"{other} losses (negative ranked higher)", yt == 0, -1),
+            ]
+        for kind, mask, sign in kinds:
+            cand = np.where(mask & near_top & (sign * d > 0))[0]
             top = cand[np.argsort(-sign * d[cand])][: args.top]
             for j in top:
                 m = medias[ids[te[j]]]
