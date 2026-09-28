@@ -34,6 +34,7 @@ from __future__ import annotations
 import math
 import os
 import zlib
+from pathlib import Path
 
 # --- Datasets and their embedders (arms differ per dataset) ---
 DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
@@ -1205,6 +1206,20 @@ def select_categories_by_scale(
 #: ``"scale"`` forces banding; unset infers as before.
 CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
 
+#: A file naming the categories to keep, one per line (#4213).  Applied after
+#: :data:`CATEGORY_MODE`'s selection, so it can only narrow a grid, and it
+#: refuses a name the selection did not produce rather than silently running
+#: fewer cells.  For a study that samples strata of a designated set chosen by a
+#: measurement made elsewhere - e.g. the hardest and easiest quartiles - where a
+#: region cell costs too much to run all of them.  Unset: every run before #4213.
+CATEGORY_FILE = os.environ.get("CALIB_CATEGORY_FILE", "").strip()
+
+
+def _read_category_file(path: str) -> list[str]:
+    lines = [ln.strip() for ln in Path(path).read_text().splitlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
+
 #: Restrict category selection to categories that have a typed query (#3267).
 #:
 #: The autopilot's opening is a walk down the **seed sort**, and where that sort
@@ -1269,6 +1284,14 @@ def select_categories(
         category_counts = eligible
 
     selected, report = _select_categories_inner(medias, category_counts)
+    if CATEGORY_FILE:
+        wanted = _read_category_file(CATEGORY_FILE)
+        missing = sorted(set(wanted) - set(selected))
+        if missing:
+            raise ValueError(f"CALIB_CATEGORY_FILE names categories the selection did not produce: {missing}")
+        report["category_file"] = CATEGORY_FILE
+        report["not_in_category_file"] = sorted(set(selected) - set(wanted))
+        selected = sorted(wanted)
     if REQUIRE_SEED_QUERY and dataset is not None:
         report["require_seed_query"] = True
         report["dropped_no_seed_query"] = dropped_no_query

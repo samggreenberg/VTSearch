@@ -89,6 +89,14 @@ export CALIB_CATEGORY_MODE=all
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
+# #4213: a region cell costs ~2 h, so the region grid runs a committed subset
+# (the hardest and easiest quartiles) rather than all 144 cells.
+[[ -n "${LOGREG_CATEGORY_FILE:-}" ]] && export CALIB_CATEGORY_FILE="$LOGREG_CATEGORY_FILE"
+
+# Owner, 2026-09-28: this study yields to other sessions' jobs.  Every job it
+# submits carries this nice; `launch_cells.sh` takes no sbatch flags, so its
+# arrays are reniced right after submission.
+NICE="${LOGREG_NICE:-0}"
 
 # --- sizing --------------------------------------------------------------------
 # 144 cells x 5 seeds = 720 paired cells per arm: paired SE ~0.04/sqrt(720) ~
@@ -168,7 +176,7 @@ run_preflight() {
 case "$MODE" in
   prepare)
     set_exp prepare
-    P=$(sbatch --parsable --job-name=$TAG-prep --mem=32G --cpus-per-task=2 \
+    P=$(sbatch --parsable --job-name=$TAG-prep --nice="$NICE" --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
@@ -178,7 +186,7 @@ case "$MODE" in
 
   baseline)
     set_exp prepare
-    T=$(sbatch --parsable --job-name=$TAG-baseline --mem=32G --cpus-per-task=2 \
+    T=$(sbatch --parsable --job-name=$TAG-baseline --nice="$NICE" --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/baseline-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $BASE/text_baseline.csv")
@@ -192,7 +200,7 @@ case "$MODE" in
     arm_env "$ARM"
     set_exp "sizing-$ARM"
     link_prepare
-    S=$(sbatch --parsable --job-name="$TAG-size-$ARM-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
+    S=$(sbatch --parsable --job-name="$TAG-size-$ARM-$IDX" --nice="$NICE" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
@@ -210,7 +218,13 @@ case "$MODE" in
         link_prepare
         echo "=== $arm ($VOTING): head=${CALIB_HEAD:-<production>} C=${VTSEARCH_SVM_HEAD_C:-<shipped>} -> $CALIB_EXP"
         run_preflight
-        bash "$HERE/launch_cells.sh"
+        bash "$HERE/launch_cells.sh" || exit 1
+        id="$(cat "$CALIB_EXP/logs/.cells_jobid" 2>/dev/null || true)"
+        require_jobid "$id" "arm $arm's cells array"
+        if [[ "$NICE" != 0 ]]; then
+          scontrol update JobId="$id" Nice="$NICE" >/dev/null 2>&1 || true
+          echo "reniced $id to $NICE"
+        fi
       ) || exit 1
     done
     ;;
