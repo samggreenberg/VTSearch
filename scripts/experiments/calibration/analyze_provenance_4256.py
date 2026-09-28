@@ -213,6 +213,8 @@ def report(df: pd.DataFrame, out: Path, provenance: dict) -> int:
     s.to_csv(out / "provenance_summary.csv", index=False, float_format="%.4g")
     by_t = summarize(df.assign(arm=df["arm"] + "@t" + df["t"].astype(str)))
     by_t.to_csv(out / "provenance_by_t.csv", index=False, float_format="%.4g")
+    by_band = summarize(df.assign(arm=df["arm"] + "@" + df["band"]))
+    by_band.to_csv(out / "provenance_by_band.csv", index=False, float_format="%.4g")
     (out / "provenance.json").write_text(json.dumps({**provenance, "rows": len(df)}, indent=2) + "\n")
     pd.set_option("display.width", 220)
     print(s[s["X"] == 0.5].round(3).to_string(index=False))
