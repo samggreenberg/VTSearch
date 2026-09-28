@@ -700,6 +700,7 @@ An abridged example; the full field list is `UserSettings` in
   "calibration_fraction": null,
   "audio_playing": true,
   "show_animations": "show",
+  "show_usage_bars": "default",
   "show_metadata": false,
   "label_hint_dismissed": false,
   "enable_achievements": true,

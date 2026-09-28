@@ -8,8 +8,10 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
+import { SettingsStateService } from '../../services/settings-state.service';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { settleResource } from '../../testing/settle-resource';
 
 describe('DashboardComponent', () => {
   let component: DashboardComponent;
@@ -753,7 +755,135 @@ describe('DashboardComponent', () => {
     const el = fixture.nativeElement as HTMLElement;
     const empty = el.querySelector('.empty-state');
     expect(empty).toBeTruthy();
-    expect(empty?.textContent || '').toContain('No datasets yet. Click + to add one.');
+    expect((empty?.textContent || '').replace(/\s+/g, ' ')).toContain('No datasets yet. Click + to add one.');
+  });
+
+  describe('first-run hints (#4227)', () => {
+    /** Flush the registry, then repaint (see the note in the empty-state test). */
+    function renderWith(datasets: any[] = [], detectors: any[] = []): HTMLElement {
+      flushInitialRequests(datasets, detectors);
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    /** Load the user's settings with the given `show_usage_bars` mode. */
+    async function loadUsageBarsSetting(mode: 'hide' | 'default' | 'view'): Promise<void> {
+      TestBed.inject(SettingsStateService).load();
+      TestBed.tick();
+      httpMock.expectOne('/api/settings').flush({ show_usage_bars: mode });
+      await settleResource();
+      fixture.changeDetectorRef.markForCheck();
+      TestBed.tick();
+    }
+
+    it('puts a working + in the dataset empty state, with an arrow to the header button', () => {
+      const el = renderWith();
+      const section = el.querySelectorAll('.dashboard-section')[0];
+      const inlineAdd = section.querySelector('.empty-state .inline-add-btn') as HTMLButtonElement;
+      expect(inlineAdd).toBeTruthy();
+      expect(inlineAdd.textContent?.trim()).toBe('+');
+      expect(section.querySelector('vt-pointer-arrow')).toBeTruthy();
+
+      inlineAdd.click();
+      expect(component.importerModalOpen).toBe(true);
+    });
+
+    it('puts a working + in the draft-detector empty state, with an arrow to the header button', () => {
+      const el = renderWith([{ id: 'd1', name: 'DS', media_type: 'image' }]);
+      const section = el.querySelectorAll('.dashboard-section')[1];
+      const empty = section.querySelector('.empty-state');
+      expect((empty?.textContent || '').replace(/\s+/g, ' ')).toContain('No draft detectors. Click + to add one.');
+      expect(section.querySelector('vt-pointer-arrow')).toBeTruthy();
+
+      (section.querySelector('.empty-state .inline-add-btn') as HTMLButtonElement).click();
+      expect(component.newDetectorModalOpen).toBe(true);
+    });
+
+    it('disables both detector tabs while there are no detectors', () => {
+      const el = renderWith();
+      const tabs = [...el.querySelectorAll('.detector-tab-bar .tab')] as HTMLButtonElement[];
+      expect(tabs.map((t) => t.disabled)).toEqual([true, true]);
+    });
+
+    it('enables the detector tabs once a detector exists', () => {
+      const el = renderWith([], [{ id: 'm1', name: 'M', media_type: 'image' }]);
+      const tabs = [...el.querySelectorAll('.detector-tab-bar .tab')] as HTMLButtonElement[];
+      expect(tabs.map((t) => t.disabled)).toEqual([false, false]);
+    });
+
+    it('locks the grid to Drafts when there are no detectors', () => {
+      selection.setDetectorTab('autorun');
+      renderWith();
+      expect(selection.detectorTab()).toBe('drafts');
+    });
+
+    it('leaves the AutoRun tab alone once detectors exist', () => {
+      selection.setDetectorTab('autorun');
+      renderWith([], [{ id: 'm1', name: 'M', media_type: 'image', autofind: true }]);
+      expect(selection.detectorTab()).toBe('autorun');
+    });
+
+    it('points at Train when an empty detector and a matching dataset are selected', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 0 }],
+      );
+      expect(component.showTrainHint).toBe(true);
+      const section = el.querySelectorAll('.dashboard-section')[1];
+      expect(section.querySelector('.intro-hint')?.textContent?.trim()).toBe(
+        'Click Train to teach your new detector.',
+      );
+      expect(section.querySelector('vt-pointer-arrow')).toBeTruthy();
+    });
+
+    it('drops the Train hint once the detector has labels', () => {
+      const el = renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'image' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 12 }],
+      );
+      expect(component.showTrainHint).toBe(false);
+      expect(el.querySelector('.intro-hint')).toBeNull();
+    });
+
+    it('does not point at Train when Train is disabled (media type mismatch)', () => {
+      renderWith(
+        [{ id: 'd1', name: 'DS', media_type: 'audio' }],
+        [{ id: 'm1', name: 'M', media_type: 'image', num_training: 0 }],
+      );
+      expect(component.labelEnabled).toBe(false);
+      expect(component.showTrainHint).toBe(false);
+    });
+
+    it('hides the RAM / Disk bars by default until a detector exists', () => {
+      let el = renderWith();
+      expect(el.querySelectorAll('vt-usage-bar').length).toBe(0);
+
+      component.refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [{ id: 'm1', name: 'M' }] });
+      TestBed.tick();
+      el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelectorAll('vt-usage-bar').length).toBe(2);
+    });
+
+    it('always shows the bars on "view" and never on "hide"', async () => {
+      renderWith([], [{ id: 'm1', name: 'M' }]);
+      await loadUsageBarsSetting('hide');
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelectorAll('vt-usage-bar').length).toBe(0);
+
+      TestBed.inject(SettingsStateService).update({ show_usage_bars: 'view' }).subscribe();
+      httpMock.expectOne('/api/settings').flush({ show_usage_bars: 'view' });
+      TestBed.tick();
+      expect(el.querySelectorAll('vt-usage-bar').length).toBe(2);
+    });
+
+    it('shows the bars on "view" even with no detectors', async () => {
+      renderWith();
+      await loadUsageBarsSetting('view');
+      expect((fixture.nativeElement as HTMLElement).querySelectorAll('vt-usage-bar').length).toBe(2);
+    });
   });
 
   it('should render dataset table when datasets exist', () => {

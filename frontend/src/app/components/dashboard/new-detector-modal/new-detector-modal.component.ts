@@ -411,6 +411,20 @@ export class NewDetectorModalComponent implements OnInit {
     return text.trim().replace(/\s+/g, ' ');
   }
 
+  /** Default detector name for a typed text example (#4227): each word
+   *  capitalised like a title, then "Detector", so ``large books`` becomes
+   *  ``Large Books Detector``. Capitals already typed are kept (``NASA
+   *  rockets`` → ``NASA Rockets Detector``), and a phrase that already ends in
+   *  "detector" doesn't get a second one. */
+  private nameFromText(text: string): string {
+    const phrase = this.sanitizeName(text).replace(
+      /(^|\s)(\S)/g,
+      (_match, space: string, first: string) => space + first.toUpperCase(),
+    );
+    if (!phrase) return '';
+    return /\bdetector$/i.test(phrase) ? phrase : `${phrase} Detector`;
+  }
+
   /** Strip a trailing extension and the leading path so a filename like
    *  ``/foo/bar/My Sound.wav`` becomes ``My Sound``. */
   private nameFromFilename(text: string): string {
@@ -432,7 +446,7 @@ export class NewDetectorModalComponent implements OnInit {
     if (first?.display) {
       this.name.set(this.sanitizeName(this.nameFromFilename(first.display)));
     } else if (this.pendingText()) {
-      this.name.set(this.sanitizeName(this.pendingText()));
+      this.name.set(this.nameFromText(this.pendingText()));
     }
   }
 
@@ -445,13 +459,25 @@ export class NewDetectorModalComponent implements OnInit {
       this.seedNotice.set('');
     }
     if (!this.nameTouched) {
-      this.name.set(this.sanitizeName(value));
+      this.name.set(this.nameFromText(value));
     }
   }
 
   onNameInput(value: string): void {
     this.nameTouched = true;
     this.name.set(value);
+  }
+
+  /** Enter in the name field means "Create" (#4227): the name is usually the
+   *  last thing typed. Only fires when the footer's primary button would be
+   *  enabled, so an incomplete form stays quiet instead of erroring. The
+   *  default is suppressed either way so the browser's implicit form
+   *  submission can't fire a second, unguarded submit. */
+  onNameEnter(event: Event): void {
+    event.preventDefault();
+    if (this.tab === 'blank' ? this.canSubmitBlank : this.canSubmitTrained) {
+      this.submit();
+    }
   }
 
   toggleMediaTypeDropdown(): void {
@@ -587,9 +613,7 @@ export class NewDetectorModalComponent implements OnInit {
    *  missing name) so the user knows what still needs filling in. */
   get blankSubmitTitle(): string {
     if (this.canSubmitBlank) return 'Create the detector with the example you provided';
-    if (!this.hasExample) {
-      return `Provide a text or ${this.exampleMediaTabLabel.toLowerCase()} example to create the detector`;
-    }
+    if (!this.hasExample) return this.exampleHint;
     if (!this.name().trim()) return 'Enter a detector name to create the detector';
     return 'Create the detector';
   }
@@ -658,6 +682,28 @@ export class NewDetectorModalComponent implements OnInit {
         : `Added ${items.length} ${noun}.`,
     );
   }
+
+  /** What to provide on the active example tab, shown under the tabs until an
+   *  example exists (and as the disabled Create button's tooltip). Per tab
+   *  because each tab takes only its own kind of example, and "start" rather
+   *  than "create" because the example only seeds the detector; labeling is
+   *  what builds it (#4227). Seed-importer tabs share the media wording. */
+  get exampleHint(): string {
+    if (this.exampleTab() === 'text') return 'Provide a text description to start the detector.';
+    return `Provide an example ${this.exampleMediaNoun} to start the detector.`;
+  }
+
+  /** "image", "video", "audio clip", …: the media tab's label as a countable
+   *  noun for {@link exampleHint}. Labels that are mass nouns get a unit. */
+  get exampleMediaNoun(): string {
+    const label = this.exampleMediaTabLabel.toLowerCase();
+    return NewDetectorModalComponent.MASS_NOUN_UNITS[label] ?? label;
+  }
+
+  private static readonly MASS_NOUN_UNITS: Record<string, string> = {
+    audio: 'audio clip',
+    text: 'text passage',
+  };
 
   /** Label for the media example tab: "Image", "Audio", "Video", etc. (the
    *  detector's media type), falling back to "Media". */

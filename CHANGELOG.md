@@ -130,6 +130,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A friendlier first run on the Dashboard** (issue #4227). An empty
+  Datasets or Detectors panel now shows a working **+** inside its "Click + to
+  add one." message, with an arrow to the real **+** in the panel header so
+  you know where it lives next time. While there are no detectors, the
+  **Drafts** / **AutoRun** tabs are dimmed and locked to Drafts, and the
+  disabled Combine and Delete icons beside **+** are fainter. Once a new
+  detector with no labels is selected next to a matching dataset, a
+  "Click Train to teach your new detector." hint points at **Train**. The
+  RAM / Disk bars now stay hidden until you have a detector; **Settings →
+  Appearance → RAM / Disk bars** switches them to always (**View**) or never
+  (**Hide**). In the New Detector dialog the examples no longer assume sound
+  ("e.g. large books", "e.g. Large Book Detector"), the hint under the example
+  tabs names only what that tab takes, a typed description becomes a
+  title-cased "… Detector" name, and Enter in the name field creates the
+  detector.
+
 - **A click-by-click walkthrough in the user guide** (#4202). The guide opens
   with *Step by step: your first search* — load a folder of photos, make a
   detector, train it, load a second folder, and Find — with a screenshot per

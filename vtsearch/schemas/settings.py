@@ -20,6 +20,7 @@ from vtsearch.settings_models import (
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_THEMES,
+    VALID_USAGE_BARS_MODES,
 )
 
 
@@ -77,6 +78,7 @@ class AppSettingsSchema(Schema):
     calibration_fraction = fields.Float(allow_none=True)
     audio_playing = fields.Boolean()
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
+    show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
@@ -253,6 +255,7 @@ class SettingsUpdateSchema(Schema):
     calibration_fraction = fields.Float(allow_none=True)
     audio_playing = fields.Boolean()
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
+    show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
