@@ -25,8 +25,10 @@ only reads from those above it:
   kept as the anchored path's small-label fallback.
 * :mod:`~vtscore.training.thresholds.precision_floor` - the precision-floor
   cut (#4224): the largest top-k whose estimated precision clears a floor, from
-  the calibration folds' held-out votes.  Self-contained (numpy and
-  scikit-learn); not yet wired to a detector.
+  the calibration folds' held-out votes, and :func:`reporting_line`, which
+  decides whether a detector's line is the floor's or the Inclusion knob's.
+  Reads :mod:`~vtscore.training.thresholds.gmm` for its sampling and
+  sentinel filtering; otherwise numpy and scikit-learn.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the
@@ -85,6 +87,7 @@ from vtscore.training.thresholds.conformal import (
     _grouped_folds,
     _per_bag_fit_weights,
     _pooled_group_scores,
+    _row_wise_fold_ordering,
     _score_rows_digest,
     _split_dither_rng,
     _torch_fold_ordering,
@@ -148,22 +151,38 @@ from vtscore.training.thresholds.gmm import (
     snap_cut_to_sample,
 )
 from vtscore.training.thresholds.costs import weighted_error_cost
+
+# The floor an unset setting resolves to lives in the config layer, so settings
+# can read it without importing the training stack; it is re-exported here
+# beside the estimator it parameterises.
+from vtscore.config.runtime import DEFAULT_MIN_PRECISION
 from vtscore.training.thresholds.precision_floor import (
     MIN_BOOTSTRAP_FITS,
     MIN_CALIBRATION_POSITIVES,
+    NO_PRECISION_FLOOR,
     PRECISION_BOOTSTRAP_REFITS,
     PRECISION_BOOTSTRAP_SEED,
     PRECISION_COORDINATES,
     PRECISION_FITS,
+    PRECISION_FLOOR_FALLBACK_INCLUSION,
     PRECISION_LOWER_PERCENTILE,
+    PrecisionFloorCurve,
     PrecisionFloorCut,
+    PrecisionFloorEstimate,
     PrecisionFloorStatus,
+    ReportingLine,
+    eligible_fold_orderings,
     em_prior_shift,
     fit_posterior,
+    fit_precision_floor_curve,
     fold_rank_evidence,
+    line_inclusion,
     percentile_in,
     precision_floor_cut,
     precision_lower_bound_curve,
+    reporting_line,
+    resolve_min_precision,
+    unpromised,
 )
 from vtscore.training.thresholds.knobs import (
     ACQUISITION_INCLUSION_OFFSET,
@@ -192,21 +211,33 @@ __all__ = [
     "inclusion_cost_weights",
     "production_split_for",
     "weighted_error_cost",
+    "DEFAULT_MIN_PRECISION",
     "MIN_BOOTSTRAP_FITS",
     "MIN_CALIBRATION_POSITIVES",
+    "NO_PRECISION_FLOOR",
     "PRECISION_BOOTSTRAP_REFITS",
     "PRECISION_BOOTSTRAP_SEED",
     "PRECISION_COORDINATES",
     "PRECISION_FITS",
+    "PRECISION_FLOOR_FALLBACK_INCLUSION",
     "PRECISION_LOWER_PERCENTILE",
+    "PrecisionFloorCurve",
     "PrecisionFloorCut",
+    "PrecisionFloorEstimate",
     "PrecisionFloorStatus",
+    "ReportingLine",
+    "eligible_fold_orderings",
     "em_prior_shift",
     "fit_posterior",
+    "fit_precision_floor_curve",
     "fold_rank_evidence",
+    "line_inclusion",
     "percentile_in",
     "precision_floor_cut",
     "precision_lower_bound_curve",
+    "reporting_line",
+    "resolve_min_precision",
+    "unpromised",
     "ANCHOR_WEIGHT_DEFAULT",
     "CUT_KIND_CONTINUED",
     "CUT_KIND_DEGENERATE_MIDPOINT",
@@ -281,6 +312,7 @@ __all__ = [
     "_grouped_folds",
     "_per_bag_fit_weights",
     "_pooled_group_scores",
+    "_row_wise_fold_ordering",
     "_score_rows_digest",
     "_split_dither_rng",
     "_torch_fold_ordering",

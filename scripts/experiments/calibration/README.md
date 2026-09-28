@@ -96,6 +96,8 @@ produced.
 
 | **#4220 Can a precision-floor promise be kept from the app's votes?** (the #4223 ruling's objective, priced offline) — [report](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md) | `analyze_pframes_4220.py`, `selftest_analyze_pframes_4220.py`, `figure_pframes_4220.py`. Reads the per-cell precision frames `task_NNNN__pframes.npz` that `CALIB_PFRAME_STEPS` makes the cell runner record (test truth, pool, votes, fold held-out votes and haystacks); prices P(y\|score) estimators (in-sample, fold-rank, fold-raw × logistic/isotonic × point/bootstrap lower bound, ± EM prior shift) on recall at a precision floor X and the violation rate, in the same-prevalence and shifted-corpus scenarios |
 | **#4222 Stay in TextTop until G Goods, in the low-prevalence world** (does a deeper text opening mine the positives a precision promise needs?) — [report](../../../docs/experiments/2026-09-28-textgood-4222/REPORT.md) | `launch_textgood_4222.sh`, `analyze_textgood_4222.py`, `selftest_analyze_textgood_4222.py`, `figure_textgood_4222.py`. Today's app with the opening's Good round at G = 3 (production) / 6 / 10 / 20, at COCO Better's default 0.44% and positives thinned to 0.1% (`CALIB_TARGET_PREVALENCE`); precision frames on. Reports harvest, calibration positives against the #4220 gate, the #4220 estimator's promises, and AP paired against the G = 3 control, then applies the decision rule fixed in #4222 |
+| **#4224 Rank frames for precision-floor studies off the GRID** — [data and schema](../../../docs/experiments/2026-09-28-rank-frames/README.md) | `export_rank_frames.py`. Cuts the #4220/#4222 precision frames down to the ranks of each test corpus's positives, plus the shipped estimator's cuts (as shipped, and with a consistent reference pool) at X = 25/50/75%, so random-verification and audit-sampling studies can run from CSVs in the repo |
+| **#4257 How many audit votes does an honest precision-floor promise cost?** — [report](../../../docs/experiments/2026-09-28-random-verification/REPORT.md) | `analyze_random_verification.py`, `selftest_analyze_random_verification.py`. Reads the #4224 rank frames and prices random verification: the user audits a uniform sample of a candidate top k, and a Clopper–Pearson lower bound decides the promise. One-round, sequential-shrinking and stratified rules against the stored estimators and against reading the top K; the audit draws are hypergeometric and the only randomness. Pure pandas/numpy/scipy, runs anywhere in about a minute, and writes the report's tables and figures |
 <!-- END INDEX -->
 
 ## Arms
@@ -485,8 +487,10 @@ GM_TEXT_BASELINE="$OUT/text_baseline.csv" GM_OUT="$OUT" python analyze_startup.p
 ```
 
 Grammar (full reference: [`vtscore/eval/startup_schedule.py`](../../../vtscore/eval/startup_schedule.py)):
-`<g|b|n><count>@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3` stays until 3
-goods exist, `b4` until 4 bads, `n8` for 8 clicks; `@top` cuts above every score,
+`<g|b|n><count>[+dry<m>/<w>]@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3`
+stays until 3 goods exist, `b4` until 4 bads, `n8` for 8 clicks; `+dry1/8` also
+ends a `g` or `n` round once its last 8 picks held fewer than 1 good (#4222's
+adaptive stop, e.g. `g20+dry1/8@top`); `@top` cuts above every score,
 `@mid` at the shipped GMM midpoint, `@k-3` at that GMM split under inclusion −3,
 `@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid` is today's opening
 and is *required* to reproduce a default run click for click.

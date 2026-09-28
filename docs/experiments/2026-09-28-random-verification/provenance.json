@@ -1,0 +1,111 @@
+{
+  "issue": 4257,
+  "frames": {
+    "0.44%": {
+      "file": "rank_frames_0p44pct.csv.gz",
+      "sha256_16": "f0d800cfdf4ff533",
+      "frames": 2662
+    },
+    "0.1%": {
+      "file": "rank_frames_0p1pct.csv.gz",
+      "sha256_16": "fb77050906731394",
+      "frames": 2328
+    },
+    "5%": {
+      "file": "rank_frames_5pct.csv.gz",
+      "sha256_16": "fdc53851bd1beb0a",
+      "frames": 2871
+    }
+  },
+  "draws_per_frame": 20,
+  "seed": 4257,
+  "floors": [
+    0.25,
+    0.5,
+    0.75
+  ],
+  "alphas": [
+    0.05,
+    0.1
+  ],
+  "budgets": [
+    5,
+    10,
+    20,
+    40
+  ],
+  "strata_edges": [
+    0,
+    4,
+    8,
+    16,
+    32,
+    64,
+    128
+  ],
+  "rules": [
+    {
+      "name": "a:consistent",
+      "kind": "a",
+      "start": "consistent",
+      "rounds": 1,
+      "seq": false
+    },
+    {
+      "name": "a:top16",
+      "kind": "a",
+      "start": 16,
+      "rounds": 1,
+      "seq": false
+    },
+    {
+      "name": "a:top32",
+      "kind": "a",
+      "start": 32,
+      "rounds": 1,
+      "seq": false
+    },
+    {
+      "name": "a:top64",
+      "kind": "a",
+      "start": 64,
+      "rounds": 1,
+      "seq": false
+    },
+    {
+      "name": "b:consistent",
+      "kind": "b",
+      "start": "consistent",
+      "rounds": 4,
+      "seq": false
+    },
+    {
+      "name": "b:top128",
+      "kind": "b",
+      "start": 128,
+      "rounds": 6,
+      "seq": false
+    },
+    {
+      "name": "b:top128/3",
+      "kind": "b",
+      "start": 128,
+      "rounds": 3,
+      "seq": false
+    },
+    {
+      "name": "c:union",
+      "kind": "c",
+      "start": 0,
+      "rounds": 1,
+      "seq": false
+    },
+    {
+      "name": "c:seq",
+      "kind": "c",
+      "start": 0,
+      "rounds": 1,
+      "seq": true
+    }
+  ]
+}

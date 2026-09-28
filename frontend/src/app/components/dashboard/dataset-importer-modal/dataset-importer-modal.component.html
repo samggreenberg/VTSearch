@@ -45,6 +45,7 @@
         (buildProjectionChange)="buildProjection = $event"
         [mergeNearDuplicates]="mergeNearDuplicates"
         (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        [autorun]="autorunFlag"
         (demoDatasetSelected)="onDemoDatasetSelected($event)"
       ></vt-demo-picker>
     </ng-container>
@@ -73,6 +74,7 @@
         (buildProjectionChange)="buildProjection = $event"
         [mergeNearDuplicates]="mergeNearDuplicates"
         (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        [autorun]="autorunFlag"
         (importStarted)="importStarted.emit()"
       ></vt-server-folder-picker>
     </ng-container>
@@ -111,6 +113,7 @@
         (buildProjectionChange)="buildProjection = $event"
         [mergeNearDuplicates]="mergeNearDuplicates"
         (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+        [autorun]="autorunFlag"
         (importStarted)="importStarted.emit()"
       ></vt-local-folder-picker>
     </ng-container>
@@ -126,8 +129,29 @@
     (buildProjectionChange)="buildProjection = $event"
     [mergeNearDuplicates]="mergeNearDuplicates"
     (mergeNearDuplicatesChange)="mergeNearDuplicates = $event"
+    [autorun]="autorunFlag"
     (importStarted)="importStarted.emit()"
   ></vt-generic-form-picker>
+
+  <!-- Outside Advanced on purpose: whether the user's AutoRun detectors run on
+       this import is a routine per-import choice, not a tuning knob. -->
+  @if (selectedImporter() && autorunDetectorCount > 0) {
+    <div class="form-group autorun-toggle">
+      <label
+        class="form-label"
+        for="import-run-autorun"
+        [title]="'Once the dataset is saved, run the detectors on your AutoRun tab (' + autorunDetectorCount + ') that match its media type. Their results open from a notice when they finish, and go to your Auto-Find exporter if you set one. Your choice is remembered for your next import.'"
+      >
+        <input
+          id="import-run-autorun"
+          type="checkbox"
+          [ngModel]="runAutorun()"
+          (ngModelChange)="onRunAutorunChange($event)"
+        />
+        Run AutoRun detectors on this dataset
+      </label>
+    </div>
+  }
 
 
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {

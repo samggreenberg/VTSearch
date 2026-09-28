@@ -8,18 +8,24 @@ import {
   ClipboardCopyComponent,
 } from '../../clipboard-copy/clipboard-copy.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
+import { ToastService } from '../../../services/toast.service';
 import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
 import {
+  AutoDetectDetectorResult,
   AutoDetectHit,
   AutoDetectResultsData,
   ImporterField,
 } from '../../../models/api.models';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import { IconComponent } from '../../icon/icon.component';
-import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
+import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import { visibleFields } from '../../../utils/plugin-fields';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
+/** The AutoRun Results dialog: one AutoRun run's hits on one dataset, with
+ *  the good / bad / both filter, copy-to-clipboard, and an Export button that
+ *  sends the listed rows to any exporter that reads a scored run. Mounted once
+ *  in `AppComponent`, fed by `AutoRunService`. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autodetect-results-modal',
@@ -31,6 +37,7 @@ import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.c
 export class AutoDetectResultsModalComponent implements OnInit {
   private exportersApi = inject(ExportersApiService);
   private templateVars = inject(PluginTemplateVarsService);
+  private toast = inject(ToastService);
 
   readonly data = input<AutoDetectResultsData>({ results: {} });
   readonly closed = output<void>();
@@ -45,6 +52,8 @@ export class AutoDetectResultsModalComponent implements OnInit {
    *  are still seeded into ``exportFieldValues``. */
   readonly exporterFields = signal<ImporterField[]>([]);
   exportFieldValues: Record<string, string> = {};
+  /** An Export click is in flight (disables the button). */
+  readonly exporting = signal(false);
 
   /** Columns offered by the shared clipboard control (single-column list mode). */
   readonly clipboardColumns: ClipboardColumn[] = [
@@ -183,6 +192,89 @@ export class AutoDetectResultsModalComponent implements OnInit {
         origin,
       };
     });
+  }
+
+  /** The exporter the Export button sends to: the picked one, or the only one. */
+  get activeExporter(): ExporterEntry | undefined {
+    return this.exporters().find((e) => e.name === this.selectedExporter());
+  }
+
+  /**
+   * The run reshaped to hold exactly the rows the table lists.
+   *
+   * Exporters write a detector's `hits` and conventionally ignore
+   * `negative_hits` (see `ResultsExporter.export_find_results`), so the chosen
+   * side is moved into `hits`: Bad exports the below-threshold rows, Both
+   * exports every row with its `label` stamped, and `total_hits` counts what
+   * is being sent.
+   */
+  exportPayload(): AutoDetectResultsData {
+    const data = this.data();
+    const results: Record<string, AutoDetectDetectorResult> = {};
+    for (const [name, result] of Object.entries(data.results || {})) {
+      const good = result.hits || [];
+      const bad = result.negative_hits || [];
+      const hits =
+        this.exportSides === 'good'
+          ? good
+          : this.exportSides === 'bad'
+            ? bad
+            : [...good.map((h) => ({ ...h, label: 'good' })), ...bad.map((h) => ({ ...h, label: 'bad' }))];
+      results[name] = { ...result, hits, negative_hits: [], total_hits: hits.length };
+    }
+    return {
+      media_type: data.media_type,
+      detectors_run: data.detectors_run,
+      results,
+      missing_detectors: data.missing_detectors ?? [],
+    };
+  }
+
+  /** Send the listed rows to the active exporter. */
+  exportResults(): void {
+    const exporter = this.activeExporter;
+    if (!exporter || this.exporting()) return;
+    const exporterLabel = exporter.display_name || exporter.name;
+    const rowCount = this.displayHits.length;
+    const plural = rowCount === 1 ? '' : 's';
+    // Claim the tab now, while this click still counts as user activation;
+    // see `openBlankTab` (#2898).
+    const pendingTab = exporter.opens_url ? openBlankTab() : null;
+    this.exporting.set(true);
+    this.exportersApi
+      .runExport({
+        exporter_name: exporter.name,
+        field_values: { ...this.exportFieldValues },
+        results: this.exportPayload() as unknown as Record<string, unknown>,
+        payload_kind: 'find_results',
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.exporting.set(false);
+          const openUrl = safeExternalUrl(response?.open_url);
+          let opened = false;
+          if (openUrl) {
+            opened = pendingTab ? pendingTab.navigate(openUrl) : openExternalUrl(openUrl);
+          } else {
+            pendingTab?.close();
+          }
+          this.toast.success({
+            message: opened
+              ? `Opened ${rowCount.toLocaleString()} result${plural} in ${exporterLabel}`
+              : `Exported ${rowCount.toLocaleString()} result${plural} to ${exporterLabel}`,
+            detail: openUrl && !opened ? 'Your browser blocked the new tab.' : response?.message,
+            action: openUrl ? { label: 'Open', title: openUrl, onClick: () => openExternalUrl(openUrl) } : undefined,
+            autoDismissMs: openUrl && !opened ? 0 : undefined,
+            dedupKey: 'autorun-results-export',
+          });
+        },
+        error: () => {
+          // The error interceptor toasts the server's reason.
+          pendingTab?.close();
+          this.exporting.set(false);
+        },
+      });
   }
 
   close(): void {

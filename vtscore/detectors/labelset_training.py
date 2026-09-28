@@ -609,6 +609,25 @@ def build_xy_from_labelset(
     return X_list, y_list, groups, score_rows
 
 
+def labelset_calibrating_groups(labelset: LabelSet) -> set:
+    """The bags of :func:`build_xy_from_labelset` whose vote the learned sort chose.
+
+    Read from each element's recorded surfacing provenance
+    (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`), which
+    rides in its metadata through every save and import.  Only these bags'
+    held-out scores may calibrate a precision-floor promise (#4245); every
+    element still trains the model.
+    """
+    from vtscore.datasets.vote_provenance import calibrates_precision, read_provenance
+    from vtscore.detectors.labelset_elements import stable_element_id
+
+    return {
+        ("g" if elem.label == "good" else "b", stable_element_id(elem))
+        for elem in labelset.elements
+        if elem.label in ("good", "bad") and calibrates_precision(read_provenance(elem.metadata))
+    }
+
+
 def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None) -> set[int]:
     """The media ids in *snap* that carry a good/bad label in *labelset*.
 
@@ -987,6 +1006,7 @@ def train_from_labelset(
         score_rows=score_rows,
         voted_ids=voted_ids,
         haystack=haystack.medias if haystack is not None else None,
+        calibrating_groups=labelset_calibrating_groups(labelset),
     )
     from vtscore.detectors.model_loading import labelset_signature
 
@@ -1007,6 +1027,7 @@ def labelset_train_and_score(
     calibration_fraction: float | None = None,
     rows: Any = None,
     on_progress: ProgressCallback | None = None,
+    min_precision: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -1035,6 +1056,10 @@ def labelset_train_and_score(
     *clips_dict*: each unresolved element costs one origin fetch (and, on a
     patch detector, one ``patch_forward``).  A caller driving a progress bar -
     or wanting a cancellation checkpoint - passes it.
+
+    *min_precision* is the precision floor to cut at, or ``None`` to cut at
+    *inclusion_value*; only the elements the learned sort chose calibrate it
+    (:func:`labelset_calibrating_groups`).
     """
     from vtscore.detectors.training import _train_and_score_xy
 
@@ -1052,6 +1077,8 @@ def labelset_train_and_score(
         score_rows=score_rows,
         voted_ids=labeled_media_ids(labelset, clips_dict),
         rows=rows,
+        min_precision=min_precision,
+        calibrating_groups=labelset_calibrating_groups(labelset),
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

@@ -676,7 +676,7 @@ class _AutoDetectResultSchema(Schema):
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """Outcome of auto-exporting an Auto-Find run's results.
 
-    Built by ``_run_autofind_export``: a fixed ``{exporter, success}`` base
+    Built by ``vtsearch.autorun_detectors.run_autofind_export``: a fixed ``{exporter, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
@@ -733,6 +733,30 @@ class AutoDetectResponseSchema(Schema):
     # Present only when an Auto-Find results exporter is configured: the
     # outcome of auto-exporting these results.
     auto_export = fields.Nested(_AutoFindExportStatusSchema)
+
+
+class AutoRunRunResponseSchema(AutoDetectResponseSchema):
+    """Response for ``GET /api/autorun/runs/<run_id>``: one background AutoRun's results.
+
+    The ``POST /api/auto-detect`` body for the run, plus which dataset it
+    scored and what started it.  Served only to the user who started the run,
+    and only while it is among the most recent runs the server keeps.
+    """
+
+    run_id = fields.String(required=True)
+    dataset_id = fields.String(required=True)
+    dataset_name = fields.String(required=True)
+    trigger = fields.String(
+        required=True,
+        validate=validate.OneOf(["import", "manual"]),
+        metadata={
+            "description": (
+                "``import`` when a finished web import started the run, ``manual`` when "
+                "the dataset's Run AutoRun action did."
+            )
+        },
+    )
+    created_at = fields.Float(required=True, metadata={"description": "Unix seconds the run finished."})
 
 
 # ---------------------------------------------------------------------------
@@ -932,6 +956,23 @@ class FindStatsSweepPointSchema(Schema):
     false_neg = fields.Integer(required=True)
 
 
+class FindStatsPrecisionPointSchema(Schema):
+    """One point on the Stats precision-vs-returned curve: the top ``n_returned`` by score."""
+
+    n_returned = fields.Integer(required=True)
+    # Score of the n-th item: the cut that returns this many.
+    threshold = fields.Float(required=True)
+    # Items in the top n the user checked by hand, and how many of those they kept Good.
+    checked = fields.Integer(required=True)
+    checked_good = fields.Integer(required=True)
+    # checked_good / checked; null when nothing in the top n was checked.
+    verified_precision = fields.Float(required=True, allow_none=True)
+    # Lower-bound estimate from the detector's calibration folds; null unless
+    # ``estimate_status`` is ``"estimated"`` (and for a count too small to read
+    # off a sampled corpus).
+    estimated_precision = fields.Float(required=True, allow_none=True)
+
+
 class FindStatsResponseSchema(Schema):
     """Response for ``GET /api/find/stats`` (detector evaluation over the
     adopted Find label set)."""
@@ -951,16 +992,37 @@ class FindStatsResponseSchema(Schema):
     agreements = fields.Integer(required=True)
     corrections = fields.Integer(required=True)
     agreement_rate = fields.Float(required=True)
-    precision = fields.Float(required=True)
+    # The "Kept rate": of the items the detector called Good that the user
+    # checked by hand, the share they kept Good.  Unchecked items are not
+    # counted as right.  Null when no such item was checked.
+    verified_precision = fields.Float(required=True, allow_none=True)
+    verified_called_good = fields.Integer(required=True)
+    verified_kept_good = fields.Integer(required=True)
     # Run context.
     inclusion = fields.Integer(required=True)
     threshold = fields.Float(required=True)
+    # How many items the Find run scored, and how many clear the current cut.
+    n_scored = fields.Integer(required=True)
+    n_returned = fields.Integer(required=True)
     # True when the detector's labelset changed (Find corrections folded in +
     # retrain) after this evaluation was scored, so these numbers reflect the
     # previous detector version.  Drives the "out of date" note in the UI.
     stale = fields.Boolean(required=True)
-    # FP/FN at every inclusion from -10..10 over all adopted items.
+    # FP/FN at every inclusion from -10..10 over all adopted items.  No longer
+    # charted; kept until the Inclusion stepper is gone (#4246).
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
+    # Precision against the number returned, at log-spaced counts plus the
+    # current cut's.
+    precision_curve = fields.List(fields.Nested(FindStatsPrecisionPointSchema), required=True)
+    # Whether the curve carries an estimate: ``"estimated"``;
+    # ``"insufficient_evidence"`` (fewer than ``min_calibration_positives``
+    # Good votes among the calibration folds' held-out votes, the precision
+    # floor's own gate); or ``"unavailable"`` (no calibration folds at all).
+    estimate_status = fields.String(
+        required=True, validate=validate.OneOf(["estimated", "insufficient_evidence", "unavailable"])
+    )
+    calibration_positives = fields.Integer(required=True)
+    min_calibration_positives = fields.Integer(required=True)
 
 
 class FindEvidenceCoverageResponseSchema(Schema):
@@ -1018,6 +1080,7 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
+    "AutoRunRunResponseSchema",
     "DetectorBrowsePositivesReleaseResponseSchema",
     "DetectorBrowsePositivesResponseSchema",
     "DetectorCancelResponseSchema",

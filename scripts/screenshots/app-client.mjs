@@ -62,7 +62,7 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
    * after this one 409s with `dataset_not_loaded`. Idempotent means idempotent
    * across restarts too.
    */
-  async function ensureDataset(name, embedder) {
+  async function ensureDataset(name, embedder, extra = []) {
     const existing = named(await datasets(), name);
     if (existing) {
       log(`dataset ${name} exists (${existing.num_items} items)`);
@@ -80,6 +80,9 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
         reference_files: 'true',
         dataset_name: name,
         embedder,
+        // The optional region / instance embedders, as the Add Dataset
+        // dialog's Advanced section sends them: the whole trio, primary first.
+        ...(extra.length ? { embedders: [embedder, ...extra] } : {}),
       },
     });
     const row = await waitFor(`dataset ${name}`, async () => named(await datasets(), name));
@@ -87,16 +90,31 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
     return row;
   }
 
-  /** Create (if absent) and load a trainable image detector on *dataset*, seeded by *text*. */
-  async function ensureDetector(name, dataset, text = query) {
-    const existing = named(await detectors(), name);
+  /**
+   * Create (if absent) and load a trainable image detector on *dataset*, seeded
+   * by *text*. *embedderType* locks it to one of the dataset's embedder types
+   * (`patch_semantic` for region voting); a detector already locked to a
+   * different type is dropped and made again.
+   */
+  async function ensureDetector(name, dataset, text = query, embedderType = '') {
+    let existing = named(await detectors(), name);
+    if (existing && embedderType && existing.embedder_type !== embedderType) {
+      await dropDetectors(name);
+      existing = undefined;
+    }
     const row =
       existing ||
       (
         await api('/api/detectors/registry', {
           method: 'POST',
           dataset: dataset.id,
-          body: { name, media_type: 'image', text_query: text, trainable: true },
+          body: {
+            name,
+            media_type: 'image',
+            text_query: text,
+            trainable: true,
+            ...(embedderType ? { embedder_type: embedderType } : {}),
+          },
         })
       ).detector;
     await api('/api/detectors/registry/load', {

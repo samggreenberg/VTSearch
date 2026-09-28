@@ -173,6 +173,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         assert ctx.model is model_before
         assert ctx.threshold == 0.73
 
+    @pytest.mark.usefixtures("no_precision_floor")
     def test_set_inclusion_rethresholds_from_fold_cache(self):
         """With cached fold orderings, an inclusion change re-derives the
         threshold (cheap quantile rule over the cache) without touching the model."""

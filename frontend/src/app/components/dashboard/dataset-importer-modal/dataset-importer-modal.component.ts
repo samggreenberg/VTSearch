@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, effect, inject, input, output, signal, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -13,6 +13,7 @@ import { ImportDefaultsService } from './pickers/shared/import-defaults.service'
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { SettingsStateService } from '../../../services/settings-state.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 import { EmbedderInfo, ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../models/api.models';
 import { DemoDatasetEntry } from '../../../generated/api-client/models/demo-dataset-entry';
 import { toTypeId } from './pickers/shared/media-type.util';
@@ -57,6 +58,7 @@ export class DatasetImporterModalComponent implements OnInit {
   private datasetsCrudApi = inject(DatasetsCrudApiService);
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private settingsState = inject(SettingsStateService);
+  private datasetState = inject(DatasetStateService);
   private importDefaults = inject(ImportDefaultsService);
 
   /** Media type_id guessed from existing datasets/models (e.g. "image"). */
@@ -84,6 +86,16 @@ export class DatasetImporterModalComponent implements OnInit {
    *  ``buildProjection``. */
   mergeNearDuplicates = false;
 
+  /** "Run AutoRun" checkbox: run the user's AutoRun detectors on the dataset
+   *  once it is saved.  Starts from the ``autorun_on_import`` setting, which
+   *  the server rewrites from each import that sends the box, so it comes up
+   *  the way the user left it at their last import.  Shared across flows like
+   *  the two toggles above. */
+  readonly runAutorun = signal(true);
+  /** Whether the user has touched the box, after which a late settings load
+   *  must not overwrite their choice. */
+  private runAutorunTouched = false;
+
   readonly mediaTypes = signal<MediaTypeInfo[]>([]);
   /** Bare (media_type-agnostic) embedder list, fetched once.  Kept for
    *  HTTP-call parity with the pre-refactor init sequence; no current
@@ -106,6 +118,30 @@ export class DatasetImporterModalComponent implements OnInit {
 
   get effectiveSoloMediaType(): string | null {
     return this.importDefaults.effectiveSoloMediaType;
+  }
+
+  constructor() {
+    effect(() => {
+      const remembered = this.settingsState.settingsSignal()?.autorun_on_import;
+      if (remembered !== undefined && !this.runAutorunTouched) this.runAutorun.set(remembered);
+    });
+  }
+
+  /** How many detectors are on the user's AutoRun tab.  With none there is
+   *  nothing for the checkbox to decide, so it is hidden. */
+  get autorunDetectorCount(): number {
+    return this.datasetState.detectors.filter((d) => d.autofind).length;
+  }
+
+  /** The value every flow sends as ``autorun``: the checkbox while it is
+   *  shown, else ``null`` (send nothing; the remembered setting decides). */
+  get autorunFlag(): boolean | null {
+    return this.autorunDetectorCount > 0 ? this.runAutorun() : null;
+  }
+
+  onRunAutorunChange(value: boolean): void {
+    this.runAutorunTouched = true;
+    this.runAutorun.set(value);
   }
 
   ngOnInit(): void {
@@ -140,6 +176,10 @@ export class DatasetImporterModalComponent implements OnInit {
     // Settings carry the per-media-type "last embedder" memory + solo-mode
     // locks the pickers read via ImportDefaultsService.
     this.settingsState.load();
+    // The detector registry says whether the user has AutoRun detectors (and so
+    // whether to offer the Run AutoRun box). The dialog also opens from views
+    // that never listed the registry, so fetch it if nobody has yet.
+    if (!this.datasetState.loaded) this.datasetState.refresh();
   }
 
   /** Front-of-list order for the picker within each tab.  Importers not

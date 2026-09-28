@@ -783,6 +783,16 @@ class DatasetLoadDemoRequestSchema(Schema):
         load_default="false",
         metadata={"description": "When 'true', collapse near-duplicate media into dupe sets at ingest."},
     )
+    autorun = fields.String(
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": (
+                "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it "
+                "is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides."
+            )
+        },
+    )
 
 
 class DatasetLoadSourceRequestSchema(Schema):

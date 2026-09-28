@@ -278,7 +278,7 @@ class TestColdHeadIsScoredAtItsGeometry:
         mismatch inverted, so the route now scores the shared
         ``scoring_rows_for_snap`` stack like every other scorer.
         """
-        import vtsearch.routes.detectors.scoring as scoring_mod
+        import vtsearch.autorun_detectors as autorun_mod
         from vtsearch.settings import add_autofind_detector
 
         corpus = _patch_corpus()
@@ -293,7 +293,7 @@ class TestColdHeadIsScoredAtItsGeometry:
             linear.weight.copy_(torch.tensor([[0.0, 10.0, 0.0, 0.0]]))
             linear.bias.copy_(torch.tensor([-5.0]))
         head = nn.Sequential(linear).eval()
-        monkeypatch.setattr(scoring_mod, "resolve_or_train_detector", lambda *a, **k: (head, 0.5, None))
+        monkeypatch.setattr(autorun_mod, "resolve_or_train_detector", lambda *a, **k: (head, 0.5, None))
 
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 200, resp.get_json()

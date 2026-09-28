@@ -644,6 +644,45 @@ def dataset_domain_shift(dataset_id: str):
     return {"reference_dataset_id": dataset_id, **report}
 
 
+@datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/autorun", methods=["POST"])
+@datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
+@datasets_registry_bp.alt_response(
+    400,
+    description="None of the caller's AutoRun detectors applies to this dataset (its media or embedder types).",
+)
+@datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
+@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+@datasets_registry_bp.alt_response(409, description="Dataset is not currently loaded.")
+def run_dataset_autorun(dataset_id: str):
+    """Run the caller's AutoRun detectors on a loaded dataset, in the background.
+
+    The Dashboard's dataset ⋯ **Run AutoRun**.  Scores the dataset with every
+    detector on the caller's AutoRun list that applies to it, sends the results
+    to their Auto-Find exporter when one is set, and keeps them for the AutoRun
+    Results dialog (``GET /api/autorun/runs/<task_id>``).  Progress is reported
+    on the ``loading-tasks`` channel of ``GET /api/events`` under the returned
+    ``task_id``, on a task keyed to this dataset; its ``autorun`` block carries
+    the summary once it finishes.  Cancellable like any loading task.
+    """
+    from vtsearch.auth import get_current_user
+    from vtsearch.autorun_detectors import AutoRunUnavailable, start_autorun_task
+    from vtsearch.state import get_context
+
+    if _reg_get(dataset_id) is None:
+        abort(404, message="Dataset not found in registry")
+    if not _reg_can_access(dataset_id, get_current_user()):
+        abort(403, message="Access denied")
+    ctx = get_context(dataset_id) if _reg_is_loaded(dataset_id) else None
+    if ctx is None:
+        abort(409, message="Load the dataset before running AutoRun on it")
+
+    try:
+        task_id = start_autorun_task(ctx, trigger="manual")
+    except AutoRunUnavailable as exc:
+        abort(exc.status, message=exc.message)
+    return {"ok": True, "message": "AutoRun started", "task_id": task_id}
+
+
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/unload", methods=["POST"])
 @datasets_registry_bp.response(200, DatasetRegistryOkResponseSchema)
 @datasets_registry_bp.alt_response(400, description="Dataset is not currently loaded.")

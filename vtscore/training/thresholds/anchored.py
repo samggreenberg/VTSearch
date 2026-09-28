@@ -298,6 +298,17 @@ class FoldAnchoredCut:
     #: a caller that predates the fields.
     fold_iterations: tuple[int, ...] = ()
     fold_converged: tuple[bool, ...] = ()
+    #: Each kept fold's held-out ``(scores, labels)``, index-aligned with
+    #: :attr:`fits` and :attr:`fold_haystacks`, unscored items dropped.  The
+    #: fit drops a fold that fails both fits, so the calibration cache's
+    #: orderings do *not* line up with :attr:`fold_haystacks`; these do, which
+    #: is what the precision estimate
+    #: (:func:`~vtscore.training.thresholds.precision_lower_bound_curve`) needs
+    #: from a live detector.  A fold that fell back to its unanchored fit still
+    #: records its votes: they are honest evidence about that fold model even
+    #: though the mixture did not use them.  Empty when the cut was built by a
+    #: caller that predates the field.
+    fold_orderings: tuple[tuple[np.ndarray, np.ndarray], ...] = ()
 
     @property
     def n_unconverged(self) -> int:
@@ -607,6 +618,7 @@ def fit_fold_anchored_cut(
     anchor_counts: list[int] = []
     iterations: list[int] = []
     converged: list[bool] = []
+    orderings: list[tuple[np.ndarray, np.ndarray]] = []
     n_anchored = 0
     for hay, ordering in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
         a_scores, a_labels = scored_ordering(ordering)
@@ -632,6 +644,7 @@ def fit_fold_anchored_cut(
         # n_unconverged` reads as "no anchored refit ran here".
         iterations.append(int(stats.get("n_iter", 0.0)) if n_anchors else 0)
         converged.append(bool(stats.get("converged", 0.0)) if n_anchors else True)
+        orderings.append((np.asarray(a_scores, dtype=np.float64), np.asarray(a_labels, dtype=np.float64)))
     if not fits:
         return None
     return FoldAnchoredCut(
@@ -644,6 +657,7 @@ def fit_fold_anchored_cut(
         combine=combine,
         fold_iterations=tuple(iterations),
         fold_converged=tuple(converged),
+        fold_orderings=tuple(orderings),
     )
 
 

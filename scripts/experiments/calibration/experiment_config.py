@@ -707,6 +707,26 @@ else:
         raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
 
 
+#: The precision floor the reporting line is drawn at (#4245).  Unset is the
+#: app's own default floor - a live detector's line - resolved by
+#: ``vtscore.training.thresholds.resolve_min_precision``; ``off`` is the
+#: Inclusion arm every study before #4245 ran, and the one an Inclusion sweep
+#: needs, because a set floor wins over the knob; a number pins a floor.
+_MIN_PRECISION_ENV = os.environ.get("CALIB_MIN_PRECISION", "").strip().lower()
+MIN_PRECISION: float | str | None
+if _MIN_PRECISION_ENV in ("", "default", "app"):
+    MIN_PRECISION = None
+elif _MIN_PRECISION_ENV == "off":
+    MIN_PRECISION = "off"
+else:
+    try:
+        MIN_PRECISION = float(_MIN_PRECISION_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_MIN_PRECISION={_MIN_PRECISION_ENV!r} is not 'off', a floor in (0, 1], or unset (= the app's default)"
+        ) from None
+
+
 def exclusion_arm_name() -> str:
     """Short label for this run's exclusion arm, for logs and the cell column."""
     if EXCLUSION_MIN_REMAINDER is None:

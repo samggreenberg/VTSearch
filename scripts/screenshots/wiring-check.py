@@ -5,9 +5,9 @@ Asserts three invariants from docs/plans/user-docs-screenshots.md:
 
   (a) every shot id in docs/user/screenshots.manifest.ts has BOTH theme files
       (`<id>.light.webp` and `<id>.dark.webp`) on disk under docs/user/assets/;
-  (b) every screenshot the user-facing docs embed (USER_GUIDE.md, README.md,
-      demos.md) — i.e. each `assets/<id>.<theme>.webp` reference — resolves to a
-      real manifest id;
+  (b) every screenshot the user-facing docs embed (USER_GUIDE.md, the how-to
+      pages under docs/user/howto/, README.md, demos.md) — i.e. each
+      `assets/<id>.<theme>.webp` reference — resolves to a real manifest id;
   (c) every shot id listed in the reshoot queue
       (docs/user/screenshots-reshoot-queue.md) resolves to a real manifest id,
       so the queue can't reference a renamed or deleted shot.
@@ -28,8 +28,10 @@ MANIFEST = ROOT / "docs" / "user" / "screenshots.manifest.ts"
 ASSETS = ROOT / "docs" / "user" / "assets"
 RESHOOT_QUEUE = ROOT / "docs" / "user" / "screenshots-reshoot-queue.md"
 THEMES = ("light", "dark")
+HOWTO = ROOT / "docs" / "user" / "howto"
 DOCS = [
     ROOT / "docs" / "user" / "USER_GUIDE.md",
+    *sorted(HOWTO.glob("*.md")),
     ROOT / "README.md",
     ROOT / "docs" / "demos.md",
 ]
@@ -37,7 +39,8 @@ DOCS = [
 # `id: 'kebab-case'` inside a SHOTS entry. The Shot interface uses
 # `id: string;` (no quotes), so it is not matched.
 ID_RE = re.compile(r"^\s*id:\s*'([a-z0-9-]+)'", re.MULTILINE)
-# Any embedded asset reference, e.g. assets/dashboard-loaded.dark.webp
+# Any embedded asset reference, e.g. assets/dashboard-loaded.dark.webp (a
+# how-to page writes it ../assets/…, which this matches too)
 REF_RE = re.compile(r"assets/([a-z0-9-]+)\.(light|dark)\.webp")
 # A reshoot-queue table row: the shot id is the first backticked token in a
 # Markdown table row (a line starting with `|`). The header and `|----|`

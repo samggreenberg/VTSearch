@@ -133,11 +133,10 @@ export class ToastService {
       const key = `sse:${kind}:${t.task_id}`;
       if (this.seenTaskKeys.has(key)) continue;
       this.seenTaskKeys.add(key);
-      this.error({
-        message: kind === 'dataset' ? 'Dataset load failed' : 'Detector load failed',
-        detail: `${t.name}: ${t.error}`,
-        dedupKey: key,
-      });
+      // A background AutoRun reports on the dataset channel too, but it is not
+      // a load: name what actually failed.
+      const message = t.autorun ? 'AutoRun failed' : kind === 'dataset' ? 'Dataset load failed' : 'Detector load failed';
+      this.error({ message, detail: `${t.name}: ${t.error}`, dedupKey: key });
     }
   }
 

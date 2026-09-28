@@ -1,0 +1,113 @@
+world,cell,seed,t,n_pos,consistent_k,consistent_precision,oracle_k,oracle_recall,rule,audit,votes,promised_k,audited_inside,precision,recall
+0.44%,bird@large,0,150,46,102,0.451,92,1.0,a:consistent,top 102: 7/20 fail,20,0,0,,0.0
+0.44%,bird@large,0,150,46,102,0.451,92,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.696
+0.44%,bird@large,0,150,46,102,0.451,92,1.0,b:top128,top 128: 8/20 fail; top 64: 19/29 fail; top 32: 32/32 (all) pass,57,32,32,1.0,0.696
+0.44%,bird@large,0,150,46,102,0.451,92,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.348
+0.44%,apple@large,2,150,50,149,0.329,86,0.86,a:consistent,top 149: 6/20 fail,20,0,0,,0.0
+0.44%,apple@large,2,150,50,149,0.329,86,0.86,a:top32,top 32: 20/20 pass,20,32,20,0.969,0.62
+0.44%,apple@large,2,150,50,149,0.329,86,0.86,b:top128,top 128: 9/20 fail; top 64: 26/32 pass,40,64,32,0.672,0.86
+0.44%,apple@large,2,150,50,149,0.329,86,0.86,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.32
+0.44%,tv@small,3,150,48,0,,2,0.021,a:consistent,nothing to audit,0,0,0,,0.0
+0.44%,tv@small,3,150,48,0,,2,0.021,a:top32,top 32: 1/20 fail,20,0,0,,0.0
+0.44%,tv@small,3,150,48,0,,2,0.021,b:top128,top 128: 1/20 fail; top 64: 0/29 fail; top 32: 1/32 (all) fail; top 16: 1/16 (all) fail; top 8: 1/8 (all) fail; top 4: 1/4 (all) fail,56,0,0,,0.0
+0.44%,tv@small,3,150,48,0,,2,0.021,c:seq,bin<4: 1/4; bin<8: 0/4; bin<16: 0/3; bin<32: 0/3; bin<64: 0/3; bin<128: 0/3,20,0,0,,0.0
+0.44%,airplane@large,0,150,44,123,0.35,86,0.977,a:consistent,top 123: 4/20 fail,20,0,0,,0.0
+0.44%,airplane@large,0,150,44,123,0.35,86,0.977,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.727
+0.44%,airplane@large,0,150,44,123,0.35,86,0.977,b:top128,top 128: 7/20 fail; top 64: 23/28 pass,40,64,28,0.672,0.977
+0.44%,airplane@large,0,150,44,123,0.35,86,0.977,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 1/3; bin<128: 0/3,20,16,11,1.0,0.364
+0.44%,skis@medium,0,150,55,129,0.419,108,0.982,a:consistent,top 129: 8/20 fail,20,0,0,,0.0
+0.44%,skis@medium,0,150,55,129,0.419,108,0.982,a:top32,top 32: 18/20 pass,20,32,20,0.938,0.545
+0.44%,skis@medium,0,150,55,129,0.419,108,0.982,b:top128,top 128: 8/20 fail; top 64: 24/28 pass,40,64,28,0.734,0.855
+0.44%,skis@medium,0,150,55,129,0.419,108,0.982,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 1/3,20,16,11,1.0,0.291
+0.44%,airplane@medium,0,150,54,108,0.472,102,0.944,a:consistent,top 108: 7/20 fail,20,0,0,,0.0
+0.44%,airplane@medium,0,150,54,108,0.472,102,0.944,a:top32,top 32: 20/20 pass,20,32,20,0.969,0.574
+0.44%,airplane@medium,0,150,54,108,0.472,102,0.944,b:top128,top 128: 10/20 fail; top 64: 26/31 pass,40,64,31,0.797,0.944
+0.44%,airplane@medium,0,150,54,108,0.472,102,0.944,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.296
+0.44%,airplane@medium,1,150,42,117,0.359,84,1.0,a:consistent,top 117: 8/20 fail,20,0,0,,0.0
+0.44%,airplane@medium,1,150,42,117,0.359,84,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.762
+0.44%,airplane@medium,1,150,42,117,0.359,84,1.0,b:top128,top 128: 8/20 fail; top 64: 18/29 fail; top 32: 32/32 (all) pass,58,32,32,1.0,0.762
+0.44%,airplane@medium,1,150,42,117,0.359,84,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 0/3; bin<128: 0/3,20,16,11,1.0,0.381
+0.44%,airplane@small,2,150,53,0,,88,0.83,a:consistent,nothing to audit,0,0,0,,0.0
+0.44%,airplane@small,2,150,53,0,,88,0.83,a:top32,top 32: 18/20 pass,20,32,20,0.938,0.566
+0.44%,airplane@small,2,150,53,0,,88,0.83,b:top128,top 128: 9/20 fail; top 64: 16/30 fail; top 32: 28/30 pass,60,32,30,0.938,0.566
+0.44%,airplane@small,2,150,53,0,,88,0.83,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 2/3; bin<64: 1/3; bin<128: 0/3,20,16,11,1.0,0.302
+0.44%,airplane@small,4,150,56,0,,90,0.804,a:consistent,nothing to audit,0,0,0,,0.0
+0.44%,airplane@small,4,150,56,0,,90,0.804,a:top32,top 32: 19/20 pass,20,32,20,0.938,0.536
+0.44%,airplane@small,4,150,56,0,,90,0.804,b:top128,top 128: 9/20 fail; top 64: 26/30 pass,40,64,30,0.703,0.804
+0.44%,airplane@small,4,150,56,0,,90,0.804,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 2/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.286
+0.44%,apple@medium,0,150,51,0,,38,0.373,a:consistent,nothing to audit,0,0,0,,0.0
+0.44%,apple@medium,0,150,51,0,,38,0.373,a:top32,top 32: 13/20 fail,20,0,0,,0.0
+0.44%,apple@medium,0,150,51,0,,38,0.373,b:top128,top 128: 5/20 fail; top 64: 13/31 fail; top 32: 19/32 (all) pass,57,32,32,0.594,0.373
+0.44%,apple@medium,0,150,51,0,,38,0.373,c:seq,bin<4: 4/4; bin<8: 3/4; bin<16: 2/3; bin<32: 1/3; bin<64: 0/3; bin<128: 0/3,20,16,11,0.812,0.255
+0.44%,apple@medium,1,150,53,0,,34,0.321,a:consistent,nothing to audit,0,0,0,,0.0
+0.44%,apple@medium,1,150,53,0,,34,0.321,a:top32,top 32: 10/20 fail,20,0,0,,0.0
+0.44%,apple@medium,1,150,53,0,,34,0.321,b:top128,top 128: 6/20 fail; top 64: 14/30 fail; top 32: 15/32 (all) fail; top 16: 13/16 (all) pass,56,16,16,0.812,0.245
+0.44%,apple@medium,1,150,53,0,,34,0.321,c:seq,bin<4: 3/4; bin<8: 2/4; bin<16: 3/3; bin<32: 1/3; bin<64: 3/3; bin<128: 1/3,20,8,8,0.625,0.094
+0.1%,bird@large,0,150,18,0,,20,0.556,a:consistent,nothing to audit,0,0,0,,0.0
+0.1%,bird@large,0,150,18,0,,20,0.556,a:top32,top 32: 6/20 fail,20,0,0,,0.0
+0.1%,bird@large,0,150,18,0,,20,0.556,b:top128,top 128: 7/20 fail; top 64: 10/34 fail; top 32: 13/32 (all) fail; top 16: 8/16 (all) pass,50,16,16,0.5,0.444
+0.1%,bird@large,0,150,18,0,,20,0.556,c:seq,bin<4: 4/4; bin<8: 2/4; bin<16: 0/3; bin<32: 2/3; bin<64: 0/3; bin<128: 0/3,20,8,8,0.75,0.333
+0.1%,apple@large,2,150,11,0,,14,0.636,a:consistent,nothing to audit,0,0,0,,0.0
+0.1%,apple@large,2,150,11,0,,14,0.636,a:top32,top 32: 4/20 fail,20,0,0,,0.0
+0.1%,apple@large,2,150,11,0,,14,0.636,b:top128,top 128: 0/20 fail; top 64: 2/30 fail; top 32: 8/32 (all) fail; top 16: 7/16 (all) fail; top 8: 4/8 (all) pass,59,8,8,0.5,0.364
+0.1%,apple@large,2,150,11,0,,14,0.636,c:seq,bin<4: 4/4; bin<8: 0/4; bin<16: 1/3; bin<32: 0/3; bin<64: 0/3; bin<128: 1/3,20,8,8,0.5,0.364
+0.1%,airplane@large,0,150,8,0,,14,0.875,a:consistent,nothing to audit,0,0,0,,0.0
+0.1%,airplane@large,0,150,8,0,,14,0.875,a:top32,top 32: 3/20 fail,20,0,0,,0.0
+0.1%,airplane@large,0,150,8,0,,14,0.875,b:top128,top 128: 1/20 fail; top 64: 3/31 fail; top 32: 7/32 (all) fail; top 16: 7/16 (all) fail; top 8: 5/8 (all) pass,58,8,8,0.625,0.625
+0.1%,airplane@large,0,150,8,0,,14,0.875,c:seq,bin<4: 4/4; bin<8: 1/4; bin<16: 1/3; bin<32: 0/3; bin<64: 0/3; bin<128: 0/3,20,8,8,0.625,0.625
+0.1%,skis@medium,0,150,12,0,,22,0.917,a:consistent,nothing to audit,0,0,0,,0.0
+0.1%,skis@medium,0,150,12,0,,22,0.917,a:top32,top 32: 6/20 fail,20,0,0,,0.0
+0.1%,skis@medium,0,150,12,0,,22,0.917,b:top128,top 128: 1/20 fail; top 64: 7/32 fail; top 32: 12/32 (all) fail; top 16: 10/16 (all) pass,54,16,16,0.625,0.833
+0.1%,skis@medium,0,150,12,0,,22,0.917,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 1/3; bin<32: 0/3; bin<64: 0/3; bin<128: 0/3,20,16,11,0.625,0.833
+0.1%,airplane@medium,0,150,8,0,,16,1.0,a:consistent,nothing to audit,0,0,0,,0.0
+0.1%,airplane@medium,0,150,8,0,,16,1.0,a:top32,top 32: 3/20 fail,20,0,0,,0.0
+0.1%,airplane@medium,0,150,8,0,,16,1.0,b:top128,top 128: 0/20 fail; top 64: 2/31 fail; top 32: 8/32 (all) fail; top 16: 8/16 (all) pass,57,16,16,0.5,1.0
+0.1%,airplane@medium,0,150,8,0,,16,1.0,c:seq,bin<4: 4/4; bin<8: 3/4; bin<16: 0/3; bin<32: 0/3; bin<64: 0/3; bin<128: 0/3,20,8,8,0.875,0.875
+0.1%,airplane@medium,1,150,12,0,,20,0.833,a:consistent,nothing to audit,0,0,0,,0.0
+0.1%,airplane@medium,1,150,12,0,,20,0.833,a:top32,top 32: 5/20 fail,20,0,0,,0.0
+0.1%,airplane@medium,1,150,12,0,,20,0.833,b:top128,top 128: 1/20 fail; top 64: 4/29 fail; top 32: 10/32 (all) fail; top 16: 10/16 (all) pass,55,16,16,0.625,0.833
+0.1%,airplane@medium,1,150,12,0,,20,0.833,c:seq,bin<4: 3/4; bin<8: 4/4; bin<16: 1/3; bin<32: 0/3; bin<64: 0/3; bin<128: 0/3,20,8,8,0.875,0.583
+5%,bird@large,0,150,46,208,0.221,92,1.0,a:consistent,top 208: 6/20 fail,20,0,0,,0.0
+5%,bird@large,0,150,46,208,0.221,92,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.696
+5%,bird@large,0,150,46,208,0.221,92,1.0,b:top128,top 128: 4/20 fail; top 64: 18/28 fail; top 32: 32/32 (all) pass,60,32,32,1.0,0.696
+5%,bird@large,0,150,46,208,0.221,92,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 1/3; bin<128: 0/3,20,16,11,1.0,0.348
+5%,apple@large,2,150,50,317,0.158,100,1.0,a:consistent,top 317: 2/20 fail,20,0,0,,0.0
+5%,apple@large,2,150,50,317,0.158,100,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.64
+5%,apple@large,2,150,50,317,0.158,100,1.0,b:top128,top 128: 7/20 fail; top 64: 22/29 pass,40,64,29,0.75,0.96
+5%,apple@large,2,150,50,317,0.158,100,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 1/3; bin<128: 0/3,20,16,11,1.0,0.32
+5%,tv@small,3,150,48,228,0.18,56,0.583,a:consistent,top 228: 5/20 fail,20,0,0,,0.0
+5%,tv@small,3,150,48,228,0.18,56,0.583,a:top32,top 32: 13/20 fail,20,0,0,,0.0
+5%,tv@small,3,150,48,228,0.18,56,0.583,b:top128,top 128: 5/20 fail; top 64: 13/32 fail; top 32: 20/32 (all) pass,57,32,32,0.625,0.417
+5%,tv@small,3,150,48,228,0.18,56,0.583,c:seq,bin<4: 4/4; bin<8: 1/4; bin<16: 2/3; bin<32: 3/3; bin<64: 0/3; bin<128: 0/3,20,8,8,0.625,0.104
+5%,airplane@large,0,150,44,78,0.564,88,1.0,a:consistent,top 78: 11/20 fail,20,0,0,,0.0
+5%,airplane@large,0,150,44,78,0.564,88,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.727
+5%,airplane@large,0,150,44,78,0.564,88,1.0,b:top128,top 128: 8/20 fail; top 64: 23/32 fail; top 32: 32/32 (all) pass,54,32,32,1.0,0.727
+5%,airplane@large,0,150,44,78,0.564,88,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.364
+5%,skis@medium,0,150,55,0,,110,1.0,a:consistent,nothing to audit,0,0,0,,0.0
+5%,skis@medium,0,150,55,0,,110,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.582
+5%,skis@medium,0,150,55,0,,110,1.0,b:top128,top 128: 11/20 fail; top 64: 27/32 pass,40,64,32,0.859,1.0
+5%,skis@medium,0,150,55,0,,110,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 1/3; bin<128: 0/3,20,16,11,1.0,0.291
+5%,airplane@medium,0,150,54,240,0.225,108,1.0,a:consistent,top 240: 3/20 fail,20,0,0,,0.0
+5%,airplane@medium,0,150,54,240,0.225,108,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.593
+5%,airplane@medium,0,150,54,240,0.225,108,1.0,b:top128,top 128: 5/20 fail; top 64: 22/27 pass,40,64,27,0.844,1.0
+5%,airplane@medium,0,150,54,240,0.225,108,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 3/3; bin<128: 0/3,20,16,11,1.0,0.296
+5%,airplane@medium,1,150,42,161,0.261,84,1.0,a:consistent,top 161: 5/20 fail,20,0,0,,0.0
+5%,airplane@medium,1,150,42,161,0.261,84,1.0,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.762
+5%,airplane@medium,1,150,42,161,0.261,84,1.0,b:top128,top 128: 5/20 fail; top 64: 20/29 fail; top 32: 32/32 (all) pass,57,32,32,1.0,0.762
+5%,airplane@medium,1,150,42,161,0.261,84,1.0,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 1/3; bin<128: 0/3,20,16,11,1.0,0.381
+5%,airplane@small,0,150,57,381,0.147,108,0.947,a:consistent,top 381: 3/20 fail,20,0,0,,0.0
+5%,airplane@small,0,150,57,381,0.147,108,0.947,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.561
+5%,airplane@small,0,150,57,381,0.147,108,0.947,b:top128,top 128: 5/20 fail; top 64: 22/28 pass,40,64,28,0.812,0.912
+5%,airplane@small,0,150,57,381,0.147,108,0.947,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.281
+5%,airplane@small,1,150,57,303,0.175,104,0.912,a:consistent,top 303: 1/20 fail,20,0,0,,0.0
+5%,airplane@small,1,150,57,303,0.175,104,0.912,a:top32,top 32: 20/20 pass,20,32,20,1.0,0.561
+5%,airplane@small,1,150,57,303,0.175,104,0.912,b:top128,top 128: 4/20 fail; top 64: 21/27 pass,40,64,27,0.781,0.877
+5%,airplane@small,1,150,57,303,0.175,104,0.912,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.281
+5%,apple@medium,0,150,51,231,0.216,92,0.902,a:consistent,top 231: 4/20 fail,20,0,0,,0.0
+5%,apple@medium,0,150,51,231,0.216,92,0.902,a:top32,top 32: 18/20 pass,20,32,20,0.938,0.588
+5%,apple@medium,0,150,51,231,0.216,92,0.902,b:top128,top 128: 9/20 fail; top 64: 22/32 fail; top 32: 30/32 (all) pass,55,32,32,0.938,0.588
+5%,apple@medium,0,150,51,231,0.216,92,0.902,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 2/3; bin<64: 2/3; bin<128: 1/3,20,16,11,1.0,0.314
+5%,apple@medium,3,150,48,172,0.273,90,0.938,a:consistent,top 172: 7/20 fail,20,0,0,,0.0
+5%,apple@medium,3,150,48,172,0.273,90,0.938,a:top32,top 32: 18/20 pass,20,32,20,0.906,0.604
+5%,apple@medium,3,150,48,172,0.273,90,0.938,b:top128,top 128: 5/20 fail; top 64: 19/28 fail; top 32: 29/32 (all) pass,58,32,32,0.906,0.604
+5%,apple@medium,3,150,48,172,0.273,90,0.938,c:seq,bin<4: 4/4; bin<8: 4/4; bin<16: 3/3; bin<32: 3/3; bin<64: 2/3; bin<128: 0/3,20,16,11,1.0,0.333

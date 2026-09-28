@@ -19,6 +19,7 @@ and freezing (no-op) on the stale threshold.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from vtscore.detectors.training import train_and_score
 from vtscore.state.core import (
@@ -29,6 +30,10 @@ from vtscore.state.core import (
 from vtscore.training.thresholds import threshold_from_fold_orderings
 
 DIM = 8
+
+# The Inclusion knob draws a detector's line only while no precision floor is
+# set: a set floor wins (#4245).  Every test here is about the knob itself.
+pytestmark = pytest.mark.usefixtures("no_precision_floor")
 
 
 def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:

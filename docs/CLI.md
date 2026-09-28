@@ -36,8 +36,11 @@ detector](#importing-labels-into-a-detector)).
 `autofind_detectors` (and the Auto-Find results exporter) are **per-user**:
 each user curates their own list on the Dashboard's **AutoRun** detector tab
 (move a detector between **Drafts** and **AutoRun** with its ⋯ menu). By default the
-CLI runs as the built-in **`default`** user, which reads its list from the
-`--settings` file (so the flat-file workflow above is unchanged).
+CLI runs as the built-in **`default`** user. Its list is the one the web app's
+**AutoRun** tab edits on a server without logins; only when that user has no
+list of its own does the run fall back to the `--settings` file's
+`autofind_detectors` (so the flat-file workflow above still works on a fresh
+install).
 
 To run *another* user's Auto-Find list (e.g. a nightly cron of their favorite
 detectors), authenticate with `--user` + `--api-key`, mirroring the server's
