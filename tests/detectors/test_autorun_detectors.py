@@ -156,7 +156,9 @@ class TestRunAutoRunRoute:
         task_id = _start(client, entry["id"])
         assert wait_for_loading_task(task_id)["error"] is None
 
-        result = get_autorun_run(task_id, "default")["results"]["ar-subset"]
+        run = get_autorun_run(task_id, "default")
+        assert run is not None
+        result = run["results"]["ar-subset"]
         scored = {h["id"] for h in result["hits"]} | {h["id"] for h in result["negative_hits"]}
         assert scored == subset
 

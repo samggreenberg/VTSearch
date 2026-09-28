@@ -74,6 +74,12 @@ def _run_load(tmp_path, load_fn, post_load) -> str:
         )
 
 
+def _snapshot(task_id: str) -> dict:
+    tracker = loading_tasks.get_tracker(task_id)
+    assert tracker is not None, "the finished load should still be listed"
+    return tracker.get()
+
+
 class TestPostLoadHook:
     def test_runs_once_after_a_successful_load(self, isolated_settings, tmp_path):
         from vtscore.datasets.registry import list_datasets
@@ -111,7 +117,7 @@ class TestPostLoadHook:
         task_id = _run_load(tmp_path, _failing_load, hook)
 
         hook.assert_not_called()
-        assert loading_tasks.get_tracker(task_id).get()["error"]
+        assert _snapshot(task_id)["error"]
 
     def test_a_raising_hook_does_not_fail_the_import(self, isolated_settings, tmp_path):
         def hook(_ctx):
@@ -119,6 +125,6 @@ class TestPostLoadHook:
 
         task_id = _run_load(tmp_path, _fake_load, hook)
 
-        snapshot = loading_tasks.get_tracker(task_id).get()
+        snapshot = _snapshot(task_id)
         assert snapshot["status"] == "idle"
         assert snapshot["error"] is None
