@@ -459,7 +459,9 @@ def _safe_threshold_for_step(
     resolved floor (``None`` for the Inclusion arm) and *calibration_rows* marks
     the training rows whose vote may calibrate it.  The floor's estimate is
     built from this step's own populations, exactly as
-    :func:`vtscore.detectors.training._fused_threshold` builds it, and the line
+    :func:`vtscore.detectors.training._fused_threshold` builds it - the
+    remainder as the corpus, the whole sim set (votes included) as the
+    reference pool, the excluded fold haystacks as the evidence's scale - and the line
     comes from the shared :func:`~vtscore.training.thresholds.reporting_line` -
     delegation, not a copy.  The line and the floor's verdict ride out in
     ``details["reporting_line"]`` so the acquisition cut can take its origin
@@ -570,6 +572,9 @@ def _safe_threshold_for_step(
             fit_final,
             eligible_fold_orderings(fold_orderings[:n_folds], details.get("fold_holdout_rows") or (), calibration_rows),
             fold_haystacks,
+            # The whole sim set, voted items included, as the app ranks it
+            # (see ``vtscore.detectors.training._fused_threshold``).
+            pool_scores=all_scores,
         )
         if fold_haystacks
         else None

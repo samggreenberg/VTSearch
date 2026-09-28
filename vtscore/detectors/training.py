@@ -259,10 +259,19 @@ def _fused_threshold(
     :func:`~vtscore.training.thresholds.reporting_line` - the rule the re-cut
     and the eval harness's default arm share.  The floor reads a
     :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` built here
-    from the same populations as the fold-anchored cut: its corpus and pool are
-    the final model's haystack (the #3308 remainder, when the exclusion
-    applies, so a promise is about what the user has not yet seen), and its
-    evidence is each fold's held-out votes ranked in that fold's haystack.  Only
+    from the same populations as the fold-anchored cut.  Its **corpus** is the
+    final model's haystack less the voted items when the #3308 exclusion
+    applies (a promise is about what the user has not yet seen); its evidence
+    is each fold's held-out votes ranked in that fold's (equally excluded)
+    haystack; and its **reference pool** - what the corpus is ranked against -
+    is the final model's scores over the *whole* haystack, voted items
+    included.  That last choice is the configuration #4220 measured safe, and
+    it is load-bearing: #4221 found the voted positives at the top of the
+    reference push unseen positives down its percentiles, a conservative offset
+    without which the same estimator breaks ~90% of its X = 50% promises
+    (#4221's comment of 2026-09-28).  Making the pool "consistent" with the
+    fold haystacks is therefore not a clean-up; it is a different, unsafe
+    estimator.  Only
     the held-out votes whose training row (*holdout_rows*, per fold, from the
     calibration's ``holdout_sink``) *calibration_rows* marks may serve as
     evidence - the votes the learned sort chose
@@ -326,11 +335,15 @@ def _fused_threshold(
             fold_haystacks.append(drop_voted(scores, rows.ids, exclude) if exclude else np.asarray(scores, np.float64))
         cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
         # Every fold's held-out votes stay aligned with its own haystack here,
-        # before the anchored fit drops any fold it could not use.
+        # before the anchored fit drops any fold it could not use.  The corpus
+        # is what the cut decides (the unvoted remainder); the reference pool
+        # is the WHOLE haystack, voted items included, as #4220 measured it -
+        # see the docstring for why that is not a detail.
         estimate = PrecisionFloorEstimate(
             fit_final,
             eligible_fold_orderings(folds.orderings[:n_folds], holdout_rows or [], calibration_rows),
             fold_haystacks,
+            pool_scores=final_scores,
         )
 
     if det_ctx is not None:

@@ -431,3 +431,36 @@ class TestARetrainParksTheEstimate:
         ctx, threshold = self._train(LEARNED_HARD, inclusion_value=6, min_precision=0.5)
         assert ctx.precision_floor_cache.cut(0.5).status is not PrecisionFloorStatus.PROMISED
         assert threshold == ctx.anchored_cut_cache.threshold_at(0)
+
+
+def test_the_reference_pool_keeps_the_voted_items_the_corpus_drops():
+    """#4220's configuration, which #4221 found the promise's safety rests on.
+
+    The corpus is the unvoted remainder (what the promise is about), but the
+    reference it is ranked against is the whole haystack, voted items included:
+    ranked against a "consistent" pool with the votes removed, the same
+    estimator broke ~90% of its X = 50% promises.
+    """
+    from vtscore.detectors.training import train_and_score
+
+    rng = np.random.default_rng(11)
+    # 100 media, 14 voted: the remainder (86) clears the #3308 floor, so the
+    # exclusion applies and the corpus and the pool genuinely differ.
+    clips = {
+        cid: {
+            "embeddings": {"test": (rng.standard_normal(8) + (1.5 if cid < 506 else 0.0)).astype(np.float32)},
+            "embedder": "test",
+            "media_type": "audio",
+            "md5": f"m{cid:031d}",
+        }
+        for cid in range(500, 600)
+    }
+    good = {cid: None for cid in range(500, 506)}
+    bad = {cid: None for cid in range(506, 514)}
+    ctx = DetectorContext("det-reference-pool", media_type="audio")
+    _r, _t, model = train_and_score(clips, good, bad, det_ctx=ctx)
+    assert model is not None
+    estimate = ctx.precision_floor_cache
+    assert estimate is not None
+    assert estimate.corpus_size == len(clips) - len(good) - len(bad)
+    assert estimate._pool.size == len(clips)

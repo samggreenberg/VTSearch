@@ -528,8 +528,12 @@ class PrecisionFloorEstimate:
     decides, *fold_orderings* the calibration folds' held-out votes (already cut
     down to the ones that may serve as evidence, :func:`eligible_fold_orderings`)
     and *fold_haystacks* those fold models' scores over the pool.  *pool_scores*
-    defaults to the corpus, which is the app's case: the cut decides the pool it
-    was fitted on.
+    is the reference the corpus is ranked against, and defaults to the corpus.
+    The app passes the final model's scores over the whole haystack, voted
+    items included, while its corpus is the unvoted remainder: that is the
+    configuration #4220 measured, and #4221 found the estimator unsafe without
+    it (the voted positives at the top of the reference are a conservative
+    offset the estimate depends on).
 
     Nothing is fitted in the constructor.  Most detectors never reach the gate,
     and one whose owner cleared the floor never needs the curve, so the
