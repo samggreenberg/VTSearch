@@ -2984,6 +2984,8 @@ def simulate_voting_iterations(  # noqa: C901
             "acq_threshold": float("nan"),
             "acq_pool_percentile": float("nan"),
             "report_pool_percentile": float("nan"),
+            # The run's floor; a skyline belongs to no step, so none was cut on it.
+            **_floor_columns(floor, {}),
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 

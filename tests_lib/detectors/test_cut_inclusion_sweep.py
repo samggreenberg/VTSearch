@@ -327,6 +327,9 @@ def test_live_cut_rule_moves_the_live_threshold_onto_that_rule():
             cut_inclusion_ks=[-8],
             cut_inclusion_sink=sink,
             live_cut_rule=live,
+            # Reporting at inclusion -8 is the Inclusion arm: a set floor
+            # (the default arm's, #4245) would draw the line instead.
+            min_precision="off",
         )
         return rows, sink
 

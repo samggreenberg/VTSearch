@@ -498,7 +498,7 @@ class TestCalibrationFoldsSnippet:
             calibration_fraction=0.5,
             hidden_dim=LINEAR_SVM_HEAD,
         )
-        assert folds._fields == ("orderings", "fallback", "models")
+        assert folds._fields == ("orderings", "fallback", "models", "holdout_rows")
         assert isinstance(threshold_from_folds(folds, inclusion_value=0), float)
 
 
