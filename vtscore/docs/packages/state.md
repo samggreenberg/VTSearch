@@ -583,6 +583,7 @@ username to a data directory.
 ## Setting-persistence hooks
 
 Some library helpers - `get_inclusion`, `set_inclusion`,
+`get_min_precision`, `set_min_precision`,
 `set_calibrate_count`, `set_calibration_fraction` - read or write
 user-pref values that a **host** owns. The library exposes the hook
 surface; the host installs the persistence callbacks. Library-only
@@ -590,8 +591,8 @@ consumers see purely in-memory mutation.
 
 ```python
 # vtscore/state/__init__.py
-KNOWN_SETTING_KEYS = frozenset({"inclusion", "calibrate_count",
-                                "calibration_fraction"})
+KNOWN_SETTING_KEYS = frozenset({"inclusion", "min_precision",
+                                "calibrate_count", "calibration_fraction"})
 
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persister for *key*, which must be in
@@ -607,7 +608,12 @@ register_setting_persister("inclusion", my_settings.save_inclusion)
 ```
 
 `get_inclusion()` seeds its first read from `CoreConfig.from_settings()`
-(see [config.md](config.md)).
+(see [config.md](config.md)), per detector, and so does `get_min_precision()`.
+The floor is a float in `(0, 1]` or `None`: `None` means no floor, and the
+Inclusion knob draws the line; a set floor wins over it. `set_min_precision`
+re-cuts the active detector at the new floor with no retrain
+(`recut_detector_threshold(ctx, min_precision=...)`) and, in Find mode,
+re-splits the unverified items.
 
 Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 (shallow copy under the lock), `get_media(cid)`, `clear_medias()`,

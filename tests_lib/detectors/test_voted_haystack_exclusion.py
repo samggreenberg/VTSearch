@@ -19,6 +19,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
 import vtscore.training.thresholds as thresholds_mod
 from vtscore.datasets.labelset import LabeledElement, LabelSet
@@ -72,8 +73,14 @@ def _spy_fit_sizes(monkeypatch) -> list[tuple[int, ...]]:
     return captured
 
 
+@pytest.mark.usefixtures("no_precision_floor")
 class TestExclusionEqualsRemoval:
-    """``voted_ids`` over the full snap == the same snap without those media."""
+    """``voted_ids`` over the full snap == the same snap without those media.
+
+    A property of the fold-anchored cut, so it is pinned with no precision
+    floor.  Under a floor it deliberately does not hold: the floor ranks its
+    corpus against the whole haystack, voted items included (#4245, #4221).
+    """
 
     def test_threshold_matches_a_snap_without_the_votes(self):
         vecs, good_ids, bad_ids = _fixture()

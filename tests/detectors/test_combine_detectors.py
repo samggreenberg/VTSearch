@@ -270,6 +270,29 @@ class TestCombineEndpointSuccess:
         # Should NOT inherit any labelset_source from sources.
         assert "labelset_source" not in got
 
+    def test_combine_registers_the_combined_detector(self, client):
+        """The Dashboard lists the registry, not the detectors folder.
+
+        A combined detector written to disk without a registry entry never
+        appeared anywhere in the app.
+        """
+        _create_model(client, "A", text_query="alpha")
+        _create_model(client, "B", text_query="beta")
+        _save_labelset(client, "A", LabelSet([_el("aa", "good"), _el("cc", "bad")]).to_dict())
+        _save_labelset(client, "B", LabelSet([_el("bb", "good")]).to_dict())
+
+        res = client.post(
+            "/api/detectors/combine",
+            json={"names": ["A", "B"], "new_name": "Combined"},
+        )
+        assert res.status_code == 201
+
+        rows = [d for d in client.get("/api/detectors/registry").get_json()["detectors"] if d["name"] == "Combined"]
+        assert len(rows) == 1
+        assert rows[0]["media_type"] == "audio"
+        assert rows[0]["num_training"] == 3
+        assert rows[0]["text_query"] == "alpha"
+
     def test_combine_drops_conflicts_keeps_agreements(self, client):
         _create_model(client, "A")
         _create_model(client, "B")

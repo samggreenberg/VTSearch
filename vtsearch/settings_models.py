@@ -26,7 +26,13 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config import (
+    DATA_DIR,
+    DEFAULT_CALIBRATE_COUNT,
+    DEFAULT_MIN_PRECISION,
+    PROJECTION_MIN_DIST,
+    PROJECTION_N_NEIGHBORS,
+)
 
 __all__ = [
     "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
@@ -331,6 +337,14 @@ class UserSettings(BaseModel):
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
     inclusion: Annotated[int, _clamp(-10, 10)] = 0
+    # The precision floor (#4245): the fraction of what a detector's cut
+    # returns that should be right.  Each detector keeps its own, seeded from
+    # this value the first time it reads one (as ``inclusion`` is).  ``None`` is
+    # an explicit "no floor": the Inclusion knob draws the line.  A set floor
+    # wins over ``inclusion``; one that can promise nothing falls back to the
+    # Inclusion 0 cut.  Clamped to ``[0.01, 1]``: a floor of zero promises
+    # nothing and would read as a floor that is always met.
+    min_precision: Annotated[float | None, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a
     # concrete theme to opt out and return to "system" to opt back in.

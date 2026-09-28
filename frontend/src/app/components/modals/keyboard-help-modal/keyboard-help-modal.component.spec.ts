@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
-import { KeyboardHelpModalComponent, headingSlug } from './keyboard-help-modal.component';
+import { KeyboardHelpModalComponent, headingSlug, resolveDocPath } from './keyboard-help-modal.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
 
@@ -121,6 +121,123 @@ describe('KeyboardHelpModalComponent — in-app guide anchors', () => {
     }
 
     expect(prevented).toBe(false);
+  });
+});
+
+/**
+ * The how-to pages under docs/user/howto/ are linked from the guide. On GitHub
+ * those links just work; in the Help panel they must open the page in the same
+ * pane (a plain navigation would leave the SPA for a raw .md file), with its
+ * `../assets/` screenshots resolved against the page, and Back to return.
+ */
+describe('KeyboardHelpModalComponent — how-to pages in the guide pane', () => {
+  let component: KeyboardHelpModalComponent;
+  let fixture: ComponentFixture<KeyboardHelpModalComponent>;
+  let httpMock: HttpTestingController;
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [KeyboardHelpModalComponent],
+      providers: [...provideHttpTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(KeyboardHelpModalComponent);
+    component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  const body = (): HTMLElement => fixture.nativeElement.querySelector('.guide-body') as HTMLElement;
+
+  /** Click the first link in the guide pane whose href is *href*; report whether the component took it. */
+  function clickLink(href: string): boolean {
+    // Read the verdict from a document-level listener (it bubbles past
+    // `.guide-body`), then cancel so jsdom doesn't attempt a real navigation.
+    let taken: boolean | null = null;
+    const observe = (event: Event): void => {
+      taken = event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener('click', observe);
+    try {
+      const link = body().querySelector(`a[href="${href}"]`) as HTMLAnchorElement;
+      link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    } finally {
+      document.removeEventListener('click', observe);
+    }
+    return taken === true;
+  }
+
+  async function openGuide(markdown: string): Promise<void> {
+    component.selectTab('guide');
+    httpMock.expectOne('assets/docs/USER_GUIDE.md').flush(markdown);
+    await fixture.whenStable();
+  }
+
+  it('opens a linked how-to page in the pane, and Back returns to the guide', async () => {
+    await openGuide(['# VTSearch User Guide', '', '[Fix the calls](howto/fix-find-results.md)'].join('\n'));
+    expect(fixture.nativeElement.querySelector('.back-btn')).toBeNull();
+
+    expect(clickLink('howto/fix-find-results.md')).toBe(true);
+    httpMock.expectOne('assets/docs/howto/fix-find-results.md').flush('# Fix the calls\n\n[Guide](../USER_GUIDE.md)');
+    await fixture.whenStable();
+
+    expect(body().querySelector('h1')?.textContent).toBe('Fix the calls');
+    const back = fixture.nativeElement.querySelector('.back-btn') as HTMLButtonElement;
+    expect(back?.textContent).toContain('Back');
+
+    back.click();
+    await fixture.whenStable();
+    // Cached: Back re-renders without a second fetch (httpMock.verify checks).
+    expect(body().querySelector('h1')?.textContent).toBe('VTSearch User Guide');
+    expect(fixture.nativeElement.querySelector('.back-btn')).toBeNull();
+  });
+
+  it("resolves a how-to page's screenshots against the page, not the guide", async () => {
+    await openGuide('[Page](howto/page.md)');
+    clickLink('howto/page.md');
+    httpMock
+      .expectOne('assets/docs/howto/page.md')
+      .flush('<img src="../assets/step-find.light.webp" alt="Step" width="720" />');
+    await fixture.whenStable();
+
+    expect(body().querySelector('img')?.getAttribute('src')).toMatch(/^assets\/docs\/assets\/step-find\.(light|dark)\.webp$/);
+  });
+
+  it('follows a link back into the guide at its heading', async () => {
+    await openGuide(['[Page](howto/page.md)', '', '## Autopilot: the guided workflow'].join('\n'));
+    clickLink('howto/page.md');
+    httpMock.expectOne('assets/docs/howto/page.md').flush('[Autopilot](../USER_GUIDE.md#autopilot-the-guided-workflow)');
+    await fixture.whenStable();
+
+    expect(clickLink('../USER_GUIDE.md#autopilot-the-guided-workflow')).toBe(true);
+    await fixture.whenStable();
+    expect(body().querySelector('h2')?.id).toBe('autopilot-the-guided-workflow');
+  });
+
+  it('leaves a link out of docs/user/ to the browser', async () => {
+    await openGuide('[Setup](../SETUP.md)');
+    expect(clickLink('../SETUP.md')).toBe(false);
+  });
+});
+
+describe('resolveDocPath', () => {
+  it('resolves relative to the linking doc', () => {
+    expect(resolveDocPath('USER_GUIDE.md', 'howto/a.md')).toBe('howto/a.md');
+    expect(resolveDocPath('howto/a.md', 'b.md#step-2')).toBe('howto/b.md');
+    expect(resolveDocPath('howto/a.md', '../USER_GUIDE.md')).toBe('USER_GUIDE.md');
+    expect(resolveDocPath('howto/a.md', '../assets/x.light.webp')).toBe('assets/x.light.webp');
+  });
+
+  it('refuses what the pane cannot serve', () => {
+    expect(resolveDocPath('USER_GUIDE.md', '../SETUP.md')).toBeNull();
+    expect(resolveDocPath('USER_GUIDE.md', '#anchor')).toBeNull();
+    expect(resolveDocPath('USER_GUIDE.md', 'https://example.com/a.md')).toBeNull();
+    expect(resolveDocPath('USER_GUIDE.md', '/abs.md')).toBeNull();
+    expect(resolveDocPath('USER_GUIDE.md', 'mailto:someone@example.com')).toBeNull();
   });
 });
 

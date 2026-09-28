@@ -889,7 +889,8 @@ protected by `_state_lock` (a `threading.RLock`):
 | `textsort_suggestions` | `list[str]` | `DetectorContext` | Text queries that received a Good vote (most recent last) |
 
 Other per-context values are reached through accessor functions rather than
-proxies: `get_inclusion()` / `set_inclusion()` (per detector),
+proxies: `get_inclusion()` / `set_inclusion()` and `get_min_precision()` /
+`set_min_precision()` (per detector),
 `get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
 only truly global (cross-dataset) state is `autorun_extractors` /
 `autorun_localizers` in `vtsearch/autorun_processors.py`.
@@ -906,7 +907,7 @@ field lists — this document names the tiers and the shape, not every key.
   `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,
-  `inclusion`, `enrich_descriptions`, `calibrate_count`,
+  `inclusion`, `min_precision`, `enrich_descriptions`, `calibrate_count`,
   `calibration_fraction`, `audio_playing`, `show_animations`, `show_usage_bars`,
   `show_metadata`,
   the `browse_*` canvas preferences, `grid_icon_size_*`, `focus_mode_*`,
@@ -977,7 +978,7 @@ per-detector state in `DetectorContext` objects:
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
-| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `inclusion`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut caches, the cached labelset, and `labelset_source` |
+| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `inclusion`, `min_precision`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut / precision-floor caches, the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
 "No Persisted Vectors or MLPs" rule in `CLAUDE.md`.  Origins are the persisted

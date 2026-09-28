@@ -50,6 +50,17 @@ class TestSmartCut:
         assert smart_cut(0.8, 3, recut) == 0.3
         assert asked == [SMART_INCLUSION]
 
+    def test_a_line_no_inclusion_drew_is_always_re_cut(self):
+        """A promised precision floor draws its own line (#4245): Smart re-cuts at its inclusion."""
+        asked: list[float] = []
+
+        def recut(k: float) -> float:
+            asked.append(k)
+            return 0.3
+
+        assert smart_cut(0.8, None, recut) == 0.3
+        assert asked == [SMART_INCLUSION]
+
     @pytest.mark.parametrize("unavailable", [None, math.nan, math.inf])
     def test_an_inclusion_blind_cut_keeps_the_served_line(self, unavailable):
         """No estimator to re-derive (a fallback or blend cut): the served line is the answer."""
@@ -152,7 +163,8 @@ def test_harness_window_is_priced_and_cut_like_the_app(monkeypatch):
             "category": category,
         }
 
-    vi.simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, calibrate_count=1)
+    # The Inclusion arm: a set floor (the default arm's, #4245) would draw the line instead.
+    vi.simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, calibrate_count=1, min_precision="off")
 
     assert windows
     assert len(windows) == len(cuts)

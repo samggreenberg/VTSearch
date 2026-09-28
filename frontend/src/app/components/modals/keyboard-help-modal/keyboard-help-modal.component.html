@@ -65,6 +65,9 @@
       </div>
     } @else {
       <div class="guide" role="tabpanel">
+        @if (canGoBack()) {
+          <button class="btn btn--secondary btn--sm back-btn" (click)="back()" title="Return to the previous page">&larr; Back</button>
+        }
         @if (guideError()) {
           <p class="guide-error">{{ guideError() }}</p>
         } @else if (guideHtml()) {

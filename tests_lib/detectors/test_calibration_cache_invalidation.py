@@ -113,7 +113,7 @@ class TestSmallLabelSetCrossCalibrates:
         # Real fold orderings were computed and cached (the <6 skip is gone for
         # safe-off), so an inclusion slide can move the line below 6 labels too.
         assert det_ctx.calibration_cache is not None
-        _key, folds = det_ctx.calibration_cache
+        _key, folds, _holdouts = det_ctx.calibration_cache
         assert folds.fallback is None and folds.orderings, (
             "below 6 labels the path must cross-calibrate, not hard-code 0.5"
         )

@@ -48,6 +48,14 @@ What follows is what the app still owes.
 - **The control shows the floor and its state, not the estimate** (owner,
   2026-09-28). No "about 60% of these should be right": the lower bound stays
   internal.
+- **Only the learned sort's own draws calibrate the promise** (owner,
+  2026-09-28, from #4222). Votes picked by another ranker (the text-sort
+  opening, the coverage atlas's New picks, a list sorted by anything but the
+  model) train the model but stay out of the evidence and the gate, because the
+  posterior is unbiased only under score-only selection. Whether the atlas's
+  picks are fair enough to count is #4261.
+- **The default floor is 50%, and a set floor wins over Inclusion** (owner,
+  2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
 - **What waits on the GRID, and what doesn't.**
   - #4222 decides how often the gate opens.
   - #4221 decides the estimator's remaining knobs: the transfer coordinate,
@@ -61,10 +69,10 @@ What follows is what the app still owes.
 
 These are the questions #4224 raised that no issue below can settle alone:
 
-- **X's range and default,** and whether X is free or a few presets. #4220
-  priced 25/50/75/90%.
-- **Headless runs.** Do AutoRun and CLI autodetect cut at the user's floor, and
-  does the CLI get a flag?
+- **Whether X is free or a few presets** in the control (#4246). #4220 priced
+  25/50/75/90%. The backend takes any value in `[0.01, 1]`.
+- **Does the CLI get a flag for the floor?** Headless runs (AutoRun, CLI
+  autodetect, the cold Find path) already cut at the user's floor.
 - **Retiring Inclusion from the extension surface.** `get_inclusion` /
   `set_inclusion`, `CoreConfig.inclusion`, the `inclusion_value=` parameters on
   `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
@@ -116,14 +124,22 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
+- [ ] #4261 — Should Autopilot's New-phase (atlas) votes calibrate the floor? (Sonnet 5)
+
+<!-- item-sep -->
+
 - **Re-derive `provenance-partitioned-calibration.md` before running it.** That
   plan is motivated by the conformal miss budget. Top-of-list review votes bias
   calibration positives high, so the FNR budget over-promises. Its metrics are
   in Inclusion units (FNR excess at Inclusion 0–3). A posterior fitted on
   score-picked votes is unbiased under *score-only* selection, which is what
-  reviewing a sorted list is (#4224's feasibility note). So the problem may not
-  transfer to the precision floor at all. Before it runs, restate its
-  hypotheses as violation rate at X, or retire it.
+  reviewing the model's own sorted list is (#4224's feasibility note), so that
+  half of the problem does not transfer to the floor. The other half does:
+  votes selected by a *different* ranker break the promise (#4222: text-sort
+  selection broke 51% of the X = 50% promises at a 20-Good opening), which is
+  why the floor already calibrates only on the learned sort's draws. Before
+  it runs, restate its hypotheses as violation rate at X by provenance, or
+  retire it.
 
 <!-- item-sep -->
 

@@ -13,11 +13,14 @@ Two readings of one ranking, sampled at a few dozen return counts *k* (the top
   the floor gates it (:data:`~vtscore.training.thresholds.MIN_CALIBRATION_POSITIVES`):
   below the gate the estimate breaks most of its promises, so none is drawn.
 
-The evidence comes from the fold-anchored estimator the last training parked on
-the detector context (``anchored_cut_cache``): its fold haystacks, the held-out
-votes aligned with them (:attr:`~vtscore.training.thresholds.FoldAnchoredCut.fold_orderings`),
-and the final model's haystack as the pool.  The corpus is the Find run's frozen
-scores.  Pure read; nothing is cached or persisted.
+The evidence is the precision floor's own (#4245): the
+:class:`~vtscore.training.thresholds.PrecisionFloorEstimate` the last training
+parked on the detector context (``precision_floor_cache``) - the held-out votes
+the learned sort chose, each fold's haystack, and the whole haystack (voted
+items included) as the reference pool, the configuration the floor's safety
+rests on (#4221).  The chart therefore draws the curve the floor cuts, not a
+more optimistic cousin of it.  The corpus is the Find run's frozen scores.
+Pure read; nothing is cached or persisted.
 """
 
 from __future__ import annotations
@@ -99,18 +102,14 @@ def estimated_precision_at(ctx: DetectorContext, corpus_scores: np.ndarray, coun
     for the top ``j * n / m`` of the corpus; a count too small to reach one
     sampled item has no estimate.
     """
-    from vtscore.training.thresholds import (  # noqa: PLC0415
-        MIN_CALIBRATION_POSITIVES,
-        fold_rank_evidence,
-        precision_lower_bound_curve,
-    )
+    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES  # noqa: PLC0415
     from vtscore.utils.scores import scored_only  # noqa: PLC0415
 
     none: list[float | None] = [None] * len(counts)
-    cut = ctx.anchored_cut_cache
-    if cut is None or not cut.fold_orderings:
+    estimate = ctx.precision_floor_cache
+    if estimate is None:
         return PrecisionEstimate(ESTIMATE_UNAVAILABLE, 0, none)
-    n_pos = int(fold_rank_evidence(cut.fold_orderings, cut.fold_haystacks)[1].sum())
+    n_pos = estimate.calibration_positives
     if n_pos < MIN_CALIBRATION_POSITIVES:
         return PrecisionEstimate(ESTIMATE_INSUFFICIENT, n_pos, none)
 
@@ -121,12 +120,12 @@ def estimated_precision_at(ctx: DetectorContext, corpus_scores: np.ndarray, coun
     if n > PRECISION_CURVE_MAX_CORPUS:
         rng = np.random.default_rng(PRECISION_CURVE_SAMPLE_SEED)
         corpus = rng.choice(corpus, size=PRECISION_CURVE_MAX_CORPUS, replace=False)
-    curve = precision_lower_bound_curve(corpus, cut.final_haystack, cut.fold_orderings, cut.fold_haystacks)
-    if curve is None:
+    curve = estimate.curve_for(corpus)
+    if not curve.formed:
         # Enough positives but no contrast to fit (no Bad beside them) - the
         # floor reads this as insufficient evidence too.
         return PrecisionEstimate(ESTIMATE_INSUFFICIENT, n_pos, none)
-    _scores, bound = curve
+    bound = curve.bound
     m = bound.size
     values: list[float | None] = []
     for k in counts:

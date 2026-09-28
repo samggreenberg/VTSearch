@@ -17,6 +17,35 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Detectors draw their line at a precision floor: "show me what's at least
+  half right"** (issue #4245, the backend of #4224). A detector's line is now
+  the cut that returns as much as it can while at least a set share of it is
+  estimated right. Every detector starts at **50%**, taken from your new
+  `min_precision` setting, and each keeps its own. The estimate is cautious: it
+  only promises once it has seen about ten positives among the votes it holds
+  back to check itself, and it only counts votes you made off the learned sort
+  (Autopilot's Hard picks, or working down a list sorted by the detector). Until
+  then, or when no cut can reach the floor, the line stays exactly where
+  Inclusion 0 puts it, so nothing you see empties or jumps. A set floor wins
+  over Inclusion: while the Inclusion stepper is still on screen it does not
+  move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
+  or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
+  on-screen control that replaces the stepper arrives in #4246. New endpoint:
+  `GET|POST /api/min-precision`; see
+  [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
+
+- **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
+  pages under `docs/user/howto/` each walk through one task click by click,
+  in the style of the user guide's *Step by step*, on the same Synthetic
+  Media drawings and `Yellow Smileys` detector: checking and correcting Find's
+  calls, borderline matches and Inclusion, how far to trust a detector,
+  exporting matches, starting from an example picture, region voting,
+  getting Autopilot unstuck, Manual mode, moving a detector, importing
+  labels, AutoRun from the command line, combining, Browse, dataset and
+  detector stats, import options, demo datasets, and saving settings. The
+  guide lists them under **How-to guides**, and the in-app Help panel now
+  opens a linked page in place, with **← Back** to return.
+
 - **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
   #4240). The **Demo → Synthetic Media** image generator used to draw one
   smiley or a few flat shapes on a plain background. It now draws round
@@ -55,6 +84,11 @@ not list every commit. Use `git log` for the full history.
 - **Changing Inclusion on one detector no longer moves another detector's
   line.** Switching to a detector afterwards showed its own Inclusion value
   over a line cut at the value you'd set elsewhere.
+
+- **Combined detectors appear on the Dashboard.** **Combine selected
+  detectors** wrote the new detector but never registered it, so it showed up
+  nowhere, and trying the same name again failed as taken. It now lands on the
+  Drafts tab like any new detector.
 
 - **"Dropped N item(s) whose embedding failed" now says which items, and why**
   (issue #4232). The warning ended with "See the server log for which embedder

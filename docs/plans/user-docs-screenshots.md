@@ -45,11 +45,6 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **Optional `browse-bin-popup` shot.** Not yet added — it has no USER_GUIDE
-  anchor/placeholder, so it stayed out of scope. Recipe for when a Browse-detail
-  section is written to home it: within `openBrowse()`, hover/click a tile so
-  `vt-browse-bin-popup` appears, then `clip` the popup.
-
 <!-- item-sep -->
 
 ---
@@ -65,8 +60,8 @@ throwaway bug-hunt captures, which are working artifacts and belong nowhere near
 the manifest.
 
 **Locked decisions (2026-06-07).** Capture engine = checked-in automated
-Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md + README.md +
-demos.md only (dev/ops docs get none). Themes = both light + dark (each logical
+Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md, the how-to
+pages under `docs/user/howto/`, README.md and demos.md (dev/ops docs get none). Themes = both light + dark (each logical
 shot yields a `{light,dark}` pair). Annotations = declared in the manifest,
 drawn by the harness as a pre-capture DOM overlay — never hand-edited.
 
@@ -117,6 +112,7 @@ interface Shot {
   caption: string;             // alt text + (optional) figure caption
   themes: ("light"|"dark")[];  // each yields a separate file
   recipe: (page, helpers) => Promise<void>;  // steps to reach the frame
+  after?: (page, helpers) => Promise<void>;  // undo what the recipe changed
   clip?: { target: Target; pad?: number };   // what to frame; omit for full viewport
   annotations?: Annotation[];  // declarative callouts, drawn pre-capture
 }
@@ -136,6 +132,10 @@ For each shot × theme: boot the app once (Smiley-example fixtures), set
 deterministic knobs, run the recipe, apply the theme, inject declarative
 annotations as an absolutely-positioned DOM overlay computed from each `target`'s
 bounding rect, then capture (`clip` element if given, else viewport) → WebP.
+A recipe should *pose* the app (a form filled in, a menu open) rather than
+change it; one that has to change it to reach its frame (pictures verified in
+Find, a detector moved to AutoRun) puts it back in `after`, which runs once the
+shot is taken, pass or fail, so no later shot inherits the change.
 
 **WebP, not PNG** (#4202). It came in while the shots were photographs behind
 UI chrome, which PNG is bad at: a full-window shot was 2.4–3.4 MB lossless —
@@ -202,8 +202,11 @@ One image is shown, always matching the **viewer's** theme. The embed is a
   theme is a `data-theme` attribute). `keyboard-help-modal.component.ts`
   post-processes the rendered HTML — collapses each `<picture>` to its `<img>`,
   swaps the `*.light.*` / `*.dark.*` suffix to the app's current effective theme,
-  resolves the relative `assets/…` path against the served dir (`/assets/docs/`),
-  and re-renders live on theme switch.
+  resolves each relative path against the doc it is in and then the served dir
+  (`/assets/docs/`), and re-renders live on theme switch. A how-to page under
+  `docs/user/howto/` therefore writes its images `../assets/…`, which resolves
+  both on GitHub and in the app; the panel opens a link from the guide to such a
+  page in place, with Back (`tests_lib/meta/test_howto_docs.py` pins both).
 
 Images are served by an `angular.json` asset glob copying `docs/user/assets/**`
 → `/assets/docs/assets`. Each embed carries alt text (= the manifest `caption`).

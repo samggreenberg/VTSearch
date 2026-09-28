@@ -24,6 +24,7 @@ GET /api/settings
   "volume": 1.0,
   "theme": "system",
   "inclusion": 0,
+  "min_precision": 0.5,
   "calibrate_count": 2,
   "calibration_fraction": null,
   "show_animations": "show",
@@ -46,7 +47,7 @@ Keys fall into these groups:
 | Group | Keys | Notes |
 |-------|------|-------|
 | Appearance & playback | `theme`, `show_animations`, `show_usage_bars`, `volume`, `audio_playing`, `show_metadata`, `label_hint_dismissed`, `enable_achievements` | `theme`: `dark` / `light` / `highviz` / `system` (default `system`, which follows the OS `prefers-color-scheme`). `show_animations`: `show` (default) / `hide` / `os`. `show_usage_bars` (the Dashboard's RAM / Disk bars): `default` (shown once a detector exists) / `hide` / `view`. `volume` 0–1. Turning `enable_achievements` off wipes the stored achievement counters. |
-| Training | `inclusion`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `inclusion` −10..10 (same value as `POST /api/inclusion`). `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
+| Training | `inclusion`, `min_precision`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `inclusion` −10..10 (same value as `POST /api/inclusion`). `min_precision` is the precision floor, clamped to 0.01..1 (same value as `POST /api/min-precision`); `0.5` by default, `null` = no floor, so Inclusion draws the line. `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
 | Autopilot | `autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_resort_interval`, `autopilot_goal_diversity` | Clamped to ≥ 1. |
 | Auto-Find | `autofind_detectors`, `autofind_exporter`, `autofind_exporter_field_values` | `autofind_exporter` must name a pickable exporter (`""` = none); field values are `{exporter: {key: value}}`. See [below](#detector-auto-find-flag). |
 | Per-media-type UI state | `focus_mode_{left,right}`, `grid_icon_size_{left,right,popup}`, `panel_pct_{left,right}`, `popup_metadata_shown`, `popup_preview_size`, `bin_details_docked`, `import_defaults_by_media_type`, `browse_colormap`, `browse_icon_size`, `browse_thumbnail_border`, `browse_mouse_zooms_per_level`, `browse_signposts`, `browse_signpost_captioner` | Dicts keyed by media type id, e.g. `{"audio": "M"}`; a missing entry means "use the frontend default". |

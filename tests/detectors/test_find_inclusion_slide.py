@@ -23,10 +23,17 @@ meaningful assertion and the full-range slide must strictly raise the cutoff.
 
 from __future__ import annotations
 
+import pytest
+
 from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.state.core import get_active_detector_context
 from vtsearch.state import snapshot_medias
+
+
+# The Inclusion knob draws a detector's line only while no precision floor is
+# set: a set floor wins (#4245).  These tests are about the knob's slide.
+pytestmark = pytest.mark.usefixtures("no_precision_floor")
 
 
 def _votes_good(client):
