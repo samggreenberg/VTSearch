@@ -96,8 +96,8 @@ way, whether they hold photos, audio, text, video or documents.
 **Synthetic Media** demo, so you can make the very same ones. In Steps 1
 and 3, use the **Demo** tab of the same dialog instead of **Files**: pick
 **Synthetic Media**, set **Size** to 240, and set **Seed** to 1 for the
-training set (Step 1) and to 2 for the new one (Step 3). Everything else is
-the same.
+training set (Step 1) and to 2 for the new one (Step 3). Name them `drawings`
+and `drawings-new` to match the screenshots. Everything else is the same.
 
 ### Step 1: Load a training dataset
 
@@ -137,9 +137,10 @@ the **New Detector** dialog:
   <img src="assets/step-new-detector.light.webp" alt="Step 2: in the New Detector dialog, (1) describe what you are looking for, (2) name the detector, (3) Create" width="720" />
 </picture>
 
-The description only gives the detector somewhere to start: `yellow smiley
-face` puts the yellow faces first, but it is not sure which of them are
-smiling. From here on, your answers teach it. Back on the dashboard:
+The description only gives the detector somewhere to start:
+`yellow smiley face` puts the yellow faces first, but it is not sure which
+of them are smiling. From here on, your answers teach it. Back on the
+dashboard:
 
 1. Tick the training dataset (`drawings`).
 2. Tick the new detector (`Yellow Smileys`).
