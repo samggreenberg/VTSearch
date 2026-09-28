@@ -893,6 +893,26 @@ class TestPayloadKindRouting:
         )
         assert res.status_code == 422
 
+    def test_detector_bundles_is_refused_as_cli_only(self, client):
+        """#4211: a known kind the route cannot build must not reach the exporter.
+
+        ``portable_detector`` lists ``detector_bundles``, so the capability
+        check passes; before the schema refused the kind, the request fell
+        through to ``export_find_results`` and surfaced as a 500.
+        """
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "portable_detector",
+                "field_values": {},
+                "results": {},
+                "payload_kind": "detector_bundles",
+            },
+        )
+        assert res.status_code == 422
+        messages = res.get_json()["errors"]["json"]["payload_kind"]
+        assert any("CLI only" in m for m in messages)
+
     @pytest.mark.parametrize(
         "payload,method",
         [({"labels": []}, "export_labelset"), ({"results": {}}, "export_find_results")],
