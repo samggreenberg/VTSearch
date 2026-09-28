@@ -59,12 +59,15 @@ own call for the rest.
 - **Marked Bad** / **Detector Good**: wrong matches you took out.
 - **Kept Good** / **Detector Bad**: matches the detector missed and you
   rescued.
-- **Agreement rate** and **Kept rate** sum these up.
+- **Agreement rate**: how often the answers agree with the detector's calls,
+  over the whole dataset.
+- **Kept rate**: of the matches you have checked by hand, the share you kept
+  **Good**.
 
 Until you have checked some pictures ([Check and correct a detector's calls](check-and-correct.md)),
-every answer is the detector's own and it agrees with itself completely. The
-figures start to mean something once you have checked a few dozen pictures
-near the line.
+every answer is the detector's own, so it agrees with itself completely and
+**Kept rate** has no matches to count. The figures start to mean something
+once you have checked a few dozen pictures near the line.
 
 ## Step 4: Act on it
 
@@ -82,7 +85,7 @@ check first.
 
 ## Where next
 
-- [Catch the borderline matches](borderline-matches.md): the chart at the
-  bottom of the same window.
+- [Catch the borderline matches](borderline-matches.md): the precision chart
+  at the bottom of the same window.
 - [How far to trust the score](../USER_GUIDE.md#how-far-to-trust-the-score),
   in the user guide.

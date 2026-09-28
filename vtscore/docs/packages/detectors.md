@@ -208,7 +208,8 @@ bags and a scoring population that differs from *snap*):
 1. Cross-calibration threshold via
    `calculate_cross_calibration_threshold` (respects `calibrate_count`
    and `calibration_fraction` settings).
-2. Full-data model via `train_model` (respects `inclusion`).
+2. Full-data model via `train_model`. Inclusion never reaches the model: the
+   head is the same at every inclusion, and only the cut in step 3 reads it.
 3. The fold-anchored population threshold whenever a media snapshot is
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.
@@ -609,9 +610,9 @@ Every entry point resolves its cache through the active
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
-| `inject_live_model(good, bad, model, threshold)`| Register a model produced by `train_and_score` so the cache can reuse it |
+| `inject_live_model(good, bad, model, threshold, *, smart_threshold=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`) |
 | `recreate_model_at_time(clips_dict, label_history, time_index, inclusion_value=0)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
-| `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |
+| `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
 | `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
 | `compute_labeling_status(..., span_info=None)`  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
@@ -627,7 +628,10 @@ Every entry point resolves its cache through the active
   leveled off) **or** when the slope is within two standard errors of zero, i.e.
   the window's step-to-step scatter explains it (a plateaued cost is flat on
   average but noisy between retrains). The arithmetic lives in
-  `vtscore.detectors.cost_trend`, which the eval harness calls too.
+  `vtscore.detectors.cost_trend`, which the eval harness calls too. Every cost
+  is priced at `SMART_INCLUSION` (0: FPR + FNR), at the model's own cut for
+  that inclusion (`smart_cut`), whatever Inclusion the user has set, so one
+  window never mixes models cut under different rules (issue #4243).
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only
   **confident** flips count against it - items that sat clear of the cut

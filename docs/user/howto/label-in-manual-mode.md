@@ -61,8 +61,8 @@ needs no clicking in the list. You can still click any picture in the list to
 answer it out of turn.
 
 Below **Select**, **Inclusion** moves the detector's line between match and
-not a match (see [Catch the borderline matches](borderline-matches.md)). With
-the **Learned** sort, moving it also re-ranks the list.
+not a match, without changing the order of the list (see
+[Catch the borderline matches](borderline-matches.md)).
 
 ## Step 4: Hand back to Autopilot
 

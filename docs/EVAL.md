@@ -368,6 +368,7 @@ The parameterisation rests on one observation: both of today's opening phases ar
 |---|---|
 | `g3` / `b4` | stay until 3 goods / 4 bads exist (a **global** count, as in the app) |
 | `n8` | stay for 8 clicks, whatever they turn out to be |
+| `+dry1/8` | …or until the round's last 8 picks held fewer than 1 good: the walk has run dry (`g` and `n` rounds only; `g20+dry1/8@top`) |
 | `@top` | cut above every score — the top of the sort |
 | `@mid` | the shipped GMM midpoint, i.e. every cosine sort's cutoff |
 | `@k-3` | that same fitted GMM, split at **inclusion −3** |

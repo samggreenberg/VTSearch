@@ -6,7 +6,7 @@ float threshold. Detector-specific glue (sourcing ``X_list`` / ``y_list``
 from votes, caching on ``DetectorContext``) lives in
 :mod:`vtscore.detectors`.
 
-The implementation is split across six submodules, layered so that each one
+The implementation is split across seven submodules, layered so that each one
 only reads from those above it:
 
 * :mod:`~vtscore.training.thresholds.knobs` - what an Inclusion value, a
@@ -23,6 +23,10 @@ only reads from those above it:
   splits and split-conformal quantiles over pooled held-out scores.
 * :mod:`~vtscore.training.thresholds.blend` - the retired safe-threshold blend,
   kept as the anchored path's small-label fallback.
+* :mod:`~vtscore.training.thresholds.precision_floor` - the precision-floor
+  cut (#4224): the largest top-k whose estimated precision clears a floor, from
+  the calibration folds' held-out votes.  Self-contained (numpy and
+  scikit-learn); not yet wired to a detector.
 
 Everything below is re-exported here, so ``vtscore.training.thresholds.X``
 resolves exactly as it did when this was one module.  **Patch targets are the
@@ -144,10 +148,28 @@ from vtscore.training.thresholds.gmm import (
     snap_cut_to_sample,
 )
 from vtscore.training.thresholds.costs import weighted_error_cost
+from vtscore.training.thresholds.precision_floor import (
+    MIN_BOOTSTRAP_FITS,
+    MIN_CALIBRATION_POSITIVES,
+    PRECISION_BOOTSTRAP_REFITS,
+    PRECISION_BOOTSTRAP_SEED,
+    PRECISION_COORDINATES,
+    PRECISION_FITS,
+    PRECISION_LOWER_PERCENTILE,
+    PrecisionFloorCut,
+    PrecisionFloorStatus,
+    em_prior_shift,
+    fit_posterior,
+    fold_rank_evidence,
+    percentile_in,
+    precision_floor_cut,
+    precision_lower_bound_curve,
+)
 from vtscore.training.thresholds.knobs import (
     ACQUISITION_INCLUSION_OFFSET,
     INCLUSION_MAX,
     INCLUSION_MIN,
+    INCLUSION_SEARCH_SPAN,
     NO_GOOD_THRESHOLD,
     PRODUCTION_SPLIT,
     PRODUCTION_SPLIT_BY_SPACE,
@@ -161,6 +183,7 @@ __all__ = [
     "ACQUISITION_INCLUSION_OFFSET",
     "INCLUSION_MAX",
     "INCLUSION_MIN",
+    "INCLUSION_SEARCH_SPAN",
     "NO_GOOD_THRESHOLD",
     "PRODUCTION_SPLIT",
     "PRODUCTION_SPLIT_BY_SPACE",
@@ -169,6 +192,21 @@ __all__ = [
     "inclusion_cost_weights",
     "production_split_for",
     "weighted_error_cost",
+    "MIN_BOOTSTRAP_FITS",
+    "MIN_CALIBRATION_POSITIVES",
+    "PRECISION_BOOTSTRAP_REFITS",
+    "PRECISION_BOOTSTRAP_SEED",
+    "PRECISION_COORDINATES",
+    "PRECISION_FITS",
+    "PRECISION_LOWER_PERCENTILE",
+    "PrecisionFloorCut",
+    "PrecisionFloorStatus",
+    "em_prior_shift",
+    "fit_posterior",
+    "fold_rank_evidence",
+    "percentile_in",
+    "precision_floor_cut",
+    "precision_lower_bound_curve",
     "ANCHOR_WEIGHT_DEFAULT",
     "CUT_KIND_CONTINUED",
     "CUT_KIND_DEGENERATE_MIDPOINT",

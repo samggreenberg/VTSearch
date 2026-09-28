@@ -10,12 +10,69 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.detectors.cost_trend.SMART_INCLUSION` and `smart_cut`, and
+  `inject_live_model(..., smart_threshold=None)`** (issue #4243). The Smart
+  indicator prices every model's error at `SMART_INCLUSION` (0, so FPR + FNR),
+  at the model's own cut for that inclusion rather than at the line it was
+  served with. `smart_cut(served_threshold, served_inclusion, recut)` picks
+  that cut: the served line when the model was served at `SMART_INCLUSION`,
+  else `recut(SMART_INCLUSION)`, else the served line again when there is
+  nothing inclusion-aware to re-cut. `inject_live_model` takes the chosen cut
+  as an optional keyword and falls back to `threshold` without it, so existing
+  callers keep working. The eval harness's Smart window reads the same two
+  names.
+
+- **A dry stop in the Autopilot opening grammar: `+dry<m>/<w>`** (issue
+  #4222). `vtscore.eval.startup_schedule` rounds can now end early when the
+  round's last `w` picks held fewer than `m` goods, so `g20+dry1/8@top,b4@mid`
+  walks the text sort until 20 goods or until 8 picks in a row come back empty.
+  Allowed on `g` and `n` rounds, refused on `b`. `StartupRound` gains
+  `dry_goods` / `dry_window` (both `0` when there is no dry stop, so existing
+  rounds compare equal), `StartupState` gains `ran_dry()`, and
+  `StartupState.on_click` / `AutopilotFlow.update` take the vote's outcome
+  (`good` / keyword `last_vote_good`), which a dry round requires.
+
+- **`FoldAnchoredCut.fold_orderings`** (issue #4242). Each kept fold's
+  held-out `(scores, labels)`, index-aligned with `fits` and `fold_haystacks`,
+  with unscored items dropped. `fit_fold_anchored_cut` drops a fold that fails
+  both fits, so the calibration cache's orderings don't line up with a cut's
+  haystacks; these do. That is the evidence
+  `precision_lower_bound_curve` / `precision_floor_cut` need from a live
+  detector: `precision_lower_bound_curve(corpus, cut.final_haystack,
+  cut.fold_orderings, cut.fold_haystacks)`. Additive, defaulting to `()` for a
+  cut built by hand.
+
 - **`vtscore.utils.synthetic.describe_image_dataset()` and
   `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
   seed)` draws, without drawing it: one dict per picture with its `filename`,
   `kind`, `background` and `objects` (each a shape, a colour name and a box; a
   face also its `expression` and whether it is `smiling`). The ground truth of
   a generated set - which pictures are the yellow smileys, and where.
+
+- **`vtscore.training.thresholds.precision_floor`** (preparation for #4224).
+  `precision_floor_cut` returns the largest top-*k* of a corpus whose
+  lower-bound estimated precision clears a floor, in one of three
+  `PrecisionFloorStatus` states (`promised`, `unreachable`,
+  `insufficient_evidence`), as a `PrecisionFloorCut`.
+  `precision_lower_bound_curve` exposes the whole curve; `fold_rank_evidence`,
+  `fit_posterior`, `em_prior_shift` and `percentile_in` are its pieces. This is
+  the estimator #4220 measured (fold-rank, logistic, 10th-percentile bootstrap
+  bound, EM prior re-estimate, gated on `MIN_CALIBRATION_POSITIVES = 10`) and it
+  reproduces that study's cuts exactly; the coordinate, bound level and refit
+  count are parameters for #4221. Not yet read by any detector.
+
+- **`FoldAnchoredCut.inclusion_for_threshold`, `INCLUSION_SEARCH_SPAN`, and
+  `vtscore.state.core.recut_detector_threshold`** (preparation for #4224). The
+  inverse of `threshold_at` recovers the inclusion a cut sits at when the cut was
+  set by another rule - a precision floor - so the acquisition cut can still sit
+  `ACQUISITION_INCLUSION_OFFSET` steps stricter than it. It returns the strictest
+  such inclusion, round-trips any realized threshold exactly, and searches
+  `[-INCLUSION_SEARCH_SPAN, INCLUSION_SEARCH_SPAN]` (32 steps). `recut_detector_threshold`
+  is the one place a loaded detector's cut is re-derived without a retrain
+  (the Inclusion slide, the Find Stats sweep, and the acquisition cut read it).
+  `detector_acquisition_threshold`'s `inclusion_value` is now optional: `None`
+  reads the offset's origin off `ctx.threshold` through the inverse. Additive:
+  every existing call passes an inclusion and behaves as before.
 
 - **`create_media_type=` on `vtscore.cli.import_labels_into_detector`, and
   `vtscore.cli.DetectorNotFoundError`** (issue #4238). With a registered media
@@ -366,6 +423,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart no longer prices at the caller's inclusion** (issue #4243).
+  `calculate_error_cost_over_time`, `compute_labeling_status`,
+  `analyze_labeling_progress` and `cached_indicator_history` still take
+  `inclusion_value`, which picks the progress cache to read, but every cost
+  they report is FPR + FNR at each model's `smart_threshold`. Before, it was
+  priced at `inclusion_value` at the served threshold. Identical at inclusion 0.
+
 - **`generate_image_dataset` draws a small world of cartoon smiley faces**
   (issue #4240). The two ideas (a smiley, or shapes, on a plain background at
   256x256) become three kinds at 512x512: a `face` in one of seven colours
@@ -646,6 +710,22 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **An Inclusion slide no longer overwrites a cut the knob cannot move.** Below
+  the calibration-fold floor (too few votes, or one class) training stores the
+  schedule blend, but `recompute_detector_thresholds_for_inclusion` wrote the
+  folds' bare fallback sentinel over it, moving the line on the first touch of
+  the stepper, sometimes toward fewer items on a lenient step. It now leaves
+  such a detector's threshold alone.
+- **`recompute_detector_thresholds_for_inclusion` re-cuts each detector at its
+  own inclusion.** It re-cut every loaded detector at the new value while
+  `set_inclusion` updated only the active detector's `DetectorContext.inclusion`,
+  so another detector's line and its reported inclusion disagreed. A detector
+  already holding a value keeps its cut; an unseeded one takes the new value.
+- **A structural re-rank drops the retrieval MLP's cached estimators**
+  (`anchored_cut_cache`, `calibration_cache`). The threshold it returns is the
+  verification classifier's boundary, and a later re-cut replaced it with an
+  MLP-scale cut applied to verification scores.
 
 - **`resolve_or_train_detector` no longer returns a head trained on stale
   labels** (issue #4204). It returned `DetectorContext.model` whenever that was

@@ -55,6 +55,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The Inclusion stepper no longer jumps the line early in a session.** With
+  too few votes for the calibration splits, the first change of the stepper
+  replaced the trained cutoff with a fixed 0.5, so the matches could change in
+  either direction, even shrinking on a step toward lenient. The line now stays
+  put until there are enough votes for the stepper to move it.
+- **Find with a detector that isn't loaded now uses your Inclusion and
+  calibration settings.** It always cut at Inclusion 0 with two calibration
+  splits, so the same detector could return different matches depending on
+  whether it happened to be loaded.
+- **Changing Inclusion on one detector no longer moves another detector's
+  line.** Switching to a detector afterwards showed its own Inclusion value
+  over a line cut at the value you'd set elsewhere.
+
 - **Combined detectors appear on the Dashboard.** **Combine selected
   detectors** wrote the new detector but never registered it, so it showed up
   nowhere, and trying the same name again failed as taken. It now lands on the
@@ -154,6 +167,27 @@ not list every commit. Use `git log` for the full history.
   A query you are still typing keeps focus, as before.
 
 ### Changed
+
+- **Find Stats charts precision against how many items are returned** (issue
+  #4242). The chart that plotted wrong and missed matches at each Inclusion
+  stop now reads down the ranked list: for the top N items, on a log-scale
+  count axis, it draws the precision VTSearch estimates (a cautious lower
+  bound from the detector's own held-out votes, shown once they include 10
+  Good ones) and the precision of the items you have checked. A dashed line
+  marks the current cut, the line under the chart reads both numbers there,
+  and hovering reads them at any count. **Kept rate** now counts only the
+  matches you checked, with the count beside it ("7 of 10 checked"); it used
+  to count every unchecked match as right, so it read close to 100% however
+  the checks went.
+
+- **The Smart indicator measures every detector at Inclusion 0** (issue
+  #4243). Smart asks whether the detector is still getting better, by
+  re-scoring the recent detectors against your current votes. It used to
+  price their mistakes at your Inclusion and measure each at the line it
+  showed you. It now counts a false alarm and a miss equally, at the line
+  each detector would draw at Inclusion 0, whatever Inclusion you have set.
+  Nothing changes at the default Inclusion. This keeps the light steady once
+  a precision floor, rather than Inclusion, sets the line (#4224).
 
 - **The User Guide is illustrated with the yellow smiley example** (issue
   #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows

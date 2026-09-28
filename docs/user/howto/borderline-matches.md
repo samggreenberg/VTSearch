@@ -14,13 +14,16 @@ where to click, in order.
 ## How Inclusion works
 
 **Inclusion** runs from **-10** (strict) to **+10** (lenient) and starts at
-**0**. Each step up roughly halves the share of real matches the line is
-allowed to miss, and the steps *nest*: everything a match at Inclusion 1 is
-still a match at Inclusion 3, along with a band of extra borderline pictures.
-The same number means the same thing on any detector and any dataset.
+**0**. The steps *nest*: everything a match at Inclusion 1 is still a match at
+Inclusion 3, along with a band of extra borderline pictures. How far one step
+moves the line depends on the detector and the dataset, so the same setting
+can return quite different numbers of matches on two detectors.
 
 Moving it never re-scores anything and never changes the order of the
-pictures. Only the line moves.
+pictures. Only the line moves. (A detector with fewer than two **Good** and
+two **Bad** answers has nothing for Inclusion to move, and its line stays
+where training put it.) The user guide explains the line itself in
+[Matches, the line, precision and recall](../USER_GUIDE.md#matches-the-line-precision-and-recall).
 
 ## Step 1: Check the matches at the default setting
 
@@ -58,17 +61,29 @@ matches, raise Inclusion another step and keep going.
 ## Step 4: See the trade-off
 
 1. Click **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-stats.dark.webp" /><img src="../assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture>, the pie-chart button at the top of the **Verified Good** pile.
-2. Scroll to **Missed vs. Wrong Matches by Inclusion**. As Inclusion rises
-   (to the right), **Wrong matches** go up and **Missed matches** go down.
-   **Current** marks where your line is now.
+2. Scroll to **Precision by Number Returned**. It reads down the ranked list:
+   for the top N pictures, how many of them are real matches. Returning more
+   (to the right) catches more matches, but the share that are right falls.
+   The dashed **Current cut** is where your line is now, and raising
+   Inclusion moves it to the right.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
-  <img src="../assets/borderline-chart.light.webp" alt="The Missed vs. Wrong Matches by Inclusion chart: wrong matches rise and missed matches fall as Inclusion goes up, with the current setting marked" width="720" />
+  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart: estimated and checked precision of the top N pictures against N, with the current cut marked" width="720" />
 </picture>
 
-The chart is drawn when the Stats window opens, so close it and open it again
-after you move Inclusion.
+The chart has two lines:
+
+- **Estimated (at least)** is VTSearch's cautious estimate, worked out from the
+  detector's own answers. It needs at least 10 **Good** answers among them.
+- **Checked by you** counts only the pictures you have checked. You check the
+  ones near the line, where the detector is least sure, so it can read lower
+  than the matches as a whole.
+
+Point at the chart to read both at any count; with the pointer off it, the
+line under the chart reads them at the current cut. The chart is drawn when
+the Stats window opens, so close it and open it again after you move
+Inclusion.
 
 ## Where the setting goes
 

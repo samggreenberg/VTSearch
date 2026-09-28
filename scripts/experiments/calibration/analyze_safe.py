@@ -201,8 +201,8 @@ def decision_rules(contrasts: dict) -> dict:
     * ``adopt_logit`` - the logit-space fit ships only if it beats the sigmoid
       crossing by >= 0.02 mean cost at p < 0.05.
     * ``blend_helps_cold_start`` - if the production blend is *worse* than the
-      raw conformal cut on the ramp, the cold-start item in
-      inclusion-calibration-bias.md absorbs a GMM-specific note.
+      raw conformal cut on the ramp, the cold-start item (in a plan since
+      retired by #4223) absorbs a GMM-specific note.
     """
 
     def _find(contrast: str, window: str = "ramp_6_20") -> dict | None:

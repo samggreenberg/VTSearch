@@ -111,7 +111,13 @@ class TestAppAndHarnessScoreAlike:
         assert eval_set is not None
         eval_rows, eval_labels = eval_set
         wf, wn = inclusion_cost_weights(inclusion)
-        step = {"model": net, "threshold": threshold, "good_ids": list(good), "bad_ids": list(bad)}
+        step = {
+            "model": net,
+            "threshold": threshold,
+            "smart_threshold": threshold,
+            "good_ids": list(good),
+            "bad_ids": list(bad),
+        }
         app = _score_step(step, eval_rows, eval_labels, wf, wn, 0)
 
         assert app["error_cost"] == pytest.approx(harness[0], abs=1e-4)

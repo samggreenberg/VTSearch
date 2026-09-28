@@ -189,12 +189,14 @@ def run_learned_sort(
     ``(results, threshold)``.
     """
     from vtscore.concurrency.stalls import PhaseClock
+    from vtscore.detectors.cost_trend import smart_cut
     from vtscore.detectors.labeling_progress import inject_live_model
     from vtscore.detectors.labelset_training import labelset_train_and_score
     from vtscore.detectors.training import train_and_score
     from vtscore.state import update_learned_scores
     from vtscore.state.core import (
         _empty_detector_context,
+        recut_detector_threshold,
         thread_dataset_context,
         thread_detector_context,
     )
@@ -240,7 +242,11 @@ def run_learned_sort(
         if model is not None and model_matches_local_votes(
             labelset, has_cross_dataset, local_good, local_bad, good, bad
         ):
-            inject_live_model(good, bad, model, threshold)
+            # Smart scores every model at its own Inclusion 0 cut, not at the
+            # line it was served with (issue #4243).  The re-cut reads the
+            # estimator this training run just parked on *det_ctx*.
+            smart_threshold = smart_cut(threshold, inclusion_value, lambda k: recut_detector_threshold(det_ctx, k))
+            inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold)
         clock.mark("inject_live_model")
 
         if det_ctx is not _empty_detector_context and model is not None:

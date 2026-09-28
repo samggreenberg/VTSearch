@@ -332,7 +332,7 @@ def find_label(body: dict):
         # correction rather than vanishing.
         set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
         # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
-        # without re-scoring, and the Stats FP/FN sweep can read them.
+        # without re-scoring, and the Stats sweep and precision curve can read them.
         set_find_scores({entry["id"]: entry["score"] for entry in results})
 
         from vtscore.detectors.registry import set_find_mode
@@ -539,10 +539,21 @@ def find_stats():
     calibrated threshold across inclusion -10..10 (re-cutting the cached
     estimator behind the current cutoff) for false-positive / false-negative
     counts at every stop.
+
+    The **Kept rate** (``verified_precision``) is the exception to "treat
+    unverified as verified": it counts only the items the user checked, since
+    counting every unchecked match as right would read 99% whatever the checks
+    found.  The **precision curve** charts how right the returned set is against
+    how much is returned - verified precision on the checked items and the
+    precision floor's lower-bound estimate - at log-spaced return counts (see
+    :mod:`vtsearch.routes.detectors._find_precision`).
     Pure read; no new state.
     """
-    from vtscore.state.core import get_active_detector_context
-    from vtscore.training.thresholds import INCLUSION_MAX, INCLUSION_MIN, threshold_from_fold_orderings
+    import numpy as np
+
+    from vtscore.state.core import get_active_detector_context, recut_detector_threshold
+    from vtscore.training.thresholds import INCLUSION_MAX, INCLUSION_MIN, MIN_CALIBRATION_POSITIVES
+    from vtsearch.routes.detectors._find_precision import curve_counts, estimated_precision_at, verified_precision_at
     from vtsearch.state import get_inclusion
 
     det_ctx = get_active_detector_context()
@@ -565,27 +576,25 @@ def find_stats():
     agreements = confirmed_good + confirmed_bad
     corrections = culled_fp + rescued_fn
     agreement_rate = agreements / total_items if total_items else 0.0
-    detector_positives = confirmed_good + culled_fp
-    precision = confirmed_good / detector_positives if detector_positives else 0.0
+    # Kept rate over the checked items the detector called Good.  A checked
+    # item's adopted label is the user's vote (verified items hold it).
+    verified = det_ctx.verified_ids
+    verified_called_good = [cid for cid in verified if initial.get(cid) == "good"]
+    verified_kept = sum(1 for cid in verified_called_good if cid in good)
+    verified_precision = verified_kept / len(verified_called_good) if verified_called_good else None
 
     # Sweep FP/FN over ALL adopted items at every inclusion's threshold.
     # Adopted-bad above the line are false positives; adopted-good below it are
-    # false negatives.  Thresholds come from the cached estimator behind the
-    # detector's current cutoff - the fold-anchored population fit when safe
-    # thresholds produced one, else the cached fold orderings - so the chart
-    # plots the line the user would actually get at each stop, and the sweep
-    # stays cheap (no refit, no re-scoring).
-    anchored_cut = det_ctx.anchored_cut_cache
-    cache = det_ctx.calibration_cache
-    orderings = cache[1].orderings if (cache is not None and cache[1].fallback is None) else []
+    # false negatives.  Thresholds come from the same re-cut an Inclusion slide
+    # applies (`recut_detector_threshold`), so the chart plots the line the user
+    # would actually get at each stop, and the sweep stays cheap (no refit, no
+    # re-scoring).  A detector with nothing to re-cut plots its current line flat.
     good_scores = [scores[c] for c in good if c in scores]
     bad_scores = [scores[c] for c in bad if c in scores]
     sweep = []
     for incl in range(INCLUSION_MIN, INCLUSION_MAX + 1):
-        if anchored_cut is not None:
-            t_i = anchored_cut.threshold_at(incl)
-        else:
-            t_i = threshold_from_fold_orderings(orderings, incl) if orderings else det_ctx.threshold
+        recut = recut_detector_threshold(det_ctx, incl)
+        t_i = recut if recut is not None else det_ctx.threshold
         sweep.append(
             {
                 "inclusion": incl,
@@ -594,6 +603,27 @@ def find_stats():
                 "false_neg": sum(1 for s in good_scores if s < t_i),
             }
         )
+
+    # Precision against the number returned.  Ranked as the Find list ranks
+    # (score descending, id to break ties), so point k is the top k the user sees.
+    ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))
+    ranked_ids = [cid for cid, _s in ranked]
+    n_returned = sum(1 for _cid, s in ranked if s >= det_ctx.threshold)
+    counts = curve_counts(len(ranked), extra=n_returned or None)
+    checked_good = {cid: cid in good for cid in verified if cid in scores}
+    verified_points = verified_precision_at(ranked_ids, checked_good, counts)
+    estimate = estimated_precision_at(det_ctx, np.fromiter((s for _cid, s in ranked), dtype=np.float64), counts)
+    precision_curve = [
+        {
+            "n_returned": k,
+            "threshold": round(ranked[k - 1][1], 4),
+            "checked": n_checked,
+            "checked_good": n_good,
+            "verified_precision": None if v_prec is None else round(v_prec, 4),
+            "estimated_precision": None if e_prec is None else round(e_prec, 4),
+        }
+        for k, (n_checked, n_good, v_prec), e_prec in zip(counts, verified_points, estimate.values, strict=True)
+    ]
 
     return {
         "total_good": total_good,
@@ -606,11 +636,19 @@ def find_stats():
         "agreements": agreements,
         "corrections": corrections,
         "agreement_rate": round(agreement_rate, 4),
-        "precision": round(precision, 4),
+        "verified_precision": None if verified_precision is None else round(verified_precision, 4),
+        "verified_called_good": len(verified_called_good),
+        "verified_kept_good": verified_kept,
         "inclusion": get_inclusion(),
         "threshold": round(det_ctx.threshold, 4),
+        "n_scored": len(ranked),
+        "n_returned": n_returned,
         "stale": getattr(det_ctx, "find_eval_stale", False),
         "sweep": sweep,
+        "precision_curve": precision_curve,
+        "estimate_status": estimate.status,
+        "calibration_positives": estimate.calibration_positives,
+        "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
     }
 
 
