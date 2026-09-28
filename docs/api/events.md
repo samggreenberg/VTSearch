@@ -108,9 +108,10 @@ ingest (see [detectors.md](detectors.md) and [io.md](io.md)) publishes
   "id": "note_4eb45583_7",
   "level": "warning",
   "message": "Skipped 3 unreadable files",
-  "detail": "page_2.pdf, page_9.pdf, notes.pdf",
+  "detail": "They could not be decoded as PDF.",
   "source": "Server Folder",
-  "timestamp": 1731000000.123
+  "timestamp": 1731000000.123,
+  "items": ["page_2.pdf", "page_9.pdf", "notes.pdf"]
 }
 ```
 
@@ -120,7 +121,9 @@ operation. Published with `notify()`
 (`vtscore/concurrency/notifications.py`); the Angular client turns each one
 into a toast via `ToastService`. `level` is one of `info`, `success`,
 `warning`, `error`; the first two auto-dismiss, the last two stay until the
-user closes them. `detail` and `source` may be `null`.
+user closes them. `detail`, `source` and `items` may be `null`. `items` lists
+the specific things the message is about, one string each (at most 1000); the
+toast shows them behind a **Details** toggle with a **Copy list** button.
 
 Unlike every other channel this one has no snapshot, which has three
 consequences worth designing around:

@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **"Dropped N item(s) whose embedding failed" now says which items, and why**
+  (issue #4232). The warning ended with "See the server log for which embedder
+  declined", which a GUI user has no way to do. It now names the embedder and
+  what went wrong (it returned no vector for those items, crashed on the batch,
+  returned the wrong number of vectors, or none is installed for the media
+  type), and its new **Details** button lists every dropped item by file name,
+  with **Copy list** to put the list on your clipboard, one item per line.
+
 - **Find no longer runs a detector hidden on the other Dashboard tab**
   (issue #4228). With a single detector on the AutoRun tab and none in
   Drafts, the Dashboard selected that detector even while Drafts was

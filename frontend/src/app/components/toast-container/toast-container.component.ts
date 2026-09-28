@@ -7,7 +7,8 @@ import { Toast, ToastService } from '../../services/toast.service';
  * Stacked toast renderer mounted once in ``AppComponent``. Binds
  * ``ToastService.toasts$`` through the ``async`` pipe and renders each one.
  * Toasts with a rich ``errorContext`` get the expandable Details + Copy debug
- * info actions (preserves the old global-error-banner UX).
+ * info actions (preserves the old global-error-banner UX); toasts carrying an
+ * ``items`` list get the same Details toggle over that list, plus Copy list.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,8 +62,17 @@ export class ToastContainerComponent implements OnDestroy {
     }
   }
 
-  async copyDebugInfo(t: Toast): Promise<void> {
-    const text = this.toastService.formatForClipboard(t);
+  copyDebugInfo(t: Toast): Promise<void> {
+    return this.copyText(t, this.toastService.formatForClipboard(t));
+  }
+
+  /** Copy a toast's item list, one entry per line, so it pastes straight
+   *  into a file listing, a spreadsheet column, or a ``grep -f``. */
+  copyItems(t: Toast): Promise<void> {
+    return this.copyText(t, (t.items ?? []).join('\n'));
+  }
+
+  private async copyText(t: Toast, text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       this.markCopied(t.id);

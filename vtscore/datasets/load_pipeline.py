@@ -728,7 +728,7 @@ def _run_origin_load_in_background(
                     apply_custom_metadata_md5(ctx.medias)
                     _tag_origins(ctx.medias, origin)
                     _apply_clipper_stage(ctx, pacer, clipper, clipper_params, chain_steps)
-                    _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
+                    embed_failures = _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
                     # Step 4 (finalize) bundles several sub-stages. Route them
                     # through a FinalizeProgress proxy so each maps into its own
                     # ordered slice of the step-4 bar instead of independently
@@ -737,7 +737,7 @@ def _run_origin_load_in_background(
                     # serialize/disk-write window. See FinalizeProgress.
                     fin = FinalizeProgress(pacer, media_type)
                     fin.begin("cleanup")
-                    _drop_none_embeddings_stage(ctx, fin)
+                    _drop_none_embeddings_stage(ctx, fin, embed_failures)
                     # Re-lazify clips from reference (thin) parents now that
                     # embedding is done: strip their materialized bytes so the
                     # dataset stores recipes, not duplicated clip payloads.

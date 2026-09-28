@@ -258,6 +258,17 @@ describe('ToastService', () => {
     expect(service.toasts[0].detail).toBeUndefined();
   });
 
+  it('carries the item list onto the toast', () => {
+    notifications$.next(notification({ items: ['page_2.pdf', 'notes.pdf'] }));
+    expect(service.toasts[0].items).toEqual(['page_2.pdf', 'notes.pdf']);
+  });
+
+  it('leaves items unset for a null or empty list, so no Details button appears', () => {
+    notifications$.next(notification({ id: 'note_ab_1', items: null }));
+    notifications$.next(notification({ id: 'note_ab_2', items: [] }));
+    expect(service.toasts.map((t) => t.items)).toEqual([undefined, undefined]);
+  });
+
   it('dedups on the backend notification id, so a redelivered frame does not stack', () => {
     notifications$.next(notification());
     notifications$.next(notification());

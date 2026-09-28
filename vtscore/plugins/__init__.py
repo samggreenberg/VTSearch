@@ -37,6 +37,7 @@ import importlib.util
 import sys
 import threading
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, TypeVar
@@ -667,6 +668,7 @@ class PluginBase:
         *,
         level: str = "info",
         detail: str | None = None,
+        items: Iterable[str] | None = None,
     ) -> Notification:
         """Put a toast in front of every user currently watching the app.
 
@@ -688,6 +690,11 @@ class PluginBase:
                 ``"error"``.  The first two fade on their own; the last two
                 stay until the user dismisses them.
             detail: Optional second line carrying the specifics.
+            items: Optional list of the things the message is about, one
+                entry each (every skipped file, not the first ten).  The app
+                shows them behind a *Details* toggle with a *Copy list*
+                button; see :func:`vtscore.concurrency.notifications.notify`
+                for the caps.
 
         Example::
 
@@ -695,10 +702,10 @@ class PluginBase:
                 self.notify(
                     f"Skipped {len(skipped)} unreadable files",
                     level="warning",
-                    detail=", ".join(skipped[:10]),
+                    items=skipped,
                 )
         """
-        return notify(message, level=level, detail=detail, source=self.display_name)
+        return notify(message, level=level, detail=detail, source=self.display_name, items=items)
 
     # -- CLI support --------------------------------------------------------
 
