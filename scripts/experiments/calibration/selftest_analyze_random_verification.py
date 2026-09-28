@@ -15,7 +15,8 @@ analyzer recovers what the construction guarantees:
 * a top 32 that is all positive is promised on every draw, at the exact recall,
   oracle, votes and unaudited recall the construction fixes;
 * a census (k0 <= m) is exact: a top 16 holding 8 positives is always promised at
-  X = 0.5, and one holding 7 never is;
+  X = 0.5, and one holding 7 never is; reading the top K yourself promises the
+  longest prefix at >= X;
 * shrinking from 128 finds the all-positive top 32 behind a top 128 at 25%;
 * the stratified rule promises exactly the all-positive top 16 and books which
   audits fall inside it;
@@ -140,10 +141,14 @@ def test_validity(failures: list[str]) -> None:
         A.simulate(mix, rule("a:top32"), 10, x, alpha, draws, seed=11),
         x,
         A.recall_of(mix, A.oracle_k(mix, x)),
-        np.zeros(mix.n),
+        {"shipped": np.zeros(mix.n)},
     )
     alone = A.summarise(
-        fr, A.simulate(fr, rule("a:top32"), 10, x, alpha, draws, seed=11), x, np.zeros(fr.n), np.zeros(fr.n)
+        fr,
+        A.simulate(fr, rule("a:top32"), 10, x, alpha, draws, seed=11),
+        x,
+        np.zeros(fr.n),
+        {"shipped": np.zeros(fr.n)},
     )
     made_alone = alone[0]["broken_of_made"]
     check(
@@ -164,13 +169,18 @@ def test_known_good(failures: list[str]) -> None:
     fr = frames_of(rows)
     out = A.simulate(fr, rule("a:top32"), 10, 0.5, 0.05, 20, seed=5)
     check(bool((out.k == 32).all()), "an all-positive top 32 is promised on every draw", failures)
-    s = A.summarise(fr, out, 0.5, A.recall_of(fr, A.oracle_k(fr, 0.5)), np.zeros(fr.n))[0]
+    s = A.summarise(fr, out, 0.5, A.recall_of(fr, A.oracle_k(fr, 0.5)), {"none": np.zeros(fr.n)})[0]
     check(abs(s["recall"] - 0.8) < 1e-12, f"its recall is exactly 32/40 (got {s['recall']})", failures)
     check(abs(s["oracle"] - 0.8) < 1e-12, "the oracle (k = 64 at exactly 0.5) recalls 32/40", failures)
     check(abs(s["recall_share"] - 1.0) < 1e-12, "recall / oracle is 1", failures)
     check(s["votes_mean"] == 10 and s["broken_of_all"] == 0, "it costs m = 10 votes and never breaks", failures)
     check(abs(s["unaudited_recall"] - 22 / 40) < 1e-12, "the unaudited recall is (32 - 10) / 40", failures)
     check(s["census_of_made"] == 0, "a 10-item audit of 32 is not a census", failures)
+    check(
+        abs(s["d_recall_vs_none"] - 0.8) < 1e-12,
+        "the paired gain over a reference that returns nothing is its recall",
+        failures,
+    )
 
 
 def test_census(failures: list[str]) -> None:
@@ -184,6 +194,10 @@ def test_census(failures: list[str]) -> None:
         failures,
     )
     check(bool((b.k == 0).all()), "census: 7/16 is never promised at X = 0.5", failures)
+    # Reading the top K yourself: the longest prefix at >= X, never broken.
+    check(bool((A.census_k(eight, 16, 0.5) == 16).all()), "census:16 promises all of an 8/16 top 16", failures)
+    check(bool((A.census_k(eight, 16, 0.75) == 1).all()), "... and only the top 1 at X = 0.75 (then 2/3)", failures)
+    check(bool((A.census_k(seven, 16, 0.5) == 14).all()), "... and the top 14 (7/14) of a 7/16 top 16", failures)
 
 
 def test_shrinking(failures: list[str]) -> None:
@@ -227,7 +241,7 @@ def test_baselines(failures: list[str]) -> None:
     for name, want_broken in (("consistent", 1.0), ("shipped", 0.0)):
         k = A.baseline_k(fr, name, 0.5)[:, None]
         zero = np.zeros_like(k)
-        s = A.summarise(fr, A.Outcome(k, zero, zero, zero, []), 0.5, orec, np.zeros(fr.n))[0]
+        s = A.summarise(fr, A.Outcome(k, zero, zero, zero, []), 0.5, orec, {"shipped": np.zeros(fr.n)})[0]
         check(s["broken_of_made"] == want_broken, f"the stored {name} cut reads broken = {want_broken:g}", failures)
 
 

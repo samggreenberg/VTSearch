@@ -64,10 +64,13 @@ checkpoint ``t`` and by object-size ``band``):
   ``new_pos_per_vote`` - positives delivered in the promised set, and unaudited
   positives, per audit vote spent (a rate, so a rule that delivers nothing reads
   0 rather than an infinite cost).
-* ``d_recall_vs_shipped`` (+ ``se_``) - the paired recall gain over the shipped
-  estimator's cut on the same frames.
+* ``d_recall_vs_shipped``, ``d_recall_vs_read32`` (+ ``se_``) - the paired recall
+  gain over the shipped estimator's cut, and over reading the top 32 yourself, on
+  the same frames (cluster standard errors).
 
-The two stored baselines (``shipped``, ``consistent``) appear with ``m = 0``.
+The two stored baselines (``shipped``, ``consistent``) appear with ``m = 0``, as
+do ``census:16`` and ``census:32``: vote on every one of the top K and promise
+the longest prefix at >= X (``CENSUS``), the reference any audit has to beat.
 
     python analyze_random_verification.py [--frames DIR] [--out DIR] [--draws 20] [--no-figures]
 """
@@ -131,6 +134,10 @@ RULES = (
     Rule("c:seq", "c", seq=True),
 )
 BASELINES = ("shipped", "consistent")
+#: Reading the top K yourself: vote on every one of the top K items and promise the
+#: longest prefix whose exact precision is >= X. Never broken, costs K votes, and
+#: every returned item has been seen - the reference an audit has to beat.
+CENSUS = (16, 32)
 
 
 # --------------------------------------------------------------------------- frames
@@ -374,8 +381,8 @@ def slices(fr: Frames):
         yield f"band={b}", (fr.meta["band"] == b).to_numpy()
 
 
-def summarise(fr: Frames, out: Outcome, x: float, oracle_rec: np.ndarray, shipped_rec: np.ndarray) -> list[dict]:
-    """Rows for one (rule, m, alpha, X) run, per slice."""
+def summarise(fr: Frames, out: Outcome, x: float, oracle_rec: np.ndarray, refs: dict[str, np.ndarray]) -> list[dict]:
+    """Rows for one (rule, m, alpha, X) run, per slice; ``refs`` are per-frame recalls to pair against."""
     k, votes = out.k, out.votes
     n_pos = fr.meta["n_pos"].to_numpy()[:, None]
     h = fr.hits(k)
@@ -396,7 +403,6 @@ def summarise(fr: Frames, out: Outcome, x: float, oracle_rec: np.ndarray, shippe
         f_new = np.where(made[sel], h[sel] - out.seen_pos[sel], 0).mean(1)
         cl = cells[sel]
         ones = np.full(sel.sum(), draws)
-        d_rec = f_rec - shipped_rec[sel]
         rows.append(
             {
                 "slice": name,
@@ -420,11 +426,21 @@ def summarise(fr: Frames, out: Outcome, x: float, oracle_rec: np.ndarray, shippe
                 "votes_p90": float(np.percentile(votes[sel], 90)),
                 "pos_delivered": f_pos.mean(),
                 "pos_per_vote": f_pos.mean() / f_votes.mean() if f_votes.mean() else np.nan,
-                "d_recall_vs_shipped": d_rec.mean(),
-                "se_d_recall_vs_shipped": cluster_se(d_rec, np.ones(sel.sum()), cl),
             }
         )
+        for ref, ref_rec in refs.items():
+            d_rec = f_rec - ref_rec[sel]
+            rows[-1][f"d_recall_vs_{ref}"] = d_rec.mean()
+            rows[-1][f"se_d_recall_vs_{ref}"] = cluster_se(d_rec, np.ones(sel.sum()), cl)
     return rows
+
+
+def census_k(fr: Frames, depth: int, x: float) -> np.ndarray:
+    """The largest k <= depth whose top-k precision is >= x (0 if none)."""
+    ks = np.arange(1, depth + 1)
+    hits = (fr.ranks[:, :, None] < ks[None, None, :]).sum(axis=1)  # (F, depth)
+    ok = meets(hits, ks[None, :], x)
+    return np.where(ok, ks[None, :], 0).max(axis=1)
 
 
 def baseline_k(fr: Frames, name: str, x: float) -> np.ndarray:
@@ -450,19 +466,28 @@ def run(
     for w, fr in frames.items():
         for x in floors:
             orec = recall_of(fr, oracle_k(fr, x))
-            srec = recall_of(fr, baseline_k(fr, "shipped", x))
+            refs = {
+                "shipped": recall_of(fr, baseline_k(fr, "shipped", x)),
+                "read32": recall_of(fr, census_k(fr, 32, x)),
+            }
             for name in BASELINES:
                 k = baseline_k(fr, name, x)[:, None]
                 zero = np.zeros_like(k)
-                for r in summarise(fr, Outcome(k, zero, zero, zero, []), x, orec, srec):
+                for r in summarise(fr, Outcome(k, zero, zero, zero, []), x, orec, refs):
                     rows.append({"world": w, "rule": name, "X": x, "alpha": np.nan, "m": 0, **r})
+            for depth in CENSUS:
+                k = census_k(fr, depth, x)[:, None]
+                votes = np.full_like(k, depth)
+                out = Outcome(k, votes, k, fr.hits(k), [])
+                for r in summarise(fr, out, x, orec, refs):
+                    rows.append({"world": w, "rule": f"census:{depth}", "X": x, "alpha": np.nan, "m": 0, **r})
             for rule in rules:
                 for a in alphas:
                     for m in budgets:
                         out = simulate(fr, rule, m, x, a, draws, seed)
                         if keep(x, a, m):
                             traces[(w, rule.name, x, a, m)] = out
-                        for r in summarise(fr, out, x, orec, srec):
+                        for r in summarise(fr, out, x, orec, refs):
                             rows.append({"world": w, "rule": rule.name, "X": x, "alpha": a, "m": m, **r})
     return pd.DataFrame(rows), traces
 
@@ -733,6 +758,29 @@ def figure_cost(summary: pd.DataFrame, out: Path, alpha: float = 0.05) -> Path:
 # --------------------------------------------------------------------------- main
 
 
+def oracle_table(frames: dict[str, Frames]) -> pd.DataFrame:
+    """How big the promisable set is: the oracle's cut, per prevalence and floor."""
+    rows = []
+    for w, fr in frames.items():
+        for x in FLOORS:
+            k = oracle_k(fr, x)
+            rows.append(
+                {
+                    "world": w,
+                    "X": x,
+                    "frames": fr.n,
+                    "reachable": float((k > 0).mean()),
+                    "oracle_k_median": float(np.median(k)),
+                    "oracle_k_median_reachable": float(np.median(k[k > 0])) if (k > 0).any() else np.nan,
+                    "oracle_k_p90": float(np.percentile(k, 90)),
+                    "oracle_recall": float(recall_of(fr, k).mean()),
+                    "n_pos_mean": float(fr.meta["n_pos"].mean()),
+                    "n_corpus_mean": float(fr.meta["n_corpus"].mean()),
+                }
+            )
+    return pd.DataFrame(rows).round(4)
+
+
 def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
@@ -762,6 +810,7 @@ def main(argv: list[str] | None = None) -> int:
     pd.DataFrame(
         [{"X": x, "alpha": a, "min_all_positive_audits": min_all_positive(x, a)} for x in FLOORS for a in ALPHAS]
     ).to_csv(args.out / "min_audit.csv", index=False)
+    oracle_table(frames).to_csv(args.out / "oracle.csv", index=False)
     prov = {
         "issue": 4257,
         "frames": {w: {"file": f, "sha256_16": sha(args.frames / f), "frames": frames[w].n} for w, f in worlds.items()},
