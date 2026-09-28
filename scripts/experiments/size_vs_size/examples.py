@@ -151,8 +151,8 @@ def main() -> int:
             fontsize=8,
         )
         fig.tight_layout()
-        name = f"examples_{cls.replace(' ', '_')}_test_{test}.png"
-        fig.savefig(figdir / name, dpi=110)
+        name = f"examples_{cls.replace(' ', '_')}_test_{test}.jpg"
+        fig.savefig(figdir / name, dpi=100, pil_kwargs={"quality": 78, "optimize": True})
         plt.close(fig)
         lines.append(f"- `{cls}`, test {test}: [{name}](figures/{name})")
     (args.out / "examples.md").write_text("\n".join(lines) + "\n")

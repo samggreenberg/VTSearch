@@ -325,9 +325,9 @@ def per_class_figure(final: pd.DataFrame, figdir: Path, t: int, metric: str = "c
             ax.set_xlabel(f"Δ {metric} (right = worse than training at {test})")
         axes[0].set_yticks(range(len(classes)), classes, fontsize=7)
         handles = [plt.Line2D([], [], marker="o", ls="", color=c, label=f"train {k}") for k, c in colors.items()]
-        fig.legend(handles=handles, loc="upper center", ncol=5, frameon=False)
+        fig.legend(handles=handles, loc="lower center", ncol=5, frameon=False, bbox_to_anchor=(0.5, -0.01))
         fig.suptitle(f"Per class at click {t}, {emb}: what training at another size costs on each test size", y=1.0)
-        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        fig.tight_layout(rect=(0, 0.02, 1, 0.98))
         name = f"per_class_{metric}_t{t}_{emb.replace('+', '_')}.png"
         fig.savefig(figdir / name, dpi=130, bbox_inches="tight")
         plt.close(fig)
@@ -342,6 +342,14 @@ def viewer_frame(long: pd.DataFrame) -> pd.DataFrame:
     ``arm``, so the viewer's "dataset: each" draws one panel per test size with
     one line per training size, and "category" is the class.
     """
+    # A class with no cohort at a test size (apple, banana and orange have no
+    # small band) has no measurement there, not a missing one: drop its rows so
+    # the coverage strip counts only cells that can be measured.
+    long = long[long["cost"].notna()]
+    # Kept under the repo's viewer weight: SML= tracks SMLn to within 0.005
+    # everywhere (contrasts.csv), fnr is 1 - recall, and F1 is not comparable
+    # across test sizes (each column has its own positive count).
+    long = long[long["test"] != "SML="]
     return pd.DataFrame(
         {
             "dataset": "test " + long["test"],
@@ -352,9 +360,7 @@ def viewer_frame(long: pd.DataFrame) -> pd.DataFrame:
             "arm": "train " + long["train"],
             "cost": long["cost"],
             "fpr": long["fpr"],
-            "fnr": long["fnr"],
             "recall": long["recall"],
-            "f1": long["f1"],
             "auroc": long["auroc"],
         }
     )
@@ -372,6 +378,7 @@ def main() -> int:
     ap.add_argument("--ts", default="30,150", help="clicks at which to read the table")
     ap.add_argument("--seeds", type=int, default=0, help="analyze seeds < N only (0 = all complete seeds)")
     ap.add_argument("--no-viewer", action="store_true")
+    ap.add_argument("--runs-budget-mb", type=float, default=1.5, help="viewer per-seed payload budget")
     args = ap.parse_args()
 
     import os
@@ -534,6 +541,7 @@ def main() -> int:
             build={"exp": str(args.exp), "seeds": complete},
             title="Size vs size (#4160)",
             subtitle="coco_better, SigLIP binary. Panel ('dataset') = TEST size; line (arm) = TRAINING size.",
+            runs_budget_mb=args.runs_budget_mb,
         )
         print(f"wrote {args.out}/viewer.html")
     return 0
