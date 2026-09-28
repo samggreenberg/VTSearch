@@ -359,6 +359,8 @@ headlessly. Three flags work together:
 | `--label-importer-file PATH` | The label file to read. Shorthand for `--label-importer-field filepath=PATH`. |
 | `--label-importer-field KEY=VALUE` | Set any one of the label importer's fields; repeat it for several. This is how you drive a label importer that reads something other than a file. |
 | `--label-importer NAME` | Which label importer to run. Defaults to `server_json_file`; `python app.py --list-label-importers` shows the rest. |
+| `--create-detector` | Create the detector from the imported labels if it doesn't exist yet (see [Creating the detector](#creating-the-detector)). |
+| `--detector-media-type TYPE` | Media type for a detector `--create-detector` creates. Defaults to the source's. |
 
 `--import-labels-into` needs at least one of `--label-importer-file` or
 `--label-importer-field`.
@@ -387,6 +389,43 @@ The two server-side importers expect labels keyed by media MD5:
 and `server_csv_file` reads a header row of `md5,label`. Only `good` and `bad`
 labels are accepted; entries with any other label, and `(md5, label)` pairs the
 detector already holds, are skipped and reported in the count.
+
+#### Creating the detector
+
+Without `--create-detector` the detector must already exist; a name with no
+detector ends the run with `Detector 'NAME' not found.` before any media is
+loaded. With it, a missing detector is created from the imported labels, so a
+labelled detector can go from a label file to hits without ever being made in
+the UI:
+
+```bash
+# Create "Dog Barks" from the label file, then score the folder with it.
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio \
+    --import-labels-into "Dog Barks" --create-detector --label-importer-file dog_barks.json
+```
+
+The detector is written and registered the way the Dashboard's **New Detector**
+does it, owned by the user the run runs as (`--user`, or the default user), so
+it appears on that user's **Drafts** tab afterwards. When it already exists,
+`--create-detector` changes nothing: the labels are merged into it as usual, so
+the same command works on every run of a cron job.
+
+Its **media type** is `--detector-media-type` when given, otherwise the
+source's: the `media_type` recorded in a `--dataset` pickle, or the importer's
+`--media-type` field. A source that declares neither (a legacy pickle, or an
+importer with no media type field, such as `local_folder`) needs
+`--detector-media-type`, and the run says so before loading anything. Set it
+also when the detector should differ from the source, e.g. `image` to score
+video frames through a converter.
+
+The labels have to be able to train a head: at least one `good` and one `bad`
+that resolve. Labels keyed only by MD5 (the `server_json_file` / `server_csv_file`
+shape) resolve against the dataset the run is scoring, so they work when those
+items are in it. An import with no `good` or `bad` label creates nothing.
+
+Under `--dry-run` the announcement names the detector it would create and its
+media type, and nothing is written; the plan lists the detector as `MISSING`,
+since it does not exist yet.
 
 The import is a **one-shot mutation of the detector JSON on disk**: the merged
 labelset persists after the run, which is why it happens before scoring rather
@@ -527,6 +566,8 @@ import_labels:
     name: server_json_file         # default: server_json_file
     fields:
       filepath: new_labels.json
+  create: false                    # true = create the detector if missing (--create-detector)
+  # media_type: audio              # with create: the new detector's type (--detector-media-type)
 
 # Optional. Where results go. Defaults to the `gui` exporter (console).
 exporter:

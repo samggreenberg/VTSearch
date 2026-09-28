@@ -29,7 +29,7 @@ _TOP_LEVEL_KEYS = {
     "tempimport",
 }
 
-_IMPORT_LABELS_KEYS = {"detector", "importer", "file"}
+_IMPORT_LABELS_KEYS = {"detector", "importer", "file", "create", "media_type"}
 
 
 def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
@@ -156,13 +156,14 @@ def _parse_plugin_section(value: Any, section: str) -> tuple[str, dict[str, Any]
 
 
 def _parse_import_labels(value: Any) -> dict[str, Any]:
-    """Parse the ``import_labels:`` block into ``{detector, importer, fields}``.
+    """Parse the ``import_labels:`` block into ``{detector, importer, fields, create, media_type}``.
 
     ``importer`` takes the same ``{name, fields}`` mapping as the top-level
     ``importer:`` / ``exporter:`` blocks, so any label importer - including
     one that reads no file - can be driven from YAML.  The older flat form
     (``importer: <name>`` plus ``file: <path>``) is still accepted: ``file``
-    is shorthand for the importer's ``filepath`` field.
+    is shorthand for the importer's ``filepath`` field.  ``create: true`` and
+    ``media_type:`` mirror ``--create-detector`` / ``--detector-media-type``.
     """
     if not isinstance(value, dict):
         raise ValueError("'import_labels:' must be a mapping.")
@@ -201,7 +202,29 @@ def _parse_import_labels(value: Any) -> dict[str, Any]:
     _validate_field_keys(importer_name, fields, "import_labels.importer", lambda _name: {f.key for f in plugin.fields})
     _require_fields(plugin, importer_name, fields)
 
-    return {"detector": detector, "importer": importer_name, "fields": fields}
+    create, media_type = _parse_import_labels_create(value)
+    return {
+        "detector": detector,
+        "importer": importer_name,
+        "fields": fields,
+        "create": create,
+        "media_type": media_type,
+    }
+
+
+def _parse_import_labels_create(value: dict[str, Any]) -> tuple[bool, str]:
+    """Parse ``import_labels.create`` / ``import_labels.media_type`` into ``(create, media_type)``."""
+    create = value.get("create", False)
+    if not isinstance(create, bool):
+        raise ValueError("'import_labels.create' must be a boolean.")
+    media_type = value.get("media_type")
+    if media_type is None:
+        return create, ""
+    if not isinstance(media_type, str) or not media_type:
+        raise ValueError("'import_labels.media_type' must be a media type name when set.")
+    if not create:
+        raise ValueError("'import_labels.media_type' only applies with 'import_labels.create: true'.")
+    return create, media_type
 
 
 def _require_fields(plugin: Any, plugin_name: str, fields: dict[str, Any]) -> None:
@@ -288,13 +311,50 @@ def run_pipeline_file(path: str | Path) -> None:
         sys.exit(1)
 
 
+def _import_labels(il: dict[str, Any], spec: Any) -> None:
+    """Run the ``import_labels:`` block, creating the detector when ``create:`` asks."""
+    from vtscore.cli import (  # noqa: PLC0415
+        DetectorNotFoundError,
+        _label_import_media_type,
+        import_labels_into_detector,
+    )
+
+    create_media_type = _label_import_media_type(
+        il["detector"],
+        spec,
+        create=il.get("create", False),
+        media_type=il.get("media_type", ""),
+        media_type_option="'import_labels.media_type'",
+    )
+    try:
+        applied, skipped = import_labels_into_detector(
+            il["detector"], il["importer"], il["fields"], create_media_type=create_media_type
+        )
+    except DetectorNotFoundError as exc:
+        raise ValueError(f"{exc} Set 'import_labels.create: true' to create it from the imported labels.") from exc
+    if create_media_type:
+        done = f"Created detector '{il['detector']}' (media_type={create_media_type}) with {applied} label(s)"
+    else:
+        done = f"Imported {applied} label(s) into detector '{il['detector']}'"
+    print(f"{done} (skipped {skipped} duplicate/invalid).", flush=True)
+
+
 def _dispatch(config: dict[str, Any]) -> None:
     """Run the parsed *config* against the existing autodetect pipeline."""
     from vtscore.cli import (  # noqa: PLC0415
         _run_source,
         _SourceSpec,
-        import_labels_into_detector,
     )
+
+    if config["importer"]:
+        spec = _SourceSpec(
+            kind="importer",
+            importer_name=config["importer"],
+            field_values=config["importer_fields"],
+            chunk_size=config["chunk_size"],
+        )
+    else:
+        spec = _SourceSpec(kind="pickle", dataset_path=config["dataset"], chunk_size=config["chunk_size"])
 
     settings_path = config["settings"]
     if config["import_labels"] is not None:
@@ -306,22 +366,7 @@ def _dispatch(config: dict[str, Any]) -> None:
             from vtscore.config import CoreConfig  # noqa: PLC0415
 
             CoreConfig.from_settings(settings_path=settings_path)
-        il = config["import_labels"]
-        applied, skipped = import_labels_into_detector(il["detector"], il["importer"], il["fields"])
-        print(
-            f"Imported {applied} label(s) into detector '{il['detector']}' (skipped {skipped} duplicate/invalid).",
-            flush=True,
-        )
-
-    if config["importer"]:
-        spec = _SourceSpec(
-            kind="importer",
-            importer_name=config["importer"],
-            field_values=config["importer_fields"],
-            chunk_size=config["chunk_size"],
-        )
-    else:
-        spec = _SourceSpec(kind="pickle", dataset_path=config["dataset"], chunk_size=config["chunk_size"])
+        _import_labels(config["import_labels"], spec)
 
     # As with ``--import-labels-into``, a label import names the detector the
     # run scores with, in place of the settings' Auto-Find list - unless the

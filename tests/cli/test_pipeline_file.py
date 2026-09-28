@@ -295,7 +295,13 @@ class TestLoadPipelineFile:
             )
         )
         cfg = load_pipeline_file(p)
-        assert cfg["import_labels"] == {"detector": "d", "importer": "server_csv_file", "fields": {"filepath": "l.csv"}}
+        assert cfg["import_labels"] == {
+            "detector": "d",
+            "importer": "server_csv_file",
+            "fields": {"filepath": "l.csv"},
+            "create": False,
+            "media_type": "",
+        }
 
     def test_import_labels_accepts_plugin_mapping(self, tmp_path):
         """``import_labels.importer`` takes the same ``{name, fields}`` shape
@@ -319,6 +325,8 @@ class TestLoadPipelineFile:
             "detector": "d",
             "importer": "server_json_file",
             "fields": {"filepath": "l.json"},
+            "create": False,
+            "media_type": "",
         }
 
     def test_import_labels_fileless_importer_needs_no_file(self, tmp_path, monkeypatch):
@@ -348,6 +356,8 @@ class TestLoadPipelineFile:
             "detector": "Dogs",
             "importer": plugin.name,
             "fields": {"detectors": "somestring"},
+            "create": False,
+            "media_type": "",
         }
 
     def test_import_labels_unknown_field_key_raises(self, tmp_path):
@@ -570,7 +580,7 @@ class TestDispatchImportLabels:
 
         seen = {}
 
-        def _fake_import(detector, importer, field_values):
+        def _fake_import(detector, importer, field_values, create_media_type=""):
             seen.update(detector=detector, importer=importer, fields=field_values)
             return (1, 0)
 
@@ -603,7 +613,7 @@ class TestDispatchDetectorSelection:
         from vtscore.cli_pipeline import _dispatch
 
         seen = {}
-        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a: (1, 0))
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a, **k: (1, 0))
         monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
         _dispatch(
             {
@@ -628,3 +638,76 @@ class TestDispatchDetectorSelection:
     def test_explicit_detectors_list_wins(self, monkeypatch):
         seen = self._dispatch_capturing(monkeypatch, ["Cats", "Dogs"])
         assert seen["override_detectors"] == ["Cats", "Dogs"]
+
+
+class TestImportLabelsCreate:
+    """Issue #4238: ``import_labels.create`` / ``import_labels.media_type``."""
+
+    @staticmethod
+    def _parse(block):
+        from vtscore.cli_pipeline import _parse_import_labels
+
+        return _parse_import_labels({"detector": "Dogs", "file": "labels.json", **block})
+
+    def test_defaults_to_no_create(self):
+        parsed = self._parse({})
+        assert parsed["create"] is False
+        assert parsed["media_type"] == ""
+
+    def test_create_with_media_type(self):
+        parsed = self._parse({"create": True, "media_type": "image"})
+        assert parsed["create"] is True
+        assert parsed["media_type"] == "image"
+
+    def test_create_must_be_boolean(self):
+        with pytest.raises(ValueError, match="'import_labels.create' must be a boolean"):
+            self._parse({"create": "yes"})
+
+    def test_media_type_needs_create(self):
+        with pytest.raises(ValueError, match="only applies with 'import_labels.create: true'"):
+            self._parse({"media_type": "image"})
+
+    @staticmethod
+    def _dispatch(monkeypatch, import_labels):
+        import vtscore.cli as vtcli
+        from vtscore.cli_pipeline import _dispatch
+
+        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: None)
+        _dispatch(
+            {
+                "dataset": None,
+                "importer": "server_folder",
+                "importer_fields": {"path": "/x", "media_type": "video"},
+                "settings": None,
+                "detectors": None,
+                "chunk_size": None,
+                "import_labels": import_labels,
+                "exporter": None,
+                "exporter_fields": {},
+                "tempimport": True,
+            }
+        )
+
+    def test_create_uses_the_sources_media_type(self, monkeypatch):
+        import vtscore.cli as vtcli
+
+        seen = {}
+        monkeypatch.setattr(
+            vtcli,
+            "import_labels_into_detector",
+            lambda det, imp, fields, create_media_type="": seen.update(mt=create_media_type) or (1, 0),
+        )
+        self._dispatch(
+            monkeypatch,
+            {"detector": "Dogs", "importer": "server_json_file", "fields": {"filepath": "x"}, "create": True},
+        )
+        assert seen["mt"] == "video"
+
+    def test_missing_detector_without_create_names_the_key(self, monkeypatch, tmp_path):
+        labels = tmp_path / "labels.json"
+        labels.write_text(json.dumps({"labels": [{"md5": "a" * 32, "label": "good"}]}))
+        with pytest.raises(ValueError, match="Set 'import_labels.create: true'"):
+            self._dispatch(
+                monkeypatch,
+                {"detector": "No Such Det", "importer": "server_json_file", "fields": {"filepath": str(labels)}},
+            )

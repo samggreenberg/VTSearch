@@ -428,7 +428,7 @@ class TestImportLabels:
 
         seen = {}
 
-        def _fake_import(detector, importer, field_values):
+        def _fake_import(detector, importer, field_values, create_media_type=""):
             seen.update(detector=detector, importer=importer, fields=field_values)
             return (3, 1)
 
@@ -460,7 +460,7 @@ class TestImportLabels:
         rec = _AutodetectRecorder(monkeypatch)
         import vtscore.cli as vtcli
 
-        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a: (1, 0))
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a, **k: (1, 0))
         _run_main(
             monkeypatch,
             [
@@ -488,7 +488,7 @@ class TestImportLabels:
 
         seen = {}
 
-        def _fake_import(detector, importer, field_values):
+        def _fake_import(detector, importer, field_values, create_media_type=""):
             seen.update(detector=detector, importer=importer, fields=field_values)
             return (0, 0)
 
@@ -550,6 +550,128 @@ class TestImportLabels:
                 ],
             )
         assert exc.value.code == 1
+
+
+class TestCreateDetectorFlags:
+    """Issue #4238: --create-detector / --detector-media-type wiring."""
+
+    @staticmethod
+    def _record_import(monkeypatch):
+        import vtscore.cli as vtcli
+
+        seen = {}
+
+        def _fake_import(detector, importer, field_values, create_media_type=""):
+            seen.update(detector=detector, create_media_type=create_media_type)
+            return (2, 0)
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", _fake_import)
+        return seen
+
+    @staticmethod
+    def _folder_argv(*extra):
+        return [
+            "--autodetect",
+            "--importer",
+            "server_folder",
+            "--path",
+            "/data",
+            "--import-labels-into",
+            "New Det",
+            "--label-importer-file",
+            "labels.json",
+            *extra,
+        ]
+
+    def test_create_detector_requires_import_labels_into(self, monkeypatch, capsys):
+        rec = _AutodetectRecorder(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--create-detector"])
+        assert exc.value.code == 2
+        assert "--create-detector only applies with --import-labels-into" in capsys.readouterr().err
+        assert rec.calls == {}
+
+    def test_detector_media_type_requires_create_detector(self, monkeypatch, capsys):
+        _AutodetectRecorder(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, self._folder_argv("--detector-media-type", "image"))
+        assert exc.value.code == 2
+        assert "--detector-media-type only applies with --create-detector" in capsys.readouterr().err
+
+    def test_importer_media_type_becomes_the_new_detectors(self, monkeypatch):
+        rec = _AutodetectRecorder(monkeypatch)
+        seen = self._record_import(monkeypatch)
+        _run_main(monkeypatch, self._folder_argv("--media-type", "video", "--create-detector"))
+        assert seen == {"detector": "New Det", "create_media_type": "video"}
+        _, kwargs = rec.calls["autodetect_importer_main"]
+        assert kwargs["override_detectors"] == ["New Det"]
+
+    def test_detector_media_type_overrides_the_source(self, monkeypatch):
+        _AutodetectRecorder(monkeypatch)
+        seen = self._record_import(monkeypatch)
+        _run_main(
+            monkeypatch,
+            self._folder_argv("--media-type", "video", "--create-detector", "--detector-media-type", "image"),
+        )
+        assert seen["create_media_type"] == "image"
+
+    def test_missing_detector_without_flag_names_it(self, monkeypatch, tmp_path, capsys):
+        """The real import refuses a missing detector, and the CLI says which
+        flag would have created it."""
+        rec = _AutodetectRecorder(monkeypatch)
+        labels = tmp_path / "labels.json"
+        labels.write_text('{"labels": [{"md5": "' + "a" * 32 + '", "label": "good"}]}')
+        with pytest.raises(SystemExit) as exc:
+            _run_main(
+                monkeypatch,
+                [
+                    "--autodetect",
+                    "--dataset",
+                    "x.pkl",
+                    "--import-labels-into",
+                    "No Such Det",
+                    "--label-importer-file",
+                    str(labels),
+                ],
+            )
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert "Pass --create-detector" in captured.out + captured.err
+        assert rec.calls == {}
+
+    def test_undeclared_media_type_stops_before_import(self, monkeypatch, capsys):
+        """A source that declares no media type and no --detector-media-type
+        ends the run before the label import or any media load."""
+        rec = _AutodetectRecorder(monkeypatch)
+        seen = self._record_import(monkeypatch)
+        with pytest.raises(SystemExit) as exc:
+            _run_main(
+                monkeypatch,
+                [
+                    "--autodetect",
+                    "--importer",
+                    "local_folder",
+                    "--import-labels-into",
+                    "New Det",
+                    "--label-importer-file",
+                    "labels.json",
+                    "--create-detector",
+                ],
+            )
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        assert "--detector-media-type" in captured.out + captured.err
+        assert seen == {}
+        assert rec.calls == {}
+
+    def test_dry_run_announces_creation_and_writes_nothing(self, monkeypatch, capsys):
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(monkeypatch, self._folder_argv("--media-type", "audio", "--create-detector", "--dry-run"))
+        assert "into new detector 'New Det' (media_type=audio)" in capsys.readouterr().out
+        assert _read_detector(_detector_path("New Det")) is None
+        assert "autodetect_importer_main" in rec.calls
 
 
 # ---------------------------------------------------------------------------

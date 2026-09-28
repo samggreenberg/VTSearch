@@ -257,6 +257,30 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--create-detector",
+        action="store_true",
+        dest="create_detector",
+        help=(
+            "With --import-labels-into, create the detector from the imported "
+            "labels if it does not exist yet (it appears in the Dashboard's "
+            "Drafts); an existing one is merged into as usual. Its media type "
+            "is --detector-media-type, else the source's: the --dataset "
+            "pickle's metadata or the importer's --media-type."
+        ),
+    )
+    parser.add_argument(
+        "--detector-media-type",
+        type=str,
+        default=None,
+        dest="detector_media_type",
+        help=(
+            "Media type of a detector --create-detector creates, when it should "
+            "differ from the source's (e.g. image, to score video frames through "
+            "a converter) or the source declares none. Unused when the detector "
+            "already exists."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         dest="dry_run",
@@ -348,6 +372,8 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
             "import_labels_into",
             "label_importer_file",
             "label_importer_fields",
+            "create_detector",
+            "detector_media_type",
             "dry_run",
             "tempimport",
         ):
@@ -502,9 +528,19 @@ def _authenticate_cli_user(args, parser) -> None:
         parser.error("--api-key requires --user <name>")
 
 
-def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
-    """Optionally merge labels into a detector before scoring (``--import-labels-into``)."""
+def _maybe_import_labels(args, parser, settings_path, dry_run, importer) -> None:
+    """Optionally merge labels into a detector before scoring (``--import-labels-into``).
+
+    With ``--create-detector`` a missing detector is created from the imported
+    labels (#4238), so a labelled detector can be run headlessly without ever
+    being made in the UI.
+    """
     from vtscore import cli_progress
+
+    if args.create_detector and not args.import_labels_into:
+        parser.error("--create-detector only applies with --import-labels-into")
+    if args.detector_media_type and not args.create_detector:
+        parser.error("--detector-media-type only applies with --create-detector")
 
     # Optional one-shot label import into a detector before scoring.
     # The autodetect pipeline below then scores with that detector alone
@@ -516,43 +552,97 @@ def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
             from vtsearch.settings import set_settings_path
 
             set_settings_path(settings_path)
+        create_media_type = _create_detector_media_type(args, parser, importer)
+        target = (
+            f"new detector {args.import_labels_into!r} (media_type={create_media_type})"
+            if create_media_type
+            else f"detector {args.import_labels_into!r}"
+        )
         if dry_run:
             cli_progress.emit(
                 "labels_import_dry_run",
                 text=(
                     f"DRY RUN: would import labels with fields {field_values!r} "
-                    f"via importer {args.label_importer!r} into detector "
-                    f"{args.import_labels_into!r}."
+                    f"via importer {args.label_importer!r} into {target}."
                 ),
                 detector=args.import_labels_into,
                 importer=args.label_importer,
                 filepath=field_values.get("filepath"),
                 fields=field_values,
+                create_media_type=create_media_type,
             )
             if cli_progress.get_format() == "text":
                 print("", flush=True)
         else:
-            from vtscore.cli import import_labels_into_detector
+            from vtscore.cli import DetectorNotFoundError, import_labels_into_detector
 
             try:
                 applied, skipped = import_labels_into_detector(
                     args.import_labels_into,
                     args.label_importer,
                     field_values,
+                    create_media_type=create_media_type,
+                )
+                done = (
+                    f"Created {target} with {applied} label(s)"
+                    if create_media_type
+                    else f"Imported {applied} label(s) into {target}"
                 )
                 cli_progress.emit(
                     "labels_imported",
-                    text=(
-                        f"Imported {applied} label(s) into detector "
-                        f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid)."
-                    ),
+                    text=f"{done} (skipped {skipped} duplicate/invalid).",
                     detector=args.import_labels_into,
                     applied=applied,
                     skipped=skipped,
+                    created=bool(create_media_type),
                 )
+            except DetectorNotFoundError as exc:
+                cli_progress.emit_error(
+                    f"importing labels: {exc} Pass --create-detector to create it from the imported labels."
+                )
+                sys.exit(1)
             except (FileNotFoundError, ValueError) as exc:
                 cli_progress.emit_error(f"importing labels: {exc}")
                 sys.exit(1)
+
+
+def _create_detector_media_type(args, parser, importer) -> str:
+    """The media type ``--create-detector`` would create the detector with, or ``""``.
+
+    ``""`` when the flag is off or the detector already exists.  A detector
+    that must be created but whose media type can't be told (no
+    ``--detector-media-type``, and the source declares none) ends the run
+    here - before any media is loaded, and under ``--dry-run`` too.
+    """
+    from vtscore import cli_progress
+    from vtscore.cli import _label_import_media_type, _SourceSpec
+
+    if not args.create_detector:
+        return ""
+    if args.importer:
+        spec = _SourceSpec(
+            kind="importer", importer_name=args.importer, field_values=_importer_field_values(args, importer)
+        )
+    elif args.dataset:
+        spec = _SourceSpec(kind="pickle", dataset_path=args.dataset)
+    else:
+        parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
+    try:
+        return _label_import_media_type(
+            args.import_labels_into,
+            spec,
+            create=True,
+            media_type=args.detector_media_type or "",
+            media_type_option="--detector-media-type",
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        cli_progress.emit_error(f"importing labels: {exc}")
+        sys.exit(1)
+
+
+def _importer_field_values(args, importer) -> dict[str, Any]:
+    """The ``--importer``'s field values, as its per-plugin flags parsed them."""
+    return {f.key: getattr(args, f.key, f.default) for f in importer.fields}
 
 
 def _label_importer_field_values(args, parser) -> dict[str, str]:
@@ -603,7 +693,7 @@ def _dispatch_autodetect(
     entry_point: Callable[..., None]
     source_args: tuple[Any, ...]
     if args.importer:
-        field_values = {f.key: getattr(args, f.key, f.default) for f in importer.fields}
+        field_values = _importer_field_values(args, importer)
         if chunk_size:
             entry_point, source_args = autodetect_importer_main_chunked, (args.importer, field_values, chunk_size)
         else:
@@ -676,7 +766,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
 
         parser.error(f"--stream-results requires --tempimport: {_STREAM_CANNOT_SAVE}")
 
-    _maybe_import_labels(args, parser, settings_path, dry_run)
+    _maybe_import_labels(args, parser, settings_path, dry_run, importer)
 
     _dispatch_autodetect(
         args,

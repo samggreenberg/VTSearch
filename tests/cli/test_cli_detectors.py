@@ -435,3 +435,265 @@ class TestImportLabelsIntoRunsThatDetector:
         # The settings file is read, never rewritten.
         on_disk = json.loads(settings_path.read_text())
         assert on_disk["autofind_detectors"] == ["nonexistent-detector"]
+
+
+# ---------------------------------------------------------------------------
+# Creating a missing detector from imported labels (#4238)
+# ---------------------------------------------------------------------------
+
+
+def _labels_file(tmp_path: Path, entries: list[dict]) -> Path:
+    path = tmp_path / "labels.json"
+    path.write_text(json.dumps({"labels": entries}))
+    return path
+
+
+class TestCreateDetectorOnImport:
+    def test_creates_and_registers_missing_detector(self, tmp_path):
+        """With create_media_type a missing detector is written the way the
+        Dashboard's New Detector writes one, and registered for its creator."""
+        from vtscore.cli import import_labels_into_detector
+        from vtscore.detectors.registry import find_by_name
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        labels = _labels_file(
+            tmp_path,
+            [
+                {"md5": "a" * 32, "label": "good"},
+                {"md5": "b" * 32, "label": "bad"},
+                {"md5": "c" * 32, "label": "maybe"},
+            ],
+        )
+        applied, skipped = import_labels_into_detector(
+            "Fresh Det", "server_json_file", {"filepath": str(labels)}, create_media_type="audio"
+        )
+        assert (applied, skipped) == (2, 1)
+
+        saved = _read_detector(_detector_path("Fresh Det"))
+        assert saved is not None
+        assert saved["name"] == "Fresh Det"
+        assert saved["media_type"] == "audio"
+        assert saved["examples"] == []
+        assert saved["created_at"] > 0
+        assert len(saved["labelset"]["labels"]) == 2
+        # Origins and labels only: no vectors or weights ride along.
+        assert "embeddings" not in json.dumps(saved) and "weights" not in saved
+
+        entry = find_by_name("Fresh Det")
+        assert entry is not None
+        assert entry["media_type"] == "audio"
+        assert entry["num_training"] == 2
+        assert entry["created_by"] == "default"
+
+    def test_created_detector_belongs_to_the_run_user(self, tmp_path):
+        from vtscore.cli import import_labels_into_detector
+        from vtscore.detectors.registry import find_by_name
+        from vtscore.state.current_user import thread_user
+
+        labels = _labels_file(tmp_path, [{"md5": "a" * 32, "label": "good"}])
+        with thread_user("alice"):
+            import_labels_into_detector(
+                "Alice Det", "server_json_file", {"filepath": str(labels)}, create_media_type="image"
+            )
+        entry = find_by_name("Alice Det")
+        assert entry is not None
+        assert entry["created_by"] == "alice"
+
+    def test_missing_detector_without_create_raises_not_found(self, tmp_path):
+        from vtscore.cli import DetectorNotFoundError, import_labels_into_detector
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        labels = _labels_file(tmp_path, [{"md5": "a" * 32, "label": "good"}])
+        with pytest.raises(DetectorNotFoundError) as exc:
+            import_labels_into_detector("Ghost", "server_json_file", {"filepath": str(labels)})
+        assert isinstance(exc.value, ValueError)
+        assert exc.value.det_name == "Ghost"
+        assert _read_detector(_detector_path("Ghost")) is None
+
+    def test_nothing_created_without_good_or_bad_labels(self, tmp_path):
+        from vtscore.cli import import_labels_into_detector
+        from vtscore.detectors.registry import find_by_name
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        labels = _labels_file(tmp_path, [{"md5": "a" * 32, "label": "maybe"}])
+        with pytest.raises(ValueError, match="no good/bad labels"):
+            import_labels_into_detector(
+                "Empty Det", "server_json_file", {"filepath": str(labels)}, create_media_type="audio"
+            )
+        assert _read_detector(_detector_path("Empty Det")) is None
+        assert find_by_name("Empty Det") is None
+
+    def test_existing_detector_is_merged_not_recreated(self, tmp_path):
+        """create_media_type is only for a missing detector: an existing one
+        keeps its media type and gets no new registry entry."""
+        from vtscore.cli import import_labels_into_detector
+        from vtscore.detectors.registry import find_by_name
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        _write_trainable_model("Existing", {"labels": [{"md5": "a" * 32, "label": "good"}]})
+        labels = _labels_file(tmp_path, [{"md5": "b" * 32, "label": "bad"}])
+        applied, _ = import_labels_into_detector(
+            "Existing", "server_json_file", {"filepath": str(labels)}, create_media_type="image"
+        )
+        assert applied == 1
+        saved = _read_detector(_detector_path("Existing"))
+        assert saved is not None
+        assert saved["media_type"] == "audio"
+        assert len(saved["labelset"]["labels"]) == 2
+        assert find_by_name("Existing") is None
+
+    def test_orphaned_registry_entry_is_reused(self, tmp_path):
+        """A registry entry whose labelset file is gone still owns the name, so
+        creating the file must not register a second entry sharing it."""
+        from vtscore.cli import import_labels_into_detector
+        from vtscore.detectors.registry import list_detectors, register_detector
+
+        register_detector(name="Orphan", media_type="audio")
+        labels = _labels_file(tmp_path, [{"md5": "a" * 32, "label": "good"}])
+        import_labels_into_detector("Orphan", "server_json_file", {"filepath": str(labels)}, create_media_type="audio")
+        assert [e["name"] for e in list_detectors()].count("Orphan") == 1
+
+    def test_unknown_create_media_type_rejected(self, tmp_path):
+        from vtscore.cli import import_labels_into_detector
+
+        labels = _labels_file(tmp_path, [{"md5": "a" * 32, "label": "good"}])
+        with pytest.raises(ValueError, match="Unknown media type"):
+            import_labels_into_detector(
+                "Typo Det", "server_json_file", {"filepath": str(labels)}, create_media_type="audoi"
+            )
+
+
+class TestLabelImportMediaType:
+    """Where a detector --create-detector makes gets its media type."""
+
+    @staticmethod
+    def _resolve(det_name, spec, **kw):
+        from vtscore.cli import _label_import_media_type
+
+        kw.setdefault("create", True)
+        return _label_import_media_type(det_name, spec, media_type_option="--detector-media-type", **kw)
+
+    def test_pickle_metadata_supplies_it(self, client, tmp_path):
+        from vtscore.cli import _SourceSpec
+        from vtscore.datasets.loader import export_dataset_to_file
+
+        path = tmp_path / "typed.pkl"
+        path.write_bytes(export_dataset_to_file(dict(medias), media_type="audio"))
+        assert self._resolve("New", _SourceSpec(kind="pickle", dataset_path=str(path))) == "audio"
+
+    def test_pickle_without_it_asks_for_the_flag(self, client, tmp_path):
+        from vtscore.cli import _SourceSpec
+
+        path = _make_dataset_file(tmp_path, medias)  # meta.json carries no media_type
+        with pytest.raises(ValueError, match="--detector-media-type"):
+            self._resolve("New", _SourceSpec(kind="pickle", dataset_path=str(path)))
+
+    def test_missing_pickle_is_reported_as_missing(self, tmp_path):
+        from vtscore.cli import _SourceSpec
+
+        with pytest.raises(FileNotFoundError, match="Dataset file not found"):
+            self._resolve("New", _SourceSpec(kind="pickle", dataset_path=str(tmp_path / "nope.pkl")))
+
+    def test_importer_field_supplies_it(self):
+        from vtscore.cli import _SourceSpec
+
+        spec = _SourceSpec(
+            kind="importer", importer_name="server_folder", field_values={"path": "/x", "media_type": "video"}
+        )
+        assert self._resolve("New", spec) == "video"
+
+    def test_importer_field_default_applies(self):
+        from vtscore.cli import _SourceSpec
+
+        spec = _SourceSpec(kind="importer", importer_name="server_folder", field_values={"path": "/x"})
+        assert self._resolve("New", spec) == "audio"
+
+    def test_importer_without_the_field_asks_for_the_flag(self):
+        from vtscore.cli import _SourceSpec
+
+        spec = _SourceSpec(kind="importer", importer_name="local_folder", field_values={})
+        with pytest.raises(ValueError, match="--detector-media-type"):
+            self._resolve("New", spec)
+
+    def test_explicit_media_type_wins(self):
+        from vtscore.cli import _SourceSpec
+
+        spec = _SourceSpec(
+            kind="importer", importer_name="server_folder", field_values={"path": "/x", "media_type": "video"}
+        )
+        assert self._resolve("New", spec, media_type="image") == "image"
+
+    def test_existing_detector_needs_none(self):
+        from vtscore.cli import _SourceSpec
+
+        _write_trainable_model("Existing", {"labels": []})
+        spec = _SourceSpec(kind="importer", importer_name="local_folder", field_values={})
+        assert self._resolve("Existing", spec) == ""
+
+    def test_create_off_needs_none(self):
+        from vtscore.cli import _SourceSpec
+
+        spec = _SourceSpec(kind="importer", importer_name="local_folder", field_values={})
+        assert self._resolve("Missing", spec, create=False) == ""
+
+    def test_unknown_explicit_media_type_rejected_even_for_existing_detector(self):
+        from vtscore.cli import _SourceSpec
+
+        _write_trainable_model("Existing", {"labels": []})
+        spec = _SourceSpec(kind="importer", importer_name="server_folder", field_values={"path": "/x"})
+        with pytest.raises(ValueError, match="Unknown media type for --detector-media-type"):
+            self._resolve("Existing", spec, media_type="imgae")
+
+
+class TestCreateDetectorEndToEnd:
+    def test_flag_run_creates_and_scores_new_detector(self, client, tmp_path, monkeypatch):
+        """The whole #4235 hope: labels + a dataset in, hits out, with the
+        detector made along the way and never touched in the UI."""
+        from vtsearch import cli_main
+        from vtscore.datasets.loader import export_dataset_to_file
+        from vtscore.detectors.registry import find_by_name
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        snapshot = dict(medias)
+        ids = sorted(snapshot)
+        labels = _labels_file(
+            tmp_path,
+            [
+                {"md5": snapshot[ids[0]]["md5"], "label": "good"},
+                {"md5": snapshot[ids[-1]]["md5"], "label": "bad"},
+            ],
+        )
+        dataset_path = tmp_path / "typed.pkl"
+        dataset_path.write_bytes(export_dataset_to_file(snapshot, media_type="audio"))
+        settings_path = _settings_file_with_detectors(tmp_path, ["nonexistent-detector"])
+        out_path = tmp_path / "hits.json"
+
+        argv = [
+            "app.py",
+            "--autodetect",
+            "--tempimport",
+            "--dataset",
+            str(dataset_path),
+            "--settings",
+            str(settings_path),
+            "--import-labels-into",
+            "Brand New",
+            "--create-detector",
+            "--label-importer-file",
+            str(labels),
+            "--exporter",
+            "server_json_file",
+            "--filepath",
+            str(out_path),
+        ]
+        monkeypatch.setattr("sys.argv", argv)
+        cli_main.main(None, None)
+
+        results = json.loads(out_path.read_text()).get("results", {})
+        assert list(results) == ["Brand New"]
+        saved = _read_detector(_detector_path("Brand New"))
+        assert saved is not None
+        assert saved["media_type"] == "audio"
+        entry = find_by_name("Brand New")
+        assert entry is not None
+        assert entry["created_by"] == "default"

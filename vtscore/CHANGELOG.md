@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`create_media_type=` on `vtscore.cli.import_labels_into_detector`, and
+  `vtscore.cli.DetectorNotFoundError`** (issue #4238). With a registered media
+  type, a missing detector is created from the imported labels - the JSON the
+  Dashboard's New Detector writes, plus a `vtscore.detectors.registry` entry
+  owned by `get_current_user()` - instead of failing; nothing is written when
+  the import yields no `good`/`bad` label. A missing detector without it raises
+  `DetectorNotFoundError`, a `ValueError` subclass carrying `det_name`, so
+  existing `except ValueError` callers are unaffected. Additive: the keyword
+  defaults to `""`, which keeps the old behaviour.
+
 - **`override_detectors=` on the four `vtscore.cli.autodetect_*_main` entry
   points** (issue #4235). A list of detector names to train and score in
   place of the settings file's `autofind_detectors`, which the run then does
