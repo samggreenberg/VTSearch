@@ -560,11 +560,15 @@ class PrecisionFloorEstimate:
         pool_scores: ScoreArray | None = None,
         **knobs: Any,
     ) -> None:
-        self._corpus_full = scored_only(corpus_scores)
+        self._corpus_full = scored_only(np.asarray(corpus_scores, dtype=np.float64))
         self._corpus = gmm_fit_array(self._corpus_full)
-        self._pool = self._corpus if pool_scores is None else gmm_fit_array(scored_only(pool_scores))
+        self._pool = (
+            self._corpus
+            if pool_scores is None
+            else gmm_fit_array(scored_only(np.asarray(pool_scores, dtype=np.float64)))
+        )
         self._fold_orderings = [scored_ordering((list(sc), list(lb))) for sc, lb in fold_orderings]
-        self._fold_haystacks = [gmm_fit_array(scored_only(hay)) for hay in fold_haystacks]
+        self._fold_haystacks = [gmm_fit_array(scored_only(np.asarray(hay, dtype=np.float64))) for hay in fold_haystacks]
         if len(self._fold_orderings) != len(self._fold_haystacks):
             raise ValueError(
                 f"{len(self._fold_orderings)} fold orderings but {len(self._fold_haystacks)} fold haystacks"

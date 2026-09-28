@@ -200,6 +200,7 @@ class TestFittedOnceCutAtAnyFloor:
         verdict = estimate.cut(0.5)
         assert estimate._curve is not None
         assert verdict == precision_floor_cut(0.5, corpus_s, corpus_s, orderings, haystacks, min_positives=5)
+        assert verdict.threshold is not None
         assert estimate.count_at(verdict.threshold) == verdict.n_returned
 
     def test_above_the_sample_cap_the_count_is_still_the_whole_corpus(self):
@@ -264,7 +265,7 @@ class TestWhichLineAnOperatingPointDraws:
         cut, estimate = _fitted()
         line = reporting_line(cut, estimate, inclusion_value=0, min_precision=0.5)
         origin = line_inclusion(line, cut)
-        assert origin is not None
+        assert origin is not None and line.threshold is not None
         # The origin reproduces the line: the offset is measured from where the cut really sits.
         assert cut.threshold_at(origin) <= line.threshold
 
@@ -415,6 +416,7 @@ class TestARetrainParksTheEstimate:
 
     def test_learned_sort_votes_are_the_evidence(self):
         ctx, _t = self._train(LEARNED_HARD)
+        assert ctx.calibration_cache is not None
         _key, folds, _holdouts = ctx.calibration_cache
         held_out_positives = int(sum(sum(labels) for _scores, labels in folds.orderings))
         assert held_out_positives > 0
