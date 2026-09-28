@@ -8,6 +8,8 @@ beside a pick log, and checks the three mechanics every verdict rests on:
   picked at or after the first learned-phase pick, and drops the rest, even
   when a learned-looking phase name (``good``) appears before it;
 * **the consistent pool** - removes exactly one reference entry per voted item;
+* **shards merge to the whole** - ``--shard`` then ``--merge`` gives the
+  single-pass rows;
 * **no-op when there is no opening** - when every vote was picked by a learned
   phase, "learned" and "all" give identical rows.
 
@@ -87,6 +89,19 @@ def main() -> int:
     a = none[none.evidence == "all"][cols].reset_index(drop=True)
     b = none[none.evidence == "learned"][cols].reset_index(drop=True)
     check(a.equals(b), "with no opening, learned evidence equals all evidence", failures)
+
+    sharded = root / "sharded"
+    arms = ["--arm", f"open={root / 'open'}", "--arm", f"none={root / 'none'}", "--out", str(sharded)]
+    for i in range(3):  # 2 cells over 3 shards: one shard is empty
+        A.main([*arms, "--shard", f"{i}/3"])
+    A.main([*arms, "--merge"])
+    merged = pd.read_csv(sharded / "provenance_rows.csv.gz")
+    key = ["arm", "t", "evidence", "pool", "X"]
+    check(
+        merged.sort_values(key).reset_index(drop=True).equals(rows.sort_values(key).reset_index(drop=True)),
+        "shards merge to the single-pass rows",
+        failures,
+    )
 
     print()
     print("SELFTEST " + ("PASSED" if not failures else f"FAILED ({len(failures)})"))

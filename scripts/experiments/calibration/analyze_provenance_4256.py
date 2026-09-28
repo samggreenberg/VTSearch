@@ -20,6 +20,10 @@ promises made, broken of those made, recall against the oracle at X, and the
 calibration positives each evidence set leaves for the gate.
 
     python analyze_provenance_4256.py --arm g3=DIR --arm g6=DIR --arm g20=DIR --out OUT [--jobs N]
+
+At ~16 s a cell, a full grid is worth sharding: ``--shard I/N`` writes only
+shard I's rows (``rows_shard_I.csv.gz``), and ``--merge`` summarizes every
+shard already in ``OUT``.
 """
 
 from __future__ import annotations
@@ -163,8 +167,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--arm", action="append", required=True, help="label=results_dir (holding cells/)")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--jobs", type=int, default=1)
+    ap.add_argument("--shard", help="I/N: analyze every Nth cell from I, write its rows only")
+    ap.add_argument("--merge", action="store_true", help="summarize the shards already in --out")
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.merge:
+        shards = sorted(args.out.glob("rows_shard_*.csv.gz"))
+        return report(pd.concat([pd.read_csv(p) for p in shards]), args.out, {"shards": len(shards)})
     jobs = []
     for spec in args.arm:
         arm, _, d = spec.partition("=")
@@ -176,6 +185,9 @@ def main(argv: list[str] | None = None) -> int:
             for p in pframe_files(cells)
             if p.name.split("__")[0] in mains
         ]
+    if args.shard:
+        i, n = (int(v) for v in args.shard.split("/"))
+        jobs = jobs[i::n]
     rows: list[dict] = []
     if args.jobs > 1:
         with ProcessPoolExecutor(args.jobs) as ex:
@@ -184,15 +196,24 @@ def main(argv: list[str] | None = None) -> int:
     else:
         for j in jobs:
             rows += cell_rows(j)
+    if not rows and args.shard:
+        return 0  # every cell in this shard starved; --merge finds nothing to read
     if not rows:
         raise SystemExit("no frames with fold_cal_vote - were the arms run with the #4256 harness?")
     df = pd.DataFrame(rows)
-    df.to_csv(args.out / "provenance_rows.csv.gz", index=False, float_format="%.5g")
+    if args.shard:
+        df.to_csv(args.out / f"rows_shard_{args.shard.split('/')[0]}.csv.gz", index=False, float_format="%.5g")
+        return 0
+    return report(df, args.out, {"cells": len(jobs)})
+
+
+def report(df: pd.DataFrame, out: Path, provenance: dict) -> int:
+    df.to_csv(out / "provenance_rows.csv.gz", index=False, float_format="%.5g")
     s = summarize(df)
-    s.to_csv(args.out / "provenance_summary.csv", index=False, float_format="%.4g")
+    s.to_csv(out / "provenance_summary.csv", index=False, float_format="%.4g")
     by_t = summarize(df.assign(arm=df["arm"] + "@t" + df["t"].astype(str)))
-    by_t.to_csv(args.out / "provenance_by_t.csv", index=False, float_format="%.4g")
-    (args.out / "provenance.json").write_text(json.dumps({"cells": len(jobs), "rows": len(df)}, indent=2) + "\n")
+    by_t.to_csv(out / "provenance_by_t.csv", index=False, float_format="%.4g")
+    (out / "provenance.json").write_text(json.dumps({**provenance, "rows": len(df)}, indent=2) + "\n")
     pd.set_option("display.width", 220)
     print(s[s["X"] == 0.5].round(3).to_string(index=False))
     return 0
