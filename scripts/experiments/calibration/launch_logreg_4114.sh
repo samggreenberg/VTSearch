@@ -21,6 +21,17 @@
 #            Linear(D, 1) (`LINEAR_LOGREG_HEAD`, vtscore/training/logreg.py)
 #   linear   the early-stopped logistic head the SVM replaced: the fidelity arm,
 #            so #3197's svm - linear gap can be checked on this bench
+#   svmc01   the SVM at C = 0.1 (#4219): at the same nominal C, logistic is the
+#            more heavily regularised fit, and #4115 found C = 0.1 ranks better
+#            for the SVM too, so this is the C-matched rival
+#
+# Voting mode (LOGREG_VOTING):
+#
+#   binary   (default) whole-image SigLIP, the #4114 bench
+#   region   `siglip+dinov3_patch` with max_patch (#4213): SigLIP opens on the
+#            typed query, DINOv3 learns from dragged boxes, and every Bad image
+#            floods ~200 region rows into the fit under per-bag weights.  The
+#            logistic loss counts all of them; the hinge ignores the easy ones.
 #
 # Environment: COCO Better (owner, 2026-09-27: current data, not vg_scale or the
 # #3197 pile), the #4184 bench - every class@band cell, SigLIP, binary voting,
@@ -33,9 +44,14 @@ MODE="${1:-}"
 export VTS_REPO="${VTS_REPO:-/expscratch/$USER/worktrees/vts-4114}"
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
-BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4114}"
+VOTING="${LOGREG_VOTING:-binary}"
+case "$VOTING" in
+  binary) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4114}" ;;
+  region) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4213}" ;;
+  *) echo "LOGREG_VOTING must be binary or region, not '$VOTING'" >&2; exit 2 ;;
+esac
 
-ALL_ARMS="svm lrconv linear"
+ALL_ARMS="${LOGREG_ARMS:-svm lrconv linear}"
 
 # --- science knobs -------------------------------------------------------------
 # The shipped threshold path.  Everything but the head is unset and resolves to
@@ -52,7 +68,11 @@ export CALIB_CUT_INCL_KS=""
 
 # --- environment ---------------------------------------------------------------
 export CALIB_DATASETS=coco_better
-export CALIB_COCO_BETTER_EMBEDDERS=siglip
+if [[ "$VOTING" == region ]]; then
+  export CALIB_COCO_BETTER_EMBEDDERS=siglip+dinov3_patch
+else
+  export CALIB_COCO_BETTER_EMBEDDERS=siglip
+fi
 export CALIB_CATEGORY_MODE=all
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_REQUIRE_OPENING=text
@@ -103,12 +123,13 @@ link_prepare() {
 }
 
 arm_env() {
-  unset CALIB_HEAD
+  unset CALIB_HEAD VTSEARCH_SVM_HEAD_C
   ARM_DIVERGES=""
   case "$1" in
     svm) ;;  # CALIB_HEAD left UNSET on purpose: resolves to PRODUCTION_HEAD
     lrconv) export CALIB_HEAD=linear_logreg; ARM_DIVERGES="head" ;;
     linear) export CALIB_HEAD=linear; ARM_DIVERGES="head" ;;
+    svmc01) export VTSEARCH_SVM_HEAD_C=0.1; ARM_DIVERGES="svm_head_c" ;;
     *) echo "unknown arm '$1'; expected one of: $ALL_ARMS" >&2; exit 2 ;;
   esac
   return 0
@@ -175,7 +196,7 @@ case "$MODE" in
         arm_env "$arm"
         set_exp "$arm"
         link_prepare
-        echo "=== $arm: head=${CALIB_HEAD:-<production>} -> $CALIB_EXP"
+        echo "=== $arm ($VOTING): head=${CALIB_HEAD:-<production>} C=${VTSEARCH_SVM_HEAD_C:-<shipped>} -> $CALIB_EXP"
         run_preflight
         bash "$HERE/launch_cells.sh"
       ) || exit 1
