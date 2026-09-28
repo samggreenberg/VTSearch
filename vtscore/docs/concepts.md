@@ -42,9 +42,15 @@ medias[42] = {
 ```
 
 The shape is defined by `vtscore/datasets/loader_folder.py` (the
-`_build_per_file_media` helper) and consistent across every loader. Plugin
-authors who add a new media type extend the shape with their own keys but
-must preserve the base contract.
+`_build_per_file_media` helper) and consistent across every loader. The
+type key is `media_type`, never `type`. Plugin authors who add a new media
+type extend the shape with their own keys (declared in the type's
+`load_media_data`) but must preserve the base contract.
+
+`media_type` is one of the six shipped types - `audio`, `image`, `text`,
+`video` (full types), `document` (importable but must be converted to
+`image` or `text` before it can be embedded) and `face` (embeddable, but
+only ever produced by the `image2face` converter) - or one a plugin adds.
 
 The dict-of-dicts representation is deliberate:
 
@@ -75,6 +81,10 @@ set_media_embedding(media, "clap", vec)  # write (also records the primary name)
 falling back to the sole dict entry when only one embedder is bound. A
 legacy pickle that stored the old singular key is re-keyed into the dict on
 load by `ensure_embeddings_dict`, so nothing downstream ever sees it.
+
+Every vector a `MediaEmbedder` returns from `embed_media` / `embed_text`
+is **L2-normalized** by the base class, whatever the underlying model
+does, so a dot product between stored vectors is their cosine similarity.
 
 The dimensionality `D` depends on the embedder (every registered embedder
 declares it via its `embedding_dim` property):
@@ -118,8 +128,11 @@ The library also maintains a **cached embedding matrix** per
 `DatasetContext`: `get_embedding_matrix(ctx)` returns
 `(sorted_media_ids, matrix)` - a contiguous `(N, D)` float32 array built
 lazily and reused across cosine sort, detector scoring, and coverage-atlas
-construction. The cache lives in process memory only - it's never persisted -
-and is invalidated when the underlying `medias` dict changes.
+construction. It is an in-memory cache, rebuilt when the set of media IDs
+changes; for a dataset backed by a saved pickle the library may also write
+a derived `<stem>.embmat.npy` sidecar beside that pickle, which is validated
+against the live IDs on read (see
+[architecture.md](architecture.md#the-no-persisted-vectors-rule)).
 
 ```python
 from vtscore.embedding import get_embedding_matrix, invalidate_embedding_matrix
@@ -151,19 +164,26 @@ when the detector loads, the library resolves each origin back to a file,
 re-embeds it, and rebuilds the training matrix. No vector or weight is
 ever stored on disk outside of dataset pickles.
 
-The reverse-resolve job lives in `vtscore/detectors/resolver.py`:
+The reverse-resolve job lives in `vtscore/detectors/resolver.py`. It takes
+the serialised origin dict plus the element's name within it:
 
 ```python
-from vtscore.detectors.resolver import resolve_file_from_origin
+from vtscore.detectors.resolver import resolve_file_context
 
-path = resolve_file_from_origin(origin)  # → Path("/data/audio/...")
+with resolve_file_context(origin.to_dict(), origin_name="barks/poodle.wav") as path:
+    ...  # Path("/data/audio/barks/poodle.wav"), or None if unresolvable
 ```
+
+Use the context manager whenever you hold the path across other work: some
+sources materialise the file in a temporary directory that is deleted when
+the block exits. (`resolve_file_from_origin` is the one-line form, safe
+only for an immediate existence check.)
 
 Different importers produce different `params` shapes. Plugin authors must
 ensure their importer's origins can be re-resolved by the matching
-`MediaSource` plugin (or by a fallback in the importer itself). See
+`MediaSource` plugin (or by the importer's own `resolve_file()`). See
 [extending/dataset-importers.md](extending/dataset-importers.md) and
-[extending/media-types.md](extending/media-types.md).
+[extending/media-sources.md](extending/media-sources.md).
 
 ## 4. LabelSet / LabeledElement
 
@@ -220,7 +240,9 @@ every serialisation boundary.
 
 A **`MediaEmbedder`** is a plugin that turns a media item into an
 embedding. Every concrete embedder subclasses `vtscore.media.MediaEmbedder`
-(defined in `vtscore/media/embedder.py`). The core of the contract:
+(defined in `vtscore/media/embedder.py`). The surface callers use (a
+subclass implements the `_…_impl` hooks behind these methods, never the
+methods themselves - see [extending/embedders.md](extending/embedders.md)):
 
 ```python
 class MediaEmbedder:
@@ -251,8 +273,9 @@ bytes came from an archive member or an HTTP fetch embeds the same way a
 local file does.
 
 Embedders are **lazy** - the model is downloaded and constructed on first
-use, then cached process-wide. The cache lives in `CoreConfig.data_dir /
-"models"` by default. Embedders that wrap multimodal models implement
+use, then cached process-wide. Weights are downloaded to
+`vtscore.config.MODELS_CACHE_DIR` (`$VTSEARCH_MODELS_DIR`, else
+`<data dir>/models`). Embedders that wrap multimodal models implement
 `embed_text` so a text query can seed a sort or a detector in the same
 vector space as the media; embedders that don't (e.g. VideoMAE, DINOv2, or
 an audio-only encoder with no text tower) report `supports_text = False`
@@ -342,10 +365,10 @@ dataset:
 - `coverage_atlas` - the hierarchical clustering used for coverage-guided
   sampling and labeling progress.
 - `dataset_display_name: str | None` - human-readable name.
-- `_emb_matrix_ids` / `_emb_matrix` - the cached `(N, D)` matrix and the
-  sorted media-id list it corresponds to (plus the region-matrix and
-  lookup-index caches beside them).
-- `_projection` / `_pyramids` - the cached VTSBrowse 2-D layout.
+- Private caches (`_emb_matrix_ids` / `_emb_matrix`, the VTSBrowse
+  `_projection` / `_pyramids`, …). Don't touch these directly; go through
+  `get_embedding_matrix` / `invalidate_embedding_matrix` and the
+  projection package.
 
 A **`DetectorContext`** holds all mutable state belonging to one loaded
 detector:

@@ -15,7 +15,7 @@
 GET /api/inclusion
 ```
 
-→ `{"inclusion": 0}`
+→ `{"inclusion": 0, "threshold": 0.5123}`
 
 ```
 POST /api/inclusion
@@ -23,9 +23,19 @@ POST /api/inclusion
 
 **Body:** `{"inclusion": 3}`
 
-Value is clamped to the range -10 to +10.
+Any number is accepted: it is truncated toward zero, then clamped to −10..+10
+(a boolean or non-number is a 422). Inclusion is a pure cutoff knob — it
+re-derives the active detector's threshold from its cached fold orderings
+without retraining, and in Find mode re-splits the unverified items over the
+frozen scores. The same value is also settable as `inclusion` on
+`PUT /api/settings`.
 
-→ `{"inclusion": 3}`
+→ `{"inclusion": 3, "threshold": 0.4471}`
+
+Both verbs return the cutoff the inclusion resolves to on the **active
+detector** (`X-Detector-Id`), so the Find slider can move its line without
+re-scoring. `threshold` is `null` when no detector is active or none has
+computed a threshold yet.
 
 ---
 
@@ -37,10 +47,24 @@ Value is clamped to the range -10 to +10.
 POST /api/labeling-progress
 ```
 
-Requires at least one good vote, one bad vote, and label history.
+Requires at least one good vote, one bad vote, and label history (400
+otherwise). Synchronous: it first advances the per-step model cache over the
+whole label history (training any steps not yet cached), so it can be slow on a
+long history. The error-cost and stability series cover only the steps a
+detector was trained for (see the note under
+[Indicator score history](#indicator-score-history)); diversity covers every
+step.
 
-→ Analysis object with progress metrics (structure depends on internal
-implementation).
+→
+```json
+{
+  "total_labels": 40,
+  "total_medias": 500,
+  "error_cost_over_time": [{"num_labels": 10, "error_cost": 0.3, "fpr": 0.1, "fnr": 0.2, "time_index": 9}],
+  "stability_over_time": [{"num_labels": 11, "num_flips": 12, "num_confident_flips": 3, "num_unlabeled": 470, "num_pool": 470, "time_index": 10}],
+  "diversity_level_over_time": [{"num_labels": 10, "diversity_level": 2, "depth": 3}]
+}
+```
 
 ### Labeling status indicators
 
@@ -51,13 +75,23 @@ GET /api/labeling-status
 →
 ```json
 {
-  "smart": {"status": "green"},
-  "stable": {"status": "yellow"},
-  "span": {"status": "red"}
+  "smart": {"status": "green", "reason": "..."},
+  "stable": {"status": "yellow", "reason": "..."},
+  "span": {"status": "red", "reason": "..."},
+  "good_count": 12,
+  "bad_count": 9,
+  "total_count": 500,
+  "stale": false
 }
 ```
 
-Each metric has a `status` of `"red"`, `"yellow"`, or `"green"`.
+Each metric has a `status` of `"red"`, `"yellow"`, or `"green"` and an
+optional human-readable `reason`. The frontend polls this every ~2 s while
+labeling, so it never blocks on training: when the per-step cache already
+covers the label history the status is computed inline (`stale: false`);
+otherwise the last snapshot is returned at once with `stale: true` (counts and
+`span` live, `smart` / `stable` lagging) and the cache is advanced by a
+background worker for a later poll.
 
 > **Metric-id naming note.** The third indicator is keyed **`span`** in this
 > `labeling-status` response, but the `metric` query/body parameter on
@@ -172,7 +206,10 @@ POST /api/coverage-atlas/next
 
 POST accepts an optional body with sort scores to influence selection:
 
-**Body:** `{"scores": {"0": 0.9, "1": 0.2}}`
+**Body:** `{"scores": {"0": 0.9, "1": 0.2}, "threshold": 0.5}`
+
+Malformed score keys/values or a non-numeric `threshold` are a 400. Without
+scores (or on GET) the next node's most typical element is returned.
 
 → `{"id": 42, "coverage_level": 3, "exhausted": false}`
 
@@ -182,7 +219,7 @@ labeled, up to the total number of atlas nodes when fully covered). `exhausted`
 is `true` when every node carries labeled evidence. Sibling nodes are visited
 largest-first, so each suggestion covers the biggest unexplored region.
 
-With scores, the pick is a surprise probe: a presumed-good node (median score
+With scores and a `threshold`, the pick is a surprise probe: a presumed-good node (median score
 at or above the threshold) yields its lowest-scored element, a presumed-bad
 node its highest-scored one. In nodes with a concentrated direction the
 extremum is drawn from the node's typical half, so a flip signals a real
