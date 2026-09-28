@@ -27,6 +27,9 @@ detector name, not the name itself (see [Detector file
 names](#detector-file-names) below); the CLI re-resolves the
 labelset's origins, embeds them with the dataset's embedder, trains a
 head, and applies it to the dataset.  See below for the exact format.
+`--import-labels-into NAME` replaces that list for the run: NAME is then the
+only detector scored (see [Importing labels into a
+detector](#importing-labels-into-a-detector)).
 
 ### Which user's Auto-Find list runs
 
@@ -337,7 +340,11 @@ populated, and reports any detector JSON files that are missing; so
 typos in a cron-style invocation fail immediately instead of after a
 multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
 is announced as part of the plan but skipped (no detector JSON is
-modified).
+modified), and the plan lists that detector alone, under
+`Detectors (1; overrides the settings' Auto-Find list)`. In
+`--progress-format json` the `dry_run_plan` event's `autofind_detectors` lists
+whichever detectors the run would score, and `detectors_source` says where they
+came from: `autofind` (the settings file) or `override` (`--import-labels-into`).
 
 ### Importing labels into a detector
 
@@ -356,8 +363,16 @@ headlessly. Three flags work together:
 `--import-labels-into` needs at least one of `--label-importer-file` or
 `--label-importer-field`.
 
+**The detector you import into is the one the run scores with.** The settings
+file's `autofind_detectors` list (the Dashboard's **AutoRun** tab) is not
+consulted, so the detector need not be on AutoRun, and nothing else on AutoRun
+runs alongside it. Labelling a detector and running it over a new dataset is
+therefore a single command that never needs the UI. The settings file still
+supplies everything else it normally does — `detectors_dir`, and the Auto-Find
+results exporter when there is no `--exporter`.
+
 ```bash
-# Merge new labels, then run Auto-Find with the enlarged labelset.
+# Merge new labels into "Dog Barks", then score the dataset with it alone.
 python app.py --autodetect --dataset data.pkl --settings settings.json \
     --import-labels-into "Dog Barks" --label-importer-file new_labels.json
 
@@ -478,7 +493,8 @@ importer:
 settings: settings.json
 
 # Optional. When set, overrides settings.json's `autofind_detectors` list
-# for this run only. The file on disk is NOT modified.
+# for this run only. The file on disk is NOT modified. When absent and
+# `import_labels:` is set, the run scores with `import_labels.detector` alone.
 detectors:
   - Dog Barks
   - Cat Meows
@@ -503,7 +519,8 @@ keep_negatives: false
 # Optional. One-shot merge of external labels into a detector before
 # scoring (same as --import-labels-into / --label-importer /
 # --label-importer-field). `importer` takes the same name + fields shape
-# as `importer:` and `exporter:`, so any label importer works.
+# as `importer:` and `exporter:`, so any label importer works. Unless
+# `detectors:` is set, this detector is then the only one the run scores.
 import_labels:
   detector: Dog Barks             # the detector's name, not its filename slug
   importer:

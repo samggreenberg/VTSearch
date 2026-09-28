@@ -99,8 +99,14 @@ def _print_dry_run_plan(
     autofind_detectors: list[str],
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
+    override_detectors: list[str] | None = None,
 ) -> None:
-    """Print the autodetect plan that ``--dry-run`` would otherwise execute."""
+    """Print the autodetect plan that ``--dry-run`` would otherwise execute.
+
+    With *override_detectors* the plan lists those instead of the settings
+    file's *autofind_detectors*, and says so - the run will not read the
+    Auto-Find list at all.
+    """
     print("DRY RUN - no media will be loaded, embedded, scored, or exported.", flush=True)
     print("", flush=True)
 
@@ -108,14 +114,18 @@ def _print_dry_run_plan(
     print("", flush=True)
 
     print(f"Settings: {settings_path or '(default: data/settings.json)'}", flush=True)
-    if not autofind_detectors:
+    detector_names, heading, count_note = autofind_detectors, "Auto-Find detectors", ""
+    if override_detectors is not None:
+        detector_names = override_detectors
+        heading, count_note = "Detectors", "; overrides the settings' Auto-Find list"
+    if not detector_names:
         if source_description.get("save_dataset"):
-            print("Auto-Find detectors: (none - the dataset would be saved and detection skipped)", flush=True)
+            print(f"{heading}: (none - the dataset would be saved and detection skipped)", flush=True)
         else:
-            print("Auto-Find detectors: (none - pipeline would abort with an error)", flush=True)
+            print(f"{heading}: (none - pipeline would abort with an error)", flush=True)
     else:
-        summaries = _summarize_autofind_detectors(autofind_detectors)
-        print(f"Auto-Find detectors ({len(summaries)}):", flush=True)
+        summaries = _summarize_autofind_detectors(detector_names)
+        print(f"{heading} ({len(summaries)}{count_note}):", flush=True)
         for s in summaries:
             if s.get("missing"):
                 print(f"  - {s['name']}  [MISSING - {s['path']}]", flush=True)
@@ -1108,14 +1118,22 @@ def _emit_dry_run_plan(
     autofind_detectors: list[str],
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
+    override_detectors: list[str] | None = None,
 ) -> None:
-    """Emit the JSON ``dry_run_plan`` event or the human-readable plan text."""
+    """Emit the JSON ``dry_run_plan`` event or the human-readable plan text.
+
+    The JSON event's ``autofind_detectors`` always lists the detectors the run
+    would train - *override_detectors* when given - and ``detectors_source``
+    (``"autofind"`` / ``"override"``) says which list that was.
+    """
     if cli_progress.get_format() == "json":
+        detector_names = autofind_detectors if override_detectors is None else override_detectors
         cli_progress.emit(
             "dry_run_plan",
             source=source_description,
             settings_path=settings_path,
-            autofind_detectors=_summarize_autofind_detectors(autofind_detectors),
+            autofind_detectors=_summarize_autofind_detectors(detector_names),
+            detectors_source="autofind" if override_detectors is None else "override",
             exporter=exporter_name,
             exporter_field_values=exporter_field_values or {},
         )
@@ -1126,6 +1144,7 @@ def _emit_dry_run_plan(
             autofind_detectors=autofind_detectors,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
         )
 
 
@@ -1135,13 +1154,14 @@ def _run_dry_run(
     autofind_detectors: list[str],
     exporter_name: str | None,
     exporter_field_values: dict[str, Any] | None,
+    override_detectors: list[str] | None = None,
 ) -> None:
     """Validate the planned pipeline + exporter and emit the dry-run plan."""
     sd = source_description or {}
     _validate_dry_run_source(sd)
     if exporter_name:
         _validate_dry_run_exporter(exporter_name, exporter_field_values)
-    _emit_dry_run_plan(sd, settings_path, autofind_detectors, exporter_name, exporter_field_values)
+    _emit_dry_run_plan(sd, settings_path, autofind_detectors, exporter_name, exporter_field_values, override_detectors)
 
 
 class _NoApplicableDetectorsError(ValueError):
@@ -1177,6 +1197,11 @@ def _train_detectors_for_first_chunk(
         _load_and_train_detectors(detector_names, media_type, chunk_medias, routed) if detector_names else {}
     )
     if not detector_mlps:
+        if override_detectors is not None:
+            requested = ", ".join(repr(n) for n in detector_names) or "none"
+            raise _NoApplicableDetectorsError(
+                f"None of the requested detectors ({requested}) applies to media type: {media_type}."
+            )
         raise _NoApplicableDetectorsError(
             f"No Auto-Find detectors found for media type: {media_type}. "
             "Add detectors to the settings file's autofind_detectors list."
@@ -1397,8 +1422,9 @@ def _run_pipeline(
 
     When *override_detectors* is supplied, that list of detector names is
     used in place of the settings file's ``autofind_detectors``.  The pipeline
-    YAML loader uses this to declare detectors inline without mutating the
-    settings file on disk.
+    YAML loader uses this to declare detectors inline, and
+    ``--import-labels-into`` to run just the detector it imported into, both
+    without mutating the settings file on disk.
 
     *skip_without_detectors* is set by a run that saved its dataset first:
     there the import is the point and detection is the extra, so having no
@@ -1412,6 +1438,7 @@ def _run_pipeline(
     # below - never import ``vtsearch.settings`` directly.
     config = CoreConfig.from_settings(settings_path=settings_path) if settings_path else CoreConfig.from_settings()
     autofind_detectors = list(config.autofind_detectors)
+    detector_names = list(override_detectors) if override_detectors is not None else autofind_detectors
 
     # When no explicit ``--exporter`` was given, fall back to the Auto-Find
     # results exporter configured in settings (its per-exporter field values
@@ -1429,10 +1456,11 @@ def _run_pipeline(
             autofind_detectors,
             exporter_name,
             exporter_field_values,
+            override_detectors,
         )
         return
 
-    if skip_without_detectors and not (override_detectors or autofind_detectors):
+    if skip_without_detectors and not detector_names:
         # Checked before the source is opened: with nothing to score, reading
         # the whole dataset back in would be wasted work.
         _emit_detection_skipped("no Auto-Find detectors are configured")
@@ -1715,6 +1743,7 @@ def _autodetect(
     stream_results: bool = False,
     keep_negatives: bool = False,
     save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None:
     """Shared body of the four public ``autodetect_*_main`` entry points.
 
@@ -1730,6 +1759,7 @@ def _autodetect(
             settings_path=settings_path,
             exporter_name=exporter_name,
             exporter_field_values=exporter_field_values,
+            override_detectors=override_detectors,
             dry_run=dry_run,
             stream_results=stream_results,
             keep_negatives=keep_negatives,
@@ -1749,6 +1779,7 @@ def autodetect_main(
     stream_results: bool = False,
     keep_negatives: bool = False,
     save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None:
     """CLI entry point: run autodetect with all Auto-Find detectors.
 
@@ -1756,6 +1787,11 @@ def autodetect_main(
     scores that saved copy; having no applicable detector then ends the run
     with a note rather than an error.  The default leaves nothing behind,
     which is what these entry points always did.
+
+    *override_detectors*, when given, names the detectors to run in place of
+    the settings file's ``autofind_detectors`` list (which is then not read
+    for this run; the file on disk is never modified).  ``--import-labels-into``
+    uses it to run exactly the detector it just imported into.
     """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path),
@@ -1766,6 +1802,7 @@ def autodetect_main(
         stream_results=stream_results,
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
+        override_detectors=override_detectors,
     )
 
 
@@ -1780,10 +1817,11 @@ def autodetect_importer_main(
     stream_results: bool = False,
     keep_negatives: bool = False,
     save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None:
     """CLI entry point: run autodetect with a named importer and output results.
 
-    *save_dataset* behaves as in :func:`autodetect_main`.
+    *save_dataset* and *override_detectors* behave as in :func:`autodetect_main`.
     """
     _autodetect(
         _SourceSpec(kind="importer", importer_name=importer_name, field_values=field_values),
@@ -1794,6 +1832,7 @@ def autodetect_importer_main(
         stream_results=stream_results,
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
+        override_detectors=override_detectors,
     )
 
 
@@ -1808,11 +1847,13 @@ def autodetect_main_chunked(
     stream_results: bool = False,
     keep_negatives: bool = False,
     save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect on a pickle dataset.
 
-    *save_dataset* behaves as in :func:`autodetect_main`; *chunk_size* then
-    bounds the scoring pass over the saved copy.
+    *save_dataset* and *override_detectors* behave as in
+    :func:`autodetect_main`; *chunk_size* bounds the scoring pass over the
+    saved copy.
     """
     _autodetect(
         _SourceSpec(kind="pickle", dataset_path=dataset_path, chunk_size=chunk_size),
@@ -1823,6 +1864,7 @@ def autodetect_main_chunked(
         stream_results=stream_results,
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
+        override_detectors=override_detectors,
     )
 
 
@@ -1838,12 +1880,13 @@ def autodetect_importer_main_chunked(
     stream_results: bool = False,
     keep_negatives: bool = False,
     save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None:
     """CLI entry point: chunked autodetect with a named importer.
 
-    *save_dataset* behaves as in :func:`autodetect_main`; *chunk_size* then
-    bounds the scoring pass over the saved copy (the import itself is held in
-    memory whole, as a GUI import is).
+    *save_dataset* and *override_detectors* behave as in
+    :func:`autodetect_main`; *chunk_size* bounds the scoring pass over the
+    saved copy (the import itself is held in memory whole, as a GUI import is).
     """
     _autodetect(
         _SourceSpec(
@@ -1859,4 +1902,5 @@ def autodetect_importer_main_chunked(
         stream_results=stream_results,
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
+        override_detectors=override_detectors,
     )

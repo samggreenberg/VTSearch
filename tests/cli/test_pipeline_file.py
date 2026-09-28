@@ -592,3 +592,39 @@ class TestDispatchImportLabels:
             }
         )
         assert seen == {"detector": "Dogs", "importer": "x", "fields": {"detectors": "somestring"}}
+
+
+class TestDispatchDetectorSelection:
+    """Issue #4235: ``import_labels:`` names the run's detector unless
+    ``detectors:`` is set."""
+
+    def _dispatch_capturing(self, monkeypatch, detectors):
+        import vtscore.cli as vtcli
+        from vtscore.cli_pipeline import _dispatch
+
+        seen = {}
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a: (1, 0))
+        monkeypatch.setattr(vtcli, "_run_source", lambda spec, **kw: seen.update(kw))
+        _dispatch(
+            {
+                "dataset": "foo.pkl",
+                "importer": None,
+                "importer_fields": {},
+                "settings": None,
+                "detectors": detectors,
+                "chunk_size": None,
+                "import_labels": {"detector": "Dogs", "importer": "server_json_file", "fields": {"filepath": "x"}},
+                "exporter": None,
+                "exporter_fields": {},
+                "tempimport": True,
+            }
+        )
+        return seen
+
+    def test_import_labels_detector_replaces_autofind_list(self, monkeypatch):
+        seen = self._dispatch_capturing(monkeypatch, None)
+        assert seen["override_detectors"] == ["Dogs"]
+
+    def test_explicit_detectors_list_wins(self, monkeypatch):
+        seen = self._dispatch_capturing(monkeypatch, ["Cats", "Dogs"])
+        assert seen["override_detectors"] == ["Cats", "Dogs"]

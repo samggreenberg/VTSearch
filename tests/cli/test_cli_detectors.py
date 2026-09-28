@@ -366,3 +366,72 @@ class TestImportLabelsIntoDetectorCLI:
         with pytest.raises(ValueError) as exc:
             import_labels_into_detector_from_file("no-such-model", "server_json_file", str(labels_path))
         assert "no-such-model" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# --import-labels-into picks the detector the run scores with (#4235)
+# ---------------------------------------------------------------------------
+
+
+class TestImportLabelsIntoRunsThatDetector:
+    def test_flag_run_scores_imported_detector_not_autofind_list(self, client, tmp_path, monkeypatch):
+        """``--autodetect --import-labels-into NAME`` scores with NAME alone:
+        the settings file's Auto-Find list names only a detector that does not
+        exist, so the run fails unless that list is bypassed - and the
+        detector is not on it, so it would never run if it were read."""
+        files = _make_audio_files(tmp_path, ["alpha.wav", "beta.wav", "gamma.wav"])
+        _stub_resolve(monkeypatch, files)
+
+        labelset = {
+            "labels": [
+                {
+                    "md5": "a" * 32,
+                    "label": "good",
+                    "origin": {"importer": "ds_a", "params": {}},
+                    "origin_name": "alpha.wav",
+                },
+                {
+                    "md5": "c" * 32,
+                    "label": "bad",
+                    "origin": {"importer": "ds_a", "params": {}},
+                    "origin_name": "gamma.wav",
+                },
+            ]
+        }
+        _write_trainable_model("Not On AutoRun", labelset)
+        labels_path = tmp_path / "new_labels.json"
+        labels_path.write_text(json.dumps({"labels": [{"md5": "a" * 32, "label": "good"}]}))
+
+        dataset_path = _make_dataset_file(tmp_path, medias)
+        settings_path = _settings_file_with_detectors(tmp_path, ["nonexistent-detector"])
+        out_path = tmp_path / "hits.json"
+
+        from vtsearch import cli_main
+
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "app.py",
+                "--autodetect",
+                "--tempimport",
+                "--dataset",
+                str(dataset_path),
+                "--settings",
+                str(settings_path),
+                "--import-labels-into",
+                "Not On AutoRun",
+                "--label-importer-file",
+                str(labels_path),
+                "--exporter",
+                "server_json_file",
+                "--filepath",
+                str(out_path),
+            ],
+        )
+        cli_main.main(None, None)
+
+        results = json.loads(out_path.read_text()).get("results", {})
+        assert list(results) == ["Not On AutoRun"]
+        # The settings file is read, never rewritten.
+        on_disk = json.loads(settings_path.read_text())
+        assert on_disk["autofind_detectors"] == ["nonexistent-detector"]

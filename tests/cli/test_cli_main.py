@@ -256,6 +256,13 @@ class TestAutodetectWiring:
         assert args[0] == "x.pkl"
         assert args[1] == "s.json"
 
+    def test_no_label_import_keeps_autofind_list(self, monkeypatch):
+        """Without --import-labels-into the settings' Auto-Find list decides."""
+        rec = _AutodetectRecorder(monkeypatch)
+        _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl"])
+        _, kwargs = rec.calls["autodetect_main"]
+        assert kwargs["override_detectors"] is None
+
     def test_pickle_chunked_path(self, monkeypatch):
         rec = _AutodetectRecorder(monkeypatch)
         _run_main(monkeypatch, ["--autodetect", "--dataset", "x.pkl", "--chunk-size", "100"])
@@ -446,6 +453,32 @@ class TestImportLabels:
         )
         assert seen == {"detector": "det", "importer": "server_json_file", "fields": {"filepath": "labels.json"}}
         assert "autodetect_main" in rec.calls
+
+    def test_import_labels_into_overrides_autofind_detectors(self, monkeypatch):
+        """Issue #4235: the detector labels are imported into is the one the
+        run scores with, in place of the settings' Auto-Find list."""
+        rec = _AutodetectRecorder(monkeypatch)
+        import vtscore.cli as vtcli
+
+        monkeypatch.setattr(vtcli, "import_labels_into_detector", lambda *a: (1, 0))
+        _run_main(
+            monkeypatch,
+            [
+                "--autodetect",
+                "--importer",
+                "server_folder",
+                "--path",
+                "/data/sounds",
+                "--media-type",
+                "audio",
+                "--import-labels-into",
+                "Good Dogs",
+                "--label-importer-file",
+                "labels.json",
+            ],
+        )
+        _, kwargs = rec.calls["autodetect_importer_main"]
+        assert kwargs["override_detectors"] == ["Good Dogs"]
 
     def test_label_importer_field_flags_pass_arbitrary_fields(self, monkeypatch):
         """Issue #4174: a label importer whose fields are not a file path is
