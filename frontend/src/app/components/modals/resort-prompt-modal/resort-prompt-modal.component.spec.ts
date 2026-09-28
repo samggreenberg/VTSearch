@@ -36,6 +36,69 @@ describe('ResortPromptModalComponent', () => {
     httpMock.verify();
   });
 
+  function renderPrompt(inputs: Record<string, unknown>): HTMLElement {
+    for (const [name, value] of Object.entries(inputs)) {
+      fixture.componentRef.setInput(name, value);
+    }
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  function squash(text: string | null | undefined): string {
+    return (text ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  it('says how the current sort has gone and offers both ways forward', () => {
+    const el = renderPrompt({
+      currentExampleType: 'text',
+      currentExampleDisplay: 'dog barking',
+      clicksSoFar: 10,
+      positivesSoFar: 1,
+      keepLabelsCount: 15,
+    });
+
+    expect(squash(el.querySelector('.prompt-text')?.textContent)).toBe(
+      'You\'ve clicked 10 times and only found 1 positive while sorting based on ' +
+        '\u201cdog barking\u201d. You could keep clicking, or supply a different sort. ' +
+        'Which would you like to do?',
+    );
+    expect(squash(el.querySelector('.keep-btn')?.textContent)).toBe(
+      'Keep clicking \u201cdog barking\u201d for 15 more labels.',
+    );
+    expect(squash(el.querySelector('.choice-col--alt .choice-heading')?.textContent)).toBe(
+      'Supply a different sort',
+    );
+    // Both ways to give a different sort sit under that heading.
+    const alt = el.querySelector('.choice-col--alt')!;
+    expect(alt.querySelector('input.form-input')).not.toBeNull();
+    expect(alt.querySelectorAll('.media-btn').length).toBe(2);
+  });
+
+  it('names a media example by its filename and pluralises the counts', () => {
+    const el = renderPrompt({
+      currentExampleType: 'media',
+      currentExampleDisplay: 'bark.wav',
+      clicksSoFar: 1,
+      positivesSoFar: 0,
+      keepLabelsCount: 0,
+    });
+
+    expect(squash(el.querySelector('.prompt-text')?.textContent)).toContain(
+      'You\'ve clicked 1 time and only found 0 positives while sorting based on bark.wav.',
+    );
+    // No next-prompt count to promise: the keep option drops the clause.
+    expect(squash(el.querySelector('.keep-btn')?.textContent)).toBe('Keep clicking bark.wav.');
+  });
+
+  it('keeps the current sort from the left-hand option', () => {
+    vi.spyOn(component.keepExample, 'emit');
+    const el = renderPrompt({ currentExampleDisplay: 'dog barking' });
+
+    (el.querySelector('.keep-btn') as HTMLButtonElement).click();
+
+    expect(component.keepExample.emit).toHaveBeenCalled();
+  });
+
   it('lists datasource importers alongside the browse sources', () => {
     openPicker();
 

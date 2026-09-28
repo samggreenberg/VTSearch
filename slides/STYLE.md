@@ -72,6 +72,7 @@ beside it.** `themes/vtsearch.css` defines three, matching the palette in
 | `.cut` | blue | the threshold, and the shipped decision it makes |
 | `.neg` | red | the negative side: the Bad component, the losing arm |
 | `.pos` | green | the positive side: the Good component, a measured win |
+| `.side.steps` list numbers | red disc | a numbered place to click, drawn on the screenshot beside it |
 
 Use them only when the coloured word names something the figure on that slide
 also draws in that colour:

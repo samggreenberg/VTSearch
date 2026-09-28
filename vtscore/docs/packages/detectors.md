@@ -97,7 +97,12 @@ file via an importer or media source, embedded with the active media
 type's embedder, and the resulting `(X_list, y_list)` is fed into
 `train_and_threshold`. The trained head + threshold live in
 `DetectorContext.model` / `.threshold` until the process ends or the
-labelset changes. This is the invariant the
+labelset changes. Changing the labels does not drop the head.
+Instead, every writer of `.model` stamps `.model_labels_sig` with
+`model_loading.labelset_signature` of the labels it trained from, and
+`resolve_or_train_detector` (Find, Auto-Find, the portable export)
+reuses the head only while `model_loading.cached_head_is_current` says
+the saved labelset still has that signature (issue #4204). This is the invariant the
 [CLAUDE.md "No Persisted Vectors or MLPs"](../../../CLAUDE.md) rule
 enforces, and it's why `_PICKLE_SAFE_CLASSES` in
 `vtscore.security.pickle` does not include any torch types - the only
@@ -435,7 +440,8 @@ and return `(X_list, y_list)`.
 
 `vtscore/detectors/labelset_training.py`. Populate the cache,
 build `(X, y)`, run `train_and_threshold`, store the result on
-`det_ctx.model` / `det_ctx.threshold`. Returns `True` on success,
+`det_ctx.model` / `det_ctx.threshold`, and stamp
+`det_ctx.model_labels_sig` with the labelset's signature. Returns `True` on success,
 `False` when fewer than 2 cached vectors exist or one class is
 missing.
 
@@ -684,6 +690,11 @@ training clipper without reading the detector JSON.
 - **Origins are stable across datasets.** `stable_element_id` is
   computed from origin / md5 fields, so the same training label
   identifies the same source file no matter which dataset is loaded.
+- **A cached head is reused only for the labels it was trained on.**
+  Whatever stores `DetectorContext.model` also stores
+  `model_labels_sig`. A consumer that short-circuits on the cached head
+  checks `cached_head_is_current` against the labelset it just read,
+  and retrains when the check fails.
 - **Resolver is pluggable.** `register_source_resolver` and
   `register_importer_resolver` let library consumers extend file
   resolution without modifying the package.

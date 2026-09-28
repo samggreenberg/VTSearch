@@ -230,6 +230,17 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
   }
+  // An inline crop — one control pictured mid-sentence, beside the words that
+  // name it — declares only a height; a full screenshot declares a width. Keep
+  // the crop in the line of text instead of giving it the block rule above.
+  ::ng-deep img[height]:not([width]) {
+    display: inline-block;
+    vertical-align: middle;
+    height: 1.6em;
+    width: auto;
+    margin: 0 0.1em;
+    border: 0;
+  }
   ::ng-deep table {
     border-collapse: collapse;
     margin: 0 0 var(--space-md);
