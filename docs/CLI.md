@@ -1,11 +1,17 @@
 <!-- This file is served raw at GET /api/achievements/docs/cli/raw and its
-     footer phrase is hash-matched in vtsearch/achievements.py. Don't remove
-     or reword the "Readme Reader code phrase" line without updating
-     achievements.py to match. See CLAUDE.md. -->
+     footer phrase is hash-matched against _DOCS_RAW in
+     vtsearch/achievements_catalog.py. Don't remove or reword the "Readme
+     Reader code phrase" line without updating achievements_catalog.py to
+     match. See CLAUDE.md. -->
 
 # Command-line interface
 
-VTSearch provides a CLI workflow for running detectors on datasets and exporting results, all without starting the web server.
+Everything here goes through one entry point, `python app.py`. With no workflow flag it starts the web server; with `--autodetect` or `--pipeline` it runs detectors over a dataset and exports the hits without starting the server; with `--list-plugins` it prints what is installed and exits. `python app.py --help` lists every flag.
+
+- [Auto-detect (run detectors on a dataset)](#auto-detect-run-detectors-on-a-dataset) — the headless scoring run: sources, exporters, streaming, [dry runs](#dry-run-mode), [label import](#importing-labels-into-a-detector), [progress output](#progress-output-format)
+- [Pipeline file](#pipeline-file) — the same run declared in YAML, for cron and CI
+- [Web server modes](#web-server-modes) — port, logging, gunicorn, login providers, and the admin-set restrictions (solo media type, hidden plugins, retention, …)
+- [Inspecting plugins and the API schema](#inspecting-plugins-and-the-api-schema)
 
 ## Auto-detect (run detectors on a dataset)
 
@@ -17,7 +23,7 @@ Models are specified via a **settings file** (`--settings`) whose
 maps to a JSON file under `data/detectors/` named after a **slug** of the
 detector name, not the name itself (see [Detector file
 names](#detector-file-names) below); the CLI re-resolves the
-labelset's origins, embeds them with the dataset's embedder, trains an
+labelset's origins, embeds them with the dataset's embedder, trains a
 head, and applies it to the dataset.  See below for the exact format.
 
 ### Which user's Auto-Find list runs
@@ -195,7 +201,7 @@ correction costs no extra conversion or embedding work.
 
 **How to get the files:**
 
-- **Dataset file**: Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
+- **Dataset file** (only for `--dataset`; `--importer` reads the source media directly): a demo dataset loaded once in the web UI leaves a cached `.pkl` under `data/embeddings/`. The currently active dataset can also be downloaded as a pickle through the API, `GET /api/dataset/export` (see [`docs/api/datasets.md`](api/datasets.md#export-dataset)); the dashboard has no menu item for it.
 - **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/` (see [Detector file names](#detector-file-names) below); the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh head, and scores the dataset.
 
 ```json
@@ -536,7 +542,8 @@ python app.py --solo-media-type image
 ```
 
 Valid values are the registered media-type ids (`audio`, `image`,
-`video`, `text`, `document`). This is an **admin-set server
+`video`, `text`, `document`, `face`; `python app.py --list-media-types`
+prints the installed set). This is an **admin-set server
 restriction**, not a user preference: it applies to every user, users
 cannot change or opt out of it from the Settings dialog (the Server tab
 shows it read-only), and `PUT /api/settings` refuses to touch it. The

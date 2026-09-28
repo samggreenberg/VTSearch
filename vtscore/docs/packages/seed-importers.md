@@ -22,7 +22,7 @@ the single-item sibling and the durable-origin contract they share.
 | Module | Concern |
 |--------|---------|
 | `vtscore/seed_importers/base.py` | `SeedImporter` ABC and the `SeedMediaItem` record |
-| `vtscore/seed_importers/__init__.py` | The auto-discovering registry: `get_seed_importer`, `list_seed_importers` |
+| `vtscore/seed_importers/__init__.py` | The auto-discovering registry: `get_seed_importer`, `list_seed_importers`; also re-exports `SeedImporter`, `SeedMediaItem` |
 
 Nothing else: **no seed importer ships in-tree.** The family is an
 extension point, so the registry is empty until a third-party package
@@ -79,9 +79,12 @@ id). Any other exception is reported as an upstream/source failure. An
 empty list is **not** an error: "nothing matched" is a real answer, and the
 user is told so rather than being shown a failure.
 
-`max_items` bounds one run. The route keeps the first `max_items` items and
-reports the truncation, so a runaway query degrades to a short batch with a
-visible warning instead of filling the example-media directory.
+`max_items` bounds one run: the caller keeps the first `max_items` items
+and reports the truncation, so a runaway query degrades to a short batch
+with a visible warning instead of filling the example-media directory.
+`to_dict()` adds `max_items` to the standard plugin metadata.
+`get_field_options` defaults to raising `NotImplementedError`, as on
+every `PluginBase`.
 
 ### `SeedMediaItem`
 
@@ -142,9 +145,7 @@ for importer in list_seed_importers():
     print(importer.name, importer.max_items)
 ```
 
-The web app renders each importer's `fields` as a dynamic form — the same
-machinery the Add Dataset modal uses — behind its own tab in the New
-Detector modal's Blank flow, and calls `POST /api/seed-import/<name>`,
-which saves each returned item's bytes into the server-side example-media
-directory. An install with no seed importers registered grows no tabs, so
-the family costs nothing when unused.
+A host renders each importer's `fields` as a form, calls `run`, and saves
+each returned item's bytes into the example-media directory
+(`vtscore.security.path_validation.example_media_dir()`). With no seed
+importers registered the family costs nothing.

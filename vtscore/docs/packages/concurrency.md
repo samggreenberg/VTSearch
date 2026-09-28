@@ -4,11 +4,6 @@ The runtime plumbing for background work: independent layers for running
 a task off-request, reporting how far it has got, letting the user cancel
 it, and capping how many run at once.
 
-Related docs: [`state.md`](state.md) for the contexts these jobs and
-trackers operate against; [`security.md`](security.md) for the
-safe-load helpers used during dataset import; [`timing.md`](timing.md)
-for the per-step duration model that turns a step index into an ETA.
-
 **Import from the defining module.** `vtscore/concurrency/` has no
 `__init__.py` - it is a PEP 420 implicit namespace package, so it exports
 nothing of its own and `from vtscore.concurrency import JobManager` raises
@@ -40,6 +35,7 @@ true of `vtscore.security`.
 - [`events.py`](#eventspy)
 - [User notifications](#user-notifications)
 - [Stall diagnostics](#stall-diagnostics)
+- [Cross-references](#cross-references)
 
 ---
 
@@ -62,17 +58,16 @@ tracker.
 ## Async jobs
 
 `vtscore/concurrency/async_jobs.py` exposes a single-slot background-job
-manager. Flask runs with `gthread` workers; endpoints doing GIL-bound
-Python work starve unrelated requests like `/api/votes` polls. The job
-manager moves the heavy work onto a daemon thread so the request handler
-returns immediately with a job ID.
+manager. It moves heavy, GIL-bound work onto a daemon thread so the
+caller (in the app, a request handler) returns immediately with a job
+ID instead of starving unrelated requests.
 
 ### `AsyncJob` (dataclass)
 
-State container for one background job (`async_jobs.py`). Fields:
+State container for one background job. Fields:
 `job_id` (UUID4 hex), `signature` (caller-supplied fingerprint),
 `status` (`"pending"` / `"running"` / `"done"` / `"error"` /
-`"cancelled"`), `result`, `error`, `progress` (this job's own
+`"cancelled"`; default `"running"`), `result`, `error`, `progress` (this job's own
 `ProgressTracker` - see below), `started_at`, `done_event`
 (`threading.Event`), `user` (captured at `start()` for per-user settings
 resolution), `dataset_id` / `detector_id` (captured at `start()`;
@@ -98,14 +93,27 @@ Cancellation likewise has one flag, not two: `cancel_event` **is**
 `job.progress.check_cancelled()` and `check_job_cancelled()` all observe
 the same event and raise the same `CancelledError`.
 
+Worker-thread helpers: `bind_job_cancellation(job)` (context manager
+binding *job* to the current thread; `JobManager` does this for you),
+`current_job()` (the bound job or `None`), and `check_job_cancelled()`
+(raises `CancelledError` if the bound job was cancelled; a no-op when
+no job is bound, so shared library code can call it unconditionally).
+
 ### `JobManager`
 
-One background job runs at a time; one **pending slot** coalesces
+`JobManager(name, max_history=8, *, user_visible=True)`. One
+background job runs at a time; one **pending slot** coalesces
 follow-up requests. A second `start()` while a job is in flight stashes
-the new `(signature, target)` in the pending slot; further `start()`
-calls overwrite the slot (latest wins) and return the same pending
-`AsyncJob`. When the running job finishes, the pending job is promoted
-and spawned automatically.
+the new `(signature, target)` in the pending slot. Further `start()`
+calls from the same requester context (user + dataset + detector)
+update the slot in place (latest wins) and return the same pending
+`AsyncJob`; a call from a different context supersedes it with a fresh
+job. When the running job finishes, the pending job is promoted and
+spawned automatically - unless it was cancelled while parked, in which
+case it is marked `cancelled` and dropped.
+
+Other methods: `get(job_id)`, `current()`, `cached_for(signature)`,
+`active_jobs()`, `reset_for_tests()`.
 
 ```python
 from vtscore.concurrency.async_jobs import JobManager
@@ -137,8 +145,9 @@ matches - the "re-sort without new votes is free" fast path.
 Cancellation: `job.cancel()` sets the event; the target must check
 `job.is_cancelled` cooperatively. If the target returns while the event
 is set, the manager records `status = "cancelled"`. If the target
-raises, `status = "error"` with `job.error` set - and the pending slot
-is still promoted so a queued follow-up runs. The manager is
+raises `CancelledError`, `status = "cancelled"`; any other exception
+gives `status = "error"` with `job.error` set - and the pending slot is
+still promoted so a queued follow-up runs. The manager is
 thread-safe (internal `RLock`) but **not** re-entrant - the target must
 not call `mgr.start()` on the same manager.
 
@@ -154,14 +163,20 @@ consumers leave `user=None`.
 
 ```python
 # vtscore/concurrency/async_jobs.py
-learned_sort_jobs = JobManager("learned-sort")
-eval_jobs = JobManager("eval-train-score")
-labeling_status_jobs = JobManager("labeling-status", user_visible=False)
+learned_sort_jobs      = JobManager("learned-sort")
+eval_jobs              = JobManager("eval-train-score")
+labeling_status_jobs   = JobManager("labeling-status", user_visible=False)
+projection_jobs        = JobManager("projection")
+signpost_relabel_jobs  = JobManager("signpost-relabel", user_visible=False)
+archive_thumbnail_jobs = JobManager("archive-thumbnail-warm", user_visible=False)
 
 JOB_MANAGERS: dict[str, JobManager] = {
     "learned-sort": learned_sort_jobs,
     "eval": eval_jobs,
+    "projection": projection_jobs,
     "labeling-status": labeling_status_jobs,
+    "signpost-relabel": signpost_relabel_jobs,
+    "archive-thumbnail-warm": archive_thumbnail_jobs,
 }
 ```
 
@@ -184,20 +199,17 @@ detector) pair with at least one running or pending job across every
 user-visible manager. Jobs missing `dataset_id` / `detector_id` are
 dropped. `reset_all_async_jobs_for_tests()` walks the whole of
 `JOB_MANAGERS` — hidden managers included, since test isolation cares
-about every daemon thread — and clears state.
-
-Splitting these two concerns across two lists is what the single
-registry replaced: the visible managers lived in `JOB_MANAGERS` while
-the hidden ones were re-listed by hand inside the reset helper, and that
-second list went stale (issue #3404).
+about every daemon thread — and clears state. Register a new manager
+in `JOB_MANAGERS` only; never keep a second hand-maintained list.
 
 ---
 
 ## `ProgressTracker`
 
 Thread-safe progress tracker for a single long-running operation
-(`progress.py`). Each instance holds its own lock, data dict, cancel
-event, and optional subscriber callbacks.
+(`progress.py`): `ProgressTracker(extra_fields=None, *,
+initial_status="idle")`. Each instance holds its own lock, data dict,
+cancel event, and optional subscriber callbacks.
 
 ```python
 from vtscore.concurrency.progress import ProgressTracker
@@ -218,17 +230,20 @@ snapshot = tracker.get()
 | `check_cancelled()` | Raise `CancelledError` if cancel event is set |
 | `is_cancelled` | Read the event |
 | `reset_cancel()` | Clear the event - call at the start of each new operation |
+| `cancel_event` | The underlying `threading.Event` |
+| `set_step_weights(weights)` | Per-step weights for the whole-job `overall` fraction; `None` = equal |
 
 `extra_fields` declares keys `update()` will honour beyond the base
 `(status, message, current, total)` tuple. Unrecognised keys are
 silently dropped, so a single `update_progress()` call site can supply
 kwargs some trackers care about and others don't. Every shipped tracker
-uses `_PROGRESS_COMMON_EXTRAS` (`progress.py`):
+uses `PROGRESS_COMMON_EXTRAS` (`progress.py`):
 
 ```python
-_PROGRESS_COMMON_EXTRAS = {
-    "step": None, "total_steps": None,      # sub-step counter
-    "error": None, "eta_seconds": None,     # eta_seconds auto-populated
+PROGRESS_COMMON_EXTRAS = {
+    "step": None, "total_steps": None,       # sub-step counter
+    "error": None, "eta_seconds": None,      # eta_seconds auto-populated
+    "overall": None, "overall_step_end": None,  # whole-job fraction (multi-step ops)
 }
 ```
 
@@ -242,7 +257,11 @@ recomputes a smoothed ETA. The tracker keeps a phase key
 `(status, total)`; whenever it changes or `current` resets backwards
 the clock resets. After 5 seconds of elapsed work the raw ETA is
 `(elapsed / completed) * (total - current)` smoothed with an EMA
-(`alpha = 0.3`). Before then, `eta_seconds` stays `None`.
+(`alpha = 0.3`). Before then, `eta_seconds` stays `None`. The published
+value is never the raw estimate: it is snapped to a coarse ladder of
+round values (`_ETA_LADDER`: 10 s … 24 h) and only moves to a
+neighbouring rung once the smoothed estimate overshoots the boundary by
+15% (`_ETA_HYSTERESIS`), so it can rise but does not twitch.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -265,7 +284,7 @@ bag = LoadingTasksTracker()
 tracker = bag.create_task(
     task_id="ds_load_42", name="loading my-dataset.pkl",
     dataset_id="my-dataset", media_type="audio", embedder="clap",
-)
+)  # also: detector_id=, step_weights=, extra_fields=
 tracker.update("downloading", "Fetching ...", 0, 100)
 bag.mark_finished("ds_load_42")
 ```
@@ -277,10 +296,13 @@ caller's first `update()`.
 
 Methods: `create_task(task_id, ...)` (register and return tracker),
 `get_tracker(task_id)`, `mark_finished(task_id)` (schedules pruning),
-`remove_task(task_id)`, `cancel_task(task_id)` / `cancel_all()`,
-`set_dataset_id(task_id, ds_id)` (late-bind once known), `list_tasks()`
-(snapshot; prunes stale finished entries), `has_active_tasks()`,
-`subscribe(cb)` / `unsubscribe(cb)`.
+`is_finished(task_id)`, `remove_task(task_id)`,
+`cancel_task(task_id)` / `cancel_all()`, `set_worker(task_id, thread)`
+/ `worker_alive(task_id)` (lets a cancel tell a live worker from a
+phantom row), `active_task_ids()`, `set_dataset_id(task_id, ds_id)`
+(late-bind once known), `list_tasks()` (snapshot; prunes stale
+finished entries), `has_active_tasks()`, `subscribe(cb)` /
+`unsubscribe(cb)`.
 
 Stale-prune policy: finished tasks without errors are removed 5 seconds
 after `mark_finished()`; tasks with errors are kept for 30 seconds so
@@ -293,9 +315,9 @@ the polling frontend can display them. The prune runs lazily inside
 
 ```python
 # vtscore/concurrency/progress.py
-sort_progress    = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
-eval_progress    = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
-find_progress    = ProgressTracker(extra_fields=dict(_PROGRESS_COMMON_EXTRAS))
+sort_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
+eval_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
+find_progress    = ProgressTracker(extra_fields=dict(PROGRESS_COMMON_EXTRAS))
 
 loading_tasks          = LoadingTasksTracker()
 detector_loading_tasks = LoadingTasksTracker()
@@ -312,21 +334,15 @@ callers don't have to import the tracker itself:
 
 **There is deliberately no `dataset_progress` singleton.** Dataset and
 import progress lives entirely in `loading_tasks`, one tracker per
-operation. The global one that used to sit alongside it - reachable as
-`dataset_progress` / `update_progress()` / `get_progress()`, and streamed
-on an SSE `dataset` channel - was removed because a process-wide sink has
-no owner: nothing could say when the work it was narrating had ended, so a
-finished import and a wedged one produced the same output (#3167). Cancel
-it and no worker was reading the flag; leave it and it sat on its last
-message forever. `cancel_dataset_progress()` survives the removal and now
-cancels exactly the active tasks in `loading_tasks` (staging imports
-included).
+operation, so every progress row has an owner that can say when its work
+ended (#3167).
 
-`update_progress()` also survives, with a new meaning: it is the free-
-function spelling of `resolve_progress_callback()` (below), for plugin
-authors who would rather report progress with a call than by accepting an
-`on_progress` argument. It reports into whatever tracker the calling
-thread bound and is a no-op when nothing is bound.
+`update_progress(status, message="", current=0, total=0, error=…,
+step=…, total_steps=…)` is the free-function spelling of
+`resolve_progress_callback()` (below), for plugin authors who would
+rather report progress with a call than by accepting an `on_progress`
+argument. It reports into whatever tracker the calling thread bound and
+is a no-op when nothing is bound.
 
 ```python
 from vtscore.concurrency.progress import update_progress
@@ -375,13 +391,10 @@ def load_something(path, on_progress=None):
 ```
 
 `ProgressCallback` and `noop_progress` are defined here and imported
-everywhere else (`vtscore.media.base` re-exports them); `progress.py`
-imports nothing from `vtscore`, so there is no cycle to work around.
-
-This mirrors `vtscore.media.set_thread_progress_callback` (a separate
-channel for the media-registry's callback). Both exist so multi-threaded
-consumers (e.g. scoring two detectors in parallel) don't have one
-thread clobber another's callback.
+everywhere else (`vtscore.media.base` re-exports `ProgressCallback`);
+`progress.py` imports nothing from `vtscore`, so there is no cycle to
+work around. The binding is thread-local so multi-threaded consumers
+(e.g. two concurrent loads) don't clobber each other's callback.
 
 ```python
 from vtscore.concurrency.progress import set_thread_progress, clear_thread_progress, loading_tasks
@@ -432,16 +445,20 @@ cancellation doesn't immediately abort the next run. Dataset loads don't
 need it: each load creates its own tracker, so its flag starts clear and
 a cancel aimed at an earlier load stays with that load.
 
-`cancel_dataset_progress()` cancels every active task in `loading_tasks`
-(staging imports included) and reports what each one did - see
-`_cancel_report` for the acknowledged / pending / unresponsive
-classification.
+`cancel_dataset_progress(grace_seconds=CANCEL_ACK_GRACE_SECONDS)`
+cancels every active task in `loading_tasks` (staging imports included);
+`cancel_dataset_task(task_id, grace_seconds=...)` cancels one (returns
+`None` for an unknown id). Both wait up to the grace period (default
+2.0 s) and return a report dict `{ok, targets, acknowledged, pending,
+unresponsive, message}`: *pending* tasks still have a live worker;
+*unresponsive* ones had none, and their stale rows are cleared.
 
 ---
 
 ## Memory budget
 
-`vtscore/concurrency/memory_budget.py` exposes one function:
+`vtscore/concurrency/memory_budget.py` exposes `cap_workers_by_memory`
+and the `available_memory_bytes()` probe it uses:
 
 ```python
 def cap_workers_by_memory(
@@ -518,15 +535,17 @@ race window); production code should not read it.
 ## `events.py`
 
 `vtscore/concurrency/events.py` is the SSE wiring layer: it owns
-`_TRACKER_CHANNELS` (`dataset`, `sort`, `find`, `eval`) and
+`_TRACKER_CHANNELS` (`sort`, `find`, `eval`) and
 `_TASK_CHANNELS` (`loading-tasks`, `detector-loading-tasks`), subscribes
 to each tracker's notify stream, and emits
 `event: <channel>\ndata: <json>\n\n` frames suitable for an SSE response.
 
-| Function | Description |
+| Name | Description |
 |----------|-------------|
-| `initial_snapshot() -> list[str]` | SSE frames a freshly-connected client should receive first |
-| `stream_progress_events(*, heartbeat_seconds=5.0, max_queue=1024)` | Generator yielding SSE strings until disconnect |
+| `initial_snapshot() -> list[str]` | SSE frames a freshly-connected client should receive first: a `server` frame carrying `BOOT_ID` (per-process UUID), then one per channel |
+| `stream_progress_events(*, heartbeat_seconds=5.0, keepalive_seconds=1.0, max_queue=1024)` | Generator yielding SSE strings until disconnect |
+| `acquire_sse_slot()` / `release_sse_slot()` / `active_sse_connections()` | Bounded connection slots (`MAX_SSE_CONNECTIONS`, from `VTSEARCH_SSE_MAX_CONNECTIONS`, default `VTSEARCH_THREADS - 2`); `acquire` returns `False` at the cap |
+| `uncap_sse_connections()` | Lift the cap for servers with no bounded thread pool (unless the env var is set) |
 
 The generator subscribes to each tracker, drains a private bounded
 queue per client, and unsubscribes in a `finally` block on disconnect.
@@ -601,16 +620,26 @@ picks up a change:
 
 | Name | Description |
 |------|-------------|
-| `StallWatchdog(threshold_ms, *, arm=None, sampler=default_sampler, dump_path=…)` | Heartbeat thread. A beat that wakes `threshold_ms` late logs one WARNING naming the threads whose CPU time grew across the gap (from `/proc/self/task`), the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock |
-| `start_stall_diagnostics_from_env() -> StallWatchdog \| None` | What the app calls: installs GC-pause logging and starts the watchdog with a `faulthandler.dump_traceback_later` armer, re-armed on every beat so a miss dumps every thread's Python frames *during* the stall - GIL-free, because that timer runs on a C thread. `VTSEARCH_STALL_WATCHDOG_MS=0` disables the watchdog; the dump goes to `VTSEARCH_STALL_DUMP_FILE`, else `VTSEARCH_LOG_FILE`, else stderr |
+| `StallWatchdog(threshold_ms, *, arm=None, sampler=default_sampler, dump_path="<stderr>", logger=None)` | Heartbeat thread. A beat that wakes `threshold_ms` late logs one WARNING naming the threads whose CPU time grew across the gap (from `/proc/self/task`), the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock |
+| `start_stall_diagnostics_from_env() -> StallWatchdog \| None` | What the app calls: installs GC-pause logging and starts the watchdog with a `faulthandler.dump_traceback_later` armer, re-armed on every beat so a miss dumps every thread's Python frames *during* the stall - GIL-free, because that timer runs on a C thread. `VTSEARCH_STALL_WATCHDOG_MS` (default 1000; `0` disables the watchdog); the dump goes to `VTSEARCH_STALL_DUMP_FILE`, else `VTSEARCH_LOG_FILE`, else stderr |
 | `install_gc_pause_logging()` / `gc_pause_stats()` / `gc_pause_ms_total()` | `gc.callbacks` timer; a pause at or above `gc_warn_threshold_ms()` logs its generation, duration and collected count. The threshold reads `VTSEARCH_GC_WARN_MS`, and unset it tracks `VTSEARCH_SLOW_PHASE_MS` (half of it, capped at the 200 ms default) so a collection can never be below the reporting bar while still being large enough to inflate the phase it lands in. `gc_pause_ms_total()` is the monotonic total a window snapshots at both ends |
 | `freeze_gc_after_preload() -> (objects, ms) \| None` | `gc.collect()` then `gc.freeze()`, moving everything alive into the permanent generation that full collections skip. Called once after the model preload, where the live set is the imported libraries and the embedders (issue #3870). `VTSEARCH_GC_FREEZE` falsey skips it |
 | `thread_cpu_ms()` | This thread's CPU time, or `0.0` where the platform has no `time.thread_time` |
-| `PhaseClock(name, **fields)` | `mark(phase)` between phases, `finish(**fields)` (or exit the `with`) logs `slow phase: name total …ms cpu=…ms gc=…ms (phase=…ms, …)` at or above `VTSEARCH_SLOW_PHASE_MS`. Used on the learned-sort retrain, `_train_and_score_xy`, the per-vote labelset rewrite, the labeling-status replay and the vote rehydrate. CPU beside wall is what separates a phase that did the work from one that blocked or was descheduled; `gc` names the part that was a collection freezing every thread |
-| `timed_lock(lock, name)` | `with lock:` that logs `lock wait: name waited …ms` above the same threshold. Sits on `_state_lock` (vote, rehydrate), `_progress_lock` (invalidate, inject, status reads, replay) and `label_sync_write_lock` |
+| `PhaseClock(name, **fields)` | `mark(phase)` between phases, `finish(**fields)` (or exit the `with`) logs `slow phase: name total …ms cpu=…ms gc=…ms (phase=…ms, …)` at or above `VTSEARCH_SLOW_PHASE_MS` (default 500 ms). CPU beside wall is what separates a phase that did the work from one that blocked or was descheduled; `gc` names the part that was a collection freezing every thread |
+| `timed_lock(lock, name, *, logger=None)` | `with lock:` that logs `lock wait: name waited …ms` above the same threshold |
+| `stop_stall_diagnostics()` / `active_watchdog()` | Stop / return the watchdog `start_stall_diagnostics_from_env` started |
 
 The watchdog's report is read by its CPU line: process CPU close to wall
 with one thread on top is a GIL hold (the dump names the frame); no CPU
 consumed is a process that was not scheduled (memory pressure, a paged-out
 cgroup); CPU spread over threads is contention, which the lock and phase
 lines then locate.
+
+---
+
+## Cross-references
+
+- [`state.md`](state.md) - the contexts these jobs and trackers operate against.
+- [`timing.md`](timing.md) - the per-step duration model that turns a step index into an ETA.
+- [`datasets.md`](datasets.md#concurrency-gates) - the two `ConcurrencyGate`s that pace dataset loads.
+- [`cli.md`](cli.md) - `cli_progress.notification_subscriber`, the headless consumer of `notify()`.

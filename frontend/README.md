@@ -24,7 +24,7 @@ This starts the Angular dev server at `http://localhost:4200/` with a proxy that
 npm run build:prod
 ```
 
-This compiles the Angular app and outputs the build artifacts to `../static/` (the project root's `static/` directory), where Flask serves them. Output files: `index.html`, `main.js`, `polyfills.js`, `styles.css`.
+This compiles the Angular app and outputs the build artifacts to `../static/` (the project root's `static/` directory), where Flask serves them. Output files: `index.html`, `main.js`, `styles.css`, plus lazy route / `@defer` chunks (no `polyfills.js`: the app is zoneless and both polyfill arrays are empty). The `prebuild:prod` hook regenerates the API client and the build stamp first.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ Specs run on **Vitest + jsdom** via the `@angular/build:unit-test` builder — n
 browser required, so they work in the cloud container. Karma is gone. The suite
 also runs from the repo root as part of `./run-tests.sh` (full) and
 `./run-tests.sh frontend` (build + `npm audit` + Vitest); the fast
-`./run-tests.sh core` path keeps only the compile-only `build:prod` check.
+`./run-tests.sh core` path runs `build:prod` and `npm audit` but not Vitest.
 
 ## Upgrading Angular
 
@@ -131,11 +131,10 @@ detector → sort).
 ## Code scaffolding
 
 ```bash
-ng generate component component-name
+npx ng generate component component-name --prefix vt --change-detection OnPush
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
+Pass both flags: `angular.json` still declares the CLI-default `app` prefix and
+no change-detection default, but every component here uses a `vt-` selector and
+`OnPush` (see [FRONTEND.md § Component composition conventions](../docs/FRONTEND.md#8-component-composition-conventions)).
+`npx ng generate --help` lists the other schematics.

@@ -332,6 +332,10 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 
 <!-- item-sep -->
 
+- Which backbone should the atlas use on a patch + structural dataset? It follows the score precedence (`structural ▸ patch ▸ text`), but a structural embedder's Stage-1 VLAD vector may cluster worse than the patch vector. The trio spike confirmed that precedence for *scoring*, not for the atlas.
+
+<!-- item-sep -->
+
 ## 12. References
 
 1. K. Lee, K. Lee, H. Lee, J. Shin. *A Simple Unified Framework for Detecting Out-of-Distribution Samples and Adversarial Attacks.* NeurIPS 2018. [[arXiv]](https://arxiv.org/abs/1807.03888)

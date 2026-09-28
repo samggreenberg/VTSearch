@@ -74,7 +74,7 @@ There is no `--weight-bold` (700). If you find yourself wanting `font-weight: 70
 
 ### 1.5 Colors
 
-All colors are theme-aware CSS variables defined in `_variables.scss`. There are dark (default), light, and high-contrast themes. **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
+All colors are theme-aware CSS variables defined in `_variables.scss`. There are three token blocks: dark (the `:root` base), light, and high-contrast (`highviz`); the default `system` theme setting picks dark or light from the OS (`ThemeService`). **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
 
 Canonical roles:
 
@@ -324,7 +324,7 @@ doesn't imply the changes were pending a commit.
 
 **Close-less dialogs.** A handful of modals set `[showCloseButton]="false"` and
 render no header `×`, on purpose: they are decision points that must be resolved
-by an explicit footer action (or a `← Back`) rather than dismissed ambiguously.
+by an explicit action (or a `← Back`) rather than dismissed ambiguously.
 These are the new-detector modal, the clipper-chooser, combine-detectors,
 resort-prompt, and dialog-host. Every *other* modal keeps the header `×`. Do not
 add `[showCloseButton]="false"` to a new modal without a comparable reason.

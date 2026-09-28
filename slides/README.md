@@ -81,7 +81,7 @@ source of the PDF hanging off it, and a deck deleted from `decks/` has its
 assets swept off the release rather than left to go stale.
 
 To publish by hand — a deck rendered from a branch that is not going to `dev`
-soon, say — run the same script the workflow runs:
+soon, say — run the same script the workflow runs, from the repository root:
 
 ```bash
 ./scripts/publish-slides.sh                  # every deck
@@ -160,26 +160,28 @@ Every deck opens with its own outline fragment (`fragments/outline-<deck>.md`,
 [`STYLE.md`](STYLE.md).
 
 Layout is a background-image directive, which is why placement survives in
-version control as a diffable line rather than a repacked binary:
+version control as a diffable line rather than a repacked binary. The standard
+figure slide is full-bleed, with the headline in the top-left notch the figure
+leaves for it (see *A figure owns the whole slide* in [`STYLE.md`](STYLE.md)):
 
 ```markdown
-![bg right:56% fit](figs/book-boundary.png)
+<!-- _class: full -->
 
-### The Problem
-## A Concept in Your Head, a Million Items on Disk
+![bg fit](figs/book-boundary.png)
 
-- Easy to name, impossible to query: *find me the books*
+## Judging a Book<br>by its Cover
 ```
 
 Figure paths are written relative to `slides/`, not to the fragment — `build.py`
 repoints them when it assembles into `_build/`.
 
-`bg right:56%` puts the figure in the right 56% of the slide; `left:` mirrors
-it; plain `![bg fit]` goes full-bleed. **56% is the standard and every sidebar
-figure uses it** — the generators size figures to that slot's 717x720 box and
-check their type against it, so a one-off `54%` quietly changes what the check
-was measuring. Classes `lead`, `statement`, `outline`, `full`, and `caveat` are
-defined in the theme and set per-slide with `<!-- _class: full -->`.
+`![bg right:56% fit]` (or `left:`) is the older sidebar layout, figure in 56% of
+the slide beside a text column; `_template.md` still lists it, but no fragment
+in a deck uses it now. If you do use a sidebar, keep it at 56%: the generators'
+type-floor check (`slide_figure.SIDEBAR`) assumes that slot's 717x720 box, so a
+one-off `54%` quietly changes what the check was measuring. Classes `lead`,
+`statement`, `outline`, `full`, and `caveat` are defined in the theme and set
+per-slide with `<!-- _class: full -->`.
 
 Any HTML comment that isn't a Marp directive becomes a **presenter note** —
 visible in `--preview` and exported into PPTX/HTML notes, not on the slide.
@@ -206,18 +208,18 @@ complete figure, the full bullet list — then chop it with build markers where
 the reveals go:
 
 ```markdown
-![bg right:56% fit](figs/calib-xcal-flow.png)
+<!-- _class: full -->
 
-## Cross-calibration
+![bg fit](figs/calib-xcal-flow.png)
+
+## Grading Your<br>Own Homework
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 
-- Split the votes in half; train a model on each half
-
 <!-- build: figs/calib-xcal-flow.build2.png -->
-
-- Each model scores the half it **never saw**
 ```
+
+(`fragments/xcal.md`, abridged — the real one has six stages.)
 
 Each marker becomes one earlier page in the audience deck: the content above
 the marker, with the slide's figure swapped for the marker's stage figure.
@@ -291,7 +293,7 @@ rules about *fragments*, which Marpit cannot see:
   2. Marpit's own counter would number it and hide the number.
 - **A fragment used more than once is one slide, shown several ways.** All its
   pages share a number and take consecutive letters — the outline reads
-  `1a … 1i` however far apart its nine pages fall — which is the same rule a
+  `1a … 1j` however far apart its ten pages fall — which is the same rule a
   build already follows, applied to the other way a slide can have pages.
   Marpit can hold the previous page's number, which is no help when the pages
   are eighty slides apart.
@@ -299,8 +301,8 @@ rules about *fragments*, which Marpit cannot see:
 A numbering group's presenter notes are written per letter, as for a build,
 and the speaker build then gives each showing only the notes naming *its*
 letters (plus, on the first showing, any note naming none). That is what
-keeps a slide the room sees nine times from printing the same four paragraphs
-into the speaker's hand nine times.
+keeps a slide the room sees ten times from printing the same four paragraphs
+into the speaker's hand ten times.
 
 The **speaker build shows the whole group at once**: one page per fragment,
 with the final stage large beside the notes and every page of the group under
@@ -308,14 +310,13 @@ it as a lettered contact sheet. The speaker narrates from the complete picture,
 sees what each advance will put on screen, and refers to them by the letters
 the audience deck prints. Markers never leak into presenter notes.
 
-Presenter notes that do not fit **spill onto a continuation page** rather than
-being clipped: the type floor rules out shrinking to fit, and a page that
-silently loses its last sentence is worse than an extra page. `build.py`
-estimates the fit (`NOTES_LINES`, `NOTES_CHARS_PER_LINE`) conservatively.
+Presenter notes that do not fit are a `--check` failure, not a continuation
+page — see *One slide, one speaker page* above. `build.py` estimates the fit
+against `NOTES_LINES` conservatively.
 
 `--check` also requires a numbering group's notes to **name every page of it** —
 one `**c** —` per reveal, though one note may cover several. That counts the
-group across the whole deck, so a fragment shown nine times owes nine lettered
+group across the whole deck, so a fragment shown ten times owes ten lettered
 notes even though it carries no build markers. A frame nobody wrote a line for
 is invisible until you are standing in front of a room.
 
@@ -345,9 +346,9 @@ outline-hold-the-line +at2
 ```
 
 That exists for the one thing a fragment cannot say about itself. A deck that
-shows its outline again before each section wants the same five lines five
-times over with a different one marked; five near-identical fragments are five
-copies to keep in step, and one fragment used five ways cannot drift. Because
+shows its outline again before each section wants the same list once per
+section with a different line marked; near-identical fragments are copies to
+keep in step, and one fragment used five ways cannot drift. Because
 it is one fragment, it is also one *slide*: see **Numbering** above.
 
 ## Figures
@@ -379,8 +380,8 @@ plot can be regenerated when the underlying numbers move —
 be unreadable in its slot.
 
 **Screenshots of the app are generated too.** `figs/ui-make-detector*.webp`,
-`figs/ui-train-loop*.webp`, `figs/ui-find*.webp` and `figs/ui-region-voting.webp`
-come from `figs/src/shoot-ui-figs.mjs`, which builds a corpus of real
+`figs/ui-train-loop*.webp`, `figs/ui-find*.webp`, `figs/ui-steps-*.webp` and
+`figs/ui-region-voting.webp` come from `figs/src/shoot-ui-figs.mjs`, which builds a corpus of real
 photographs out of COCO val2017 (`figs/src/coco_fixture.py` downloads it and
 files it by subject), trains a detector on **books** by voting — the deck's
 running example, and a concept with real near-misses in that pile — and drives
@@ -397,28 +398,38 @@ sheet of the top of the ranking with no app around it, built by
 composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
 
-The first three groups are **one session**, shot in the order a user works:
-create the detector through the modal, answer what autopilot serves until the
-Good and Bad piles have something in them, then run the trained head over
-`photos-prod` — a second COCO corpus that shares no frame with the one the
-votes came from, so the Find slide's claim that it is scoring unseen media is
-enforced by `coco_fixture.DISJOINT_FROM` rather than asserted in a caption.
-Nothing is staged through the API that a slide says was done by hand: the
-button `train-loop` clicks is chosen from the served item's own file name, so
-the piles are a real session's.
+The intro groups are **one session**, shot in the order a user works, from an
+app with nothing in it: import `photos` through the Add Dataset dialog, create
+the detector through the modal, answer what autopilot serves until the Good and
+Bad piles have something in them, import `photos-prod` the same way, then run
+the trained head over it — a second COCO corpus that shares no frame with the
+one the votes came from, so the Find slide's claim that it is scoring unseen
+media is enforced by `coco_fixture.DISJOINT_FROM` rather than asserted in a
+caption. Nothing is staged through the API that a slide says was done by hand:
+the button `train-loop` clicks is chosen from the served item's own file name,
+so the piles are a real session's.
 
-The expensive steps are idempotent — the corpora are downloaded, filed and
-embedded only if absent — so a re-run after a GUI change is the captures plus a
-few minutes of clicking. The intro detector is deliberately *not*: it is deleted
-and re-made every run, because the first shot's subject is a dashboard that does
-not have one yet.
-It deliberately does **not** reuse the docs shots in
-`docs/user/screenshots.manifest.ts`: those are taken against the synthetic
-`syn-imgs` fixture because the user guide walks the reader through that dataset,
-and a slide is the audience's first sight of the tool, where flat coloured
-shapes make the product look like a toy. **A GUI change that moves the docs
-screenshots moves these too** — reshoot both, or the deck keeps showing an app
-that no longer exists.
+The **Step-By-Step** figures (`figs/ui-steps-*.webp`, section 8) are that same
+session photographed a second time at the moments a user has to click, with a
+red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
+with the user guide's screenshots). Where a moment is also an intro frame, the
+two are shot back to back — clean, then numbered — so the two sections show one
+session rather than two. The disc size is set for the slot (`CALLOUT_SCALE`):
+its digit lands at 22px on the slide, above the type floor.
+
+The COCO download is idempotent, but the session is deliberately *not*: its
+datasets and detector are deleted and rebuilt every run, because the first
+shot's subject is an app with nothing in it. That costs a re-embed of both piles
+(~470 photographs, a few minutes on CPU) per run.
+
+The corpus and the detector are the **Book example**
+(`scripts/screenshots/book-example.mjs`), which the user guide's screenshots use
+too (#4202) — they were shot against a synthetic fixture of flat coloured
+shapes until then. The frames are still taken by separate harnesses, because a
+slide wants a narrower window, a padded 16:9 crop, WebP and a real session's
+votes, where the guide wants both themes and a fixed vote baseline. **A GUI
+change that moves the docs screenshots moves these too** — reshoot both, or the
+deck keeps showing an app that no longer exists.
 
 **Never drop a report figure straight onto a slide.** It was sized for a page,
 and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`
@@ -433,8 +444,8 @@ rather than adding it to `requirements/` for a figure's sake.
 
 ## Exporting to PowerPoint
 
-`make FMT=pptx` produces one full-slide image per slide — fine for handing over
-a read-only deck, not editable.
+`./render.sh <deck> pptx` (or `make FMT=pptx`) produces one full-slide image
+per slide — fine for handing over a read-only deck, not editable.
 
 **`--editable` gives real PowerPoint shapes**: headlines and lists arrive as
 text you can retype, figures as pictures you can move or replace.

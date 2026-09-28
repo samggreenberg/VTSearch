@@ -1,140 +1,88 @@
 /**
- * Idempotently create the deterministic fixtures the screenshot recipes need,
- * by driving the running app's UI (so the fixtures look exactly as a user's
- * would). Safe to re-run: each step is skipped if its artifact already exists.
- * refresh.sh runs this before capture.ts. See docs/plans/user-docs-screenshots.md.
+ * Idempotently create the fixtures the screenshot recipes need: the Book
+ * example (`book-example.mjs`) — COCO photographs, a detector that finds books
+ * in them, and a second pile the detector has never seen. Safe to re-run: each
+ * dataset is imported only if absent, and each detector's votes are reset to
+ * the same baseline every run. refresh.sh runs this before capture.ts. See
+ * docs/plans/user-docs-screenshots.md.
  *
- *   - syn-imgs   : 60 synthetic images, SigLIP embedder (the main fixture)
- *   - doc-demo   : an image detector trained on 5 good / 4 bad votes over syn-imgs
- *                  (gives a trained detector for dashboard / results-grid /
- *                   autopilot-phase shots). NB: doc-demo is a throwaway; the
- *                   harness never touches a user's real detectors.
- *   - syn-patch  : 24 synthetic images, DINOv2-patch embedder (region-voting,
- *                  which needs a patch-region-aware embedder)
+ *   - photos        : the training pile, SigLIP (the main fixture)
+ *   - photos-prod   : the test pile, SigLIP — same subjects, no frame shared
+ *                     with `photos`, so Find runs over media nobody voted on
+ *                     (and Detector Stats has a training set to compare with)
+ *   - photo-regions : a small pile embedded with DINOv2 patch (region voting)
+ *   - Books         : an image detector on `photos`, trained on a fixed set of
+ *                     book / not-a-book votes
+ *   - books-regions : the region-voting detector on `photo-regions`
+ *
+ * The corpora are the ones the slide deck is shot against, built by
+ * `slides/figs/src/coco_fixture.py` (a one-off ~1 GB COCO download on first
+ * run, then a directory check). The two harnesses share the app and the names,
+ * so running either leaves the other's fixtures usable.
+ *
+ * This harness used to build synthetic fixtures (`syn-imgs`, `syn-patch`, and a
+ * `doc-demo` detector). They are its own throwaways, so a run removes any that
+ * a previous version left behind — they would otherwise sit in every dashboard
+ * shot. It never touches a dataset or detector it did not create.
  *
  * Usage:  node ensure-fixtures.mjs   (APP env overrides the URL)
  */
-import { launchChromium } from './launch.mjs';
+import {
+  appClient,
+  BOOK_DETECTOR,
+  framesOf,
+  isBook,
+  REGION_DATASET,
+  REGION_DETECTOR,
+  REGION_VOTES,
+  TEST_DATASET,
+  TRAIN_DATASET,
+} from './book-example.mjs';
 
 const APP = process.env.APP || 'http://localhost:5000';
 const log = (...a) => console.log('[fixtures]', ...a);
+const app = appClient(APP, log);
 
-const browser = await launchChromium();
-try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-  const goDash = async () => {
-    await page.goto(`${APP}/#/dashboard`, { waitUntil: 'domcontentloaded' });
-    // An empty registry renders the ".empty-state" placeholder instead of the
-    // table — and this bootstrap's whole job is to fill an empty registry —
-    // so wait for either, not just the table.
-    await page.waitForSelector('.dash-table, .empty-state', { timeout: 30000 });
-    await page.waitForTimeout(1200);
-  };
-  const hasDataset = (name) => page.locator('tr[vt-dataset-card]', { hasText: name }).count();
-  const hasDetector = (name) => page.locator('tr[vt-detector-card]', { hasText: name }).count();
+// The votes that train `Books`: a first session's worth, about what the slide
+// deck's recorded session ends on (twelve Good, fifteen Bad). Fewer is not a
+// detector anyone would ship — at eight and six, Find called 189 of the 240
+// test photos a match, which is a picture of the tool not working. The count
+// is also load-bearing for `autopilot-progress` — autopilot moves
+// through its phases on vote counts, and this baseline puts it in Refine
+// Boundary — so change it and that shot's active phase moves with it.
+//
+// The Bads are the near-misses, not the giraffes: a laptop, a monitor, a phone
+// — rectangular, printed things — because that is what makes the ranking in
+// the results shots look like a detector that learned *book* rather than
+// *indoors*.
+const BOOK_VOTES = {
+  good: 12,
+  bad: { laptop: 3, tv: 3, keyboard: 2, 'cell-phone': 2, clock: 2, chair: 2, vase: 1 },
+};
 
-  const importSynthetic = async (name, size, embedderLabel) => {
-    await page.locator('button[title="Import a new dataset"]').click();
-    // The tab bar was renamed .importer-tab-bar -> .tab-bar (.tab) in the
-    // header/layout IA unification; scope to .importer-picker to stay unique.
-    await page.waitForSelector('.importer-picker .tab-bar', { timeout: 15000 });
-    await page.locator('.importer-picker .tab', { hasText: 'Demo' }).click();
-    await page.waitForTimeout(600);
-    await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).click();
-    await page.waitForSelector('#field-size', { timeout: 10000 });
-    await page.fill('#field-size', String(size));
-    await page.fill('#field-dataset_name', name);
-    if (embedderLabel) {
-      await page.locator('button', { hasText: /Advanced/i }).first().click();
-      await page.waitForTimeout(400);
-      await page.selectOption('#import-advanced-embedder', { label: embedderLabel });
-      await page.waitForTimeout(300);
-    }
-    await page.getByRole('button', { name: 'Import', exact: true }).click();
-    // wait for the row to finish embedding (progress text gone)
-    await page.waitForFunction((n) => {
-      const c = [...document.querySelectorAll('tr[vt-dataset-card]')].find((e) => e.textContent.includes(n));
-      return c && !/Embedding|Loading dataset/.test(c.textContent);
-    }, name, { timeout: 300000 });
-    log(`imported ${name}`);
-  };
+await app.dropDetectors('doc-demo');
+await app.dropDatasets('syn-imgs', 'syn-patch');
 
-  // 1. syn-imgs (SigLIP)
-  await goDash();
-  if (await hasDataset('syn-imgs')) log('syn-imgs exists, skipping');
-  else await importSynthetic('syn-imgs', 60, null);
+const train = await app.ensureDataset(TRAIN_DATASET, 'siglip');
+await app.ensureDataset(TEST_DATASET, 'siglip');
+const regions = await app.ensureDataset(REGION_DATASET, 'dinov2_patch');
 
-  // 2. doc-demo detector (blank, image) + a few votes so it is trained
-  await goDash();
-  if (await hasDetector('doc-demo')) {
-    log('doc-demo exists, skipping create');
-  } else {
-    await page.locator('button[title="Create a new detector"]').click();
-    await page.waitForTimeout(800);
-    await page.locator('input[placeholder*="dog barking" i]').fill('colorful geometric pattern');
-    await page.waitForTimeout(300);
-    await page.locator('#detector-name').fill('doc-demo');
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await page.waitForTimeout(2000);
-    log('created doc-demo');
-  }
-  {
-    // Train it: enforce a baseline of exactly 5 good / 4 bad votes (and no
-    // others) through the votes API - even when doc-demo already existed.
-    // Later shot recipes mutate the votes (find-view adds corrections), so
-    // a rerun against a surviving doc-demo used to drift off the 9-vote
-    // baseline the autopilot-progress shot depends on.
-    const ctx = await page.evaluate(async () => {
-      const ds = await (await fetch('/api/datasets/registry')).json();
-      const det = await (await fetch('/api/detectors/registry')).json();
-      return {
-        dataset: ((ds.datasets || []).find((x) => x.name === 'syn-imgs') || {}).id,
-        detector: ((det.detectors || []).find((x) => x.name === 'doc-demo') || {}).id,
-      };
-    });
-    if (!ctx.dataset || !ctx.detector) throw new Error('fixture context missing: ' + JSON.stringify(ctx));
-    await page.evaluate(async ({ dataset, detector }) => {
-      const h = { 'content-type': 'application/json', 'X-Dataset-Id': dataset, 'X-Detector-Id': detector };
-      // Make sure both contexts are actually loaded server-side; right after
-      // the Create flow the detector load can still be settling and votes
-      // 409 with detector_not_loaded. NB: the load requests must NOT carry
-      // X-Detector-Id - resolving the header for a not-yet-loaded detector
-      // 409s the load call itself.
-      const hLoad = { 'content-type': 'application/json', 'X-Dataset-Id': dataset };
-      await fetch('/api/datasets/registry/' + dataset + '/load', { method: 'POST', headers: hLoad });
-      await fetch('/api/detectors/registry/load', { method: 'POST', headers: hLoad, body: JSON.stringify({ detector_id: detector }) });
-      const until = Date.now() + 30000;
-      while (Date.now() < until) {
-        const s = await (await fetch('/api/dataset/status', { headers: h })).json();
-        if (s.loaded) break;
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      const items = await (await fetch('/api/medias/ids', { headers: h })).json();
-      const ids = items.map((m) => m.id).sort((a, b) => a - b);
-      const vote = async (id, target) => {
-        for (let attempt = 0; attempt < 20; attempt++) {
-          const r = await fetch('/api/medias/' + id + '/vote', { method: 'POST', headers: h, body: JSON.stringify({ target }) });
-          if (r.ok) return;
-          if (r.status !== 409) throw new Error('vote ' + id + ' -> ' + r.status);
-          await new Promise((res) => setTimeout(res, 1000));
-        }
-        throw new Error('vote ' + id + ' still 409 after retries');
-      };
-      for (const id of ids.slice(0, 5)) await vote(id, 'good');
-      for (const id of ids.slice(5, 9)) await vote(id, 'bad');
-      for (const id of ids.slice(9)) await vote(id, 'none');
-    }, ctx);
-    // Give the per-vote retrain a moment to settle before the next step.
-    await page.waitForTimeout(3000);
-    log('trained doc-demo (5 good / 4 bad)');
-  }
-
-  // 3. syn-patch (DINOv2 patch) for region voting
-  await goDash();
-  if (await hasDataset('syn-patch')) log('syn-patch exists, skipping');
-  else await importSynthetic('syn-patch', 24, 'DINOv2 patch (region-aware images)');
-
-  log('fixtures ready');
-} finally {
-  await browser.close();
+const books = await app.ensureDetector(BOOK_DETECTOR, train);
+{
+  const meta = await app.mediaIndex(train, books);
+  await app.setVotes(train, books, {
+    good: framesOf(meta, 'book', BOOK_VOTES.good, isBook),
+    bad: Object.entries(BOOK_VOTES.bad).flatMap(([category, n]) => framesOf(meta, category, n)),
+  });
 }
+
+const regionDetector = await app.ensureDetector(REGION_DETECTOR, regions);
+{
+  const meta = await app.mediaIndex(regions, regionDetector);
+  await app.setVotes(regions, regionDetector, {
+    good: REGION_VOTES.good,
+    bad: Object.entries(REGION_VOTES.bad).flatMap(([category, n]) => framesOf(meta, category, n)),
+  });
+}
+
+log('fixtures ready');

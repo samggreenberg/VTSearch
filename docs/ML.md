@@ -1,6 +1,6 @@
 # Machine Learning Details
 
-VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (hinge loss + L2, class-balanced). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
+VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (L2-regularised squared hinge, class-balanced). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
 Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides typicality ranks for domain-shift detection.
 
@@ -24,7 +24,7 @@ The head is fitted by liblinear (scikit-learn's `LinearSVC`, `C=1.0`, `class_wei
 
 | Sentinel | Architecture | Fitted by | Status |
 |---|---|---|---|
-| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, hinge + L2, class-balanced | **shipped** |
+| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, squared hinge + L2, class-balanced | **shipped** |
 | `LINEAR_HEAD` (`0`) | `Linear(D, 1)` | balanced BCE gradient loop = logistic regression | eval arm, tests |
 | `hidden_dim > 0` | `Linear(D, H) -> ReLU -> Dropout -> Linear(H, 1)` | balanced BCE gradient loop | eval arm, tests |
 
@@ -39,7 +39,7 @@ Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `
 | Setting | Value | Notes |
 |---------|-------|-------|
 | **Loss function** | Squared hinge + L2 | scikit-learn `LinearSVC`, solved by liblinear |
-| **Regularization** | `C = 1.0` | `SVM_HEAD_C` in `config.py`, or the `VTSEARCH_SVM_HEAD_C` env var |
+| **Regularization** | `C = 1.0` | `SVM_HEAD_C` in `vtscore/config/runtime.py`, or the `VTSEARCH_SVM_HEAD_C` env var |
 | **Solver iteration cap** | 5000 | liblinear's `max_iter`; the fit is milliseconds at any real vote count |
 | **Head** | `Linear(input_dim, 1)` | The `LINEAR_SVM_HEAD` sentinel (`hidden_dim=-1`); no hidden layer, no dropout |
 | **Batching** | Full-batch | All labeled data in one solve |
@@ -120,7 +120,7 @@ That inverts the direction relative to the cost weights: a **negative** inclusio
 
 **What the conservative reading gave up, and why the successor still matters.** On a starved environment −1 finds 6 positives per 100 votes where −3 finds 18 — the gain #3318 recovered and #3319 extended. Under binary voting the benefit is sharply concentrated in *starved* cells and turns negative in well-supplied ones — measured on axes independent of the arm being scored (AP response slope **−0.0207** on log category prevalence, CI [−0.0259, −0.0159]; **−0.0402** on a leave-one-out baseline). The offset is a starvation remedy whose price is charged everywhere, so the principled successor is a **supply-dependent** offset — aggressive while positives are scarce, relaxing as they accumulate — which the detector can drive off its own positive count and which subsumes the voting-mode question (#2910). See [`REPORT.md`](experiments/2026-08-07-acquisition-inclusion/REPORT.md) (COCO), [`REPORT_SECOND_ENVIRONMENT.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md) (VG binary), [`REPORT_REGION_VOTING.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_REGION_VOTING.md) (VG region — **voided by #2943, read its banner before citing anything in it**) and [`REPORT_PILE_2877.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_PILE_2877.md) (the pile run: three environments, both voting modes, and the region check that was owed). **Note the pile run complicates #2910's premise rather than supporting it**: prevalence is held flat there by construction, and the arms still split — along score separability, not supply. A supply-dependent offset should be re-argued against those three environments before it is built. **#3319 sharpens the successor question rather than settling it**: the decision endpoint is flat across three bits, so a supply-dependent *offset* would be tuning inside a plateau. What that study points at instead is a rule targeting a **pick precision** — self-calibrating, and immune to the step-shortfall above, which a constant offset is not (**#3546**). The deep regime it could not settle, and the pile change that would settle it, are **#3547**.
 
-**That measurement is one environment, and a second one disagrees (issue #2877).** Rerun verbatim on `visual_genome_m × siglip`, the mechanism reproduces exactly — the sampling position moves *further* (+0.121 pool percentile against COCO's +0.058), positives per 100 votes go **6 → 12**, the `+2` falsifier falsifies on every endpoint, and the adaptive ramp is identical — but the payoff inverts: final cost degrades roughly monotonically in `|k|`, and `-3` **fails the same pre-registered ship rule**, with a 95% CI of **[+0.003, +0.022]** on the mean cost delta against a +0.01 tolerance. Only `k=-1` passes. The mechanism is legible: `regret` (cost minus oracle cost) is *flat* in every negative-`k` arm, so the cut estimator is blameless; what changes is the learned ranking, in two directions at once. Average precision **rises** (0.349 → 0.371, p<1e-5) while oracle cost — `min_θ (FPR+FNR)`, a statement about *global* separability — **rises too** (0.395 → 0.410). Aggressive acquisition sharpens the head of the ranking and blurs its tail; AP sees the first, and a globally-placed reporting cut sees the second. COCO escaped this only because it was starved hard enough that any positive helped everywhere. The ranking benefit also **saturates at `k=-2`** while the cost penalty keeps growing. **Note that this second environment is also binary voting** — `visual_genome_m × siglip` carries no `patch_grid`, so its `region_voting` flag was a no-op — so `-3` is over-fitted to `coco_val × siglip2` rather than to binary voting as a class, and the region-voting generalisation check needed `dinov3_patch`. **It has since been run** — see [`REPORT_PILE_2877.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_PILE_2877.md), which finds region voting *tolerant* of the aggressive offsets this environment rejected, and finds the head-sharpening/tail-blurring split above to be a property of the environment rather than of the voting mode. That reading is superseded: #3318 restored −3 and #3319 shipped **−4**, on clean-label environments only, with the region cross-check passing. See [`docs/experiments/2026-08-07-acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md).
+**Superseded reading: the #2891 rejection (issue #2877).** The one environment that rejected −3 (`visual_genome_m × siglip`, binary voting) is kept on record because its mechanism is instructive: `regret` stayed flat while AP *rose* and oracle cost *also* rose — aggressive acquisition sharpened the head of the ranking and blurred its tail. The pile run later found that split to be a property of the environment rather than of the voting mode, and #3318/#3319 moved the constant back to −3 and then −4 on clean-label environments. Details: [`REPORT_SECOND_ENVIRONMENT.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md), [`REPORT_PILE_2877.md`](experiments/2026-08-07-acquisition-inclusion/REPORT_PILE_2877.md).
 
 Two things about the shape are worth keeping. **It is an offset, not an absolute cut** — the mechanism is the *gap* between where the line is drawn and where sampling happens, so reading −3 absolutely would collapse the gap to nothing at Inclusion −3 and invert it below that. And **the ramp is not a parameter anyone chose**: early on the anchored mixture is wide, so the tilt has little leverage and the acquisition cut sits near the reporting line; as the fit sharpens it climbs (pool percentile 0.840 → 0.932 → 0.961 across a run). A *pinned* quantile — the same intent with one fewer indirection — is constant by construction, is maximally aggressive from step 1 against a model trained on almost nothing, and returned 6 positives against −3's 18. The adaptive ramp is doing the work, which was the strongest evidence that `mid_tilt` tilts usefully before its *reporting* role was measured directly (issue #2865; the tilt held).
 
@@ -128,7 +128,7 @@ Everything else still reads the reporting cut: the green/red line, the above-thr
 
 **Why fold models share the final model's head:** a different head produces a different score distribution, so a threshold found on fold models would not transfer faithfully to the final model. The training code threads one `hidden_dim` sentinel through both the final fit and every fold fit, so the two can't drift apart. With a linear head that value is a constant (`LINEAR_SVM_HEAD`), which makes the property automatic — the head has no capacity to size. It mattered more under the old MLP, whose width was auto-sized from the training-set size: left alone, each fold would have trained on fewer examples and got a narrower hidden layer than the final model.
 
-The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
+The **Calibration Fraction** setting (0–1; unset by default, which selects the per-embedder value above) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
 The threshold is a **split-conformal quantile rule** over the pooled held-out scores, governed by the `inclusion_value` parameter (integer in range [-10, +10]). This is where inclusion biases the result toward recall or precision — at calibration/threshold time, **not** at training time. For `k = inclusion_value` (with `BASE = 0.25`, `QPOS_MAX = 0.75` — `CONFORMAL_BASE_BUDGET` / `CONFORMAL_QPOS_MAX` in `vtscore/training/thresholds/conformal.py`):
 
@@ -183,13 +183,13 @@ The same control answers the neighbouring question — "is the capacity right?" 
 
 | Setting | Where | Value |
 |---------|-------|-------|
-| `OMP_NUM_THREADS` | `app.py` | `1` |
-| `MKL_NUM_THREADS` | `app.py` | `1` |
-| `torch.set_num_threads` | `vtscore/embedding/loader.py` | `1` |
-| dtype | `training.py` | `torch.float32` |
+| `OMP_NUM_THREADS` | `app.py` | the resolved thread count |
+| `MKL_NUM_THREADS` | `app.py` | the resolved thread count |
+| `torch.set_num_threads` | `vtscore/media/torch_setup.py` (`ensure_torch_configured`) | the resolved thread count |
+| dtype | `vtscore/training/mlp.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
-Threading is restricted to 1 to minimize memory overhead; the real cost is the embedding models, not the head. (The head's own fit is liblinear on the CPU and is milliseconds either way.)
+All three thread settings read one value, `VTSEARCH_TORCH_THREADS`. The **server** (`python app.py`) resolves it in `vtsearch/torch_threads.py` — the env var if set, otherwise the process's CPU allocation (`os.sched_getaffinity`), because a person waits on every vote — and publishes it to the OMP/MKL variables before torch is imported. Anything that imports `vtscore` without going through `app.py` (library use, batch scripts, tests) gets `vtscore.config.TORCH_THREADS` (`vtscore/config/runtime.py`), which defaults to `1` to keep memory overhead low: each thread allocates its own scratch buffers. See [`docs/DEPLOYMENT.md`](DEPLOYMENT.md) for the operator knob. The real cost is the embedding models, not the head. (The head's own fit is liblinear on the CPU and is milliseconds either way.)
 
 ## Embedding Models
 
@@ -242,7 +242,7 @@ Embedders carry capability flags consumed by the routes layer and the frontend:
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
 
-Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
+Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (the liblinear head fit is milliseconds on a few hundred labeled examples; scoring the dataset dominates a retrain).
 
 ### Description enrichment
 
@@ -456,12 +456,13 @@ Build is the same order as the embedding-matrix work a dataset load already does
 
 ## Key Files
 
-- `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`
+- `vtscore/training/mlp.py`: `build_model`, `train_model`, `build_model_from_weights`, the head sentinels
+- `vtscore/training/svm.py`: `fit_linear_svm_head` (the shipped head's fit)
 - `vtscore/coverage/atlas.py`: `CoverageAtlas`, `domain_shift_report`
 - `vtscore/state/coverage.py`: atlas build/restore/resync helpers, vote wiring
 - `vtscore/training/thresholds/`: `calculate_cross_calibration_threshold`, `fold_anchored_gmm_threshold` (`anchored.py`), `calculate_safe_threshold` (`blend.py`), `calculate_gmm_threshold` (`gmm.py`), `conformal_threshold` (`conformal.py`)
 - `vtscore/detectors/training.py`: `train_and_score`, `train_and_threshold`, origin-based detector training
 - `vtscore/detectors/labeling_progress.py`: Per-step cache of the detectors the app trained, and their stability analysis
-- `vtscore/embedding/loader.py`: Model initialization and thread configuration
+- `vtscore/embedding/loader.py`: Model initialization; `vtscore/media/torch_setup.py`: torch thread configuration
 - `vtscore/eval/voting_iterations.py`: Voting simulation evaluation
-- `vtscore/config/runtime.py`: `TRAIN_EPOCHS`; `vtscore/config/models.py`: the model IDs
+- `vtscore/config/runtime.py`: `SVM_HEAD_C`, `DEFAULT_CALIBRATE_COUNT`, `TORCH_THREADS`, and the BCE-arm knobs (`TRAIN_EPOCHS`, …); `vtscore/config/models.py`: the model IDs

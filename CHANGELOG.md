@@ -17,6 +17,26 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The folder importer's Browse opens at the folder you typed** (issue
+  #4207). In **Add Dataset → Files → Folder**, clicking **Browse** after
+  typing a path opened the browser at the server root, replaced the path with
+  `/`, and re-ran media-type detection on the whole filesystem. The browser
+  now opens inside the typed folder, and opening it leaves the field and the
+  detection alone; only navigating in the browser changes them. A typed path
+  that doesn't exist opens the browser at the root, still without touching
+  the field.
+
+- **Find scores with the detector's current labels, not the ones it had when
+  it last trained** (issue #4204). After you changed a detector's labels
+  without a Learned sort in between (voting under a text, example or random
+  sort, clearing the votes, or flipping labels in the dashboard's saved-label
+  review), Find kept giving the old detector's verdicts until the app was
+  restarted. A new browser page didn't help, because the cached model lives on
+  the server. Find now reuses the cached model only while it was trained from
+  the detector's saved labels, and retrains when they have changed. The
+  legacy multi-dataset Find does the same. Learned sort's own cache now also
+  counts a redrawn region as a label change.
+
 - **Find (and Train) on an unloaded detector waits for the load to finish**
   (issue #4187). The route sometimes opened as soon as the detector load
   started, showing an empty page and a stream of "Detector is not loaded"
@@ -74,6 +94,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Autopilot "Update Sort Example?" prompt says what it is asking**
+  (issue #4200). It used to show the current example and ask whether to keep
+  it. It now reports how the sort has gone ("You've clicked 10 times and only
+  found 1 positive while sorting based on …") and lays out the two answers
+  side by side: **Keep clicking** that sort for the next interval on the
+  left, **Supply a different sort** (text or media example) on the right.
+
 - **Structural (instance-matching) search is ~3x faster on both of its hot
   paths** (#3900). Ingest with the `sift_vlad` embedder no longer runs SIFT
   detection at the source's full resolution: detection cost scales with pixel
@@ -89,6 +116,15 @@ not list every commit. Use `git log` for the full history.
   GPU when there is one.
 
 ### Added
+
+- **A click-by-click walkthrough in the user guide** (#4202). The guide opens
+  with *Step by step: your first search* — load a folder of photos, make a
+  detector, train it, load a second folder, and Find — with a screenshot per
+  step whose red numbered markers show exactly where to click, in order. Small
+  pictures of the buttons now sit in the sentences that name them ("click the
+  **+**"), in the in-app Help panel as well as on GitHub, and every screenshot
+  in the guide now shows real photographs (the slide deck's books example)
+  instead of synthetic shapes.
 
 - **Double-click the image to zoom in** (#3934). Looking closer at a borderline
   item meant reaching for the zoom control below the image, which breaks the

@@ -10,16 +10,12 @@ package is import-clean - it never reaches into the app - and is the only
 place library code is allowed to read environment variables directly.
 
 **Source:** `vtscore/config/` - a package of six submodules, listed under
-[Package layout](#package-layout) below. Everything public is re-exported
+[Contents](#contents) below. Everything public is re-exported
 from `vtscore/config/__init__.py`, so `vtscore.config.X` and
 `from vtscore.config import X` are the import paths for all of it; the
 submodules are an internal organisation, not a second public surface.
-**Related:** [`cli.md`](cli.md) for the CLI entry points that build a
-`CoreConfig` before running, and
-[`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
-seam exists at all.
 
-## Package layout
+## Contents
 
 The submodules are layered: each reads only from ones above it.
 
@@ -49,25 +45,18 @@ Two consequences matter to test authors, and only to test authors:
   vars are not re-read. `_reload_all()` reloads them in dependency order and
   then the package.
 
-## Why `CoreConfig` exists
-
-Library code under `vtscore/` is meant to run with or without the Flask
-app. Before this seam existed, every loader, trainer, and embedder
-reached into `vtsearch.settings` for tunables like `saved_datasets_dir`,
-`calibrate_count`, or `calibration_fraction` - which made the library
-impossible to vendor independently. `CoreConfig` is the seam:
+## Two ways to get a `CoreConfig`
 
 - **Library-only consumers** construct a `CoreConfig(...)` directly and
-  hand it to the API they call. No Flask, no `vtsearch.settings`, no
-  shim. This is the supported public path.
-- **The app** registers a builder via `register_core_config_builder()`
-  at startup that snapshots the active `vtsearch.settings` into a fresh
-  `CoreConfig` at every request boundary. Library code calls
-  `CoreConfig.from_settings()` and gets a value object back without
-  knowing the app exists.
+  hand it to the API they call. This is the supported public path.
+- **A host app** registers a builder via `register_core_config_builder()`
+  at startup; library code then calls `CoreConfig.from_settings()` and
+  gets a value object back without knowing the app exists.
 
-The dataclass is `frozen=True`, so a config handed to a background
-thread cannot be mutated underneath it.
+The rationale for the seam is in
+[`architecture.md`](../architecture.md#the-coreconfig-bridge). The
+dataclass is `frozen=True`, so a config handed to a background thread
+cannot be mutated underneath it.
 
 ## The `CoreConfig` dataclass
 
@@ -93,9 +82,11 @@ after the table do have defaults, precisely so a library-only
 | `data_dir`                        | `Path`         | bootstrap   | Filesystem root for caches, embeddings, and model downloads. Mirrors `DATA_DIR` at construction. |
 
 Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
-`autofind_exporter_field_values` (`dict`, `{}`), `signpost_captioner`
-(`dict[str, bool]`, `{}`), and `signpost_vocab` (`dict[str, list[str]]`,
-`{}`).
+`autofind_exporter_field_values` (`dict[str, dict[str, str]]`, `{}` -
+keyed by exporter name), `projection_n_neighbors` (`int`,
+`PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
+`PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
+and `signpost_vocab` (`dict[str, list[str]]`, `{}`).
 
 "Server" and "per-user" refer to where the app stores the corresponding
 setting - both tiers flow into the same `CoreConfig` so library code
@@ -190,14 +181,20 @@ when one is in scope). Tests rely on this: they override
 | `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
 | `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
-| `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB). Oversized requests get HTTP 413. Set to `0` for unlimited (Flask's out-of-the-box behaviour). |
+| `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB), for a host app to enforce. `0` = unlimited. |
+| `MAX_DECODE_PIXELS`      | `64_000_000` | `VTSEARCH_MAX_DECODE_PIXELS` | Bitmap budget for one image decode; larger sources are downsampled (aspect kept). Crop/clip paths bypass it. `0` disables. |
+| `MAX_STRUCTURAL_DETECT_PIXELS` | `2_000_000` | `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` | Resolution budget for structural (SIFT) keypoint detection. `0` detects at native size. |
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on BCE-head training epochs. `vtscore.training.mlp.train_model` may early-stop sooner. The production SVM head is one liblinear solve and ignores this.  |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop. BCE heads only.   |
 | `DEFAULT_CALIBRATE_COUNT`| `2`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
 | `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width. Legacy MLP head only - the production linear SVM head has none.              |
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear SVM head.                                            |
+| `MLP_LABEL_SMOOTHING`    | `0.05`  | -                             | Label-smoothing epsilon for MLP targets (keeps calibration scores distinct for the conformal threshold).          |
 | `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the production linear SVM head (`fit_linear_svm_head`). Lower regularises harder on few votes. |
+| `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` | `15` / `0.1` | - | Global UMAP defaults for the browse projection (see [`projection.md`](projection.md)). |
+| `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
+| `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |
 
 ### `allocated_cpus()` / `resolve_decode_workers()`
 
@@ -207,10 +204,10 @@ Linux). That is deliberately *not* `os.cpu_count()`: a SLURM job holding
 `--cpus-per-task=8` on a 96-core node is entitled to 8, and the affinity
 mask is what reflects that.
 
-`resolve_decode_workers()` sizes the image-decode prefetch pool used by
+`resolve_decode_workers(cap=DEFAULT_DECODE_WORKER_CAP)` sizes the image-decode prefetch pool used by
 `vtscore.media.image._image_bulk` — the pool that decodes the next batch
 while the current batch's GPU forward runs. It returns
-`min(DEFAULT_DECODE_WORKER_CAP, allocated_cpus() - 1)`, floored at 1: one
+`min(cap, allocated_cpus() - 1)`, floored at 1: one
 CPU is left for the calling thread, which runs the model processor and
 tensor marshalling. Read at call time, so it tracks an allocation the
 process only learns about after import.
@@ -254,20 +251,22 @@ arch (see `scripts/install.sh`). The right tag is not simply the newest:
 the newest wheels drop the oldest architectures, so an old GPU needs an
 *older* tag (`cu128` dropped Volta/`sm_70`, so a V100 needs `cu124`).
 
+### Embedding precision and image-processor backend
+
+| Name | Meaning |
+|------|---------|
+| `EMBED_PRECISION` / `embed_precision()` | Requested / effective embedding compute precision. Half modes are CUDA-only: off CUDA, or on a device without bf16 for a bf16 mode, the effective value is `"fp32"`. `auto` resolves to `bf16`, else `fp16`. |
+| `embed_weight_dtype()` | dtype to cast weights to (`fp16` / `bf16` modes), else `None` |
+| `embed_autocast_dtype()` | dtype for a `torch.autocast` block (`autocast_*` modes), else `None` |
+| `IMAGE_PROCESSOR_BACKEND` / `IMAGE_PROCESSOR_DEVICE` | Requested `transformers` image-processor implementation and resize/normalise device |
+| `image_processor_load_kwargs()` / `image_processor_call_kwargs()` | Kwargs for `from_pretrained` / the processor call that apply those two settings |
+| `resolved_processor_backend(processor)` / `processor_backend_from_class_name(...)` / `verify_image_processor_backend(processor, *, embedder)` | Report (and warn on) the backend a loaded processor actually uses |
+
 ## Server-path access
 
-There is no configurable server-root allow-list. Server-side filesystem
-access (importers, exporters, the file browser) is governed entirely by
-the active login provider:
-
-- **Single-user / no-auth mode** (`DefaultLoginProvider`): unrestricted.
-  The lone trusted user may read from and write to any server-readable
-  path, and the file browser is rooted at the filesystem root (`/`).
-- **Multi-user mode** (any non-default provider): each user is confined
-  to their own `<get_user_data_dir(user)>/...` subtree.
-
-See `vtscore.security.path_validation.get_file_access_base_dir` and
-`validate_server_filepath`.
+Not a config concern: there is no configurable server-root allow-list.
+Server-side filesystem access is governed by the active login provider;
+see [`security.md`](security.md).
 
 ## Embedder model identifiers
 
@@ -288,7 +287,7 @@ time. The actual download + load is lazy, driven by each embedder's
 | `AST_SAMPLE_RATE`              | `16000`                                                                                |                                                                                        |
 | `BEATS_CHECKPOINT_REPO`        | `"lpepino/beats_ckpts"`                                                                | Hub mirror of the MIT-licensed BEATs release (no `transformers` implementation).       |
 | `BEATS_CHECKPOINT_FILE`        | `"BEATs_iter3_plus_AS2M.pt"`                                                           | Self-supervised encoder, not an AudioSet-finetuned classifier variant.                 |
-| `BEATS_SAMPLE_RATE`            | `16000`                                                                                | 16 kHz mono; features are Kaldi fbanks, not waveforms.                                 |
+| `BEATS_SAMPLE_RATE`            | `16000`                                                                                | 16 kHz mono; features are Kaldi fbanks, not waveforms. Siblings: `BEATS_EMBED_DIM`, `BEATS_MAX_SAMPLES`, `BEATS_MIN_SAMPLES`, `BEATS_FBANK_MEAN`, `BEATS_FBANK_STD`. |
 | `WHISPER_MODEL_ID`             | `"openai/whisper-base"`                                                                | Used by the audio→text converter (ASR).                                                |
 | `WHISPER_SAMPLE_RATE`          | `16000`                                                                                |                                                                                        |
 | `XCLIP_MODEL_ID`               | `"microsoft/xclip-base-patch32"`                                                       | Default video embedder.                                                                |
@@ -301,6 +300,9 @@ time. The actual download + load is lazy, driven by each embedder's
 | `DINOV2_MODEL_ID`              | `"facebook/dinov2-base"`                                                               | Self-supervised image encoder.                                                         |
 | `DINOV3_MODEL_ID`              | `"facebook/dinov3-vitb16-pretrain-lvd1689m"`                                           | DINO v3.                                                                               |
 | `EUPE_MODEL_ID`                | `"https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"`              | Direct HF URL to EUPE ViT-B weights. Loaded via `torch.hub.load`. FAIR Non-commercial. |
+| `CLIP_L_MODEL_ID`              | `"openai/clip-vit-large-patch14"`                                                      | OpenAI CLIP ViT-L/14.                                                                  |
+| `SIGLIP_L_MODEL_ID` / `SIGLIP_L_PRETRAINED` | `"ViT-SO400M-14-SigLIP-384"` / `"webli"`                                  | open_clip model name + pretrained tag (not a HF id).                                   |
+| `PARASPEECHCLAP_*`             | `SPEECH_MODEL_ID="microsoft/wavlm-large"`, `TEXT_MODEL_ID="ibm-granite/granite-embedding-278m-multilingual"`, `CHECKPOINT_REPO="ajd12342/paraspeechclap-combined"`, `CHECKPOINT_FILE="slap-combined.pth.tar"` | Plus `EMBED_DIM=768`, `SAMPLE_RATE=16000`, `MAX_SAMPLES=16000*30`. |
 | `E5_MODEL_ID`                  | `"intfloat/e5-base-v2"`                                                                | Default text embedder.                                                                 |
 | `BGE_MODEL_ID`                 | `"BAAI/bge-base-en-v1.5"`                                                              | Alternative text embedder.                                                             |
 
@@ -335,24 +337,20 @@ which `resolve_decode_workers()` reads per call. Setting any of the
 others after `vtscore.config` has loaded has no effect; do the export
 before `python -m vtscore` / `python app.py` runs. (Tests that need a
 different value re-read the whole package with `config._reload_all()` -
-see [Package layout](#package-layout).)
+see [Contents](#contents).)
 
 ## Typical flow
 
 The end-to-end picture for a library + app deployment:
 
 1. Process starts; `vtscore.config` imports and reads env vars.
-2. The Flask app's `vtsearch.shim` calls
-   `register_core_config_builder(builder_fn)` where `builder_fn`
-   snapshots `vtsearch.settings` into a `CoreConfig` for the current
-   user.
-3. A request arrives. The before-request handler resolves the active
-   user, then library code calls `CoreConfig.from_settings()`, which
-   delegates to `builder_fn` and returns a frozen `CoreConfig` valid
-   for this request only.
-4. The handler hands that `CoreConfig` to whatever library function it
-   calls - datasets loader, detector trainer, exporter. Background
-   threads spawned from the request keep using the same frozen object.
+2. The host app calls `register_core_config_builder(builder_fn)`, where
+   `builder_fn` snapshots its settings store into a `CoreConfig` for
+   the current user.
+3. Library code calls `CoreConfig.from_settings()`, which delegates to
+   `builder_fn` and returns a frozen `CoreConfig` for this call.
+4. Background threads spawned from that call keep using the same
+   frozen object.
 
 For library-only consumers, steps 2–3 collapse: the consumer builds
 `CoreConfig(...)` directly and passes it down. `from_settings()` is
@@ -373,3 +371,12 @@ care which path produced the config.
   `CoreConfig` and routing it explicitly.
 - No persisted embeddings, no persisted model weights. This config
   module does not introduce a place to cache them.
+
+---
+
+## Cross-references
+
+- [`architecture.md`](../architecture.md#the-coreconfig-bridge) - why the `CoreConfig` seam exists.
+- [`cli.md`](cli.md) - the CLI entry points that build a `CoreConfig` before running.
+- [`embedding.md`](embedding.md) - `get_torch_device()` and the concurrency defaults built on `resolve_device()`.
+- [`security.md`](security.md) - server-path access rules.

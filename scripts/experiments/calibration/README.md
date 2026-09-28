@@ -92,6 +92,7 @@ produced.
 | **#3557 Sign-dependent (hinge) cut rule** — [plan](../../../docs/experiments/2026-09-22-hinge-tilt-3557/PLAN.md) | `launch_hinge_3557.sh`, `analyze_hinge_3557.py`, `selftest_analyze_hinge_3557.py`, `figures_hinge_3557.py`. Two run-level arms (live rule `mid_tilt` vs `hinge`, `CALIB_LIVE_CUT_RULE`) because the acquisition cut re-cuts the same estimator below the hinge's seam; each arm also carries the paired re-cut frame |
 | **#3551 Tuning the retired `rare` / `corridor` blend schedules** — [plan](../../../docs/experiments/2026-09-22-blend-endpoints-3551/PLAN.md) | `launch_blend_3551.sh`, `analyze_blend_3551.py`, `selftest_analyze_blend_3551.py`, `analyze_blend_ab_3551.py`. The schedule is now only the fused cut's fold fallback, so the screen splits every schedule row by `shipped_provenance` into Q1 (the fallback it would ship) and Q2 (a replacement for the fused cut), and gates on the shipped fallback reproducing the live threshold; `ab` runs promoted arms per voting mode (`AB_MODE`) |
 | **#4184 The calibration ladder on COCO Better** (one cost curve per rung of the *Hold The Line* deck, for its slide) — [plan](../../../docs/experiments/2026-09-25-progression-4184/PLAN.md), [report](../../../docs/experiments/2026-09-25-progression-4184/REPORT.md) | `launch_progression_4184.sh`, `analyze_progression_4184.py`, `selftest_analyze_progression_4184.py`, and for the #4201 prevalence arm (`CALIB_HAYSTACK_PREVALENCE`) `compare_prevalence_4201.py` (the rungs at two prevalences, paired per cell) and `figure_prevalence_4201.py` (the report's two figures). Seven run-level arms, one per rung; the four retired thresholds are `CALIB_LIVE_THRESHOLD` (`vtscore/eval/live_threshold_rules.py`), because a rung's line picks its own questions and a re-cut of another rung's trajectory would not. The slide figure is `slides/figs/src/make-progression-fig.py`, which reads the 5% arm's committed `h0.05/progression_curve.csv` |
+| **#4114 The converged logistic head in the loop, on COCO Better** — [report](../../../docs/experiments/2026-09-27-logreg-head-4114/REPORT.md) (analyzers, examples and figures live in [`../svm_vs_logistic/`](../svm_vs_logistic/)) | `launch_logreg_4114.sh`. Arms `svm` / `lrconv` (head `linear_logreg`) / `linear` |
 
 <!-- END INDEX -->
 
@@ -198,8 +199,14 @@ alongside them harmlessly), and writes all study output under
 ## Fixed config (pre-registered)
 
 `inclusion=0` (cost = FPR + FNR), `sim_fraction=0.5`, `calibrate_count=2`,
-`calibration_fraction=0.5`, MLP trainer, 150 votes, 4 seeds. Env knobs mirror
-the `MAXPATCH_*` set under the `CALIB_*` prefix.
+150 votes, 4 seeds. Env knobs mirror the `MAXPATCH_*` set under the `CALIB_*`
+prefix.
+
+#2781 also pre-registered `calibration_fraction=0.5` and the auto-sized MLP
+head. Both now follow the app instead: the head is the shipped linear SVM
+(`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
+fraction resolves per space through `production_split_for` (0.3 single-vector,
+0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it.
 
 `safe_thresholds` was pre-registered `False` here and is **`True` now** (#3400):
 #2781 pre-registered the unfused control while it was still a shipped path, and
@@ -455,11 +462,15 @@ So the opening collapses to a list of rounds, each naming *how many clicks* and
 
 ```bash
 GM_STAGE=live bash launch_good_mining.sh    # coco_val + visual_genome_m
-GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large
+GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large: cached pickles only (see below)
 bash analyse_good_mining.sh                 # once every arm drains: everything
 python selftest_analyze_startup.py          # planted-answer check on the analyzer
 python selftest_curves.py                   # ...and on the quality-over-clicks pair
 ```
+
+The `bands` stage runs only where its prepared pickles are still cached: the
+`vg_box_*` datasets were unregistered when the Visual Genome machinery was
+retired (#4038), so `prepare_data.py` can no longer build them fresh.
 
 `analyse_good_mining.sh` is the whole analysis in one command, because the pieces
 have to agree. To re-run only the analyzer, give it the zero-click anchor

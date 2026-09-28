@@ -23,9 +23,9 @@ def progress_events() -> Response:
 
     The client connects with ``new EventSource('/api/events')`` and listens
     for ``server`` (per-connect identity frame carrying ``boot_id``),
-    ``dataset``, ``sort``, ``find``, ``eval``, ``loading-tasks``,
-    ``detector-loading-tasks``, and ``heartbeat`` (periodic liveness ping)
-    events. The first frame on every channel is the current snapshot; clients
+    ``sort``, ``find``, ``eval``, ``loading-tasks``,
+    ``detector-loading-tasks``, ``notification`` (one-off toasts), and
+    ``heartbeat`` (periodic liveness ping) events. The first frame on every channel is the current snapshot; clients
     do not need a separate REST call to bootstrap state.
 
     Each open connection pins a ``gthread`` worker thread for its lifetime,

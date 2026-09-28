@@ -18,15 +18,14 @@ Concrete subclasses live wherever the data domain does:
   library because per-user settings persistence is an app concern, but
   it inherits the same `SyncSource` shape.
 
-## Why it lives in `vtscore`
+Both tiers implement the same contract, so the ABC lives at the lowest
+tier that can host it.
 
-The ABC defines the contract: "a plugin with `load()` and `save()`
-entry points backed by `_do_load()` / `_do_save()` hooks, configurable
-via `PluginField`s, discoverable via the standard plugin registry." Both library-tier (labelsets) and app-tier (settings)
-sources implement exactly that contract, so the abstract base lives at
-the lowest tier that can host it. The concrete subclasses then live
-wherever their data domain does - labels in `vtscore.labels`, settings
-in `vtsearch.settings_io`.
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/sync/__init__.py` | `SyncSource`, `LoadT`, `SaveT` (only `SyncSource` is in `__all__`) |
 
 ## The class
 
@@ -176,19 +175,13 @@ pick it up.
 
 ## What this package does *not* do
 
-- **It does not auto-sync.** The ABC defines the `load` / `save` pair.
-  The caller (a route handler, an app-side hook, a CLI driver) decides
-  when to call them. App-side wiring for the two existing source
-  families - auto-export on vote change, auto-import on first load,
-  circular-trigger prevention via a module-level `_syncing` flag under a
-  re-entrant lock - lives in `vtscore/labels/sync.py` and
-  `vtsearch/settings.py`, not here.
-- **It does not persist anything.** `SyncSource` is a contract;
-  storage is whatever the subclass implements. The standard caveats
-  about persistence still apply - embeddings and trained model weights
-  are in-memory artefacts, not labels. See `CLAUDE.md` "No Persisted
-  Vectors or MLPs" if you're tempted to round-trip more than label
-  identifiers + their `good`/`bad` flag.
+- **It does not auto-sync.** The ABC defines the `load` / `save` pair;
+  the caller decides when to call them. For labelsets, the
+  debounced auto-export, auto-import and re-export guard live in
+  `vtscore/labels/sync.py` (see [labels.md](labels.md#sync-glue)).
+- **It does not persist anything.** Storage is whatever the subclass
+  implements. Embeddings and trained model weights are never among it -
+  see [architecture.md](../architecture.md#the-no-persisted-vectors-rule).
 - **It does not impose a transport.** `_do_load` / `_do_save` can talk to a
   filesystem, an HTTP API, a database, a message queue - anything the
   subclass cares to wire up. The framework only requires that the two

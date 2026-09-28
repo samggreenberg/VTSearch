@@ -306,6 +306,16 @@ def seed_query_text(dataset: str, category: str) -> str:
     local = EXPERIMENT_QUERIES.get(dataset) or {}
     if category in local:
         return local[category]
+    # A mixed cell (#4160) is the class at several sizes, and every band of a
+    # class shares one text -- someone hunting a car types "a car" whatever its
+    # size -- so it takes its pure bands' text.
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    cls, band = scale_bands.parse_cell(category)
+    if scale_bands.is_mix_band(band):
+        texts = {local[f"{cls}@{b}"] for b in scale_bands.REPORTED_BANDS if f"{cls}@{b}" in local}
+        if len(texts) == 1:
+            return texts.pop()
 
     from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
 
@@ -502,6 +512,72 @@ if TEST_BANDS and TEST_BANDS != "all":
     TEST_BANDS = [b.strip() for b in TEST_BANDS.split(",") if b.strip()]
 elif TEST_BANDS == "all":
     TEST_BANDS = "auto"
+
+#: Also rank each band's cohort against the held-out negatives
+#: (``auroc_<band>``, #4160).  Off by default: it scores the negatives a second
+#: time every step, which is cheap on a whole-image arm and is not on a region
+#: one.
+TEST_BAND_AUROC = os.environ.get("CALIB_TEST_BAND_AUROC", "0") == "1"
+
+#: Train-side size mixes to run BESIDE the pure bands (#4160), as a comma list:
+#: ``equal`` (the class's bands at equal shares) and/or ``natural`` (the shares
+#: the whole corpus holds, read from :data:`MIX_SHARES_PATH`).  Each adds one
+#: cell per class, ``<class>@mix-<name>``, run through
+#: :func:`vtscore.eval.scale_bands.paired_mix` so its per-band test cohorts are
+#: the pure arms' own.  Empty (the default) adds nothing.
+TRAIN_MIXES = [m.strip() for m in os.environ.get("CALIB_TRAIN_MIXES", "").split(",") if m.strip()]
+_KNOWN_MIXES = ("equal", "natural")
+if set(TRAIN_MIXES) - set(_KNOWN_MIXES):
+    raise ValueError(f"CALIB_TRAIN_MIXES={TRAIN_MIXES} names a mix outside {_KNOWN_MIXES}")
+
+#: ``{class: {band: share}}`` for the ``natural`` mix.  The shares have to come
+#: from the corpus, not from the cell pickle: the pile designates the same
+#: number of positives in every band, so a pickle's own shares are equal by
+#: construction.  ``coco_better_export.py --mix-census-json`` writes this file.
+MIX_SHARES_PATH = os.environ.get("CALIB_MIX_SHARES", "").strip()
+
+
+def with_train_mixes(categories: list[str]) -> list[str]:
+    """*categories* plus one ``<class>@mix-<name>`` per banded class per mix.
+
+    A class gets a mixed cell only when it has at least two pure bands: a mix
+    over one band is that band's arm under another name.
+    """
+    if not TRAIN_MIXES:
+        return list(categories)
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    bands: dict[str, set[str]] = {}
+    for cat in categories:
+        cls, band = scale_bands.parse_cell(cat)
+        if band is not None and not scale_bands.is_mix_band(band):
+            bands.setdefault(cls, set()).add(band)
+    extra = [f"{cls}@{scale_bands.MIX_BAND}-{m}" for cls in sorted(bands) if len(bands[cls]) > 1 for m in TRAIN_MIXES]
+    return [*categories, *(c for c in extra if c not in categories)]
+
+
+def train_mix_for(category: str) -> "dict[str, float] | None":
+    """The per-band shares a ``<class>@mix-<name>`` cell trains at, else ``None``."""
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    cls, band = scale_bands.parse_cell(category)
+    if not scale_bands.is_mix_band(band):
+        return None
+    name = (band or "").partition("-")[2]
+    if name == "equal":
+        return {b: 1.0 for b in scale_bands.REPORTED_BANDS}
+    if name == "natural":
+        if not MIX_SHARES_PATH:
+            raise ValueError(f"{category!r} needs CALIB_MIX_SHARES (the corpus band shares)")
+        import json  # noqa: PLC0415
+        from pathlib import Path  # noqa: PLC0415
+
+        shares = json.loads(Path(MIX_SHARES_PATH).read_text()).get(cls)
+        if not shares:
+            raise KeyError(f"{MIX_SHARES_PATH} has no shares for {cls!r}")
+        return {b: float(w) for b, w in shares.items()}
+    raise ValueError(f"{category!r} names an unknown mix {name!r}")
+
 
 #: Inclusion values the fold orderings are re-thresholded at for the budget sweep.
 INCLUSION_SWEEP_KS = [int(k) for k in os.environ.get("CALIB_SWEEP_KS", "-4,-2,-1,0,1,2,4").split(",")]
@@ -819,7 +895,8 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: like #2799's ("should safe_thresholds be forced on for every VTSearch
 #: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``
 #: for the logistic head the SVM replaced (#2790/#2809), or ``CALIB_HEAD=mlp``
-#: for the historical auto-sized-MLP arm (#2781).
+#: for the historical auto-sized-MLP arm (#2781), or ``CALIB_HEAD=linear_logreg``
+#: for the logistic loss fitted to convergence by scikit-learn (#4114).
 HEAD = os.environ.get("CALIB_HEAD") or None
 
 #: Which **pipeline** runs at each step (issue #3959).  Unset is ``"app"``, the

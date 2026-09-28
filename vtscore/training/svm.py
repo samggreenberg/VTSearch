@@ -11,7 +11,7 @@ scores as ``svm_linear``, then lifts the resulting hyperplane into a torch
 max-pooled region scoring, weight serialisation, threshold fusion - keeps
 working on an ``nn.Sequential`` exactly as it did under the logistic head.
 The two heads have the *same architecture*; they differ only in the objective
-that fits it (hinge + L2 versus balanced BCE).  Reached through
+that fits it (squared hinge + L2 versus balanced BCE).  Reached through
 :func:`vtscore.training.mlp.train_model` via the
 :data:`~vtscore.training.mlp.LINEAR_SVM_HEAD` sentinel.
 """
@@ -488,7 +488,7 @@ def fit_linear_svm_head(
     architecture as the older logistic head - one ``Linear(input_dim, 1)``, no
     hidden layer - so weight serialisation, ``build_model_from_weights``,
     max-pooled region scoring, and the calibration folds are all untouched.
-    What changes is the objective that fits it: hinge loss with L2
+    What changes is the objective that fits it: squared hinge loss (the ``LinearSVC`` default) with L2
     regularisation (a maximum-margin boundary decided by the examples nearest
     it) instead of balanced binary cross-entropy.
 

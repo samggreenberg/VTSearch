@@ -24,7 +24,7 @@ POST /api/label-importers/import/<importer_name>
     select value) surface as ``422`` with the standard ``errors``
     envelope; handler-level rejects (path traversal, plugin error) keep
     their original HTTP codes (400 / 500) with the standard ``message``
-    envelope. See "Routes absent from the spec" in ``docs/API.md``.
+    envelope. See "Routes with no typed schema" in ``docs/API.md``.
 
 POST /api/label-importers/ingest-missing
     Accept a list of missing label entries, re-ingest them from their

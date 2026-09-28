@@ -35,7 +35,7 @@ import experiment_config as cfg  # noqa: E402
 def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]]:
     out: dict[str, dict[str, list[str]]] = {}
     for ds, per_emb in prepare_info.get("datasets", {}).items():
-        out[ds] = {emb: entry.get("selected_categories", []) for emb, entry in per_emb.items()}
+        out[ds] = {emb: cfg.with_train_mixes(entry.get("selected_categories", [])) for emb, entry in per_emb.items()}
     return out
 
 
@@ -363,6 +363,8 @@ def main(argv: list[str] | None = None) -> int:
             head=cfg.HEAD,
             style=style,
             test_bands=cfg.TEST_BANDS,
+            test_band_auroc=cfg.TEST_BAND_AUROC,
+            train_mix=cfg.train_mix_for(cat),
             emit_calibration_metrics=True,
             repool_variants=variants,
             repool_topk=cfg.REPOOL_TOPK,

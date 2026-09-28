@@ -9,12 +9,13 @@
 5. Experiments
 6. Regions
 7. Logos
-8. <span class="closing">The End</span>
+8. Step by Step
+9. <span class="closing">The End</span>
 
-<!-- **a** — Seven stops, in order. Promise the room the shape: the first
+<!-- **a** — Eight stops, in order. Promise the room the shape: the first
      third builds the tool, the next two sections are the same machinery walked
      twice, and the rest is what else the loop has to get right — where it asks,
-     what it was measured on, regions, and logos. -->
+     what it was measured on, regions, and logos — then how to do it yourself. -->
 
 <!-- **b** — Section 1 is the tool, from nothing — nobody needs to have seen it
      before. The last of its slides is where the whole talk's object turns up:
@@ -38,4 +39,8 @@
 <!-- **h** — Section 7 is logos: where a concept ends when the room expects a
      spec sheet, and the document set we built to find them in. -->
 
-<!-- **i** — The End. The last line appears only now. Take questions. -->
+<!-- **i** — Section 8 is the tool again, as a how-to: five slides, every
+     click numbered, from an empty app to a detector finding books in photos
+     it never saw. It is the one to leave on screen, or hand out. -->
+
+<!-- **j** — The End. The last line appears only now. Take questions. -->

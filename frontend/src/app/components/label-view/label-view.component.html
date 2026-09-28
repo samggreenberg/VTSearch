@@ -132,6 +132,8 @@
     [currentExampleType]="resortCurrentType"
     [currentExampleDisplay]="resortCurrentDisplay"
     [keepLabelsCount]="nextResortThreshold"
+    [clicksSoFar]="resortSortClicks"
+    [positivesSoFar]="resortSortPositives"
     (keepExample)="onResortKeep()"
     (newExample)="onResortNewExample($event)"
     (closed)="onResortClosed()"

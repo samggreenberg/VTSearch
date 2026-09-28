@@ -73,7 +73,9 @@ per-field `errors` envelope:
 {
   "code": 422,
   "status": "Unprocessable Content",
-  "errors": {"query": {"path": ["Not a valid string."]}}
+  "message": "Unprocessable Content",
+  "errors": {"query": {"path": ["Not a valid string."]}},
+  "request_id": "ab12cd34ef56"
 }
 ```
 

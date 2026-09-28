@@ -3,11 +3,11 @@
 This is the reference catalogue of every demo dataset VTSearch can download and embed on demand. For the step-by-step loading walkthrough (opening the **Add Dataset** dialog, the **Demo** tab, and the **🏭 Synthetic Media** offline generator), see **[user/USER_GUIDE.md](user/USER_GUIDE.md)**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.png" />
-  <img src="user/assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.webp" />
+  <img src="user/assets/importer-picker.light.webp" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
 </picture>
 
-Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant (the **Download** column is the raw-source download estimate; size variants of the same demo usually share one download, and **—** marks demos that need no network download at all, like the synthetic generators). The three long-form audio demos are the exception — see the note under the Audio table. On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
+Datasets are grouped by media type below. Most demos come in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset); a few offer only some of them (e.g. only **A**), and the synthetic generators have none. Sizes are downloaded once and cached, so reloads are instant (the **Download** column is the raw-source download estimate; size variants of the same demo usually share one download, and **—** marks demos that need no network download at all, like the synthetic generators). The three long-form audio demos are the exception — see the note under the Audio table. On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
 
 The tables below are generated from the demo-dataset registry (each media type's `demo_datasets` declaration), so they always match what the app actually offers.
 
@@ -207,6 +207,6 @@ The tables below are generated from the demo-dataset registry (each media type's
 
 <!-- END GENERATED: demos:video -->
 
-> **Note:** Video demos are downloaded from a mix of sources: the UCF-101 subset from HuggingFace Datasets, the full UCF-101 categories from YouTube, HMDB51 from `serre-lab.clps.brown.edu`, and KTH from `csc.kth.se`. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
+> **Note:** Video demos are downloaded from two kinds of source: UCF-101 (both the subset and the full set) and HMDB51 from Hugging Face dataset mirrors, and KTH from `csc.kth.se`. On some networks or air-gapped systems this may require manual setup; see [DEPLOYMENT.md](DEPLOYMENT.md) for offline deployment instructions.
 
-You can also load your own data from pickle files or folders via the same dialog.
+To load your own media instead, use the same dialog's **Files** tab (a folder, or a manifest of file paths, on the server); see [Loading a dataset](user/USER_GUIDE.md#loading-a-dataset).

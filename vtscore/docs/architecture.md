@@ -69,8 +69,8 @@ they define the library's interface boundary.
 | 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook that refuses `flask` / `werkzeug` / `flask_smorest`. The hook (`tests_lib/flask_blocker.py`) is re-installed at the top of `tests_lib/conftest.py` in every xdist worker, since `sys.meta_path` is per-process and the workers are what import the code under test. |
 
 If you find code in `vtscore/` that violates one of these seams, it's a bug.
-The grep commands that enforce each seam live in the git history under the
-extract-library commits.
+The one-way dependency is enforced by a test; see
+[Dependency direction](#dependency-direction).
 
 ## Resolution chain for "active context"
 
@@ -101,7 +101,8 @@ precedence first):
 4. **The request-missing sentinel**, when a host app has registered a
    request-context predicate and the current request named no dataset /
    detector. Reads see an empty context; writes raise
-   `RequestMissingContextError` rather than silently polluting shared state.
+   `vtscore.state.core.RequestMissingContextError` rather than silently
+   polluting shared state.
 5. **A process-wide empty fallback context**, for CLI and library callers
    outside any request.
 
@@ -127,14 +128,6 @@ set_thread_dataset_context(ctx)   # makes ctx the active context
 ```
 
 ```python
-# Inside a Flask request, the app's resolver hook does this for you.
-@app.before_request
-def _resolve_context() -> None:
-    dataset_id = request.headers.get("X-Dataset-Id")
-    g._dataset_context = get_context(dataset_id) if dataset_id else None
-```
-
-```python
 # Override scope - beats both resolver and thread-local for the duration
 # of the block.
 from vtscore.state import override_detector_context
@@ -142,6 +135,10 @@ from vtscore.state import override_detector_context
 with override_detector_context(other_ctx):
     apply_and_retrain(...)  # operates on other_ctx
 ```
+
+For a request-oriented host, install a resolver hook instead of binding
+per thread; [integration.md](integration.md#hook-2-register__context_resolver)
+shows the wiring with a `ContextVar`.
 
 ## The CoreConfig bridge
 
@@ -153,18 +150,28 @@ library actually reads:
 - Filesystem knobs: `data_dir`, `saved_datasets_dir`, `detectors_dir`.
 - Concurrency knobs: `max_concurrent_dataset_downloads`,
   `max_concurrent_dataset_embeddings`.
+- Lifecycle knobs: `autofind_detectors`, `dataset_max_age_days`.
+- Optional, defaulted fields: `autofind_exporter`,
+  `autofind_exporter_field_values`, `projection_n_neighbors`,
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`.
+
+Every field without a default is required, so constructing one by hand
+means passing all twelve (as below).
 
 Library code calls `CoreConfig.from_settings()` to get a populated config
 for the current request / thread. That classmethod is a thin wrapper that
 delegates to whatever builder the app installed via
-`register_core_config_builder()`. The actual implementation lives at
-`vtsearch/shim/__init__.py:build_core_config()` and reads from
-`vtsearch.settings`.
+`register_core_config_builder()`. In the VTSearch app that builder is
+`build_core_config` in `vtsearch/shim/__init__.py`, which reads
+`vtsearch.settings`. The builder is called with one positional
+`settings_path` argument, so declare it even if you ignore it.
 
 **Library-only consumers don't need a builder.** They construct `CoreConfig`
 directly and pass it where it's needed:
 
 ```python
+from pathlib import Path
+
 from vtscore.config import CoreConfig
 
 config = CoreConfig(
@@ -192,7 +199,7 @@ bugs.
 
 Every plugin family in `vtscore` follows the same shape:
 
-1. A base ABC (`DatasetImporter`, `LabelsetExporter`, `MediaEmbedder`, …)
+1. A base ABC (`DatasetImporter`, `ResultsExporter`, `MediaEmbedder`, …)
 2. A sentinel attribute name (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …)
 3. A `PluginRegistry[T]` constructed with that sentinel, eager by default
 4. An optional `importlib.metadata` entry-point group (`vtscore.<family>`)
@@ -201,8 +208,15 @@ Every plugin family in `vtscore` follows the same shape:
 Discovery happens at registry-construction time - by the time
 `vtscore.datasets.importers.__init__` returns, every importer module in
 the package has been imported, every `IMPORTER` sentinel harvested, and
-every `vtscore.importers` entry point loaded. Built-ins win on name clash;
-broken entry points warn and are skipped.
+every `vtscore.importers` entry point loaded. Built-ins win on name clash
+(the clashing entry point is skipped with a warning). An entry point whose
+own import raises is logged as a warning and registered as a *tombstone*:
+it is left out of `list_*()` but `get_*()` still resolves it, and using it
+re-raises the original error.
+
+Media types, embedders, clippers and cleaners are the exception: they are
+found by the `vtscore.media` sub-package scan only, with no entry-point
+group.
 
 See [packages/plugins.md](packages/plugins.md) for the full mechanics and
 [extending/README.md](extending/README.md) for plugin-authoring guides.
@@ -222,17 +236,19 @@ ground rules:
   only across a dict operation, so asking "is this ID loaded?" never
   queues behind a long `_state_lock` holder. Writers take `_state_lock`
   first and the registry lock inside it.
-- **Thread-local progress callbacks.** Both `vtscore.media` (per-thread
-  via `set_thread_progress_callback`) and `vtscore.concurrency.progress`
-  (per-thread via `set_thread_progress`) let parallel ingestion threads
-  report progress without clobbering each other.
+- **Thread-local progress callbacks.** An embedder's progress callback is
+  thread-scoped (`MediaEmbedder.progress_scope(cb)`), and
+  `vtscore.concurrency.progress.set_thread_progress(cb)` binds a per-thread
+  sink for long-running operations, so parallel ingestion threads report
+  progress without clobbering each other.
 - **Per-thread context binding.** `set_thread_dataset_context()` /
   `set_thread_detector_context()` are how background threads tell the
   library which context they're operating on. The dataset-load and
   learned-sort job managers do this automatically when they spawn workers.
-- **Deterministic training.** `train_model` uses a local
-  `torch.Generator` seeded with the caller-supplied seed (default 42) and
-  wraps `nn.Dropout` initialisation in `torch.random.fork_rng()`, so
+- **Deterministic training.** `train_model` takes a seed (default 42).
+  The production linear-SVM head is fitted by liblinear, which touches no
+  global RNG; the BCE heads use a local `torch.Generator` and wrap
+  `nn.Dropout` initialisation in `torch.random.fork_rng()`. Either way,
   parallel training calls don't race on the global RNG.
 
 What the library **doesn't** do is take responsibility for serialising
@@ -267,62 +283,55 @@ The reasoning:
 The single exception is **dataset pickle files**, which are by design a
 `(medias, embeddings)` snapshot - they *are* the dataset, not a cache.
 They round-trip through `pickle.dump` / `safe_pickle_load`, with the
-unpickler's allowlist preventing any non-numpy class reference.
+unpickler's allowlist preventing any non-numpy class reference. Caches
+derived purely from a registered pickle's own contents - the
+`<stem>.embmat.npy` / `<stem>.embids.npy` embedding-matrix sidecar written
+beside it (`vtscore/embedding/matrix.py`) - fall under the same exception:
+they hold nothing the pickle doesn't, are validated against the live id set
+on read, and cost only time to lose.
 
 ## Directory map
 
+Top level only, plus the sub-directories a plugin author touches. Every
+entry has a guide in [`packages/`](README.md#package-reference).
+
 ```
 vtscore/
-├── __init__.py                         # __version__ (manual semver)
-├── config.py                           # CoreConfig + DATA_DIR + model IDs
-├── cli.py                              # autodetect entry points
-├── cli_pipeline.py                     # YAML pipeline parser
-├── cli_progress.py                     # text / NDJSON progress emit
-├── docs/                               # this directory
-├── datasets/                           # origins, labelsets, loaders, importers
-│   ├── importers/                      # IMPORTER-sentinel auto-discovery
-│   │   ├── server_folder/              # local filesystem importer
-│   │   ├── http_archive/               # URL-fetched archive importer
-│   │   ├── combine_datasets/           # union of saved datasets
-│   │   ├── synthetic/                  # deterministic synthetic media
-│   │   ├── demo/                       # bundled demo datasets
-│   │   └── …                           # see packages/datasets.md
-│   ├── sources/                        # MediaSource resolvers (local_folder, http_archive, …)
-│   ├── origin.py                       # Origin dataclass
-│   ├── labelset.py                     # LabelSet + LabeledElement
-│   ├── loader.py                       # façade re-exporting loader_folder/loader_pickle/loader_demo
-│   ├── load_pipeline.py                # ConcurrencyGate, post-load fix-ups
-│   ├── registry.py                     # on-disk dataset registry (saved_datasets_dir)
-│   ├── split.py                        # train/test split
-│   └── …
-├── media/                              # MediaType / MediaEmbedder / MediaClipper registries
-│   ├── base.py                         # the ABCs
-│   ├── audio/                          # MEDIA_TYPE + EMBEDDER + CLIPPERS sentinels
-│   ├── image/
-│   ├── text/
-│   ├── video/
-│   └── document/
-├── embedding/                          # embedder façade + cached matrix
-├── training/                           # classifier head / thresholds / SVM / region-similarity
-├── detectors/                          # full detector lifecycle
-│   ├── registry.py                     # in-memory detector registry
-│   ├── store.py                        # JSON labelset persistence
-│   ├── training.py                     # train_and_threshold, train_and_score
-│   ├── workflow.py                     # apply_and_retrain
-│   ├── resolver.py                     # origin → file → embedding
-│   ├── label_sync.py / label_restoration.py / dataset_sync.py / media_seeding.py
-│   ├── labelset_elements.py / labelset_training.py
-│   └── labeling_progress.py            # per-step model cache + stopping conditions
-├── eval/                               # offline evaluation runner + metrics
-├── converters/                         # audio↔image/text, video→audio/image, etc.
-├── exporters/                          # EXPORTER-sentinel auto-discovery
-├── labels/                             # LabelImporter + LabelsetSource families
-├── plugins/                            # PluginRegistry + sentinel scanner + entry-points
-├── state/                              # DatasetContext, DetectorContext, ops
-├── sync/                               # SyncSource[L,S] ABC
-├── concurrency/                        # AsyncJob / JobManager / progress trackers
-├── security/                           # path / URL validation, safe pickle
-└── utils/                              # build_media_hit, synthetic media generators
+├── __init__.py                 # __version__ (manual semver)
+├── config/                     # CoreConfig, DATA_DIR / MODELS_CACHE_DIR, model IDs, runtime tunables
+├── cli.py / cli_pipeline.py / cli_progress.py   # autodetect CLI, YAML pipeline, text/NDJSON progress
+├── io.py                       # server-file JSON read + atomic-write helpers for plugins
+├── gpu_backends.py             # optional cuML routing
+├── single_instance.py          # the port lock
+├── host_seams.py               # snapshot/restore of every host hook (for tests)
+├── achievements_hooks.py       # no-op event hook the app fills in
+├── datasets/                   # origins, labelsets, loaders, registry, split, load pipeline
+│   ├── importers/              # DatasetImporter family (IMPORTER sentinel, one sub-package each)
+│   ├── sources/                # MediaSource family (SOURCE sentinel, one flat module each)
+│   └── stages/                 # load-pipeline stages, e.g. stages/embedding.py (embed_missing)
+├── datasource_importers/       # single-item exemplar importers (DATASOURCE_IMPORTER)
+├── seed_importers/             # unlabeled seed-batch importers (SEED_IMPORTER)
+├── media/                      # MediaType / MediaEmbedder / MediaClipper / MediaCleaner ABCs + registries
+│   ├── audio/ image/ text/ video/            # full media types
+│   ├── document/               # convert-out half type (must be converted to image/text)
+│   └── face/                   # convert-in half type (produced by image2face, never imported)
+├── embedding/                  # embed helpers, loader/preload, cached (N, D) matrix
+├── training/                   # heads (linear SVM / linear / MLP), thresholds, SVM, region similarity
+├── detectors/                  # detector lifecycle: registry, store, training, workflow, resolver, sync
+├── eval/                       # offline evaluation runners + metrics
+├── converters/                 # MediaConverter family (CONVERTER sentinel, one flat module each)
+├── exporters/                  # ResultsExporter family (EXPORTER sentinel)
+├── labels/                     # LabelImporter + LabelsetSource families, label sync
+├── plugins/                    # PluginRegistry, PluginField, normalisation, inventory
+├── state/                      # DatasetContext, DetectorContext, vote / click ops, current user
+├── coverage/                   # Coverage Atlas
+├── projection/                 # VTSBrowse UMAP layout + hex-tile pyramid
+├── timing/                     # per-step cost model behind progress bars
+├── sync/                       # SyncSource[L, S] ABC
+├── concurrency/                # namespace package: async jobs, memory budget, progress
+├── security/                   # namespace package: path / URL validation, safe pickle, login
+├── utils/                      # hit dicts, hashing, score sanitisation, synthetic media
+└── docs/                       # this directory
 ```
 
 ## Import paths (read before copy-pasting)
@@ -337,7 +346,9 @@ is the authority on where to import it from.
 | Package | How to import |
 |---------|---------------|
 | `vtscore.config` | Package (`vtscore/config/`), everything public re-exported from its `__init__`: `from vtscore.config import CoreConfig, DATA_DIR`. |
-| `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. |
+| `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. Media sources: `vtscore.datasets.sources` (`MediaSource`, `MediaItem`, `get_source_for_origin`, `list_media_sources`; `FetchedItem` is in `vtscore.datasets.sources.base`). |
+| `vtscore.datasource_importers` | `DataSourceImporter`, `FetchedMediaItem`, `get_datasource_importer`, `list_datasource_importers`. |
+| `vtscore.seed_importers` | `SeedImporter`, `SeedMediaItem`, `get_seed_importer`, `list_seed_importers`. |
 | `vtscore.media` | Re-exports the ABCs (`MediaType`, `MediaEmbedder`, `MediaClipper`, the processor ABCs) and the registry helpers (`get`, `get_embedder`, `get_clipper`, `set_progress_callback`, …). |
 | `vtscore.embedding` | Re-exports the embed / loader / matrix helpers. |
 | `vtscore.training` | Re-exports `build_model` / `train_model` and the threshold helpers. `SVMClassifier` is at `vtscore.training.svm`; region helpers at `vtscore.training.region_similarity`. |
@@ -346,17 +357,15 @@ is the authority on where to import it from.
 | `vtscore.converters` | `get_converter`, `list_converters`, plus the built-in converter classes. |
 | `vtscore.exporters` | `get_exporter`, `list_exporters`. |
 | `vtscore.labels` | **Empty `__init__` - no re-exports.** Importers: `vtscore.labels.importers.get_label_importer` / `list_label_importers`. Sources: `vtscore.labels.sources.get_labelset_source` / `list_labelset_sources`. Sync: `vtscore.labels.sync`. |
-| `vtscore.plugins` | `PluginBase`, `PluginField`, `PluginRegistry`, `make_plugin_registry`, the field-type enums. |
-| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
+| `vtscore.plugins` | `PluginBase`, `PluginField`, `PluginRegistry`, `make_plugin_registry`, `FieldType`, `FieldOption`, `EntryPointTombstone`. Inventory: `vtscore.plugins.inventory`; normalisation: `vtscore.plugins.normalize`. |
+| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. `RequestMissingContextError` lives in `vtscore.state.core`; the current-user resolver in `vtscore.state.current_user`. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
+| `vtscore.coverage` | `CoverageAtlas` and its constants. |
+| `vtscore.projection` / `vtscore.timing` | Both re-export their public surface from `__init__` (see [packages/projection.md](packages/projection.md), [packages/timing.md](packages/timing.md)). |
 | `vtscore.sync` | `SyncSource`. |
 | `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
 | `vtscore.security` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
 | `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.scores`, `vtscore.utils.synthetic`. |
 | `vtscore.cli` | Plain modules: `vtscore.cli`, `vtscore.cli_pipeline`, `vtscore.cli_progress`. |
-
-`vtsearch.state` is an app-tier shim that re-exports `vtscore.state` plus the
-request-scoped proxy views. Library code should import `vtscore.state`
-directly; app code may use either.
 
 ## Dependency direction
 
@@ -380,6 +389,8 @@ never the reverse.
 │  ├── datasets / media / embedding           │
 │  ├── training / detectors / eval            │
 │  ├── converters / exporters / labels        │
+│  ├── datasource_importers / seed_importers  │
+│  ├── coverage / projection / timing         │
 │  ├── concurrency / security / utils         │
 │  └── cli / cli_pipeline / cli_progress      │
 └─────────────────────────────────────────────┘
@@ -416,7 +427,8 @@ the library without the library knowing:
    `vtsearch/shim/`.
 
 If you're embedding `vtscore` in your own application, you'll typically
-install your own variants of these hooks. None of them is required -
+install your own variants of the first two and the fourth -
+[integration.md](integration.md) shows how. None of them is required -
 the library has working defaults for all five (no context, no
 `from_settings()` builder, no app-side plugin families, every user is
 `"default"`, and achievement events that no-op).

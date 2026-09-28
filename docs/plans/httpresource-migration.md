@@ -27,7 +27,8 @@ must be half-migrated.
 
 - **Expand to more read services** (the standing next step). Already done for
   `SettingsStateService`, `MediaStateService`, the left-panel media-type/embedder
-  reads, and the importer/exporter picker modals. A still-open refinement: if media-types /
+  reads, the importer/exporter picker modals, and `label-importer-modal`'s
+  importer list. A still-open refinement: if media-types /
   embedders ever need to **re-fetch on dataset switch**, give the resource a
   `toSignal(activeContext.datasetId$)` request key instead of the eager load —
   today the component is recreated on switch, so eager-once suffices.
@@ -35,11 +36,10 @@ must be half-migrated.
 <!-- item-sep -->
 
 - **Remaining component-local read subscribes** (not yet converted). The next
-  candidates after the picker modals are heavier: `dataset-importer-modal`
-  (interdependent clipper/embedder/demo loads + dynamic field-option fetches)
-  and `label-importer-modal` (importer list is a clean read, but field-options
-  and imports are mutations). Convert the clean list reads when those modals are
-  next touched; leave the dynamic field-option fetches imperative.
+  candidate after the picker modals is heavier: `dataset-importer-modal`
+  (interdependent clipper/embedder/demo loads + dynamic field-option fetches).
+  Convert the clean list reads when that modal is next touched; leave the
+  dynamic field-option fetches imperative.
 
 <!-- item-sep -->
 

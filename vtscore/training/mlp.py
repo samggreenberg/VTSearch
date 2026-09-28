@@ -51,8 +51,16 @@ LINEAR_HEAD = 0
 #: calibrated threshold does not transfer).
 LINEAR_SVM_HEAD = -1
 
+#: ``hidden_dim`` sentinel selecting the **converged logistic-regression head**
+#: (issue #4114): the logistic loss of :data:`LINEAR_HEAD`, but fitted to
+#: convergence by scikit-learn (balanced, L2, C = 1) rather than by the
+#: early-stopped Adam loop below.  Same ``Linear(input_dim, 1)`` architecture;
+#: :func:`train_model` routes it to
+#: :func:`vtscore.training.logreg.fit_linear_logreg_head`.  An eval arm only.
+LINEAR_LOGREG_HEAD = -2
+
 #: Every ``hidden_dim`` that builds a single ``Linear(D, 1)`` rather than an MLP.
-LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD)
+LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD, LINEAR_LOGREG_HEAD)
 
 
 def _auto_hidden_dim(n_train: int) -> int:
@@ -210,6 +218,38 @@ def _train_svm_head(
     )
 
 
+def _train_logreg_head(
+    X_train: torch.Tensor,
+    y_train: torch.Tensor,
+    input_dim: int,
+    seed: int,
+    sample_weights: torch.Tensor | None,
+) -> nn.Sequential:
+    """Fit the :data:`LINEAR_LOGREG_HEAD` branch of :func:`train_model`.
+
+    Hands the tensors to :func:`vtscore.training.logreg.fit_linear_logreg_head`
+    as numpy, the way :func:`_train_svm_head` does for the SVM.
+    """
+    check_job_cancelled()
+    from vtscore.training.logreg import fit_linear_logreg_head  # noqa: PLC0415
+
+    weights_np = None if sample_weights is None else sample_weights.reshape(-1).detach().cpu().numpy()
+    if weights_np is not None and weights_np.shape[0] != len(y_train):
+        raise ValueError(f"sample_weights length {weights_np.shape[0]} does not match training-set size {len(y_train)}")
+    return fit_linear_logreg_head(
+        X_train.detach().cpu().numpy(),
+        y_train.reshape(-1).detach().cpu().numpy(),
+        input_dim,
+        seed=seed,
+        sample_weight=weights_np,
+    )
+
+
+#: The linear heads fitted outright by a scikit-learn solver rather than by the
+#: torch epoch loop in :func:`train_model`, by sentinel.
+_SOLVER_HEADS = {LINEAR_SVM_HEAD: _train_svm_head, LINEAR_LOGREG_HEAD: _train_logreg_head}
+
+
 def train_model(
     X_train: torch.Tensor,
     y_train: torch.Tensor,
@@ -297,8 +337,9 @@ def train_model(
             f"(y=0) example; got {num_true} positives and {num_false} negatives"
         )
 
-    if hidden_dim == LINEAR_SVM_HEAD:
-        return _train_svm_head(X_train, y_train, input_dim, seed, sample_weights)
+    solver_fit = _SOLVER_HEADS.get(hidden_dim) if hidden_dim is not None else None
+    if solver_fit is not None:
+        return solver_fit(X_train, y_train, input_dim, seed, sample_weights)
 
     ensure_torch_configured()
     device = get_torch_device()

@@ -196,11 +196,30 @@ Forgets the stored Hub credential (sign out).
 
 ---
 
-## Static / UI
+## SPA & static routes
+
+Non-API paths are never auth-gated.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Serve the single-page application (`index.html`) |
+| GET | `/label`, `/dashboard` | Named client-side routes; serve `index.html` so a deep link or reload lands in the SPA |
+| GET | `/{path}` | Catch-all: serves the file from `static/` when one exists at that path (the Angular bundle's `main.js`, `styles.css`, …), otherwise `index.html` so Angular Router handles the URL. Paths under `/api/` are excluded and 404 as JSON instead. |
 | GET | `/favicon.ico` | Site favicon (204 if missing) |
 | GET | `/favicon-{variant}.ico` | Favicon variant: `smile`, `frown`, or `surprised` (404 for unknown variant, 204 if file missing) |
 | GET | `/logo.svg` | Site logo (204 if missing) |
+
+The HuggingFace callback redirects back to `/?hf_auth=...`, which the
+catch-all serves like any other SPA URL.
+
+---
+
+## Health & version
+
+Outside `/api/`, so the probes are never auth-gated.
+
+| Method | Path | Response |
+|--------|------|----------|
+| GET | `/healthz` | Liveness: `{"status": "ok"}` while the process is serving. Does no other work. |
+| GET | `/readyz` | Readiness: `{"status": "ready" \| "not_ready", "checks": {"data_dir": {"ok", "detail"}, "models": {"ok", "detail"}}}` — **200** when every check passes, **503** otherwise. `data_dir` checks `DATA_DIR` exists and is writable; `models` checks that every embedder the dataset/detector registries need is warm (`detail` lists those still loading). |
+| GET | `/api/version` | `{"version": "2026-09-28T01:02:03Z"}` — the UTC commit timestamp of the running build (`vtsearch.__version__`). The SPA compares it with its own bundle stamp to detect a stale frontend. |

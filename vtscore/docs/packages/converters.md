@@ -2,19 +2,19 @@
 
 A *converter* turns a media dict of one type into one or more media
 dicts of a **different** type. They're how you embed audio with an
-image model (audio → spectrogram → SigLIP), search OCR'd documents
-with a text model (image → text → E5), or run a video through a
-keyframe-image pipeline. Every converter is auto-discovered via the
+image model (audio → spectrogram → SigLIP), search OCR'd images with a
+text model (image → text → E5), or run a video through a
+frame-image pipeline. Every converter is auto-discovered via the
 `CONVERTER` sentinel, so adding one is a one-file change.
 
 ## Contents
 
 | Module | Concern |
 |--------|---------|
-| `vtscore/converters/base.py` | The `MediaConverter` ABC |
+| `vtscore/converters/base.py` | The `MediaConverter` ABC and the `resolve_media_bytes` helper |
 | `vtscore/converters/__init__.py` | The auto-discovering registry and its accessors |
-| `vtscore/converters/runner.py` | `run_converters_on_folder` - wires conversion into dataset import |
-| `vtscore/converters/audio2image.py` | Render audio as a mel-spectrogram image |
+| `vtscore/converters/runner.py` | `run_converters_on_folder` / `apply_converter_to_demo` - wire conversion into dataset import |
+| `vtscore/converters/audio2image.py` | Render audio as a mel-spectrogram / CQT image |
 | `vtscore/converters/audio2text.py` | Transcribe speech via Whisper (ASR) |
 | `vtscore/converters/image2text.py` | OCR an image for embedded text |
 | `vtscore/converters/image2face.py` | Localise faces and emit one crop per detection |
@@ -23,27 +23,30 @@ keyframe-image pipeline. Every converter is auto-discovered via the
 | `vtscore/converters/video2image.py` | Extract frames as images |
 | `vtscore/converters/video2audio.py` | Extract the audio track |
 
+**See also:** [`../extending/converters.md`](../extending/converters.md)
+for writing a converter (contract, parameters, packaging, tests).
+
 ---
 
 ## When to use a converter
 
 A converter is the right tool when the embedder you want to apply
-isn't directly compatible with the source format. Three common
-shapes:
+isn't directly compatible with the source format:
 
 | You have      | You want                                        | Use                                  |
 |---------------|-------------------------------------------------|--------------------------------------|
-| Audio files   | Embed them with an image model (SigLIP, DINOv3) | `audio2image` (mel-spectrogram)       |
-| Image files   | Search them by transcribed text                 | `image2text` (OCR)                    |
-| Video files   | Embed individual frames with an image model     | `video2image` (keyframe extraction)   |
-| Video files   | Embed the audio track with an audio model       | `video2audio`                         |
-| Audio files   | Transcribe speech and embed with a text model   | `audio2text` (Whisper ASR)            |
-| Document files (PDF) | Run an image embedder over each page     | `document2image`                      |
-| Document files | Embed extracted body text                      | `document2text`                       |
+| Audio files   | Embed them with an image model (SigLIP, DINOv3) | `audio2image` (spectrogram)          |
+| Audio files   | Transcribe speech and embed with a text model   | `audio2text` (Whisper ASR)           |
+| Image files   | Search them by the text they contain            | `image2text` (OCR)                   |
+| Image files   | Embed each face in FaceNet identity space       | `image2face`                         |
+| Video files   | Embed individual frames with an image model     | `video2image`                        |
+| Video files   | Embed the audio track with an audio model       | `video2audio`                        |
+| Documents (PDF) | Run an image embedder over each page          | `document2image`                     |
+| Documents     | Embed extracted body text                       | `document2text`                      |
 
 Converters are not embedders - they don't produce vectors. They
-produce media dicts, which then get embedded by the **target** media
-type's embedder. The runner handles that handoff.
+produce media dicts, which the framework embed stage then embeds with
+the **target** media type's embedder.
 
 ---
 
@@ -56,6 +59,7 @@ field-driven configuration system every other plugin family uses.
 class MediaConverter(PluginBase, ABC):
     display_name: str = ""
     description: str = ""
+    summary_template: str = ""               # "{key}" placeholders for the UI preview
     fields: list[PluginField] = []           # user-configurable params
 
     @property
@@ -71,107 +75,77 @@ class MediaConverter(PluginBase, ABC):
     def target_type(self) -> str: ...        # type_id of output
 
     @abstractmethod
-    def convert(
-        self,
-        media: dict,
-        params: dict | None = None,
-    ) -> list[dict]: ...
+    def convert(self, media: dict, params: dict | None = None) -> list[dict]: ...
+
+    def convert_normalized(self, media: dict, params: dict | None = None) -> list[dict]: ...
+    def normalize_params(self, params: dict | None) -> dict: ...
+    def validate_params(self, params: dict | None) -> dict: ...
+    def get_param(self, params: dict | None, key: str) -> Any: ...
 ```
 
-The implementation contract:
+The contract:
 
 - `convert(media, params)` returns a **list** of new media dicts.
-  Empty list means "skipped - could not convert" (e.g. an empty
-  document, an audio decode failure). The caller treats empty
-  lists as "no output for this source".
+  Empty list means "could not convert" (an empty document, a decode
+  failure).
 - Each returned dict must contain at minimum `"filename"` and the
-  data fields expected by the target media type's
-  `load_media_data` (e.g. `"media_bytes"` + `"duration"` for image,
-  `"media_string"` for text). The dict does **not** include `"id"`,
-  `"embedding"`, or `"md5"` - the runner assigns those.
-- `params` follows the same shape every plugin family uses:
-  `{field.key: value}`. The default is `None`, meaning "use declared
-  defaults". Implementations should always read params through
-  `self.get_param(params, key)` (`vtscore/converters/base.py`)
-  so missing or empty values fall back to `field.default`.
-
-### Declaring parameters
-
-Converters declare user-tunable knobs via `fields`:
-
-```python
-from vtscore.plugins import PluginField
-
-class Video2ImageMediaConverter(MediaConverter):
-    fields = [
-        PluginField(
-            key="n_clips",
-            label="Frames per video",
-            field_type="number",
-            description="Number of evenly-spaced frames to extract.",
-            default="10",
-            required=False,
-            min="1",
-            max="1000",
-            step="1",
-        ),
-    ]
-```
-
-(`vtscore/converters/video2image.py`.) The frontend reads
-these fields off `converter.to_dict()` and renders matching inputs.
+  data fields expected by the target media type (e.g. `"media_bytes"`
+  + `"duration"` for image/audio/video, `"media_string"` for text). It
+  does **not** include `"id"`, `"embedding"`, or `"md5"` - the runner
+  and embed stage assign those.
+- The *source* media carries `media_bytes` in a full import but only
+  `{filename, media_path}` in reference (*thin*) mode. Read binary
+  input with `resolve_media_bytes(media)` (bytes, else the file at
+  `media_path`, else `None`), not `media["media_bytes"]`.
+- **Framework call sites use `convert_normalized`**, never `convert`
+  directly. It runs `normalize_params` (drops empty-string values for
+  fields with a default or that are optional, validates against the
+  `fields` schema, fills defaults; raises `ValueError` on invalid
+  input), calls `convert`, and copies the source's `custom_metadata`
+  onto each output that lacks one. So `convert` may index
+  `params[key]` directly. `get_param` remains as a shim for
+  converters called with raw params.
 
 ---
 
 ## Built-in converters
 
-Seven ship in-tree, all in `vtscore/converters/`. Each module ends
+Eight ship in-tree, all in `vtscore/converters/`. Each module ends
 with `CONVERTER = MyConverter()`, which the registry picks up
 automatically.
 
-| Module                                   | Class                            | Source → Target | Notes                                         |
-|------------------------------------------|----------------------------------|-----------------|-----------------------------------------------|
-| `vtscore/converters/audio2image.py`      | `Audio2ImageMediaConverter`      | audio → image   | Mel-spectrogram or CQT PNG via librosa + matplotlib. Configurable: `spectrogram_type`, `n_mels`, `time_window_s`, `colormap`. |
-| `vtscore/converters/audio2text.py`       | `Audio2TextMediaConverter`       | audio → text    | Whisper ASR (HF `openai/whisper-*`).          |
-| `vtscore/converters/video2image.py`      | `Video2ImageMediaConverter`      | video → image   | OpenCV keyframe extraction. Configurable: `n_clips`. |
-| `vtscore/converters/video2audio.py`      | `Video2AudioMediaConverter`      | video → audio   | FFmpeg-backed audio track demux.              |
-| `vtscore/converters/document2image.py`   | `Document2ImageMediaConverter`   | document → image | Render PDF pages to PNG (PyMuPDF).           |
-| `vtscore/converters/document2text.py`    | `Document2TextMediaConverter`    | document → text | Extract embedded text from documents.         |
-| `vtscore/converters/image2text.py`       | `Image2TextMediaConverter`       | image → text    | OCR via Tesseract.                            |
+| Name | Class | Source → Target | Fields | Backend (lazy import) |
+|------|-------|-----------------|--------|-----------------------|
+| `audio2image`    | `Audio2ImageMediaConverter`    | audio → image    | `spectrogram_type`, `n_mels`, `time_window_s`, `colormap` | `librosa` + `matplotlib` |
+| `audio2text`     | `Audio2TextMediaConverter`     | audio → text     | `model_size`, `language` | `openai-whisper` (`import whisper`) |
+| `image2text`     | `Image2TextMediaConverter`     | image → text     | `language`, `threshold` | PaddleOCR |
+| `image2face`     | `Image2FaceMediaConverter`     | image → face     | `threshold`, `padding`, `min_size` | `facenet-pytorch` (MTCNN), opt-in |
+| `video2image`    | `Video2ImageMediaConverter`    | video → image    | `n_clips` / `seconds_per_frame` (mutually clearing) | `vtscore.media.video.decode` |
+| `video2audio`    | `Video2AudioMediaConverter`    | video → audio    | `ffmpeg_timeout` | FFmpeg |
+| `document2image` | `Document2ImageMediaConverter` | document → image | - | PyMuPDF (`agpl` extra) |
+| `document2text`  | `Document2TextMediaConverter`  | document → text  | - | PyMuPDF (`agpl` extra) |
 
-Each is importable directly:
-
-```python
-from vtscore.converters import (
-    Audio2ImageMediaConverter,
-    Audio2TextMediaConverter,
-    Document2ImageMediaConverter,
-    Document2TextMediaConverter,
-    Image2TextMediaConverter,
-    Video2AudioMediaConverter,
-    Video2ImageMediaConverter,
-)
-```
-
-Or via the registry:
+All but `Image2FaceMediaConverter` are re-exported from
+`vtscore.converters`; import that one from
+`vtscore.converters.image2face`, or look any of them up by name:
 
 ```python
 from vtscore.converters import get_converter
+
 v2i = get_converter("video2image")
-outputs = v2i.convert(media_dict, {"n_clips": "20"})
+outputs = v2i.convert_normalized(media_dict, {"n_clips": "20"})
 ```
 
 ---
 
 ## Registry & discovery
 
-`vtscore/converters/__init__.py`. The registry is a
-`PluginRegistry[MediaConverter]` built on the standard discovery
-machinery - exactly like importers, exporters, settings sources, etc.
+`vtscore/converters/__init__.py` builds the registry with the standard
+plugin machinery ([`plugins.md`](plugins.md)):
 
 ```python
-_registry: PluginRegistry[MediaConverter] = PluginRegistry(
-    package="vtscore.converters",
+get_converter, list_converters = make_plugin_registry(
+    package=__name__,
     sentinel="CONVERTER",
     label="media converter",
     discover_modules=True,
@@ -179,29 +153,16 @@ _registry: PluginRegistry[MediaConverter] = PluginRegistry(
 )
 ```
 
-The registry scans `vtscore.converters` for modules that expose a
-module-level `CONVERTER` attribute, and also imports anything
-registered under the `vtscore.converters` Python entry-point group.
-Built-ins win on name clashes; broken third-party entries warn and
-are skipped.
+Every module under `vtscore.converters` exposing `CONVERTER`, plus
+anything registered under the `vtscore.converters` entry-point group,
+is discovered eagerly at import time.
 
-### Public accessors
-
-| Function (`vtscore/converters/__init__.py`)     | Purpose                                    |
-|--------------------------------------------------|--------------------------------------------|
-| `list_converters()`                              | Every registered converter.                |
-| `get_converter(name)`                            | Look up by `name`; returns `None` on miss. |
-| `list_converters_for_target(target_type)`        | All converters producing `target_type`.    |
-| `list_converters_for_source(source_type)`        | All converters consuming `source_type`.    |
-
-`get_converter` / `list_converters` are the registry's own accessors,
-returned by `make_plugin_registry` — the same construction every other
-plugin family uses.
-
-`list_converters_for_target("image")` is the typical query for "give
-me every way to produce an image, regardless of source". This is
-what dataset importers call to populate their "convert via..."
-dropdowns.
+| Function                                  | Purpose                                    |
+|-------------------------------------------|--------------------------------------------|
+| `list_converters()`                       | Every registered converter.                |
+| `get_converter(name)`                     | Look up by `name`; `None` on miss.         |
+| `list_converters_for_target(target_type)` | All converters producing `target_type`.    |
+| `list_converters_for_source(source_type)` | All converters consuming `source_type`.    |
 
 ```python
 from vtscore.converters import list_converters_for_target
@@ -213,65 +174,23 @@ for c in list_converters_for_target("image"):
 # video2image <- video
 ```
 
----
-
-## The `CONVERTER` sentinel
-
-Every concrete converter module ends with a module-level
-`CONVERTER = MyConverter()` assignment:
-
-```python
-# vtscore/converters/audio2image.py
-class Audio2ImageMediaConverter(MediaConverter):
-    display_name = "Audio → Image (spectrogram)"
-    description = "Render audio as a mel-spectrogram or CQT image"
-    fields = [...]
-    @property
-    def source_type(self) -> str: return "audio"
-    @property
-    def target_type(self) -> str: return "image"
-    def convert(self, media, params=None): ...
-
-CONVERTER = Audio2ImageMediaConverter()
-```
-
-(`vtscore/converters/audio2image.py`.) That's the only
-boilerplate needed for discovery. Out-of-tree converters can either:
-
-1. Drop the module into `vtscore/converters/` (or symlink it there).
-2. Register via the `vtscore.converters` entry-point group in
-   `pyproject.toml`:
+Out-of-tree converters register through the entry-point group:
 
 ```toml
 [project.entry-points."vtscore.converters"]
 my_converter = "my_pkg.my_converter:CONVERTER"
 ```
 
-The registry's `eager=True` (default) means discovery happens at
-import time, so by the time `list_converters()` returns, every
-in-tree and entry-point converter is already known.
-
 ---
 
 ## Running a converter - the runner
 
-`vtscore/converters/runner.py`. Most callers don't invoke
-`converter.convert(...)` directly - they call
-`run_converters_on_folder(...)`, which:
-
-1. Scans a folder for files matching the **source** media type's
-   extensions.
-2. Calls `converter.convert(source_media, params)` on each match.
-3. Resolves the **target** media type's default embedder and
-   embeds each converted output.
-4. Assigns sequential IDs starting after the current max in `medias`.
-5. Records an `origin` of `{"importer": "converter", "params": {...}}`
-   so the result is replayable.
+`vtscore/converters/runner.py`. Importers don't call `convert()`
+directly; they call:
 
 ```python
 def run_converters_on_folder(
     folder_path: Path,
-    converter_names: list[str] | None = None,
     target_media_type: str = "",
     medias: dict[int, dict] | None = None,
     thin: bool = False,
@@ -282,16 +201,24 @@ def run_converters_on_folder(
 ) -> None: ...
 ```
 
-Two entry shapes:
+For each spec in *converter_specs* - `SourceSpec(converter, params, ...)`
+objects or `{"converter": ..., "params": ...}` dicts; specs with no
+converter (the "include directly" rows) and unknown names are skipped,
+as are converters whose `target_type` isn't *target_media_type* - it:
 
-- **`converter_names`** - legacy, names only. Each converter runs
-  with its declared field defaults.
-- **`converter_specs`** - multi-media path. A list of
-  `SourceSpec(converter, params, ...)` (or equivalent dicts) so the
-  caller can pass per-converter params resolved from a UI form. This
-  is what multi-media importers (`server_folder`, `server_files`,
-  `local_folder`, `local_files`) use after the multi-media-import
-  refactor.
+1. Scans *folder_path* for files matching the converter's **source**
+   media type's extensions.
+2. Calls `converter.convert_normalized(source_media, params)` on each
+   (a converter that raises is logged and skipped).
+3. Appends each output to *medias* with sequential IDs starting after
+   the current max, **unembedded** (`embeddings={}`, `embedder=""`).
+   The framework embed stage (`vtscore.datasets.stages.embedding.embed_missing`)
+   embeds them after the importer returns.
+4. Records a replayable `converter` origin on each output (below).
+
+In *thin* mode each output also carries a `_lazy_source` marker; its
+bytes are stripped after embedding and re-derived on demand by
+`vtscore.media.lazy_clip`.
 
 ```python
 from pathlib import Path
@@ -300,193 +227,89 @@ from vtscore.converters.runner import run_converters_on_folder
 medias: dict[int, dict] = {}
 run_converters_on_folder(
     folder_path=Path("/data/recordings"),
-    converter_names=["audio2image"],
     target_media_type="image",
     medias=medias,
     base_origin={"importer": "server_folder", "params": {"path": "/data/recordings"}},
+    converter_specs=[{"converter": "audio2image", "params": {}}],
 )
-# `medias` is now populated with spectrograms embedded via the default image embedder.
+# `medias` now holds unembedded spectrogram media; embed them before scoring.
 ```
 
-The runner also exposes `apply_converter_to_demo` (`runner.py`)
-for the demo-dataset case: convert every existing media in a dict
-in-place (replacing it with the converted outputs). Its `embedder_name`
-parameter is **accepted and ignored** - conversion changes the media
-type, so an embedder chosen for the source type does not apply to the
-outputs, and the framework embed stage resolves the target type's
-embedder itself. The parameter stays for out-of-tree callers that
-still pass it.
+`apply_converter_to_demo(converter_name, dataset_name, medias,
+embedder_name="", on_progress=None)` converts every media of a demo
+dataset **in place** (`medias` ends up holding only the converted
+outputs, renumbered from 1). Raises `ValueError` for an unknown
+converter. `embedder_name` is accepted and ignored: the embed stage
+resolves the target type's embedder itself.
 
----
+### Converted media dicts and their origin
 
-## How `convert()` outputs flow into media dicts
-
-The runner builds each output media dict via
-`_build_converted_media_dict` (`vtscore/converters/runner.py`):
+Each output becomes (`_build_converted_media_dict`):
 
 ```python
 {
-    "id": <assigned by runner>,
-    "media_type": <converter.target_type>,
-    "embedder": <name of target media type's default embedder>,
-    "file_size": <len of media_bytes or media_string.encode()>,
-    "md5": <content_md5 of bytes/string>,
-    "embedding": <vector from target_emb.embed_media(...)>,
-    "filename": <converter output's filename>,
+    "id": <assigned>, "media_type": <converter.target_type>,
+    "embedder": "", "embeddings": {},
+    "file_size": <len of media_bytes / media_string>,
+    "md5": <content md5 of the output>,
+    "filename": origin_name, "origin_name": f"{source_rel}→{output_filename}",
     "category": "custom",
     "origin": {"importer": "converter", "params": {...}},
-    "origin_name": f"{source_rel}→{output_filename}",
-    "media_bytes": <if produced>,
-    "media_string": <if produced>,
-    "media_path": <source path>,
+    "media_path": <resolved source path>,
     "duration": <output.get("duration", 0)>,
-    # plus any optional fields the target type expects:
-    #   "width", "height", "word_count", "character_count"
+    # plus whichever the output carries: media_bytes, media_string,
+    # width, height, word_count, character_count
 }
 ```
 
-`origin` is the canonical persisted form (CLAUDE.md "No Persisted
-Vectors"). The recorded `params` are:
+The origin `params` (all values stored as strings):
 
 | Key | Meaning |
 |-----|---------|
 | `converter` | The converter's name (`video2image`, …) |
-| `source_file` | The source filename **relative to the import root** |
-| `source_path` | The **resolved absolute path** of the source file |
-| `converter_param_<key>` | Every user-supplied converter param |
-| `converter_out_index` / `converter_n_out` | This output's position in the converter's returned list, and the list's length at import time |
-| `converter_content_hash` | Short md5 of the output bytes - the authoritative replay disambiguator |
-| `parent_importer` | The importer that supplied the source corpus |
-| `parent_<key>` (`parent_path`, `parent_url`, `parent_paths_file`, `parent_manifest`, `parent_name` for a demo dataset) | That importer's own locator param, prefixed - so the corpus itself is recoverable, not just the file inside it.  The resolver rebuilds the parent origin by stripping the prefix, so a new importer's locator needs no resolver change |
+| `source_file` | The source filename **relative to the scanned folder** |
+| `source_path` | The **resolved absolute path** of the source file (authoritative when the folder is a staging area of symlinks, as with `server_files`) |
+| `converter_param_<key>` | Every converter param |
+| `converter_out_index` / `converter_n_out` | This output's position in the returned list, and the list's length at import time |
+| `converter_content_hash` | Short md5 of the output payload - the authoritative replay disambiguator |
+| `parent_importer` | The importer that supplied the source corpus (`"demo"` for `apply_converter_to_demo`) |
+| `parent_<key>` (`parent_path`, `parent_url`, `parent_paths_file`, `parent_manifest`, `parent_name`) | That importer's own locator param, prefixed, so the corpus itself is recoverable |
 
-`source_file` and `source_path` differ whenever the scanned folder is a
-staging area of symlinks: the `server_files` (Manifest) importer links every
-listed path into a temp dir under its basename, disambiguating collisions as
-`name__1.ext`, so `source_file` alone can name a file that never existed on
-disk. `source_path` is the authoritative pointer back at the original media -
-the source video an extracted frame came from, the source PDF behind a
-rendered page.
-
-`vtscore.media.provenance` renders these keys as the human-readable
-**Source** / **Derived Via** / **Imported Via** lines that
-`MediaType.display_metadata` surfaces in the labeling UI's metadata grid, so
-a user looking at an extracted frame can see which video it came from without
-reading raw origin params.
-
----
-
-## Implementing a new converter
-
-Sketch - the walk-through is in
-[../../docs/EXTENDING-plugins.md#adding-a-media-converter](../../../docs/EXTENDING-plugins.md#adding-a-media-converter).
-
-1. Create `vtscore/converters/<source>2<target>.py`.
-2. Subclass `MediaConverter`. Implement `source_type`,
-   `target_type`, and `convert(media, params)`.
-3. Declare `display_name`, `description`, and any
-   `fields` you need.
-4. At the bottom of the module, expose `CONVERTER = MyConverter()`.
-5. Restart the process - discovery picks it up on next import.
-
-A minimal example:
-
-```python
-from typing import Any
-from vtscore.converters.base import MediaConverter
-from vtscore.plugins import PluginField
-
-
-class Text2EmojiMediaConverter(MediaConverter):
-    display_name = "Text → Emoji"
-    description = "Replace common words with their emoji equivalents."
-    fields = [
-        PluginField(
-            key="lang",
-            label="Language",
-            field_type="select",
-            options=["en", "es", "fr"],
-            default="en",
-        ),
-    ]
-
-    @property
-    def source_type(self) -> str:
-        return "text"
-
-    @property
-    def target_type(self) -> str:
-        return "text"   # same target type is allowed
-
-    def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        lang = self.get_param(params, "lang")
-        text = media.get("media_string", "")
-        if not text:
-            return []
-        emojified = _emojify(text, lang)
-        return [{
-            "filename": (media.get("filename") or "output") + ".emoji.txt",
-            "media_string": emojified,
-            "duration": 0,
-        }]
-
-
-CONVERTER = Text2EmojiMediaConverter()
-```
+`vtscore.media.provenance` renders these as the human-readable
+**Source** / **Derived Via** / **Imported Via** metadata lines.
 
 ---
 
 ## Gotchas
 
-- **Converter output is embedded by the target's *default* embedder.**
-  `run_converters_on_folder` calls `embedders_for_type(target_type)[0]`
-  (`vtscore/converters/runner.py`). To embed with a non-default
-  target embedder, set it as default in the registry or call
-  `_emit_converted_outputs` yourself with a hand-resolved embedder.
-- **Converters don't produce vectors.** They produce media dicts.
-  The runner does the embedding pass. If you call `convert()`
-  directly without the runner, you're responsible for embedding the
-  outputs.
-- **Heavy deps are imported lazily inside `convert()`.** Most
-  converters depend on third-party packages
-  (`librosa`+`matplotlib` for `audio2image`, `cv2` for
-  `video2image`, `pytesseract` for `image2text`, `pymupdf` for
-  `document2*`, `openai-whisper` for `audio2text`). Each does the
-  import inside `convert` and returns `[]` on `ImportError` rather
-  than crashing - install the relevant extras before relying on a
-  converter. `pymupdf` is the one a *default* install still has but
-  can be deliberately left out (it is AGPL-3.0, so it sits in the
-  opt-out `agpl` extra); the `document2*` converters print the
-  message from `vtscore/utils/optional_deps.py` in that case, naming
-  the package and how to install it.
-- **Temporary files.** Converters that need a file path (e.g.
-  `audio2image` decoding via librosa) write `media_bytes` to a
-  `tempfile.NamedTemporaryFile`, run the operation, and `unlink` the
-  file in a `finally`. The runner's `_embed_converted_output`
-  (`vtscore/converters/runner.py`) does the same thing for the
-  embedding pass. No persisted intermediates.
-- **`get_param` treats empty strings as unset.** A UI that submits
-  empty inputs gets the field's `default`, not `""`. This is
-  intentional - fall through to the declared default when the user
-  doesn't touch the field.
-- **`name` defaults to `f"{source}2{target}"`.** If two converters
-  share the same source/target pair, override `name` on one of them
-  or discovery will silently shadow the duplicate.
-- **`apply_converter_to_demo` mutates `medias` in place** -
-  `medias.clear()` followed by `medias.update(converted)`
-  (`runner.py`). Callers that need the original around must
-  snapshot first.
+- **Converters don't produce vectors.** If you call
+  `convert_normalized()` outside the runner, embedding the outputs is
+  your job.
+- **Heavy deps are imported lazily inside `convert()`**, and a missing
+  one yields `[]` rather than an exception - install the relevant
+  extras before relying on a converter. PyMuPDF is AGPL-3.0 and sits in
+  the opt-out `agpl` extra; the `document2*` converters log the
+  message from `vtscore.utils.optional_deps.agpl_unavailable_message`
+  when it is absent.
+- **Empty strings count as unset.** `normalize_params` drops `""` for
+  any field that has a default or is optional, so a blank UI input
+  falls back to the declared default.
+- **`name` defaults to `f"{source}2{target}"`.** Two converters with
+  the same source/target pair must override `name` on one of them, or
+  one shadows the other in the registry.
+- **`apply_converter_to_demo` mutates `medias` in place.** Snapshot
+  first if you need the originals.
 
 ---
 
 ## Cross-references
 
 - [media](media.md) - the `MediaType` / `MediaEmbedder` / `MediaClipper`
-  ABCs and registry; converters write into media dicts produced by
-  those types.
-- [embedding](embedding.md) - the embedder façade the runner uses
-  to vectorise converter outputs.
-- [plugins](plugins.md) - the `PluginField` / `PluginBase` /
-  `PluginRegistry` scaffolding converters share with every other
-  plugin family.
-- [../../docs/EXTENDING-plugins.md](../../../docs/EXTENDING-plugins.md) -
-  the full walkthrough for adding a converter.
+  ABCs and registry; converter outputs are media of those types.
+- [datasets](datasets.md) - the import pipeline and embed stage that
+  run converters and embed their outputs.
+- [plugins](plugins.md) - `PluginField` / `PluginBase` / registry
+  scaffolding shared by every plugin family.
+- [`../extending/converters.md`](../extending/converters.md) and
+  [`docs/EXTENDING-media.md`](../../../docs/EXTENDING-media.md#adding-a-media-converter) -
+  writing a converter (library and app-side views).

@@ -110,7 +110,8 @@ frontend/
 ├── docs-assets/            Symlink to docs/user/ — the in-app user guide is served from here
 ├── public/                 Favicons, logo (copied verbatim into the build output)
 ├── scripts/
-│   └── openapi-gen-cached.mjs   Hash-stamped wrapper around ng-openapi-gen
+│   ├── openapi-gen-cached.mjs   Hash-stamped wrapper around ng-openapi-gen
+│   └── build-stamp.mjs          Writes generated/build-stamp.ts (the bundle's version, §7)
 └── src/
     ├── main.ts, index.html, test-setup.ts
     ├── styles.scss         Global stylesheet entry; @use's the scss/ partials
@@ -123,10 +124,11 @@ frontend/
         ├── guards/         Route guards that resolve the URL pair into context (§6)
         ├── interceptors/   The four HTTP interceptors (§7)
         ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`)
-        ├── models/         Hand-written types the OpenAPI spec cannot describe (§7)
+        ├── models/         Hand-written types (§7): api.models.ts, projection.models.ts
         ├── utils/          Pure functions — no Angular DI, trivially unit-testable
         ├── testing/        Shared TestBed fragments and zoneless helpers (§10)
-        └── generated/      **gitignored**; regenerated from openapi.json on prebuild/pretest
+        └── generated/      **gitignored**; api-client/ (from openapi.json) and
+                            build-stamp.ts, both rewritten on prebuild/pretest
 ```
 
 Two rules keep this navigable:
@@ -211,9 +213,10 @@ VTSBrowse: a UMAP projection rendered on a canvas as a hex-tile pyramid. This
 area is unusual and mostly self-contained — `browse-canvas` is the single
 largest component in the app because it owns the render loop. Its state is
 split across small services rather than living in the canvas:
-`BrowseViewportService` (visible region, shared with the minimap),
+`BrowseViewportService` (visible region, shared with the minimap) and
 `BrowseSelectionService` (selection at *item* granularity, so it stays coherent
-as bins split and merge across zoom levels), `TileCacheService`,
+as bins split and merge across zoom levels) — both provided on `browse-view`,
+not root — plus the root `TileCacheService`,
 `BrowsePrepService` (load + project before navigating), and
 `ProjectionApiService`.
 
@@ -354,7 +357,8 @@ this codebase, and it is silent.
   `MediaStateService`, several picker modals so far). `rxResource({ params,
   stream })` wraps the *existing* generated-client method, so the typed client
   and interceptor chain are untouched and the service's public surface becomes
-  `valueSignal()` / `isLoading()` / `error()`. Prefer it over raw
+  a value signal (e.g. `settingsSignal`, a `computed` over `resource.value()`)
+  plus `isLoading()` / `error()`. Prefer it over raw
   `httpResource`, which would bypass the generated client. The remaining
   conversion recipe and the list of still-open call sites live in
   [`docs/plans/httpresource-migration.md`](plans/httpresource-migration.md).
@@ -505,12 +509,16 @@ rebuilt automatically:
 
 ```
 prebuild / prebuild:prod / pretest / pretest:ci
-    → node scripts/openapi-gen-cached.mjs
+    → node scripts/openapi-gen-cached.mjs && node scripts/build-stamp.mjs
 ```
 
 The wrapper hashes the spec, the generator config, and the generator's own
 version, and skips regeneration when nothing moved (`--force`, or
 `npm run generate-api-client`, regenerates unconditionally).
+`build-stamp.mjs` writes the bundle's version into
+`generated/build-stamp.ts`; `BuildSkewService` compares it with
+`GET /api/version` at startup and raises a toast when a new server is serving
+a stale SPA (the mechanism is described under "Versioning" in `CLAUDE.md`).
 
 The snapshot itself is gated: `./run-tests.sh` re-dumps the spec from the
 running Flask app and **fails if `frontend/openapi.json` is stale**. When you
@@ -535,7 +543,10 @@ describe them:
 
 Adding a hand-written interface that duplicates a generated one is a
 regression: it can drift, and the compile-time guarantee is exactly what is
-lost.
+lost.  `models/projection.models.ts` is the standing exception to clean up: it
+hand-writes the Browse payloads (`ProjectionMeta`, `ProjectionBuildResponse`,
+`ProjectionLabelsResponse`, …) although the spec now carries schemas of the
+same names.
 
 ### The interceptor chain
 
@@ -750,8 +761,10 @@ shared widgets. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when
-per-instance state is the point (`LabelViewPanelStateService` is the current
-example).
+per-instance state or a component-bound lifetime is the point.  The complete
+list today: `LabelViewPanelStateService` and `SortRunnerService`
+(`label-view`), `PairScopeService` (`label-view`, `find-view`), and
+`BrowseViewportService` / `BrowseSelectionService` (`browse-view`).
 
 ---
 
@@ -774,8 +787,9 @@ classes, patterns, and copy style. The structural facts:
   `ThemeService`; components should read tokens, not hardcode colors.
 
 If your change alters a GUI surface framed by a screenshot in the user docs,
-add the shot id to `docs/user/screenshots-reshoot-queue.md` — the wiring check
-in `./run-tests.sh` keeps that queue honest.
+reshoot it (`scripts/screenshots/refresh.sh`) in the same change; queue the
+shot id in `docs/user/screenshots-reshoot-queue.md` only when a reshoot is not
+possible. The full rule is "Screenshot reshoots" in `CLAUDE.md`.
 
 ---
 

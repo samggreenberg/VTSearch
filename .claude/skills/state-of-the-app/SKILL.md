@@ -23,6 +23,10 @@ same edit.
   - **SigLIP binary:** `siglip`, `whole_image`.
   - **DINOv3 region:** `siglip+dinov3_patch`, `max_patch`, opened on SigLIP's
     text sort.
+- **A review runs Binary Photo only by default (owner, 2026-09-26).** Region
+  Photo is so slow (~5 h a seed) that it runs only when the owner asks for it
+  explicitly: "We'll do that explicitly at some point when we need it." Never
+  launch region cells as part of a routine review, a smoke run included.
 - **One report per production path (owner, 2026-09-24):** "State of the App:
   Binary Photo" and "State of the App: Region Photo". A future "Document Logo"
   report follows the same shape. Each goes in its own directory,
@@ -99,16 +103,29 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   so every cell would have run in duplicate and raced its twin on the same
   output files. Only the `prepare` checks need a compute node. After any
   submission, count the jobs.
+- **`analyze.sh` needs `results/grid_shape.json`, and only `launch.sh cells`
+  writes it.** A run built from `subset` or `redo` (a smoke run, or seeds
+  widened by index) has none, and `analyze.sh` then dies inside
+  `experiment_config.py` on `int('')`. Write one by hand with the seeds the
+  run really holds; the 2026-09-26 smoke run's is the example.
 - **Before a report is written,** check that `prepare_info.json` lists all 144
   cells for BOTH paths. `CALIB_REQUIRE_SEED_QUERY=1` silently drops a class
   that has no typed query.
 
 ## What the report says
 
-The report goes in `docs/experiments/<date>-state-of-the-app/REPORT.md` and
-carries these sections, in this order:
+**The report is about the app as it is now (owner, 2026-09-27):** how it is
+doing, where it does well or poorly, and WHY. It is not a contest with an
+earlier review or a bench that no longer exists: "We're not fighting some
+internal fight against the version that no longer exists." A delta against the
+previous review gets one short note at most, never a section or the framing.
+Spend the effort on the why: for each class that does poorly, look at its images
+and say what the app gets wrong.
 
-1. **Headline per path:** mean text-only cost, then cost at 25 and 50 clicks,
+Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/REPORT.md`
+(e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
+
+1. **Headline:** mean text-only cost, then cost at 25 and 50 clicks,
    then the final cost against the ceiling. Do the same for F1.
 2. **Where the app does well and where it does poorly,** by class and by band.
    Name the classes, with numbers.

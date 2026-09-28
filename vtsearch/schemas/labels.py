@@ -30,8 +30,14 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
-from vtscore.exporters.base import PAYLOAD_KINDS
 from vtsearch.schemas.media import OriginSchema
+
+#: The payload kinds ``POST /api/exporters/export`` can dispatch: two of the
+#: three in :data:`vtscore.exporters.base.PAYLOAD_KINDS`.  The third,
+#: ``detector_bundles``, is the trained classifiers themselves, which only the
+#: CLI pipeline has in hand; the route has nothing to build one from, so the
+#: schema refuses it rather than letting it reach an exporter as a 500.
+_EXPORT_ROUTE_PAYLOAD_KINDS: tuple[str, ...] = ("find_results", "labelset")
 
 
 class LabeledElementSchema(Schema):
@@ -272,13 +278,22 @@ class RunExportRequestSchema(Schema):
         required=False,
         load_default=None,
         allow_none=True,
-        validate=validate.OneOf(PAYLOAD_KINDS),
+        validate=[
+            validate.NoneOf(
+                ("detector_bundles",),
+                error=(
+                    "detector_bundles is exported from the CLI only (--autodetect --exporter "
+                    "portable_detector); this route has no trained detectors to build one from."
+                ),
+            ),
+            validate.OneOf(_EXPORT_ROUTE_PAYLOAD_KINDS),
+        ],
         metadata={
             "description": (
                 "Which payload ``results`` carries. Omit and the handler infers it from the dict "
                 "shape, which is what pre-payload-kind API clients get; send it explicitly and the "
                 "handler rejects an exporter that does not implement that kind instead of letting it "
-                "deliver an empty export."
+                "deliver an empty export. ``detector_bundles`` is CLI-only and refused here."
             )
         },
     )

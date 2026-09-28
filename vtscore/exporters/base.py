@@ -163,8 +163,8 @@ class ResultsExporter(PluginBase):
     :meth:`export_find_results` and :meth:`export_labelset` delegate to
     :meth:`export`, so an existing out-of-tree plugin needs no changes.  Such an
     exporter is credited with **both** kinds (there is no way to know which it
-    handles), which is exactly the pre-existing behaviour, and it gets a
-    :class:`DeprecationWarning` pointing at the named methods.
+    handles), which is exactly the pre-existing behaviour, and a warning is
+    logged pointing at the named methods.
 
     Streaming
     ---------

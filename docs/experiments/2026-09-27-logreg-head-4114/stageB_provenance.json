@@ -1,0 +1,32 @@
+{
+  "svm": {
+    "n_files": 720,
+    "n_read": 702,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 18,
+    "no_base_rows": 0,
+    "n_rows_all": 3196086,
+    "n_rows": 97073
+  },
+  "linear": {
+    "n_files": 720,
+    "n_read": 702,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 18,
+    "no_base_rows": 0,
+    "n_rows_all": 3194990,
+    "n_rows": 97073
+  },
+  "lrconv": {
+    "n_files": 720,
+    "n_read": 702,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 18,
+    "no_base_rows": 0,
+    "n_rows_all": 3197008,
+    "n_rows": 97073
+  }
+}

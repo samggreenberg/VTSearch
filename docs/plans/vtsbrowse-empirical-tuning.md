@@ -129,9 +129,10 @@ the rework below exists.
 | `base_radius` | derived (`None` → `_base_radius_for`) | Override path exists but unused. |
 | `tile_span` | `16.0` | Hex columns/rows per tile. Payload-size vs round-trip-count tradeoff. Part 2's target. |
 
-`build_pyramid(proj)` is called with **no** `n_levels` (auto-depth) in
-`vtsearch/routes/projection.py` and `vtscore/datasets/load_pipeline.py`;
-`base_cols`/`tile_span` use the function defaults.
+`build_pyramid(proj, bin_shape=...)` is called with **no** `n_levels`
+(auto-depth) from `vtscore/projection/service.py` (`fit_and_install_layout`,
+`rebin_from_existing_layout`, `build_subset_layout`); `base_cols`/`tile_span` use the
+function defaults.
 
 ### Canvas renderer (Stage 3) — `frontend/.../browse-canvas/browse-canvas.component.ts`
 

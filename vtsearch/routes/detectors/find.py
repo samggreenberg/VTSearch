@@ -215,23 +215,32 @@ def _build_detector_config(d: dict) -> dict:
     the on-disk labelset (when present) so the per-dataset dispatcher can
     pick safely (see :func:`_select_scorer`).
 
+    The live MLP is carried only while it was trained from the labelset on
+    disk (:func:`~vtscore.detectors.model_loading.cached_head_is_current`); a
+    head left over from before the labels changed is dropped here, and the
+    detector scores cold from its current labels (issue #4204).
+
     Aborts with 400 when the detector has no usable labels in either form.
     """
+    from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
     from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
+    from vtscore.detectors.model_loading import cached_head_is_current  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
     from vtscore.state.core import get_detector_context  # noqa: PLC0415
 
     config: dict = {"name": d["name"], "detector_id": d["id"]}
 
     det_ctx = get_detector_context(d["id"])
-    if det_ctx is not None and det_ctx.model is not None:
+    det_data = _read_detector(_detector_path(d["name"]))
+    labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
+    if det_ctx is not None and cached_head_is_current(det_ctx, labelset):
         config["live_mlp"] = det_ctx.model
         config["threshold"] = det_ctx.threshold
         config["live_embedder"] = det_ctx.embedder or ""
 
-    det_data = _read_detector(_detector_path(d["name"]))
     if det_data and det_data.get("labelset", {}).get("labels"):
         config["detector_data"] = det_data
+        config["cold_labelset"] = labelset
 
     # The detector's locked embedder *type* drives per-(detector, dataset) score
     # routing: for each dataset loaded by Find, the matrix (and any cold retrain)

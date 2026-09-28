@@ -13,7 +13,11 @@ GET /api/exporters
 ```
 
 → JSON array of exporter objects, each with `name`, `display_name`,
-`description`, `fields`, and `opens_url` (see below).
+`description`, `icon`, `fields`, `ui_mode`, `hidden_from_picker`, `opens_url`
+(see below), and `supported_payloads` — which of `find_results`, `labelset`,
+`detector_bundles` the exporter can take. Operator-hidden plugins (the
+`hidden_plugins` setting) are omitted; `hidden_from_picker` ones are listed
+with the flag set.
 
 ### Run export
 
@@ -27,14 +31,34 @@ POST /api/exporters/export
 {
   "exporter_name": "server_json_file",
   "field_values": {"filepath": "/home/user/results.json"},
+  "payload_kind": "find_results",
   "results": {}
 }
 ```
 
-→ `{"success": true, "message": "...", ...}`
+`payload_kind` says what `results` is: `find_results` (a scored run, e.g. the
+`POST /api/auto-detect` response) or `labelset` (a serialised labelset, e.g.
+the `GET /api/labels/export` response). When omitted it is inferred — a dict
+with a top-level `labels` key is a labelset — which exists only for older
+clients. A kind the exporter doesn't list in `supported_payloads` is a 400.
+`detector_bundles` is refused with a 422: it is the trained classifiers
+themselves, which only the CLI pipeline has, so this route cannot build one.
 
-Available built-in exporters: `server_json_file`, `server_csv_file`, `webhook`,
-`email_smtp`, `gui`, `open_url`.
+→ `{"success": true, "message": "...", "open_url": "...", "display_results": ...}`
+— `success` always; the rest only when the exporter returns them
+(`display_results` is what the `gui` exporter hands back for in-app display).
+400 (missing plugin field, invalid file path, unsupported payload kind, or the
+exporter rejected its input), 404 (unknown exporter), 422 (unknown or
+CLI-only `payload_kind`), 500 (exporter error).
+
+Built-in exporters: `server_json_file`, `server_csv_file`, `webhook`,
+`email_smtp`, `open_url`, `gui` (picker-hidden; returns results for display
+rather than writing them), and `portable_detector` (picker-hidden; supports
+only `detector_bundles`, which this route cannot produce — a `find_results`
+or `labelset` request is a 400, a `detector_bundles` one a 422. Use
+it from the CLI as `--autodetect --exporter portable_detector`, or export one
+saved detector with
+[`POST /api/detectors/{detector_id}/portable-bundle`](detectors.md#export-portable-bundle)).
 
 **`open_url`** — an exporter may return an `open_url` key, an `http(s)` URL the
 frontend opens in a new browser tab. It is how a third-party site with no ingest
@@ -91,7 +115,9 @@ receives a fully-materialised results dict. See [CLI.md](../CLI.md) and
 GET /api/label-importers
 ```
 
-→ JSON array of label importer objects.
+→ JSON array of label importer objects (`name`, `display_name`, `description`,
+`icon`, `fields`, `ui_mode`, `hidden_from_picker`). `fields` is what the run
+route below accepts.
 
 ### Dynamic field options
 
@@ -163,9 +189,13 @@ POST /api/label-importers/ingest-missing
 
 **Body:** `{"entries": [...]}`
 
-Re-ingests medias from their recorded origins and applies labels.
+**Requires** `X-Dataset-Id` **and** `X-Detector-Id`.
 
-→ `{"ingested": 3, "applied": 3, "message": "Ingested 3 media(s), applied 3 label(s)."}`
+Synchronously re-ingests medias from their recorded origins into the active
+dataset and applies their labels. Entries are label-export entries (`origin`,
+`origin_name`, `md5`, `label`, …).
+
+→ `{"ingested": 3, "applied": 3, "failed_count": 0, "failed": [], "message": "Ingested 3 media(s), applied 3 label(s)."}`
 
 ---
 
@@ -295,6 +325,53 @@ PUT /api/autorun-localizers/{name}/rename
 
 ---
 
+## Running extractors & localizers
+
+These run against every media in the **active** dataset (`X-Dataset-Id`) and
+return results inline (synchronously); nothing is stored. A media with no hits
+is omitted from `results`.
+
+```
+POST /api/extract
+POST /api/localize
+```
+
+One-off run of a single processor built from the body:
+
+**Body:** `{"extractor_type": "ocr", "config": {...}, "name": "optional"}`
+(`localizer_type` for `/api/localize`).
+
+→
+```json
+{
+  "extractor_name": "adhoc",
+  "media_type": "image",
+  "total_medias_with_hits": 1,
+  "results": [{"id": 4, "filename": "sign.png", "...": "...", "extractions": [...]}]
+}
+```
+
+`/api/localize` answers `localizer_name` and per-media `localizations`
+instead. Each result row is the media's display info plus the hits. 400 if no
+medias are loaded, the config can't be built, or the processor's media type
+differs from the dataset's.
+
+```
+POST /api/auto-extract
+POST /api/auto-localize
+```
+
+No body. Runs every stored autorun extractor (or localizer) whose media type
+matches the loaded dataset, in parallel.
+
+→ `{"media_type": "image", "extractors_run": 2, "results": {"<name>": {"extractor_name": ..., "total_medias_with_hits": ..., "results": [...]}}}`
+(`localizers_run` / `localizer_name` for `/api/auto-localize`). A stored
+processor whose config no longer builds is skipped silently, so
+`extractors_run` can be smaller than the number stored. 400 if no medias are
+loaded or none are registered for the media type.
+
+---
+
 ## Settings Importers & Exporters
 
 ### List settings importers
@@ -333,7 +410,9 @@ POST /api/settings-importers/import/{importer_name}
 
 **Form or Body:** importer-specific fields.
 
-→ `{"ok": true, "message": "..."}`
+Applies the imported settings through the same setters as `PUT /api/settings`.
+
+→ `{"success": true, "message": "Imported 5 setting(s) via ...", "keys": ["volume", ...]}`
 
 ### List settings exporters
 
@@ -361,4 +440,7 @@ POST /api/settings-exporters/export
 
 **Body:** `{"exporter_name": "...", "field_values": {...}}`
 
-→ `{"ok": true, "message": "..."}`
+→ `{"success": true, "message": "...", ...}` plus whatever the exporter returns —
+e.g. `filepath` for a server-file exporter, or `data` + `filename` +
+`download: true` when the browser should save the file. 400 (missing field or
+invalid path), 404 (unknown exporter), 500 (exporter error).

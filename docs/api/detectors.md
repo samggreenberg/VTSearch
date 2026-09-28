@@ -34,7 +34,11 @@ POST /api/detectors
 
 **Body:** `{"name": "Dog Barks", "text_query": "dog barking sounds", "media_type": "audio"}`
 
-Or with examples: `{"name": "Dog Barks", "examples": [{"type": "text", "value": "dog barking"}]}`
+Or with examples: `{"name": "Dog Barks", "media_type": "audio", "examples": [{"type": "text", "value": "dog barking"}]}`
+
+`name` and `media_type` are required (`media_type: "any"` is rejected with
+400), plus at least one of `text_query`, `media_example`, or `examples`.
+Optional `embedder_type` pins which kind of embedder the detector learns in.
 
 → `{"success": true, "name": "...", "text_query": "...", "media_type": "audio", "examples": [...], "num_labels": 0}` (201)
 
@@ -43,6 +47,9 @@ detector's labelset as `good` labels (see *Register detector* below); a
 text-only detector reports 0.
 
 409 if name already exists.
+
+This writes the detector file only; `POST /api/detectors/registry` (below) is
+what the GUI uses, and also creates the registry entry.
 
 ### Get detector
 
@@ -68,9 +75,14 @@ PUT /api/detectors/{name}/rename
 
 **Body:** `{"new_name": "Cat Meows"}`
 
-→ `{"success": true, "old_name": "...", "new_name": "Cat Meows"}`
+→ `{"success": true, "old_name": "...", "new_name": "Cat Meows", "pending_labelset_move": null}`
 
-409 if new name already exists.
+409 if new name already exists. `pending_labelset_move` is
+`{"old_path", "new_path"}` when the detector has a
+[labelset source](settings.md#labelset-sources-sync) whose file path is
+templated on `{detector_name}` / `{detector_id}` and the rename left the old
+file behind; offer the user a
+[move](#move-an-orphaned-labelset-file), otherwise it is `null`.
 
 ### Set examples
 
@@ -93,9 +105,13 @@ exemplar the user has since voted Bad keeps that label.
 POST /api/detectors/{name}/labels
 ```
 
+**Requires** `X-Dataset-Id` **and** `X-Detector-Id`.
+
 Saves the current good/bad votes as the detector's labelset.
 
 → `{"success": true, "name": "...", "num_labels": 50}`
+
+409 if the detector's vote state isn't aligned with the active dataset.
 
 ### Import labels into detector
 
@@ -177,6 +193,31 @@ Serve one saved labelset element, resolved via its origin:
 404 if the detector, element, or file is missing; 500 if a thumbnail can't be
 generated.
 
+### Vote on a saved label
+
+```
+POST /api/detectors/{name}/labels/{element_id}/vote
+```
+
+**Body:** `{"target": "good"}`, `{"target": "bad"}`, or `{"target": "remove"}`,
+plus an optional `provenance` block (same shape as
+[`POST /api/medias/{media_id}/vote`](medias.md#vote-on-a-media); defaults to
+`{"flow": "labelset_review"}`).
+
+Edits one element of the detector's **saved** labelset directly — the
+Dashboard's label-review surface, which works whether or not the detector is
+loaded. Absolute-target semantics: `good` / `bad` set the label (re-asserting
+the current label is a no-op), `remove` drops the element. When the element
+resolves into the active dataset, the loaded detector's in-memory votes are
+updated to match so retraining and learned sort see the change. Provenance is
+recorded only when the label actually flips.
+
+→ `{"ok": true, "action": "flipped"}` — `action` is `"flipped"`,
+`"removed"`, or `"unchanged"`.
+
+400 (malformed `provenance`), 404 (detector or element not found), 422
+(`target` outside the three values).
+
 ### Export portable bundle
 
 ```
@@ -229,6 +270,10 @@ GET /api/detectors/registry
   ]
 }
 ```
+
+Entries also carry `examples`, `media_example`, `embedder`, `embedder_type`,
+`created_at`, `created_by`, `readers`, and `is_owner`; see the
+`DetectorRegistryListResponse` schema in the spec.
 
 `name` is what the on-disk labelset file is looked up by; the file itself is
 `data/detectors/<slug-of-name>.json`. The head is trained on demand from the
@@ -288,7 +333,13 @@ absent); seeds are skipped there too. Autopilot's Good phase sorts against
 the embedding centroid of *all* the media examples, seeds included — that is
 the one thing a seed does do.
 
-→ `{"ok": true, "detector": {...}}` (201)
+Optional `embedder_type` locks the embedder kind the detector learns in
+(`semantic`, `patch_semantic`, or `structural`; a concrete embedder name is
+also accepted and classified). Empty lets the server pick the sole kind the
+dataset supplies. (The schema also accepts a `trainable` flag, which nothing
+reads.)
+
+→ `{"ok": true, "detector": {...}}` (201) — `detector` is the new registry entry.
 
 409 if the name is already taken — by another registry entry, or by a
 detector file created through `POST /api/detectors`. Names are compared by the
@@ -357,13 +408,16 @@ POST /api/detectors/registry/load
 **Body:** `{"detector_id": "abc123"}` (pass `null` or omit the field
 to unload the active detector without loading another one).
 
+The detector's labels are resolved into the active dataset (`X-Dataset-Id`);
+a header naming a registered-but-unloaded dataset is a 409.
+
 → `{"ok": true, "message": "Loading started", "task_id": "..."}` when
 loading; `{"ok": true, "labels_restored": 0, "examples_seeded": 0}`
 when unloading.
 
 Loading is async; subscribe to the `detector-loading-tasks` channel
-on [`/api/events`](events.md) (SSE) for progress. 404 if the detector
-is not in the registry.
+on [`/api/events`](events.md) (SSE) for progress. 403 if access is denied; 404
+if the detector is not in the registry.
 
 ### Unload detector
 
@@ -371,7 +425,11 @@ is not in the registry.
 POST /api/detectors/registry/{detector_id}/unload
 ```
 
-→ `{"ok": true}`
+Drops the detector's in-memory context (votes, trained head).
+
+→ `{"ok": true, "message": "..."}`
+
+400 if the detector isn't loaded; 404 if it doesn't exist.
 
 ### Detector loading tasks (SSE)
 
@@ -388,7 +446,10 @@ channel of [`/api/events`](events.md):
 POST /api/detectors/cancel/{task_id}
 ```
 
-→ `{"ok": true}`
+Cancels any task on the `detector-loading-tasks` channel: a detector load, a
+labelset-media ingest, or a positives-browse build.
+
+→ `{"ok": true}`; 404 if the task is unknown.
 
 ### Delete registered detector
 
@@ -408,9 +469,11 @@ PUT /api/detectors/registry/{detector_id}/rename
 
 **Body:** `{"name": "New Name"}`
 
-→ `{"ok": true, "name": "New Name"}`
+→ `{"ok": true, "name": "New Name", "pending_labelset_move": null}`
 
-409 if the new name is already taken. Names are compared by the labelset
+`pending_labelset_move` has the same meaning as on
+[`PUT /api/detectors/{name}/rename`](#rename-detector). 403 if the caller isn't
+the creator. 409 if the new name is already taken. Names are compared by the labelset
 *slug* (lowercased, punctuation collapsed), so "My Cat" and "my cat" collide;
 re-spelling a detector's own name that way is allowed.
 
@@ -452,6 +515,7 @@ set the dashboard's Browse button projects).
   "num_positive_resolved": 20,
   "active_dataset_name": "ESC-50",
   "embedder": "laion_clap",
+  "embedder_type": "semantic",
   "text_query": "cat meowing",
   "media_example": "",
   "clipper": "",
@@ -464,6 +528,24 @@ set the dashboard's Browse button projects).
 ```
 
 403 if the caller cannot access the detector; 404 if it does not exist.
+
+### Move an orphaned labelset file
+
+```
+POST /api/detectors/registry/{detector_id}/labelset-source/move-file
+```
+
+**Body:** `{"old_path": "...", "new_path": "..."}` — normally the
+`pending_labelset_move` pair a rename returned.
+
+Moves the detector's labelset-source file after a rename left it at the old
+template-resolved path (the *Move existing labelset file?* prompt).
+
+→ `{"ok": true, "moved": true, "old_path": "...", "new_path": "..."}`
+(`moved: false` when there was nothing at `old_path`).
+
+400 (path outside the allowed base), 404 (detector not found), 409
+(`new_path` already exists).
 
 ### Browse a detector's positives
 

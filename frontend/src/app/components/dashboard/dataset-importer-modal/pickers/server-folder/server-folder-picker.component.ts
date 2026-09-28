@@ -4,7 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
 import { ImportAdvancedComponent } from '../../import-advanced/import-advanced.component';
-import { FolderBrowserComponent, FolderBrowserBrowseFn } from '../../../../folder-browser/folder-browser.component';
+import {
+  FolderBrowserComponent,
+  FolderBrowserBrowseFn,
+  FolderBrowserPathChange,
+} from '../../../../folder-browser/folder-browser.component';
 import { DatasetsCrudApiService } from '../../../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { DatasetsUiApiService } from '../../../../../services/datasets-ui-api.service';
@@ -197,7 +201,12 @@ export class ServerFolderPickerComponent {
     this.cdr.markForCheck();
   }
 
-  onFolderPicked(evt: { path: string; rootPath: string }): void {
+  onFolderPicked(evt: FolderBrowserPathChange): void {
+    // The browser opens at the typed path (via `startPath`), or at the root
+    // when that path can't be listed. Either way its opening listing is not a
+    // pick, so it must not overwrite what the user typed or re-run detection.
+    // With nothing typed there is nothing to lose, and the field takes the root.
+    if (evt.initial && this.folderPath()) return;
     const { path, rootPath } = evt;
     let absolute: string;
     if (!rootPath) {
