@@ -80,7 +80,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--autodetect",
         action="store_true",
-        help="Run a detector on a dataset from the command line and print predicted-Good items",
+        help=(
+            "Import a dataset from the command line, save it to the dashboard, and run the "
+            "Auto-Find detectors on it (export the predicted-Good items). With no Auto-Find "
+            "detector for its media type the dataset is saved and detection is skipped."
+        ),
+    )
+    parser.add_argument(
+        "--tempimport",
+        action="store_true",
+        help=(
+            "Make --autodetect's import temporary: score the dataset, then discard it instead "
+            "of saving it to the dashboard. Implies --autodetect. Required with --stream-results."
+        ),
     )
     parser.add_argument(
         "--user",
@@ -331,6 +343,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
             "label_importer_file",
             "label_importer_fields",
             "dry_run",
+            "tempimport",
         ):
             if getattr(args, conflicting, None):
                 cli_flag = f"--{conflicting.replace('_', '-')}"
@@ -389,7 +402,7 @@ def _resolve_plugins(args, parser, remaining):
     importer = None
     exporter = None
 
-    if args.autodetect:
+    if args.autodetect or args.tempimport:
         importer, exporter = _register_plugin_cli_args(args, parser)
 
     if importer or exporter:
@@ -563,6 +576,7 @@ def _dispatch_autodetect(
     dry_run,
     stream_results,
     keep_negatives,
+    save_dataset,
 ) -> None:
     """Run the autodetect workflow via the importer- or pickle-file code path."""
     from vtscore.cli import (
@@ -598,6 +612,7 @@ def _dispatch_autodetect(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
     )
 
 
@@ -639,6 +654,14 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
     if keep_negatives and not stream_results:
         parser.error("--keep-negatives only applies with --stream-results")
+    # The imported dataset is saved to the dashboard unless --tempimport says
+    # otherwise (#4226). Streaming exists for sources too big to hold, and
+    # saving means holding the whole dataset, so the two cannot be combined.
+    save_dataset = not getattr(args, "tempimport", False)
+    if stream_results and save_dataset:
+        from vtscore.cli import _STREAM_CANNOT_SAVE
+
+        parser.error(f"--stream-results requires --tempimport: {_STREAM_CANNOT_SAVE}")
 
     _maybe_import_labels(args, parser, settings_path, dry_run)
 
@@ -653,6 +676,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         dry_run,
         stream_results,
         keep_negatives,
+        save_dataset,
     )
 
 
@@ -714,6 +738,11 @@ def main(app, initialize_server) -> None:
     _maybe_list_plugins(args, parser)
     _maybe_run_pipeline(args, parser, remaining)
     args, importer, exporter = _resolve_plugins(args, parser, remaining)
+    # A temporary import only means something for a detect run, so the flag
+    # alone selects one rather than falling through to the web server. Set
+    # after _resolve_plugins, whose second parse pass rebuilds ``args``.
+    if args.tempimport:
+        args.autodetect = True
 
     _apply_verbosity(args)
     _apply_admin_overrides(args, parser)

@@ -8,7 +8,7 @@ scoring, S13 export) needed to run `--autodetect` against a folder-of-folders
 holding far more images than fit in RAM, e.g.:
 
 ```
-python app.py --autodetect --importer server_folder --path /data/images \
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
   --media-type image --chunk-size 500 --stream-results \
   --exporter server_json_file --filepath hits.ndjson --settings settings.json
 ```

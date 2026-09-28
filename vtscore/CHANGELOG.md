@@ -10,6 +10,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`save_dataset=` on the four `vtscore.cli.autodetect_*_main` entry points**
+  (issue #4226). With `save_dataset=True` the source is imported through the
+  GUI load pipeline (`_run_importer_in_background`) and registered in the
+  dataset registry before detection, which then scores the saved pickle; no
+  applicable detector ends the run with a `detection_skipped` event instead of
+  an error, and combining it with `stream_results=True` is refused. The
+  keyword defaults to `False`, so existing callers keep the temporary
+  behaviour. New `cli_progress` events: `dataset_saved`, `detection_skipped`.
+  Pipeline files gain a `tempimport` key; a file without it now saves its
+  dataset, and `stream_results: true` requires `tempimport: true`.
+
 - **`vtscore.cli.import_labels_into_detector(det_name, importer_name,
   field_values)`** (issue #4174). Runs a label importer with an arbitrary
   field mapping and merges its labels into a detector, so importers that read

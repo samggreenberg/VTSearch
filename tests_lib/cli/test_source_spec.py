@@ -36,6 +36,7 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "save_dataset": False,
         }
 
     def test_pickle_chunked_carries_chunk_size_and_flags(self):
@@ -46,6 +47,7 @@ class TestDescribe:
             "chunk_size": 250,
             "stream_results": True,
             "keep_negatives": True,
+            "save_dataset": False,
         }
 
     def test_importer_carries_params(self):
@@ -58,7 +60,13 @@ class TestDescribe:
             "chunk_size": None,
             "stream_results": False,
             "keep_negatives": False,
+            "save_dataset": False,
         }
+
+    def test_save_dataset_is_reported(self):
+        """``--dry-run`` reads whether the import would be kept from here (#4226)."""
+        spec = _SourceSpec(kind="pickle", dataset_path="/data/ds.pkl")
+        assert spec.describe(stream_results=False, keep_negatives=False, save_dataset=True)["save_dataset"] is True
 
     @pytest.mark.parametrize(
         "spec",

@@ -1545,7 +1545,7 @@ find-results pickers by construction.
 `export()` / `export_cli()` receive the **fully-materialised** results dict, so
 they buffer every hit in memory. For a media source larger than RAM (e.g. a
 folder tree of billions of images scanned via
-`--autodetect --chunk-size N --stream-results`), an exporter can instead write
+`--autodetect --tempimport --chunk-size N --stream-results`), an exporter can instead write
 each hit as it is scored, by opting in:
 
 ```python

@@ -6,17 +6,19 @@
 
 # Command-line interface
 
-Everything here goes through one entry point, `python app.py`. With no workflow flag it starts the web server; with `--autodetect` or `--pipeline` it runs detectors over a dataset and exports the hits without starting the server; with `--list-plugins` it prints what is installed and exits. `python app.py --help` lists every flag.
+Everything here goes through one entry point, `python app.py`. With no workflow flag it starts the web server; with `--autodetect` or `--pipeline` it imports a dataset, saves it to the dashboard, runs detectors over it, and exports the hits without starting the server (`--tempimport` discards the dataset instead of saving it); with `--list-plugins` it prints what is installed and exits. `python app.py --help` lists every flag.
 
-- [Auto-detect (run detectors on a dataset)](#auto-detect-run-detectors-on-a-dataset) — the headless scoring run: sources, exporters, streaming, [dry runs](#dry-run-mode), [label import](#importing-labels-into-a-detector), [progress output](#progress-output-format)
+- [Auto-detect (run detectors on a dataset)](#auto-detect-run-detectors-on-a-dataset) — the headless scoring run: sources, [saving the dataset or `--tempimport`](#saving-the-dataset-to-the-dashboard---tempimport), exporters, streaming, [dry runs](#dry-run-mode), [label import](#importing-labels-into-a-detector), [progress output](#progress-output-format)
 - [Pipeline file](#pipeline-file) — the same run declared in YAML, for cron and CI
 - [Web server modes](#web-server-modes) — port, logging, gunicorn, login providers, and the admin-set restrictions (solo media type, hidden plugins, retention, …)
 - [Inspecting plugins and the API schema](#inspecting-plugins-and-the-api-schema)
 
 ## Auto-detect (run detectors on a dataset)
 
-Score every item in a dataset with the detectors flagged for
-Auto-Find and output the items each model predicts as "Good."
+Import a dataset, save it to the dashboard, score every item with the
+detectors flagged for Auto-Find, and output the items each model predicts as
+"Good." Add `--tempimport` to score it without keeping it (see [Saving the
+dataset to the dashboard](#saving-the-dataset-to-the-dashboard---tempimport)).
 
 Models are specified via a **settings file** (`--settings`) whose
 `autofind_detectors` list names registered models.  Each name
@@ -44,8 +46,51 @@ python app.py --autodetect --dataset data.pkl --user alice --api-key "$ALICE_KEY
 
 The key is checked against `data/api_keys.json` (the same file the server's
 `--login api_key` uses); on success the run reads `alice`'s Auto-Find list and
-results exporter. Without `--user`, the `default` user (and the `--settings`
-file) applies.
+results exporter, and the imported dataset is saved to `alice`'s dashboard.
+Without `--user`, the `default` user (and the `--settings` file) applies.
+
+### Saving the dataset to the dashboard (`--tempimport`)
+
+By default the CLI **keeps what it imports**. The source (`--dataset` or
+`--importer`) is imported through the same load pipeline the dashboard's
+**Add dataset** uses — clipping, embedding, duplicate collapse, the saved
+`.pkl` under `data/saved_datasets/` and the registry entry — so the next time
+the UI is opened (or right away, if a server is running against the same data
+directory) the dataset is on the dashboard, owned by the user the run ran as.
+Detection then runs over that saved copy, so its hits are the ones Find would
+give on that dashboard row.
+
+```bash
+# Import a folder, save it to the dashboard, and run the Auto-Find detectors on it.
+python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json
+```
+
+With a saving run the import is the point and detection is the extra: when no
+Auto-Find detector is configured, or none applies to the dataset's media type,
+the dataset is still saved and the run ends with a `Detection skipped: …` note
+and exit status 0. That also makes `--autodetect` with an empty Auto-Find list
+a plain headless import.
+
+A `--dataset` pickle is **copied** in (the dashboard deletes a dataset's pickle
+when the dataset is deleted, so it never adopts your file). Pointing
+`--dataset` at a pickle the dashboard already holds (one under
+`data/saved_datasets/`) imports nothing new; the run just scores it.
+
+**`--tempimport`** makes the run temporary instead — the behaviour
+`--autodetect` had before datasets were saved: the source is scored straight
+from the importer and nothing is kept. Having no applicable detector is then an
+error, since the run would do nothing. `--tempimport` implies `--autodetect`,
+though spelling out both reads better in scripts:
+
+```bash
+# Score and discard: nothing is added to the dashboard.
+python app.py --autodetect --tempimport --dataset data.pkl --settings settings.json
+```
+
+A saving run holds the whole dataset in memory while it imports, exactly as a
+GUI import does; `--chunk-size` then bounds only the scoring pass over the saved
+copy. `--stream-results` exists for sources too large to hold, so it **requires
+`--tempimport`** — the run is refused otherwise.
 
 **From a pickle file:**
 
@@ -90,15 +135,16 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --chunk-s
 python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings settings.json --chunk-size 500
 ```
 
-`--chunk-size` bounds the *loading and embedding* working set, but the default
-flow still accumulates every hit in memory and buffers the whole result set
-before the exporter writes it. For a media source with more items (and more
-hits) than fit in RAM — e.g. a folder tree of billions of images — add
-`--stream-results` (requires `--chunk-size` and a streaming-capable exporter:
-`server_json_file`, `server_csv_file`, `gui`, `webhook`, or `email_smtp`):
+`--chunk-size` bounds the *loading and embedding* working set of a
+`--tempimport` run, but the default flow still accumulates every hit in memory
+and buffers the whole result set before the exporter writes it. For a media
+source with more items (and more hits) than fit in RAM — e.g. a folder tree of
+billions of images — add `--stream-results` (requires `--tempimport`,
+`--chunk-size` and a streaming-capable exporter: `server_json_file`,
+`server_csv_file`, `gui`, `webhook`, or `email_smtp`):
 
 ```bash
-python app.py --autodetect --importer server_folder --path /data/images \
+python app.py --autodetect --tempimport --importer server_folder --path /data/images \
   --media-type image --settings settings.json --chunk-size 500 \
   --stream-results --exporter server_json_file --filepath hits.ndjson
 ```
@@ -269,6 +315,7 @@ Source:
     path: /data/sounds
     media_type: audio
   Chunk size: whole dataset
+  Save to dashboard: yes (the imported dataset is kept; --tempimport discards it)
 
 Settings: settings.json
 Auto-Find detectors (2):
@@ -281,7 +328,8 @@ Exporter: server_json_file
 
 When `--stream-results` is set, the plan adds a `Streaming: yes (...)` line
 under the source (noting whether negatives are dropped or included), so a
-streaming run can be sanity-checked before it starts.
+streaming run can be sanity-checked before it starts. The `Save to dashboard`
+line says whether the run would keep the dataset; a dry run never saves it.
 
 `--dry-run` validates importer and exporter names, checks that the
 dataset pickle (if given) exists, verifies required CLI fields are
@@ -362,6 +410,19 @@ A `notification` never ends the run, at any level — including
 `"level": "error"`, which reports something the code continued past. The
 fatal-error record is the separate `error` event.
 
+A saving run (no `--tempimport`) reports the dataset it kept as a
+`dataset_saved` event carrying its registry `dataset_id`, `name`, `num_items`
+and `pkl_path` (`already_saved` is true when the pickle was already on the
+dashboard), and a run that had no detector to use as `detection_skipped` with a
+`reason`. While the import runs, its progress arrives as ordinary `progress`
+events:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --progress-format json \
+  | jq -r 'select(.event == "dataset_saved") | .dataset_id'
+```
+
 A media the scorer cannot embed — a corrupt image, an unresolvable thin path, a
 pre-computed vector of the wrong width — is **skipped**, not fatal: one bad file
 must not take a long run down with it. Each skip is reported as a
@@ -397,7 +458,9 @@ python app.py --pipeline pipeline.yaml
 ```
 
 The YAML supports every knob the `--autodetect` flag set does. It cannot be
-combined with the other autodetect flags; declare everything inline.
+combined with the other autodetect flags; declare everything inline. Like the
+flags, a pipeline run saves its dataset to the dashboard unless the file sets
+`tempimport: true`.
 
 ```yaml
 # Pick exactly one source.
@@ -423,9 +486,14 @@ detectors:
 # Optional. Process medias in batches of N. Same as --chunk-size.
 chunk_size: 1000
 
+# Optional. Discard the imported dataset after detection instead of saving
+# it to the dashboard (same as --tempimport). Off by default.
+tempimport: false
+
 # Optional. Stream each chunk's hits straight to the exporter instead of
-# accumulating them (same as --stream-results). Requires chunk_size and a
-# streaming-capable exporter. Output is chunk-ordered, not globally sorted.
+# accumulating them (same as --stream-results). Requires tempimport: true,
+# chunk_size and a streaming-capable exporter. Output is chunk-ordered, not
+# globally sorted.
 stream_results: false
 
 # Optional. With stream_results, also emit below-threshold hits (label=bad).
