@@ -134,6 +134,15 @@ class CoreConfig:
     # working unchanged.
     signpost_vocab: dict[str, list[str]] = field(default_factory=dict)
 
+    # Operator switch: ingest progress bars (dataset imports, staging imports,
+    # a labelset's missing-media fetch) publish no remaining-time estimate,
+    # for deployments where no timing profile makes one trustworthy (issue
+    # #4233).  The app populates it from the ``hide_ingest_eta`` admin
+    # setting.  Read by :func:`vtscore.concurrency.progress.ingest_eta_hidden`.
+    # Defaulted here so library-only ``CoreConfig(...)`` constructions
+    # without the app shim keep working unchanged.
+    hide_ingest_eta: bool = False
+
     @classmethod
     def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
         """Snapshot the current user's ``vtsearch.settings`` into a CoreConfig.

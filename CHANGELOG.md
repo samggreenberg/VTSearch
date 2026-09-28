@@ -148,6 +148,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Operators can hide the ETA on import progress bars** (issue #4233). On
+  some servers an import's speed is too erratic to predict, and its
+  remaining-time estimate could climb from "About 10 sec left" to "About
+  45 min left" in a single import. Setting `--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA=1` or `"hide_ingest_eta": true` in the server
+  settings file removes the estimate from dataset imports, staging imports
+  and labelset missing-media fetches. Those bars still fill and show their
+  counts, and every other progress bar keeps its estimate. Settings ▸ Server
+  shows whether the switch is on.
+
 - **A friendlier first run on the Dashboard** (issue #4227). An empty
   Datasets or Detectors panel now shows a working **+** inside its "Click + to
   add one." message, with an arrow to the real **+** in the panel header so

@@ -260,6 +260,18 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
+    # Withhold the remaining-time estimate from **ingest** progress bars
+    # (dataset imports, staging imports, a labelset's missing-media fetch).
+    # On a deployment where those jobs are too erratic for any timing profile
+    # to predict, the ETA swings from seconds to most of an hour and misleads
+    # more than it helps (issue #4233); the bar and its counts still show.
+    # Other long-running bars (open, sort, Find, train) keep their ETA.  Set
+    # with the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA``
+    # env var (process-wide, wins for the process lifetime) or by editing this
+    # key in the settings file.  See
+    # :func:`vtsearch.settings.get_effective_hide_ingest_eta`.
+    hide_ingest_eta: bool = False
+
     # Solo-mediaType streamlining. An admin-set restriction: when set, the
     # importer and new-detector flows hide their mediaType pickers and lock to
     # this type, the converter picker filters to converters whose output is

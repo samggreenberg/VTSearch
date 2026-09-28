@@ -1,6 +1,6 @@
 """Tests for the declarative admin-override registry.
 
-The registry (:mod:`vtsearch.admin_overrides`) is what stops the six
+The registry (:mod:`vtsearch.admin_overrides`) is what stops the
 process-level admin knobs from drifting apart the way they had: before it,
 each was hand-plumbed through argparse, the environment, the settings
 resolvers and the ``/api/settings`` overlay separately, and only three of the
@@ -9,7 +9,7 @@ was arbitrary.
 
 The first class below is the guard against that recurring: it asserts
 *structurally* that every registered override is reachable from a flag, from
-the environment, and from the settings payload. A seventh knob that forgets one
+the environment, and from the settings payload. A new knob that forgets one
 of the three fails here rather than being discovered by an operator.
 """
 
@@ -122,6 +122,16 @@ class TestEnvOverrides:
         monkeypatch.setenv("VTSEARCH_SEMANTIC_ONLY", "0")
         admin_overrides.apply_env_overrides()
         assert settings_mod.get_cli_semantic_only() is None
+
+    def test_hide_ingest_eta_from_env(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_HIDE_INGEST_ETA", "on")
+        admin_overrides.apply_env_overrides()
+        assert settings_mod.get_effective_hide_ingest_eta() is True
+
+    def test_hide_ingest_eta_env_zero_does_not_loosen(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_HIDE_INGEST_ETA", "0")
+        admin_overrides.apply_env_overrides()
+        assert settings_mod.get_cli_hide_ingest_eta() is None
 
     def test_an_explicit_flag_wins_over_the_env(self, monkeypatch):
         monkeypatch.setenv("VTSEARCH_SUPPORT_EMAIL", "env@example.org")

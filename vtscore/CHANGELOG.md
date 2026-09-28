@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **ETA-less progress trackers and `CoreConfig.hide_ingest_eta`** (issue
+  #4233). `ProgressTracker(..., publish_eta=False)` and
+  `LoadingTasksTracker.create_task(..., publish_eta=False)` build a tracker
+  whose `eta_seconds` stays `None` while the bar itself updates as usual.
+  The new `CoreConfig.hide_ingest_eta` field (default `False`) and
+  `vtscore.concurrency.progress.ingest_eta_hidden()` let a deployment turn
+  the estimate off for dataset imports, staging imports and labelset
+  missing-media fetches. Both keywords default to `True`, so existing
+  callers and hand-built `CoreConfig(...)` instances are unaffected.
+
 - **`items=` on `notify()` and `PluginBase.notify()`** (issue #4232). A
   notification can carry the list of specific things it is about - every
   skipped file, every dropped row - as `items`, one entry each. The app shows

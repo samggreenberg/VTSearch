@@ -208,8 +208,8 @@ in `JOB_MANAGERS` only; never keep a second hand-maintained list.
 
 Thread-safe progress tracker for a single long-running operation
 (`progress.py`): `ProgressTracker(extra_fields=None, *,
-initial_status="idle")`. Each instance holds its own lock, data dict,
-cancel event, and optional subscriber callbacks.
+initial_status="idle", publish_eta=True)`. Each instance holds its own
+lock, data dict, cancel event, and optional subscriber callbacks.
 
 ```python
 from vtscore.concurrency.progress import ProgressTracker
@@ -262,6 +262,12 @@ value is never the raw estimate: it is snapped to a coarse ladder of
 round values (`_ETA_LADDER`: 10 s … 24 h) and only moves to a
 neighbouring rung once the smoothed estimate overshoots the boundary by
 15% (`_ETA_HYSTERESIS`), so it can rise but does not twitch.
+A tracker built with `publish_eta=False` never publishes one:
+`eta_seconds` stays `None` on every snapshot while `current`/`total` and
+`overall` update as usual. The ingest paths (dataset import, staging
+import, labelset missing-media fetch) build theirs that way when
+`ingest_eta_hidden()` is true, i.e. when `CoreConfig.hide_ingest_eta` is
+set; with no `CoreConfig` builder installed it reads `False`.
 
 **Subscribers:** `subscribe(cb)` registers a callback fired with a
 snapshot after every `update()`, synchronously on the producer thread
@@ -284,7 +290,7 @@ bag = LoadingTasksTracker()
 tracker = bag.create_task(
     task_id="ds_load_42", name="loading my-dataset.pkl",
     dataset_id="my-dataset", media_type="audio", embedder="clap",
-)  # also: detector_id=, step_weights=, extra_fields=
+)  # also: detector_id=, step_weights=, extra_fields=, publish_eta=
 tracker.update("downloading", "Fetching ...", 0, 100)
 bag.mark_finished("ds_load_42")
 ```
