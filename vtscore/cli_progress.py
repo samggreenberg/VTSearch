@@ -14,7 +14,8 @@ Event names emitted today:
 - ``chunks_done``    - chunked scoring finished
   fields: ``total_medias`` (int), ``chunks`` (int)
 - ``labels_imported`` - one-shot ``--import-labels-into`` finished
-  fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int)
+  fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int),
+  ``created`` (bool - ``--create-detector`` made the detector)
 - ``export_complete`` - exporter finished its run
   fields: ``message`` (str - the exporter's own confirmation text),
   ``open_url`` (str? - only when the exporter returned one; an ``http(s)``

@@ -218,6 +218,8 @@ def import_labels_into_detector(
     det_name: str,
     importer_name: str,
     field_values: dict[str, Any],
+    *,
+    create_media_type: str = "",
 ) -> tuple[int, int]:
 
 def import_labels_into_detector_from_file(
@@ -236,6 +238,20 @@ are checked and values normalized as for the other CLI plugin paths.
 (`{"filepath": filepath}`). Used by the pipeline-YAML `import_labels:`
 block and `--import-labels-into` (see below); also callable directly
 when you want to ingest labels without running a full autodetect pass.
+
+A detector with no file in the detectors dir raises
+`DetectorNotFoundError` (a `ValueError` subclass carrying `det_name`)
+unless `create_media_type` names a registered media type. In that case the
+detector is **created** from the imported labels: the JSON the Dashboard's
+New Detector writes (no seed examples, `embedder_type` left for the first
+train to resolve), plus a `vtscore.detectors.registry` entry owned by
+`vtscore.state.current_user.get_current_user()`, so it appears in that
+user's Drafts. No entry is added when one already owns the name. Nothing
+is written when the import yields no `good`/`bad` label, and an existing
+detector ignores `create_media_type`. The app's `--create-detector` and the
+YAML's `import_labels.create: true` drive it, taking the media type from
+`--detector-media-type` / `import_labels.media_type`, else from the source:
+a dataset pickle's `meta.json`, or an importer's `media_type` field.
 
 ### What `_run_pipeline` does
 
@@ -295,7 +311,7 @@ dispatch.
 | `chunk_size`    | positive `int`        | Stream the source in chunks of this size.                                |
 | `stream_results` | `bool`               | Stream hits to the exporter (see above). Requires `chunk_size`.          |
 | `keep_negatives` | `bool`               | Also stream below-threshold hits. Requires `stream_results`.             |
-| `import_labels` | `{detector, file, importer?}` | Run a label importer + merge into a detector before scoring.   |
+| `import_labels` | `{detector, file, importer?, create?, media_type?}` | Run a label importer + merge into a detector before scoring; `create: true` makes the detector if it is missing (`media_type` overrides the source's). |
 | `exporter`      | `{name, fields?}`     | Exporter name + per-field values.                                        |
 
 Unknown top-level keys raise `ValueError`; a missing file raises
@@ -428,8 +444,8 @@ event includes `event` and `ts`; each row lists the extra fields.
 Progress ticks with no `message` and `total <= 0` are dropped, so
 consumers never see empty `{"status":"idle"}` records. The app's
 `--import-labels-into` flag also emits `labels_imported`
-(`detector`, `applied`, `skipped`), but from the app tier, not from
-these modules.
+(`detector`, `applied`, `skipped`, `created`), but from the app tier, not
+from these modules.
 
 ### Consuming the NDJSON stream
 
