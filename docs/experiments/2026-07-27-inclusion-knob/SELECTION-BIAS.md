@@ -56,9 +56,10 @@ inclusions = 7,392 rows; run 2026-07-30.
 > `simulate_voting_iterations`, which cannot drift because it keeps no copy; it
 > writes `autopilot_prod_*.csv` and leaves the files above untouched. The
 > numbers in this report stand as the record of the 2026-07-30 run under the
-> then-shipped detector; a re-measurement under the current one is the open
-> work in
-> [`docs/plans/inclusion-calibration-bias.md`](../../plans/inclusion-calibration-bias.md).
+> then-shipped detector. The plan that owed a re-measurement under the current
+> one was retired when a precision floor replaced the miss budget (#4223); what
+> survives of it is in
+> [`docs/plans/min-precision.md`](../../plans/min-precision.md).
 
 ## Method
 
@@ -146,7 +147,8 @@ phase has diversified anything). Any future mitigation should target the first
 * No region-bag (grouped) arms: the grouped path max-pools each voted image's
   regions to one calibration score and floods Bad votes with every region of the
   image, which reshapes the calibration distribution in ways this study does not
-  measure. Tracked in `docs/plans/inclusion-calibration-bias.md`.
+  measure. Under the precision floor that replaces this budget, the question
+  is #4248.
 * The binary violation rate is coarse at high k (any FNR > 0.0002 counts at
   k=10); `fnr_excess` magnitudes are the load-bearing numbers.
 
@@ -187,5 +189,5 @@ policy get", not as a production estimate.
 5. **If anything is worth building, it is cold-start calibration** (finding 5),
    not bias correction.
 
-Follow-ups are tracked in
-[`docs/plans/inclusion-calibration-bias.md`](../../plans/inclusion-calibration-bias.md).
+The plan that tracked these follow-ups was retired by the #4223 ruling; what
+survives of it is in [`docs/plans/min-precision.md`](../../plans/min-precision.md).

@@ -23,6 +23,14 @@ NO_GOOD_THRESHOLD = 2.0
 INCLUSION_MIN = -10
 INCLUSION_MAX = 10
 
+#: Half-width of the bracket :meth:`FoldAnchoredCut.inclusion_for_threshold`
+#: searches when it recovers the inclusion behind a cut the knob did not set
+#: (a precision floor, #4224).  Far wider than the slider on purpose: such a
+#: cut can sit well outside ``[INCLUSION_MIN, INCLUSION_MAX]``, and at 32
+#: steps (a 2**32 evidence ratio) every per-fold cut has long since run off
+#: its haystack, so nothing realizable lies beyond it.
+INCLUSION_SEARCH_SPAN = 32.0
+
 
 #: The shipped Train/Calibrate split of each calibration fold, per the **space
 #: the detector learns in** (issue #3287 measured them separately; see

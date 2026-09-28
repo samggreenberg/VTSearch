@@ -1560,7 +1560,52 @@ def invalidate_loaded_detector_models() -> None:
             ctx.threshold = 0.5
 
 
-def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: int) -> float:
+def recut_detector_threshold(ctx: "DetectorContext", inclusion_value: float) -> float | None:
+    """The threshold *ctx*'s cached estimator cuts at *inclusion_value*, or ``None``.
+
+    The one place a detector's cut is re-derived without a retrain.  The Inclusion
+    slide (:func:`recompute_detector_thresholds_for_inclusion`), the Find Stats
+    sweep and the acquisition cut (:func:`detector_acquisition_threshold`) all
+    read it, so a new reporting rule (a precision floor, #4224) has one seam to
+    plug into rather than four copies of the fallback chain.
+
+    In order:
+
+    * **The fold-anchored estimator** (``ctx.anchored_cut_cache``), when training
+      fitted one - the shipped cut.  Re-cutting it is arithmetic on the fitted
+      Gaussians, so the result is exactly what a retrain at *inclusion_value*
+      would have stored.
+    * **The conformal rule over the cached fold orderings**, when there is no
+      estimator (safe thresholds off, or a degenerate fit): the slide behaviour
+      this path has always had.  Under safe thresholds that drops the schedule
+      blend a retrain would have mixed in, which needs state the cache does not
+      keep (the comprehensive-audit-2026-07 "skip blend on slides" ruling).
+    * **``None`` - leave the threshold alone** - in every other case: no cached
+      folds, or folds that never split (``folds.fallback`` set: too few votes,
+      or one class).  The stored threshold there came from an inclusion-blind
+      rule - the schedule blend, or the fallback itself - so there is nothing
+      the knob could move.  Returning the fallback instead, as the slide once
+      did, replaced a fitted blend cut with the bare 0.5 sentinel on the first
+      touch of the stepper, which could even admit *fewer* items on a step
+      toward lenient.
+    """
+    cut = ctx.anchored_cut_cache
+    if cut is not None:
+        candidate = float(cut.threshold_at(inclusion_value))
+        if math.isfinite(candidate):
+            return candidate
+    cache = ctx.calibration_cache
+    if cache is None:
+        return None
+    folds = cache[1]
+    if folds.fallback is not None or not folds.orderings:
+        return None
+    from vtscore.training.thresholds import threshold_from_fold_orderings
+
+    return float(threshold_from_fold_orderings(folds.orderings, inclusion_value))
+
+
+def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
 
     **Not the decision line.**  ``ctx.threshold`` is what the user sees and what
@@ -1571,6 +1616,14 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: int)
     Decoupling the two buys 4.5x the positives per 100 votes at lower cost - see
     ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md`` (PR #2876).
 
+    The offset is relative to **the inclusion the reporting cut sits at**.
+    *inclusion_value* names it when the caller set the cut in those units (the
+    Inclusion knob).  ``None`` recovers it from ``ctx.threshold`` through
+    :meth:`~vtscore.training.thresholds.FoldAnchoredCut.inclusion_for_threshold`,
+    which is the path a cut chosen by another rule takes: under a precision
+    floor (#4224) the reporting cut is wherever the floor lands, and acquisition
+    samples four steps stricter than *that*.
+
     Derived on demand rather than stored beside ``ctx.threshold``: there are
     four places that write a threshold onto a detector context, and a second
     field would be one more thing for each of them to forget.  Re-cutting is
@@ -1578,55 +1631,49 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: int)
     request.
 
     Falls back to ``ctx.threshold`` when there is no fold-anchored estimator to
-    re-cut (safe thresholds off, or a degenerate fit that fell back to the
-    schedule blend, which has no inclusion-aware form) - the two jobs coincide
-    there, exactly as they did everywhere before #2876.
+    re-cut (safe thresholds off, a degenerate fit that fell back to the schedule
+    blend, which has no inclusion-aware form, or a structural detector whose
+    threshold is not on the estimator's scale) - the two jobs coincide there,
+    exactly as they did everywhere before #2876.
     """
     cut = ctx.anchored_cut_cache
     if cut is None:
         return ctx.threshold
     from vtscore.training.thresholds import acquisition_inclusion
 
-    candidate = float(cut.threshold_at(acquisition_inclusion(inclusion_value)))
+    reporting = inclusion_value if inclusion_value is not None else cut.inclusion_for_threshold(ctx.threshold)
+    if reporting is None:
+        return ctx.threshold
+    candidate = float(cut.threshold_at(acquisition_inclusion(reporting)))
     return candidate if math.isfinite(candidate) else ctx.threshold
 
 
 def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
-    """Re-derive each loaded detector's threshold at *inclusion_value* from its
-    cached fold orderings, leaving the (inclusion-independent) MLP in place.
+    """Re-derive each loaded detector's threshold after an Inclusion change,
+    leaving the (inclusion-independent) MLP in place.
 
-    Inclusion is a pure cutoff knob now: a change must not drop the model or
+    Inclusion is a pure cutoff knob: a change must not drop the model or
     re-score the haystack - only move the threshold over already-computed
-    scores.  Detectors with no cached fold orderings yet are left untouched;
-    the next training pass computes the threshold under the new inclusion.
+    scores (:func:`recut_detector_threshold`).  Detectors with nothing cached to
+    re-cut are left untouched; the next training pass computes the threshold
+    under the new inclusion.
 
-    **The safe threshold is re-derived faithfully.**  With safe thresholds on,
-    a fresh retrain stores the fold-anchored population cut
-    (:func:`vtscore.training.thresholds.fold_anchored_gmm_threshold`), and the
-    fitted estimator is parked on ``ctx.anchored_cut_cache``.  Re-cutting it at
-    a new inclusion is arithmetic on the already-fitted Gaussians, so a slide
-    reproduces exactly what a retrain at that inclusion would have stored -
-    without touching the model or re-scoring the haystack.  Detectors with no
-    anchored cut (safe thresholds off, or a degenerate fit that fell back to
-    the blend) slide on the raw cross-calibration rule over the cached fold
-    orderings, as they always have.
+    **Each detector is re-cut at its own inclusion.**  The value is per
+    detector (``DetectorContext.inclusion``, seeded from the user's setting on
+    first read; see #3416): :func:`vtscore.state.set_inclusion` writes only the
+    active detector's, so *inclusion_value* is applied to the active detector
+    and to any detector that has not been seeded yet.  A detector already
+    holding its own value keeps its cut.  Re-cutting it at *inclusion_value*,
+    as this once did, left its threshold at the new value while
+    ``GET /api/inclusion`` still reported the old one, so switching to it
+    showed a stepper that disagreed with its line.
     """
-    from vtscore.training.thresholds import threshold_from_fold_orderings
-
     with _state_lock:
         for ctx in loaded_detector_contexts():
-            cut = ctx.anchored_cut_cache
-            if cut is not None:
-                ctx.threshold = cut.threshold_at(inclusion_value)
-                continue
-            cache = ctx.calibration_cache
-            if cache is None:
-                continue
-            folds = cache[1]
-            if folds.fallback is not None:
-                ctx.threshold = folds.fallback
-            elif folds.orderings:
-                ctx.threshold = threshold_from_fold_orderings(folds.orderings, inclusion_value)
+            own = ctx.inclusion
+            threshold = recut_detector_threshold(ctx, own if own is not None else inclusion_value)
+            if threshold is not None:
+                ctx.threshold = threshold
 
 
 # ---------------------------------------------------------------------------

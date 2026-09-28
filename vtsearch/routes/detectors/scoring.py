@@ -541,8 +541,8 @@ def find_stats():
     counts at every stop.
     Pure read; no new state.
     """
-    from vtscore.state.core import get_active_detector_context
-    from vtscore.training.thresholds import INCLUSION_MAX, INCLUSION_MIN, threshold_from_fold_orderings
+    from vtscore.state.core import get_active_detector_context, recut_detector_threshold
+    from vtscore.training.thresholds import INCLUSION_MAX, INCLUSION_MIN
     from vtsearch.state import get_inclusion
 
     det_ctx = get_active_detector_context()
@@ -570,22 +570,16 @@ def find_stats():
 
     # Sweep FP/FN over ALL adopted items at every inclusion's threshold.
     # Adopted-bad above the line are false positives; adopted-good below it are
-    # false negatives.  Thresholds come from the cached estimator behind the
-    # detector's current cutoff - the fold-anchored population fit when safe
-    # thresholds produced one, else the cached fold orderings - so the chart
-    # plots the line the user would actually get at each stop, and the sweep
-    # stays cheap (no refit, no re-scoring).
-    anchored_cut = det_ctx.anchored_cut_cache
-    cache = det_ctx.calibration_cache
-    orderings = cache[1].orderings if (cache is not None and cache[1].fallback is None) else []
+    # false negatives.  Thresholds come from the same re-cut an Inclusion slide
+    # applies (`recut_detector_threshold`), so the chart plots the line the user
+    # would actually get at each stop, and the sweep stays cheap (no refit, no
+    # re-scoring).  A detector with nothing to re-cut plots its current line flat.
     good_scores = [scores[c] for c in good if c in scores]
     bad_scores = [scores[c] for c in bad if c in scores]
     sweep = []
     for incl in range(INCLUSION_MIN, INCLUSION_MAX + 1):
-        if anchored_cut is not None:
-            t_i = anchored_cut.threshold_at(incl)
-        else:
-            t_i = threshold_from_fold_orderings(orderings, incl) if orderings else det_ctx.threshold
+        recut = recut_detector_threshold(det_ctx, incl)
+        t_i = recut if recut is not None else det_ctx.threshold
         sweep.append(
             {
                 "inclusion": incl,

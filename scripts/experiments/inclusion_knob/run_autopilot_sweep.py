@@ -6,8 +6,8 @@ holds when the votes are chosen by the detector's own sort.  The comparison the
 concluded study made (Autopilot vs. exchangeable random voting) is recorded in
 [`SELECTION-BIAS.md`](../../../docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md);
 what this script is *for* now is measuring that budget under the **shipped**
-detector, which is what the open items in
-``docs/plans/inclusion-calibration-bias.md`` need.
+detector.  (The plan that owed those measurements was retired when a precision
+floor replaced the miss budget, #4223; see ``docs/plans/min-precision.md``.)
 
 **This is a driver, not a simulation.**  Every vote, fit, calibration and cut is
 :func:`vtscore.eval.voting_iterations.simulate_voting_iterations`'s; this file
@@ -60,8 +60,7 @@ Two frames are written:
 
 Every step is emitted, not just the checkpoints: one trajectory yields them all
 now that the loop is not being re-simulated per vote count, and the cold-start
-question in ``docs/plans/inclusion-calibration-bias.md`` lives in the steps the
-old checkpoint grid skipped.
+question lives in the steps the old checkpoint grid skipped.
 
 Usage::
 

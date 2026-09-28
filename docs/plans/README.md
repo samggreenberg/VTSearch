@@ -38,8 +38,8 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 ## Thresholds and calibration
 
+- [`min-precision.md`](min-precision.md)
 - [`population-anchored-calibration.md`](population-anchored-calibration.md)
-- [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md)
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
 - [`calibration-experiment.md`](calibration-experiment.md)
 - [`region-vs-binary-kappa-mechanism.md`](region-vs-binary-kappa-mechanism.md)
