@@ -208,7 +208,8 @@ bags and a scoring population that differs from *snap*):
 1. Cross-calibration threshold via
    `calculate_cross_calibration_threshold` (respects `calibrate_count`
    and `calibration_fraction` settings).
-2. Full-data model via `train_model` (respects `inclusion`).
+2. Full-data model via `train_model`. Inclusion never reaches the model: the
+   head is the same at every inclusion, and only the cut in step 3 reads it.
 3. The fold-anchored population threshold whenever a media snapshot is
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.

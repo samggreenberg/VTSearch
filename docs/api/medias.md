@@ -456,8 +456,8 @@ This is the only sort with a detector behind it, so the only one whose
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`
 is the **acquisition cut**, and it is a different number — Autopilot's Hard and
 New picks read a threshold as a *rank position* rather than a boundary, so they
-sample around a cut taken three inclusion steps below the reporting one, which
-places it higher in the ranking. Nothing shown to the user reads it. It is
+sample around a cut taken four inclusion steps below the reporting one
+(`ACQUISITION_INCLUSION_OFFSET`), which places it higher in the ranking. Nothing shown to the user reads it. It is
 `null` on sorts with no detector behind them (`/api/sort`, `/api/example-sort`,
 `/api/label-file-sort`), where a client should fall back to `threshold`. See
 [`docs/ML.md`](../ML.md#threshold-calibration) for the mechanism and the

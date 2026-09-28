@@ -123,7 +123,7 @@ canonical persisted form.
 | `verified_ids` | `dict[int, None]` | IDs the human explicitly verified this Find session |
 | `find_scores` | `dict[int, float]` | Frozen per-item score, so an Inclusion change re-thresholds without re-scoring |
 | `find_eval_stale` | `bool` | The labelset changed since this Find evaluation was scored |
-| `inclusion` | `int \| None` | Per-detector inclusion fraction override |
+| `inclusion` | `int \| None` | This detector's Inclusion value: seeded from the user's setting on first read, `None` until then. An Inclusion change re-cuts each loaded detector at its own value |
 | `training_medias` | `dict[int, dict[str, Any]]` | Voted medias with embeddings |
 | `label_embeddings` | `dict[str, np.ndarray]` | `stable_element_id -> embedding`, built from origins |
 | `label_embedding_regions` | `dict[str, tuple \| None]` | The region each cached `label_embeddings` entry was pooled from - detects a region edit |

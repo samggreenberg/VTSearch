@@ -73,6 +73,35 @@ need to think about sort modes or selection strategies directly.
 > panel shows the one matching your current theme, and on GitHub/GitLab the
 > `<picture>` element above picks the variant matching your site appearance.
 
+### Matches, the line, precision and recall
+
+A trained detector gives every item a **score** and ranks the dataset by
+it, best match first. It also draws a **line** through that ranking (the
+*threshold*): items at or above the line are its **matches**, and items
+below it are not. Everything that acts on "the matches" acts on exactly the
+items above the line: the *Unverified Good* count in Find, **To Dataset**,
+**Export**, **Browse**, and the exports an AutoRun detector sends.
+
+Two numbers describe how good a set of matches is:
+
+- **Precision** - of the items the detector returns, the share that really
+  are what you are looking for. At 80% precision, 8 in every 10 returned
+  items are right.
+- **Recall** - of all the items in the dataset that really are what you are
+  looking for, the share the detector returns. At 80% recall it found 8 in
+  every 10 of them.
+
+The two trade off against each other. Moving the line down the ranking
+returns more items, so recall goes up, but the extra items are the ones the
+detector is least sure of, so precision usually goes down. Moving the line
+up does the reverse. Moving the line never changes the ranking itself: the
+same items stay in the same order. Which way to lean depends on what you
+will do with the results. If you will read every match, lean toward
+precision; if missing one is the costly mistake, lean toward recall.
+
+In the Find view's **Stats**, *Kept rate* is the precision of the
+detector's matches among the items you have checked.
+
 ---
 
 ## Step by step: your first search
@@ -186,9 +215,9 @@ Back on the dashboard:
 
 Find scores every photo in the dataset and opens the results:
 
-1. The photos, best match first. How many the detector calls a match, and
-   how many it doesn't, is counted on the right as *Unverified Good* and
-   *Unverified Bad*.
+1. The photos, best match first. How many the detector calls a match (the
+   photos above its line), and how many it doesn't, is counted on the right
+   as *Unverified Good* and *Unverified Bad*.
 2. Click any photo to look at it, and confirm or correct the detector
    with **Good** or **Bad**. Checking is optional.
 3. The photos you check collect in **Verified Good** and **Verified Bad**.
@@ -566,20 +595,26 @@ but in Manual mode you choose directly.
 A numeric stepper from **-10** (strict) to **+10** (lenient),
 default 0.
 
-Moves the detector's good/bad cutoff. Negative values mean "only
-call it good if you're very sure" - fewer matches, but the ones you
-get are more likely right. Positive values mean "include borderline
-items" - more matches, but more of them may be wrong. Changing it
-**re-runs the ranking** so the new cutoff takes effect.
+Moves the detector's line (see
+[Matches, the line, precision and recall](#matches-the-line-precision-and-recall)).
+Negative values mean "only call it good if you're very sure": fewer
+matches, but the ones you get are more likely right. Positive values
+mean "include borderline items": more matches, but more of them may be
+wrong. Changing it moves the line over the scores the detector already
+has; the ranking itself does not change.
 
-Each step **up** roughly halves the share of real matches the cutoff
-is allowed to miss, and the steps *nest*: everything included at
-Inclusion 1 is still included at Inclusion 4, plus a band of extra
-borderline items. That makes a two-pass workflow natural: work at a
-strict setting first, then raise inclusion a few steps and review just
-the newly admitted band to be confident you've seen "all the potential
-items". The same knob position means the same miss-tolerance on any
-detector or dataset.
+The steps *nest*: everything included at Inclusion 1 is still included
+at Inclusion 4, plus a band of extra borderline items. That makes a
+two-pass workflow natural: work at a strict setting first, then raise
+inclusion a few steps and review just the newly admitted band to be
+confident you've seen "all the potential items". How far one step moves
+the line is not a fixed amount: it depends on the detector and the
+dataset, so the same setting can return a very different number of
+matches on two detectors.
+
+Until the detector has at least two Good and two Bad votes, it has no
+calibration for the stepper to move, and the line stays where training
+put it.
 
 Leave at 0 unless you want to deliberately lean toward catching
 everything or toward only the surest matches.

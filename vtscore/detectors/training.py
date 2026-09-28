@@ -423,7 +423,8 @@ def train_and_threshold(
     1. K-fold calibration (respects ``calibrate_count`` /
        ``calibration_fraction`` settings), giving both the cross-calibration
        cut and the fold models.
-    2. Full-data model training (respects ``inclusion`` setting).
+    2. Full-data model training.  Inclusion never reaches the model; only the
+       cut in step 3 reads it.
     3. The fold-anchored population threshold whenever *snap* is provided -
        see :func:`_safe_threshold`.  It is fitted on the per-media scores
        :func:`_score_all_media` produces - region max-pooled on a patch
