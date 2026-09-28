@@ -207,6 +207,10 @@ class AppSettingsSchema(Schema):
         keys=fields.String(),
         values=fields.Dict(keys=fields.String(), values=fields.String()),
     )
+    # Whether a web import runs the user's AutoRun detectors once the dataset
+    # is saved; the Add Dataset dialog's "Run AutoRun" checkbox starts from it,
+    # and each import that sends the box remembers its state here.
+    autorun_on_import = fields.Boolean()
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -310,6 +314,7 @@ class SettingsUpdateSchema(Schema):
     # validation runs at export time against the chosen plugin's schema).
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Raw()
+    autorun_on_import = fields.Boolean()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()

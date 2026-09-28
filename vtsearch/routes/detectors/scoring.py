@@ -11,20 +11,18 @@ Migrated to ``flask_smorest`` so the routes are described in
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from flask_smorest import Blueprint, abort
 
-from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
 from vtsearch.routes._context import require_dataset_header, require_detector_header
-from vtsearch.routes._media_response import media_info_for_response
 from vtsearch.routes._progress import find_idle, find_idle_on_crash
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
+    AutoRunRunResponseSchema,
     FindCorrectionsToDetectorResponseSchema,
     FindEvidenceCoverageResponseSchema,
     FindLabelRequestSchema,
@@ -33,62 +31,31 @@ from vtsearch.schemas.detectors import (
 )
 from vtsearch.state import snapshot_medias
 
-if TYPE_CHECKING:  # pragma: no cover - import cycle / heavy-import avoidance
-    from vtscore.detectors.training import ScoringRows
-
 logger = logging.getLogger(__name__)
 
 detector_scoring_bp = Blueprint(
     "detector_scoring",
     __name__,
     description="Run a detector against the active dataset (find-label) "
-    "or run every Auto-Find detector at once (auto-detect).",
+    "or run every AutoRun detector at once (auto-detect).",
 )
 
 
 def _detector_type(det_data: dict | None) -> str:
     """The locked embedder type of a detector JSON (legacy-migrated)."""
-    from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
+    from vtsearch.autorun_detectors import detector_type  # noqa: PLC0415
 
-    return detector_embedder_type_from_data(det_data or {})
-
-
-def _dataset_bound_embedders(snap: dict) -> list[str]:
-    """The embedder names the active snap binds (keys of the first media's vectors)."""
-    from vtscore.embedding.media_vectors import media_embedder_names  # noqa: PLC0415
-
-    return media_embedder_names(next(iter(snap.values()), {})) if snap else []
+    return detector_type(det_data)
 
 
 def _dataset_supplies_detector_type(det_data: dict | None, snap: dict) -> bool:
     """Whether the active snap binds an embedder of the detector's locked type.
 
-    A detector scores its labels in the concrete embedder of its locked type the
-    active dataset supplies; when the dataset binds no embedder of that type the
-    labels would re-embed in a foreign space (garbage scores), so the pair is
-    incompatible.  A legacy/typeless detector is always compatible (resolved at
-    first train via the score precedence).
+    See :func:`vtsearch.autorun_detectors.dataset_supplies_detector_type`.
     """
-    from vtscore.embedding.binding import detector_dataset_compatible  # noqa: PLC0415
+    from vtsearch.autorun_detectors import dataset_supplies_detector_type  # noqa: PLC0415
 
-    return detector_dataset_compatible(_detector_type(det_data), _dataset_bound_embedders(snap))
-
-
-def _compatible_detectors(detectors_to_run: list, snap: dict) -> list:
-    """Drop Auto-Find detectors whose locked type the active dataset can't supply.
-
-    Scoring an incompatible detector's labels in a foreign space would be
-    garbage, so they are skipped; a legacy/typeless detector stays (resolved via
-    the score precedence).  Each item is a ``(name, det_data, entry)`` triple.
-    Aborts 400 if the gate leaves nothing to run.
-    """
-    kept = [trip for trip in detectors_to_run if _dataset_supplies_detector_type(trip[1], snap)]
-    if not kept:
-        abort(
-            400,
-            message="No Auto-Find detectors are compatible with the active dataset's embedder types.",
-        )
-    return kept
+    return dataset_supplies_detector_type(det_data, snap)
 
 
 def _type_incompatible_message(det_data: dict | None) -> str:
@@ -382,146 +349,6 @@ def find_label(body: dict):
             "bad_count": bad_count,
             "detector_name": d.get("name", ""),
         }
-
-
-def _resolve_autofind_names(body: dict, media_type: str) -> list[str]:
-    """Return the Auto-Find detector names to consider for this request.
-
-    Aborts with 404 when ``detector_name`` is given but not in the Auto-Find
-    list, and with 400 when no Auto-Find detectors are configured at all.
-    """
-    from vtsearch.settings import get_autofind_detectors  # noqa: PLC0415
-
-    autofind_names = get_autofind_detectors()
-    single_name = body.get("detector_name") or ""
-    if single_name:
-        if single_name not in autofind_names:
-            abort(404, message=f"Detector '{single_name}' not flagged for Auto-Find")
-        return [single_name]
-    if not autofind_names:
-        abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
-    return autofind_names
-
-
-def _collect_detectors_for_media_type(
-    autofind_names: list[str], media_type: str
-) -> tuple[list[tuple[str, dict, dict | None]], list[str]]:
-    """Load detector data + registry entry for each Auto-Find name matching *media_type*.
-
-    Returns ``(detectors, missing)``: *missing* holds names whose detector
-    file no longer exists on disk (a stale Auto-Find reference). Names whose
-    media type simply doesn't match the active dataset are skipped without
-    being reported - those are legitimately inapplicable, not broken.
-    """
-    from vtscore.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
-    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
-
-    detectors: list[tuple[str, dict, dict | None]] = []
-    missing: list[str] = []
-    for name in autofind_names:
-        det_data = _read_detector(_detector_path(name))
-        if det_data is None:
-            missing.append(name)
-            continue
-        if det_data.get("media_type", "") != media_type:
-            continue
-        reg_entry = find_by_name(name)
-        if reg_entry is None:
-            # Fallback: also accept registry entries whose name matches.
-            for entry in list_detectors():
-                if entry.get("name") == name:
-                    reg_entry = entry
-                    break
-        detectors.append((name, det_data, reg_entry))
-    return detectors, missing
-
-
-def _score_detector_for_auto_detect(
-    name: str,
-    det_data: dict,
-    reg_entry: dict | None,
-    media_type: str,
-    snap: dict,
-    rows: ScoringRows,
-) -> tuple[str, dict] | None:
-    """Train (or reuse) one detector and score every media in *snap*.
-
-    *rows* is the :class:`~vtscore.detectors.training.ScoringRows` stack for
-    this detector's score space, built once by the route and shared by every
-    detector that resolves to the same embedder.  Scoring goes through
-    :func:`~vtscore.detectors.training.score_rows_with_model` - the app's one
-    definition of what a head scores a media at - so this route pools a patch
-    head over its media's rows exactly as ``/api/find-label`` does.  It used to
-    forward a bare image-level matrix instead, which was self-consistent only
-    while ``resolve_or_train_detector`` hand-rolled a whole-image head; now that
-    it delegates to the app's own labelset training (issue #3544), an
-    image-level pass here would be the same train/score mismatch inverted.
-    """
-    from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
-
-    # Poll BEFORE the catch-all try: CancelledError subclasses Exception, and
-    # a cancel must propagate to the route (via future.result()), not be
-    # swallowed as a failed detector.
-    find_progress.check_cancelled()
-
-    try:
-        detector_id = reg_entry["id"] if reg_entry else name
-        mlp, threshold, _diag = resolve_or_train_detector(
-            detector_id,
-            det_data,
-            media_type,
-            snap,
-            progress_step=1,
-            progress_total_steps=1,
-        )
-        if mlp is None:
-            return None
-
-        scores, _best_row = score_rows_with_model(mlp, rows)
-
-        positive_hits = []
-        negative_hits = []
-        for cid, score in zip(rows.ids, scores, strict=True):
-            clip_info = media_info_for_response(snap[cid])
-            clip_info["score"] = round(score, 4)
-            if score >= threshold:
-                positive_hits.append(clip_info)
-            else:
-                negative_hits.append(clip_info)
-
-        positive_hits.sort(key=lambda x: x["score"], reverse=True)
-        negative_hits.sort(key=lambda x: x["score"], reverse=True)
-
-        return name, {
-            "detector_name": name,
-            "threshold": round(threshold, 4),
-            "total_hits": len(positive_hits),
-            "hits": positive_hits,
-            "negative_hits": negative_hits,
-        }
-    except Exception:
-        logger.exception("Auto-detect failed for detector %s", name)
-        return None
-
-
-def _collect_auto_detect_results(futures: list, results: dict[str, dict]) -> None:
-    """Drain the auto-detect worker futures into *results*.
-
-    A worker that saw the cancel flag raises :class:`CancelledError`; drop the
-    queued workers (already-running ones finish their current detector, the
-    queued ones bail at their entry poll), reset the tracker, and abort 409.
-    """
-    try:
-        for future in futures:
-            outcome = future.result()
-            if outcome is not None:
-                name, result = outcome
-                results[name] = result
-    except CancelledError:
-        for f in futures:
-            f.cancel()
-        find_idle()
-        abort(409, message="Find cancelled")
 
 
 @detector_scoring_bp.route("/api/find/stats", methods=["GET"])
@@ -857,190 +684,75 @@ def find_corrections_to_detector():
 @detector_scoring_bp.response(200, AutoDetectResponseSchema)
 @detector_scoring_bp.alt_response(
     400,
-    description="No medias loaded, or no Auto-Find detectors match the active media type.",
+    description="No medias loaded, or no AutoRun detectors match the active media type.",
 )
-@detector_scoring_bp.alt_response(404, description="Named detector is not flagged for Auto-Find.")
+@detector_scoring_bp.alt_response(404, description="Named detector is not on the caller's AutoRun list.")
 @detector_scoring_bp.alt_response(409, description="Find was cancelled via /api/find/cancel.")
 def auto_detect(body: dict):
-    """Score the active dataset with every detector flagged for Auto-Find.
+    """Score the active dataset with every detector on the caller's AutoRun list.
 
     Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each
     one's MLP on demand from its on-disk labelset.  Returns one result column
-    per detector. Pass ``detector_name`` to run a single Auto-Find detector.
-    """
-    snap = snapshot_medias()
-    if not snap:
-        abort(400, message="No medias loaded")
+    per detector. Pass ``detector_name`` to run a single AutoRun detector.
 
-    media_type = next(iter(snap.values())).get("media_type", "audio")
+    The synchronous, scripted sibling of the Dashboard's background AutoRun
+    (``POST /api/datasets/registry/<dataset_id>/autorun``); both run through
+    :mod:`vtsearch.autorun_detectors`.  This one reports on the shared Find
+    tracker and is cancelled by ``/api/find/cancel``.
+    """
+    from vtsearch.autorun_detectors import (  # noqa: PLC0415
+        AutoRunUnavailable,
+        plan_autorun,
+        run_autofind_export,
+        score_autorun,
+    )
+
+    snap = snapshot_medias()
 
     # Clear a leftover cancel flag from a previously-cancelled run.
     find_progress.reset_cancel()
 
-    autofind_names = _resolve_autofind_names(body, media_type)
-    detectors_to_run, missing_detectors = _collect_detectors_for_media_type(autofind_names, media_type)
-    if not detectors_to_run:
-        if missing_detectors:
-            abort(
-                400,
-                message=(
-                    f"No Auto-Find detectors found for media type: {media_type}. "
-                    f"Missing detector file(s) for: {', '.join(missing_detectors)}"
-                ),
-            )
-        abort(400, message=f"No Auto-Find detectors found for media type: {media_type}")
+    try:
+        plan = plan_autorun(snap, detector_name=body.get("detector_name") or "")
+    except AutoRunUnavailable as exc:
+        abort(exc.status, message=exc.message)
 
-    # Type gate: drop Auto-Find detectors whose locked embedder type the active
-    # dataset can't supply (see _compatible_detectors).
-    detectors_to_run = _compatible_detectors(detectors_to_run, snap)
-
-    from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
-    from vtscore.state.core import get_active_context  # noqa: PLC0415
-
-    # Each detector scores in the concrete embedder of its locked type, so build
-    # one row stack per distinct embedder the Auto-Find detectors call for
-    # (collapsing to a single shared stack on the common single-embedder
-    # dataset, where every type resolves to the same name).  A legacy/typeless
-    # detector falls back to the dataset score precedence, matching
-    # resolve_or_train_detector's cold-train space.
-    from vtscore.embedding.binding import keying_embedder_for_type  # noqa: PLC0415
-
-    default_score = get_active_context().routed_embedder("score")
-    det_embedders: dict[str, str | None] = {}
-    for dname, ddata, _entry in detectors_to_run:
-        keyed = keying_embedder_for_type(_detector_type(ddata), snap)
-        det_embedders[dname] = keyed or default_score
-
-    # These are ``scoring_rows_for_snap`` rows - the app's single definition of
-    # what a detector scores a media at - not an image-level matrix: the heads
-    # ``resolve_or_train_detector`` returns are the app's own labelset-trained
-    # ones, which are MaxPatch heads on a patch dataset (issue #3544).  On such
-    # a dataset the build is the region matrix cached on the active dataset
-    # context, so one stack per space costs nothing the first vote of a session
-    # would not have paid anyway.
-    row_stacks: dict[str | None, ScoringRows] = {}
-    for emb in set(det_embedders.values()):
-        row_stacks[emb] = scoring_rows_for_snap(snap, emb)
-
-    # Size the worker cap off the biggest stack actually built.  Indexing by
-    # ``default_score`` would KeyError whenever no detector keys to it - the
-    # normal case on a multi-embedder dataset where every Auto-Find detector is
-    # type-locked to a semantic embedder while the score precedence picks the
-    # patch/structural one.  ``row_stacks`` is never empty here because
-    # ``_compatible_detectors`` aborts 400 when the type gate leaves nothing.
-    # The cap counts *rows*, not media: a patch stack is H*W+1 rows per media
-    # and that is what each worker's forward pass allocates.
-    cap_rows = max(int(r.matrix.shape[0]) for r in row_stacks.values())
-    cap_dim = max(int(r.matrix.shape[1]) if r.matrix.ndim > 1 else 0 for r in row_stacks.values())
-    worker_cap = cap_workers_by_memory(
-        cap_rows,
-        cap_dim,
-        max_workers=min(len(detectors_to_run), 8),
-    )
-    results: dict[str, dict] = {}
     # A cold detector's train writes "running" to the shared tracker from inside
     # the workers (``resolve_or_train_detector``), so this route owns parking it
-    # again — on the way out of a crash via the guard, and on the ordinary path
-    # below.  Cancellation parks it in ``_collect_auto_detect_results``.
+    # again — on the way out of a crash via the guard, and on the two ordinary
+    # exits below.
     with find_idle_on_crash():
-        with ThreadPoolExecutor(max_workers=worker_cap) as pool:
-            futures = [
-                pool.submit(
-                    _score_detector_for_auto_detect,
-                    name,
-                    data,
-                    entry,
-                    media_type,
-                    snap,
-                    row_stacks[det_embedders[name]],
-                )
-                for name, data, entry in detectors_to_run
-            ]
-            _collect_auto_detect_results(futures, results)
+        try:
+            response = score_autorun(plan, snap)
+        except CancelledError:
+            find_idle()
+            abort(409, message="Find cancelled")
         find_idle()
 
-    if results:
-        from vtsearch.achievements import record_find  # noqa: PLC0415
-
-        # Each detector scored the medias in its own embedder's stack, so count
-        # them per detector rather than multiplying one stack's media count out.
-        record_find(sum(len(row_stacks[det_embedders[name]].ids) for name in results))
-
-    response = {
-        "media_type": media_type,
-        "detectors_run": len(results),
-        "results": results,
-        "missing_detectors": missing_detectors,
-    }
-    auto_export = _run_autofind_export(response)
+    auto_export = run_autofind_export(response)
     if auto_export is not None:
         response["auto_export"] = auto_export
     return response
 
 
-def _run_autofind_export(response: dict) -> dict | None:
-    """Run the configured Auto-Find results exporter on *response*.
+@detector_scoring_bp.route("/api/autorun/runs/<run_id>", methods=["GET"])
+@detector_scoring_bp.response(200, AutoRunRunResponseSchema)
+@detector_scoring_bp.alt_response(
+    404,
+    description="No such run for the caller: unknown, another user's, or aged out of the kept window.",
+)
+def get_autorun_run(run_id: str):
+    """Results of a finished background AutoRun, for the user who started it.
 
-    Returns ``None`` when no exporter is configured (the common case), or a
-    status dict ``{exporter, success, message?, error?}`` otherwise. Export
-    failures are reported in the status block rather than raised: the scored
-    results are valuable on their own, so a misconfigured exporter must not
-    sink the whole request.
+    ``run_id`` is the ``task_id`` of the AutoRun task (``autorun.run_id`` on
+    its ``loading-tasks`` row).  Runs are kept in memory only, and only the
+    most recent few, so an old or pre-restart run answers 404 like one that
+    never existed.
     """
-    from vtsearch.settings import (  # noqa: PLC0415
-        get_autofind_exporter,
-        get_autofind_exporter_field_values,
-    )
+    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtsearch.autorun_detectors import get_autorun_run as _get_run  # noqa: PLC0415
 
-    exporter_name = get_autofind_exporter()
-    if not exporter_name:
-        return None
-
-    from vtscore.exporters import get_exporter  # noqa: PLC0415
-
-    exporter = get_exporter(exporter_name)
-    if exporter is None:
-        return {"exporter": exporter_name, "success": False, "error": f"Unknown exporter '{exporter_name}'"}
-
-    if "find_results" not in exporter.supported_payloads:
-        # A saved Auto-Find choice can outlive the exporter's capabilities (a
-        # plugin narrowed, or a labelset-only exporter picked before the
-        # pickers filtered). Report it rather than handing it a shape it can't
-        # read and mailing an empty summary.
-        supported = ", ".join(sorted(exporter.supported_payloads)) or "nothing"
-        return {
-            "exporter": exporter_name,
-            "success": False,
-            "error": f"Exporter '{exporter_name}' cannot export find results (it supports: {supported})",
-        }
-
-    field_values = dict(get_autofind_exporter_field_values().get(exporter_name, {}))
-    try:
-        from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
-
-        normalize_field_values(exporter, field_values)
-        outcome = exporter.export_find_results(response, field_values) or {}
-    except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never raised
-        logger.exception("Auto-Find export via %s failed", exporter_name)
-        return {"exporter": exporter_name, "success": False, "error": str(exc)}
-
-    status = {"exporter": exporter_name, "success": True, "message": outcome.get("message", "Export complete.")}
-    for key, value in outcome.items():
-        if key != "message":
-            status[key] = value
-
-    # An `open_url` reaches the browser, so it gets the same scheme allowlist
-    # `POST /api/exporters/export` applies - a plugin must not be able to push
-    # a `javascript:` URL to the frontend from here either. Unlike that route
-    # this one drops the bad URL instead of failing: the export already
-    # happened, and the scored results must survive a cosmetic field.
-    if status.get("open_url") is not None:
-        from vtscore.security.url_validation import validate_browser_url  # noqa: PLC0415
-
-        try:
-            status["open_url"] = validate_browser_url(str(status["open_url"]))
-        except ValueError as exc:
-            logger.error("Auto-Find exporter %r returned an unusable open_url: %s", exporter_name, exc)
-            del status["open_url"]
-            status["message"] = f"{status['message']} (the exporter returned an unusable URL, so nothing will open)"
-    return status
+    record = _get_run(run_id, get_current_user())
+    if record is None:
+        abort(404, message="AutoRun results not found")
+    return record

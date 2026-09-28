@@ -721,6 +721,7 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_detectors": [],
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
+  "autorun_on_import": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
