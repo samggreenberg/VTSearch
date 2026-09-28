@@ -373,6 +373,25 @@ async function setAutoRun(h: Helpers, on: boolean): Promise<void> {
   await h.app.api(`/api/detectors/registry/${det.id}/autofind`, { method: 'PUT', body: { autofind: on } });
 }
 
+/**
+ * Click the Browse canvas, *button* 'left' or 'right', at the first point
+ * (working out from the centre) where it lands on a tile, judged by *hit*.
+ * Tiles leave gaps between clusters, and a right-click on empty space soon
+ * after another zooms out, so the tries are spaced out.
+ */
+async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: () => Promise<boolean>): Promise<void> {
+  const box = await page.locator('vt-browse-canvas').first().boundingBox();
+  if (!box) throw new Error('no Browse canvas');
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  for (const [dx, dy] of [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40], [80, 40], [-80, -40], [120, 0], [-120, 0], [0, 120]]) {
+    await page.mouse.click(cx + dx, cy + dy, { button });
+    await h.wait(1200);
+    if (await hit()) return;
+  }
+  throw new Error('no tile found near the middle of the Browse canvas');
+}
+
 /** Select a dataset + detector on the dashboard, then Find; wait out scoring. */
 async function openFind(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
@@ -1039,7 +1058,7 @@ export const SHOTS: Shot[] = [
     caption:
       'The Missed vs. Wrong Matches by Inclusion chart: wrong matches rise and missed matches fall as Inclusion goes up, with the current setting marked',
     themes: BOTH,
-    clip: { target: '.chart-wrap', pad: 16 },
+    clip: { target: '.chart-wrap', pad: 6 },
     async recipe(page, h) {
       await openFind(page, h);
       await verifyServed(page, h, 12);
@@ -1619,4 +1638,234 @@ export const SHOTS: Shot[] = [
     },
     after: async (page, h) => tickOnly(page, h, 'tr[vt-dataset-card]', []),
   }),
+  // explore-with-browse.md
+  {
+    id: 'browse-menu',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#step-1-open-the-map`,
+    caption: "Step 1: (1) the dataset's ⋯ menu, then (2) Browse dataset",
+    themes: BOTH,
+    annotations: [
+      { target: datasetRow(TRAIN_DATASET), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Browse dataset' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(TRAIN_DATASET);
+    },
+  },
+  {
+    id: 'browse-toolbar',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#step-2-find-your-way-around`,
+    caption: 'Step 2: (1) the zoom buttons, (2) Signposts, (3) thumbnail size',
+    themes: BOTH,
+    annotations: [
+      { target: '.browse-zoom', kind: 'step', step: 1, at: 'bottom' },
+      { target: '.browse-signposts', kind: 'step', step: 2, at: 'bottom' },
+      { target: '.browse-size', kind: 'step', step: 3, at: 'bottom' },
+    ],
+    async recipe(page, h) {
+      await h.openBrowse();
+    },
+  },
+  {
+    id: 'browse-bin',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#step-3-look-inside-a-tile`,
+    caption: 'Step 3: after right-clicking a tile, (1) its pictures, (2) a large view of one, (3) its details',
+    themes: BOTH,
+    annotations: [
+      { target: '.bin-popup-scroll', kind: 'step', step: 1, at: 'right' },
+      { target: '.bin-popup-preview-img', kind: 'step', step: 2, at: 'right' },
+      { target: 'button[aria-label="Show metadata"]', kind: 'step', step: 3, at: 'bottom' },
+    ],
+    async recipe(page, h) {
+      await h.openBrowse();
+      await clickTile(page, h, 'right', async () => (await page.locator('.bin-popup-count').count()) > 0);
+      await page.locator('.bin-popup-entry').first().hover();
+      await page.waitForSelector('.bin-popup-preview-img', { timeout: 10000 });
+      await h.wait(800);
+    },
+  },
+  {
+    id: 'browse-find',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-find`,
+    caption: "Browsing Find's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Find",
+    themes: BOTH,
+    annotations: [
+      { target: '.bsp', kind: 'step', step: 1 },
+      { target: '.bsp-verify-good', kind: 'step', step: 2, at: 'bottom' },
+      { target: '.bsp-verify-bad', kind: 'step', step: 2, at: 'bottom' },
+      { target: '.browse-back', kind: 'step', step: 3, at: 'right' },
+    ],
+    // The selection lives in the page only; nothing is verified.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('.goods-actions button[aria-label="Browse"]').first().click();
+      await page.waitForSelector('.bsp-verify-good', { timeout: 300000 });
+      await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 180000 }).catch(() => {});
+      await h.wait(2500);
+      await clickTile(page, h, 'left', async () => (await page.locator('.bsp-entry').count()) > 0);
+      await page.mouse.move(700, 60);
+      await h.wait(800);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+
+  // check-a-dataset.md
+  {
+    id: 'dataset-stats',
+    embeddedIn: `${HOWTO}/check-a-dataset.md#a-datasets-stats`,
+    caption: 'Dataset stats: (1) how many pictures, and duplicate groups, (2) how the dataset was made, (3) when, and the kinds of file',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.stats-table tr', hasText: 'Media items' }, kind: 'step', step: 1 },
+      { target: { selector: '.stats-table tr', hasText: 'Embedder' }, kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .section-title', hasText: 'Timeline' }, kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(TRAIN_DATASET);
+      await page.locator('.context-menu .menu-item', { hasText: 'Stats' }).first().click();
+      await page.waitForSelector('.stats-table', { timeout: 15000 });
+      await h.wait(800);
+    },
+  },
+  {
+    id: 'detector-stats',
+    embeddedIn: `${HOWTO}/check-a-dataset.md#a-detectors-stats`,
+    caption: 'Detector stats: (1) its Good and Bad answers, (2) how many are about pictures in the open dataset, (3) how it was made, and when',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal tr', hasText: 'Positives' }, kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal tr', hasText: 'In current dataset' }, kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .section-title', hasText: 'Creation' }, kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow(TRAIN_DATASET);
+      await h.selectDetectorRow(DETECTOR);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Stats' }).first().click();
+      await page.waitForSelector('vt-modal tr', { timeout: 15000 });
+      await h.wait(800);
+    },
+  },
+
+  // advanced-import.md
+  {
+    id: 'import-advanced',
+    embeddedIn: `${HOWTO}/advanced-import.md#step-2-choose`,
+    caption:
+      'Step 2: in Advanced, (1) the kinds of media to include, (2) the embedder, (3) cleanup, (4) build the Browse map now, or merge near-copies',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-source-specs-picker', kind: 'step', step: 1 },
+      { target: '#import-advanced-embedder', kind: 'step', step: 2 },
+      { target: { selector: 'label.cleanup-row', hasText: 'EXIF' }, kind: 'step', step: 3 },
+      { target: '#import-advanced-projection', kind: 'step', step: 4 },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).first().click();
+      await page.waitForSelector('#field-size', { timeout: 10000 });
+      await page.locator('#field-size').fill('240');
+      await page.locator('#field-seed').fill('4');
+      await page.locator('#field-dataset_name').fill('drawings-more');
+      await page.locator('vt-import-advanced > .advanced-toggle').first().click();
+      await page.waitForSelector('#import-advanced-projection', { timeout: 10000 });
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, 400);
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'import-progress',
+    embeddedIn: `${HOWTO}/advanced-import.md#step-3-import-and-watch-it-load`,
+    caption: "Step 3: (1) the import's progress, at the top of the Datasets card, (2) Cancel",
+    themes: BOTH,
+    annotations: [
+      { target: 'tr.loading-task-row vt-job-progress', kind: 'step', step: 1 },
+      { target: 'button[title="Cancel this dataset load"]', kind: 'step', step: 2, at: 'right' },
+    ],
+    // A real import, cancelled once photographed and cleared away.
+    async recipe(page, h) {
+      await h.app.dropDatasets('drawings-more');
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).first().click();
+      await page.waitForSelector('#field-size', { timeout: 10000 });
+      await page.locator('#field-size').fill('240');
+      await page.locator('#field-seed').fill('4');
+      await page.locator('#field-dataset_name').fill('drawings-more');
+      await page.locator('vt-modal .btn--primary', { hasText: 'Import' }).first().click();
+      await page.waitForSelector('tr.loading-task-row vt-job-progress', { timeout: 30000 });
+      await page.mouse.move(700, 60);
+      await h.wait(2500);
+    },
+    after: async (page, h) => {
+      await page.locator('button[title="Cancel this dataset load"]').first().click().catch(() => {});
+      await page.waitForTimeout(3000);
+      await h.app.dropDatasets('drawings-more');
+    },
+  },
+
+  // load-a-demo.md
+  {
+    id: 'demo-catalogue',
+    embeddedIn: `${HOWTO}/load-a-demo.md#step-1-pick-a-collection`,
+    caption: 'Step 1: (1) Downloaded Media, (2) the kind of media, (3) a collection, then (4) Import',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.importer-subtab', hasText: 'Downloaded Media' }, kind: 'step', step: 1 },
+      { target: '#demo-media-type', kind: 'step', step: 2 },
+      { target: 'tr.demo-row.selected', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    // Posed: a row is only chosen, and nothing is downloaded.
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Downloaded Media' }).first().click();
+      await page.waitForSelector('#demo-media-type', { timeout: 15000 });
+      await page.locator('#demo-media-type').click();
+      await page.locator('li.media-type-option', { hasText: 'Image' }).first().click();
+      await page.waitForSelector('tr.demo-row', { timeout: 15000 });
+      await page.locator('tr.demo-row').first().click();
+      await page.waitForSelector('tr.demo-row.selected', { timeout: 10000 });
+      await h.wait(800);
+    },
+  },
+
+  // save-your-settings.md
+  {
+    id: 'settings-footer',
+    embeddedIn: `${HOWTO}/save-your-settings.md#step-1-open-the-settings-footer`,
+    caption: 'Step 1: at the bottom of Settings, (1) Import, (2) Export',
+    themes: BOTH,
+    annotations: [
+      { target: 'button[title="Import settings from a file"]', kind: 'step', step: 1, at: 'bottom' },
+      { target: '.settings-actions button[aria-label="Export"]', kind: 'step', step: 2, at: 'bottom' },
+    ],
+    async recipe(_page, h) {
+      await h.dashboard();
+      await h.openSettings();
+    },
+  },
+  {
+    id: 'settings-export',
+    embeddedIn: `${HOWTO}/save-your-settings.md#step-2-export-them`,
+    caption: 'Step 2: in Export Settings, (1) Local JSON File downloads them, (2) Server JSON File saves them on the server',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal .picker-card', hasText: 'Local JSON File' }, kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .picker-card', hasText: 'Server JSON File' }, kind: 'step', step: 2 },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openSettings();
+      await page.locator('.settings-actions button[aria-label="Export"]').first().click();
+      await page.waitForSelector('vt-modal .picker-card', { timeout: 10000 });
+      await h.wait(700);
+    },
+  },
 ];

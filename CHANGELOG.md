@@ -17,6 +17,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
+  pages under `docs/user/howto/` each walk through one task click by click,
+  in the style of the user guide's *Step by step*, on the same Synthetic
+  Media drawings and `Yellow Smileys` detector: checking and correcting Find's
+  calls, borderline matches and Inclusion, how far to trust a detector,
+  exporting matches, starting from an example picture, region voting,
+  getting Autopilot unstuck, Manual mode, moving a detector, importing
+  labels, AutoRun from the command line, combining, Browse, dataset and
+  detector stats, import options, demo datasets, and saving settings. The
+  guide lists them under **How-to guides**, and the in-app Help panel now
+  opens a linked page in place, with **← Back** to return.
+
 - **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
   #4240). The **Demo → Synthetic Media** image generator used to draw one
   smiley or a few flat shapes on a plain background. It now draws round
@@ -42,6 +54,11 @@ not list every commit. Use `git log` for the full history.
   `import_labels.media_type`.
 
 ### Fixed
+
+- **Combined detectors appear on the Dashboard.** **Combine selected
+  detectors** wrote the new detector but never registered it, so it showed up
+  nowhere, and trying the same name again failed as taken. It now lands on the
+  Drafts tab like any new detector.
 
 - **"Dropped N item(s) whose embedding failed" now says which items, and why**
   (issue #4232). The warning ended with "See the server log for which embedder

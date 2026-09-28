@@ -45,11 +45,6 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **Optional `browse-bin-popup` shot.** Not yet added — it has no USER_GUIDE
-  anchor/placeholder, so it stayed out of scope. Recipe for when a Browse-detail
-  section is written to home it: within `openBrowse()`, hover/click a tile so
-  `vt-browse-bin-popup` appears, then `clip` the popup.
-
 <!-- item-sep -->
 
 ---
@@ -117,6 +112,7 @@ interface Shot {
   caption: string;             // alt text + (optional) figure caption
   themes: ("light"|"dark")[];  // each yields a separate file
   recipe: (page, helpers) => Promise<void>;  // steps to reach the frame
+  after?: (page, helpers) => Promise<void>;  // undo what the recipe changed
   clip?: { target: Target; pad?: number };   // what to frame; omit for full viewport
   annotations?: Annotation[];  // declarative callouts, drawn pre-capture
 }
@@ -136,6 +132,10 @@ For each shot × theme: boot the app once (Smiley-example fixtures), set
 deterministic knobs, run the recipe, apply the theme, inject declarative
 annotations as an absolutely-positioned DOM overlay computed from each `target`'s
 bounding rect, then capture (`clip` element if given, else viewport) → WebP.
+A recipe should *pose* the app (a form filled in, a menu open) rather than
+change it; one that has to change it to reach its frame (pictures verified in
+Find, a detector moved to AutoRun) puts it back in `after`, which runs once the
+shot is taken, pass or fail, so no later shot inherits the change.
 
 **WebP, not PNG** (#4202). It came in while the shots were photographs behind
 UI chrome, which PNG is bad at: a full-window shot was 2.4–3.4 MB lossless —
