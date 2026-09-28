@@ -191,6 +191,7 @@ def _fused_threshold(
     voted_ids: "set[int] | None" = None,
     min_precision: float | None = None,
     calibration_rows: "list[bool] | None" = None,
+    holdout_rows: "list[list[int]] | None" = None,
 ) -> float:
     """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
@@ -262,7 +263,8 @@ def _fused_threshold(
     the final model's haystack (the #3308 remainder, when the exclusion
     applies, so a promise is about what the user has not yet seen), and its
     evidence is each fold's held-out votes ranked in that fold's haystack.  Only
-    the held-out votes whose training row *calibration_rows* marks may serve as
+    the held-out votes whose training row (*holdout_rows*, per fold, from the
+    calibration's ``holdout_sink``) *calibration_rows* marks may serve as
     evidence - the votes the learned sort chose
     (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`); ``None``
     keeps them all.  The estimate is parked on ``det_ctx.precision_floor_cache``
@@ -327,7 +329,7 @@ def _fused_threshold(
         # before the anchored fit drops any fold it could not use.
         estimate = PrecisionFloorEstimate(
             fit_final,
-            eligible_fold_orderings(folds.orderings[:n_folds], folds.holdout_rows, calibration_rows),
+            eligible_fold_orderings(folds.orderings[:n_folds], holdout_rows or [], calibration_rows),
             fold_haystacks,
         )
 
@@ -617,6 +619,9 @@ def train_and_threshold(
     # replaced the schedule needs the fold *models* (it anchors on their
     # held-out scores), so there is nothing left to skip.  Two extra linear-head
     # fits at 4-5 votes is the whole cost.
+    # Which training rows each fold held out: the precision floor maps them back
+    # to their votes to keep only the learned sort's draws as evidence.
+    holdouts: list[list[int]] = []
     if det_ctx is not None:
         # Cache the K folds on the context so an Inclusion slide can re-derive
         # the cutoff without a no-op (the find-label / detector-load paths land
@@ -631,6 +636,7 @@ def train_and_threshold(
             det_ctx=det_ctx,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
+            holdout_sink=holdouts,
         )
     else:
         folds = calibration_folds(
@@ -642,6 +648,7 @@ def train_and_threshold(
             hidden_dim=hidden_dim,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
+            holdout_sink=holdouts,
         )
     threshold = threshold_from_folds(folds, inclusion)
 
@@ -702,6 +709,7 @@ def train_and_threshold(
             voted_ids=voted_ids,
             min_precision=min_precision,
             calibration_rows=calibration_rows_for(groups, calibrating_groups),
+            holdout_rows=holdouts,
         )
     elif det_ctx is not None:
         # Safe thresholds off: no population estimator to re-cut on a slide.
@@ -1334,6 +1342,7 @@ def _train_and_score_xy(
     # below the blend schedule's floor, where the schedule multiplied the
     # cross-cal cut by zero; the schedule is no longer what combines the two
     # estimators.)
+    holdouts: list[list[int]] = []
     folds = calibration_folds_cached(
         X_list,
         y_list,
@@ -1344,6 +1353,7 @@ def _train_and_score_xy(
         det_ctx=det_ctx,
         groups=cal_groups,
         score_rows_by_group=cal_score_rows,
+        holdout_sink=holdouts,
     )
     threshold = threshold_from_folds(folds, inclusion_value)
     clock.mark("calibration_folds")
@@ -1386,6 +1396,7 @@ def _train_and_score_xy(
         voted_ids=voted_ids,
         min_precision=min_precision,
         calibration_rows=calibration_rows_for(groups, calibrating_groups),
+        holdout_rows=holdouts,
     )
     clock.mark("fused_threshold")
 

@@ -495,8 +495,9 @@ def eligible_fold_orderings(
 ) -> list[tuple[list[float], list[float]]]:
     """Each fold's held-out ``(scores, labels)``, kept only where the vote behind it may calibrate a promise.
 
-    *holdout_rows* is :attr:`~vtscore.training.thresholds.CalibrationFolds.holdout_rows`:
-    per fold, the training row behind each held-out score.  *eligible_rows* is
+    *holdout_rows* is what the calibration's ``holdout_sink`` received
+    (:func:`~vtscore.training.thresholds.compute_fold_orderings`): per fold,
+    the training row behind each held-out score.  *eligible_rows* is
     indexed by training row.  The folds keep their order and their count, so the
     result stays aligned with the fold haystacks it will be ranked against.
 

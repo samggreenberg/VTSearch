@@ -391,10 +391,10 @@ folds = calibration_folds_cached(          # expensive: fits `calibrate_count` f
 threshold = threshold_from_folds(folds, inclusion_value=0)   # cheap: a quantile rule
 ```
 
-`CalibrationFolds` is a `NamedTuple` of `(orderings, fallback, models,
-holdout_rows)`; `holdout_rows` names, per fold, the training row behind each
-held-out score, so a caller can tell which votes a fold held out (the
-precision floor calibrates only on the learned sort's own draws).
+`CalibrationFolds` is a `NamedTuple` of `(orderings, fallback, models)`. Pass
+`holdout_sink=[]` to either call to also receive, per fold, the training row
+behind each held-out score, so a caller can tell which votes a fold held out
+(the precision floor calibrates only on the learned sort's own draws).
 `calibration_folds_cached` memoises it on `det_ctx.calibration_cache` under a
 deterministic key built from `X_list`, `y_list`, the calibrate settings,
 `hidden_dim`, and any `score_rows_by_group` - so toggling Inclusion during

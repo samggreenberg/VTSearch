@@ -360,6 +360,10 @@
             "readOnly": true,
             "type": "integer"
           },
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
+          },
           "panel_pct_left": {
             "additionalProperties": {
               "type": "number"
@@ -4988,6 +4992,56 @@
         ],
         "type": "object"
       },
+      "MinPrecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "min_precision": {
+            "nullable": true
+          }
+        },
+        "required": [
+          "min_precision"
+        ],
+        "type": "object"
+      },
+      "MinPrecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_positives": {
+            "type": "integer"
+          },
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
+          },
+          "n_returned": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "promised",
+              "unreachable",
+              "insufficient_evidence",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "calibration_positives",
+          "min_precision",
+          "n_returned",
+          "status",
+          "threshold"
+        ],
+        "type": "object"
+      },
       "OkMessage": {
         "additionalProperties": false,
         "properties": {
@@ -5806,6 +5860,10 @@
             "type": "boolean"
           },
           "last_embedder_per_media_type": {},
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
+          },
           "panel_pct_left": {},
           "panel_pct_right": {},
           "popup_metadata_shown": {},
@@ -13228,6 +13286,66 @@
         ]
       }
     },
+    "/api/min-precision": {
+      "get": {
+        "operationId": "get_min_precision_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinPrecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Get the active detector's precision floor, what it can promise, and the line it draws.",
+        "tags": [
+          "sorting"
+        ]
+      },
+      "post": {
+        "description": "The counterpart of ``POST /api/inclusion``: a pure cutoff knob.  The active\ndetector re-cuts its cached estimators at the new floor (no retrain) and,\nin Find mode, re-splits the unverified items over the frozen scores.  The\nnew line comes back in the same round trip.  A set floor draws the line\nwhatever Inclusion says; ``null`` hands it back to Inclusion.  A floor that\ncan promise nothing draws the Inclusion 0 line and says why in ``status``.",
+        "operationId": "set_min_precision_route",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MinPrecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinPrecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Set the precision floor (a fraction clamped to ``[0.01, 1]``), or clear it with ``null``.",
+        "tags": [
+          "sorting"
+        ]
+      }
+    },
     "/api/pregen-processors": {
       "get": {
         "operationId": "list_pregen_processors",
@@ -14675,7 +14793,7 @@
       "name": "medias"
     },
     {
-      "description": "Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
+      "description": "Text / example / learned sort, votes, inclusion, precision floor, safe-thresholds, coverage atlas.",
       "name": "sorting"
     },
     {

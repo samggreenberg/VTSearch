@@ -118,19 +118,15 @@ class CalibrationFolds(NamedTuple):
     (:func:`fold_anchored_gmm_threshold`) scores the haystack with so the
     anchors and the population it fits share one scale.
 
-    *holdout_rows* names, per fold and aligned entry for entry with that fold's
-    ordering, the training row behind each held-out score - on the grouped path
-    the first row of the held-out bag, which is enough because every row of a
-    bag belongs to one vote.  A caller maps a row back to the vote it came from
-    to decide which held-out scores may serve as evidence for something other
-    than the conformal cut (the precision floor, #4245).  Empty when the folds
-    were built by a caller that predates the field.
+    Which training rows each fold held out is not a field here - adding one
+    would break every caller that unpacks the three - but a ``holdout_sink``
+    on :func:`calibration_folds` / :func:`calibration_folds_cached` receives it
+    (see :func:`compute_fold_orderings`).
     """
 
     orderings: list[tuple[list[float], list[float]]]
     fallback: float | None
     models: list
-    holdout_rows: tuple[tuple[int, ...], ...] = ()
 
 
 def calibration_folds(
@@ -144,6 +140,7 @@ def calibration_folds(
     rng: "np.random.RandomState | None" = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
+    holdout_sink: list | None = None,
 ) -> CalibrationFolds:
     """Train the K calibration folds, keeping their models (uncached).
 
@@ -151,9 +148,11 @@ def calibration_folds(
     fresh ``RandomState(CALIBRATION_SPLIT_SEED)``, matching
     :func:`calibration_folds_cached`, so an uncached call (``det_ctx is None``)
     and a cached one produce the same folds for the same labelset.
+
+    *holdout_sink* receives, per fold, the training row behind each held-out
+    score (see :func:`compute_fold_orderings`).
     """
     models: list = []
-    holdouts: list[list[int]] = []
     orderings, fallback = compute_fold_orderings(
         X_list,
         y_list,
@@ -165,9 +164,9 @@ def calibration_folds(
         groups=groups,
         score_rows_by_group=score_rows_by_group,
         model_sink=models,
-        holdout_sink=holdouts,
+        holdout_sink=holdout_sink,
     )
-    return CalibrationFolds(orderings, fallback, models, tuple(tuple(rows) for rows in holdouts))
+    return CalibrationFolds(orderings, fallback, models)
 
 
 def calibration_folds_cached(
@@ -181,11 +180,12 @@ def calibration_folds_cached(
     det_ctx: Any = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
+    holdout_sink: list | None = None,
 ) -> CalibrationFolds:
     """Memoized :func:`calibration_folds` keyed on the calibration inputs.
 
     When *det_ctx* is provided, caches the inclusion-independent folds on
-    ``det_ctx.calibration_cache`` as ``(key, folds)`` and reuses them whenever
+    ``det_ctx.calibration_cache`` as ``(key, folds, holdout_rows)`` and reuses them whenever
     the (labels, calibrate settings) key matches.  This is the common case
     during interactive sorting: the user toggles ``inclusion`` or loads a new
     media item, the labels stay the same, and the only work left is re-running
@@ -200,7 +200,8 @@ def calibration_folds_cached(
     shipped threshold needs them on every retrain, cache hit or miss: the
     fold-anchored estimator scores the haystack through each fold model.  They
     are process-scoped in-memory state like ``DetectorContext.model`` and are
-    never serialised.
+    never serialised.  So are the held-out rows *holdout_sink* receives, which
+    a cache hit hands back as a fresh computation would.
     """
     key = None
     if det_ctx is not None:
@@ -215,8 +216,11 @@ def calibration_folds_cached(
         )
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
+            if holdout_sink is not None:
+                holdout_sink.extend(list(rows) for rows in (cached[2] if len(cached) > 2 else ()))
             return cached[1]
 
+    holdouts: list[list[int]] = []
     folds = calibration_folds(
         X_list,
         y_list,
@@ -227,9 +231,12 @@ def calibration_folds_cached(
         rng=np.random.RandomState(CALIBRATION_SPLIT_SEED),
         groups=groups,
         score_rows_by_group=score_rows_by_group,
+        holdout_sink=holdouts,
     )
     if det_ctx is not None and key is not None:
-        det_ctx.calibration_cache = (key, folds)
+        det_ctx.calibration_cache = (key, folds, tuple(tuple(rows) for rows in holdouts))
+    if holdout_sink is not None:
+        holdout_sink.extend(holdouts)
     return folds
 
 

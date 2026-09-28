@@ -1053,17 +1053,19 @@ class DetectorContext:
         "cached_labelset_media_type",  # str
         # Sync source
         "labelset_source",  # dict | None: {"source_name": "...", "field_values": {...}}
-        # Calibration folds cache.  Holds ``(key, CalibrationFolds)`` where
-        # *key* is a deterministic fingerprint of the
+        # Calibration folds cache.  Holds ``(key, CalibrationFolds,
+        # holdout_rows)`` where *key* is a deterministic fingerprint of the
         # **inclusion-independent** calibration inputs (training vectors,
-        # labels, calibrate_count, calibration_fraction, hidden_dim) and the
-        # payload carries the per-fold held-out ``(scores, labels)``, the
-        # fallback sentinel, and the trained fold models.  Because
-        # inclusion is deliberately absent from *key*, an Inclusion change hits
-        # the cache and only re-runs the cheap quantile rule (no fold refit);
-        # a label/embedder change rotates *key* and falls through to a fresh
+        # labels, calibrate_count, calibration_fraction, hidden_dim), the
+        # folds carry the per-fold held-out ``(scores, labels)``, the
+        # fallback sentinel, and the trained fold models, and *holdout_rows*
+        # names the training row behind each held-out score (the precision
+        # floor maps them back to votes, #4245).  Because inclusion is
+        # deliberately absent from *key*, an Inclusion change hits the cache
+        # and only re-runs the cheap quantile rule (no fold refit); a
+        # label/embedder change rotates *key* and falls through to a fresh
         # calibration.
-        "calibration_cache",  # tuple[Any, CalibrationFolds] | None
+        "calibration_cache",  # tuple[Any, CalibrationFolds, tuple[tuple[int, ...], ...]] | None
         # The fold-anchored population estimator behind the current threshold
         # (``FoldAnchoredCut``), or None when the estimator degenerated.  A
         # re-cut answers Inclusion: the shipped ``mid_tilt`` rule anchors the
@@ -1154,7 +1156,7 @@ class DetectorContext:
         self.cached_labelset_media_type: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
-        self.calibration_cache: tuple[Any, Any] | None = None
+        self.calibration_cache: tuple[Any, ...] | None = None
         self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
         self.precision_floor_cache: Any = None  # PrecisionFloorEstimate | None
 
