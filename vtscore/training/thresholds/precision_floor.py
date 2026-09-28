@@ -144,6 +144,37 @@ class PrecisionFloorCut:
     calibration_positives: int
 
 
+#: How a caller whose ``None`` already means "the shipped default" spells *no
+#: floor* - the eval harness's arm knob, where ``None`` is the default arm.
+NO_PRECISION_FLOOR = "off"
+
+
+def resolve_min_precision(min_precision: float | str | None = None) -> float | None:
+    """The floor an eval arm cuts at: ``None`` is the app's default, ``"off"`` is no floor.
+
+    The three-state contract :func:`~vtscore.training.thresholds.resolve_exclusion_floor`
+    follows.  ``None`` - what the harness's default arm passes - resolves to
+    :data:`~vtscore.training.thresholds.DEFAULT_MIN_PRECISION`, the value an
+    unset user setting resolves to in the app, so the default arm cuts where a
+    live detector does.  :data:`NO_PRECISION_FLOOR` is the Inclusion-knob arm
+    (``min_precision=None`` in the app's own vocabulary), and a number pins a
+    floor, validated to ``(0, 1]``.
+    """
+    if min_precision is None:
+        from vtscore.config.runtime import DEFAULT_MIN_PRECISION  # noqa: PLC0415
+
+        return DEFAULT_MIN_PRECISION
+    if min_precision == NO_PRECISION_FLOOR:
+        return None
+    if isinstance(min_precision, str) or isinstance(min_precision, bool):
+        raise ValueError(
+            f"min_precision must be a number in (0, 1], None or {NO_PRECISION_FLOOR!r}; got {min_precision!r}"
+        )
+    floor = float(min_precision)
+    _check_floor(floor)
+    return floor
+
+
 def _check_floor(floor: float) -> None:
     if not 0.0 < floor <= 1.0:
         raise ValueError(f"precision floor must be in (0, 1], got {floor!r}")

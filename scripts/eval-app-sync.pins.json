@@ -11,6 +11,10 @@
     "app": "f67f2a6f59fba5813aa1f284fefc83520c6675251256cfcd2ed5729a4a1566d6",
     "harness": "a233c439b1759886852f5011f198c873727b3dde1e2a8b2a2f6da042f0666e9b"
   },
+  "autopilot.pick_provenance": {
+    "app": "7e7a534c4e332b840ab82c06c980b34cac8a83417d945b930c09a97a852db8e3",
+    "harness": "2a613cc0e1a75b594e6b29cc211577681d941bda73018c4b136e25ffbf5e78ff"
+  },
   "autopilot.startup_default": {
     "app": "095713cd624bc097c160ead7036dc7efe30e5091efd5a9e4c48bc6633c0ec3d1",
     "harness": "5791e133a51f3ed40314f5a083621a283239a8cbcbe4387b63936515d9374239"
@@ -39,6 +43,10 @@
     "app": "ae8504e0b03401743dfcb8912d804fdf3644b23cb710d43f33e4663d680da93a",
     "harness": "6a3451d7e0f015a6eb54179630dd6e91f6ce3f72c76b5272321574933406e892"
   },
+  "thresholds.min_precision_default": {
+    "app": "b69ca0748bf3b3cef65fb6b283f6fe25694cf63a785506d196b6b4ad6ffc1c6d",
+    "harness": "02536d2784e8639eec71e2607e7297aff423dd9fd00a31d714057eaee79dc6dd"
+  },
   "thresholds.rate_cut_no_root": {
     "app": "b167612751767183a0416f22e643d9d4a79c67e7d041d9b9a1ae4d20725db084",
     "harness": "a3d9f1d799352d5409e925b7ac805905de7add2fe27c464d2e4f01dabf2015fb"
@@ -54,14 +62,14 @@
     "app": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1"
   },
   "training.fused_threshold": {
-    "app": "ef73b5501f62c20ee02166fcb336d261d014f642306f49280eed8e228c70d500"
+    "app": "31ff409063053ac477a702d9467765ec8ceca9ec6dac1406cf20ca11248f2029"
   },
   "training.split_fraction_default": {
     "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "54023ddec7758a6169876cb4efa43ded52e2ec2178a55b56eabb896ab3e3c110",
-    "harness": "eb397995c49e3af50a685780384a87ec96b92d5f35b618e300b40ca3891ccdc2"
+    "app": "26b0ba6bcf31c9427c005e823844c86897715b2011b519481d659a3445556b65",
+    "harness": "06f11b661fb3d6adff3d4b0c4c7c04d4d1b55a937cc8aaeedd2424b6cdb845ef"
   }
 }

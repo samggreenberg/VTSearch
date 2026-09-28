@@ -200,6 +200,18 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: them a sign error in the acquisition cut is invisible.
     "acq_pool_percentile",
     "report_pool_percentile",
+    # --- The precision floor (#4245).
+    #: The floor the reporting line was drawn at; NaN on the Inclusion arm
+    #: (``min_precision="off"``), where ``threshold`` is the knob's cut.
+    "min_precision",
+    #: What the floor could say this step - ``promised``, ``unreachable`` or
+    #: ``insufficient_evidence`` - and so whether ``threshold`` is the floor's
+    #: cut or the Inclusion 0 fallback.  Empty where no estimate was built.
+    "floor_status",
+    #: Positives among the held-out votes that may calibrate the promise (the
+    #: learned sort's own draws); the gate opens at 10.  -1 where no estimate
+    #: was built.
+    "calibration_positives",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one

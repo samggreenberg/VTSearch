@@ -1730,10 +1730,7 @@ def detector_line_inclusion(
     ).inclusion
 
 
-def recompute_detector_thresholds(
-    inclusion_value: int | None = None,
-    min_precision: "float | None | object" = None,
-) -> None:
+def recompute_detector_thresholds(inclusion_value: int | None, min_precision: float | None) -> None:
     """Re-derive each loaded detector's threshold at its own operating point, leaving the MLP in place.
 
     Inclusion and the precision floor are pure cutoff knobs: a change must not
@@ -1746,35 +1743,46 @@ def recompute_detector_thresholds(
     (``DetectorContext.inclusion`` / ``min_precision``, seeded from the user's
     settings on first read; see #3416), and :func:`vtscore.state.set_inclusion`
     / :func:`vtscore.state.set_min_precision` write only the active detector's.
-    *inclusion_value* and *min_precision* are the values just written: they
-    apply to any detector that has not been seeded yet, which is what its
-    first read would seed it with.  Pass :data:`KEEP_MIN_PRECISION` for
-    *min_precision* when only the inclusion changed.  A detector already
-    holding its own values keeps its cut.  Re-cutting it at the new value, as
-    this once did, left its threshold at the new value while ``GET
-    /api/inclusion`` still reported the old one, so switching to it showed a
-    stepper that disagreed with its line.
+    *inclusion_value* and *min_precision* are what a detector that has not
+    read its own value yet takes - the user's setting, which is what that
+    first read will seed it with.  A detector already holding its own values
+    keeps its cut.  Re-cutting it at the new value, as this once did, left its
+    threshold at the new value while ``GET /api/inclusion`` still reported the
+    old one, so switching to it showed a stepper that disagreed with its line.
     """
     with _state_lock:
         for ctx in loaded_detector_contexts():
             own_incl = ctx.inclusion if ctx.inclusion is not None else inclusion_value
-            if ctx.min_precision_seeded:
-                floor = ctx.min_precision
-            elif min_precision is KEEP_MIN_PRECISION:
-                # Nothing about the floor changed and this detector has never
-                # read it: leave its line to the retrain that seeds it.
-                continue
-            else:
-                floor = min_precision  # type: ignore[assignment]
+            floor = ctx.min_precision if ctx.min_precision_seeded else min_precision
             if floor is None and own_incl is None:
                 continue
-            threshold = recut_detector_threshold(ctx, own_incl, min_precision=floor)  # type: ignore[arg-type]
+            threshold = recut_detector_threshold(ctx, own_incl, min_precision=floor)
             if threshold is not None:
                 ctx.threshold = threshold
 
 
-#: Sentinel for :func:`recompute_detector_thresholds`: "the floor did not change".
-KEEP_MIN_PRECISION = object()
+def user_min_precision() -> float | None:
+    """The user's precision floor: what a detector that has not read its own yet will be seeded with.
+
+    ``None`` - no floor - when no settings builder is registered (a
+    library-only process that never configured one), rather than raising.
+    """
+    from vtscore.config import CoreConfig
+
+    try:
+        return CoreConfig.from_settings().min_precision
+    except RuntimeError:
+        return None
+
+
+def user_inclusion() -> int | None:
+    """The user's Inclusion setting, or ``None`` with no settings builder; see :func:`user_min_precision`."""
+    from vtscore.config import CoreConfig
+
+    try:
+        return CoreConfig.from_settings().inclusion
+    except RuntimeError:
+        return None
 
 
 def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
@@ -1784,7 +1792,7 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
     whose floor is set keeps the floor's line (a set floor wins over the knob),
     and one with no floor re-cuts at its own inclusion.
     """
-    recompute_detector_thresholds(inclusion_value, KEEP_MIN_PRECISION)
+    recompute_detector_thresholds(inclusion_value, user_min_precision())
 
 
 # ---------------------------------------------------------------------------

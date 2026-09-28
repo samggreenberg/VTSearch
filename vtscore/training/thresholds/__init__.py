@@ -158,6 +158,7 @@ from vtscore.config.runtime import DEFAULT_MIN_PRECISION
 from vtscore.training.thresholds.precision_floor import (
     MIN_BOOTSTRAP_FITS,
     MIN_CALIBRATION_POSITIVES,
+    NO_PRECISION_FLOOR,
     PRECISION_BOOTSTRAP_REFITS,
     PRECISION_BOOTSTRAP_SEED,
     PRECISION_COORDINATES,
@@ -179,6 +180,7 @@ from vtscore.training.thresholds.precision_floor import (
     precision_floor_cut,
     precision_lower_bound_curve,
     reporting_line,
+    resolve_min_precision,
     unpromised,
 )
 from vtscore.training.thresholds.knobs import (
@@ -211,6 +213,7 @@ __all__ = [
     "DEFAULT_MIN_PRECISION",
     "MIN_BOOTSTRAP_FITS",
     "MIN_CALIBRATION_POSITIVES",
+    "NO_PRECISION_FLOOR",
     "PRECISION_BOOTSTRAP_REFITS",
     "PRECISION_BOOTSTRAP_SEED",
     "PRECISION_COORDINATES",
@@ -232,6 +235,7 @@ __all__ = [
     "precision_floor_cut",
     "precision_lower_bound_curve",
     "reporting_line",
+    "resolve_min_precision",
     "unpromised",
     "ANCHOR_WEIGHT_DEFAULT",
     "CUT_KIND_CONTINUED",

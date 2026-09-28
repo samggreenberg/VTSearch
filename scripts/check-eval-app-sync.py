@@ -190,6 +190,48 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="autopilot.pick_provenance",
+        app=f"ts:{LABEL_VIEW_TS}::subscribe(([prev, curr]) =>",
+        harness="vtscore/eval/autopilot_flow.py::_PHASE_PICKS,pick_provenance",
+        kind="ported",
+        note=(
+            "Which ranking each Autopilot phase draws off, and how: the label view sets the sort "
+            "and select mode on every phase change (good: seed sort, top; bad: seed sort, hard; "
+            "hard: learned, hard; new: learned, new) and VoteProvenanceService records them with "
+            "each vote. The precision floor calibrates only on votes calibrates_precision accepts "
+            "- learned-sort draws off the ranking itself (#4245) - and the harness decides that "
+            "from pick_provenance's record of each simulated click. If a phase starts drawing off "
+            "a different sort or select mode, the harness's evidence filter has to follow or its "
+            "default arm calibrates the promise on votes the app would not."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's retrain mode (a detector that already had labels) draws good "
+            "and bad off the learned sort too; the harness always starts from an untrained "
+            "detector, so it has no retrain mode to port. The harness's seed sort is a text sort "
+            "or an example sort and is recorded as 'text' either way - calibrates_precision reads "
+            "only whether the sort was the learned one."
+        ),
+    ),
+    Mirror(
+        id="thresholds.min_precision_default",
+        app="py:vtscore.state.__init__.get_min_precision",
+        harness="vtscore/training/thresholds/precision_floor.py::resolve_min_precision",
+        kind="default",
+        note=(
+            "What floor a detector cuts at when nobody set one (#4245): the app seeds each "
+            "detector from the user's setting, whose unset value is DEFAULT_MIN_PRECISION, and "
+            "the harness's min_precision=None resolves to that same constant. The value cannot "
+            "drift - both read one constant, and tests_lib/sorting/test_precision_floor_wiring.py "
+            "pins UserSettings' default against the resolver - so this digest watches the "
+            "*resolution*: if the app's floor starts depending on something else (the dataset, "
+            "the embedder, a per-detector default), that has to reach the harness too."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned floor where "
+            "the app has a per-user setting; the DEFAULT arm passes None and resolves here."
+        ),
+    ),
+    Mirror(
         id="autopilot.startup_default",
         app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
         harness="vtscore/eval/startup_schedule.py::PRODUCTION_STARTUP",
@@ -342,7 +384,12 @@ MIRRORS: list[Mirror] = [
         note=(
             "How the cross-calibration cut and the population estimate are fused into the "
             "shipped threshold. The harness's reported operating point is only comparable to "
-            "the app's if this rule matches."
+            "the app's if this rule matches. Since #4245 this is also where the precision "
+            "floor's estimate is built (the final model's haystack as corpus and pool, each "
+            "fold's held-out votes cut down by eligible_fold_orderings, each fold's own "
+            "haystack) and where the line is chosen - both sides call the shared "
+            "reporting_line, so which line an operating point draws is delegated; what this "
+            "digest watches is the estimate's inputs, which the harness has to build the same way."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "

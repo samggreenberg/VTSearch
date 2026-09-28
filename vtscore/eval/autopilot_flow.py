@@ -264,6 +264,37 @@ TRAINED_PHASES: frozenset[str] = frozenset({"hard", "new", "done", "exhausted"})
 STOPPING_PHASE: str = "done"
 
 
+#: What the app records for a vote Autopilot surfaced, per labelling phase:
+#: the ranking on screen and how the item was drawn off it.  Ported from the
+#: label view's phase subscription (``label-view.component.ts``): ``good`` and
+#: ``bad`` draw off the seed sort (``top`` then ``hard``), ``hard`` off the
+#: learned sort's cut band, and ``new`` defers to the coverage atlas with the
+#: learned sort on screen.  The harness has no retrain mode, where the app draws
+#: ``good`` / ``bad`` off the learned sort instead, and its seed sort is a text
+#: sort or an example sort; both are ``text`` here, which is all a reader of the
+#: record distinguishes (learned or not).
+_PHASE_PICKS: dict[str, tuple[str, str]] = {
+    "good": ("text", "top"),
+    "bad": ("text", "hard"),
+    "hard": ("learned", "hard"),
+    "new": ("learned", "new"),
+}
+
+
+def pick_provenance(phase: Optional[str]) -> Optional[dict[str, str]]:
+    """The surfacing provenance the app would record for a vote Autopilot surfaced in *phase*.
+
+    The shape :mod:`vtscore.datasets.vote_provenance` stores, so the harness
+    decides which votes may calibrate a precision-floor promise with the app's
+    own :func:`~vtscore.datasets.vote_provenance.calibrates_precision` rather
+    than a copy of it (#4245).  ``None`` outside the four labelling phases.
+    """
+    if phase not in _PHASE_PICKS:
+        return None
+    sort_kind, select_mode = _PHASE_PICKS[phase]
+    return {"flow": "autopilot", "phase": phase, "select_mode": select_mode, "sort_kind": sort_kind}
+
+
 def stopping_rule_fired(phase: str) -> bool:
     """Whether *phase* is the one the app's stopping rules produce.
 

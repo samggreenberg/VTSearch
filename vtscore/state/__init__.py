@@ -299,7 +299,7 @@ def set_min_precision(value: float | None) -> None:
         _core._set_min_precision(value)
         _persist_setting("min_precision", value)
     if changed:
-        _core.recompute_detector_thresholds(None, value)
+        _core.recompute_detector_thresholds(_core.user_inclusion(), value)
         rethreshold_unverified_find_items()
 
 
