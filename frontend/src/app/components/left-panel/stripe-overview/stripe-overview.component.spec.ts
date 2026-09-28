@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { StripeOverviewComponent, STRIPE_MAX_ITEMS } from './stripe-overview.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { NO_PROMISE_STATES, lineFloor } from '../../../testing/line-floor';
 
 describe('StripeOverviewComponent', () => {
   let component: StripeOverviewComponent;
@@ -124,5 +125,37 @@ describe('StripeOverviewComponent', () => {
     } as unknown as MouseEvent);
     component.onStripeKeyboard();
     expect(emitted).toBe(false);
+  });
+
+  describe('the unpromised marker (#4247)', () => {
+    async function drawWith(floor: ReturnType<typeof lineFloor> | null): Promise<HTMLElement> {
+      fixture.componentRef.setInput('sortOrder', [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.3 },
+      ]);
+      fixture.componentRef.setInput('threshold', 0.5);
+      fixture.componentRef.setInput('floor', floor);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it.each(NO_PROMISE_STATES)('draws the fallback line, dashed, when %s', async (status) => {
+      const el = await drawWith(lineFloor(status));
+      const marker = el.querySelector('.stripe-threshold');
+      expect(marker).not.toBeNull();
+      expect(marker!.classList).toContain('stripe-threshold--unpromised');
+      expect(component.cachedThresholdPosition()).toBe(50);
+      const title = el.querySelector('.stripe-overview')!.getAttribute('title')!;
+      expect(title).toContain('The dashed line is unpromised');
+      expect(title).toContain('Inclusion 0');
+    });
+
+    it.each([lineFloor('promised'), lineFloor(null), null])('draws a plain line otherwise (%o)', async (floor) => {
+      const el = await drawWith(floor);
+      const marker = el.querySelector('.stripe-threshold');
+      expect(marker).not.toBeNull();
+      expect(marker!.classList).not.toContain('stripe-threshold--unpromised');
+      expect(el.querySelector('.stripe-overview')!.getAttribute('title')).not.toContain('unpromised');
+    });
   });
 });

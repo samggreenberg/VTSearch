@@ -7,6 +7,7 @@ import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { NO_PROMISE_STATES, lineFloor } from '../../../testing/line-floor';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
@@ -292,6 +293,45 @@ describe('MediaListComponent scroll-prefetch re-wiring', () => {
       component.loadMore.subscribe(spy);
       component.onLoadMore();
       expect(spy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('the unpromised line (#4247)', () => {
+    function drawWith(floor: ReturnType<typeof lineFloor> | null): HTMLElement {
+      fixture.componentRef.setInput('sortOrder', [
+        { id: 1, score: 0.8 },
+        { id: 2, score: 0.6 },
+        { id: 3, score: 0.3 },
+      ]);
+      fixture.componentRef.setInput('threshold', 0.5);
+      fixture.componentRef.setInput('floor', floor);
+      TestBed.tick();
+      return fixture.nativeElement.querySelector('.media-threshold-line') as HTMLElement;
+    }
+
+    it.each(NO_PROMISE_STATES)('draws the fallback line where the cut puts it, labelled, when %s', (status) => {
+      const line = drawWith(lineFloor(status));
+      expect(line).not.toBeNull();
+      // Still a working line: it sits between the last match and the first non-match.
+      expect(component.cachedOrderedItems.find((i) => i.showThreshold)?.media.id).toBe(3);
+      expect(line.classList).toContain('media-threshold-line--unpromised');
+      expect(line.querySelector('.threshold-label--unpromised')?.textContent?.trim()).toBe('unpromised');
+      expect(line.getAttribute('title')).toContain('Unpromised:');
+      expect(line.getAttribute('aria-label')).toBe('Good/Bad threshold, unpromised');
+    });
+
+    it.each([lineFloor('promised'), lineFloor(null), null])('draws the plain line otherwise (%o)', (floor) => {
+      const line = drawWith(floor);
+      expect(line).not.toBeNull();
+      expect(line.classList).not.toContain('media-threshold-line--unpromised');
+      expect(line.querySelector('.threshold-label--unpromised')).toBeNull();
+      expect(line.getAttribute('title')).toBe("The line between the detector's good and bad matches");
+    });
+
+    it('drops the label once a promise is made', () => {
+      drawWith(lineFloor('insufficient_evidence'));
+      const line = drawWith(lineFloor('promised', { calibrationPositives: 12 }));
+      expect(line.classList).not.toContain('media-threshold-line--unpromised');
     });
   });
 });

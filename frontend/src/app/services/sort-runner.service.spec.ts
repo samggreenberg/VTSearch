@@ -11,6 +11,7 @@ import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
+import { NO_PROMISE_STATES, wireFloor } from '../testing/line-floor';
 
 /**
  * `SortRunnerService` in isolation.
@@ -179,6 +180,43 @@ describe('SortRunnerService', () => {
       .expectOne('/api/votes')
       .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
   }
+
+  // --- the floor on the line (#4247) ------------------------------------------
+
+  it.each(NO_PROMISE_STATES)(
+    'installs a learned sort with no precision promise at its fallback cut, labelled, when %s',
+    (status) => {
+      enableLearnedSort();
+      runner.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [
+          { id: 1, score: 0.9 },
+          { id: 2, score: 0.3 },
+        ],
+        threshold: 0.5,
+        acq_threshold: 0.7,
+        floor: wireFloor(status),
+        total: 2,
+        above_threshold: 1,
+        has_more_below: false,
+      });
+
+      // The cut is a cut: the line, its count and Autopilot's acquisition cut all land.
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.aboveThreshold).toBe(1);
+      expect(sortState.acqThreshold).toBe(0.7);
+      expect(sortState.floor?.status).toBe(status);
+      expect(sortState.unpromised).toBe(true);
+    },
+  );
+
+  it('a text sort carries no floor', () => {
+    runner.onTextSort('birds');
+    httpMock.expectOne('/api/sort').flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 });
+    expect(sortState.floor).toBeNull();
+    expect(sortState.unpromised).toBe(false);
+  });
 
   it('cancels the learned-sort job by id, and only once', () => {
     enableLearnedSort();
