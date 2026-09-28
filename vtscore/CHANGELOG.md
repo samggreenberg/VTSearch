@@ -26,6 +26,38 @@ instead, since every commit on `dev` is effectively a new app release.)
   cancel. A hook that raises is logged; the dataset stays saved. The app uses it
   to start AutoRun on an imported dataset.
 
+- **`vtscore.detectors.cost_trend.SMART_INCLUSION` and `smart_cut`, and
+  `inject_live_model(..., smart_threshold=None)`** (issue #4243). The Smart
+  indicator prices every model's error at `SMART_INCLUSION` (0, so FPR + FNR),
+  at the model's own cut for that inclusion rather than at the line it was
+  served with. `smart_cut(served_threshold, served_inclusion, recut)` picks
+  that cut: the served line when the model was served at `SMART_INCLUSION`,
+  else `recut(SMART_INCLUSION)`, else the served line again when there is
+  nothing inclusion-aware to re-cut. `inject_live_model` takes the chosen cut
+  as an optional keyword and falls back to `threshold` without it, so existing
+  callers keep working. The eval harness's Smart window reads the same two
+  names.
+
+- **A dry stop in the Autopilot opening grammar: `+dry<m>/<w>`** (issue
+  #4222). `vtscore.eval.startup_schedule` rounds can now end early when the
+  round's last `w` picks held fewer than `m` goods, so `g20+dry1/8@top,b4@mid`
+  walks the text sort until 20 goods or until 8 picks in a row come back empty.
+  Allowed on `g` and `n` rounds, refused on `b`. `StartupRound` gains
+  `dry_goods` / `dry_window` (both `0` when there is no dry stop, so existing
+  rounds compare equal), `StartupState` gains `ran_dry()`, and
+  `StartupState.on_click` / `AutopilotFlow.update` take the vote's outcome
+  (`good` / keyword `last_vote_good`), which a dry round requires.
+
+- **`FoldAnchoredCut.fold_orderings`** (issue #4242). Each kept fold's
+  held-out `(scores, labels)`, index-aligned with `fits` and `fold_haystacks`,
+  with unscored items dropped. `fit_fold_anchored_cut` drops a fold that fails
+  both fits, so the calibration cache's orderings don't line up with a cut's
+  haystacks; these do. That is the evidence
+  `precision_lower_bound_curve` / `precision_floor_cut` need from a live
+  detector: `precision_lower_bound_curve(corpus, cut.final_haystack,
+  cut.fold_orderings, cut.fold_haystacks)`. Additive, defaulting to `()` for a
+  cut built by hand.
+
 - **`vtscore.utils.synthetic.describe_image_dataset()` and
   `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
   seed)` draws, without drawing it: one dict per picture with its `filename`,
@@ -406,6 +438,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **Smart no longer prices at the caller's inclusion** (issue #4243).
+  `calculate_error_cost_over_time`, `compute_labeling_status`,
+  `analyze_labeling_progress` and `cached_indicator_history` still take
+  `inclusion_value`, which picks the progress cache to read, but every cost
+  they report is FPR + FNR at each model's `smart_threshold`. Before, it was
+  priced at `inclusion_value` at the served threshold. Identical at inclusion 0.
 
 - **`generate_image_dataset` draws a small world of cartoon smiley faces**
   (issue #4240). The two ideas (a smiley, or shapes, on a plain background at

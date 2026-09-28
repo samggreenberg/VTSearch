@@ -18,7 +18,7 @@
 
 import type { Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
+import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -61,6 +61,14 @@ export interface Annotation {
 /** Helpers implemented by the capture harness and passed to every recipe. */
 export interface Helpers {
   page: Page;
+  /**
+   * The running app's API client (`scripts/screenshots/app-client.mjs`):
+   * `api(path, {method, body, dataset, detector})`, `datasets()`,
+   * `detectors()`, `named(rows, name)`, `mediaIndex(dataset, detector)`,
+   * `vote(dataset, detector, id, target)`. For a recipe's `after` to undo what
+   * it changed, and for state a user would have built by hand.
+   */
+  app: any;
   /** Navigate to the dashboard and wait for it to settle. */
   dashboard(): Promise<void>;
   click(selector: string): Promise<void>;
@@ -121,11 +129,20 @@ export interface Shot {
   /** Declarative callouts, drawn as a pre-capture DOM overlay. */
   annotations?: Annotation[];
   recipe: (page: Page, h: Helpers) => Promise<void>;
+  /**
+   * Undo whatever the recipe changed in the app to reach its frame (items
+   * verified in Find, a moved Inclusion, a detector moved to AutoRun). Runs
+   * after the capture, pass or fail, so no later shot inherits the change.
+   * A recipe that only *poses* the app — a form filled in but not submitted,
+   * a menu opened — needs none.
+   */
+  after?: (page: Page, h: Helpers) => Promise<void>;
 }
 
 const BOTH: Theme[] = ['light', 'dark'];
 
 const GUIDE = 'docs/user/USER_GUIDE.md';
+const HOWTO = 'docs/user/howto';
 const STEPS = `${GUIDE}#step-by-step-your-first-search`;
 
 /** A dashboard row, matched by its exact name (see `Target`). */
@@ -145,14 +162,24 @@ const dashButton = (hasText: 'Train' | 'Find'): Target => ({
  * Takes an object with a literal `id:` so `scripts/screenshots/wiring-check.py`,
  * which finds shot ids by that key, sees these shots like any other.
  */
-function icon(s: { id: string; anchor: string; caption: string; target: Target; recipe: Shot['recipe'] }): Shot {
+function icon(s: {
+  id: string;
+  anchor: string;
+  /** A how-to page under docs/user/howto/ to credit instead of the guide. */
+  page?: string;
+  caption: string;
+  target: Target;
+  recipe: Shot['recipe'];
+  after?: Shot['after'];
+}): Shot {
   return {
     id: s.id,
-    embeddedIn: `${GUIDE}#${s.anchor}`,
+    embeddedIn: `${s.page ? `${HOWTO}/${s.page}` : GUIDE}#${s.anchor}`,
     caption: s.caption,
     themes: BOTH,
     clip: { target: s.target, pad: 6 },
     recipe: s.recipe,
+    after: s.after,
   };
 }
 
@@ -171,8 +198,231 @@ async function cleanDashboard(page: Page, h: Helpers): Promise<void> {
   await h.wait(400);
 }
 
+/** The dashboard rows of the example's test pile and detector, for API calls. */
+async function findPair(h: Helpers): Promise<{ dataset: string; detector: string }> {
+  const ds = h.app.named(await h.app.datasets(), TEST_DATASET);
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  if (!ds || !det) throw new Error(`no ${TEST_DATASET} / ${DETECTOR} to run Find with`);
+  return { dataset: ds.id, detector: det.id };
+}
+
+/**
+ * End the detector's live Find session (its verified pictures) and put
+ * Inclusion back to 0, so the next Find shot starts from a fresh scoring run
+ * whatever an earlier recipe did. Find verifications live in server memory and
+ * survive leaving Find, so without this one shot's checked pictures would show
+ * up in the next.
+ */
+async function resetFind(h: Helpers): Promise<void> {
+  const pair = await findPair(h);
+  await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
+  await h.app.api('/api/inclusion', { method: 'POST', body: { inclusion: 0 }, ...pair });
+}
+
+/** The example's category for each picture of *dataset*, by file name. */
+function categories(dataset: string): Record<string, string> {
+  return Object.fromEntries(
+    corpus(dataset).pictures.map((p: { filename: string; category: string }) => [p.filename, p.category]),
+  );
+}
+
+/**
+ * The file name of the picture in the viewer (its alt text), once a new one
+ * has arrived and stopped changing. Until a picture's details load, the alt
+ * reads a placeholder ("Image media") rather than a file name, and a vote can
+ * make Autopilot re-pick a moment after it serves; both are waited out.
+ */
+async function servedPicture(page: Page, h: Helpers, previous: string | null): Promise<string | null> {
+  const alt = () => page.locator('img.image-element').first().getAttribute('alt');
+  await page
+    .waitForFunction((prev) => {
+      const a = document.querySelector('img.image-element')?.getAttribute('alt') ?? '';
+      return /\.[a-z0-9]+$/i.test(a) && a !== prev;
+    }, previous, { timeout: 20000 })
+    .catch(() => {});
+  let name = await alt();
+  for (let i = 0; i < 10; i++) {
+    await h.wait(600);
+    const again = await alt();
+    if (again === name) return name;
+    name = again;
+  }
+  return name;
+}
+
+/**
+ * In Find, answer the next *n* pictures it serves the way the example's user
+ * would: Good for a yellow smiley, Bad for anything else. The file name is the
+ * viewer's alt text, and the generator's account says what each picture is.
+ */
+async function verifyServed(page: Page, h: Helpers, n: number): Promise<void> {
+  const cats = categories(TEST_DATASET);
+  let name = await servedPicture(page, h, null);
+  for (let i = 0; i < n; i++) {
+    const good = name !== null && cats[name] === 'yellow-smiley';
+    await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
+    name = await servedPicture(page, h, name);
+  }
+}
+
+/**
+ * In the region fixture's label view, draw a box round the one yellow smiley
+ * in the hero scene with the Marquee, as a user would. The box is the
+ * generator's own box for that smiley, so it sits tight on the face rather
+ * than being eyeballed round it, and it is a real canvas drag.
+ */
+async function drawHeroRegion(page: Page, h: Helpers): Promise<void> {
+  const hero = corpus(REGION_DATASET).pictures.find((p: { filename: string }) => p.filename === HERO_REGION);
+  if (!hero) throw new Error(`${HERO_REGION} is not in the ${REGION_DATASET} corpus`);
+  const region = regionBox(hero);
+  await h.enterLabelView(REGION_DATASET, REGION_DETECTOR);
+  await h.leftTab('Manual');
+  await h.serveItem(HERO_REGION);
+  await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
+  await h.wait(600);
+  // The rendered *picture*, not the <img> element: the viewer sizes the
+  // element to the whole centre panel with `object-fit: contain`, so the
+  // picture is a letterboxed rectangle inside it.
+  const box = await page.locator('img.image-element').first().evaluate((el) => {
+    const img = el as HTMLImageElement;
+    const r = img.getBoundingClientRect();
+    const scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
+    const w = img.naturalWidth * scale;
+    const hh = img.naturalHeight * scale;
+    return { x: r.x + (r.width - w) / 2, y: r.y + (r.height - hh) / 2, width: w, height: hh };
+  });
+  const x0 = box.x + box.width * region.x0;
+  const y0 = box.y + box.height * region.y0;
+  const x1 = box.x + box.width * region.x1;
+  const y1 = box.y + box.height * region.y1;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 8 });
+  await page.mouse.move(x1, y1, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForSelector('.region-box', { timeout: 10000 });
+  await h.wait(900);
+}
+
+/** A picture of *category* in the training pile, and its path on the server. */
+function trainingPicture(category: string): { filename: string; path: string } {
+  const [filename] = framesOf(corpus(TRAIN_DATASET).pictures, category, 1);
+  return { filename, path: `${corpusPath(TRAIN_DATASET)}/${filename}` };
+}
+
+/** New Detector on the Image tab, with the training pile ticked. */
+async function newDetectorImageTab(page: Page, h: Helpers): Promise<void> {
+  await h.dashboard();
+  await h.selectDatasetRow(TRAIN_DATASET);
+  await h.openNewDetector();
+  await page.waitForSelector('.new-detector-form', { timeout: 20000 });
+  await page.locator('.example-tab-bar .tab', { hasText: 'Image' }).first().click();
+  await page.waitForSelector('.example-panel .drop-zone', { timeout: 10000 });
+  await h.wait(500);
+}
+
+/** ...then hand it a yellow smiley from the training pile, as if dropped from the desktop. */
+async function dropExample(page: Page, h: Helpers): Promise<void> {
+  await newDetectorImageTab(page, h);
+  await page.locator('.example-panel .drop-zone-input').setInputFiles(trainingPicture('yellow-smiley').path);
+  await page.waitForSelector('[role=dialog][aria-label="Use This Example?"]', { timeout: 20000 });
+  await h.wait(800);
+}
+
+/**
+ * A target Autopilot's text ranking struggles with, for the unstick-autopilot
+ * shot: 8 of the 240 drawings are yellow smileys with rosy cheeks, and the
+ * description puts only 2 of them in its top ten (measured with SigLIP; the
+ * words find yellow smileys, but barely see the cheeks).
+ */
+const ROSY = 'Rosy Smileys';
+const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
+
+type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
+
+/** True if *picture* is a yellow smiley with rosy cheeks (the ROSY detector's target). */
+function isRosySmiley(picture: Drawing): boolean {
+  const [face] = picture.objects;
+  return picture.kind === 'face' && face.color === 'yellow' && !!face.smiling && !!face.cheeks;
+}
+
+
+/**
+ * Tick exactly the rows called *names* on a dashboard card (`tr[vt-dataset-card]`
+ * or `tr[vt-detector-card]`) and untick the rest; names match the whole
+ * `.name-cell`, since `drawings` is a prefix of `drawings-new`.
+ */
+async function tickOnly(page: Page, h: Helpers, tag: string, names: string[]): Promise<void> {
+  const rows = page.locator(tag);
+  await rows.first().waitFor({ timeout: 20000 });
+  for (let i = 0; i < (await rows.count()); i++) {
+    const row = rows.nth(i);
+    const label = ((await row.locator('.name-cell').first().textContent()) || '').trim();
+    const cb = row.locator('.select-checkbox').first();
+    if (((await cb.getAttribute('aria-checked')) === 'true') !== names.includes(label)) {
+      await cb.click();
+      await h.wait(350);
+    }
+  }
+  await h.wait(400);
+}
+
+/** Put the example's detector on (or back off) the AutoRun tab, through the API. */
+async function setAutoRun(h: Helpers, on: boolean): Promise<void> {
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  await h.app.api(`/api/detectors/registry/${det.id}/autofind`, { method: 'PUT', body: { autofind: on } });
+}
+
+/**
+ * Click the Browse canvas, *button* 'left' or 'right', at the first point
+ * (working out from the centre) where it lands on a tile, judged by *hit*.
+ * Tiles leave gaps between clusters, and a right-click on empty space soon
+ * after another zooms out, so the tries are spaced out.
+ */
+async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: () => Promise<boolean>): Promise<void> {
+  const box = await page.locator('vt-browse-canvas').first().boundingBox();
+  if (!box) throw new Error('no Browse canvas');
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  for (const [dx, dy] of [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40], [80, 40], [-80, -40], [120, 0], [-120, 0], [0, 120]]) {
+    await page.mouse.click(cx + dx, cy + dy, { button });
+    await h.wait(1200);
+    if (await hit()) return;
+  }
+  throw new Error('no tile found near the middle of the Browse canvas');
+}
+
+/** How far the manual-text-sort shot widens the left panel, in CSS px. */
+const MANUAL_WIDEN = 140;
+
+/**
+ * The remembered left-panel widths (`panel_pct_left`, per media type) from
+ * before a shot dragged the divider. Dragging back does not restore them
+ * exactly: a released divider snaps to fit whole columns of thumbnails.
+ */
+let savedLeftWidths: unknown = null;
+
+/**
+ * Drag the divider between the label view's left and centre panels by *dx*.
+ * The width is remembered per media type, so a shot that drags it saves the
+ * setting first (`savedLeftWidths`) and puts it back in `after`.
+ */
+async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void> {
+  const box = await page.locator('.pane-divider').first().boundingBox();
+  if (!box) throw new Error('no pane divider');
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx / 2, y, { steps: 6 });
+  await page.mouse.move(x + dx, y, { steps: 6 });
+  await page.mouse.up();
+  await h.wait(800);
+}
+
 /** Select a dataset + detector on the dashboard, then Find; wait out scoring. */
 async function openFind(page: Page, h: Helpers): Promise<void> {
+  await resetFind(h);
   await h.dashboard();
   await h.selectDatasetRow(TEST_DATASET);
   await h.selectDetectorRow(DETECTOR);
@@ -184,6 +434,40 @@ async function openFind(page: Page, h: Helpers): Promise<void> {
   // photographing a progress bar.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 }).catch(() => {});
   await h.wait(2500);
+}
+
+/**
+ * Check a fixed handful of Find's pictures by hand, each with its true label -
+ * five yellow smileys and three of the near-misses that rank beside them - so
+ * Detector Stats has a "Checked by you" line to draw. Votes go through the API
+ * with absolute targets, so a second run (the dark capture after the light one)
+ * changes nothing, and a Find-mode vote never reaches the detector's own
+ * labels, so the re-run Find scores exactly as the first did.
+ */
+async function checkSomeInFind(page: Page): Promise<void> {
+  const { pictures } = corpus(TEST_DATASET);
+  const names = new Set<string>([
+    ...framesOf(pictures, 'yellow-smiley', 5),
+    ...framesOf(pictures, 'yellow-face', 2),
+    ...framesOf(pictures, 'orange-smiley', 1),
+  ]);
+  const isGood = new Map<string, boolean>(
+    pictures.map((p: { filename: string; yellow_smileys: unknown[] }) => [p.filename, p.yellow_smileys.length > 0]),
+  );
+  const origin = new URL(page.url()).origin;
+  const getJson = async (path: string, headers: Record<string, string> = {}) =>
+    (await page.request.get(origin + path, { headers })).json();
+  const ds = (await getJson('/api/datasets/registry')).datasets.find((d: { name: string }) => d.name === TEST_DATASET);
+  const det = (await getJson('/api/detectors/registry')).detectors.find((d: { name: string }) => d.name === DETECTOR);
+  const headers = { 'X-Dataset-Id': String(ds.id), 'X-Detector-Id': String(det.id) };
+  const ids = (await getJson('/api/medias/ids', headers)).map((m: { id: number }) => m.id);
+  const metas = await (await page.request.post(origin + '/api/medias/batch', { headers, data: { ids } })).json();
+  for (const m of metas as { id: number; filename: string }[]) {
+    if (!names.has(m.filename)) continue;
+    const target = isGood.get(m.filename) ? 'good' : 'bad';
+    const r = await page.request.post(`${origin}/api/medias/${m.id}/vote`, { headers, data: { target } });
+    if (!r.ok()) throw new Error(`vote ${m.filename} -> ${r.status()} ${await r.text()}`);
+  }
 }
 
 /** The label view with autopilot serving: an item, and the tool asking about it. */
@@ -577,43 +861,13 @@ export const SHOTS: Shot[] = [
     annotations: [
       { target: '.region-box', kind: 'box', label: 'Vote good on this region' },
     ],
-    // Region voting needs a patch-region-aware embedder, so this shot uses the
-    // `drawing-regions` fixture (embedded with DINOv2 patch) and its own
-    // detector. The frame is a scene with one yellow smiley in it, beside a
-    // yellow face that is not smiling (see `smiley-example.mjs`), so the
-    // rectangle is visibly a claim about where the evidence is; the box is the
-    // generator's own box for that smiley. The rectangle is a real canvas drag.
+    // Region voting needs a region embedder and a detector locked to it, so
+    // this shot uses the `drawing-regions` fixture and its own detector. The
+    // frame is a scene with one yellow smiley in it, beside a yellow face that
+    // is not smiling (see `smiley-example.mjs`), so the rectangle is visibly a
+    // claim about where the evidence is.
     async recipe(page, h) {
-      const hero = corpus(REGION_DATASET).pictures.find((p: { filename: string }) => p.filename === HERO_REGION);
-      if (!hero) throw new Error(`${HERO_REGION} is not in the ${REGION_DATASET} corpus`);
-      const region = regionBox(hero);
-      await h.enterLabelView(REGION_DATASET, REGION_DETECTOR);
-      await h.leftTab('Manual');
-      await h.serveItem(HERO_REGION);
-      await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
-      await h.wait(600);
-      // The rendered *picture*, not the <img> element: the viewer sizes the
-      // element to the whole centre panel with `object-fit: contain`, so the
-      // picture is a letterboxed rectangle inside it.
-      const box = await page.locator('img.image-element').first().evaluate((el) => {
-        const img = el as HTMLImageElement;
-        const r = img.getBoundingClientRect();
-        const scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
-        const w = img.naturalWidth * scale;
-        const hh = img.naturalHeight * scale;
-        return { x: r.x + (r.width - w) / 2, y: r.y + (r.height - hh) / 2, width: w, height: hh };
-      });
-      const x0 = box.x + box.width * region.x0;
-      const y0 = box.y + box.height * region.y0;
-      const x1 = box.x + box.width * region.x1;
-      const y1 = box.y + box.height * region.y1;
-      await page.mouse.move(x0, y0);
-      await page.mouse.down();
-      await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 8 });
-      await page.mouse.move(x1, y1, { steps: 8 });
-      await page.mouse.up();
-      await page.waitForSelector('.region-box', { timeout: 10000 });
-      await h.wait(900);
+      await drawHeroRegion(page, h);
     },
   },
   {
@@ -757,14 +1011,19 @@ export const SHOTS: Shot[] = [
     id: 'find-stats',
     embeddedIn: `${GUIDE}#find-scoring-and-verifying`,
     caption:
-      "The Find view's Detector Stats modal: detector-vs-verified counts, how much of this dataset looks unlike the one the detector was trained on, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes",
+      "The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of estimated and checked precision against how many items are returned",
     themes: BOTH,
     clip: { target: '.modal-content' },
     async recipe(page, h) {
       await openFind(page, h);
+      await checkSomeInFind(page);
       // Stats lives in the right-panel action row of the find view.
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.stats-table', { timeout: 20000 });
+      // The chart is the section this shot is for; it sits below the fold.
+      await page.locator('.chart-wrap').scrollIntoViewIfNeeded();
+      // Park the pointer off the chart, so the readout shows the current cut.
+      await page.mouse.move(5, 5);
       await h.wait(1200);
     },
   },
@@ -780,6 +1039,920 @@ export const SHOTS: Shot[] = [
       await page.locator('button[title^="Achievements:"]:visible').first().click();
       await page.waitForSelector('.achievements-total, vt-achievements-tab', { timeout: 15000 });
       await h.wait(800);
+    },
+  },
+  // ── How-to pages (docs/user/howto/): one task each, click by click ───────
+  //
+  // Each picks up where the guide's Step by step ends. A recipe that has to
+  // change the app to reach its frame (verify pictures in Find, move
+  // Inclusion) says how to put it back in `after`; one that only poses a form
+  // or a menu needs none.
+
+  // check-and-correct.md
+  {
+    id: 'correct-verify',
+    embeddedIn: `${HOWTO}/check-and-correct.md#step-1-check-the-pictures-the-detector-is-least-sure-of`,
+    caption:
+      'Step 1: (1) the picture Find is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad',
+    themes: BOTH,
+    annotations: [
+      { target: 'img.image-element', kind: 'step', step: 1, at: 'corner' },
+      { target: '.btn-good', kind: 'step', step: 2, at: 'right' },
+      { target: '.btn-bad', kind: 'step', step: 2 },
+      { target: '.panel-right', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await verifyServed(page, h, 6);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+  {
+    id: 'correct-add',
+    embeddedIn: `${HOWTO}/check-and-correct.md#step-2-hand-your-corrections-to-the-detector`,
+    caption: 'Step 2: (1) Add Corrections to Detector, then (2) Add Corrections to confirm',
+    themes: BOTH,
+    annotations: [
+      { target: '.corrections-btn', kind: 'step', step: 1 },
+      { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'Add Corrections' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    // Photographed with the dialog open and never confirmed: confirming writes
+    // the corrections into the fixture detector's labels for good.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await verifyServed(page, h, 6);
+      await page.locator('.corrections-btn').first().click();
+      await page.getByText('Add your corrections to this detector?').first().waitFor({ timeout: 10000 });
+      await h.wait(500);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+
+  // borderline-matches.md
+  {
+    id: 'borderline-inclusion',
+    embeddedIn: `${HOWTO}/borderline-matches.md#step-2-loosen-the-line`,
+    caption: 'Step 2: (1) Inclusion raised to 3, (2) the line in the list moves down, (3) the Unverified Good count grows',
+    themes: BOTH,
+    annotations: [
+      { target: '#inclusion-input', kind: 'step', step: 1, at: 'right' },
+      { target: '.media-threshold-line', kind: 'step', step: 2, at: 'right' },
+      { target: '.panel-right .folded-note', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('#inclusion-input').fill('3');
+      await page.locator('#inclusion-input').blur();
+      await h.wait(1500);
+      // Moving the line serves nothing new, and the list only draws the
+      // pictures near what it shows. Answer the next picture, as Step 3 has
+      // the reader do: Find then serves from the new line and the list
+      // scrolls to it.
+      await verifyServed(page, h, 1);
+      const line = page.locator('.media-threshold-line').first();
+      await line.waitFor({ timeout: 15000 });
+      // The served picture lands at the top of the list, with the line just
+      // above it under the header; centre the line so the picture shows it.
+      await line.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await page.mouse.move(700, 60);
+      await h.wait(800);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+  {
+    id: 'borderline-chart',
+    embeddedIn: `${HOWTO}/borderline-matches.md#step-4-see-the-trade-off`,
+    caption:
+      'The Precision by Number Returned chart for the top N pictures, with the current cut marked and the line under the chart reading it there',
+    themes: BOTH,
+    clip: { target: '.chart-wrap', pad: 6 },
+    async recipe(page, h) {
+      await openFind(page, h);
+      await verifyServed(page, h, 12);
+      await page.locator('#inclusion-input').fill('3');
+      await page.locator('#inclusion-input').blur();
+      await h.wait(1500);
+      await page.locator('button[aria-label="Stats"]').first().click();
+      await page.waitForSelector('.chart-wrap', { timeout: 20000 });
+      await page.locator('.chart-wrap').first().scrollIntoViewIfNeeded();
+      await h.wait(1200);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+
+  // trust-a-detector.md
+  {
+    id: 'trust-stats',
+    embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
+    caption:
+      'Step 2: in Detector Stats, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
+    themes: BOTH,
+    annotations: [
+      { target: '.domain-ref-select', kind: 'step', step: 1, at: 'right' },
+      { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2 },
+      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('button[aria-label="Stats"]').first().click();
+      await page.waitForSelector('.stats-table', { timeout: 20000 });
+      // The overlap check picks the first candidate itself; make sure it is
+      // the training pile, and wait for both verdicts to come back.
+      const select = page.locator('.domain-ref-select').first();
+      await select.waitFor({ timeout: 20000 });
+      const trainId = h.app.named(await h.app.datasets(), TRAIN_DATASET)?.id;
+      if (trainId && (await select.inputValue()) !== trainId) await select.selectOption(trainId);
+      await page.locator('.domain-chip', { hasText: 'atypical' }).first().waitFor({ timeout: 120000 });
+      await page.locator('.domain-chip', { hasText: 'evidence vacuum' }).first().waitFor({ timeout: 120000 });
+      await h.wait(800);
+    },
+  },
+
+  // export-matches.md
+  icon({
+    id: 'icon-to-dataset',
+    anchor: 'what-gets-sent',
+    page: 'export-matches.md',
+    caption: 'The To Dataset button in the Find view',
+    target: '.goods-actions button[aria-label="To Dataset"]',
+    recipe: async (page, h) => { await openFind(page, h); },
+  }),
+  {
+    id: 'export-choose',
+    embeddedIn: `${HOWTO}/export-matches.md#step-1-choose-what-to-send`,
+    caption: 'Step 1: in Export, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-modal .delimiter-row', kind: 'step', step: 1 },
+      { target: 'vt-modal .column-checkboxes', kind: 'step', step: 2 },
+      { target: 'vt-modal .table-scroll', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('button[title^="Export the full good set"]').first().click();
+      await page.waitForSelector('.export-tabs', { timeout: 15000 });
+      await h.wait(900);
+    },
+  },
+  {
+    id: 'export-server-csv',
+    embeddedIn: `${HOWTO}/export-matches.md#step-2-send-it`,
+    caption: 'Step 2: on the Server CSV File tab, (1) the path to save to on the server, then (2) Save',
+    themes: BOTH,
+    annotations: [
+      { target: '#field-filepath', kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Save' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('button[title^="Export the full good set"]').first().click();
+      await page.waitForSelector('.export-tabs', { timeout: 15000 });
+      await page.locator('.export-tab', { hasText: 'Server CSV File' }).first().click();
+      await page.waitForSelector('#field-filepath', { timeout: 10000 });
+      await page.locator('#field-filepath').scrollIntoViewIfNeeded();
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'export-to-dataset',
+    embeddedIn: `${HOWTO}/export-matches.md#or-keep-the-matches-as-a-dataset`,
+    caption: "Keep the matches as a dataset: (1) To Dataset, (2) the new dataset's name, (3) OK",
+    themes: BOTH,
+    annotations: [
+      { target: '.goods-actions button[aria-label="To Dataset"]', kind: 'step', step: 1, at: 'bottom' },
+      { target: 'vt-dialog-host input.form-input', kind: 'step', step: 2 },
+      { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'OK' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    // Posed with the name dialog open; OK would add a dataset to the fixtures.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('.goods-actions button[aria-label="To Dataset"]').first().click();
+      await page.waitForSelector('vt-dialog-host input.form-input', { timeout: 10000 });
+      await h.wait(500);
+    },
+  },
+  // start-from-an-example.md
+  {
+    id: 'example-image-tab',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#step-1-open-new-detector-on-the-examples-tab`,
+    caption: 'Step 1: in New Detector, (1) the Image tab, (2) the box to drop a picture on, (3) Browse Images…',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.example-tab-bar .tab', hasText: 'Image' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.example-panel .drop-zone', kind: 'step', step: 2 },
+      { target: '.example-panel .media-btn', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await newDetectorImageTab(page, h);
+    },
+  },
+  {
+    id: 'example-confirm',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#step-2-confirm-the-picture`,
+    caption: 'Step 2: Use This Example? (1) OK uses the whole picture, (2) OK but Crop trims it first',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-media-crop-modal .btn--primary', kind: 'step', step: 1, at: 'right' },
+      { target: { selector: 'vt-media-crop-modal .btn', hasText: 'OK but Crop' }, kind: 'step', step: 2, at: 'top' },
+    ],
+    async recipe(page, h) {
+      await dropExample(page, h);
+    },
+  },
+  {
+    id: 'example-stack',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#step-3-add-more-examples-name-it-create-it`,
+    caption: "Step 3: (1) the example, (2) + Add for another, (3) the detector's name, then (4) Create",
+    themes: BOTH,
+    annotations: [
+      { target: '.example-row', kind: 'step', step: 1 },
+      { target: '.add-example-btn', kind: 'step', step: 2 },
+      { target: '#detector-name', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    // Posed, never created: Create would add a detector to the fixtures.
+    async recipe(page, h) {
+      await dropExample(page, h);
+      await page.locator('vt-media-crop-modal .btn--primary').first().click();
+      await page.waitForSelector('.example-row', { timeout: 30000 });
+      await page.locator('#detector-name').fill('Smileys by example');
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'example-seed-menu',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#or-start-from-a-picture-already-in-the-dataset`,
+    caption: 'From the dataset: (1) the Manual tab, (2) right-click a picture, (3) Use as detector seed',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.thumbnail-wrap', kind: 'step', step: 2 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Use as detector seed' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await h.serveItem();
+      await page.locator('.thumbnail-wrap:visible').first().click({ button: 'right' });
+      await page.waitForSelector('.context-menu', { timeout: 10000 });
+      await h.wait(500);
+    },
+  },
+
+  // vote-on-a-region.md
+  {
+    id: 'region-import',
+    embeddedIn: `${HOWTO}/vote-on-a-region.md#step-1-make-a-dataset-that-can-see-regions`,
+    caption: 'Step 1: in Add Dataset, (1) Advanced, (2) a Region embedder, then (3) Import',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-import-advanced > .advanced-toggle', kind: 'step', step: 1 },
+      { target: '#import-advanced-patch-embedder', kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    // Posed, never imported: the fixture already holds this dataset.
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).first().click();
+      await page.waitForSelector('#field-size', { timeout: 10000 });
+      await page.locator('#field-size').fill('40');
+      await page.locator('#field-seed').fill('3');
+      await page.locator('#field-dataset_name').fill(REGION_DATASET);
+      await page.locator('vt-import-advanced > .advanced-toggle').first().click();
+      await page.waitForSelector('#import-advanced-patch-embedder', { timeout: 10000 });
+      await page.locator('#import-advanced-patch-embedder').selectOption({ label: 'DINOv2 patch (region-aware images)' });
+      // Scroll the dialog the way a reader would, with the wheel: a scripted
+      // scrollIntoView scrolls an inner box no reader can, and the form then
+      // paints over the tabs.
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, 600);
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'region-new-detector',
+    embeddedIn: `${HOWTO}/vote-on-a-region.md#step-2-make-a-detector-that-uses-regions`,
+    caption: 'Step 2: in New Detector, (1) Advanced, (2) Detector Embedder Type set to Patch Semantic, then (3) Create',
+    themes: BOTH,
+    annotations: [
+      { target: '.new-detector-form .advanced-toggle', kind: 'step', step: 1 },
+      { target: '#detector-embedder-type', kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow(REGION_DATASET);
+      await h.openNewDetector();
+      await page.waitForSelector('.new-detector-form', { timeout: 20000 });
+      await page.locator('.example-panel input.form-input').first().fill(DETECTOR_TEXT);
+      await page.locator('#detector-name').fill('Smileys (regions)');
+      await page.locator('.new-detector-form .advanced-toggle').first().click();
+      await page.waitForSelector('#detector-embedder-type', { timeout: 10000 });
+      await page.locator('#detector-embedder-type').selectOption({ label: 'Patch Semantic' });
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'region-draw',
+    embeddedIn: `${HOWTO}/vote-on-a-region.md#step-3-draw-a-box-and-vote`,
+    caption: 'Step 3: (1) the Marquee button, (2) a box drawn round the yellow smiley, then (3) Good',
+    themes: BOTH,
+    annotations: [
+      { target: 'button[aria-label="Marquee: draw region"]', kind: 'step', step: 1 },
+      { target: '.region-box', kind: 'step', step: 2, at: 'right' },
+      { target: '.btn-good', kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await drawHeroRegion(page, h);
+    },
+  },
+
+  // unstick-autopilot.md
+  {
+    id: 'unstick-prompt',
+    embeddedIn: `${HOWTO}/unstick-autopilot.md#when-autopilot-asks`,
+    caption:
+      'Update Sort Example? (1) Keep clicking with the same sort, or supply a different one: (2) a new description, then Use, or (3) an example picture',
+    themes: BOTH,
+    annotations: [
+      { target: '.keep-btn', kind: 'step', step: 1 },
+      { target: '.resort-prompt .text-input-row input', kind: 'step', step: 2 },
+      { target: { selector: '.resort-prompt .media-btn', hasText: 'Browse Media' }, kind: 'step', step: 3 },
+    ],
+    // A fresh detector for a target its words find badly, answered honestly
+    // (Good only for a rosy-cheeked yellow smiley) until Autopilot runs out of
+    // patience. Made and dropped here: it is no part of the Smiley example.
+    async recipe(page, h) {
+      await h.app.dropDetectors(ROSY);
+      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+      const det = await h.app.ensureDetector(ROSY, train, ROSY_TEXT);
+      await h.app.setVotes(train, det, { good: [], bad: [] });
+      await h.enterLabelView(TRAIN_DATASET, ROSY);
+      await h.leftTab('Autopilot');
+      await page.waitForSelector('.btn-good', { timeout: 120000 });
+      const byName: Record<string, Drawing> = Object.fromEntries(
+        corpus(TRAIN_DATASET).pictures.map((p: Drawing & { filename: string }) => [p.filename, p]),
+      );
+      const prompt = page.locator('[role=dialog][aria-label="Update Sort Example?"]');
+      let name = await servedPicture(page, h, null);
+      for (let i = 0; i < 30 && !(await prompt.count()); i++) {
+        const good = name !== null && !!byName[name] && isRosySmiley(byName[name]);
+        if (process.env.SHOT_DEBUG) console.log(`[unstick] ${name} -> ${good ? 'good' : 'bad'}`);
+        await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
+        await h.wait(400);
+        if (await prompt.count()) break;
+        name = await servedPicture(page, h, name);
+      }
+      await prompt.waitFor({ timeout: 10000 });
+      await h.wait(800);
+    },
+    after: async (_page, h) => h.app.dropDetectors(ROSY),
+  },
+
+  // label-in-manual-mode.md
+  {
+    id: 'manual-text-sort',
+    embeddedIn: `${HOWTO}/label-in-manual-mode.md#step-1-switch-to-manual-and-sort-the-list`,
+    caption: 'Step 1: (1) the Manual tab, (2) the Text sort, then (3) a description and Search',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.sort-mode-group', kind: 'step', step: 2, at: 'right' },
+      { target: '.sort-mode-content', kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      savedLeftWidths = (await h.app.api('/api/settings')).panel_pct_left;
+      await dragLeftDivider(page, h, MANUAL_WIDEN);
+      // Top, so the next picture served (and the list's scroll) is the best
+      // match rather than a borderline one.
+      await page.locator('.select-mode-group .sort-radio', { hasText: 'Top' }).first().click();
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Text' }).first().click();
+      await page.waitForSelector('.text-sort-input', { timeout: 10000 });
+      await page.locator('.text-sort-input').fill('yellow grinning face with tongue');
+      await page.locator('.text-sort-btn').first().click();
+      await page.waitForSelector('.thumbnail-wrap', { timeout: 60000 });
+      await h.wait(2500);
+    },
+    // The sort mode and the panel width stick; hand the next shot the Learned
+    // sort and the width the rest of the guide is shot at.
+    after: async (page, h) => {
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Learned' }).first().click();
+      await page.waitForTimeout(1500);
+      if (savedLeftWidths) {
+        await h.app.api('/api/settings', { method: 'PUT', body: { panel_pct_left: savedLeftWidths } });
+      }
+    },
+  },
+  {
+    id: 'manual-load-sort',
+    embeddedIn: `${HOWTO}/label-in-manual-mode.md#step-1-switch-to-manual-and-sort-the-list`,
+    caption: 'The Load sort: (1) Load, (2) the + beside No sort loaded, then (3) a saved detector to rank by',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.sort-mode-group .sort-radio', hasText: 'Load' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.load-sort-add-btn', kind: 'step', step: 2, at: 'right' },
+      { target: '.file-item', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Load' }).first().click();
+      await h.wait(800);
+      await page.locator('.load-sort-add-btn').first().click();
+      await page.waitForSelector('.file-item', { timeout: 15000 });
+      await h.wait(700);
+    },
+    after: async (page) => {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Learned' }).first().click();
+      await page.waitForTimeout(1500);
+    },
+  },
+  // move-a-detector.md
+  {
+    id: 'move-export-menu',
+    embeddedIn: `${HOWTO}/move-a-detector.md#step-1-export-the-detectors-answers`,
+    caption: "Step 1: (1) the detector's ⋯ menu, then (2) Export labels",
+    themes: BOTH,
+    annotations: [
+      { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Export labels' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+    },
+  },
+  {
+    id: 'move-export-save',
+    embeddedIn: `${HOWTO}/move-a-detector.md#step-2-save-them-to-a-file`,
+    caption: 'Step 2: (1) Categories on All, (2) the Server JSON File tab, (3) the path to save to, then (4) Save',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal .delimiter-option', hasText: 'All' }, kind: 'step', step: 1 },
+      { target: { selector: '.export-tab', hasText: 'Server JSON File' }, kind: 'step', step: 2, at: 'top' },
+      { target: '#field-filepath', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Save' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Export labels' }).first().click();
+      await page.waitForSelector('.export-tabs', { timeout: 15000 });
+      await page.locator('.export-tab', { hasText: 'Server JSON File' }).first().click();
+      await page.waitForSelector('#field-filepath', { timeout: 10000 });
+      // Scroll the dialog's body to its foot, where the path and Save are.
+      // Clicking the half-hidden last tab made the harness scroll it into
+      // view sideways, which a reader's click does not; undo that too.
+      await page.locator('vt-modal .modal-body').first().evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+        for (let node: Element | null = el; node; node = node.parentElement) node.scrollLeft = 0;
+        el.querySelectorAll('*').forEach((child) => {
+          if (child.scrollLeft && !child.classList.contains('table-scroll')) child.scrollLeft = 0;
+        });
+      });
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'move-trained-tab',
+    embeddedIn: `${HOWTO}/move-a-detector.md#step-3-make-a-detector-from-the-file`,
+    caption:
+      "Step 3: in New Detector, (1) the Trained tab (then Server JSON File), (2) the file's path, (3) the detector's name, then (4) Create & Import",
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal .tab[role="tab"]', hasText: 'Trained' }, kind: 'step', step: 1, at: 'top' },
+      { target: '#nmm-filepath', kind: 'step', step: 2 },
+      { target: '#detector-name', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create & Import' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    // Posed, never created.
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow(TRAIN_DATASET);
+      await h.openNewDetector();
+      await page.locator('vt-modal .tab[role="tab"]', { hasText: 'Trained' }).first().click();
+      await page.locator('vt-modal .picker-card', { hasText: 'Server JSON File' }).first().click();
+      await page.waitForSelector('#nmm-filepath', { timeout: 10000 });
+      await page.locator('#nmm-filepath').fill('/data/Yellow Smileys-drawings.json');
+      await page.locator('#detector-name').fill(DETECTOR);
+      await h.wait(700);
+    },
+  },
+
+  // import-labels.md
+  {
+    id: 'labels-menu',
+    embeddedIn: `${HOWTO}/import-labels.md#step-2-open-import-labels-on-the-detector`,
+    caption: "Step 2: (1) the detector's ⋯ menu, then (2) Import Labels",
+    themes: BOTH,
+    annotations: [
+      { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Import Labels' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+    },
+  },
+  {
+    id: 'labels-import-form',
+    embeddedIn: `${HOWTO}/import-labels.md#step-3-import-the-file`,
+    caption: "Step 3: (1) the file's path on the server, then (2) Import",
+    themes: BOTH,
+    annotations: [
+      { target: '#lif-filepath', kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    // Posed, never imported: Import would add the rows to the fixture detector.
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Import Labels' }).first().click();
+      await page.locator('vt-modal .picker-card', { hasText: 'Server CSV File' }).first().click();
+      await page.waitForSelector('#lif-filepath', { timeout: 10000 });
+      await page.locator('#lif-filepath').fill('/data/smiley-labels.csv');
+      await h.wait(700);
+    },
+  },
+
+  // autorun-from-the-command-line.md
+  {
+    id: 'autorun-menu',
+    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-1-move-the-detector-to-autorun`,
+    caption: "Step 1: (1) the detector's ⋯ menu, then (2) Move to AutoRun",
+    themes: BOTH,
+    annotations: [
+      { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Move to AutoRun' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+    },
+  },
+  {
+    id: 'autorun-tab',
+    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-1-move-the-detector-to-autorun`,
+    caption: 'Step 1: (1) the AutoRun tab, (2) the detector now on it',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.detector-tab-bar .tab', hasText: 'AutoRun' }, kind: 'step', step: 1, at: 'top' },
+      { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
+    ],
+    async recipe(page, h) {
+      await setAutoRun(h, true);
+      await cleanDashboard(page, h);
+      await page.locator('.detector-tab-bar .tab', { hasText: 'AutoRun' }).first().click();
+      await page.locator('tr[vt-detector-card]').first().waitFor({ timeout: 10000 });
+      await page.mouse.move(700, 60);
+      await h.wait(700);
+    },
+    after: async (_page, h) => setAutoRun(h, false),
+  },
+  {
+    id: 'autorun-settings',
+    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-2-choose-where-results-go-optional`,
+    caption: 'Step 2: in Settings, (1) Auto-Find, (2) a Results Exporter, (3) its settings, then (4) Done',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.side-tab', hasText: 'Auto-Find' }, kind: 'step', step: 1 },
+      { target: { selector: '.view-tab', hasText: 'Server CSV File' }, kind: 'step', step: 2, at: 'top' },
+      { target: '#autofind-filepath', kind: 'step', step: 3 },
+      { target: { selector: '.settings-actions .btn', hasText: 'Done' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openSettings();
+      await page.locator('.side-tab', { hasText: 'Auto-Find' }).first().click();
+      await page.locator('.view-tab', { hasText: 'Server CSV File' }).first().click();
+      await page.waitForSelector('#autofind-filepath', { timeout: 10000 });
+      await h.wait(700);
+    },
+    // The choice saves as it is made; put the destination back to None.
+    after: async (page) => {
+      await page.locator('.view-tab', { hasText: 'None' }).first().click();
+      await page.waitForTimeout(1000);
+    },
+  },
+
+  // combine.md
+  {
+    id: 'combine-datasets-tick',
+    embeddedIn: `${HOWTO}/combine.md#combine-datasets`,
+    caption: 'Combine datasets: (1) tick the datasets, then (2) Combine selected datasets',
+    themes: BOTH,
+    annotations: [
+      { target: datasetRow(TRAIN_DATASET), kind: 'step', step: 1 },
+      { target: datasetRow(TEST_DATASET), kind: 'step', step: 1 },
+      { target: 'button[aria-label="Combine selected datasets"]', kind: 'step', step: 2, at: 'bottom' },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', [TRAIN_DATASET, TEST_DATASET]);
+      await tickOnly(page, h, 'tr[vt-detector-card]', []);
+      await page.mouse.move(700, 60);
+      await h.wait(500);
+    },
+    after: async (page, h) => tickOnly(page, h, 'tr[vt-dataset-card]', []),
+  },
+  {
+    id: 'combine-datasets-dialog',
+    embeddedIn: `${HOWTO}/combine.md#combine-datasets`,
+    caption: "In Combine Datasets: (1) the new dataset's name, (2) the datasets going in, then (3) Combine",
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-modal .name-input', kind: 'step', step: 1 },
+      { target: 'vt-modal table', kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Combine' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    // Posed, never combined.
+    async recipe(page, h) {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', [TRAIN_DATASET, TEST_DATASET]);
+      await page.locator('button[aria-label="Combine selected datasets"]').first().click();
+      await page.waitForSelector('vt-modal .name-input', { timeout: 10000 });
+      await h.wait(700);
+    },
+    after: async (page, h) => {
+      await page.keyboard.press('Escape');
+      await tickOnly(page, h, 'tr[vt-dataset-card]', []);
+    },
+  },
+  {
+    id: 'combine-detectors-dialog',
+    embeddedIn: `${HOWTO}/combine.md#combine-detectors`,
+    caption: "In Combine Trainable Detectors: (1) the new detector's name, then (2) Combine",
+    themes: BOTH,
+    annotations: [
+      { target: '#combine-new-name', kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Combine' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    // Posed, never combined.
+    async recipe(page, h) {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', []);
+      await tickOnly(page, h, 'tr[vt-detector-card]', [DETECTOR, REGION_DETECTOR]);
+      await page.locator('button[aria-label="Combine selected detectors"]').first().click();
+      await page.waitForSelector('#combine-new-name', { timeout: 10000 });
+      await page.locator('#combine-new-name').fill('Smileys (pooled)');
+      await h.wait(700);
+    },
+    after: async (page, h) => {
+      await page.locator('vt-modal .btn--secondary', { hasText: 'Cancel' }).first().click().catch(() => {});
+      await tickOnly(page, h, 'tr[vt-detector-card]', []);
+    },
+  },
+  icon({
+    id: 'icon-combine-datasets',
+    anchor: 'combine-datasets',
+    page: 'combine.md',
+    caption: 'The Combine selected datasets button',
+    target: 'button[aria-label="Combine selected datasets"]',
+    recipe: async (page, h) => {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', [TRAIN_DATASET, TEST_DATASET]);
+      await page.mouse.move(700, 60);
+    },
+    after: async (page, h) => tickOnly(page, h, 'tr[vt-dataset-card]', []),
+  }),
+  // explore-with-browse.md
+  {
+    id: 'browse-menu',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#step-1-open-the-map`,
+    caption: "Step 1: (1) the dataset's ⋯ menu, then (2) Browse dataset",
+    themes: BOTH,
+    annotations: [
+      { target: datasetRow(TRAIN_DATASET), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Browse dataset' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(TRAIN_DATASET);
+    },
+  },
+  {
+    id: 'browse-toolbar',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#step-2-find-your-way-around`,
+    caption: 'Step 2: (1) the zoom buttons, (2) Signposts, (3) thumbnail size',
+    themes: BOTH,
+    annotations: [
+      { target: '.browse-zoom', kind: 'step', step: 1, at: 'bottom' },
+      { target: '.browse-signposts', kind: 'step', step: 2, at: 'bottom' },
+      { target: '.browse-size', kind: 'step', step: 3, at: 'bottom' },
+    ],
+    async recipe(page, h) {
+      await h.openBrowse();
+    },
+  },
+  {
+    id: 'browse-bin',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#step-3-look-inside-a-tile`,
+    caption: 'Step 3: after right-clicking a tile, (1) its pictures, (2) a large view of one, (3) its details',
+    themes: BOTH,
+    annotations: [
+      { target: '.bin-popup-scroll', kind: 'step', step: 1, at: 'right' },
+      { target: '.bin-popup-preview-img', kind: 'step', step: 2, at: 'right' },
+      { target: 'button[aria-label="Show metadata"]', kind: 'step', step: 3, at: 'bottom' },
+    ],
+    async recipe(page, h) {
+      await h.openBrowse();
+      await clickTile(page, h, 'right', async () => (await page.locator('.bin-popup-count').count()) > 0);
+      await page.locator('.bin-popup-entry').first().hover();
+      await page.waitForSelector('.bin-popup-preview-img', { timeout: 10000 });
+      await h.wait(800);
+    },
+  },
+  {
+    id: 'browse-find',
+    embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-find`,
+    caption: "Browsing Find's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Find",
+    themes: BOTH,
+    annotations: [
+      { target: '.bsp', kind: 'step', step: 1 },
+      { target: '.bsp-verify-good', kind: 'step', step: 2, at: 'bottom' },
+      { target: '.bsp-verify-bad', kind: 'step', step: 2, at: 'bottom' },
+      { target: '.browse-back', kind: 'step', step: 3, at: 'right' },
+    ],
+    // The selection lives in the page only; nothing is verified.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('.goods-actions button[aria-label="Browse"]').first().click();
+      await page.waitForSelector('.bsp-verify-good', { timeout: 300000 });
+      await page.waitForSelector('.browse-preload-cover', { state: 'detached', timeout: 180000 }).catch(() => {});
+      await h.wait(2500);
+      await clickTile(page, h, 'left', async () => (await page.locator('.bsp-entry').count()) > 0);
+      await page.mouse.move(700, 60);
+      await h.wait(800);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+
+  // check-a-dataset.md
+  {
+    id: 'dataset-stats',
+    embeddedIn: `${HOWTO}/check-a-dataset.md#a-datasets-stats`,
+    caption: 'Dataset stats: (1) how many pictures, and duplicate groups, (2) how the dataset was made, (3) when, and the kinds of file',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.stats-table tr', hasText: 'Media items' }, kind: 'step', step: 1 },
+      { target: { selector: '.stats-table tr', hasText: 'Embedder' }, kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .section-title', hasText: 'Timeline' }, kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(TRAIN_DATASET);
+      await page.locator('.context-menu .menu-item', { hasText: 'Stats' }).first().click();
+      await page.waitForSelector('.stats-table', { timeout: 15000 });
+      await h.wait(800);
+    },
+  },
+  {
+    id: 'detector-stats',
+    embeddedIn: `${HOWTO}/check-a-dataset.md#a-detectors-stats`,
+    caption: 'Detector stats: (1) its Good and Bad answers, (2) how many are about pictures in the open dataset, (3) how it was made, and when',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal tr', hasText: 'Positives' }, kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal tr', hasText: 'In current dataset' }, kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .section-title', hasText: 'Creation' }, kind: 'step', step: 3 },
+    ],
+    // Opened after a training session, back on the dashboard by its own
+    // button (not a reload), so the app still has the dataset in hand and
+    // *In current dataset* has something to count.
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await page.locator('.top-bar-btn', { hasText: 'Dashboard' }).first().click();
+      await page.waitForSelector('.dash-table', { timeout: 30000 });
+      await h.wait(1200);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Stats' }).first().click();
+      await page.waitForSelector('vt-modal tr', { timeout: 15000 });
+      await page.getByText(/ of \d+ in /).first().waitFor({ timeout: 10000 }).catch(() => {});
+      await h.wait(800);
+    },
+  },
+
+  // advanced-import.md
+  {
+    id: 'import-advanced',
+    embeddedIn: `${HOWTO}/advanced-import.md#step-2-choose`,
+    caption:
+      'Step 2: in Advanced, (1) the kinds of media to include, (2) the embedder, (3) cleanup, (4) build the Browse map now, or merge near-copies',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-source-specs-picker', kind: 'step', step: 1 },
+      { target: '#import-advanced-embedder', kind: 'step', step: 2 },
+      { target: { selector: 'label.cleanup-row', hasText: 'EXIF' }, kind: 'step', step: 3 },
+      { target: '#import-advanced-projection', kind: 'step', step: 4 },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).first().click();
+      await page.waitForSelector('#field-size', { timeout: 10000 });
+      await page.locator('#field-size').fill('240');
+      await page.locator('#field-seed').fill('4');
+      await page.locator('#field-dataset_name').fill('drawings-more');
+      await page.locator('vt-import-advanced > .advanced-toggle').first().click();
+      await page.waitForSelector('#import-advanced-projection', { timeout: 10000 });
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, 400);
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'import-progress',
+    embeddedIn: `${HOWTO}/advanced-import.md#step-3-import-and-watch-it-load`,
+    caption: "Step 3: (1) the import's progress, at the top of the Datasets card, (2) Cancel",
+    themes: BOTH,
+    annotations: [
+      { target: 'tr.loading-task-row vt-job-progress', kind: 'step', step: 1 },
+      { target: 'button[title="Cancel this dataset load"]', kind: 'step', step: 2, at: 'right' },
+    ],
+    // A real import, cancelled once photographed and cleared away.
+    async recipe(page, h) {
+      await h.app.dropDatasets('drawings-more');
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).first().click();
+      await page.waitForSelector('#field-size', { timeout: 10000 });
+      await page.locator('#field-size').fill('240');
+      await page.locator('#field-seed').fill('4');
+      await page.locator('#field-dataset_name').fill('drawings-more');
+      await page.locator('vt-modal .btn--primary', { hasText: 'Import' }).first().click();
+      await page.waitForSelector('tr.loading-task-row vt-job-progress', { timeout: 30000 });
+      await page.mouse.move(700, 60);
+      await h.wait(2500);
+    },
+    after: async (page, h) => {
+      await page.locator('button[title="Cancel this dataset load"]').first().click().catch(() => {});
+      await page.waitForTimeout(3000);
+      await h.app.dropDatasets('drawings-more');
+    },
+  },
+
+  // load-a-demo.md
+  {
+    id: 'demo-catalogue',
+    embeddedIn: `${HOWTO}/load-a-demo.md#step-1-pick-a-collection`,
+    caption: 'Step 1: (1) Downloaded Media, (2) the kind of media, (3) a collection, then (4) Import',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.importer-subtab', hasText: 'Downloaded Media' }, kind: 'step', step: 1 },
+      { target: '#demo-media-type', kind: 'step', step: 2 },
+      { target: 'tr.demo-row.selected', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    // Posed: a row is only chosen, and nothing is downloaded.
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Downloaded Media' }).first().click();
+      await page.waitForSelector('#demo-media-type', { timeout: 15000 });
+      await page.locator('#demo-media-type').click();
+      await page.locator('li.media-type-option', { hasText: 'Image' }).first().click();
+      await page.waitForSelector('tr.demo-row', { timeout: 15000 });
+      await page.locator('tr.demo-row').first().click();
+      await page.waitForSelector('tr.demo-row.selected', { timeout: 10000 });
+      await h.wait(800);
+    },
+  },
+
+  // save-your-settings.md
+  {
+    id: 'settings-footer',
+    embeddedIn: `${HOWTO}/save-your-settings.md#step-1-open-the-settings-footer`,
+    caption: 'Step 1: at the bottom of Settings, (1) Import, (2) Export',
+    themes: BOTH,
+    annotations: [
+      { target: 'button[title="Import settings from a file"]', kind: 'step', step: 1, at: 'bottom' },
+      { target: '.settings-actions button[aria-label="Export"]', kind: 'step', step: 2, at: 'bottom' },
+    ],
+    async recipe(_page, h) {
+      await h.dashboard();
+      await h.openSettings();
+    },
+  },
+  {
+    id: 'settings-export',
+    embeddedIn: `${HOWTO}/save-your-settings.md#step-2-export-them`,
+    caption: 'Step 2: in Export Settings, (1) Local JSON File downloads them, (2) Server JSON File saves them on the server',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal .picker-card', hasText: 'Local JSON File' }, kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .picker-card', hasText: 'Server JSON File' }, kind: 'step', step: 2 },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openSettings();
+      await page.locator('.settings-actions button[aria-label="Export"]').first().click();
+      await page.waitForSelector('vt-modal .picker-card', { timeout: 10000 });
+      await h.wait(700);
     },
   },
 ];

@@ -91,13 +91,34 @@ class TestParsing:
             StartupRound(stop="bad", n=BAD_TARGET, cut="mid"),
         )
 
-    @pytest.mark.parametrize("spec", ["g3@top", "b4@mid", "n8@k-3", "n8@k0", "n8@k2", "n6@q0.05", "n6@q0.5"])
+    @pytest.mark.parametrize(
+        "spec",
+        ["g3@top", "b4@mid", "n8@k-3", "n8@k0", "n8@k2", "n6@q0.05", "n6@q0.5", "g20+dry1/8@top", "n30+dry2/10@q0.05"],
+    )
     def test_round_trips_through_its_spec(self, spec):
         (rnd,) = parse_startup_schedule(spec)
         assert rnd.spec() == spec
 
     @pytest.mark.parametrize(
-        "spec", ["", "g3", "g3@", "@top", "x3@top", "g0@top", "g3@k", "g3@warm", "n3@q", "g-1@top", "n3@k1.5"]
+        "spec",
+        [
+            "",
+            "g3",
+            "g3@",
+            "@top",
+            "x3@top",
+            "g0@top",
+            "g3@k",
+            "g3@warm",
+            "n3@q",
+            "g-1@top",
+            "n3@k1.5",
+            "g20+dry1@top",
+            "g20+dry/8@top",
+            "g20dry1/8@top",
+            "g20@top+dry1/8",
+            "g20+dry1/8/2@top",
+        ],
     )
     def test_junk_is_rejected_not_guessed_at(self, spec):
         """A misparsed arm measures an opening nobody wrote."""
@@ -106,6 +127,23 @@ class TestParsing:
 
     def test_whitespace_and_trailing_commas_are_tolerated(self):
         assert parse_startup_schedule(" g3@top , b4@mid ,") == parse_startup_schedule(PRODUCTION_STARTUP)
+
+    def test_dry_stop_parses_to_its_count_and_window(self):
+        assert parse_startup_schedule("g20+dry1/8@top,b4@mid") == (
+            StartupRound(stop="good", n=20, cut="top", dry_goods=1, dry_window=8),
+            StartupRound(stop="bad", n=BAD_TARGET, cut="mid"),
+        )
+
+    def test_a_bad_round_refuses_a_dry_stop(self):
+        """The stop counts goods, so a round hunting negatives would call itself
+        dry on exactly the picks it wants."""
+        with pytest.raises(ValueError, match="bad round"):
+            parse_startup_schedule("g3@top,b4+dry1/8@mid")
+
+    @pytest.mark.parametrize("spec", ["g20+dry0/8@top", "g20+dry9/8@top", "g20+dry1/0@top"])
+    def test_a_dry_stop_that_could_never_fire_or_always_fires_is_rejected(self, spec):
+        with pytest.raises(ValueError, match="0 < m <= w"):
+            parse_startup_schedule(spec)
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +246,91 @@ class TestStartupState:
         assert not is_startup_phase("hard") and not is_startup_phase("s") and not is_startup_phase("")
 
 
+def _vote(st, outcomes, *, good=0, bad=0, remaining=1000):
+    """Cast *outcomes* (a string of ``G``/``B``) at *st* the way the harness
+    does, one click and one advance per vote; returns the round index after
+    each vote."""
+    after = []
+    for o in outcomes:
+        g = o == "G"
+        good, bad, remaining = good + g, bad + (not g), remaining - 1
+        st.on_click(g)
+        st.advance(good_count=good, bad_count=bad, remaining_unlabeled=remaining)
+        after.append(st.index)
+    return after
+
+
+class TestDryStop:
+    """#4222's adaptive stop: a round ends on its target *or* once its last
+    ``w`` picks held fewer than ``m`` goods, whichever comes first.
+
+    The follow-on rounds here ask for more bads than the walk casts, so the
+    index lands on them rather than skipping past a target already met.
+    """
+
+    def test_the_walk_ends_when_its_window_runs_dry(self):
+        st = StartupState(parse_startup_schedule("g20+dry1/4@top,b20@mid"))
+        assert _vote(st, "GBBBB") == [0, 0, 0, 0, 1]
+
+    def test_exactly_m_goods_in_the_window_is_not_dry(self):
+        """ "Fewer than m", pinned at the boundary: 2 of the last 4 keeps a
+        ``+dry2/4`` walk going, 1 of the last 4 ends it."""
+        st = StartupState(parse_startup_schedule("g20+dry2/4@top,b4@mid"))
+        assert _vote(st, "GBGBB") == [0, 0, 0, 0, 1]
+
+    def test_the_window_slides_rather_than_counting_the_whole_round(self):
+        """A round-long count would never run dry after its first good; the
+        stop is about the *recent* rate."""
+        st = StartupState(parse_startup_schedule("g20+dry1/3@top,b20@mid"))
+        assert _vote(st, "BBGBBB") == [0, 0, 0, 0, 0, 1]
+
+    def test_a_round_cannot_run_dry_before_its_window_fills(self):
+        st = StartupState(parse_startup_schedule("g20+dry1/8@top,b4@mid"))
+        assert _vote(st, "B" * 7) == [0] * 7
+        assert not st.ran_dry()
+        assert _vote(st, "B", bad=7, remaining=993) == [1]
+
+    def test_the_window_counts_only_this_rounds_picks(self):
+        """Round 0's bads are not round 1's evidence: carried over, they would
+        call round 1 dry on its first click."""
+        st = StartupState(parse_startup_schedule("n3@top,g20+dry1/3@top,b20@mid"))
+        assert _vote(st, "GBB") == [0, 0, 1]
+        assert _vote(st, "BBB", good=1, bad=2, remaining=997) == [1, 1, 2]
+
+    def test_the_target_still_ends_the_round(self):
+        st = StartupState(parse_startup_schedule("g3+dry1/8@top,b4@mid"))
+        assert _vote(st, "GGG") == [0, 0, 1]
+
+    def test_a_click_round_can_run_dry_too(self):
+        st = StartupState(parse_startup_schedule("n30+dry1/4@q0.05,b20@mid"))
+        assert _vote(st, "GBBBB") == [0, 0, 0, 0, 1]
+
+    def test_the_quorum_hold_still_applies(self):
+        """A walk that runs dry before its first good is still one class short;
+        the schedule holds on its last round until a good arrives, as it would
+        for any other stop."""
+        st = StartupState(parse_startup_schedule("g20+dry1/4@top"))
+        _vote(st, "BBBB")
+        assert st.ran_dry() and st.held_for_quorum and not st.done
+        _vote(st, "B", bad=4, remaining=996)
+        assert st.extended_clicks == 1 and not st.done
+        _vote(st, "G", bad=5, remaining=995)
+        assert st.done
+
+    def test_a_dry_round_refuses_a_click_without_its_outcome(self):
+        """Counting nothing, the stop would never fire and the arm would run as
+        the plain round its spec says it is not."""
+        st = StartupState(parse_startup_schedule("g20+dry1/4@top"))
+        with pytest.raises(ValueError, match="outcome"):
+            st.on_click()
+
+    def test_a_plain_round_still_needs_no_outcome(self):
+        st = StartupState(parse_startup_schedule("n1@top"))
+        st.on_click()
+        st.advance(good_count=1, bad_count=1, remaining_unlabeled=10)
+        assert st.done
+
+
 class TestFlowIntegration:
     def test_no_detector_is_on_screen_during_a_round(self):
         """A round is on the seed sort by construction, whatever the vote count."""
@@ -219,6 +342,17 @@ class TestFlowIntegration:
         assert flow.phase == "s0"
         flow.update(good_count=2, bad_count=2, remaining_unlabeled=50, span=None)
         assert flow.phase == "hard"
+
+    def test_the_flow_hands_the_vote_to_a_dry_round(self):
+        flow = AutopilotFlow(startup=StartupState(parse_startup_schedule("g20+dry1/2@top")))
+        assert flow.update(1, 0, remaining_unlabeled=50, span=None, last_vote_good=True) == "s0"
+        assert flow.update(1, 1, remaining_unlabeled=49, span=None, last_vote_good=False) == "s0"
+        assert flow.update(1, 2, remaining_unlabeled=48, span=None, last_vote_good=False) == "hard"
+
+    def test_a_dry_round_rejects_an_update_without_the_vote(self):
+        flow = AutopilotFlow(startup=StartupState(parse_startup_schedule("g20+dry1/2@top")))
+        with pytest.raises(ValueError, match="outcome"):
+            flow.update(1, 0, remaining_unlabeled=50, span=None)
 
     def test_without_a_schedule_the_flow_is_untouched(self):
         flow = AutopilotFlow()
@@ -294,6 +428,30 @@ class TestTheLeverMoves:
         _, shallow = _run("n10@q0.03,n6@q0.4")
         _, deep = _run("n10@q0.35,n6@q0.4")
         assert sum(p["picked_label"] for p in shallow[:10]) > sum(p["picked_label"] for p in deep[:10])
+
+
+class TestDryStopInTheHarness:
+    def test_a_dry_stop_that_never_fires_changes_nothing(self):
+        """Production's three goods arrive long before a 50-pick window fills,
+        so this arm *is* the production opening, click for click."""
+        _, prod = _run(PRODUCTION_STARTUP)
+        _, dry = _run("g3+dry1/50@top,b4@mid")
+        assert [p["picked_id"] for p in dry] == [p["picked_id"] for p in prod]
+
+    def test_the_walk_hands_over_at_its_first_dry_window(self):
+        """Against the same walk with no dry stop: identical picks down the top
+        of the sort, then a handover at the first 3 bads in a row, well short of
+        the 60 goods the plain round would still be walking for."""
+        _, plain = _run("g60@top,b4@mid", max_steps=42)
+        _, dry = _run("g60+dry1/3@top,b4@mid", max_steps=42)
+        walk = [p for p in dry if p["startup_round"] == 0]
+        labels = "".join(str(p["picked_label"]) for p in walk)
+        assert labels.endswith("000") and "000" not in labels[:-1]
+        assert [p["picked_id"] for p in walk] == [p["picked_id"] for p in plain[: len(walk)]]
+        assert all(p["startup_round"] == 0 for p in plain)
+        handover = dry[len(walk)]
+        assert handover["phase"] != "s0"
+        assert walk[-1]["n_good"] < 60
 
 
 class TestGuards:

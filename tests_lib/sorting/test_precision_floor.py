@@ -16,10 +16,12 @@ from vtscore.training.thresholds import (
     MIN_CALIBRATION_POSITIVES,
     PrecisionFloorStatus,
     em_prior_shift,
+    fit_fold_anchored_cut,
     fold_rank_evidence,
     precision_floor_cut,
     precision_lower_bound_curve,
 )
+from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
 
 N = 3000
 
@@ -213,3 +215,54 @@ class TestPieces:
         floor = args.pop("floor")
         with pytest.raises(ValueError, match=match):
             precision_floor_cut(floor, corpus_s, pool_s, orderings, haystacks, **args)
+
+
+class TestEvidenceFromAFittedCut:
+    """A fitted :class:`FoldAnchoredCut` carries each kept fold's votes beside its haystack (#4242).
+
+    The fit drops a fold that fails both fits, so the calibration cache's
+    orderings stop lining up with the cut's haystacks; the estimate needs them
+    aligned fold for fold.
+    """
+
+    def _sigmoid_session(self, seed: int):
+        corpus_s, _y, pool_s, orderings, haystacks = _session(seed)
+        sig = lambda a: 1.0 / (1.0 + np.exp(-(np.asarray(a, dtype=np.float64) - 1.5)))  # noqa: E731
+        return (
+            sig(corpus_s),
+            sig(pool_s),
+            [(sig(s).tolist(), labs) for s, labs in orderings],
+            [sig(h) for h in haystacks],
+        )
+
+    def test_a_dropped_fold_takes_its_votes_with_it(self):
+        _corpus, pool, orderings, haystacks = self._sigmoid_session(3)
+        # The middle fold's haystack is too small to fit anything, so the fit drops it.
+        folds_in = [orderings[0], ([0.9, 0.1], [1.0, 0.0]), orderings[1]]
+        hays_in = [haystacks[0], np.array([0.5]), haystacks[1]]
+        cut = fit_fold_anchored_cut(hays_in, folds_in, pool)
+        assert cut is not None
+        assert len(cut.fits) == len(cut.fold_haystacks) == len(cut.fold_orderings) == 2
+        for (scores, labels), (want_s, want_l) in zip(cut.fold_orderings, orderings, strict=True):
+            assert scores.tolist() == pytest.approx(want_s)
+            assert labels.tolist() == want_l
+
+    def test_unscored_votes_are_dropped_with_their_labels(self):
+        _corpus, pool, orderings, haystacks = self._sigmoid_session(4)
+        scores, labels = orderings[0]
+        polluted = ([*scores, NON_FINITE_SCORE_SENTINEL], [*labels, 1])
+        cut = fit_fold_anchored_cut(haystacks, [polluted, orderings[1]], pool)
+        assert cut is not None
+        assert cut.fold_orderings[0][0].tolist() == pytest.approx(scores)
+        assert cut.fold_orderings[0][1].tolist() == labels
+
+    def test_the_cut_feeds_the_estimator_directly(self):
+        corpus, pool, orderings, haystacks = self._sigmoid_session(5)
+        cut = fit_fold_anchored_cut(haystacks, orderings, pool)
+        assert cut is not None
+        from_cut = precision_lower_bound_curve(corpus, cut.final_haystack, cut.fold_orderings, cut.fold_haystacks)
+        assert from_cut is not None
+        _scores, bound = from_cut
+        assert 0.0 <= bound.min() <= bound.max() <= 1.0
+        # The top of a well-separated ranking is estimated more right than the whole corpus.
+        assert bound[9] > bound[-1]

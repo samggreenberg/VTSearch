@@ -440,17 +440,27 @@ class AutopilotFlow:
             self.stability.append(stability_entry(self._prev_snapshot, snapshot, pool_size))
         self._prev_snapshot = snapshot
 
-    def update(self, good_count: int, bad_count: int, remaining_unlabeled: float, span: dict[str, Any] | None) -> Phase:
+    def update(
+        self,
+        good_count: int,
+        bad_count: int,
+        remaining_unlabeled: float,
+        span: dict[str, Any] | None,
+        *,
+        last_vote_good: Optional[bool] = None,
+    ) -> Phase:
         """Recompute and return the phase after a vote.
 
         With a :class:`~vtscore.eval.startup_schedule.StartupState` attached the
         opening is the schedule's, not :data:`GOOD_TARGET` / :data:`BAD_TARGET`;
         once it is spent the app's machine resumes with both targets already
         met, so the trajectory continues into ``hard`` / ``new`` / ``done``
-        exactly as it would have.
+        exactly as it would have.  *last_vote_good* is the vote just cast; only
+        a schedule round with a dry stop (#4222) reads it, and such a round
+        refuses a vote without it.
         """
         if self.startup is not None:
-            self.startup.on_click()
+            self.startup.on_click(last_vote_good)
             self.startup.advance(good_count, bad_count, remaining_unlabeled)
             if not self.startup.done:
                 self.phase = self.startup.phase_name()  # type: ignore[assignment]

@@ -11,7 +11,8 @@
  *   - drawings-new    : the test pile, SigLIP — another seed, no picture shared
  *                       with `drawings`, so Find runs over media nobody voted
  *                       on (and Detector Stats has a training set to compare with)
- *   - drawing-regions : a small pile embedded with DINOv2 patch (region voting)
+ *   - drawing-regions : a small pile, SigLIP with DINOv2 patch as its region
+ *                       embedder (region voting)
  *   - Yellow Smileys  : an image detector on `drawings`, trained on a fixed set
  *                       of yellow-smiley / near-miss votes
  *   - smileys-regions : the region-voting detector on `drawing-regions`
@@ -50,7 +51,7 @@ await app.dropDatasets('syn-imgs', 'syn-patch', ...BOOK_FIXTURES.datasets);
 
 const train = await app.ensureCorpus(TRAIN_DATASET, 'siglip');
 await app.ensureCorpus(TEST_DATASET, 'siglip');
-const regions = await app.ensureCorpus(REGION_DATASET, 'dinov2_patch');
+const regions = await app.ensureCorpus(REGION_DATASET, 'siglip', ['dinov2_patch']);
 
 /** Every file name of *cats* (`{category: how many}`) in *pictures*, in order. */
 const byCategory = (pictures, cats) =>
@@ -65,7 +66,7 @@ const detector = await app.ensureDetector(DETECTOR, train);
   });
 }
 
-const regionDetector = await app.ensureDetector(REGION_DETECTOR, regions);
+const regionDetector = await app.ensureDetector(REGION_DETECTOR, regions, undefined, 'patch_semantic');
 {
   const { pictures } = corpus(REGION_DATASET);
   await app.setVotes(regions, regionDetector, {
