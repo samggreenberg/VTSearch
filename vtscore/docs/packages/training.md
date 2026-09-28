@@ -251,7 +251,8 @@ are summarised in
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
-| `precision_floor_cut`                     | Not yet shipped: the largest set whose estimated precision clears a floor (#4224) |
+| `precision_floor_cut`                     | The largest set whose estimated precision clears a floor (#4224); a detector's line when its floor is set |
+| `reporting_line`                          | Which line an operating point draws: the floor's, its Inclusion 0 fallback, or Inclusion's |
 
 ### `text_sort_threshold(scores, rule=None)`
 
@@ -441,8 +442,8 @@ back entirely to the GMM threshold.
 
 ### `precision_floor_cut(floor, corpus_scores, pool_scores, fold_orderings, fold_haystacks, ...)`
 
-`vtscore/training/thresholds/precision_floor.py`. **Not wired to a detector
-yet**: the cut the precision-floor control (#4224) will read, ported from the
+`vtscore/training/thresholds/precision_floor.py`. The cut a detector draws when
+its precision floor is set (#4245; the control is #4224), ported from the
 estimator #4220 measured
 ([`docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md)).
 It returns the largest top-*k* of the corpus whose **lower-bound** estimated
@@ -463,6 +464,34 @@ reported), or `insufficient_evidence` (fewer than `MIN_CALIBRATION_POSITIVES`,
 10, positives among the calibration votes). The transfer `coordinate`
 (`"percentile"` or `"tail"`), the bound level and the refit count are
 parameters because #4221 is still pricing them.
+
+One call is `fit_precision_floor_curve(...)` (the costly half: the bootstrap
+refits) followed by `PrecisionFloorCurve.cut(floor)` (a scan), so a caller
+cutting one corpus at several floors keeps the curve.
+`PrecisionFloorEstimate(corpus_scores, fold_orderings, fold_haystacks)` is what
+a detector keeps between retrains: it fits the curve the first time a floor is
+asked for, reads it off a seeded sample above 50k scores, and counts
+`n_returned` on the whole corpus.
+
+**What may serve as evidence.** Pass `holdout_sink=[]` to the calibration
+(`compute_fold_orderings`, `calibration_folds`, `calibration_folds_cached`) to
+learn which training row backs each held-out score, then
+`eligible_fold_orderings(orderings, holdout_rows, eligible_rows)` keeps only the
+votes that may calibrate a promise. The app keeps the ones
+`vtscore.datasets.vote_provenance.calibrates_precision` accepts: votes drawn off
+the learned sort's own ranking, because the posterior is unbiased only under
+score-only selection.
+
+### `reporting_line(cut, estimate, *, inclusion_value, min_precision)`
+
+Which line a detector draws at an operating point, shared by training, the
+no-refit re-cut (`vtscore.state.core.recut_detector_threshold`) and the eval
+harness's default arm. `min_precision=None` is the Inclusion knob:
+`cut.threshold_at(inclusion_value)`. A floor that is `promised` draws its own
+threshold, whatever the inclusion. One that promises nothing draws the
+`PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut, so an unmet floor never empties the
+results. The returned `ReportingLine` carries the verdict, and `line_inclusion`
+gives the inclusion Autopilot's acquisition offset starts from.
 
 ---
 

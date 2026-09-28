@@ -37,6 +37,41 @@ detector** (`X-Detector-Id`), so the Find slider can move its line without
 re-scoring. `threshold` is `null` when no detector is active or none has
 computed a threshold yet.
 
+Inclusion draws the line only while the detector has **no precision floor**:
+a set floor wins (see below), and `threshold` is then the floor's line.
+
+### Get / set the precision floor
+
+```
+GET /api/min-precision
+```
+
+→ `{"min_precision": 0.5, "status": "insufficient_evidence", "threshold": 0.5123, "n_returned": 412, "calibration_positives": 3}`
+
+```
+POST /api/min-precision
+```
+
+**Body:** `{"min_precision": 0.75}` — or `{"min_precision": null}` to clear it.
+
+The precision floor is the fraction of what the detector returns that should
+be right: the line returns as much as it can while at least that share of it
+is estimated right (a bootstrap lower bound, not a point estimate). It is kept
+per detector and seeded from the user's `min_precision` setting, which is
+`0.5` until the user changes it. A number is clamped to `[0.01, 1]`; a boolean
+or non-number is a 422. Like Inclusion it is a pure cutoff knob — the active
+detector re-cuts without retraining and, in Find mode, re-splits the
+unverified items — and the same value is settable as `min_precision` on
+`PUT /api/settings`.
+
+| Field | Meaning |
+|---|---|
+| `min_precision` | The active detector's floor, or `null` when none is set and Inclusion draws the line. |
+| `status` | `promised` (the line keeps the floor), `unreachable` (enough evidence, but no cut reaches it), `insufficient_evidence` (fewer than 10 positives among the calibration votes), or `null` with no floor. |
+| `threshold` | The line: the floor's cut when promised, the **Inclusion 0** cut when the floor promises nothing, Inclusion's cut when no floor is set. |
+| `n_returned` | Items at or above `threshold` in the corpus the cut decides — the dataset the detector last trained against, less its voted items when those are excluded from the population estimate. `null` before a retrain has fitted one. |
+| `calibration_positives` | Positives among the held-out calibration votes that may serve as evidence. Only votes drawn off the learned sort's own ranking count (Autopilot's Hard picks, or the top / cutoff band of a learned-sorted list): votes from the text sort, the coverage atlas, Find verification or bulk actions train the detector but not the promise. |
+
 ---
 
 ## Labeling Progress

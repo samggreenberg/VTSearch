@@ -17,6 +17,23 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Detectors draw their line at a precision floor: "show me what's at least
+  half right"** (issue #4245, the backend of #4224). A detector's line is now
+  the cut that returns as much as it can while at least a set share of it is
+  estimated right. Every detector starts at **50%**, taken from your new
+  `min_precision` setting, and each keeps its own. The estimate is cautious: it
+  only promises once it has seen about ten positives among the votes it holds
+  back to check itself, and it only counts votes you made off the learned sort
+  (Autopilot's Hard picks, or working down a list sorted by the detector). Until
+  then, or when no cut can reach the floor, the line stays exactly where
+  Inclusion 0 puts it, so nothing you see empties or jumps. A set floor wins
+  over Inclusion: while the Inclusion stepper is still on screen it does not
+  move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
+  or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
+  on-screen control that replaces the stepper arrives in #4246. New endpoint:
+  `GET|POST /api/min-precision`; see
+  [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
+
 - **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
   #4240). The **Demo → Synthetic Media** image generator used to draw one
   smiley or a few flat shapes on a plain background. It now draws round

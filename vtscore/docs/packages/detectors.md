@@ -215,12 +215,16 @@ bags and a scoring population that differs from *snap*):
    cross-calibration cut ships alone.
 
 Returns `(model, threshold)`. The function reads `get_inclusion`,
-`get_calibrate_count`, and `get_calibration_fraction` from
+`get_min_precision`, `get_calibrate_count`, and `get_calibration_fraction` from
 `vtscore.state`; those getters resolve through `CoreConfig`, so library
 consumers running outside an app must register a
 `register_core_config_builder` provider. Passing `det_ctx` caches the
 fold orderings on it so a later Inclusion change can re-derive the
-threshold without retraining.
+threshold without retraining. It also parks the precision-floor estimate
+(`precision_floor_cache`), so moving the floor re-cuts too. When a floor is set
+the threshold is the floor's line, or the Inclusion 0 cut when the floor
+promises nothing. Pass `calibrating_groups` (the bags whose vote the learned
+sort chose) to keep every other vote out of the floor's evidence.
 
 ### `train_and_score(...)`
 

@@ -221,7 +221,7 @@ MIRRORS: list[Mirror] = [
             "What floor a detector cuts at when nobody set one (#4245): the app seeds each "
             "detector from the user's setting, whose unset value is DEFAULT_MIN_PRECISION, and "
             "the harness's min_precision=None resolves to that same constant. The value cannot "
-            "drift - both read one constant, and tests_lib/sorting/test_precision_floor_wiring.py "
+            "drift - both read one constant, and tests/sorting/test_min_precision_route.py "
             "pins UserSettings' default against the resolver - so this digest watches the "
             "*resolution*: if the app's floor starts depending on something else (the dataset, "
             "the embedder, a per-detector default), that has to reach the harness too."
