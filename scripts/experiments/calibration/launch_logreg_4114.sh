@@ -65,6 +65,18 @@ export CALIB_REPOOL_VARIANTS=""
 export CALIB_FOLD_COUNTS=""
 export CALIB_ANCHORED=0
 export CALIB_CUT_INCL_KS=""
+# #4219: the head decision needs the cut at the Inclusion stops users reach, and
+# the cut was tuned on SVM scores.  LOGREG_CUT_INCL_KS re-cuts every step's own
+# trajectory with the SHIPPED rule (mid_tilt, kappa 0.3, qmean) at each stop,
+# into the `__cutincl` side frame; the trajectory itself is unchanged.
+if [[ -n "${LOGREG_CUT_INCL_KS:-}" ]]; then
+  export CALIB_CUT_INCL_KS="$LOGREG_CUT_INCL_KS"
+  export CALIB_ANCHORED=1
+  export CALIB_ANCHORED_RULES=mid_tilt
+  export CALIB_ANCHORED_WEIGHTS=0.3
+  export CALIB_ANCHORED_FOLD_ARMS=1
+  export CALIB_ANCHORED_FOLD_COMBINES=qmean
+fi
 
 # --- environment ---------------------------------------------------------------
 export CALIB_DATASETS=coco_better
