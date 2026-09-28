@@ -2364,6 +2364,7 @@ def simulate_voting_iterations(  # noqa: C901
                     len(bad_votes),
                     remaining_unlabeled=len(pool),
                     span=atlas.span_info() if atlas is not None else None,
+                    last_vote_good=is_positive,
                 )
             continue
 
@@ -2579,6 +2580,7 @@ def simulate_voting_iterations(  # noqa: C901
                 len(bad_votes),
                 remaining_unlabeled=len(pool),
                 span=atlas.span_info() if atlas is not None else None,
+                last_vote_good=is_positive,
             )
 
         # Identifying columns shared by every row this step emits.
