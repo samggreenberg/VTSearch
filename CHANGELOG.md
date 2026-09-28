@@ -31,6 +31,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The Inclusion stepper no longer jumps the line early in a session.** With
+  too few votes for the calibration splits, the first change of the stepper
+  replaced the trained cutoff with a fixed 0.5, so the matches could change in
+  either direction, even shrinking on a step toward lenient. The line now stays
+  put until there are enough votes for the stepper to move it.
+- **Find with a detector that isn't loaded now uses your Inclusion and
+  calibration settings.** It always cut at Inclusion 0 with two calibration
+  splits, so the same detector could return different matches depending on
+  whether it happened to be loaded.
+- **Changing Inclusion on one detector no longer moves another detector's
+  line.** Switching to a detector afterwards showed its own Inclusion value
+  over a line cut at the value you'd set elsewhere.
+
 - **"Dropped N item(s) whose embedding failed" now says which items, and why**
   (issue #4232). The warning ended with "See the server log for which embedder
   declined", which a GUI user has no way to do. It now names the embedder and

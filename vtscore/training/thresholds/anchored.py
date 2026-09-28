@@ -26,7 +26,7 @@ from vtscore.training.thresholds.gmm import (
     scored_ordering,
     snap_cut_to_sample,
 )
-from vtscore.training.thresholds.knobs import inclusion_cost_weights
+from vtscore.training.thresholds.knobs import INCLUSION_SEARCH_SPAN, inclusion_cost_weights
 from vtscore.utils.scores import scored_only
 
 
@@ -505,6 +505,64 @@ class FoldAnchoredCut:
         q = self._quantile_at(*inclusion_cost_weights(inclusion_value))
         realized = float(np.quantile(self.final_haystack, min(1.0, max(0.0, q))))
         return snap_cut_to_sample(realized, self.final_haystack)
+
+    def inclusion_for_threshold(
+        self,
+        threshold: float,
+        *,
+        lo: float = -INCLUSION_SEARCH_SPAN,
+        hi: float = INCLUSION_SEARCH_SPAN,
+        tol: float = 1e-3,
+    ) -> float | None:
+        """The inclusion at which this estimator reproduces *threshold*: the inverse of :meth:`threshold_at`.
+
+        The reporting cut does not have to come from the Inclusion knob.  A
+        precision floor (#4224) picks its cut from an estimate of precision
+        above it, and Autopilot's acquisition cut still has to sit
+        :data:`ACQUISITION_INCLUSION_OFFSET` steps *stricter* than wherever that
+        cut landed - an offset needs an origin, and this is how a cut that was
+        not set in inclusion units gets one.  The acquisition cut is then
+        ``threshold_at(inclusion_for_threshold(t) + ACQUISITION_INCLUSION_OFFSET)``.
+
+        Returns the **strictest** inclusion whose cut admits at least what
+        *threshold* admits, ``inf {k : threshold_at(k) <= threshold}``, found by
+        bisection to within *tol* - well defined because :meth:`threshold_at`
+        is non-increasing in ``k``.  Two consequences follow:
+
+        * a threshold this estimator realized round-trips exactly:
+          ``threshold_at(inclusion_for_threshold(threshold_at(k))) ==
+          threshold_at(k)``.  The returned ``k`` may sit below the original
+          one, at the strict end of the plateau the original shares a cut
+          with; the realized threshold is the same, and an offset read from
+          the strict end lands *higher* up the ranking, never lower.
+        * a threshold no inclusion realizes exactly (one set by a different
+          rule) maps to the strictest ``k`` whose cut sits at or below it: the
+          cut at that ``k`` admits everything *threshold* admits, plus as few
+          extra items as the estimator's steps allow.
+
+        The search is confined to ``[lo, hi]``, far wider than the UI's
+        ``[INCLUSION_MIN, INCLUSION_MAX]``: a precision floor can legitimately
+        ask for a cut the slider never reached.  A threshold stricter than
+        every cut in the bracket returns ``lo``; one more lenient than every
+        cut returns ``hi``.  ``None`` means there is nothing to invert - an
+        empty haystack, where :meth:`threshold_at` is the constant 0.5 - or a
+        non-finite *threshold*.
+        """
+        if self.final_haystack.size == 0 or not math.isfinite(threshold):
+            return None
+        if self.threshold_at(lo) <= threshold:
+            return float(lo)
+        if self.threshold_at(hi) > threshold:
+            return float(hi)
+        # Invariant: threshold_at(a) > threshold >= threshold_at(b).
+        a, b = float(lo), float(hi)
+        while b - a > tol:
+            mid = 0.5 * (a + b)
+            if self.threshold_at(mid) <= threshold:
+                b = mid
+            else:
+                a = mid
+        return b
 
 
 def fit_fold_anchored_cut(

@@ -10,6 +10,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`FoldAnchoredCut.inclusion_for_threshold`, `INCLUSION_SEARCH_SPAN`, and
+  `vtscore.state.core.recut_detector_threshold`** (preparation for #4224). The
+  inverse of `threshold_at` recovers the inclusion a cut sits at when the cut was
+  set by another rule - a precision floor - so the acquisition cut can still sit
+  `ACQUISITION_INCLUSION_OFFSET` steps stricter than it. It returns the strictest
+  such inclusion, round-trips any realized threshold exactly, and searches
+  `[-INCLUSION_SEARCH_SPAN, INCLUSION_SEARCH_SPAN]` (32 steps). `recut_detector_threshold`
+  is the one place a loaded detector's cut is re-derived without a retrain
+  (the Inclusion slide, the Find Stats sweep, and the acquisition cut read it).
+  `detector_acquisition_threshold`'s `inclusion_value` is now optional: `None`
+  reads the offset's origin off `ctx.threshold` through the inverse. Additive:
+  every existing call passes an inclusion and behaves as before.
+
 - **`create_media_type=` on `vtscore.cli.import_labels_into_detector`, and
   `vtscore.cli.DetectorNotFoundError`** (issue #4238). With a registered media
   type, a missing detector is created from the imported labels - the JSON the
@@ -622,6 +635,22 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **An Inclusion slide no longer overwrites a cut the knob cannot move.** Below
+  the calibration-fold floor (too few votes, or one class) training stores the
+  schedule blend, but `recompute_detector_thresholds_for_inclusion` wrote the
+  folds' bare fallback sentinel over it, moving the line on the first touch of
+  the stepper, sometimes toward fewer items on a lenient step. It now leaves
+  such a detector's threshold alone.
+- **`recompute_detector_thresholds_for_inclusion` re-cuts each detector at its
+  own inclusion.** It re-cut every loaded detector at the new value while
+  `set_inclusion` updated only the active detector's `DetectorContext.inclusion`,
+  so another detector's line and its reported inclusion disagreed. A detector
+  already holding a value keeps its cut; an unseeded one takes the new value.
+- **A structural re-rank drops the retrieval MLP's cached estimators**
+  (`anchored_cut_cache`, `calibration_cache`). The threshold it returns is the
+  verification classifier's boundary, and a later re-cut replaced it with an
+  MLP-scale cut applied to verification scores.
 
 - **`resolve_or_train_detector` no longer returns a head trained on stale
   labels** (issue #4204). It returned `DetectorContext.model` whenever that was

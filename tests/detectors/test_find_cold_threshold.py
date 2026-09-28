@@ -440,3 +440,43 @@ class TestEveryMediaGetsAVerdict:
         assert any(v != "N/A" for cid, v in verdicts.items() if cid != 10) or positives, (
             "one unscorable media must not sink the other nine"
         )
+
+
+class TestColdFindTrainsUnderTheUsersSettings:
+    def test_it_cuts_at_the_users_inclusion_and_calibration(self, monkeypatch):
+        """A cold detector is trained the way the load and learned-sort paths train it.
+
+        The cold path called ``labelset_train_and_score`` with its defaults, so
+        every cold Find was cut at inclusion 0 over two calibration splits,
+        whatever the user had set - while the *live* path over the same detector
+        used the user's line.  One labelset should mean one detector either way.
+        """
+        import dataclasses
+
+        import vtscore.config as config_mod
+        import vtscore.detectors.labelset_training as labelset_mod
+
+        real_from_settings = config_mod.CoreConfig.from_settings
+        monkeypatch.setattr(
+            config_mod.CoreConfig,
+            "from_settings",
+            classmethod(
+                lambda cls, *a, **kw: dataclasses.replace(
+                    real_from_settings(*a, **kw), inclusion=3, calibrate_count=3, calibration_fraction=0.4
+                )
+            ),
+        )
+        seen: list[dict] = []
+        real_train = labelset_mod.labelset_train_and_score
+
+        def _spy(*args, **kwargs):
+            seen.append(kwargs)
+            return real_train(*args, **kwargs)
+
+        monkeypatch.setattr(labelset_mod, "labelset_train_and_score", _spy)
+        _run_find(_cold_corpus(), _cold_config(), monkeypatch)
+
+        assert seen, "the cold path never trained"
+        assert seen[0]["inclusion_value"] == 3
+        assert seen[0]["calibrate_count"] == 3
+        assert seen[0]["calibration_fraction"] == 0.4
