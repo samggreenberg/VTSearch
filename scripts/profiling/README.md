@@ -58,9 +58,9 @@ emit no row, and keep their static ballpark share via the `_finalize_slots` merg
 ## Method & cost model
 
 **What the weights do.** The unified load bar paces across four phases —
-**download, model load, embed, finalize** — using a weight vector
-(`vtscore/datasets/stages/_common.py`, applied by
-`ProgressTracker._overall_raw_fraction`). The weights only shape *pacing*; the
+**download (+ extract), load, embed, finalize** — using a weight vector
+(`load_step_weights` in `vtscore/datasets/stages/_common.py`, applied by
+`ProgressTracker._overall_raw_fraction` in `vtscore/concurrency/progress.py`). The weights only shape *pacing*; the
 overall ETA self-corrects from real elapsed-vs-fraction, so bad weights make the
 bar race one phase and crawl another rather than making the final ETA wrong. That
 bounds the value of this work: smooth honest pacing, not a time oracle.
@@ -69,8 +69,8 @@ bounds the value of this work: smooth honest pacing, not a time oracle.
 
 | Phase      | Scales with                        | Cost model              |
 |------------|------------------------------------|-------------------------|
-| download   | archive **bytes**, not `n`         | `download_size_mb / bandwidth` |
-| model load | nothing (encoder loaded once)      | fixed per (embedder, device) |
+| download   | archive **bytes**, not `n`         | `download_size_mb / bandwidth` (+ the same shape for extraction) |
+| load       | model: nothing (encoder loaded once); source decode: `n` | `a_model + b_load · n` |
 | embed      | `n` (one forward per item)         | `a_embed + b_embed · n` |
 | finalize   | `n` (dedup + coverage + registry)  | `a_fin + b_fin · n` |
 
@@ -83,7 +83,8 @@ when `n` is unknown.
 **Measurement matrix.** device `{cpu, cuda(±cuML)}` × media `{image, audio, video,
 text, document}` × each registered embedder × ≥2 size points per media (vary the
 slice window / `items_per_category` for ≥3 distinct `n`). Run each cell ≥3×
-(median); record cold vs warm model-load and download separately; log skipped
+(median; the driver's `--reps` default is 2, and CPU sizes above `--max-cpu-reps-size` get 1);
+record cold vs warm model-load and download separately; log skipped
 cells so coverage gaps are explicit.
 
 **Fitting.** Per (device, media_type, embedder): `a_model` = median warm

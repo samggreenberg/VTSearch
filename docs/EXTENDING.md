@@ -33,7 +33,7 @@ ABC, update both sides and let the gate confirm it.
 
 | Guide | What you build | Library contract |
 |-------|----------------|------------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory lives there too). | [dataset-importers](../vtscore/docs/extending/dataset-importers.md), [results-exporters](../vtscore/docs/extending/results-exporters.md), [label-importers](../vtscore/docs/extending/label-importers.md), [labelset-sources](../vtscore/docs/extending/labelset-sources.md) |
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, seed importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory and the entry-point group table live there too). | [dataset-importers](../vtscore/docs/extending/dataset-importers.md), [results-exporters](../vtscore/docs/extending/results-exporters.md), [label-importers](../vtscore/docs/extending/label-importers.md), [labelset-sources](../vtscore/docs/extending/labelset-sources.md) |
 | [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). | [media-types](../vtscore/docs/extending/media-types.md), [embedders](../vtscore/docs/extending/embedders.md), [clippers](../vtscore/docs/extending/clippers.md), [converters](../vtscore/docs/extending/converters.md) |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. | — (app tier only; processors are not auto-discovered) |
 
@@ -117,16 +117,26 @@ filesystem-hygiene check, not an authentication one.
 
 ### How it works
 
-1. `set_login_provider(provider)` is called once at startup (in `app.py`).
+1. `set_login_provider(provider)` is called once at startup. The built-in
+   providers are selected by `python app.py --login trivial|api_key`
+   (`_run_server` in `vtsearch/cli_main.py`); a custom provider must be
+   activated the same way — add a branch there, or call
+   `set_login_provider()` from your own startup code before the server
+   starts serving.
 2. The `before_request` middleware calls `provider.get_user(request)` and
    stores the result in `g.user`.
 3. Routes call `get_current_user()` to read `g.user`.
 4. `GET /api/auth/status` calls `provider.status_dict(request)`.
 
-### Built-in provider
+### Built-in providers
 
-`DefaultLoginProvider` (the default) returns `"default"` for every request,
-is always authenticated, and uses the shared `data/` directory.
+`DefaultLoginProvider` (active unless `--login` is passed) returns
+`"default"` for every request, is always authenticated, and uses the shared
+`data/` directory. `vtsearch.auth` also ships `TrivialLoginProvider`
+(`--login trivial`: username-only cookie login, for testing multi-user
+features) and `ApiKeyLoginProvider` (`--login api_key`: `Authorization:
+Bearer` keys hashed in `data/api_keys.json`); both are worked examples of
+the interface.
 
 ### Current scope
 
@@ -150,7 +160,7 @@ isolation yet.
 
 Runtime dependencies are declared in **`pyproject.toml`** under
 `[project.dependencies]`: that's the single source of truth, and deptry
-(wired into `lint.yml` and the pre-commit hook) verifies that every
+(a `./run-tests.sh` gate, and an optional pre-commit hook) verifies that every
 imported package is declared there. Dev tools (pytest, ruff,
 pre-commit, etc.) live under `[project.optional-dependencies].dev`, and
 the two AGPL-3.0 packages (`ultralytics`, `PyMuPDF`) under
@@ -197,6 +207,15 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 - [ ] If your form holds opaque values (ids, query keys), override `default_display_name(field_values)` so the Dataset Name box shows a readable name — see [Naming the imported dataset](EXTENDING-plugins.md#naming-the-imported-dataset)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
+
+### New Datasource / Seed Importer Checklist
+
+See [EXTENDING-plugins.md § Adding a Datasource Importer](EXTENDING-plugins.md#adding-a-datasource-importer) and [§ Adding a Seed Importer](EXTENDING-plugins.md#adding-a-seed-importer).
+
+- [ ] Datasource (one exemplar item): subclass `DataSourceImporter`, set `category` and `fields`, implement `fetch(field_values) -> FetchedMediaItem`, expose `DATASOURCE_IMPORTER`
+- [ ] Seed (a batch of unlabeled seeds): subclass `SeedImporter`, set `fields` (and `max_items` if 100 is too few), implement `run(field_values) -> list[SeedMediaItem]`, expose `SEED_IMPORTER`
+- [ ] Do outbound fetches through `guarded_session()` / `fetch_validated_url`, keep the source's real file extension, and set `origin` when the item has a durable identity
+- [ ] Test: check `GET /api/datasource-importers` / `GET /api/seed-importers` includes it
 
 ### New Results Exporter Checklist
 
@@ -275,9 +294,9 @@ See [EXTENDING-plugins.md § Adding a Settings Exporter](EXTENDING-plugins.md#ad
 
 See [EXTENDING-media.md § Adding a Media Source](EXTENDING-media.md#adding-a-media-source).
 
-- [ ] Create `vtscore/datasets/sources/<name>.py` (media sources are flat `.py` modules, not sub-packages)
-- [ ] Create a `MediaSource` subclass with `list_items()`, `fetch_item()`, `resolve_path()`
-- [ ] Create a factory class with `name` and `create_from_origin(origin)` method
+- [ ] Create `vtscore/datasets/sources/<name>.py` (every built-in source is a flat `.py` module), or register out-of-tree through the `vtscore.media_sources` entry-point group
+- [ ] Create a `MediaSource` subclass with `list_items()`, `fetch_item()`, `resolve_path()`, each returning `FetchedItem` / `MediaItem`
+- [ ] Create a factory class with `name` and `create_from_origin(origin)` method; `name` must equal the `origin["importer"]` value the source serves
 - [ ] Expose `SOURCE = YourFactory()` at module level
 - [ ] Test: create an origin dict for your source and verify `get_source_for_origin()` returns it
 
@@ -287,7 +306,7 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 
 - [ ] Create `vtscore/media/<type>/` directory with `__init__.py`, `media_type.py`
 - [ ] Subclass `MediaType` and implement all abstract properties and methods
-- [ ] Expose `MEDIA_TYPE`, `CLIPPERS`, and (if you ship them) `CLEANERS` sentinels in `__init__.py` (embedders are discovered per-module; see the embedder checklist below)
+- [ ] Expose `MEDIA_TYPE` and (if you ship them) `CLIPPERS` / `CLEANERS` sentinels in `__init__.py` (embedders are discovered per-module; see the embedder checklist below)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Override `pickle_extra_fields` if you use custom clip keys
 - [ ] Test: import a folder of your media type, verify clips appear and are sortable
@@ -297,10 +316,12 @@ See [EXTENDING-media.md § Adding a Media Type](EXTENDING-media.md#adding-a-medi
 See [EXTENDING-media.md § Adding a Media Embedder](EXTENDING-media.md#adding-a-media-embedder).
 
 - [ ] Create `vtscore/media/<type>/embedder.py` (or `embedder_<variant>.py` for alternatives)
-- [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `embed_media()`
-- [ ] Optionally implement `embed_text()` for text-query sorting
+- [ ] Subclass `MediaEmbedder`, implement `name`, `media_type_id`, `_load_models_impl()`, `_embed_media_impl()` (the underscored hooks, not `load_models()` / `embed_media()`); keep the loaded model on `self._model`
+- [ ] Optionally implement `_embed_text_impl()` for text-query sorting (not `embed_text()`, which L2-normalises); otherwise override `supports_text` to return `False`
+- [ ] Declare `embedding_dim` (and `model_id` when there is a downloadable checkpoint)
 - [ ] Leave `description_wrappers` empty unless you have *measured* that a prompt ensemble beats the typed query on your checkpoint (see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder))
-- [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; symlinked files are supported)
+- [ ] Expose `EMBEDDER = YourEmbedder()` at module level (auto-discovery picks it up; no `__init__.py` edits needed; an `embedder_<name>/` sub-package and symlinked files/directories are supported too)
+- [ ] Run `python scripts/gen-docs-inventories.py` and commit the regenerated embedder tables
 - [ ] Test: load a dataset and verify embeddings are generated
 
 ### New Media Clipper Checklist
@@ -310,7 +331,7 @@ See [EXTENDING-media.md § Adding a Media Clipper](EXTENDING-media.md#adding-a-m
 - [ ] Create or add to `vtscore/media/<type>/clipper.py`
 - [ ] Subclass `MediaClipper`, implement `name`, `media_type`, `clip()`
 - [ ] Override `description` with a short tooltip string for the chooser UI
-- [ ] If adding `parameters`, include a `description` key in each param dict
+- [ ] If adding `parameters`, include a `description` key in each param dict and implement `with_params()` to return a **new** instance
 - [ ] Add to the `CLIPPERS` list in the media type's `__init__.py`
 - [ ] Test: verify `clip()` returns valid media dicts
 
@@ -378,4 +399,5 @@ See [Authentication Providers](#authentication-providers) above.
       access is intended
 - [ ] Override `login_required()` if the frontend should show a login screen
 - [ ] Override `get_user_data_dir(username, base_data_dir)` for per-user isolation
-- [ ] Call `set_login_provider(MyProvider())` at app startup (in `app.py`)
+- [ ] Screen any client-supplied username with `is_safe_username()`
+- [ ] Activate it with `set_login_provider(MyProvider())` at startup (a new `--login` branch in `_run_server`, `vtsearch/cli_main.py`, or your own startup code)

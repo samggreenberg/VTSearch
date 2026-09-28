@@ -48,7 +48,7 @@ python -m vtscore.eval [OPTIONS]
 | `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort. A no-op on embedders that declare no wrappers, which since #3341 is most of them — `siglip`, `clap`, `e5` and `bge` all measured worse enriched than plain | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | unset = the app's per-space default (0.3 single-vector / 0.5 patch) |
-| `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
+| `--embedder NAME` | Build each demo dataset with this embedder | empty = the media type's default embedder |
 | `--region-voting` | Region-pool learned-sort Good votes from each media's ground-truth box (needs `--embedder <patch>` + a dataset with stored regions, e.g. Visual Genome) | off |
 | `--list` | List available eval datasets and exit | - |
 
@@ -77,7 +77,7 @@ python -m vtscore.eval --list
 
 ## Available eval datasets
 
-Each eval dataset wraps a demo dataset and defines text queries targeting specific categories. The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results); `_a` denotes the **all** (full) variant.
+Each eval dataset wraps a demo dataset and defines text queries targeting specific categories (`EVAL_DATASETS` in [`vtscore/eval/config.py`](../vtscore/eval/config.py) is the source of truth; `python -m vtscore.eval --list` prints it). The `_s`, `_m`, `_l` suffixes denote **small**, **medium**, and **large** size variants of the same dataset (more clips = slower evaluation but more statistically robust results); `_a` denotes the **all** (full) variant.
 
 | Eval dataset ID | Media type | Demo dataset | Categories |
 |----------------|-----------|--------------|------------|
@@ -87,8 +87,14 @@ Each eval dataset wraps a demo dataset and defines text queries targeting specif
 | `caltech101_s` | Image | caltech101_s | 25 Caltech-101 categories (airplanes, bonsai, dolphin, helicopter, watch, etc.) |
 | `caltech101_m` | Image | caltech101_m | 25 Caltech-101 categories |
 | `caltech256_a` | Image | caltech256_a | 25 Caltech-256 categories (backpack, butterfly, camel, giraffe, lighthouse, etc.) |
-| `visual_genome_s` | Image (multi-label) | visual_genome_s | ~40 Visual Genome object categories (person, car, dog, tree, building, etc.); an image can be a positive for several at once |
-| `visual_genome_m` | Image (multi-label) | visual_genome_m | ~40 Visual Genome object categories |
+| `enrico_m` | Image (UI screenshots) | enrico_m | 18 Enrico screen functions (camera, chat, dialer, login, etc.) |
+| `enrico_a` | Image (UI screenshots) | enrico_a | 18 Enrico screen functions |
+| `rico_screen2words_m` | Image (UI screenshots) | rico_screen2words_m | 16 app genres (Google Play category of the screen's app) |
+| `rico_screen2words_a` | Image (UI screenshots) | rico_screen2words_a | 16 app genres |
+| `rvl_cdip_m` | Image (document scans) | rvl_cdip_m | All 16 RVL-CDIP document types (letter, form, email, invoice, etc.) |
+| `rvl_cdip_a` | Image (document scans) | rvl_cdip_a | All 16 RVL-CDIP document types |
+| `visual_genome_s` | Image (multi-label) | visual_genome_s | 40 Visual Genome object categories (person, car, dog, tree, building, etc.); an image can be a positive for several at once |
+| `visual_genome_m` | Image (multi-label) | visual_genome_m | 40 Visual Genome object categories |
 | `vggface2_faces_s` | Image (faces) | vggface2_faces_s | 40 celebrity identities; `category` = person, so learned sort measures same-person identity matching (train on a few of a person's photos → recover their held-out photos) |
 | `vggface2_faces_m` | Image (faces) | vggface2_faces_m | 40 celebrity identities (40 photos/person) |
 | `20newsgroups_s` | Text | 20newsgroups_s | 15 topics (sports, science, cars, religion, politics, medicine, etc.) |
@@ -258,6 +264,8 @@ plot_eval_results(results, output_dir="eval_seeds")
 
 The voting-iterations evaluation measures how classification quality improves as more votes are cast. This is useful for understanding how many labels a user needs to provide before the model converges.
 
+**Two entry points, two sets of knobs.** `simulate_voting_iterations` (in `vtscore/eval/voting_iterations.py`) runs **one** simulated session — one dataset, one target category, one seed — and takes every knob described below. `run_voting_iterations_eval` is the grid driver the examples use: it loops over datasets × categories × seeds (and over the list-valued arms `strategies`, `trainers`, `styles`, `prevalence_arms`) and forwards only the knobs in its own signature — `inclusion`, `sim_fraction`, `calibrate_count`, `calibration_fraction`, `region_voting`, `max_steps`, `atlas_min_node_size`, `seed_scores`, `autopilot_fidelity`, `startup_schedule`, `calibration_seed` and `standalone_cut`, among others. The rest — `acq_inclusion_offset`, `acq_rank_percentile`, `head`, `blend_schedule`, `emit_calibration_metrics`, `skyline_arms`, `pick_sink` and the diagnostic sinks — exist **only** on `simulate_voting_iterations`; passing them to the driver raises `TypeError`. The calibration study runner (`scripts/experiments/calibration/`) calls `simulate_voting_iterations` directly and exposes most of them as `CALIB_*` environment variables.
+
 Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and works through the standard Good / Bad / Hard / New phases. `autopilot` is the vote-order strategy every study's headline numbers are read off, and every default-arm result row carries `strategy="autopilot"`. Two experiment arms sit beside it (issue #3954): `autopilot_uncertainty` and `autopilot_maxvar` keep every Autopilot phase and replace only the Hard pick with a rule that reads the detector's posterior spread — the straddle `argmax 1.96·std − |p − cut|` and plain `argmax std` respectively. They run only against a trainer that reports a spread (the `gp_*` trainers below) and raise otherwise, so a run can never attribute the app's own picks to a GP rule.
 
 #### Autopilot fidelity (`autopilot_fidelity`, default `True`)
@@ -329,7 +337,7 @@ Pass the result to `curves.quality_vs_clicks(..., stops=...)` and the mandatory 
 
 The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay at `inclusion`; the threshold handed to the picks is re-cut at `inclusion + acq_inclusion_offset` from the same fold-anchored fit. This mirrors production, which decoupled the two jobs in PR #2876 — see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect.
 
-The default is `ACQUISITION_INCLUSION_OFFSET` — the shipped value, **not** `0` — so an unconfigured run measures what users actually get. (PR #2876 shipped `-3`; PR #2891 cut it to `-1` after a second environment rejected `-3`; the #2877 pile run then restored `-3` after measuring three environments on verified labels. Read the constant, not a number written here.) Pass `acq_inclusion_offset=0` for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
+The default is `ACQUISITION_INCLUSION_OFFSET` — the shipped value, **not** `0` — so an unconfigured run measures what users actually get. (PR #2876 shipped `-3`; PR #2891 cut it to `-1`; #3318 restored `-3`; #3319 moved it to `-4`. Read the constant, not a number written here.) Pass `acq_inclusion_offset=0` to `simulate_voting_iterations` (or `CALIB_ACQ_INCLUSION_OFFSET=0` to the calibration runner) for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
 
 Three columns make the lever verifiable rather than assumed, all measured in the **pool** distribution the selector ranks:
 
@@ -415,7 +423,7 @@ Four things to know before reading the numbers:
 
 - **The row is per *run*, not per step.** A skyline is vote-independent, so it is emitted once per `(cell, seed)` at `t = 0` with `app_trained = 0`, tagged in `gmm_variant` like every other variant family. The four decomposition columns (`skyline_oracle_cost`, `skyline_oracle_cost_honest`, `training_regret`, `training_regret_honest`) are then filled on *every* row of the run, so the identity holds within a row. Cost: one extra fit per arm per cell, not per click.
 - **Negative `training_regret` is legal.** Unlike the threshold oracle, the skyline is not a per-run optimum over the same object — region votes carry box information an image-labelled skyline lacks, and small samples get lucky. Nothing clamps it.
-- **The terms are sum-pinned**, so the same caution `_operating_metrics` documents for `rule_inefficiency` / `calibration_shift` applies verbatim: they share noise by construction, so don't read one half moving as an effect when the knob also moves the yardstick.
+- **The terms are sum-pinned**, so the same caution `vtscore.eval.row_metrics.operating_metrics` documents for `rule_inefficiency` / `calibration_shift` applies verbatim: they share noise by construction, so don't read one half moving as an effect when the knob also moves the yardstick.
 - **The gap bundles several causes** — how many labels, *which* labels (the acquisition policy), and the full split's imbalance. Read it as "headroom left by the interactive loop", not as one cause.
 
 `skyline_test_xfit` is the optional bracket partner, and it is **cross-fitted**: the test split is partitioned into folds and each item is scored by a head that never saw it. A naive train-on-test fit is not an option — a ~769-parameter linear head on a test set of comparable size can shatter near-arbitrary labelings, so it would report near-zero cost on a genuinely unlearnable class and its "regret" would measure `d / n_test` rather than learnability. It is the SVM analogue of `honest_test_oracle`, which does the same thing one level down for the *cut*; its pooled scores share a ranking but not a calibrated scale, so read it for `oracle_cost` / `auroc` / `average_precision` only.

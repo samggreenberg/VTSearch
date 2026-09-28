@@ -16,22 +16,32 @@ extractors).
 ## Contents
 
 - [Shared Plugin Architecture](#shared-plugin-architecture): PluginField,
-  PluginRegistry, discovery, route generation
+  PluginBase, discovery, entry points
   - [Framework-side field normalization](#framework-side-field-normalization):
     what the framework does to `field_values` before your plugin sees it
     (read this before writing any `.strip()` / `validate_url` /
     `validate_server_filepath` boilerplate)
   - [Notifying the user (toasts)](#notifying-the-user-toasts): telling the
     user something went sideways *without* failing the whole run
-- [Adding a Data Importer](#adding-a-data-importer)
-- [Adding a Datasource Importer](#adding-a-datasource-importer)
-- [Adding a Seed Importer](#adding-a-seed-importer)
-- [Adding a Media Converter](#adding-a-media-converter)
+  - [PluginRegistry (Auto-Discovery)](#pluginregistry-auto-discovery):
+    sentinels, packages, and entry-point groups for every family
+- [Adding a Data Importer](#adding-a-data-importer): whole datasets;
+  includes [dynamic field options](#dynamic-field-options), which every
+  form-driven family shares
+- [Adding a Datasource Importer](#adding-a-datasource-importer): one
+  exemplar item
+- [Adding a Seed Importer](#adding-a-seed-importer): a batch of unlabeled
+  seed media
+- [Adding a Media Converter](#adding-a-media-converter) /
+  [Adding a Media Source](#adding-a-media-source): pointers to
+  EXTENDING-media.md
 - [Adding a Results Exporter](#adding-a-results-exporter)
 - [Adding a Label Importer](#adding-a-label-importer)
-- [Adding a Settings Importer](#adding-a-settings-importer)
-- [Adding a Settings Exporter](#adding-a-settings-exporter)
-- [Adding a Settings Source](#adding-a-settings-source)
+- [Sharing and deploying classifiers](#sharing-and-deploying-classifiers)
+- [Adding a Settings Importer](#adding-a-settings-importer) (app tier)
+- [Adding a Settings Exporter](#adding-a-settings-exporter) (app tier)
+- [Adding a Settings Source](#adding-a-settings-source) (app tier), with
+  [How the sync engine works](#how-the-sync-engine-works)
 - [Adding a Labelset Source](#adding-a-labelset-source)
 
 ---
@@ -63,12 +73,14 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 
 <!-- END GENERATED: plugin-families -->
 
-The form-driven families (importers, exporters, label importers, settings
-I/O, labelset sources, converters, media sources) share the same
-architecture built on two base classes in `vtscore/plugins/__init__.py`
-(the media registries — media types, embedders, clippers, cleaners — have
-their own registration story; see
-[EXTENDING-media.md](EXTENDING-media.md)):
+The form-driven families (dataset / datasource / seed / label importers,
+results exporters, settings I/O, labelset sources, converters) share the
+same architecture built on `PluginField` and `PluginBase` in
+`vtscore/plugins/__init__.py`, and are discovered by `PluginRegistry`.
+Media sources use the registry but not `PluginBase` (their sentinel is a
+plain factory object). The media registries — media types, embedders,
+clippers, cleaners — have their own registration story; see
+[EXTENDING-media.md](EXTENDING-media.md).
 
 ### PluginField
 
@@ -176,6 +188,8 @@ don't pick one get a letter instead of inheriting yours), and its
 | `add_cli_arguments(parser)`     | Auto-generates `argparse` flags from `fields`            |
 | `validate_cli_field_values(fv)` | Raises `ValueError` if any required field is missing, then runs the normalization pass below |
 | `to_dict()`                     | JSON-serialisable plugin metadata for API responses      |
+| `get_field_options(key, values)` | Override for `dynamic_options` fields — see [Dynamic field options](#dynamic-field-options) |
+| `notify(message, level=, detail=)` | Toast the user without failing — see [Notifying the user](#notifying-the-user-toasts) |
 
 ### Framework-side field normalization
 
@@ -363,19 +377,19 @@ frame that carries it.
 
 ### PluginRegistry (Auto-Discovery)
 
-All plugin families use `PluginRegistry` for auto-discovery. The
-registry uses direct filesystem scanning (`Path.iterdir()`) under the
-plugin package directory. It discovers both **sub-packages**
-(directories with `__init__.py`) and, for registries created with
-`discover_modules=True`, **flat `.py` modules** (excluding `__init__.py`
-and `base.py`). In each module it looks for a module-level sentinel
-attribute; if found, the plugin is registered by its `name`.
+All the families in the table below use `PluginRegistry` for
+auto-discovery. The registry uses direct filesystem scanning
+(`Path.iterdir()`) under the plugin package directory. It always discovers
+**sub-packages** (directories with `__init__.py`, symlinks included) and,
+for registries created with `discover_modules=True`, also **flat `.py`
+modules** (excluding `__init__.py`, `base.py`, and `_`-prefixed names). In
+each module it looks for a module-level sentinel attribute; if found, the
+plugin is registered under the sentinel object's `name`.
 
-Most plugin families use sub-packages, which pair well with per-plugin
-`requirements.txt` files. The exceptions are **media sources**
-(`vtscore.datasets.sources`) and **media converters**
-(`vtscore.converters`), whose plugins are flat `.py` modules
-(`local_folder.py`, `http_archive.py`, `video2audio.py`, ...).
+Most plugin families use sub-packages. The two `discover_modules=True`
+families — **media sources** (`vtscore.datasets.sources`) and **media
+converters** (`vtscore.converters`) — ship their built-ins as flat `.py`
+modules (`local_folder.py`, `http_archive.py`, `video2audio.py`, ...).
 
 | Plugin Family        | Package                            | Sentinel               | Base Class            | Entry-point group               |
 |----------------------|------------------------------------|------------------------|-----------------------|---------------------------------|
@@ -394,6 +408,11 @@ Most plugin families use sub-packages, which pair well with per-plugin
 Failed imports emit a warning but do not break the application; a missing
 optional dependency gracefully disables that plugin.
 
+The media registries (media types, embedders, clippers, cleaners) are not
+`PluginRegistry` families and have **no entry-point group**: they are found
+by a scan of `vtscore/media/` sub-packages. See
+[EXTENDING-media.md § Media System](EXTENDING-media.md#media-system).
+
 ### Third-party plugins via `importlib.metadata` entry points
 
 Plugins don't have to live inside the `vtsearch` source tree. Any installed
@@ -408,14 +427,19 @@ my_importer = "my_pkg.importer:IMPORTER"
 
 The value (`my_pkg.importer:IMPORTER`) must resolve to an already-instantiated
 plugin object; the same shape that the in-tree sentinel attribute holds.
-After `pip install` of the third-party package, the plugin appears in
-`list_importers()`, the relevant `/api/...` endpoint, and `python app.py
---list-plugins` without any changes to the core repo.
+The registry key is that object's `name` attribute, not the entry-point
+name on the left. After `pip install` of the third-party package, the
+plugin appears in `list_importers()`, the relevant `/api/...` endpoint, and
+`python app.py --list-plugins` without any changes to the core repo.
 
-Built-in plugins take precedence: if an entry point's `name` clashes with
-a name already registered by the package scan, it is skipped and a warning
-is emitted. A broken entry point (import error, missing `name` attribute)
-warns and is skipped; it cannot block discovery of other plugins.
+Built-in plugins take precedence: if an entry point's plugin `name` clashes
+with a name already registered by the package scan, it is skipped and a
+warning is emitted. An entry point with no `name` attribute warns and is
+skipped. One whose own import raises (typically a missing optional
+dependency) warns and is registered as a *tombstone* under the entry-point
+name: it is left out of listings, but a by-name lookup still resolves and
+re-raises the original error (as `ImportError`) on first use. Neither case blocks discovery of other
+plugins.
 
 ### Listing every registered plugin
 
@@ -472,9 +496,10 @@ Expose a module-level `IMPORTER` instance.
 > `ImporterBase`. If your importer drives its own ingestion entirely from
 > `run()` (override point 4) and never touches `SourceSpec`,
 > `effective_source_specs()`, or the per-record hooks, you can subclass
-> `ImporterBase` directly for a leaner surface — the six in-tree importers
+> `ImporterBase` directly for a leaner surface — the seven in-tree importers
 > that do this (`synthetic`, `pickle`, `demo`, `combine_datasets`,
-> `local_folder`, `local_files`) are the worked examples. Both bases share
+> `local_folder`, `local_files`, `local_archive_member`) are the worked
+> examples. Both bases share
 > the same metadata, origin, CLI, chunked-loading, and precomputed-vector
 > surface, so when in doubt reach for `DatasetImporter`.
 
@@ -521,8 +546,11 @@ class S3Importer(DatasetImporter):
 
         Args:
             field_values: Maps each PluginField.key to the user's input.
-                - "file" fields arrive as werkzeug FileStorage objects.
-                - All other fields arrive as plain strings.
+                - "file" fields arrive as UploadedFile objects
+                  (.filename / .read() / .save(dst) / .stream), from
+                  both the HTTP and the CLI path.
+                - All other fields arrive as plain, already-normalized
+                  strings.
             medias: The global medias dict.  Populate it **in-place**; do not
                 replace the reference.
             thin: When True, store media_path references instead of loading
@@ -632,7 +660,7 @@ to the framework.
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `_fetch_records_bulk_impl()` | `(records: list, field_values: dict, thin: bool) -> list[dict | None]` | Batched fetch hook. Default loops `fetch_record`. Override to issue concurrent / batched I/O |
-| `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
+| `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default wraps `file` field paths as `CliUploadedFile` and delegates to `run()`. Override only when CLI behaviour genuinely diverges |
 | `get_field_options()` | `(field_key: str, current_values: dict) -> Sequence[FieldOption]` | Compute dropdown options for fields declared with `dynamic_options=True`; each option is a plain string or a `(value, label)` tuple. See [Dynamic field options](#dynamic-field-options) |
 | `default_display_name()` | `(field_values: dict) -> str` | Name the datasets this importer produces. Shown live in the form's Dataset Name box and used verbatim when the user leaves it blank. Default derives a name from your URL / path / upload fields. See [Naming the imported dataset](#naming-the-imported-dataset) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
@@ -817,20 +845,27 @@ class MyServiceImporter(DatasetImporter):
 
     def _fetch_records_bulk_impl(self, records, field_values, thin=False):
         # Optional: replace the per-item loop with a single bulk request,
-        # a thread/async pool, or whatever the source supports.
+        # a thread/async pool, or whatever the source supports. Return a
+        # list aligned with *records* (None = skip), so IDs stay stable.
         from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=16) as pool:
-            embeddings = list(pool.map(lambda r: _api.get_embedding(r["id"]), records))
-            blobs = ([] if thin else
-                     list(pool.map(lambda r: _api.fetch_bytes(r["url"]), records)))
+        with ThreadPoolExecutor(max_workers=min(16, max(1, len(records)))) as pool:
+            vectors = list(pool.map(lambda r: _api.get_embedding(r["id"]), records))
+            # Thin mode skips the byte download entirely; media_url carries it.
+            blobs = [None] * len(records) if thin else list(
+                pool.map(lambda r: _api.fetch_bytes(r["url"]), records)
+            )
         return [
             {"media_type": "audio", "filename": r["id"],
-             "embeddings": {"my_embedder": e}, "embedder": "my_embedder",
-             "media_bytes": (None if thin else b), "media_url": r["url"]}
-            for r, e, b in zip(records, embeddings, blobs or [None] * len(records))
+             "embeddings": {"my_embedder": v}, "embedder": "my_embedder",
+             "media_bytes": b, "media_url": r["url"]}
+            for r, v, b in zip(records, vectors, blobs)
         ]
 ```
+
+`_api` stands in for whatever your service exposes. Every built-in
+importer is folder-shaped and leaves `_fetch_records_bulk_impl` alone, so
+there is no in-tree example of this hook.
 
 The default `run()`:
 
@@ -846,34 +881,6 @@ The default `run()`:
 
 Records returning `None` are skipped (gaps are squeezed out, IDs stay
 sequential).
-
-The bulk hook is where a service importer earns its keep: one round
-trip per batch instead of one per record. Every built-in importer is
-folder-shaped and leaves `_fetch_records_bulk_impl` alone, so there is no
-in-tree example; the shape is a thread pool over the per-record calls,
-yielding in the original order so IDs stay stable:
-
-```python
-    def _fetch_records_bulk_impl(self, records, field_values, thin=False):
-        from concurrent.futures import ThreadPoolExecutor
-
-        with ThreadPoolExecutor(max_workers=min(16, max(1, len(records)))) as pool:
-            # One embedding lookup per record, all in flight at once.
-            vectors = list(pool.map(lambda r: _catalogue_embedding(r["id"]), records))
-            # Thin mode skips the byte download entirely; media_url carries it.
-            blobs = [None] * len(records) if thin else list(
-                pool.map(lambda r: _catalogue_bytes(r["url"]), records)
-            )
-
-        return [
-            self._build_media(rec, vec, blob)
-            for rec, vec, blob in zip(records, vectors, blobs)
-        ]
-```
-
-`_catalogue_embedding` / `_catalogue_bytes` stand in for whatever your
-service exposes; `_build_media` is your own assembly of the media dict
-documented above.
 
 ### Dynamic field options
 
@@ -1037,15 +1044,16 @@ python app.py --autodetect --importer s3 --bucket my-data --prefix audio/ \
     --media-type audio --settings settings.json
 ```
 
-CLI arguments are auto-generated from `fields`. Override `run_cli()` if
-your `run()` expects non-string values (e.g. FileStorage objects).
+CLI arguments are auto-generated from `fields`. A `file` field takes a path
+on the command line and reaches `run()` wrapped as a `CliUploadedFile`, so
+the same body serves both paths.
 
 ### Wiring up dependencies
 
-Add any extra packages to `[project.dependencies]` in the repo's
-`pyproject.toml`; that's the single source of truth and deptry verifies
-every import is declared there. They are picked up the next time you run
-`bash scripts/install.sh` (or any editable install).
+Declare any extra packages in `[project.dependencies]` in `pyproject.toml`
+— see [EXTENDING.md § Dependency
+Management](EXTENDING.md#dependency-management). This applies to every
+family below.
 
 ### Multi-media imports
 
@@ -1151,8 +1159,7 @@ behavioural change.
 > `fetch_source_media` or `fetch_all_source_media`.
 
 See [`EXTENDING-media.md` § Adding a Media Converter](EXTENDING-media.md#adding-a-media-converter)
-for how converters compose with importers. (The original `multi-media-import`
-design plan was removed once the feature shipped; its history is in git.)
+for how converters compose with importers.
 
 ---
 
@@ -1386,83 +1393,21 @@ field with `dynamic_options=True` and implement
 
 ## Adding a Media Converter
 
-A `MediaConverter` takes media of one type and produces one or more
-media dicts of a *different* type.  Built-in examples:
-`video2image`, `video2audio`, `document2image`, `document2text`,
-`audio2image` (spectrogram), `audio2text` (Whisper ASR), `image2text` (OCR).
-Converters are auto-discovered from `vtscore.converters` via the
-`CONVERTER` sentinel.
+Media converters (`MediaConverter`, `CONVERTER` sentinel, flat modules
+under `vtscore/converters/`, entry-point group `vtscore.converters`) share
+this registry architecture, but their authoring guide lives with the rest
+of the media system: see [EXTENDING-media.md § Adding a Media
+Converter](EXTENDING-media.md#adding-a-media-converter). Their `fields`
+reach `convert()` as a validated `params` dict rather than as a plugin
+form body, so the [field normalization](#framework-side-field-normalization)
+above does not apply to them.
 
-### File structure
+## Adding a Media Source
 
-```
-vtscore/converters/<your_converter>.py    # flat module; single file per converter
-```
-
-### What to implement
-
-Subclass `MediaConverter` from `vtscore.converters.base`.  Implement
-`source_type`, `target_type`, and `convert()`.  Optionally declare
-user-configurable parameters as a list of `PluginField`s on the class.
-
-```python
-from vtscore.converters.base import MediaConverter
-from vtscore.plugins import PluginField
-
-
-class Image2TextMediaConverter(MediaConverter):
-    display_name = "Image → Text (OCR)"
-    description = "Run OCR on image files"
-    fields = [
-        PluginField(
-            key="lang",
-            label="OCR Language",
-            field_type="text",
-            default="eng",
-            description="Tesseract language code (e.g. 'eng', 'spa').",
-        ),
-    ]
-
-    @property
-    def source_type(self) -> str:
-        return "image"
-
-    @property
-    def target_type(self) -> str:
-        return "text"
-
-    def convert(self, media: dict, params: dict | None = None) -> list[dict]:
-        lang = self.get_param(params, "lang")
-        import pytesseract
-        from PIL import Image
-
-        img = Image.open(io.BytesIO(media["media_bytes"]))
-        text = pytesseract.image_to_string(img, lang=lang)
-        if not text.strip():
-            return []
-        return [{"filename": Path(media["filename"]).stem + ".txt", "media_string": text}]
-
-
-CONVERTER = Image2TextMediaConverter()
-```
-
-### MediaConverter class reference
-
-| Member | Description |
-|--------|-------------|
-| `source_type` (property) | The `type_id` of the input media type (e.g. `"image"`) |
-| `target_type` (property) | The `type_id` of the output media type (e.g. `"text"`) |
-| `convert(media, params=None)` | Convert a single source media dict; return a list of target dicts |
-| `fields` | Class-level list of `PluginField`s for user-configurable params |
-| `get_param(params, key)` | Helper: read a param value with field-default fallback |
-| `name` (property) | Auto-derived as `f"{source_type}2{target_type}"` |
-| `display_name` | Human-readable label shown in the picker |
-| `description` | One-line description |
-
-Each returned dict must include a `filename` and the target type's data
-fields (`media_bytes` and `duration` for image/audio/video,
-`media_string` for text).  The caller assigns IDs and embeds the
-outputs.
+Media sources (`MediaSource` via a factory, `SOURCE` sentinel, entry-point
+group `vtscore.media_sources`) resolve an origin back to a local file. Their
+authoring guide is [EXTENDING-media.md § Adding a Media
+Source](EXTENDING-media.md#adding-a-media-source).
 
 ---
 
@@ -1589,7 +1534,8 @@ find-results pickers by construction.
 | Member | Signature | Description |
 |--------|-----------|-------------|
 | `export()` | `(results: dict, field_values: dict) -> dict` | Legacy single-method form. Both named methods delegate here when unoverridden, which is what keeps pre-existing plugins working; prefer the named methods in new code |
-| `export_cli_detectors()` | `(detectors: list[dict], field_values: dict) -> dict` | Export the trained classifiers instead of their output (CLI/pipeline only) |
+| `needs_trained_detectors` | `property -> bool` | Default `False`. Return `True` to have the CLI pipeline call `export_cli_detectors()` instead of `export_cli()` |
+| `export_cli_detectors()` | `(detectors: list[dict], field_values: dict) -> dict` | Export the trained classifiers instead of their output (CLI/pipeline only; requires `needs_trained_detectors`) |
 | `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export_find_results()` |
 | `supports_streaming` | `property -> bool` | Whether this exporter can write results incrementally. Default `False`. |
 | `export_cli_streaming()` | `(header: dict, records: Iterator[tuple[str, dict]], field_values: dict) -> dict` | Write hits incrementally as scored chunks stream in. Required when `supports_streaming` is `True`. |
@@ -1730,13 +1676,6 @@ endpoints:
 | `/api/dataset/export`          | GET    | Full dataset (clips + embeddings + media)  | Pickle (`.pkl`) |
 | `/api/labels/export`           | GET    | LabelSet: labels with per-element origin  | JSON            |
 | `/api/detectors/{name}` | GET    | Detector labelset + examples              | JSON            |
-
-### Wiring up dependencies
-
-Add any extra packages to `[project.dependencies]` in the repo's
-`pyproject.toml`; that's the single source of truth and deptry verifies
-every import is declared there. They are picked up the next time you run
-`bash scripts/install.sh` (or any editable install).
 
 ---
 
@@ -2094,14 +2033,25 @@ class S3SettingsSource(SettingsSource):
             Body=json.dumps(settings_data, indent=2),
         )
 
+    def _do_peek_version(self, field_values: dict) -> str | None:
+        """Cheap freshness token: the object's ETag from a HEAD request."""
+        import boto3
+        s3 = boto3.client("s3")
+        head = s3.head_object(Bucket=field_values["bucket"], Key=field_values["key"])
+        return head["ETag"]
+
 
 SETTINGS_SOURCE = S3SettingsSource()
 ```
 
 The sentinel `SETTINGS_SOURCE` at module level is required for auto-discovery.
-Override `_do_load` / `_do_save` (not `load` / `save`): `SyncSource`'s public
-`load` / `save` normalize `field_values` and then dispatch to the underscored
-hooks, so a subclass that overrides `load` / `save` directly is never called.
+Override `_do_load` / `_do_save` / `_do_peek_version` (not `load` / `save` /
+`peek_version`): `SyncSource`'s public methods normalize `field_values` and
+then dispatch to the underscored hooks, so a subclass that overrides the
+public names directly is never called. `_do_peek_version` is optional — the
+default returns `None` — but without it the source is imported once per
+process and never auto-refreshed; see [the freshness
+probe](#the-freshness-probe-and-its-cost).
 
 ### Template variables
 
@@ -2420,7 +2370,10 @@ LABELSET_SOURCE = DatabaseLabelsetSource()
 The sentinel `LABELSET_SOURCE` at module level is required for auto-discovery.
 As with settings sources, override `_do_load` / `_do_save` (not `load` /
 `save`): the public methods normalize `field_values` before dispatching to
-these hooks, so a direct `load` / `save` override never runs.
+these hooks, so a direct `load` / `save` override never runs. A source with
+richer metadata (detector name, embedder, examples) may additionally
+override `_do_load_full(field_values) -> LabelSet`; the default wraps
+`_do_load()` in a `LabelSet` with no `detector_meta`.
 
 ### Template variables
 

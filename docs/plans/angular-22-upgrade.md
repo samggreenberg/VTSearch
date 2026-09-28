@@ -35,7 +35,7 @@ v22 breaking change is a no-op here (see the audit below).
 
 - **Breaking-change audit (done — nearly all no-ops).** Confirmed against the
   v22 changelog and this codebase:
-  - Components default to `OnPush`: **no-op**, all 91/91 components already set
+  - Components default to `OnPush`: **no-op**, every component already sets
     `ChangeDetectionStrategy.OnPush` explicitly.
   - `paramsInheritanceStrategy` defaults to `'always'`: **no-op**, routes are
     flat (no `children:`), nothing reads inherited parent params.
@@ -54,23 +54,11 @@ v22 breaking change is a no-op here (see the audit below).
 
 ## Optional follow-ups (each its own opt-in effort; not required by v22)
 
-- **Signal-API modernization (umbrella)** — the codebase still uses decorator
-  `@Input()` (127 sites), `@Output()` (12), and `@ViewChild` (40) across ~60
-  component files rather than signal `input()`/`output()`/`viewChild()`/`model()`;
-  constructor injection is already gone bar one util site. These are **not** a
-  v22 requirement (available since v17.3, work fine in 21 and 22), so this is a
-  "modernize toward signal-first authoring" project decoupled from the version
-  bump. Sliced into per-cluster, ~PR-sized issues (each folds any coupled
-  `ngOnChanges` into `computed`/`effect`, since signal inputs don't fire
-  `ngOnChanges`), tagged with a recommended Claude model by difficulty.
-  (The first slice — progress widgets, #2541 — has shipped; file further
-  clusters as new issues as they come up.)
-
 <!-- item-sep -->
 
 - **Angular Aria (now stable)** — headless, styleable a11y components. Directly
   relevant: `vt-modal` hand-rolls focus management via CDK's `CdkTrapFocus`
-  across ~24 dialogs (the ~7 kB eager cost noted in the `angular.json` budget
+  across ~24 dialogs (the ~9 kB eager cost noted in the `angular.json` budget
   comment). Evaluate whether Aria can replace some of that.
 
 <!-- item-sep -->

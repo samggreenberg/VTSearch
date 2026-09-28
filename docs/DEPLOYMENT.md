@@ -73,19 +73,22 @@ cloud or multi-homed host that is every interface, not just loopback.
 - **Understand what `--login` does and does not do.** Selecting a non-default
   provider (`--login trivial`, `--login api_key`) makes
   `get_file_access_base_dir()` return `data/<username>/`, which *does* confine
-  the browse root and every server-path importer/exporter to that subtree — a
-  real and worthwhile change. It does **not** gate access: no `before_request`
-  hook or route calls `provider.is_authenticated()`, so a request with a
-  missing or invalid Bearer token is served as the `anonymous` user rather than
-  rejected, and `TrivialLoginProvider`'s login screen is enforced only in the
-  SPA ([#2946](https://github.com/samggreenberg/VTSearch/issues/2946)). Treat
-  provider choice as a **confinement** mechanism, not an authentication one,
-  until that issue is fixed.
+  the browse root and every server-path importer/exporter to that subtree.
+  Whether it also *gates* access depends on the provider: the `_enforce_auth`
+  `before_request` hook (`vtsearch/hooks.py`) rejects unauthenticated `/api/*`
+  requests with 401 only when the provider's `enforce_auth()` is true.
+  `--login api_key` enforces — a request without a valid Bearer token (keys in
+  `data/api_keys.json`) gets 401, except `/api/auth/status`, `/login` and
+  `/logout`. `--login trivial` deliberately does **not**: it has no password,
+  so its login screen is a way to pick an identity, not an access control, and
+  a request with no cookie is served as `anonymous`. So `api_key` is real
+  authentication for headless clients; for browser users, the proxy above is
+  still the only authentication.
 - **Set `VTSEARCH_SECRET_KEY` to a random value.** The default is a constant
   visible in the source. `TrivialLoginProvider`'s session cookie is only
   integrity-protected by that key, so with the default anyone can forge a
-  cookie naming any user — and the username is also a path component
-  ([#2930](https://github.com/samggreenberg/VTSearch/issues/2930)).
+  cookie naming any user — and therefore read that user's `data/<username>/`
+  subtree.
 - **Let the OS be the real boundary.** In single-user mode the only limit on
   file access is what the process account can read and write, so run VTSearch
   as an unprivileged, dedicated user (or in a container) whose only writable
@@ -141,19 +144,19 @@ documented workarounds; this section describes the code as it stands.
 
 ### Dataset-ingest concurrency
 
-How many datasets the server downloads / embeds in parallel. Both knobs **autodetect from hardware** on every startup (no config needed): downloads scale with CPU count (cap 4), and embeddings scale with the scarcer of cores and RAM (~1 job per 4 cores, ~1 per 4 GiB; cap 4), flooring to 1 on small/RAM-starved boxes so a laptop stays constrained. The env vars below override the autodetect **without** persisting to `data/settings.json` — so the same `python app.py` launch picks a small default on a laptop and a bigger one on a fat node that exports the var (e.g. a single-GPU SLURM allocation, which the autodetect alone would otherwise throttle to one embed worker since embedders currently run on CPU). Values are clamped to `[1, 16]`; a non-integer value is ignored (logged, falls back to autodetect). An explicit value set via the settings UI still wins over both.
+How many datasets the server downloads / embeds in parallel. Both knobs **autodetect from hardware** on every startup (no config needed): downloads scale with CPU count (cap 4); embeddings are `1` on an accelerator host (CUDA/MPS — embed jobs share the one device and serialise on it) and on a CPU host scale with the scarcer of cores and RAM (~1 job per 4 cores, ~1 per 4 GiB; cap 4), flooring to 1 on small/RAM-starved boxes so a laptop stays constrained. The env vars below override the autodetect **without** persisting to `data/settings.json` — so the same `python app.py` launch picks a small default on a laptop and a bigger one on a node that exports the var. Values are clamped to `[1, 16]`; a non-integer value is ignored (logged, falls back to autodetect). An explicit value set via the settings UI still wins over both.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VTSEARCH_MAX_CONCURRENT_DOWNLOADS` | autodetect (CPU count, cap 4) | Max datasets downloaded in parallel |
-| `VTSEARCH_MAX_CONCURRENT_EMBEDDINGS` | autodetect (min of cores/4 and RAM/4 GiB, cap 4) | Max dataset embedding jobs run in parallel |
+| `VTSEARCH_MAX_CONCURRENT_EMBEDDINGS` | autodetect (`1` on CUDA/MPS; else min of cores/4 and RAM/4 GiB, cap 4) | Max dataset embedding jobs run in parallel |
 
 ### Compute and model runtime
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VTSEARCH_DEVICE` | `auto` | Preferred compute device for embedding, training, and scoring. `auto` resolves to `cuda` when a usable GPU is visible, then `mps`, then `cpu`; explicit values (`cuda`, `cuda:1`, `cpu`, `mps`) pass through unchanged. Resolution is lazy — the var records intent, torch is only imported when a device is actually needed. Pin it to `cpu` to keep a shared GPU free, or to `cuda:N` to place the process on one card of a multi-GPU box. |
-| `VTSEARCH_TORCH_THREADS` | `1` | Thread count for `torch` and the native math libraries (also exported as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported). The default of 1 keeps RSS low in constrained environments, since each thread allocates its own scratch buffers; raise it on a big box where CPU embedding throughput matters more than memory. |
+| `VTSEARCH_TORCH_THREADS` | server: the process's CPU allocation; library/batch use: `1` | Thread count for `torch` and the native math libraries. When the server starts (`python app.py` **or** gunicorn importing `app.py`), `vtsearch/torch_threads.py` resolves it — the variable if set, otherwise the CPUs this process may run on (`os.sched_getaffinity`, i.e. the SLURM/cgroup/container allocation) — and exports the result as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported, **overwriting** any value already in the environment (including the `OMP_NUM_THREADS=1` the Dockerfiles set). Code that imports `vtscore` without `app.py` (scripts, tests) defaults to `1`. Each thread allocates its own scratch buffers, so lower it on a memory-constrained box. |
 | `VTSEARCH_EMBED_BATCH_SIZE` | `32` | Items per GPU embedding batch. Lower it if a large model OOMs on a small card; non-positive or unparseable values fall back to the default. Some embedders (e.g. video models, whose per-clip frame stacks are much larger) ship a smaller default of their own. |
 | `VTSEARCH_DECODE_WORKERS` | allocated CPUs − 1, capped at 8 | Threads used to decode images *ahead* of the GPU forward during bulk image embedding. Decoding a batch inline, forwarding it, then decoding the next leaves the GPU idle for the whole decode — measured at 82% idle for base SigLIP on a V100 — so the decode runs on a pool, one batch ahead. The default is sized from the CPUs this process may actually run on (`os.sched_getaffinity`, which reflects a SLURM/cgroup allocation rather than the node's core count), leaving one for the calling thread. Set `0` to decode inline on the calling thread. Results are unaffected either way; the only cost of the pool is holding two batches of decoded images instead of one. |
 | `VTSEARCH_EMBED_PRECISION` | `fp32` | Compute precision for the **image** embedding forward pass. `fp32` is full precision and the shipped default. `fp16` / `bf16` cast the weights (fastest; `bf16` needs sm_80+, so not a V100); `autocast_fp16` / `autocast_bf16` keep fp32 weights and wrap the forward in `torch.autocast`, which holds softmax and layer norm in fp32 — numerically safer, slower; `auto` picks `bf16` where supported, else `fp16`. Every half mode degrades to `fp32` off CUDA, where half is emulated and *slower* than the fp32 it replaces. Stored vectors are always fp32 — only the compute is half. **Half precision changes the vectors** (cosine similarities shift ~1e-3, against a ~1e-7 fp32 kernel-selection noise floor), so a dataset embedded in one mode is not interchangeable with one embedded in another; re-embed a collection wholesale rather than in halves. **The speedup is only on the heavy encoders.** End to end it is 2.0x (L40S) to 2.5x (V100) on `siglip2_l`, but **0.99x on the default `siglip`** on both cards — base SigLIP's forward stopped being the bottleneck once decode was overlapped with it, so the knob buys the shipped default nothing. (The 4.2x in #3143 was the `siglip2_l` forward measured in isolation, before that overlap landed.) This is also the escape hatch back to `fp32`. |
@@ -162,8 +165,8 @@ How many datasets the server downloads / embeds in parallel. Both knobs **autode
 | `VTSEARCH_IMAGE_PROCESSOR_DEVICE` | `auto` | Where the resize/normalise above runs. `auto` passes nothing (CPU tensors, today's behaviour); `cpu` is explicit; `cuda` hands the work to the GPU, which the `torchvision` backend supports through a `device=` call kwarg. `cuda` degrades to `auto` off CUDA rather than raising — an escape hatch that crashes on a laptop is not an escape hatch. It stays at `auto` because it is **not** free numerically: GPU resampling differs from CPU torchvision by *more* than CPU torchvision differs from PIL. The speedup is also smaller than it looks — 1.68× on `siglip`'s embed path in isolation but ~1.09× per pile cell, and ~1.02× for `siglip2_l`. |
 | `VTSEARCH_MAX_DECODE_PIXELS` | `64000000` (64 MP) | Pixel budget for a single image decode. Sources above it are downsampled (aspect preserved) before reaching a thumbnail, embedder, extractor, or converter — all of which resize to a few hundred pixels anyway — so gigapixel panoramas and whole-slide scans import instead of exhausting memory. Ordinary photographs are never touched; crop/clip paths deliberately bypass this and decode at native size. Set to `0` to disable bounding entirely. |
 | `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` | `2000000` (2 MP) | Resolution budget for local-feature detection in the structural (instance-matching) embedders. SIFT detection cost scales with pixel count while the keypoint set is capped regardless, so an uncapped high-resolution source pays many times over for the same descriptors — and spends them on fine texture that does not survive a rescale, so it matches worse as well as slower. Keypoints are stored in normalised coordinates and SIFT is scale-invariant, so features detected under different budgets still match each other. Set to `0` to detect at native size. |
-| `VTSEARCH_TRAIN_EPOCHS` | `200` | Upper bound on training epochs for the detector head. Training also short-circuits on a loss plateau (see `VTSEARCH_TRAIN_PATIENCE`). |
-| `VTSEARCH_TRAIN_PATIENCE` | `10` | Epochs the training loss may fail to improve before early-stop fires. Set to `0` to disable early-stop and always run the full `VTSEARCH_TRAIN_EPOCHS`. |
+| `VTSEARCH_TRAIN_EPOCHS` | `200` | Upper bound on epochs for the BCE gradient loop. **Does not affect the shipped detector head**, which is a linear SVM fitted by liblinear (see [ML.md](ML.md#training-configuration)); only the eval-harness head arms and the structural-verification classifier run that loop. |
+| `VTSEARCH_TRAIN_PATIENCE` | `10` | Epochs that loop's loss may fail to improve before early-stop fires; `0` disables early-stop. Same scope as `VTSEARCH_TRAIN_EPOCHS`. |
 | `VTSEARCH_CALIBRATE_COUNT` | `2` | Default `calibrate_count` baked into a fresh user's settings. Each unit adds one fold-training pass per learned sort, and buys resolution on the Inclusion knob (which is a quantile rule over pooled held-out fold scores). Lower to `1` to trade calibration quality for sort latency. |
 | `VTSEARCH_DISABLE_CUML` | unset | Set to any non-empty, non-`0` value to force the CPU clustering libraries for UMAP / k-means even when cuML is installed and the GPU is usable. Runtime opt-out — distinct from the install-time `VTSEARCH_SKIP_CUML` below. Useful when a RAPIDS install is present but misbehaving. |
 
@@ -198,8 +201,8 @@ These are read by the installer, not the running app.
 | `HF_HUB_OFFLINE` | unset | Set to `1` to prevent any HuggingFace Hub downloads |
 | `HF_HUB_DISABLE_IMPLICIT_TOKEN` | `1` (set by app) | Disables HuggingFace auth tokens (all models are public) |
 | `TRANSFORMERS_NO_ADVISORY_WARNINGS` | `1` (set by app) | Suppresses advisory warnings from `transformers` |
-| `OMP_NUM_THREADS` | `1` (set by app) | OpenMP thread count; kept at 1 for memory optimization |
-| `MKL_NUM_THREADS` | `1` (set by app) | Intel MKL thread count; kept at 1 for memory optimization |
+| `OMP_NUM_THREADS` | set by app | OpenMP thread count; overwritten at startup with the resolved `VTSEARCH_TORCH_THREADS` — set that instead |
+| `MKL_NUM_THREADS` | set by app | Intel MKL thread count; same as above |
 
 ### Docker / GPU
 
@@ -255,14 +258,7 @@ Flask dev server's `threaded=True` behaviour.
 
 ### Tuning
 
-Override the relevant config via environment variables:
-
-| Env var | Default | Notes |
-|---------|---------|-------|
-| `VTSEARCH_BIND` | `0.0.0.0:5000` | `host:port` |
-| `VTSEARCH_THREADS` | `8` | Threads per worker; raise for more concurrent requests |
-| `VTSEARCH_TIMEOUT` | `0` | Worker timeout in seconds; `0` (default) disables. Long imports / training routinely exceed short timeouts. |
-| `VTSEARCH_LOG_LEVEL` | `warning` | Gunicorn log level; `info`/`debug` also enable the gunicorn access log (streamed to stdout) |
+`gunicorn.conf.py` reads `VTSEARCH_BIND`, `VTSEARCH_THREADS` and `VTSEARCH_TIMEOUT` (see [Gunicorn / WSGI](#gunicorn--wsgi-production) above), plus `VTSEARCH_LOG_LEVEL` as its own log level — at `info`/`debug` that also turns on gunicorn's access log, streamed to stdout. Raising `VTSEARCH_THREADS` raises the concurrent-request ceiling and, with it, the SSE connection cap.
 
 For larger tuning changes, edit `gunicorn.conf.py` directly.
 
@@ -434,8 +430,10 @@ These features require network access only when explicitly used:
 
 ### pip install during build
 
-CPU builds fetch PyTorch wheels from `https://download.pytorch.org/whl/cpu`.
-GPU builds use the default PyPI + NVIDIA indexes.
+Besides PyPI, CPU builds fetch PyTorch wheels from `https://download.pytorch.org/whl/cpu`.
+GPU builds fetch them from the CUDA-tagged PyTorch index (`…/whl/cu121` in
+`docker/Dockerfile.gpu`; `install.sh` picks the tag per host) and the RAPIDS/cuML
+wheels from `https://pypi.nvidia.com`. Mirror these for an air-gapped build.
 
 ---
 
@@ -488,9 +486,11 @@ mount them as a volume:
 **Option A - Bake into the image** (larger image, simpler deployment):
 
 ```dockerfile
-# Add to the end of Dockerfile, before CMD
-COPY ./pre-downloaded-models/ /app/data/models/
-ENV HF_HUB_OFFLINE=1
+# Add to the end of Dockerfile, before CMD. Keep the cache OUTSIDE /app/data:
+# a volume mounted there would hide anything baked under it.
+COPY ./pre-downloaded-models/ /opt/vtsearch/models/
+ENV VTSEARCH_MODELS_DIR=/opt/vtsearch/models \
+    HF_HUB_OFFLINE=1
 ```
 
 **Option B - Mount as a volume** (smaller image; models shared across
@@ -530,27 +530,22 @@ automatically on first startup.
 
 ```
 data/
-├── models/                           # HuggingFace model cache (~4.1 GB total)
-│   ├── models--laion--larger_clap_general/
-│   ├── models--google--siglip-base-patch16-224/
-│   ├── models--openai--clip-vit-base-patch32/
-│   ├── models--microsoft--xclip-base-patch32/
-│   └── models--intfloat--e5-base-v2/
-├── embeddings/                       # Cached dataset embeddings (.pkl files)
-├── saved_datasets/                   # Datasets saved from the UI
-├── detectors/                        # Persistent detector definitions (.json)
+├── models/                           # HuggingFace model cache (VTSEARCH_MODELS_DIR; ~4.1 GB for the prefetched set)
+├── saved_datasets/                   # Every registered dataset's pickle (ds_<id>.pkl) and its derived sidecars
+├── dataset_registry.json             # Index of registered datasets (names, pickle paths, expiry)
+├── detectors/                        # Detector definitions (.json, labelsets with origins)
+├── detector_registry.json            # Index of registered detectors
+├── embeddings/                       # Cache of embedded demo datasets (.pkl), keyed by demo + embedder
 ├── settings.json                     # SERVER settings only (see below)
 ├── user_settings.json                # Preferences of the single-user "default" user
+├── api_keys.json                     # Only with `--login api_key`: hashed API keys
 ├── <username>/                       # Multi-user only: one subtree per user
 │   ├── user_settings.json            #   that user's preferences
 │   └── ...                           #   their datasets, detectors, media
-├── audio/                            # Audio media files
-├── video/                            # Video media files
-├── images/                           # Image media files
-├── paragraphs/                       # Text media files
-├── documents/                        # Document media files (PDF, DOC, PPT)
 ├── local_uploads/                    # Files uploaded through the browser
 ├── staging/                          # Scratch space for in-flight imports
+├── logs/                             # App logs written by the SLURM launcher (VTSEARCH_LOG_FILE)
+├── images/, video/, synthetic/       # Demo/synthetic media materialised by the downloaders
 └── ESC-50-master/, gtzan/, ...       # Extracted demo dataset sources
 ```
 
@@ -563,12 +558,13 @@ single-user default keeps `user_settings.json` directly in the data dir. See
 | Path | Preserve? | Why |
 |------|-----------|-----|
 | `data/models/` | **Yes** | Re-downloading is slow (~4.1 GB) |
-| `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
+| `data/embeddings/` | Optional | Embedded demo-dataset cache; losing it means re-embedding a demo on its next load |
 | `data/settings.json` | **Yes** | Server settings: directories, concurrency limits, deployment locks |
 | `data/user_settings.json`, `data/<username>/user_settings.json` | **Yes** | Every user preference, including each user's Auto-Find detector list |
-| `data/detectors/` | **Yes** | Persistent detector definitions with labelsets |
-| `data/saved_datasets/` | **Yes** | Datasets users explicitly saved |
-| `data/audio/`, `video/`, `images/`, `paragraphs/`, `documents/` | Depends | Media files from imported datasets; re-import if lost |
+| `data/detectors/`, `data/detector_registry.json` | **Yes** | Persistent detector definitions with labelsets |
+| `data/saved_datasets/`, `data/dataset_registry.json` | **Yes** | Every registered dataset (pickle + registry entry); losing them means re-importing |
+| `data/api_keys.json` | **Yes** (if used) | API keys for `--login api_key` |
+| `data/images/`, `video/`, `synthetic/` | Safe to delete | Demo/synthetic media; re-materialised on the next demo load |
 | `data/staging/` | Safe to delete | Scratch space for in-flight imports |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
@@ -934,62 +930,26 @@ does is twitch.
 
 ## Docker production notes
 
-Both images run the app under gunicorn with the bundled `gunicorn.conf.py`
-(single worker + gthread threads, not Flask's dev server) and set
-`VTSEARCH_SERVER_INIT=1` so the startup sequence runs at WSGI import
-time. See [Running under gunicorn](#running-under-gunicorn) for tuning.
+Build and run commands for every image live in [SETUP.md § Docker](SETUP.md#docker);
+this section covers what matters when you operate one. Every image runs the app
+under gunicorn with the bundled `gunicorn.conf.py` (single worker + gthread
+threads, not Flask's dev server) and sets `VTSEARCH_SERVER_INIT=1` so the
+startup sequence runs at WSGI import time. See
+[Running under gunicorn](#running-under-gunicorn) for tuning.
 
-### CPU deployment
+### Choosing an image
 
-```bash
-docker compose -f docker/compose/docker-compose.yml up -d
-```
+| Dockerfile | Compose file (`docker/compose/`) | Base | What it is for |
+|---|---|---|---|
+| `docker/Dockerfile` | `docker-compose.yml` | `python:3.10-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
+| `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
+| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml` | `python:3.10-slim` | SigLIP-only image search from `requirements/labbench.txt`; SigLIP weights baked in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. |
+| `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.10-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
+| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
 
-Uses `docker/Dockerfile` (base: `python:3.10-slim`). System packages installed:
-`libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`.
-
-### GPU deployment
-
-```bash
-docker compose \
-  -f docker/compose/docker-compose.yml \
-  -f docker/compose/docker-compose.gpu.yml up -d
-```
-
-Uses `docker/Dockerfile.gpu` (base: `nvidia/cuda:12.1.1-runtime-ubuntu22.04`).
-Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
-on the host.
-
-### LabBench deployment (SigLIP-only image search)
-
-```bash
-docker compose -f docker/compose/docker-compose.labbench.yml up -d
-```
-
-Uses `docker/Dockerfile.labbench` (base: `python:3.10-slim`) and
-`requirements/labbench.txt`, a pared-down dependency set that skips audio,
-video, document, text, and extractor plugins. The SigLIP model weights
-(`google/siglip-base-patch16-224`) are pre-downloaded **at build time**,
-so the container is ready to serve immediately on first run with no
-Hugging Face round-trip.
-
-The model cache is baked into `/opt/vtsearch/models` (set via
-`VTSEARCH_MODELS_DIR` in the Dockerfile) so the weights survive volume
-mounts on `/app/data`. No system packages beyond the Python slim base
-are required (no `ffmpeg`, `libsndfile1`, `libgl1`, ...).
-
-This is the recommended variant when you only need image search (LabBench).
-
-### Data persistence
-
-The Docker volume `vtsearch-data` is mounted at `/app/data`. This persists
-models, embeddings, settings, and media files across container restarts.
-
-To use a host directory instead of a named volume:
-
-```bash
-docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
-```
+All of them persist state in the volume mounted at `/app/data` (named
+`vtsearch-data` in the compose files); a container without that mount loses its
+settings, datasets and detectors on restart.
 
 ### Resource considerations
 
@@ -999,60 +959,52 @@ docker run -p 5000:5000 -v /path/on/host:/app/data vtsearch
   loaded.
 - **Disk**: The `data/models/` directory uses ~4.1 GB. Dataset embeddings
   and media files vary by dataset size.
-- **CPU**: `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set to reduce
-  per-operation memory. This trades single-operation throughput for lower
-  memory usage.
+- **CPU**: the server sizes its torch/OpenMP/MKL thread pool to the
+  container's CPU allocation (the `OMP_NUM_THREADS=1` in the Dockerfiles is
+  overwritten at startup). Cap it with `VTSEARCH_TORCH_THREADS` (e.g.
+  `docker run -e VTSEARCH_TORCH_THREADS=2 …`) if memory matters more than
+  throughput, or limit the container's CPUs.
 - **GPU (optional)**: GPU mode accelerates embedding computation and model
   training. Not required for basic operation.
 
 ### Health check
 
-The app serves the web UI at `/`. A simple health check:
+The app serves two probes at the root of the URL space (`vtsearch/routes/health.py`):
+`/healthz` (liveness — 200 whenever the process is serving) and `/readyz`
+(readiness — 503 until every readiness check passes, e.g. while embedders are
+still warming up). None of the images declares a `HEALTHCHECK`; add one in your
+orchestrator:
 
 ```bash
-curl -f http://localhost:5000/ || exit 1
+curl -fsS http://localhost:5000/healthz || exit 1   # liveness
+curl -fsS http://localhost:5000/readyz  || exit 1   # readiness
 ```
 
-### Rebuilding after code changes
+### Stamping the version into an image
+
+`vtsearch.__version__` is normally
+derived from git at import time, but the Docker build context excludes `.git`,
+so the Dockerfile reads the version from a build arg instead. None of the
+`docker/compose/*.yml` files pass it, so a plain `docker compose build` bakes
+the fallback `0.0.0-unknown` into the image. To stamp the real version, pass it
+explicitly, e.g.:
 
 ```bash
-docker compose -f docker/compose/docker-compose.yml build           # CPU
-docker compose \
-  -f docker/compose/docker-compose.yml \
-  -f docker/compose/docker-compose.gpu.yml build                    # GPU
+docker compose -f docker/compose/docker-compose.yml build \
+  --build-arg VTSEARCH_VERSION="$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)"
 ```
 
-Add `--no-cache` after dependency changes to force a full rebuild.
-
-> **Note on the baked version string.** `vtsearch.__version__` is normally
-> derived from git at import time, but the Docker build context excludes `.git`,
-> so the Dockerfile reads the version from a build arg instead. None of the
-> `docker/compose/*.yml` files pass it, so a plain `docker compose build` bakes
-> the fallback `0.0.0-unknown` into the image. To stamp the real version, pass it
-> explicitly, e.g.:
->
-> ```bash
-> docker compose -f docker/compose/docker-compose.yml build \
->   --build-arg VTSEARCH_VERSION="$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)"
-> ```
->
-> The Dockerfile writes this into `vtsearch/_version.txt`; `__init__.py` reads it
-> when git is unavailable.
+The Dockerfile writes this into `vtsearch/_version.txt`; `__init__.py` reads it
+when git is unavailable.
 
 ---
 
 ## Dependency structure
 
-Runtime + dev dependencies are declared in `pyproject.toml` (under
-`[project.dependencies]` and `[project.optional-dependencies]`, whose
-`dev` and `agpl` extras hold the dev tools and the two AGPL-3.0 packages).
-The top-level `requirements/base.txt` and `requirements/gpu.txt` just
-forward to it via `-e .[dev,agpl]`, so pyproject is the single source of
-truth and deptry verifies every imported package is declared there.
-
-The labbench / image-embedders requirements files are deliberately
-standalone (curated minimal subsets pinned for size-constrained Docker
-images) and do **not** flow through pyproject.
+`pyproject.toml` is the single source of truth for runtime and dev dependencies; how
+`scripts/install.sh` picks CPU vs GPU and the CUDA wheel tag is in
+[SETUP.md § Installing dependencies](SETUP.md#installing-dependencies). The
+requirements files an operator may meet:
 
 ```
 pyproject.toml                       ← [project.dependencies] + [project.optional-dependencies] (dev, agpl)
@@ -1063,17 +1015,6 @@ requirements/gpu-no-agpl.txt         ← gpu.txt without the `agpl` extra (see b
 requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
 requirements/image-embedders.txt     ← All-image-embedders image deps (standalone; shared by the CPU
                                        and GPU Dockerfiles, which each pass their own --extra-index-url)
-```
-
-Install commands:
-
-```bash
-# Auto-detect CPU vs GPU (installs all features + dev tools)
-bash scripts/install.sh
-
-# Force one or the other
-bash scripts/install.sh cpu
-bash scripts/install.sh gpu
 ```
 
 ### Installing without the AGPL dependencies
@@ -1121,7 +1062,6 @@ licensing statement.
 | `flask` | latest | Web server |
 | `opencv-python-headless` | latest | Image processing (structural embedder, YOLO). **Not** used for video decoding — see [FIPS](#video-import-crashes-with-fatal-fips-selftest-failure) |
 | `ultralytics` | latest | YOLO-based image processing. AGPL-3.0; in the `agpl` extra, installed by default — see [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies) |
-| `laion_clap` | latest | Audio embedding preprocessing |
 | `librosa` | latest | Audio analysis (spectrograms, silence splitting) |
 | `soundfile` / `soxr` | latest | Audio decoding and resampling (`vtscore.media.audio.decode`) |
 | `imageio-ffmpeg` | latest | Bundled ffmpeg binary; audio codecs libsndfile can't read (AAC/M4A/MP4), and all video frame decoding (`vtscore.media.video.decode`) |

@@ -12,10 +12,6 @@ it on a context is separate, in `vtscore/state/coverage.py`; see
 [`state.md`](state.md#coverage-atlas) for that half and for the
 `build_coverage_atlas*` / `coverage_atlas_*` API the app calls.
 
-The split is deliberate. The two halves used to sit side by side as
-`state/coverage.py` and `state/coverage_atlas.py` — a near-homograph pair in
-which only one of the two was actually state.
-
 Related docs: [`state.md`](state.md) for the wiring and the atlas's place on
 `DatasetContext`; [`detectors.md`](detectors.md) for the evidence-coverage
 report built on the same idea.
@@ -28,8 +24,7 @@ report built on the same idea.
 
 ## What the structure keeps
 
-The atlas replaces the old **diversity tree**, keeping what the tree threw
-away. Three differences matter to callers:
+Three properties matter to callers:
 
 - **Evidence channels, not a "seen" bit.** Each node counts labeled evidence
   per class (`n_pos` / `n_neg`), so "verified good here", "verified bad here"
@@ -50,10 +45,22 @@ away. Three differences matter to callers:
 
 | Symbol | Description |
 |--------|-------------|
-| `CoverageAtlas` | The partition itself: build, lookup, evidence counting, coverage level, next-sample selection, typicality |
-| `auto_max_depth(n, ...)` | Depth to build to for a dataset of *n* items |
+| `CoverageAtlas(vectors, k=3, max_depth=10, min_node_size=20, on_progress=None)` | The partition itself, built by recursive k-means over `{id: vector}` (`k` must be 2-9). See the method groups below |
+| `auto_max_depth(n, k=3, min_node_size=20)` | Depth to build to for *n* items: `COVERAGE_ATLAS_MAX_DEPTH` unless `n / min_node_size` exceeds the 4 000-leaf budget, then clamped so `k**depth` stays under it. At least 1 |
 | `domain_shift_report(atlas, matrix, alpha=0.05)` | Dataset-level shift report: how much of *matrix* looks atypical under *atlas* |
-| `COVERAGE_ATLAS_DEFAULT_K` / `COVERAGE_ATLAS_MAX_DEPTH` / `COVERAGE_ATLAS_MIN_NODE_SIZE` | Partition-shape defaults |
+| `COVERAGE_ATLAS_DEFAULT_K` / `COVERAGE_ATLAS_MAX_DEPTH` / `COVERAGE_ATLAS_MIN_NODE_SIZE` | Partition-shape defaults: `3` / `10` / `20` |
+
+`CoverageAtlas` methods:
+
+- **Lookup / evidence:** `lookup(vector_id)` (leaf name), `label(vector_id, good)`,
+  `unlabel(vector_id)`, `n_pos(name)` / `n_neg(name)`, `reset_labeled()`,
+  `labeled_ids()`.
+- **Coverage:** `coverage_level()`, `next_sample(...)`, `total_nodes()`,
+  `depth()`, `span_info()`.
+- **Typicality:** `typicality_pvalues(matrix)`, `typicality_pvalue(vector)`.
+- **Persistence:** `to_serializable()` / `CoverageAtlas.from_serializable(data)`
+  (skips the k-means build; raises `ValueError` on an unknown or missing
+  format so callers can rebuild), `structural_clone()`.
 
 `CoverageAtlas.typicality_pvalues` returns ranks, not calibrated p-values —
 its docstring records the measured deviation and what it costs.

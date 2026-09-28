@@ -179,17 +179,21 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
-- **The 30th-vote transient (a live bug the study caught).** Production auto-sizes
-  the detector MLP's hidden layer as `max(8, n_labels // 3)`
-  (`vtscore/training/mlp.py`) and `train_model` always initialises from `seed=42`,
+- **The 30th-vote transient (a bug the study caught; now narrower).** The detector
+  head has since moved to the linear SVM (`LINEAR_SVM_HEAD`, no hidden layer), so
+  the retrieval side no longer has it. What remains is the structural
+  verification classifier (`vtscore/training/structural_similarity.py`), which
+  still calls `train_model` with the auto-sized width `max(8, n_train // 3)`
+  (`vtscore/training/mlp.py::_auto_hidden_dim`) and always initialises from `seed=42`,
   so the architecture steps 9→10 neurons at exactly 30 labels and every dataset
   draws the same unlucky width-10 init until the width steps again at 33. The study
   saw a sharp, synchronized quality dip at exactly t=30 (25 of 175 queries lose
   >0.3 P@10 at t=30, none at t=28 or 29; recovery by t=33). It is deterministic and
   user-visible: a user's 30th–32nd vote can transiently make results worse. Cheap
   fixes: average 2–3 seeds at width-change boundaries, derive the init seed from
-  the vote set, or add hysteresis to the width step. Not structural-specific — it
-  is worst on the 8,192-d VLAD inputs but the mechanism is in the shared trainer.
+  the vote set, or add hysteresis to the width step. The study measured the dip
+  on the old MLP retrieval head over 8,192-d VLAD inputs; whether it still bites
+  the small match-stat classifier is unmeasured.
 
 <!-- item-sep -->
 
@@ -277,7 +281,7 @@ worlds without rewriting the downstream.
 
 **Stage 1 — retrieval (rides the existing pipeline unchanged).** Aggregate each
 image's local descriptors into a fixed-D vector via **VLAD**. That vector
-populates `media["embedding"]`, so the coverage atlas, cosine/example sort,
+populates `media["embeddings"]["sift_vlad"]`, so the coverage atlas, cosine/example sort,
 pre-vote sorts, and `train_model` work with zero new machinery. `supports_text`
 is `False` (no text encoder maps into VLAD space). Stage 1 alone is coarse
 instance retrieval — fast, and what makes Stage 2 tractable.
@@ -327,7 +331,7 @@ UI — and keeps the audio (constellation-fingerprint) backend a drop-in too.
 
 ### Storage — no-persist compliance
 
-Per media: `media["embedding"]` (fp32 L2-normalised VLAD, Stage 1) and
+Per media: `media["embeddings"]["sift_vlad"]` (L2-normalised VLAD, Stage 1) and
 `media["local_features"] = StructuralFeatures(keypoints, descriptors)` (fp16/
 uint8, capped per image at the top-M by response). ~128–256 KB/image, same order
 as patch's `patch_grid`. Local features live **only** in the dataset pickle (the

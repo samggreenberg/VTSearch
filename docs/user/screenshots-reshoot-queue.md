@@ -1,6 +1,6 @@
 # Screenshot reshoot queue
 
-A running list of doc screenshots that are **known stale** — the GUI they
+A running list of doc screenshots that someone has **flagged as stale** — the GUI they
 capture has changed, but the images under `docs/user/assets/` haven't been
 re-rendered yet.
 
@@ -34,7 +34,12 @@ enforces this, so a typo'd or renamed id fails the suite.
 3. Commit the regenerated images and **delete the drained rows** from the table
    below (leave the queue empty, not stale).
 
-An empty table means "no known-stale shots" — the desired resting state.
+An empty table means "nothing is *queued*" — the desired resting state, but
+not a guarantee that every screenshot is current. This file only records drift
+that a session noticed and wrote down; a GUI change whose session neither
+reshot nor queued leaves no trace here. To actually verify the committed
+images, run `scripts/screenshots/check.sh` (a manual, browser-needing
+pixel-diff against `docs/user/assets/` — not a `run-tests.sh` gate).
 
 ## Queue
 

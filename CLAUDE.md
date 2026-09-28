@@ -62,7 +62,7 @@ Keep `#3421` as the link text; the number is what the user reads and what they'd
 
 **You never need to know whether `N` is an issue or a PR.** GitHub redirects `/issues/N` to `/pull/N` when the number turns out to be a pull request, so the `issues` URL is correct for both. There is no lookup to do first and therefore no case where "I'm not sure which it is" justifies leaving a reference bare.
 
-**Why every one, rather than the first mention.** Linking only the first is the convention that prose style guides inherited from print, where a repeated footnote is clutter. It is actively wrong here. A turn that links `#3421` in its opening sentence and leaves the next five bare teaches the reader that a bare `#3421` means something — a repeat, a different register, an unlinked *something* — when it means nothing at all. Worse, the reference the user actually wants to click is almost never the first: it is the one in the summary table at the bottom, or the one in the sentence that says *this is the issue that's still open*. Making them scroll back up to find the linked copy costs more than the link would have. Linking costs you nothing but the characters, so spend them uniformly.
+**Why every one, rather than the first mention.** The reference the user wants to click is rarely the first — it is the one in the summary table at the bottom, or the sentence saying *this is the issue that's still open* — and a mix of linked and bare copies implies a distinction that does not exist. Linking costs only characters, so spend them uniformly.
 
 **This applies on every surface Claude talks to the user on** — the web app, Claude Code in the terminal, the desktop app, a cloud session's final message. Like the bare-`#N` convention above, it is repo policy rather than a per-session preference, so it holds wherever this file is loaded. Within a message it covers prose, end-of-turn summaries, bullet lists and tables alike, repeats inside a single sentence included.
 
@@ -114,26 +114,12 @@ This standing instruction **is** the explicit request that the remote-environmen
 **Use a normal merge commit: `gh pr merge <n> --merge`.** Never `--squash`, never
 `--rebase`.
 
-This is not a style preference. [`docs/RELEASE.md`](docs/RELEASE.md) steps 4 and 6
-find what shipped by walking the release window, and until #3691 they walked
-**merge commits** specifically — a squashed PR is not one: it lands as an ordinary
-commit whose subject ends `(#N)`, so `git log --merges origin/main..origin/dev`
-never listed it. Measured on a live window (197 commits, 52 of them merges): a PR
-squashed by mistake was **absent** from that walk while one merged normally an hour
-later was present. The issue sweep had a second net — step 6's orphan backstop reads
-`Addressed in #M` comments, which is PR data rather than git — but the release
-summary and the punch-card data (`scripts/punchcard/pr_merges.txt`) had none, so a
-squashed PR could drop out of both without anything saying so.
-
-**That half is now fixed at the other end, and the rule still stands.** Four
-squashes were already on `dev` before this rule existed, and no convention can
-retroactively un-squash them, so `scripts/release-prs.py` walks `--first-parent`
-and reads either shape. The release walk is therefore no longer a reason to merge
-rather than squash — but the two costs below are not recoverable by any script,
-and a subject-line parse is a weaker thing for a release to rest on than a merge
-commit. Do not read the fix as permission.
-
-Two smaller costs, both paid at merge time:
+The release walk used to be the main reason (a squash is a one-parent commit, so
+`git log --merges` never listed it); `scripts/release-prs.py` now walks
+`--first-parent` and reads both shapes, but only because four squashes were
+already on `dev`. That script is a backstop, not permission — a subject-line parse
+is a weaker thing for a release to rest on than a merge commit, and two costs are
+unrecoverable by any script:
 
 - **Ancestry.** A squash-merged branch is no longer an ancestor of `dev`, so a
   follow-up PR from it re-shows its *entire* diff rather than the new commits.
@@ -149,8 +135,8 @@ unsure what this repo does, ask the repo rather than the last commit you happene
 to read — a two-commit sample is not a convention:
 
 ```
-git log --pretty=%s -100 origin/dev | grep -c "^Merge pull request"   # 21
-git log --pretty=%s -100 origin/dev | grep -cE "\(#[0-9]+\) \(#[0-9]+\)$"  # 3
+git log --pretty=%s -100 origin/dev | grep -c "^Merge pull request"          # merge commits
+git log --pretty=%s -100 origin/dev | grep -cE "\(#[0-9]+\) \(#[0-9]+\)$"   # squashes
 ```
 
 **Merging is not part of Auto-PR.** Open the PR without being asked; merge it
@@ -162,7 +148,7 @@ When your change resolves a GitHub issue, **link the PR back to that issue** so 
 
 - Put a closing keyword in the **PR body**: `Closes #N` (or `Fixes #N` / `Resolves #N`). This populates GitHub's "Linked issues" sidebar and the issue timeline. Reference every issue the PR resolves; use one keyword per issue (`Closes #12, closes #15`), not a comma-list after a single `Closes`.
 - If the PR only *partly* addresses an issue, use a non-closing reference instead — `Refs #N` / `Part of #N` — so it links without implying the issue is done.
-- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges. **Name the PR number, never a bare commit SHA.** "Fixed on `dev` by `de9ae81ac`" reads fine to a human and is invisible to the machinery: `scripts/reconcile-solved-labels.py` matches `#M`, so a SHA-only pointer used to report as unresolved — indistinguishable from an issue nobody had started. The script now surfaces SHA pointers as `NEEDS REVIEW` rather than swallowing them, but that is a backstop that costs a human a lookup; write `#M` and it costs nothing. A SHA is a fine *addition* ("Addressed in #3051 (`de9ae81ac`)"), never the only pointer.
+- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges. **Name the PR number, never a bare commit SHA.** `scripts/reconcile-solved-labels.py` matches `#M`; a SHA-only pointer lands in its `NEEDS REVIEW` bucket and costs a human a lookup. A SHA is a fine *addition* ("Addressed in #3051 (`de9ae81ac`)"), never the only pointer.
 - **Add the `solved` label** to every issue the PR fully resolves, in the same motion. It means "no problem-solving left here" and is what keeps the issue out of the human work queue from the moment the fix exists — see the `solved` section below.
 
 **The PR keyword is the load-bearing signal, and the issue comment must agree with it.** The `dev`→`main` sweep (step 6 of `docs/RELEASE.md`) decides what to close by reading **PR bodies**, not issue comments — so the keyword you pick is what determines whether the issue ever gets closed. `Refs #N` on a PR that actually finishes the issue is not a harmless understatement: the sweep reads it as "still partial", skips the issue, and *nothing revisits it in a later release*. The issue stays open forever while its fix is live in `main`.
@@ -184,13 +170,13 @@ If you catch yourself writing "Addressed in #M" on the issue while the PR body s
 
 **Search the tracker before opening an issue.** Use `search_issues` on the symptom — a failing test's name, an error string, the file path — not on your own phrasing of the diagnosis. Two sessions hitting the same bug a day apart will describe it differently (one calls it flaky, the other calls it systematically wrong) while naming the identical test, so the symptom is what actually matches and the diagnosis is what actually diverges.
 
-**A duplicate that is never linked is worse than a noisy tracker**, because the `dev`→`main` sweep resolves issues through PR bodies and issue comments. When the fix PR names only one of the pair, the other has *nothing* pointing at it: no closing keyword, no `Refs`, no comment. All three of `docs/RELEASE.md` step 6's buckets are blind to it by construction, and no later release re-examines an already-merged PR. It stays open forever while its fix is live in `main`. That is exactly how #2911 sat open for six days after shipping, and the only reason it was caught is that someone asked about it directly.
+**A duplicate that is never linked is worse than a noisy tracker**, because the `dev`→`main` sweep resolves issues through PR bodies and issue comments. When the fix PR names only one of the pair, the other has *nothing* pointing at it, so all three of `docs/RELEASE.md` step 6's buckets are blind to it and it stays open forever while its fix is live in `main` (#2911).
 
 So when you find that two issues are the same bug:
 
 - **Fixing both at once** — put a closing keyword for **each** in the PR body (`Closes #12, closes #15`), and comment `Addressed in #M` on both. One PR legitimately closes N issues; the sweep handles that fine.
 - **Discovering the duplicate before any fix** — close the *newer* one with `state_reason: "duplicate"` and `duplicate_of: <older number>`, and keep the older one as the survivor. GitHub renders the link natively, and it is the survivor that the fix PR then references. Do not close the older one as duplicate of the newer just because the newer has a better write-up; fold the better write-up into the survivor's body instead.
-- **Discovering it after the fix already shipped** — comment `Addressed in #M` on the orphan naming the fix PR, and close it `completed` (stripping `dev` if present, per the label rules below). This is the one case where a per-fix session closes an issue itself rather than leaving it to the sweep: the sweep's window is `origin/main..origin/dev`, and a fix already on `main` has fallen out the far end of it, so nothing will ever pick the issue up again.
+- **Discovering it after the fix already shipped** — comment `Addressed in #M` on the orphan naming the fix PR, and close it `completed` (stripping `solved` if present, per the label rules below). This is the one case where a per-fix session closes an issue itself rather than leaving it to the sweep: the sweep's window is `origin/main..origin/dev`, and a fix already on `main` has fallen out the far end of it, so nothing will ever pick the issue up again.
 
 The general shape: an issue is only ever resolved by something that *names its number*. If you know a number is resolved and nothing on GitHub says so, write the pointer yourself.
 
@@ -215,13 +201,11 @@ The pointer carries the issue number (the durable link) and a short human-readab
 
 **Dismissing an issue as unwarranted:** close it as `not_planned` with a one-line comment explaining why. If any plan file points at it (grep `docs/plans/` for `#<number>`), prune that pointer line in the same motion. Because plans carry only pointers — not bodies — this is always a trivial one-line deletion, whether the issue was dismissed or merged. (The Dev2Main Routine reconciles this automatically when it sweeps issues; a manual close should do the same pointer-prune by hand.)
 
-This is why closing an issue by hand didn't previously "trickle back": the item was **duplicated as a body** in the plan instead of **referenced as a pointer.** Store it once, point at it from anywhere else, and dismissal is just deleting the pointer.
-
 ## Label every issue you file (CRITICAL)
 
 **Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time — `labels: ["claude", …]` through the MCP tool, or `--label claude,experiment` through the `gh` CLI — not as a follow-up edit. If a label is missing from the repo, applying it creates it automatically — do not skip a label because it doesn't exist yet.
 
-**Both spellings matter, because both get used.** The rule reads as if there were one way to file an issue; in practice sessions here file through `gh issue create` far more often than through the MCP tool. A `PreToolUse` hook enforces the rule on both paths (`.claude/hooks/require-issue-labels.py`) — it watched only the MCP tool for its first weeks, during which 29 unlabeled issues went through the `gh` path it could not see.
+**Both spellings matter, because both get used** — sessions here file through `gh issue create` far more often than through the MCP tool. A `PreToolUse` hook (`.claude/hooks/require-issue-labels.py`) enforces the rule on both paths.
 
 A third label, **`solved`**, is a *status* rather than something you choose when filing — it goes on when a fix PR exists. Read its section below before closing any issue.
 
@@ -252,19 +236,12 @@ The point is scheduling: `label:experiment` is the queue of work that needs mach
 <!-- experiment: the file being ported lives on the GRID, so a container can only invent its SBATCH headers -->
 ```
 
-The marker is a sentinel with a fixed form — `<!--`, the word `experiment`, a colon, your reason — and it renders as nothing. It is the affirmative twin of the `<!-- not-an-experiment: <reason> -->` opt-out that the same hook already reads, and it guards the half of the label's life that nothing else does.
+The marker has a fixed form — `<!--`, the word `experiment`, a colon, your reason — and renders as nothing (it is the twin of the hook's `<!-- not-an-experiment: <reason> -->` opt-out). Two mechanisms guard the label (#3694 is the incident):
 
-Two mechanisms read it, at the two ends of the label's life:
+- **`.claude/hooks/require-issue-labels.py` prevents the drop.** Besides blocking an experiment-looking `create` with no label, it blocks an `issue_write` **update** whose `labels` array drops `experiment` off an issue that carries it — `labels` replaces the whole set, so every label-touching write can lose it. It asks GitHub, so it is awake only where `gh` works (the laptop) and allows whenever it cannot tell. To remove the label *deliberately*: `gh issue edit <n> --remove-label experiment`.
+- **`scripts/reconcile-solved-labels.py` catches what got through**, reporting an `ADD experiment` bucket for any open issue whose body carries the marker without the label.
 
-- **`.claude/hooks/require-issue-labels.py` prevents the drop.** It already blocked a `create` that looks like an experiment while carrying no label; it now also blocks an `issue_write` **update** whose `labels` array drops `experiment` off an issue that carries it. That second guard exists because `labels` replaces the whole set, so every label-touching write — applying `solved`, adding a label, restating a set from memory — is a chance to lose a label nobody listed. It asks GitHub whether the label is really there, so like the `solved` close guard it is awake only where `gh` works (the laptop, not a web container) and allows whenever it cannot tell. To remove the label *deliberately*, say so: `gh issue edit <n> --remove-label experiment`.
-- **`scripts/reconcile-solved-labels.py` catches what got through.** It reads the marker and reports an `ADD experiment` bucket for any open issue carrying one without the label — a drop from a session where the hook was asleep, or a label never applied at all.
-
-#3694 is why both exist: its body explained at length why the work needed the GRID, its label was gone, and so it sat in the pick-up-now queue until a container picked it up and could not do the work.
-
-Two things follow from the marker being only a *hint*:
-
-- **It is never required.** A human filing a research idea applies `experiment` and writes no comment, so the script only ever *adds* from a marker; a missing marker is evidence of nothing and never removes the label.
-- **Its text is never parsed.** Write whatever explains the gate — #3694's marker opens "NOT because anything is measured" and is a marker regardless. Presence is the whole signal.
+The marker is only a *hint*: it is **never required** (a missing marker never removes the label; the script only adds), and **its text is never parsed** — presence is the whole signal.
 
 ### `solved` — the development is done; only merges remain
 
@@ -277,7 +254,7 @@ is:issue is:open -label:solved    # what a human should work on next
 is:issue is:open label:solved     # solved; waiting only on merges
 ```
 
-**Solved-in-an-open-PR counts as done.** The label deliberately does *not* wait for the merge. "Fixed in a branch, PR open" and "merged into `dev`" are different facts about git but the same fact about people: neither has any thinking left in it, so neither should be offered to someone asking what to work on. Waiting for the merge would also make the label untriggerable in practice — no session is around to observe a merge happening, which is exactly why the label used to go unapplied for weeks at a time.
+**Solved-in-an-open-PR counts as done.** The label deliberately does *not* wait for the merge. "Fixed in a branch, PR open" and "merged into `dev`" are different facts about git but the same fact about people: neither has any thinking left in it, so neither should be offered to someone asking what to work on. Waiting for the merge would also make the label untriggerable in practice — no session is around to observe a merge.
 
 **The label is transient, not a historical fact.** It goes on when the fix PR is opened and comes off whenever that stops being true — in the write that closes the issue (`docs/RELEASE.md` step 6), or if the fix falls through. A closed issue must never carry it: the label would assert something false, and a reopened issue would wrongly read as solved.
 
@@ -285,11 +262,9 @@ Three rules bind you directly:
 
 - **Apply it when you open the fix PR**, in the same motion as the `Addressed in #M` comment (see "Linking a fix PR to its GitHub issue" above). Pass `labels` explicitly with the issue's existing labels plus `solved` — `labels` *replaces* the whole set, so read the issue first if you don't already know them. **Clear the assignee in the same write** — see "Assign the owner while you are working an issue" below.
 - **Take it back off if the fix falls through.** If your PR is closed without merging, or review concludes the fix is wrong and the issue needs solving again, strip `solved` — the issue belongs back in the human queue. This is the one removal a fix session does itself.
-- **Closing an issue strips `solved`.** Pass `labels` explicitly on a `completed` close, listing every label the issue keeps (`claude`, `experiment`, …) and omitting `solved`; passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array. Through `gh issue close` — which has no `--label` flag to restate a set with, and is how closes here actually happen — the same hook asks GitHub for the issue's current labels and blocks only when `solved` is really there, naming the fix: `gh issue edit <n> --remove-label solved && <your close command>`. That lookup is the hook's one piece of I/O, so it fires on closes alone and allows whenever it cannot get an answer (no `gh`, unauthenticated, offline, slow) — meaning it catches the common mistake but is not a guarantee, and `scripts/reconcile-solved-labels.py` stays the backstop.
+- **Closing an issue strips `solved`.** Pass `labels` explicitly on a `completed` close, listing every label the issue keeps (`claude`, `experiment`, …) and omitting `solved`; passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array. Through `gh issue close` (no `--label` flag), the same hook looks up the issue's labels and blocks only when `solved` is really there, naming the fix: `gh issue edit <n> --remove-label solved && <your close command>`. The lookup allows whenever it cannot get an answer (no `gh`, unauthenticated, offline), so it is a catch, not a guarantee.
 
-`scripts/reconcile-solved-labels.py` is the backstop for all three, for the assignee, and for the `experiment` marker above — it catches issues a session forgot to label, issues whose fix PR was abandoned, stale labels left behind by a close, solved or closed issues still showing an assignee, and open issues whose body asks for `experiment` without carrying it. It encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer. It is a pure function from data to plan — it does no network I/O of its own, so gather the PR and issue data with the `gh` CLI (`gh api`, `gh pr list`, `gh issue list`) and pipe it in. `gh` carries its own authenticated token and works normally; only a raw `GITHUB_TOKEN` 403s. **That is true on the laptop, and false in a Claude Code on the web container**, where `gh` is not installed at all and, once installed, authenticates with the ambient `GH_TOKEN` — which 403s on REST *and* GraphQL (`GitHub access is not enabled for this session`). So run this recipe from the laptop; from a web session, reach for the `github` MCP tools instead. See `docs/RELEASE.md` for the recipe.
-
-**A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute (hiding an issue that still needs solving), and skipping would leave solved work in the human queue. Ambiguity gets surfaced, not resolved by a coin flip.
+`scripts/reconcile-solved-labels.py` is the backstop for all three rules, for the assignee rule below, and for the `experiment` marker. It is a pure function of PR/issue JSON you gather and pipe in — with `gh` on the laptop; in a web container `gh` is absent and the ambient `GH_TOKEN` 403s, so use the `github` MCP tools there. A comment posted *after* a fix pointer is never guessed at: the script reports it as `NEEDS REVIEW`. The recipe and bucket semantics live in `docs/RELEASE.md` step 6b.
 
 ## Assign the owner while you are working an issue
 
@@ -315,7 +290,7 @@ Three rules bind you directly:
 
 **Closing an issue clears the assignee too** — `docs/RELEASE.md` step 6 passes `assignees: []` alongside the label list, for the same reason it strips `solved`: a closed issue has nobody working it.
 
-`scripts/reconcile-solved-labels.py` backstops this, reporting a `CLEAR ASSIGNEE` bucket beside its label buckets. It reconciles in **one direction only** — it plans removals from solved and closed issues, and never invents an assignment, because "nobody is working on it" and "a session started five minutes ago" are the same JSON from its input. That asymmetry is why the *assign* half of the rule above has no safety net and has to be done by hand; the *unassign* half has the hook above in front of the reconciler.
+`scripts/reconcile-solved-labels.py` backstops only the *unassign* half (its `CLEAR ASSIGNEE` bucket); it never proposes an assignment, so the *assign* half has no safety net and has to be done by hand.
 
 ## Recommend a Claude model in every issue you file
 
@@ -414,18 +389,13 @@ your final message and stop; I review and merge pull requests myself.
 Choose the model per thread, sized to the work; do not leave every thread on Opus.
 ```
 
-**Then verify the watch half rather than assuming it.** Project instructions are
-instructions Claude keeps to, not an enforced setting — the docs say as much of thread
-limits, and nothing promises more for auto-fix, which the project turns on *around* the
-thread rather than inside it. So a thread can obey *PR Activity Subscription (do not
-ask)* to the letter, never calling `subscribe_pr_activity`, and still end up watching
-its own PR. Check once, after pasting: open a throwaway PR from a thread and confirm
-the thread's CI status bar at claude.ai/code shows **Auto-fix** cleared. A watch left
-on pushes commits and review replies to the PR under the owner's account, and wakes the
-otherwise-idle thread — spending plan quota — every time a review comment arrives.
-There is no CI here to fail (`./run-tests.sh` is the only gate; the repo has no GitHub
-Actions), but review comments alone are enough, and every open PR leaves a wakeable
-thread behind.
+**Then verify the watch half rather than assuming it.** Project instructions are not
+an enforced setting, and auto-fix is turned on *around* the thread, so a thread can
+never call `subscribe_pr_activity` and still end up watching its own PR. Check once,
+after pasting: open a throwaway PR from a thread and confirm the thread's CI status bar
+at claude.ai/code shows **Auto-fix** cleared. A watch left on pushes commits and review
+replies under the owner's account and wakes the idle thread — spending plan quota —
+on every review comment.
 
 If it does not stick, give up the *Auto-PR* convenience for threads rather than the
 rule: instruct them to push the branch and report the compare URL instead of opening
@@ -445,7 +415,7 @@ the enforced ceiling is 200 new threads per day across all projects.
 
 `vtsearch.__version__` is the UTC timestamp of `HEAD`'s commit (ISO 8601, Z-terminated), computed from git at import time in `vtsearch/__init__.py`. There is no tracked version constant to bump; every commit on `dev` automatically becomes the new version, and parallel branches cannot collide on a hand-edited version line. Do not add a `VERSION` file, do not write a hand-bumped string into `vtsearch/__init__.py`, and do not include version bumps in feature PRs. For Docker images (where `.git` is excluded from the build context), the host passes `--build-arg VTSEARCH_VERSION=$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)` and the Dockerfile bakes it into `vtsearch/_version.txt` (gitignored). If git is unavailable and the baked file is missing, the version falls back to `0.0.0-unknown`.
 
-**The frontend bundle carries the same stamp.** `frontend/scripts/build-stamp.mjs` runs from the `prebuild` / `pretest` hooks and writes `frontend/src/app/generated/build-stamp.ts` (gitignored, beside the generated API client) with the value computed above — from `VTSEARCH_VERSION` if set, else git. At startup `BuildSkewService` compares it against `GET /api/version` and, on a mismatch, raises a non-dismissing toast; the Settings footer also grows a `⚠ bundle v …` chip beside the server version. This exists because `static/` is a gitignored build artifact, so `git pull && python app.py` leaves a new server serving an old SPA with nothing anywhere saying so — the failure mode that cost issue #2898 three round-trips. Nothing here is hand-edited; if you change how the Python version is derived, change `build-stamp.mjs` to match.
+**The frontend bundle carries the same stamp.** `frontend/scripts/build-stamp.mjs` runs from the `prebuild` / `pretest` hooks and writes `frontend/src/app/generated/build-stamp.ts` (gitignored, beside the generated API client) with the value computed above — from `VTSEARCH_VERSION` if set, else git. At startup `BuildSkewService` compares it against `GET /api/version` and, on a mismatch, raises a non-dismissing toast; the Settings footer also grows a `⚠ bundle v …` chip beside the server version. This exists because `static/` is a gitignored build artifact, so `git pull && python app.py` can leave a new server serving an old SPA silently (#2898). Nothing here is hand-edited; if you change how the Python version is derived, change `build-stamp.mjs` to match.
 
 **`vtscore.__version__` is different.** The library uses independent semver, tracked as a hand-edited constant in `vtscore/__init__.py` (currently `0.1.0`). Bump it only when cutting an actual `vtscore` release, and add a matching entry to `vtscore/CHANGELOG.md`. Do *not* include `vtscore` version bumps in unrelated feature PRs. The two packages version independently because `vtsearch` is a continuously-deployed app (every commit = new version) while `vtscore` is meant for external consumers who expect stable, semver-tagged releases.
 
@@ -459,7 +429,7 @@ Persisted artifacts (settings files, detector JSON, dataset pickles, cached side
 
 ### Extension-facing surfaces: don't break casually
 
-A third-party developer may have written code against our plugin ABCs (`LabelsetExporter`, `DatasetImporter`, `MediaConverter`, and their siblings), the registry sentinels (`EXPORTER`, `IMPORTER`, …), the `vtscore.*` entry-point groups, or the public `vtscore` library API. Breaking those forces someone outside this repo to refactor working code, on our schedule. That is a real cost, and it is paid by someone who never agreed to it.
+A third-party developer may have written code against our plugin ABCs (`ResultsExporter` and its permanent alias `LabelsetExporter`, `DatasetImporter`, `MediaConverter`, and their siblings), the registry sentinels (`EXPORTER`, `IMPORTER`, …), the `vtscore.*` entry-point groups, or the public `vtscore` library API. Breaking those forces someone outside this repo to refactor working code, on our schedule. That is a real cost, and it is paid by someone who never agreed to it.
 
 This is not an absolute bar — a genuinely better contract can be worth it — but it must be a deliberate decision, not a side effect:
 
@@ -542,13 +512,13 @@ If a feature seems to require persisting a vector or a trained head, push back: 
 
 Most of the harness is safe by construction because it **delegates** — `MaxPatchStyle` calls `pool_box_from_media` / `bad_negative_vecs` / `media_score_rows` rather than re-deriving them, so it cannot drift. Prefer delegation over copying every time; it is the only fix that can't rot. Two kinds of code can't delegate, and those are the ones that bite:
 
-- **Ported** — app logic re-implemented in the harness because the original is unreachable (it lives in TypeScript) or unusable (wrapped in interactive, lock-guarded, single-detector caches). `vtscore/eval/autopilot_flow.py` is the whole of this category today.
+- **Ported** — app logic re-implemented in the harness because the original is unreachable (it lives in TypeScript) or unusable (wrapped in interactive, lock-guarded, single-detector caches). Today these live in `vtscore/eval/autopilot_flow.py`, `al_strategies.py` and `step_trainers.py`; `MIRRORS` in the gate script below is the authoritative list.
 - **Default resolution** — where the harness resolves "no explicit arm" to whatever the app currently defaults to (`style=None` → `max_patch` on a patch dataset; `blend_schedule=None` → `production_schedule_for(...)`). When the app's default changes, the harness keeps handing out the old one *under the name "default"*.
 
 **The gate:** `scripts/check-eval-app-sync.py` pins a digest of every mirrored app surface (Python and TypeScript) **and of the harness code that mirrors it**, and `./run-tests.sh` fails when either moves. A copy stays faithful only while neither half moves without the other, so the gate names which half did:
 
 - `app-changed` — the original moved. Reconcile the harness copy to it.
-- `harness-changed` — the copy moved while the original stood still. Re-read the two against each other. This direction is not hypothetical: it is how the Smart-indicator plumbing drifted in #2923, with the app standing still and the gate green throughout.
+- `harness-changed` — the copy moved while the original stood still. Re-read the two against each other. (How the Smart-indicator plumbing drifted in #2923.)
 
 After reconciling — or after confirming nothing is owed — re-pin:
 
@@ -575,7 +545,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters and snapshot checks run before pytest; pyright and pip-audit run alongside it). There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.

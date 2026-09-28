@@ -115,9 +115,10 @@ Pieces of the live feature left open, to pick up alongside the follow-ups above:
 
 <!-- item-sep -->
 
-- **Canvas selection actions** — selection is tracked (`BrowseSelectionService`)
-  but not acted on: export / seed detector / subset projection, plus a minimap
-  overlay.
+- **Canvas selection actions** — selection is tracked (`BrowseSelectionService`),
+  listed in the selection panel and overlaid on the minimap, but the only action
+  on it is Verified Good/Bad in detector-positives browse. Still owed: export /
+  seed detector / subset projection.
 
 <!-- item-sep -->
 

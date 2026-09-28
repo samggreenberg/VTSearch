@@ -29,9 +29,9 @@ declare an `importlib.metadata` entry point in the family's group. Both
 discovery paths converge on the same registry, and built-ins win on
 name clashes so a stray third-party package can't silently shadow a
 core plugin. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
-for the registry, [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
-for the entry-point loader, and the [plugins package
-doc](../packages/plugins.md) for the lower-level API surface.
+for the registry and its entry-point loader (`PluginRegistry`), and the
+[plugins package doc](../packages/plugins.md) for the lower-level API
+surface.
 
 ## The families
 
@@ -88,6 +88,13 @@ sync at the model layer.
 - [Results exporters](results-exporters.md) - send results/labels out
 - [Label importers](label-importers.md) - one-shot label pull
 - [Labelset sources](labelset-sources.md) - bidirectional label sync
+- [Media sources](media-sources.md) - resolve an origin back to a file
+
+Datasource importers, seed importers and media cleaners have no guide
+here yet; their contracts are documented with their packages -
+[datasource-importers](../packages/datasource-importers.md),
+[seed-importers](../packages/seed-importers.md), and the cleaner section
+of [media](../packages/media.md).
 
 ## Shared rules for every plugin
 
@@ -264,8 +271,12 @@ my_source = "my_pkg.sources.thing:LABELSET_SOURCE"
 After `pip install` of your distribution, the plugin appears in
 `list_importers()` (or the corresponding `list_*` function),
 `gather_plugins()`, and `python app.py --list-plugins` without any
-core-repo changes. A failed entry-point load warns and is skipped;
-built-in plugins take precedence on name clashes.
+core-repo changes. Built-in plugins take precedence on name clashes (the
+clashing entry point is skipped with a warning). An entry point whose own
+import raises is logged as a warning and kept as a *tombstone*: it is
+omitted from `list_*()`, while `get_*()` still returns it and re-raises the
+original error on first use - so one broken plugin cannot break discovery
+of the rest.
 
 ## Testing your plugin
 

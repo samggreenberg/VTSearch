@@ -35,7 +35,7 @@ grid and the arm table.
 
 The standalone arms cannot run the fused threshold — their fold models are not
 the app's head, so there is nothing for the fold-anchored mixture to anchor on
-(see `_safe_threshold_for_step`) — which is why `app_xcal` exists: it is the
+(see `vtscore.eval.voting_iterations._safe_threshold_for_step`) — which is why `app_xcal` exists: it is the
 same head under a rule the GP arms can share. Three threshold rules are run on
 the RBF GP because the pilot found the raw cut collapsing on it (the
 probability scale moves between the fold models and the final model) and the
@@ -59,6 +59,7 @@ python summarize.py                    # tables, figures, viewer into the study 
 | `GPHEAD_EXP` | `~/gp-head` | experiment root (pickle cache, models, results) |
 | `GPHEAD_RESULTS` | `$GPHEAD_EXP/results` | where the cell CSVs land |
 | `GPHEAD_DATASETS` | `caltech101_m` | datasets |
+| `GPHEAD_EMBEDDER` | `siglip` | embedder |
 | `GPHEAD_N_CATEGORIES` / `GPHEAD_N_SEEDS` / `GPHEAD_MAX_STEPS` | `6` / `5` / `150` | grid size |
 | `GPHEAD_ARMS` | every arm | subset of Stage B arms |
 | `GPHEAD_STAGE_A_TRAINERS` / `GPHEAD_LABEL_COUNTS` | see config | Stage A grid |
@@ -73,7 +74,7 @@ calibration folds) through `CALIB_STANDALONE_CUT=anchored`.
 
 | Script | Job |
 |---|---|
-| `launch_grid_3959.sh` | `prepare` / `baseline` / `size` / `<env> <arm\|all>` / `status`, two envs x eight arms |
+| `launch_grid_3959.sh` | `prepare` / `baseline` / `list` / `size` / `<env> <arm\|all>` / `status`, two envs (`better`, `natural`) x eight arms |
 | `analyze_grid_3959.py` | paired contrasts on the cell: cost = oracle cost (ranking) + regret (cut) |
 | `figures_3959.py` | the quality-over-clicks pair per dataset, the paired forest, the by-click gaps |
 | `viewer_3959.py` | the interactive viewers (`coco_better` one page per embedder, bands folded into the run) |

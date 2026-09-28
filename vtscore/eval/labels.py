@@ -22,7 +22,6 @@ breaks that: an image holding a *large* bus is not a positive for ``bus@small``,
 but calling it a negative penalises a detector for finding a real bus.  Such a
 media is *excluded* from that cell — neither positive nor negative — which
 :func:`media_is_evaluable` reports and every pool-building caller must honour.
-See ``docs/plans/vg-scale-bands-and-corrections.md``.
 """
 
 from __future__ import annotations

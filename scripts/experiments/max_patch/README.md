@@ -19,7 +19,7 @@ simulation via `simulate_voting_iterations(style=...)`.
 - **max_patch** — the production pipeline (adopted in #2886): Good region-votes
   train on the *single raw patch* nearest the voted box, Bad votes flood the
   image-level vector + *every* raw patch (bag-weighted so a rejected image still
-  counts once), images score by max-pooling the MLP over that same stack.
+  counts once), images score by max-pooling the trained head over that same stack.
 - **max_patch_hac** / **max_patch_pca_hac** — raw-patch-leaf HAC trees: snap a
   Good vote to the best-matching node, flood / max-pool every node. The PCA
   variant only changes the merge *ordering*.
@@ -50,8 +50,11 @@ max over tree nodes) and the Autopilot seed phase votes down that ranking.
 ```bash
 export HF_TOKEN=hf_...   # required for the gated DINOv3 weights
 
-# One-shot dependency chain:
-bash queue_all.sh 240    # 240 = safe upper bound on array cells
+# One-shot dependency chain. Pass the array size: queue_all.sh's default of 240
+# predates the scale-band grid below and is too small for it (cells past the
+# array's end never run). Size it from `run_cells.py --print-cells` once
+# prepare_info.json exists, or over-provision (surplus indices exit as no-ops):
+bash queue_all.sh <N_CELLS>
 
 # Or by hand, sized exactly:
 sbatch ... --wrap "source ../../../gridenv.sh && cd $PWD && python prepare_data.py"

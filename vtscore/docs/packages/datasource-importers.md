@@ -32,8 +32,8 @@ class DataSourceImporter(PluginBase):
     icon: str = "\U0001f4e5"            # inbox tray
     category: str = "services"          # picker tab: services | server | local | demo
 
-    def fetch(self, field_values: dict[str, Any]) -> FetchedMediaItem: ...
-    def get_field_options(self, field_key, current_values) -> list[FieldOption]: ...
+    def fetch(self, field_values: dict[str, Any]) -> FetchedMediaItem: ...   # must override
+    def get_field_options(self, field_key, current_values) -> list[FieldOption]: ...  # for dynamic_options fields
 ```
 
 `field_values` arrives **already validated and normalised** - text
@@ -112,10 +112,8 @@ importer = get_datasource_importer("url_download")
 item = importer.fetch({"url": "https://example.org/cat.jpg"})
 ```
 
-The web app renders each importer's `fields` as a dynamic form - the
-same machinery the Add Dataset modal uses - and calls
-`POST /api/datasource-import/<name>`, which saves the fetched bytes into
-the server-side example-media directory.
+In the app, each importer's `fields` render as a dynamic form in the
+example-media picker.
 
 ---
 
@@ -123,5 +121,5 @@ the server-side example-media directory.
 
 | Name | Category | Notes |
 |------|----------|-------|
-| `server_file` | `server` | A `server_path` field. Re-validates through `validate_server_filepath` against the per-user base dir, then records the **validated** path as the origin's `path` param |
-| `url_download` | `services` | A `url` field. The URL passes `vtscore.security.validate_url` (SSRF guard) at normalisation time and is re-checked on every redirect hop at fetch time |
+| `server_file` | `server` | One `path` field (type `server_path`). Re-validates through `validate_server_filepath` against the per-user base dir, then records the **validated** path as the origin's `path` param |
+| `url_download` | `services` | One `url` field. Filename is taken from the URL path (fallback `download.bin`); origin is `{"url": ...}`, resolved later by the `url_download` `MediaSource`. The URL passes `vtscore.security.validate_url` (SSRF guard) at normalisation time and is re-checked on every redirect hop at fetch time |

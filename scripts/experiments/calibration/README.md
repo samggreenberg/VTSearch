@@ -198,8 +198,14 @@ alongside them harmlessly), and writes all study output under
 ## Fixed config (pre-registered)
 
 `inclusion=0` (cost = FPR + FNR), `sim_fraction=0.5`, `calibrate_count=2`,
-`calibration_fraction=0.5`, MLP trainer, 150 votes, 4 seeds. Env knobs mirror
-the `MAXPATCH_*` set under the `CALIB_*` prefix.
+150 votes, 4 seeds. Env knobs mirror the `MAXPATCH_*` set under the `CALIB_*`
+prefix.
+
+#2781 also pre-registered `calibration_fraction=0.5` and the auto-sized MLP
+head. Both now follow the app instead: the head is the shipped linear SVM
+(`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
+fraction resolves per space through `production_split_for` (0.3 single-vector,
+0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it.
 
 `safe_thresholds` was pre-registered `False` here and is **`True` now** (#3400):
 #2781 pre-registered the unfused control while it was still a shipped path, and
@@ -455,11 +461,15 @@ So the opening collapses to a list of rounds, each naming *how many clicks* and
 
 ```bash
 GM_STAGE=live bash launch_good_mining.sh    # coco_val + visual_genome_m
-GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large
+GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large: cached pickles only (see below)
 bash analyse_good_mining.sh                 # once every arm drains: everything
 python selftest_analyze_startup.py          # planted-answer check on the analyzer
 python selftest_curves.py                   # ...and on the quality-over-clicks pair
 ```
+
+The `bands` stage runs only where its prepared pickles are still cached: the
+`vg_box_*` datasets were unregistered when the Visual Genome machinery was
+retired (#4038), so `prepare_data.py` can no longer build them fresh.
 
 `analyse_good_mining.sh` is the whole analysis in one command, because the pieces
 have to agree. To re-run only the analyzer, give it the zero-click anchor
