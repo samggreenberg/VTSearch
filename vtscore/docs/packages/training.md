@@ -251,6 +251,7 @@ are summarised in
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
+| `precision_floor_cut`                     | Not yet shipped: the largest set whose estimated precision clears a floor (#4224) |
 
 ### `text_sort_threshold(scores, rule=None)`
 
@@ -434,6 +435,31 @@ or replace the weighted average with a clamp.
 
 When `xcal_threshold` is `float("inf")` (no valid fold split), falls
 back entirely to the GMM threshold.
+
+### `precision_floor_cut(floor, corpus_scores, pool_scores, fold_orderings, fold_haystacks, ...)`
+
+`vtscore/training/thresholds/precision_floor.py`. **Not wired to a detector
+yet**: the cut the precision-floor control (#4224) will read, ported from the
+estimator #4220 measured
+([`docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md)).
+It returns the largest top-*k* of the corpus whose **lower-bound** estimated
+precision is at least `floor`:
+
+- each calibration fold's held-out vote scores are ranked in that fold's own
+  haystack (`fold_rank_evidence`), so every fold shares one coordinate;
+- `P(positive | percentile)` is fitted on them (`fit_posterior`, logistic by
+  default) and applied to the corpus through the pool's percentiles;
+- the precision curve is read at the 10th percentile of 30 bootstrap refits
+  (`precision_lower_bound_curve`), after an EM re-estimate of the corpus prior
+  (`em_prior_shift`) for when the corpus is not the voted pool.
+
+The result is a `PrecisionFloorCut` in one of three `PrecisionFloorStatus`
+states: `promised` (with the threshold, the count and the estimate),
+`unreachable` (enough evidence, but no cut clears the floor; the best bound is
+reported), or `insufficient_evidence` (fewer than `MIN_CALIBRATION_POSITIVES`,
+10, positives among the calibration votes). The transfer `coordinate`
+(`"percentile"` or `"tail"`), the bound level and the refit count are
+parameters because #4221 is still pricing them.
 
 ---
 

@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.training.thresholds.precision_floor`** (preparation for #4224).
+  `precision_floor_cut` returns the largest top-*k* of a corpus whose
+  lower-bound estimated precision clears a floor, in one of three
+  `PrecisionFloorStatus` states (`promised`, `unreachable`,
+  `insufficient_evidence`), as a `PrecisionFloorCut`.
+  `precision_lower_bound_curve` exposes the whole curve; `fold_rank_evidence`,
+  `fit_posterior`, `em_prior_shift` and `percentile_in` are its pieces. This is
+  the estimator #4220 measured (fold-rank, logistic, 10th-percentile bootstrap
+  bound, EM prior re-estimate, gated on `MIN_CALIBRATION_POSITIVES = 10`) and it
+  reproduces that study's cuts exactly; the coordinate, bound level and refit
+  count are parameters for #4221. Not yet read by any detector.
+
 - **`FoldAnchoredCut.inclusion_for_threshold`, `INCLUSION_SEARCH_SPAN`, and
   `vtscore.state.core.recut_detector_threshold`** (preparation for #4224). The
   inverse of `threshold_at` recovers the inclusion a cut sits at when the cut was
