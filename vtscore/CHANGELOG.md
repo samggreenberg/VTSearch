@@ -32,6 +32,16 @@ instead, since every commit on `dev` is effectively a new app release.)
   `StartupState.on_click` / `AutopilotFlow.update` take the vote's outcome
   (`good` / keyword `last_vote_good`), which a dry round requires.
 
+- **`FoldAnchoredCut.fold_orderings`** (issue #4242). Each kept fold's
+  held-out `(scores, labels)`, index-aligned with `fits` and `fold_haystacks`,
+  with unscored items dropped. `fit_fold_anchored_cut` drops a fold that fails
+  both fits, so the calibration cache's orderings don't line up with a cut's
+  haystacks; these do. That is the evidence
+  `precision_lower_bound_curve` / `precision_floor_cut` need from a live
+  detector: `precision_lower_bound_curve(corpus, cut.final_haystack,
+  cut.fold_orderings, cut.fold_haystacks)`. Additive, defaulting to `()` for a
+  cut built by hand.
+
 - **`vtscore.utils.synthetic.describe_image_dataset()` and
   `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
   seed)` draws, without drawing it: one dict per picture with its `filename`,

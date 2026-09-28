@@ -18,7 +18,7 @@
 
 import type { Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
+import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -184,6 +184,40 @@ async function openFind(page: Page, h: Helpers): Promise<void> {
   // photographing a progress bar.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 }).catch(() => {});
   await h.wait(2500);
+}
+
+/**
+ * Check a fixed handful of Find's pictures by hand, each with its true label -
+ * five yellow smileys and three of the near-misses that rank beside them - so
+ * Detector Stats has a "Checked by you" line to draw. Votes go through the API
+ * with absolute targets, so a second run (the dark capture after the light one)
+ * changes nothing, and a Find-mode vote never reaches the detector's own
+ * labels, so the re-run Find scores exactly as the first did.
+ */
+async function checkSomeInFind(page: Page): Promise<void> {
+  const { pictures } = corpus(TEST_DATASET);
+  const names = new Set<string>([
+    ...framesOf(pictures, 'yellow-smiley', 5),
+    ...framesOf(pictures, 'yellow-face', 2),
+    ...framesOf(pictures, 'orange-smiley', 1),
+  ]);
+  const isGood = new Map<string, boolean>(
+    pictures.map((p: { filename: string; yellow_smileys: unknown[] }) => [p.filename, p.yellow_smileys.length > 0]),
+  );
+  const origin = new URL(page.url()).origin;
+  const getJson = async (path: string, headers: Record<string, string> = {}) =>
+    (await page.request.get(origin + path, { headers })).json();
+  const ds = (await getJson('/api/datasets/registry')).datasets.find((d: { name: string }) => d.name === TEST_DATASET);
+  const det = (await getJson('/api/detectors/registry')).detectors.find((d: { name: string }) => d.name === DETECTOR);
+  const headers = { 'X-Dataset-Id': String(ds.id), 'X-Detector-Id': String(det.id) };
+  const ids = (await getJson('/api/medias/ids', headers)).map((m: { id: number }) => m.id);
+  const metas = await (await page.request.post(origin + '/api/medias/batch', { headers, data: { ids } })).json();
+  for (const m of metas as { id: number; filename: string }[]) {
+    if (!names.has(m.filename)) continue;
+    const target = isGood.get(m.filename) ? 'good' : 'bad';
+    const r = await page.request.post(`${origin}/api/medias/${m.id}/vote`, { headers, data: { target } });
+    if (!r.ok()) throw new Error(`vote ${m.filename} -> ${r.status()} ${await r.text()}`);
+  }
 }
 
 /** The label view with autopilot serving: an item, and the tool asking about it. */
@@ -757,14 +791,19 @@ export const SHOTS: Shot[] = [
     id: 'find-stats',
     embeddedIn: `${GUIDE}#find-scoring-and-verifying`,
     caption:
-      "The Find view's Detector Stats modal: detector-vs-verified counts, how much of this dataset looks unlike the one the detector was trained on, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes",
+      "The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of estimated and checked precision against how many items are returned",
     themes: BOTH,
     clip: { target: '.modal-content' },
     async recipe(page, h) {
       await openFind(page, h);
+      await checkSomeInFind(page);
       // Stats lives in the right-panel action row of the find view.
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.stats-table', { timeout: 20000 });
+      // The chart is the section this shot is for; it sits below the fold.
+      await page.locator('.chart-wrap').scrollIntoViewIfNeeded();
+      // Park the pointer off the chart, so the readout shows the current cut.
+      await page.mouse.move(5, 5);
       await h.wait(1200);
     },
   },

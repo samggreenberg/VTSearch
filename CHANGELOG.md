@@ -151,6 +151,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Find Stats charts precision against how many items are returned** (issue
+  #4242). The chart that plotted wrong and missed matches at each Inclusion
+  stop now reads down the ranked list: for the top N items, on a log-scale
+  count axis, it draws the precision VTSearch estimates (a cautious lower
+  bound from the detector's own held-out votes, shown once they include 10
+  Good ones) and the precision of the items you have checked. A dashed line
+  marks the current cut, the line under the chart reads both numbers there,
+  and hovering reads them at any count. **Kept rate** now counts only the
+  matches you checked, with the count beside it ("7 of 10 checked"); it used
+  to count every unchecked match as right, so it read close to 100% however
+  the checks went.
+
 - **The Smart indicator measures every detector at Inclusion 0** (issue
   #4243). Smart asks whether the detector is still getting better, by
   re-scoring the recent detectors against your current votes. It used to

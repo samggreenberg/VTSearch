@@ -102,7 +102,9 @@ will do with the results. If you will read every match, lean toward
 precision; if missing one is the costly mistake, lean toward recall.
 
 In the Find view's **Stats**, *Kept rate* is the precision of the
-detector's matches among the items you have checked.
+detector's matches among the items you have checked. Matches you haven't
+checked don't count, so it measures the detector rather than assuming it
+was right.
 
 ---
 
@@ -820,9 +822,22 @@ The verification view's action buttons let you act on the result:
   already verified keeps the call *you* made, so re-scoring never undoes
   your work.
 - **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-stats.dark.webp" /><img src="assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture> - open the results modal: a breakdown of the detector's
-  calls plus a chart of how wrong matches and missed matches change as
-  you adjust inclusion - the clearest way to see the trade-off the
-  inclusion stepper controls.
+  calls plus a chart of precision against how many items are returned,
+  reading down the ranked list - the clearest way to see how much you
+  give up in precision for each extra match. It draws two lines:
+  - **Estimated (at least)** - the precision VTSearch estimates for the
+    top N items: a cautious lower bound worked out from the detector's
+    own held-out votes. It appears once those votes include at least 10
+    Good ones; below that, the chart says how many it has.
+  - **Checked by you** - of the items in the top N that you have
+    verified, the share you kept Good. It counts only what you checked,
+    and the items you check tend to sit near the line, where the detector
+    is least sure, so it can read lower than the matches as a whole.
+
+  The dashed line marks the current cut, and the line under the chart
+  reads both numbers there; hover the chart to read them at any count.
+  The count axis is logarithmic, so the top of the ranking, where
+  precision changes fastest, gets as much room as the long tail.
 - **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
   or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
@@ -830,7 +845,7 @@ The verification view's action buttons let you act on the result:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal: detector-vs-verified counts, how much of this dataset looks unlike the one the detector was trained on, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes" width="720" />
+  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of estimated and checked precision against how many items are returned" width="720" />
 </picture>
 
 ### How far to trust the score

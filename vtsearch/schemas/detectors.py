@@ -932,6 +932,23 @@ class FindStatsSweepPointSchema(Schema):
     false_neg = fields.Integer(required=True)
 
 
+class FindStatsPrecisionPointSchema(Schema):
+    """One point on the Stats precision-vs-returned curve: the top ``n_returned`` by score."""
+
+    n_returned = fields.Integer(required=True)
+    # Score of the n-th item: the cut that returns this many.
+    threshold = fields.Float(required=True)
+    # Items in the top n the user checked by hand, and how many of those they kept Good.
+    checked = fields.Integer(required=True)
+    checked_good = fields.Integer(required=True)
+    # checked_good / checked; null when nothing in the top n was checked.
+    verified_precision = fields.Float(required=True, allow_none=True)
+    # Lower-bound estimate from the detector's calibration folds; null unless
+    # ``estimate_status`` is ``"estimated"`` (and for a count too small to read
+    # off a sampled corpus).
+    estimated_precision = fields.Float(required=True, allow_none=True)
+
+
 class FindStatsResponseSchema(Schema):
     """Response for ``GET /api/find/stats`` (detector evaluation over the
     adopted Find label set)."""
@@ -951,16 +968,37 @@ class FindStatsResponseSchema(Schema):
     agreements = fields.Integer(required=True)
     corrections = fields.Integer(required=True)
     agreement_rate = fields.Float(required=True)
-    precision = fields.Float(required=True)
+    # The "Kept rate": of the items the detector called Good that the user
+    # checked by hand, the share they kept Good.  Unchecked items are not
+    # counted as right.  Null when no such item was checked.
+    verified_precision = fields.Float(required=True, allow_none=True)
+    verified_called_good = fields.Integer(required=True)
+    verified_kept_good = fields.Integer(required=True)
     # Run context.
     inclusion = fields.Integer(required=True)
     threshold = fields.Float(required=True)
+    # How many items the Find run scored, and how many clear the current cut.
+    n_scored = fields.Integer(required=True)
+    n_returned = fields.Integer(required=True)
     # True when the detector's labelset changed (Find corrections folded in +
     # retrain) after this evaluation was scored, so these numbers reflect the
     # previous detector version.  Drives the "out of date" note in the UI.
     stale = fields.Boolean(required=True)
-    # FP/FN at every inclusion from -10..10 over all adopted items.
+    # FP/FN at every inclusion from -10..10 over all adopted items.  No longer
+    # charted; kept until the Inclusion stepper is gone (#4246).
     sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
+    # Precision against the number returned, at log-spaced counts plus the
+    # current cut's.
+    precision_curve = fields.List(fields.Nested(FindStatsPrecisionPointSchema), required=True)
+    # Whether the curve carries an estimate: ``"estimated"``;
+    # ``"insufficient_evidence"`` (fewer than ``min_calibration_positives``
+    # Good votes among the calibration folds' held-out votes, the precision
+    # floor's own gate); or ``"unavailable"`` (no calibration folds at all).
+    estimate_status = fields.String(
+        required=True, validate=validate.OneOf(["estimated", "insufficient_evidence", "unavailable"])
+    )
+    calibration_positives = fields.Integer(required=True)
+    min_calibration_positives = fields.Integer(required=True)
 
 
 class FindEvidenceCoverageResponseSchema(Schema):
