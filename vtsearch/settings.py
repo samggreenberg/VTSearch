@@ -118,6 +118,8 @@ if TYPE_CHECKING:
     def set_support_email(value: str) -> None: ...
     def get_semantic_only() -> bool: ...
     def set_semantic_only(value: bool) -> None: ...
+    def get_hide_ingest_eta() -> bool: ...
+    def set_hide_ingest_eta(value: bool) -> None: ...
     def get_browse_signpost_vocab() -> dict[str, list[str]]: ...
     def set_browse_signpost_vocab(value: dict[str, list[str]]) -> None: ...
     def get_projection_n_neighbors() -> int: ...
@@ -1189,6 +1191,43 @@ def get_effective_semantic_only() -> bool:
     rejected by the dataset-load and detector-create routes.
     """
     return get_effective_override("semantic_only")
+
+
+def set_cli_hide_ingest_eta(value: bool | None) -> None:
+    """Set the process-level override for the ``hide_ingest_eta`` setting.
+
+    Called once from ``app.py`` startup when ``--hide-ingest-eta`` is passed
+    (or ``VTSEARCH_HIDE_INGEST_ETA`` is set). The value applies server-wide
+    (every user) and is fixed for the process lifetime;
+    :func:`get_effective_hide_ingest_eta` returns it in preference to the
+    persisted server setting. Pass ``None`` to clear the override so reads
+    fall back to the persisted file value.
+    """
+    _admin.set_override("hide_ingest_eta", None if value is None else bool(value))
+
+
+def get_cli_hide_ingest_eta() -> bool | None:
+    """Return the process-level CLI / env override (``None`` if unset)."""
+    return _admin.get_override("hide_ingest_eta")
+
+
+def get_effective_hide_ingest_eta() -> bool:
+    """Return whether ingest progress bars withhold their ETA on this instance.
+
+    Resolution order:
+
+    1. The process-level override set by :func:`set_cli_hide_ingest_eta`
+       (``--hide-ingest-eta`` / ``VTSEARCH_HIDE_INGEST_ETA``), which applies
+       to every user for the lifetime of the process.
+    2. The persisted server-tier setting (``data/settings.json``), which
+       defaults to ``False``.
+
+    When true, dataset imports, staging imports and labelset missing-media
+    fetches publish ``eta_seconds=None``, so their bars show progress but no
+    remaining-time estimate. The value reaches the library tier as
+    :attr:`vtscore.config.CoreConfig.hide_ingest_eta`.
+    """
+    return get_effective_override("hide_ingest_eta")
 
 
 def set_cli_solo_embedder(media_type: str, embedder: str | None) -> None:

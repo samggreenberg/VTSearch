@@ -406,6 +406,10 @@
             <div class="server-value">{{ settings().semantic_only ? 'On' : 'Off' }}</div>
           </div>
           <div class="form-group">
+            <label class="form-label" title="When on, dataset imports and other ingest progress bars show their progress but no remaining-time estimate, for servers where those jobs are too erratic to predict. Other progress bars keep their estimate. Set with --hide-ingest-eta, VTSEARCH_HIDE_INGEST_ETA, or the hide_ingest_eta setting.">Hide ingest ETAs</label>
+            <div class="server-value">{{ settings().hide_ingest_eta ? 'On' : 'Off' }}</div>
+          </div>
+          <div class="form-group">
             <label class="form-label" title="When set, this server is streamlined to a single media type: the Add Dataset picker hides importers and tabs that can't produce it (and preselects it on the rest), the New Detector media picker and Import Defaults collapse to this type, and converters that output other types are filtered out. Set with --solo-media-type or the solo_media_type setting.">Solo media type</label>
             <div class="server-value" [class.server-value--empty]="!effectiveSoloMediaType">{{ soloMediaTypeDisplay }}</div>
           </div>

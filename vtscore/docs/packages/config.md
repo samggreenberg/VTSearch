@@ -86,7 +86,9 @@ Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
 keyed by exporter name), `projection_n_neighbors` (`int`,
 `PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
-and `signpost_vocab` (`dict[str, list[str]]`, `{}`).
+`signpost_vocab` (`dict[str, list[str]]`, `{}`), and `hide_ingest_eta`
+(`bool`, `False` - when `True`, ingest progress bars publish no ETA; see
+[concurrency.md](concurrency.md#progresstracker)).
 
 "Server" and "per-user" refer to where the app stores the corresponding
 setting - both tiers flow into the same `CoreConfig` so library code
