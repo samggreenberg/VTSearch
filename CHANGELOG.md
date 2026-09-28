@@ -34,6 +34,20 @@ not list every commit. Use `git log` for the full history.
   `GET|POST /api/min-precision`; see
   [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
 
+- **An unpromised line says so** (issue #4247). When a detector can't yet
+  promise its precision floor - too little evidence, or no cut on the
+  dataset reaches it - its line stays at the Inclusion 0 cut and is now
+  labelled: the threshold line in the Find and Label lists is dashed and
+  reads *unpromised*, the minimap marker is dashed too, and hovering says
+  why. Nothing stops working on it: the Unverified Good count, the Find
+  review walk, To Dataset, Export and Browse all act on the items above the
+  line as before. AutoRun and command-line runs export the same set and
+  record that it was unpromised, in the log and as a `floor` entry beside
+  each detector's `threshold`. Every response that carries a detector's
+  line (`/api/inclusion`, the learned sort, `/api/find-label`,
+  `/api/auto-detect`) now carries that `floor` too; see
+  [the floor state](docs/api/labeling.md#the-floor-state).
+
 - **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
   pages under `docs/user/howto/` each walk through one task click by click,
   in the style of the user guide's *Step by step*, on the same Synthetic

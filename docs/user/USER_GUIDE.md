@@ -107,6 +107,39 @@ detector's matches among the items you have checked. Matches you haven't
 checked don't count, so it measures the detector rather than assuming it
 was right.
 
+#### When the line is unpromised
+
+A detector draws its line at a **precision floor**: the line returns as
+many items as it can while at least that share of them is estimated right.
+Every detector starts at **50%**. The estimate is cautious, so it only
+makes that promise once it has enough evidence: about ten Good votes among
+the ones it holds back to check itself, counting only votes you made off
+the detector's own ranking (Autopilot's Hard picks, or working down a
+learned sort).
+
+When it can't promise the floor, the line doesn't disappear. It stays
+where it has always been - the cut at Inclusion 0 - and is labelled
+**unpromised**: the threshold line in the media list is dashed and reads
+*THRESHOLD UNPROMISED*, and its marker on the minimap beside the list is
+dashed too. Hover the line to see which of the two reasons applies:
+
+- **Not enough evidence yet** - the detector has fewer than ten held-back
+  Good votes to check itself on. This is the usual state for a new
+  detector. Keep voting on Autopilot's Hard picks, and the promise arrives
+  once the evidence does.
+- **No cut reaches the floor** - there is enough evidence, and no line on
+  this dataset gets to the floor: the detector can't yet tell enough of the
+  matches from the look-alikes.
+
+Everything that uses the matches keeps working on an unpromised line: the
+*Unverified Good* count, the Find review walk, **To Dataset**, **Export**
+and **Browse** all act on the items above it, exactly as they would above a
+promised one. The label only tells you the share of right answers among
+them is not guaranteed. An AutoRun or command-line run exports the same
+set, and records that it was unpromised: a line in the run's log, and a
+`floor` entry beside the threshold in exports that carry the full results
+(see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+
 ---
 
 ## Step by step: your first search
@@ -888,7 +921,9 @@ runs).
 
 - **Left pane** - the **work queue** of items the detector hasn't been
   confirmed on yet, ranked by score, with the same inclusion stepper
-  you use while labeling.
+  you use while labeling. The line through it is dashed and marked
+  *unpromised* while the detector can't yet promise its precision floor;
+  see [When the line is unpromised](#when-the-line-is-unpromised).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.
 - **Right pane** - the **Verified Good** and **Verified Bad** piles,
@@ -973,7 +1008,9 @@ controls, remembered per media type:
 - **Thumbnail size** - the two image icons shrink or grow the
   thumbnails. Larger thumbnails = fewer per screen but more readable.
   After training, the list ranks the thumbnails by the detector's score,
-  with a threshold line marking the good/bad cut:
+  with a threshold line marking the good/bad cut (dashed and marked
+  *unpromised* when the detector can't yet promise its precision floor; see
+  [When the line is unpromised](#when-the-line-is-unpromised)):
 
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.webp" />
