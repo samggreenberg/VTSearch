@@ -87,16 +87,6 @@ export function corpus(name) {
 }
 
 /**
- * What a corpus path looks like in a screenshot.
- *
- * The real path is `<checkout>/data/doc-fixtures/<name>`, which differs from
- * one machine to the next and reads as a harness artefact rather than as a
- * folder of pictures. The shots type the real path, so the importer's
- * media-type detection runs against real files, and then show it as this.
- */
-export const shownPath = (name) => `/data/${name}`;
-
-/**
  * The first *n* file names of *cat* among *pictures*, in a stable order.
  *
  * Sorted by file name, so a fixture built from it is the same fixture on every

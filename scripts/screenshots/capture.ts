@@ -53,17 +53,22 @@ function ramFreeMB(): number {
 
 /**
  * Injected before every capture: kill animations so frames are stable, and hide
- * the toast stack.
+ * the toast stack and the trophy's unseen-achievement dot.
  *
  * The toasts are an artefact of the harness rather than of the product: it
  * drives a dev checkout, where `static/` is a build artefact that goes stale the
  * moment anything is committed, so `BuildSkewService` puts a large
  * non-dismissing "this page is running an out-of-date build" banner across the
  * top of every frame. The slide shooter hides it for the same reason.
+ *
+ * The dot on the trophy says the machine's user has achievements they have not
+ * looked at yet, which depends on everything that data dir has ever done: a
+ * fresh one lights it with the fixtures' own imports and votes. It is volatile
+ * state in every top bar, like the gauges `maskVolatile` blanks.
  */
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
-  `vt-toast-container,.toast-stack{display:none!important}`;
+  `vt-toast-container,.toast-stack,.notif-dot{display:none!important}`;
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp

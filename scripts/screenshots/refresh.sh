@@ -9,10 +9,10 @@
 #
 # This harness drives a SINGLE running app (it does not boot its own per run):
 # the dev box is RAM-tight and a second app instance would load the image
-# embedder twice. Determinism still holds because the fixtures are the Book
-# example's COCO corpora (a pure function of the download) with a fixed vote
-# baseline. If no app is already serving on $APP, this script starts one,
-# waits for readiness, captures, then stops it.
+# embedder twice. Determinism still holds because the fixtures are the Smiley
+# example's generated drawings (a pure function of the generator and its seeds)
+# with a fixed vote baseline. If no app is already serving on $APP, this script
+# starts one, waits for readiness, captures, then stops it.
 set -euo pipefail
 cd "$(dirname "$0")"
 
