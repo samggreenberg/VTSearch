@@ -95,6 +95,7 @@ produced.
 | **#4114 The converged logistic head in the loop, on COCO Better** — [report](../../../docs/experiments/2026-09-27-logreg-head-4114/REPORT.md) (analyzers, examples and figures live in [`../svm_vs_logistic/`](../svm_vs_logistic/)) | `launch_logreg_4114.sh`. Arms `svm` / `lrconv` (head `linear_logreg`) / `linear` |
 
 | **#4220 Can a precision-floor promise be kept from the app's votes?** (the #4223 ruling's objective, priced offline) — [report](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md) | `analyze_pframes_4220.py`, `selftest_analyze_pframes_4220.py`, `figure_pframes_4220.py`. Reads the per-cell precision frames `task_NNNN__pframes.npz` that `CALIB_PFRAME_STEPS` makes the cell runner record (test truth, pool, votes, fold held-out votes and haystacks); prices P(y\|score) estimators (in-sample, fold-rank, fold-raw × logistic/isotonic × point/bootstrap lower bound, ± EM prior shift) on recall at a precision floor X and the violation rate, in the same-prevalence and shifted-corpus scenarios |
+| **#4224 Rank frames for precision-floor studies off the GRID** — [data and schema](../../../docs/experiments/2026-09-28-rank-frames/README.md) | `export_rank_frames.py`. Cuts the #4220/#4222 precision frames down to the ranks of each test corpus's positives, plus the shipped estimator's cuts (as shipped, and with a consistent reference pool) at X = 25/50/75%, so random-verification and audit-sampling studies can run from CSVs in the repo |
 <!-- END INDEX -->
 
 ## Arms
