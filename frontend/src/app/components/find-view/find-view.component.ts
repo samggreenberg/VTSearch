@@ -43,6 +43,7 @@ import {
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { lineFloorFrom } from '../../utils/line-floor';
 import {
   coerceFocusMode,
   coerceNonEmptyString,
@@ -246,7 +247,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe((resp) => {
         if (resp.threshold != null && this.sortState.sortOrder) {
-          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold);
+          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineFloorFrom(resp.floor));
         }
         // The server re-thresholded the unverified items over the frozen
         // scores; pull the new good/bad split back for the left/right panes.
@@ -448,8 +449,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         next: (response: any) => {
           const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score, bestRegion: r.best_region }));
           const threshold = response.threshold;
-          // Set sort results for stripe display
-          this.sortState.setSortResults(sorted, threshold);
+          // Set sort results for stripe display. With no precision promise
+          // the threshold is still a cut (Inclusion 0), labelled unpromised
+          // by the floor that rides with it (#4247).
+          this.sortState.setSortResults(sorted, threshold, lineFloorFrom(response.floor));
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);

@@ -17,6 +17,8 @@ import { VoteStateService } from './vote-state.service';
 import { allItemsLabeled } from '../utils/all-labeled';
 import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
+import type { FloorState } from '../generated/api-client/models/floor-state';
+import { lineFloorFrom } from '../utils/line-floor';
 
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
@@ -178,6 +180,7 @@ export class SortRunnerService {
     results?: Array<Record<string, unknown>>;
     threshold?: number;
     acq_threshold?: number | null;
+    floor?: FloorState | null;
     total?: number;
     above_threshold?: number;
     has_more_below?: boolean;
@@ -193,6 +196,7 @@ export class SortRunnerService {
       items,
       threshold,
       acqThreshold: response.acq_threshold ?? null,
+      floor: lineFloorFrom(response.floor),
       total: response.total ?? items.length,
       hasMore: response.has_more_below ?? false,
       token: response.sort_token ?? null,

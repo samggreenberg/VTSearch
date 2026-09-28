@@ -68,12 +68,27 @@
   }
 }
 
+// The floor promised nothing, so the line sits where Inclusion 0 puts it
+// (#4247): dashed, and named so, rather than a promise it isn't.
+.media-threshold-line--unpromised {
+  &::before,
+  &::after {
+    height: 0;
+    background: none;
+    border-top: 1px dashed var(--accent);
+  }
+}
+
 .threshold-label {
   font-size: var(--font-2xs);
   color: var(--accent);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
   white-space: nowrap;
+}
+
+.threshold-label--unpromised {
+  color: var(--text-warning);
 }
 
 .empty-list {
