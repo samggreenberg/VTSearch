@@ -202,8 +202,11 @@ One image is shown, always matching the **viewer's** theme. The embed is a
   theme is a `data-theme` attribute). `keyboard-help-modal.component.ts`
   post-processes the rendered HTML — collapses each `<picture>` to its `<img>`,
   swaps the `*.light.*` / `*.dark.*` suffix to the app's current effective theme,
-  resolves the relative `assets/…` path against the served dir (`/assets/docs/`),
-  and re-renders live on theme switch.
+  resolves each relative path against the doc it is in and then the served dir
+  (`/assets/docs/`), and re-renders live on theme switch. A how-to page under
+  `docs/user/howto/` therefore writes its images `../assets/…`, which resolves
+  both on GitHub and in the app; the panel opens a link from the guide to such a
+  page in place, with Back (`tests_lib/meta/test_howto_docs.py` pins both).
 
 Images are served by an `angular.json` asset glob copying `docs/user/assets/**`
 → `/assets/docs/assets`. Each embed carries alt text (= the manifest `caption`).
