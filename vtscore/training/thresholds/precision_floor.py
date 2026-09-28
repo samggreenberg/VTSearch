@@ -41,18 +41,34 @@ the raw percentile cannot resolve the tail), the bound level
 (``lower_percentile``), and the refit count.  The defaults are what #4220
 measured.
 
+The curve is fitted once and cut at any floor (:class:`PrecisionFloorCurve`),
+the way a :class:`~vtscore.training.thresholds.FoldAnchoredCut` is fitted once
+and cut at any inclusion; :class:`PrecisionFloorEstimate` holds one detector's
+inputs and fits the curve the first time a floor is asked for.  Which line a
+detector draws - the floor's, or the Inclusion knob's when no floor is set, and
+the Inclusion 0 cut when the floor promises nothing - is
+:func:`reporting_line`, shared by the app and the eval harness's default arm so
+the two cannot disagree about it.
+
 Pure numpy + scikit-learn; nothing here reads a detector context.  Wiring it to
-a live detector (which fold orderings, which haystacks) is the caller's job.
+a live detector (which fold orderings, which haystacks, which votes may serve
+as evidence) is the caller's job: see
+:func:`vtscore.detectors.training._fused_threshold`.
 """
 
 from __future__ import annotations
 
 import enum
+import threading
 import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+
+from vtscore.training.thresholds.gmm import gmm_fit_array, scored_ordering
+from vtscore.utils.scores import scored_only
 
 #: Positives among the calibration folds' held-out votes below which no promise
 #: is made.  #4220: gated here, the fold-rank lower bound with EM breaks 6% of
@@ -82,6 +98,12 @@ PRECISION_COORDINATES = ("percentile", "tail")
 
 #: The posterior fits :func:`precision_floor_cut` accepts.
 PRECISION_FITS = ("logistic", "isotonic")
+
+
+#: The inclusion a floor's line falls back to when it promises nothing (owner,
+#: 2026-09-28; #4247).  A floor that cannot be met never empties the results:
+#: the line stays where Inclusion 0 would draw it, labelled as unpromised.
+PRECISION_FLOOR_FALLBACK_INCLUSION = 0
 
 #: A 1-D run of scores or labels: a list, or the numpy array a caller already holds.
 ScoreArray = Sequence[float] | np.ndarray
@@ -120,6 +142,11 @@ class PrecisionFloorCut:
     n_returned: int
     estimated_precision: float | None
     calibration_positives: int
+
+
+def _check_floor(floor: float) -> None:
+    if not 0.0 < floor <= 1.0:
+        raise ValueError(f"precision floor must be in (0, 1], got {floor!r}")
 
 
 def percentile_in(ref_sorted: np.ndarray, x: np.ndarray) -> np.ndarray:
@@ -294,6 +321,102 @@ def precision_lower_bound_curve(
     return corpus_sorted, np.percentile(np.stack(boots), lower_percentile, axis=0)
 
 
+@dataclass(frozen=True, eq=False)
+class PrecisionFloorCurve:
+    """The lower-bound precision of every top *k* of one corpus: fitted once, cut at any floor.
+
+    Fitting it is the whole cost of a precision floor - *n_boot* posterior
+    refits and as many passes over the corpus - while :meth:`cut` is one scan of
+    :attr:`bound`.  A caller that keeps the curve can therefore move the floor
+    without refitting anything, the way an Inclusion slide re-cuts a
+    :class:`~vtscore.training.thresholds.FoldAnchoredCut`.
+
+    :attr:`scores` is the corpus sorted descending and :attr:`bound` the
+    lower-bound precision of each top ``i + 1``
+    (:func:`precision_lower_bound_curve`).  Both are empty when no bound was
+    formed - the evidence held fewer than the gate's positives, or too few
+    resamples fitted - and every floor then reads
+    :attr:`~PrecisionFloorStatus.INSUFFICIENT_EVIDENCE`.
+    :attr:`calibration_positives` counts the positives among the evidence
+    whether or not the gate opened.
+    """
+
+    scores: np.ndarray
+    bound: np.ndarray
+    calibration_positives: int
+
+    @property
+    def formed(self) -> bool:
+        """Whether a bound was formed, so a floor can be promised or found unreachable."""
+        return self.bound.size > 0
+
+    def cut(self, floor: float) -> PrecisionFloorCut:
+        """The largest top *k* whose lower bound clears *floor*, or which state says why none does."""
+        _check_floor(floor)
+        n_pos = self.calibration_positives
+        if not self.formed:
+            return PrecisionFloorCut(PrecisionFloorStatus.INSUFFICIENT_EVIDENCE, floor, None, 0, None, n_pos)
+        ok = np.flatnonzero(self.bound >= floor)
+        if ok.size == 0:
+            return PrecisionFloorCut(PrecisionFloorStatus.UNREACHABLE, floor, None, 0, float(self.bound.max()), n_pos)
+        i = int(ok.max())
+        threshold = float(self.scores[i])
+        return PrecisionFloorCut(
+            PrecisionFloorStatus.PROMISED,
+            floor,
+            threshold,
+            int(np.count_nonzero(self.scores >= threshold)),
+            float(self.bound[i]),
+            n_pos,
+        )
+
+
+_EMPTY = np.zeros(0)
+
+
+def fit_precision_floor_curve(
+    corpus_scores: ScoreArray,
+    pool_scores: ScoreArray,
+    fold_orderings: Sequence[tuple[ScoreArray, ScoreArray]],
+    fold_haystacks: Sequence[ScoreArray],
+    *,
+    fit: str = "logistic",
+    coordinate: str = "percentile",
+    em: bool = True,
+    lower_percentile: float = PRECISION_LOWER_PERCENTILE,
+    n_boot: int = PRECISION_BOOTSTRAP_REFITS,
+    min_positives: int = MIN_CALIBRATION_POSITIVES,
+    rng: np.random.Generator | int | None = None,
+) -> PrecisionFloorCurve:
+    """Gate on *min_positives* positives among the fold-rank evidence, then fit the lower-bound curve.
+
+    The arguments are :func:`precision_lower_bound_curve`'s, plus the gate.
+    Below the gate nothing is fitted - that is the common case today (#4220),
+    and it costs one pass over the evidence rather than *n_boot* refits.
+    """
+    _check_options(fit, coordinate)
+    n_pos = int(fold_rank_evidence(fold_orderings, fold_haystacks)[1].sum())
+    curve = (
+        precision_lower_bound_curve(
+            corpus_scores,
+            pool_scores,
+            fold_orderings,
+            fold_haystacks,
+            fit=fit,
+            coordinate=coordinate,
+            em=em,
+            lower_percentile=lower_percentile,
+            n_boot=n_boot,
+            rng=rng,
+        )
+        if n_pos >= min_positives
+        else None
+    )
+    if curve is None:
+        return PrecisionFloorCurve(_EMPTY, _EMPTY, n_pos)
+    return PrecisionFloorCurve(curve[0], curve[1], n_pos)
+
+
 def precision_floor_cut(
     floor: float,
     corpus_scores: ScoreArray,
@@ -314,41 +437,229 @@ def precision_floor_cut(
     Gates on *min_positives* positives among the fold-rank evidence, then cuts
     at the largest top *k* whose :func:`precision_lower_bound_curve` value is at
     least *floor*.  The arguments are that function's; the result is one of the
-    three :class:`PrecisionFloorStatus` states.
+    three :class:`PrecisionFloorStatus` states.  One call is one
+    :func:`fit_precision_floor_curve` and one :meth:`PrecisionFloorCurve.cut`;
+    a caller cutting one corpus at several floors should keep the curve.
     """
-    if not 0.0 < floor <= 1.0:
-        raise ValueError(f"precision floor must be in (0, 1], got {floor!r}")
-    _check_options(fit, coordinate)
-    n_pos = int(fold_rank_evidence(fold_orderings, fold_haystacks)[1].sum())
-    curve = (
-        precision_lower_bound_curve(
-            corpus_scores,
-            pool_scores,
-            fold_orderings,
-            fold_haystacks,
-            fit=fit,
-            coordinate=coordinate,
-            em=em,
-            lower_percentile=lower_percentile,
-            n_boot=n_boot,
-            rng=rng,
+    _check_floor(floor)
+    return fit_precision_floor_curve(
+        corpus_scores,
+        pool_scores,
+        fold_orderings,
+        fold_haystacks,
+        fit=fit,
+        coordinate=coordinate,
+        em=em,
+        lower_percentile=lower_percentile,
+        n_boot=n_boot,
+        min_positives=min_positives,
+        rng=rng,
+    ).cut(floor)
+
+
+def eligible_fold_orderings(
+    fold_orderings: Sequence[tuple[ScoreArray, ScoreArray]],
+    holdout_rows: Sequence[Sequence[int]],
+    eligible_rows: Sequence[bool] | None,
+) -> list[tuple[list[float], list[float]]]:
+    """Each fold's held-out ``(scores, labels)``, kept only where the vote behind it may calibrate a promise.
+
+    *holdout_rows* is :attr:`~vtscore.training.thresholds.CalibrationFolds.holdout_rows`:
+    per fold, the training row behind each held-out score.  *eligible_rows* is
+    indexed by training row.  The folds keep their order and their count, so the
+    result stays aligned with the fold haystacks it will be ranked against.
+
+    ``None`` for *eligible_rows* keeps every held-out vote - the caller has no
+    provenance to filter on.  A fold whose held-out rows are missing or do not
+    line up with its ordering contributes **nothing**: a vote that cannot be
+    traced back cannot be shown to have been drawn fairly, and an empty fold
+    only makes the promise more timid.
+    """
+    if eligible_rows is None:
+        return [([float(v) for v in sc], [float(v) for v in lb]) for sc, lb in fold_orderings]
+    out: list[tuple[list[float], list[float]]] = []
+    for k, (sc, lb) in enumerate(fold_orderings):
+        rows = holdout_rows[k] if k < len(holdout_rows) else None
+        if rows is None or len(rows) != len(sc) or len(rows) != len(lb):
+            out.append(([], []))
+            continue
+        keep = [j for j, r in enumerate(rows) if 0 <= r < len(eligible_rows) and eligible_rows[r]]
+        out.append(([float(sc[j]) for j in keep], [float(lb[j]) for j in keep]))
+    return out
+
+
+class PrecisionFloorEstimate:
+    """One detector's precision-floor inputs, with the curve fitted the first time a floor is asked for.
+
+    Built beside the fold-anchored cut on every retrain, from the same
+    populations: *corpus_scores* are the final model's scores over what the cut
+    decides, *fold_orderings* the calibration folds' held-out votes (already cut
+    down to the ones that may serve as evidence, :func:`eligible_fold_orderings`)
+    and *fold_haystacks* those fold models' scores over the pool.  *pool_scores*
+    defaults to the corpus, which is the app's case: the cut decides the pool it
+    was fitted on.
+
+    Nothing is fitted in the constructor.  Most detectors never reach the gate,
+    and one whose owner cleared the floor never needs the curve, so the
+    *n_boot* refits are paid by :meth:`curve` - once, under a lock, and then
+    kept.  Moving the floor after that is :meth:`PrecisionFloorCurve.cut`.
+
+    Every score array goes through :func:`~vtscore.utils.scores.scored_only`
+    (and each held-out vote through
+    :func:`~vtscore.training.thresholds.scored_ordering`), so an item the head
+    could not score is absent rather than an observation a unit below the
+    sigmoid range.  Above :data:`~vtscore.training.thresholds._GMM_MAX_SAMPLES`
+    scores the curve is read off the same seeded uniform sample the
+    fold-anchored cut fits on (:func:`~vtscore.training.thresholds.gmm_fit_array`):
+    the fit is linear in the corpus per refit.  :meth:`cut` and
+    :meth:`count_at` count against the whole corpus, so ``n_returned`` is a
+    real count however large the dataset.
+
+    The estimator's knobs (#4221's coordinate and bound level among them) are
+    constructor arguments with :func:`precision_floor_cut`'s defaults.
+    """
+
+    def __init__(
+        self,
+        corpus_scores: ScoreArray,
+        fold_orderings: Sequence[tuple[ScoreArray, ScoreArray]],
+        fold_haystacks: Sequence[ScoreArray],
+        *,
+        pool_scores: ScoreArray | None = None,
+        **knobs: Any,
+    ) -> None:
+        self._corpus_full = scored_only(corpus_scores)
+        self._corpus = gmm_fit_array(self._corpus_full)
+        self._pool = self._corpus if pool_scores is None else gmm_fit_array(scored_only(pool_scores))
+        self._fold_orderings = [scored_ordering((list(sc), list(lb))) for sc, lb in fold_orderings]
+        self._fold_haystacks = [gmm_fit_array(scored_only(hay)) for hay in fold_haystacks]
+        if len(self._fold_orderings) != len(self._fold_haystacks):
+            raise ValueError(
+                f"{len(self._fold_orderings)} fold orderings but {len(self._fold_haystacks)} fold haystacks"
+            )
+        self._knobs = knobs
+        _check_options(knobs.get("fit", "logistic"), knobs.get("coordinate", "percentile"))
+        self._curve: PrecisionFloorCurve | None = None
+        self._lock = threading.Lock()
+
+    @property
+    def calibration_positives(self) -> int:
+        """Positives among the evidence, counted as the gate counts them (no fit needed)."""
+        if self._curve is not None:
+            return self._curve.calibration_positives
+        return int(fold_rank_evidence(self._fold_orderings, self._fold_haystacks)[1].sum())
+
+    @property
+    def corpus_size(self) -> int:
+        """How many scored items the cut decides."""
+        return int(self._corpus_full.size)
+
+    def curve(self) -> PrecisionFloorCurve:
+        """The fitted curve, fitted on the first call and kept."""
+        with self._lock:
+            if self._curve is None:
+                self._curve = fit_precision_floor_curve(
+                    self._corpus, self._pool, self._fold_orderings, self._fold_haystacks, **self._knobs
+                )
+            return self._curve
+
+    def count_at(self, threshold: float) -> int:
+        """How many corpus items score at or above *threshold*: what a line there returns."""
+        return int(np.count_nonzero(self._corpus_full >= threshold))
+
+    def cut(self, floor: float) -> PrecisionFloorCut:
+        """:meth:`PrecisionFloorCurve.cut` on :meth:`curve`, with ``n_returned`` counted on the whole corpus."""
+        verdict = self.curve().cut(floor)
+        if verdict.threshold is None:
+            return verdict
+        return PrecisionFloorCut(
+            verdict.status,
+            verdict.floor,
+            verdict.threshold,
+            self.count_at(verdict.threshold),
+            verdict.estimated_precision,
+            verdict.calibration_positives,
         )
-        if n_pos >= min_positives
-        else None
-    )
-    if curve is None:
-        return PrecisionFloorCut(PrecisionFloorStatus.INSUFFICIENT_EVIDENCE, floor, None, 0, None, n_pos)
-    scores, bound = curve
-    ok = np.flatnonzero(bound >= floor)
-    if ok.size == 0:
-        return PrecisionFloorCut(PrecisionFloorStatus.UNREACHABLE, floor, None, 0, float(bound.max()), n_pos)
-    i = int(ok.max())
-    threshold = float(scores[i])
-    return PrecisionFloorCut(
-        PrecisionFloorStatus.PROMISED,
-        floor,
-        threshold,
-        int(np.count_nonzero(scores >= threshold)),
-        float(bound[i]),
-        n_pos,
-    )
+
+
+@dataclass(frozen=True)
+class ReportingLine:
+    """Where a detector's reporting cut sits under its operating point, and why.
+
+    :attr:`threshold` is ``None`` when there is no fold-anchored cut to read a
+    line off (no usable folds, or a degenerate fit) - the caller keeps its own
+    inclusion-blind fallback there, as it always has.  :attr:`inclusion` is the
+    inclusion the line sits at, which Autopilot's acquisition offsets from:
+    the knob's value when Inclusion governs, the fallback's when a floor
+    promises nothing, and ``None`` when a promised floor put the line somewhere
+    no inclusion named - :func:`line_inclusion` derives it from the line then.
+    :attr:`floor` is the floor's verdict, ``None`` when no floor is set.
+    """
+
+    threshold: float | None
+    inclusion: float | None
+    floor: PrecisionFloorCut | None
+
+
+def unpromised(floor: float, calibration_positives: int = 0) -> PrecisionFloorCut:
+    """The verdict of a floor with no estimate behind it: not enough evidence yet."""
+    return PrecisionFloorCut(PrecisionFloorStatus.INSUFFICIENT_EVIDENCE, floor, None, 0, None, calibration_positives)
+
+
+def reporting_line(
+    cut: Any,
+    estimate: PrecisionFloorEstimate | None,
+    *,
+    inclusion_value: float,
+    min_precision: float | None,
+) -> ReportingLine:
+    """The reporting cut at an operating point: a precision floor, or an inclusion when no floor is set.
+
+    **The one definition of which line a detector draws**, called by the app's
+    retrain (:func:`vtscore.detectors.training._fused_threshold`), its no-refit
+    re-cut (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
+    harness's default arm, so the three cannot drift apart.
+
+    * *min_precision* ``None``: the Inclusion knob governs, and the line is
+      ``cut.threshold_at(inclusion_value)`` - exactly the pre-floor behaviour.
+    * A floor that is **promised**: the floor's own threshold.  *inclusion_value*
+      is ignored - a set floor wins over the knob (owner, 2026-09-28).
+    * A floor that promises nothing (``unreachable`` or
+      ``insufficient_evidence``, or no *estimate* at all): the line falls back
+      to :data:`PRECISION_FLOOR_FALLBACK_INCLUSION` and the verdict says why
+      (#4247).
+
+    *cut* is the fitted :class:`~vtscore.training.thresholds.FoldAnchoredCut`,
+    or ``None`` when training fitted none.
+    """
+
+    def _at(inclusion: float) -> float | None:
+        if cut is None:
+            return None
+        value = float(cut.threshold_at(inclusion))
+        return value if np.isfinite(value) else None
+
+    if min_precision is None:
+        return ReportingLine(_at(inclusion_value), float(inclusion_value), None)
+    verdict = estimate.cut(min_precision) if estimate is not None else unpromised(min_precision)
+    if verdict.status is PrecisionFloorStatus.PROMISED and verdict.threshold is not None:
+        return ReportingLine(verdict.threshold, None, verdict)
+    fallback = float(PRECISION_FLOOR_FALLBACK_INCLUSION)
+    return ReportingLine(_at(fallback), fallback, verdict)
+
+
+def line_inclusion(line: ReportingLine, cut: Any) -> float | None:
+    """The inclusion *line* sits at: the one it was drawn at, or the strictest that reproduces it.
+
+    Autopilot's acquisition cut sits a fixed number of inclusion steps stricter
+    than the line (:func:`~vtscore.training.thresholds.acquisition_inclusion`),
+    and an offset needs an origin.  A line a promised floor drew was not set in
+    inclusion units, so its origin is recovered through
+    :meth:`~vtscore.training.thresholds.FoldAnchoredCut.inclusion_for_threshold`.
+    ``None`` when there is nothing to recover it from.
+    """
+    if line.inclusion is not None:
+        return line.inclusion
+    if cut is None or line.threshold is None:
+        return None
+    return cut.inclusion_for_threshold(line.threshold)

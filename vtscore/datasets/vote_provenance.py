@@ -11,10 +11,12 @@ context, and that context is **not re-derivable**: the ranking that surfaced
 the item is client-side ephemeral state and the model that produced its score
 is overwritten by the next retrain.  So it is recorded at click time, here.
 
-This module owns the vocabulary and the validation.  Recording only - nothing
-in the codebase reads these values back to change behaviour yet; consuming
-them is gated on the experiment pre-registered in
-``docs/plans/provenance-partitioned-calibration.md``.
+This module owns the vocabulary and the validation.  One reader changes
+behaviour: the precision floor (#4245) calibrates its promise only on votes
+the learned sort chose (:func:`calibrates_precision`), because a vote picked by
+any other ranker skews the posterior it fits (#4222).  Every other use -
+partitioning the conformal calibration, for one - is gated on the experiment
+pre-registered in ``docs/plans/provenance-partitioned-calibration.md``.
 
 Storage
 -------
@@ -196,6 +198,48 @@ def normalize_provenance(raw: Any) -> dict[str, Any] | None:
     if len(out) == 1 or (len(out) == 2 and out.get("flow") == "unknown"):
         return None
     return out
+
+
+#: The flows whose draws come off a ranking the user was shown, and so can be
+#: score-only.  Every other flow is either not a draw (``seed_example``,
+#: ``import``, ``undo``, ``unknown``) or selects on the label the vote records
+#: (``find_verify`` and ``labelset_review`` correct what looks wrong; ``bulk``
+#: adopts a set the user chose by eye).
+PRECISION_CALIBRATION_FLOWS = frozenset({"autopilot", "list_review"})
+
+#: The draws off the learned ranking that are score-only: its head (``top``) and
+#: the band around the acquisition cut (``hard``).  ``new`` is excluded: the
+#: coverage atlas picks the node on embedding coverage and only then reads the
+#: score inside it, so the selection is not score-only (owner, 2026-09-28).
+PRECISION_CALIBRATION_SELECT_MODES = frozenset({"top", "hard"})
+
+
+def calibrates_precision(provenance: dict[str, Any] | None) -> bool:
+    """Whether a vote with this provenance may calibrate a precision-floor promise.
+
+    The floor's posterior ``P(positive | score)`` is unbiased under
+    **score-only** selection: an item picked for its rank in the model's own
+    ranking tells the fit nothing about its label beyond that rank.  A vote
+    picked by any other ranker - the text sort of Autopilot's opening, an
+    example sort, a list sorted by anything but the current model - was chosen
+    on information the model's score lacks, which makes the positives it finds
+    the easy ones.  #4222 measured it: with the opening's text walk raised to
+    20 Goods, half the promises made at X = 50% broke.
+
+    So a vote calibrates only when its recorded flow draws off a ranking
+    (:data:`PRECISION_CALIBRATION_FLOWS`), that ranking was the learned sort,
+    and the draw was a rank position (:data:`PRECISION_CALIBRATION_SELECT_MODES`).
+    A vote with no provenance, or one recorded before a field existed, does not:
+    an unattributed vote is not evidence of a fair draw.  Such votes still train
+    the model; they only stay out of the promise's evidence and its gate.
+    """
+    if not provenance:
+        return False
+    return (
+        provenance.get("flow") in PRECISION_CALIBRATION_FLOWS
+        and provenance.get("sort_kind") == "learned"
+        and provenance.get("select_mode") in PRECISION_CALIBRATION_SELECT_MODES
+    )
 
 
 def coerce_provenance(raw: Any) -> dict[str, Any] | None:

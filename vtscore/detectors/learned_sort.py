@@ -137,11 +137,14 @@ def build_learned_sort_signature(
     inclusion_value,
     calibrate_count_value,
     calibration_fraction_value,
+    min_precision_value=None,
 ):
     """Build the no-op short-circuit key for a learned-sort run.
 
     Two runs with equal signatures produce identical results, so the route's
-    job manager can return the cached result instead of retraining.
+    job manager can return the cached result instead of retraining.  The
+    precision floor is part of the key: the threshold a run returns is the
+    floor's line whenever one is set.
     """
     from vtscore.detectors.model_loading import labelset_signature
 
@@ -161,6 +164,7 @@ def build_learned_sort_signature(
         inclusion_value,
         calibrate_count_value,
         calibration_fraction_value,
+        min_precision_value,
     )
 
 
@@ -177,6 +181,7 @@ def run_learned_sort(
     inclusion_value,
     calibrate_count_value,
     calibration_fraction_value,
+    min_precision_value=None,
 ):
     """Train and score a learned sort, reconciling the result with local votes.
 
@@ -186,7 +191,8 @@ def run_learned_sort(
     *labelset* is set, otherwise the raw-vote pipeline; injects the live model
     into the progress cache when it maps cleanly onto current-dataset votes;
     and stores the model + training set on *det_ctx*.  Returns
-    ``(results, threshold)``.
+    ``(results, threshold)``: the threshold is the precision floor's line when
+    *min_precision_value* is set, else the inclusion's.
     """
     from vtscore.concurrency.stalls import PhaseClock
     from vtscore.detectors.labeling_progress import inject_live_model
@@ -218,6 +224,7 @@ def run_learned_sort(
                 inclusion_value=inclusion_value,
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
+                min_precision=min_precision_value,
             )
         else:
             results, threshold, model = train_and_score(
@@ -229,6 +236,7 @@ def run_learned_sort(
                 calibration_fraction=calibration_fraction_value,
                 vote_region_boxes=region_boxes_snapshot,
                 det_ctx=det_ctx,
+                min_precision=min_precision_value,
             )
 
         clock.mark("train_and_score")
