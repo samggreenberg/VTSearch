@@ -671,6 +671,9 @@ class _AutoDetectResultSchema(Schema):
 
     detector_name = fields.String(required=True)
     threshold = fields.Float(required=True)
+    # Whether ``threshold`` is a promise, or the unpromised Inclusion 0 cut
+    # (#4247); ``null`` for a detector with no trained context to ask.
+    floor = fields.Nested(FloorStateSchema, allow_none=True)
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)

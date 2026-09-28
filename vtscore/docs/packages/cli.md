@@ -272,7 +272,11 @@ All four entry points delegate to `vtscore/cli.py::_run_pipeline`
    direct or one-hop converter route from the dataset's types is
    *skipped* with a `detector_skipped` event; one whose
    `input_spec.clipper` doesn't match the dataset is *re-clipped* at
-   scoring time (a `detector_reclip` event), not skipped.
+   scoring time (a `detector_reclip` event), not skipped. A detector
+   whose precision floor promises nothing (unreachable, or too few
+   calibration positives) is still scored, at its Inclusion 0 cut, and
+   announced with a `detector_unpromised` event; every result it
+   produces carries the same verdict under `floor`.
 5. Score each chunk via `_score_medias_with_detectors`, merging hits
    into the accumulated results in place.
 6. Hand the merged `{media_type, detectors_run, results}` dict to
@@ -433,6 +437,7 @@ event includes `event` and `ts`; each row lists the extra fields.
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
 | `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
+| `detector_unpromised` | `detector`, `min_precision`, `status` (`unreachable` / `insufficient_evidence`), `calibration_positives` | `_record_floor_state` in `cli.py` |
 | `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli.py`    |
 | `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
 | `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |

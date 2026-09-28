@@ -364,6 +364,9 @@ def _load_and_train_detectors(
         out[det_name] = {
             "mlp": det_ctx.model,
             "threshold": det_ctx.threshold,
+            # Whether that threshold is a promise, or the unpromised Inclusion 0
+            # cut (#4247); it rides into every result the detector produces.
+            "floor": _record_floor_state(det_name, det_ctx),
             "embedder": det_ctx.embedder or "",
             "media_type": det_media_type or media_type,
             "embedder_type": detector_embedder_type_from_data(det),
@@ -375,6 +378,32 @@ def _load_and_train_detectors(
             "clipper_params": reclip_params,
         }
     return out
+
+
+def _record_floor_state(det_name: str, det_ctx: Any) -> dict[str, Any]:
+    """What the precision floor says about *det_name*'s trained cut, announced when unpromised.
+
+    Read at the floor the training read (:func:`vtscore.state.get_min_precision`).
+    A floor that promised nothing still leaves a cut - the Inclusion 0 one -
+    and that is what gets exported; the ``detector_unpromised`` event is the
+    run's record that the set it exports carries no precision promise (#4247).
+    """
+    from vtscore.state import get_min_precision  # noqa: PLC0415
+    from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+
+    state = detector_floor_state(det_ctx, get_min_precision())
+    if state["status"] not in (None, "promised"):
+        cli_progress.emit(
+            "detector_unpromised",
+            text=(
+                f"Detector '{det_name}' makes no {100 * state['min_precision']:.0f}% precision promise "
+                f"({state['status'].replace('_', ' ')}, {state['calibration_positives']} calibration "
+                "positives); exporting its Inclusion 0 cut."
+            ),
+            detector=det_name,
+            **state,
+        )
+    return state
 
 
 def _score_medias_with_detectors(
@@ -566,6 +595,7 @@ def _score_direct_all(
         out[det_name] = {
             "detector_name": det_name,
             "threshold": round(threshold, 4),
+            "floor": info.get("floor"),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,
@@ -629,6 +659,7 @@ def _score_one_detector(
     return {
         "detector_name": det_name,
         "threshold": round(threshold, 4),
+        "floor": info.get("floor"),
         "total_hits": len(positive_hits),
         "hits": positive_hits,
         "negative_hits": negative_hits,
@@ -1547,7 +1578,8 @@ def _run_streaming_pipeline(
     header = {
         "media_type": media_type,
         "detectors": [
-            {"detector_name": name, "threshold": round(info["threshold"], 4)} for name, info in detector_mlps.items()
+            {"detector_name": name, "threshold": round(info["threshold"], 4), "floor": info.get("floor")}
+            for name, info in detector_mlps.items()
         ],
         "keep_negatives": bool(keep_negatives),
     }
