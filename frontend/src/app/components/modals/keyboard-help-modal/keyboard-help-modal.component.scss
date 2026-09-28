@@ -148,6 +148,15 @@
   &::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 }
 
+// Back to the doc a followed link came from (a how-to page opened from the
+// guide). Sticky, so it stays in reach however far down the page you read.
+.guide > .back-btn {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-bottom: var(--space-sm);
+}
+
 .guide-loading,
 .guide-error {
   margin: 0;

@@ -39,14 +39,20 @@ const FIXTURE_BUILDER = join(HERE, 'smiley_fixture.py');
 export const TRAIN_DATASET = 'drawings';
 /** The pile the detector is run over: another seed, not one picture shared. */
 export const TEST_DATASET = 'drawings-new';
-/** A small pile embedded with DINOv2 patch, for region voting. */
+/**
+ * A small pile for region voting, imported the way the how-to page has a
+ * reader do it: SigLIP, plus DINOv2 patch as its region embedder.
+ */
 export const REGION_DATASET = 'drawing-regions';
 
 /** The detector the whole example builds: named for what it finds. */
 export const DETECTOR = 'Yellow Smileys';
 /** What a user types to describe it: the whole specification. */
 export const DETECTOR_TEXT = 'yellow smiley face';
-/** Region voting needs its own detector: one binds an embedder type. */
+/**
+ * Region voting needs its own detector: one binds an embedder type, and a box
+ * only trains a detector locked to the region (Patch Semantic) type.
+ */
 export const REGION_DETECTOR = 'smileys-regions';
 
 /** Everything `ensure-fixtures.mjs` builds, by name. */
@@ -178,13 +184,16 @@ export function appClient(app, log = () => {}) {
    * fingerprint is stamped beside it once it is imported, and a dataset
    * imported from anything else is dropped and imported again.
    */
-  async function ensureCorpus(name, embedder) {
+  async function ensureCorpus(name, embedder, extra = []) {
     const path = corpusPath(name);
-    const stamp = JSON.parse(readFileSync(`${path}.json`, 'utf8')).fingerprint;
+    // A corpus imported with extra embedders stamps them too, so changing
+    // them imports it again, like a corpus the generator has redrawn.
+    const fingerprint = JSON.parse(readFileSync(`${path}.json`, 'utf8')).fingerprint;
+    const stamp = extra.length ? [fingerprint, embedder, ...extra].join(' ') : fingerprint;
     const marker = `${path}.imported`;
     const imported = existsSync(marker) ? readFileSync(marker, 'utf8').trim() : '';
     if (imported !== stamp) await client.dropDatasets(name);
-    const row = await client.ensureDataset(name, embedder);
+    const row = await client.ensureDataset(name, embedder, extra);
     writeFileSync(marker, stamp);
     return row;
   }
