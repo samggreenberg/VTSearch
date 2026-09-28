@@ -484,8 +484,10 @@ GM_TEXT_BASELINE="$OUT/text_baseline.csv" GM_OUT="$OUT" python analyze_startup.p
 ```
 
 Grammar (full reference: [`vtscore/eval/startup_schedule.py`](../../../vtscore/eval/startup_schedule.py)):
-`<g|b|n><count>@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3` stays until 3
-goods exist, `b4` until 4 bads, `n8` for 8 clicks; `@top` cuts above every score,
+`<g|b|n><count>[+dry<m>/<w>]@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3`
+stays until 3 goods exist, `b4` until 4 bads, `n8` for 8 clicks; `+dry1/8` also
+ends a `g` or `n` round once its last 8 picks held fewer than 1 good (#4222's
+adaptive stop, e.g. `g20+dry1/8@top`); `@top` cuts above every score,
 `@mid` at the shipped GMM midpoint, `@k-3` at that GMM split under inclusion −3,
 `@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid` is today's opening
 and is *required* to reproduce a default run click for click.
