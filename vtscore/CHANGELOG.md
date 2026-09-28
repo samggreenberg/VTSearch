@@ -569,6 +569,27 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **`resolve_or_train_detector` no longer returns a head trained on stale
+  labels** (issue #4204). It returned `DetectorContext.model` whenever that was
+  set, but nothing that changes a detector's labels (a vote, `clear_votes`, a
+  dataset-switch rehydrate, a labelset edit) drops it, so Find, Auto-Find and
+  the portable export scored with an outdated head. Every writer of
+  `DetectorContext.model` (`train_from_labelset`,
+  `learned_sort.update_det_ctx_with_trained_model`,
+  `workflow.apply_and_retrain`) now stamps the new
+  `DetectorContext.model_labels_sig` slot with
+  `model_loading.labelset_signature(labelset)`, and the cached head is reused
+  only while `model_loading.cached_head_is_current(det_ctx, labelset)` holds
+  for the labelset in `det_data`. When it doesn't, the head is retrained from
+  that labelset. The signature is the sorted `(label, stable_element_id,
+  region_box)` triples, so a redrawn region counts as a label change; the
+  labelset branch of `build_learned_sort_signature` now uses it too. One
+  consequence: with `det_data=None` the function returns `(None, 0.5, None)`
+  even when a cached head exists, because there are no labels to check it
+  against. A caller that sets `DetectorContext.model` itself must also set
+  `model_labels_sig`, or `resolve_or_train_detector` will retrain instead of
+  reusing it. `labelset_signature` and `cached_head_is_current` are additive.
+
 - **`LoadingTasksTracker.create_task` publishes a new task as running** (issue
   #4187). The task's tracker started at `ProgressTracker`'s default
   `status="idle"`, and `create_task` notifies subscribers before the caller's

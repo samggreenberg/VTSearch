@@ -6,6 +6,8 @@ import {
   FolderBrowserComponent,
   FolderBrowserFileEntry,
   FolderBrowserListing,
+  FolderBrowserPathChange,
+  relativeToRoot,
 } from './folder-browser.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
@@ -24,9 +26,12 @@ describe('FolderBrowserComponent', () => {
   /** Per-path listings; falls back to `defaultListing`. */
   let listings: Record<string, FolderBrowserListing>;
   let defaultListing: FolderBrowserListing;
+  /** Paths whose browse() errors, as a missing directory does server-side. */
+  let missingPaths: Set<string>;
 
   const browseFn = (path: string): Observable<FolderBrowserListing> => {
     requestedPaths.push(path);
+    if (missingPaths.has(path)) return throwError(() => ({ error: { message: 'Directory not found' } }));
     return of(listings[path] ?? defaultListing);
   };
 
@@ -34,6 +39,7 @@ describe('FolderBrowserComponent', () => {
     requestedPaths = [];
     listings = {};
     defaultListing = listing();
+    missingPaths = new Set();
 
     await TestBed.configureTestingModule({
       imports: [FolderBrowserComponent],
@@ -54,8 +60,7 @@ describe('FolderBrowserComponent', () => {
   }
 
   /** Init at the root, then navigate into `path` the way a user would.
-   *  The component always opens at the browse root, so tests that need a
-   *  non-root starting directory walk there first. */
+   *  (Opening somewhere else via `startPath` has its own tests below.) */
   function initAt(path: string): void {
     init();
     component.onRowDblClick({ kind: 'dir', name: path, path });
@@ -116,17 +121,118 @@ describe('FolderBrowserComponent', () => {
 
   it('emits pathChange with the resolved path and rootPath', () => {
     defaultListing = listing({ currentPath: 'a', rootPath: '/srv' });
-    const events: { path: string; rootPath: string }[] = [];
+    const events: FolderBrowserPathChange[] = [];
     fixture.componentRef.setInput('browse', browseFn);
     component.pathChange.subscribe(e => events.push(e));
     fixture.detectChanges();
-    expect(events).toEqual([{ path: 'a', rootPath: '/srv' }]);
+    expect(events).toEqual([{ path: 'a', rootPath: '/srv', initial: true }]);
+  });
+
+  it('flags only the opening listing as initial', () => {
+    const events: FolderBrowserPathChange[] = [];
+    fixture.componentRef.setInput('browse', browseFn);
+    component.pathChange.subscribe(e => events.push(e));
+    fixture.detectChanges();
+    component.onRowDblClick({ kind: 'dir', name: 'sub', path: 'sub' });
+    component.navigateRoot();
+    expect(events.map(e => [e.path, e.initial])).toEqual([
+      ['', true],
+      ['sub', false],
+      ['', false],
+    ]);
   });
 
   it('reload() re-requests the current directory', () => {
     initAt('x');
     component.reload();
     expect(requestedPaths).toEqual(['x']);
+  });
+
+  // ------------------------------------------------------------------
+  // startPath
+  // ------------------------------------------------------------------
+
+  it('without a startPath, opens at the root in one request', () => {
+    init();
+    expect(requestedPaths).toEqual(['']);
+    expect(component.currentPath()).toBe('');
+  });
+
+  it('opens at an absolute startPath placed against a "/" root', () => {
+    defaultListing = listing({ rootPath: '/' });
+    listings['srv/photos'] = listing({ rootPath: '/', directories: [dir('2024')] });
+    const events: FolderBrowserPathChange[] = [];
+    fixture.componentRef.setInput('browse', browseFn);
+    fixture.componentRef.setInput('startPath', '/srv/photos');
+    component.pathChange.subscribe(e => events.push(e));
+    fixture.detectChanges();
+
+    // The root is listed only to learn rootPath; it is never shown.
+    expect(requestedPaths).toEqual(['', 'srv/photos']);
+    expect(component.currentPath()).toBe('srv/photos');
+    expect(component.breadcrumbs).toEqual(['srv', 'photos']);
+    expect(component.rows().map(r => r.name)).toEqual(['2024']);
+    expect(component.absolutePath).toBe('/srv/photos');
+    expect(events).toEqual([{ path: 'srv/photos', rootPath: '/', initial: true }]);
+  });
+
+  it('opens at an absolute startPath under a non-"/" root', () => {
+    defaultListing = listing({ rootPath: '/data/alice' });
+    init({ startPath: '/data/alice/photos/' });
+    expect(requestedPaths).toEqual(['', 'photos']);
+    expect(component.currentPath()).toBe('photos');
+  });
+
+  it('takes a relative startPath as relative to the root', () => {
+    defaultListing = listing({ rootPath: '/data' });
+    init({ startPath: 'photos/2024' });
+    expect(requestedPaths).toEqual(['', 'photos/2024']);
+    expect(component.currentPath()).toBe('photos/2024');
+  });
+
+  it('falls back to the root, without an error, when startPath cannot be listed', () => {
+    defaultListing = listing({ rootPath: '/', directories: [dir('srv')] });
+    missingPaths.add('nope');
+    const events: FolderBrowserPathChange[] = [];
+    fixture.componentRef.setInput('browse', browseFn);
+    fixture.componentRef.setInput('startPath', '/nope');
+    component.pathChange.subscribe(e => events.push(e));
+    fixture.detectChanges();
+
+    expect(requestedPaths).toEqual(['', 'nope']);
+    expect(component.currentPath()).toBe('');
+    expect(component.error()).toBe('');
+    expect(component.rows().map(r => r.name)).toEqual(['srv']);
+    expect(events).toEqual([{ path: '', rootPath: '/', initial: true }]);
+  });
+
+  it('stays at the root when startPath lies outside it', () => {
+    defaultListing = listing({ rootPath: '/data/alice' });
+    init({ startPath: '/etc' });
+    expect(requestedPaths).toEqual(['']);
+    expect(component.currentPath()).toBe('');
+  });
+
+  it('relativeToRoot inverts the absolutePath join', () => {
+    const cases: [string, string, string | null][] = [
+      ['/srv/photos', '/', 'srv/photos'],
+      ['/srv/photos/', '/', 'srv/photos'],
+      ['/srv//photos', '/', 'srv/photos'],
+      ['/', '/', ''],
+      ['/data', '/data', ''],
+      ['/data/a/b', '/data', 'a/b'],
+      ['/data/a', '/data/', 'a'],
+      ['/database', '/data', null],
+      ['/etc', '/data', null],
+      ['/', '/data', null],
+      ['/srv', '', null],
+      ['a/b', '', 'a/b'],
+      ['a/b/', '/data', 'a/b'],
+      ['  ', '/data', ''],
+    ];
+    for (const [target, root, expected] of cases) {
+      expect(relativeToRoot(target, root), `${target} under ${root}`).toBe(expected);
+    }
   });
 
   // ------------------------------------------------------------------

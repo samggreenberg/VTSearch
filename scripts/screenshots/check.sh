@@ -24,7 +24,7 @@ OUT_DIR="$TMP" node_modules/.bin/tsx capture.ts "$@"
 
 drift=0
 shopt -s nullglob
-for new in "$TMP"/*.png; do
+for new in "$TMP"/*.webp; do
     name="$(basename "$new")"
     base="$BASELINE/$name"
     if [[ ! -f "$base" ]]; then

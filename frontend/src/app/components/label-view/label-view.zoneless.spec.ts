@@ -1008,6 +1008,71 @@ describe('LabelViewComponent', () => {
     expect(component.showResortPrompt()).toBe(false);
   });
 
+  it('tallies clicks and positives for the whole run of the current sort', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'test query';
+    const medias = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    flushInitialRequests(undefined, medias);
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.activate();
+    component.onAutopilotStart();
+
+    // The server has already reconciled each vote by the time the vote event
+    // fires, so answer the votes read with the post-vote state first.
+    const good: number[] = [];
+    const bad: number[] = [];
+    const cast = (id: number, vote: 'good' | 'bad'): void => {
+      (vote === 'good' ? good : bad).push(id);
+      component.voteState.loadVotes();
+      httpMock.match('/api/votes').forEach(req =>
+        req.flush({ good: [...good], bad: [...bad], click_times: {}, learned_scores: {} }),
+      );
+      component.onMediaVoted({ id, vote });
+      httpMock.match('/api/votes').forEach(req =>
+        req.flush({ good: [...good], bad: [...bad], click_times: {}, learned_scores: {} }),
+      );
+    };
+
+    cast(1, 'good');
+    for (let id = 2; id <= 10; id++) cast(id, 'bad');
+
+    expect(autopilot.state.phase).toBe('good');
+    expect(component.showResortPrompt()).toBe(true);
+    expect(component.resortSortClicks).toBe(10);
+    expect(component.resortSortPositives).toBe(1);
+
+    // Keeping the sort keeps the tally: the next prompt reports the whole run.
+    component.onResortKeep();
+    cast(11, 'good');
+    expect(component.resortSortClicks).toBe(11);
+    expect(component.resortSortPositives).toBe(2);
+
+    // A different sort starts a fresh tally.
+    component.onResortNewExample({ action: 'new-example', type: 'text', value: 'new query' });
+    expect(component.resortSortClicks).toBe(0);
+    expect(component.resortSortPositives).toBe(0);
+  });
+
+  it('does not count a click that toggled a positive off', () => {
+    const session = TestBed.inject(LabelSessionService);
+    session.textQuery = 'test query';
+    flushInitialRequests();
+
+    const autopilot = TestBed.inject(AutopilotStateService);
+    autopilot.activate();
+    component.onAutopilotStart();
+
+    // Item 1 is no longer good once the vote lands: the click un-voted it.
+    component.onMediaVoted({ id: 1, vote: 'good' });
+    httpMock.match('/api/votes').forEach(req =>
+      req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+    );
+
+    expect(component.resortSortClicks).toBe(1);
+    expect(component.resortSortPositives).toBe(0);
+  });
+
   it('should re-select autopilot suggestion on refocus', () => {
     flushInitialRequests();
 

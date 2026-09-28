@@ -895,7 +895,8 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: like #2799's ("should safe_thresholds be forced on for every VTSearch
 #: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``
 #: for the logistic head the SVM replaced (#2790/#2809), or ``CALIB_HEAD=mlp``
-#: for the historical auto-sized-MLP arm (#2781).
+#: for the historical auto-sized-MLP arm (#2781), or ``CALIB_HEAD=linear_logreg``
+#: for the logistic loss fitted to convergence by scikit-learn (#4114).
 HEAD = os.environ.get("CALIB_HEAD") or None
 
 #: Which **pipeline** runs at each step (issue #3959).  Unset is ``"app"``, the

@@ -3,8 +3,8 @@
 This is the reference catalogue of every demo dataset VTSearch can download and embed on demand. For the step-by-step loading walkthrough (opening the **Add Dataset** dialog, the **Demo** tab, and the **🏭 Synthetic Media** offline generator), see **[user/USER_GUIDE.md](user/USER_GUIDE.md)**.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.png" />
-  <img src="user/assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
+  <source media="(prefers-color-scheme: dark)" srcset="user/assets/importer-picker.dark.webp" />
+  <img src="user/assets/importer-picker.light.webp" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
 </picture>
 
 Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant (the **Download** column is the raw-source download estimate; size variants of the same demo usually share one download, and **—** marks demos that need no network download at all, like the synthetic generators). The three long-form audio demos are the exception — see the note under the Audio table. On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).

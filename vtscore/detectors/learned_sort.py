@@ -91,8 +91,18 @@ def model_matches_local_votes(labelset, has_cross_dataset, local_good, local_bad
 
 
 def update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, training_medias, snap, good, bad) -> None:
-    """Persist the freshly trained model + training set onto *det_ctx*."""
+    """Persist the freshly trained model + training set onto *det_ctx*.
+
+    The head is stamped with the signature of *labelset*, the one this run
+    captured when it started.  A background run that finishes after newer votes
+    therefore stores a head Find will not reuse (issue #4204).  The raw-vote
+    path (*labelset* ``None``) has no detector file to compare against, so its
+    signature is ``None`` and never matches.
+    """
+    from vtscore.detectors.model_loading import labelset_signature
+
     det_ctx.model = model
+    det_ctx.model_labels_sig = labelset_signature(labelset)
     det_ctx.threshold = threshold
     if labelset is not None:
         det_ctx.training_medias = training_medias or {}
@@ -133,10 +143,10 @@ def build_learned_sort_signature(
     Two runs with equal signatures produce identical results, so the route's
     job manager can return the cached result instead of retraining.
     """
-    from vtscore.detectors.labelset_elements import stable_element_id
+    from vtscore.detectors.model_loading import labelset_signature
 
     if labelset is not None:
-        labels_sig = tuple(sorted((el.label, stable_element_id(el)) for el in labelset.elements))
+        labels_sig = labelset_signature(labelset)
     else:
         labels_sig = (
             ("good", tuple(sorted(good))),

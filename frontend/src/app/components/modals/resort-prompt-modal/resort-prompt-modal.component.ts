@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
@@ -27,6 +27,10 @@ export interface ResortResult {
 
 type ModalView = 'prompt' | 'media-picker';
 
+function countPhrase(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-resort-prompt-modal',
@@ -45,9 +49,23 @@ export class ResortPromptModalComponent {
   readonly currentExampleType = input<'text' | 'media'>('text');
   readonly currentExampleDisplay = input('');
   readonly keepLabelsCount = input(0);
+  /** Labels cast while sorting by the current example. */
+  readonly clicksSoFar = input(0);
+  /** How many of those labels were positive. */
+  readonly positivesSoFar = input(0);
   readonly closed = output<void>();
   readonly keepExample = output<void>();
   readonly newExample = output<ResortResult>();
+
+  /** The current sort as the prompt names it: a text query in quotes, a
+   *  media example by its filename. */
+  readonly currentSortLabel = computed(() =>
+    this.currentExampleType() === 'text'
+      ? `“${this.currentExampleDisplay()}”`
+      : this.currentExampleDisplay(),
+  );
+  readonly clicksPhrase = computed(() => countPhrase(this.clicksSoFar(), 'time', 'times'));
+  readonly positivesPhrase = computed(() => countPhrase(this.positivesSoFar(), 'positive', 'positives'));
 
   view: ModalView = 'prompt';
   pendingText = '';

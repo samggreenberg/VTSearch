@@ -1008,6 +1008,13 @@ class DetectorContext:
         # ``label_embeddings``.
         "label_score_regions",
         "model",  # nn.Sequential | None (current trained MLP)
+        # Signature of the labelset ``model`` was trained from
+        # (:func:`~vtscore.detectors.model_loading.labelset_signature`), or
+        # None when unknown.  Stamped by every writer of ``model``; Find reuses
+        # the cached head only while it still matches the detector's saved
+        # labelset, because nothing that changes the labels drops ``model``
+        # (issue #4204).  In-memory only, never persisted.
+        "model_labels_sig",  # tuple | None
         # Structural (SIFT/VLAD) detectors carry a *second* learned object next
         # to the retrieval MLP: the match-statistic verification classifier
         # (None until trained / for non-structural detectors).  In-memory only,
@@ -1115,6 +1122,7 @@ class DetectorContext:
         self.label_negative_regions: dict[str, list[Any]] = {}
         self.label_score_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
+        self.model_labels_sig: tuple | None = None
         # Match-statistic verification classifier for structural detectors;
         # None for non-structural detectors and until first trained.
         self.verification_classifier: Any = None  # nn.Sequential | None
@@ -1541,8 +1549,10 @@ def invalidate_loaded_detector_models() -> None:
     ``det_ctx.model`` / ``det_ctx.threshold`` (``/api/find-label``,
     ``/api/find``, ``/api/auto-detect``) retrains under the new setting.
 
-    Sort / vote paths already retrain every call, so this is purely about
-    making the cached-MLP consumers honour live setting changes.
+    Only a learned sort retrains; a vote does not.  Label changes are caught
+    separately, by the labelset signature those consumers check before reusing
+    ``det_ctx.model`` (issue #4204), so this is purely about making them honour
+    live setting changes.
     """
     with _state_lock:
         for ctx in loaded_detector_contexts():

@@ -12,7 +12,8 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, of, Subscription } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { IconComponent } from '../icon/icon.component';
 import { formatBytes } from '../../utils/format-metadata';
@@ -46,6 +47,33 @@ export interface FolderBrowserListing {
 }
 
 export type FolderBrowserBrowseFn = (path: string) => Observable<FolderBrowserListing>;
+
+/** Payload of ``pathChange``.  ``initial`` is true only for the listing the
+ *  browser opens on, so a caller can tell "the browser appeared" apart from
+ *  "the user navigated". */
+export interface FolderBrowserPathChange {
+  path: string;
+  rootPath: string;
+  initial: boolean;
+}
+
+/** Express ``target`` relative to the browse root ``root`` — the inverse of
+ *  the join ``absolutePath`` performs.  A relative ``target`` is taken to be
+ *  relative to the root already.  Returns ``null`` when an absolute ``target``
+ *  lies outside ``root``, or cannot be placed because no root is known. */
+export function relativeToRoot(target: string, root: string): string | null {
+  const collapse = (p: string): string => {
+    const squeezed = p.trim().replace(/\/{2,}/g, '/');
+    return squeezed.replace(/\/+$/, '') || (squeezed.startsWith('/') ? '/' : '');
+  };
+  const t = collapse(target);
+  if (!t.startsWith('/')) return t;
+  if (!root) return null;
+  const r = collapse(root);
+  if (t === r) return '';
+  if (r === '/') return t.slice(1);
+  return t.startsWith(r + '/') ? t.slice(r.length + 1) : null;
+}
 
 interface Row {
   kind: 'dir' | 'file';
@@ -108,13 +136,17 @@ export class FolderBrowserComponent implements OnInit, OnDestroy, AfterViewInit 
   /** Empty-state message shown when the listing is empty. */
   readonly emptyMessage = input('');
 
-  /** Fired whenever the displayed directory changes.  ``path`` is
-   *  relative to the browse root; ``rootPath`` is the absolute server
+  /** Directory to open at instead of the browse root: an absolute path
+   *  (placed against the ``rootPath`` the listing reports) or one relative
+   *  to the root.  Read once, when the browser opens.  Falls back to the
+   *  root when the path is outside it or cannot be listed. */
+  readonly startPath = input('');
+
+  /** Fired whenever the displayed directory changes, including once for
+   *  the directory the browser opens on (with ``initial: true``).  ``path``
+   *  is relative to the browse root; ``rootPath`` is the absolute server
    *  path if the backend exposes one (empty string otherwise). */
-  readonly pathChange = output<{
-    path: string;
-    rootPath: string;
-}>();
+  readonly pathChange = output<FolderBrowserPathChange>();
 
   /** Fired when the user confirms a file (Enter on selected file, or
    *  double-click on a file).  Folders are never emitted; they
@@ -146,7 +178,22 @@ export class FolderBrowserComponent implements OnInit, OnDestroy, AfterViewInit 
   ngOnInit(): void {
     // Not the constructor: `browse` is a required signal input, so it is only
     // readable once the parent's bindings have been applied.
-    this.loadDirectory('');
+    const start = this.startPath().trim();
+    if (!start) {
+      this.showListing(this.fetch(''), true);
+      return;
+    }
+    // An absolute start path can only be placed against the root, and only a
+    // listing reports the root — so list the root first, then descend. The
+    // root listing doubles as the fallback when the start path can't be shown.
+    const opening$ = this.fetch('').pipe(
+      switchMap((atRoot) => {
+        const rel = relativeToRoot(start, atRoot.res.rootPath ?? '');
+        if (!rel) return of(atRoot);
+        return this.fetch(rel).pipe(catchError(() => of(atRoot)));
+      }),
+    );
+    this.showListing(opening$, true);
   }
 
   ngAfterViewInit(): void {
@@ -164,11 +211,20 @@ export class FolderBrowserComponent implements OnInit, OnDestroy, AfterViewInit 
   // ------------------------------------------------------------------
 
   private loadDirectory(path: string): void {
+    this.showListing(this.fetch(path), false);
+  }
+
+  /** The listing for ``path``, paired with the path it was asked for. */
+  private fetch(path: string): Observable<{ res: FolderBrowserListing; path: string }> {
+    return this.browse()(path).pipe(map((res) => ({ res, path })));
+  }
+
+  private showListing(listing$: Observable<{ res: FolderBrowserListing; path: string }>, initial: boolean): void {
     this.loading.set(true);
     this.error.set('');
     this.currentSub?.unsubscribe();
-    this.currentSub = this.browse()(path).subscribe({
-      next: (res) => {
+    this.currentSub = listing$.subscribe({
+      next: ({ res, path }) => {
         const dirs = res.directories || [];
         const files = this.showFiles() ? res.files || [] : [];
         const rows: Row[] = [];
@@ -189,7 +245,7 @@ export class FolderBrowserComponent implements OnInit, OnDestroy, AfterViewInit 
         this.rootPath.set(res.rootPath ?? '');
         this.selectedIndex.set(-1);
         this.loading.set(false);
-        this.pathChange.emit({ path: this.currentPath(), rootPath: this.rootPath() });
+        this.pathChange.emit({ path: this.currentPath(), rootPath: this.rootPath(), initial });
       },
       error: (err) => {
         this.error.set(apiErrorMessage(err, 'Could not browse this folder.'));
