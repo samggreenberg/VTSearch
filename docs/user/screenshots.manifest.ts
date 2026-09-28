@@ -170,6 +170,7 @@ function icon(s: {
   caption: string;
   target: Target;
   recipe: Shot['recipe'];
+  after?: Shot['after'];
 }): Shot {
   return {
     id: s.id,
@@ -178,6 +179,7 @@ function icon(s: {
     themes: BOTH,
     clip: { target: s.target, pad: 6 },
     recipe: s.recipe,
+    after: s.after,
   };
 }
 
@@ -344,6 +346,32 @@ function isRosySmiley(picture: Drawing): boolean {
   return picture.kind === 'face' && face.color === 'yellow' && !!face.smiling && !!face.cheeks;
 }
 
+
+/**
+ * Tick exactly the rows called *names* on a dashboard card (`tr[vt-dataset-card]`
+ * or `tr[vt-detector-card]`) and untick the rest; names match the whole
+ * `.name-cell`, since `drawings` is a prefix of `drawings-new`.
+ */
+async function tickOnly(page: Page, h: Helpers, tag: string, names: string[]): Promise<void> {
+  const rows = page.locator(tag);
+  await rows.first().waitFor({ timeout: 20000 });
+  for (let i = 0; i < (await rows.count()); i++) {
+    const row = rows.nth(i);
+    const label = ((await row.locator('.name-cell').first().textContent()) || '').trim();
+    const cb = row.locator('.select-checkbox').first();
+    if (((await cb.getAttribute('aria-checked')) === 'true') !== names.includes(label)) {
+      await cb.click();
+      await h.wait(350);
+    }
+  }
+  await h.wait(400);
+}
+
+/** Put the example's detector on (or back off) the AutoRun tab, through the API. */
+async function setAutoRun(h: Helpers, on: boolean): Promise<void> {
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  await h.app.api(`/api/detectors/registry/${det.id}/autofind`, { method: 'PUT', body: { autofind: on } });
+}
 
 /** Select a dataset + detector on the dashboard, then Find; wait out scoring. */
 async function openFind(page: Page, h: Helpers): Promise<void> {
@@ -1351,4 +1379,244 @@ export const SHOTS: Shot[] = [
       await page.waitForTimeout(1500);
     },
   },
+  // move-a-detector.md
+  {
+    id: 'move-export-menu',
+    embeddedIn: `${HOWTO}/move-a-detector.md#step-1-export-the-detectors-answers`,
+    caption: "Step 1: (1) the detector's ⋯ menu, then (2) Export labels",
+    themes: BOTH,
+    annotations: [
+      { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Export labels' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+    },
+  },
+  {
+    id: 'move-export-save',
+    embeddedIn: `${HOWTO}/move-a-detector.md#step-2-save-them-to-a-file`,
+    caption: 'Step 2: (1) Categories on All, (2) the Server JSON File tab, (3) the path to save to, then (4) Save',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal .delimiter-option', hasText: 'All' }, kind: 'step', step: 1 },
+      { target: { selector: '.export-tab', hasText: 'Server JSON File' }, kind: 'step', step: 2, at: 'top' },
+      { target: '#field-filepath', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Save' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Export labels' }).first().click();
+      await page.waitForSelector('.export-tabs', { timeout: 15000 });
+      await page.locator('.export-tab', { hasText: 'Server JSON File' }).first().click();
+      await page.waitForSelector('#field-filepath', { timeout: 10000 });
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, 800);
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'move-trained-tab',
+    embeddedIn: `${HOWTO}/move-a-detector.md#step-3-make-a-detector-from-the-file`,
+    caption:
+      "Step 3: in New Detector, (1) the Trained tab (then Server JSON File), (2) the file's path, (3) the detector's name, then (4) Create & Import",
+    themes: BOTH,
+    annotations: [
+      { target: { selector: 'vt-modal .tab[role="tab"]', hasText: 'Trained' }, kind: 'step', step: 1, at: 'top' },
+      { target: '#nmm-filepath', kind: 'step', step: 2 },
+      { target: '#detector-name', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create & Import' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    // Posed, never created.
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow(TRAIN_DATASET);
+      await h.openNewDetector();
+      await page.locator('vt-modal .tab[role="tab"]', { hasText: 'Trained' }).first().click();
+      await page.locator('vt-modal .picker-card', { hasText: 'Server JSON File' }).first().click();
+      await page.waitForSelector('#nmm-filepath', { timeout: 10000 });
+      await page.locator('#nmm-filepath').fill('/data/Yellow Smileys-drawings.json');
+      await page.locator('#detector-name').fill(DETECTOR);
+      await h.wait(700);
+    },
+  },
+
+  // import-labels.md
+  {
+    id: 'labels-menu',
+    embeddedIn: `${HOWTO}/import-labels.md#step-2-open-import-labels-on-the-detector`,
+    caption: "Step 2: (1) the detector's ⋯ menu, then (2) Import Labels",
+    themes: BOTH,
+    annotations: [
+      { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Import Labels' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+    },
+  },
+  {
+    id: 'labels-import-form',
+    embeddedIn: `${HOWTO}/import-labels.md#step-3-import-the-file`,
+    caption: "Step 3: (1) the file's path on the server, then (2) Import",
+    themes: BOTH,
+    annotations: [
+      { target: '#lif-filepath', kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    // Posed, never imported: Import would add the rows to the fixture detector.
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+      await page.locator('.context-menu .menu-item', { hasText: 'Import Labels' }).first().click();
+      await page.locator('vt-modal .picker-card', { hasText: 'Server CSV File' }).first().click();
+      await page.waitForSelector('#lif-filepath', { timeout: 10000 });
+      await page.locator('#lif-filepath').fill('/data/smiley-labels.csv');
+      await h.wait(700);
+    },
+  },
+
+  // autorun-from-the-command-line.md
+  {
+    id: 'autorun-menu',
+    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-1-move-the-detector-to-autorun`,
+    caption: "Step 1: (1) the detector's ⋯ menu, then (2) Move to AutoRun",
+    themes: BOTH,
+    annotations: [
+      { target: detectorRow(DETECTOR), kind: 'step', step: 1 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Move to AutoRun' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await cleanDashboard(page, h);
+      await h.overflowMenu(DETECTOR);
+    },
+  },
+  {
+    id: 'autorun-tab',
+    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-1-move-the-detector-to-autorun`,
+    caption: 'Step 1: (1) the AutoRun tab, (2) the detector now on it',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.detector-tab-bar .tab', hasText: 'AutoRun' }, kind: 'step', step: 1, at: 'top' },
+      { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
+    ],
+    async recipe(page, h) {
+      await setAutoRun(h, true);
+      await cleanDashboard(page, h);
+      await page.locator('.detector-tab-bar .tab', { hasText: 'AutoRun' }).first().click();
+      await page.locator('tr[vt-detector-card]').first().waitFor({ timeout: 10000 });
+      await page.mouse.move(700, 60);
+      await h.wait(700);
+    },
+    after: async (_page, h) => setAutoRun(h, false),
+  },
+  {
+    id: 'autorun-settings',
+    embeddedIn: `${HOWTO}/autorun-from-the-command-line.md#step-2-choose-where-results-go-optional`,
+    caption: 'Step 2: in Settings, (1) Auto-Find, (2) a Results Exporter, (3) its settings, then (4) Done',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.side-tab', hasText: 'Auto-Find' }, kind: 'step', step: 1 },
+      { target: { selector: '.view-tab', hasText: 'Server CSV File' }, kind: 'step', step: 2, at: 'top' },
+      { target: '#autofind-filepath', kind: 'step', step: 3 },
+      { target: { selector: '.settings-actions .btn', hasText: 'Done' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openSettings();
+      await page.locator('.side-tab', { hasText: 'Auto-Find' }).first().click();
+      await page.locator('.view-tab', { hasText: 'Server CSV File' }).first().click();
+      await page.waitForSelector('#autofind-filepath', { timeout: 10000 });
+      await h.wait(700);
+    },
+    // The choice saves as it is made; put the destination back to None.
+    after: async (page) => {
+      await page.locator('.view-tab', { hasText: 'None' }).first().click();
+      await page.waitForTimeout(1000);
+    },
+  },
+
+  // combine.md
+  {
+    id: 'combine-datasets-tick',
+    embeddedIn: `${HOWTO}/combine.md#combine-datasets`,
+    caption: 'Combine datasets: (1) tick the datasets, then (2) Combine selected datasets',
+    themes: BOTH,
+    annotations: [
+      { target: datasetRow(TRAIN_DATASET), kind: 'step', step: 1 },
+      { target: datasetRow(TEST_DATASET), kind: 'step', step: 1 },
+      { target: 'button[aria-label="Combine selected datasets"]', kind: 'step', step: 2, at: 'bottom' },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', [TRAIN_DATASET, TEST_DATASET]);
+      await tickOnly(page, h, 'tr[vt-detector-card]', []);
+      await page.mouse.move(700, 60);
+      await h.wait(500);
+    },
+    after: async (page, h) => tickOnly(page, h, 'tr[vt-dataset-card]', []),
+  },
+  {
+    id: 'combine-datasets-dialog',
+    embeddedIn: `${HOWTO}/combine.md#combine-datasets`,
+    caption: "In Combine Datasets: (1) the new dataset's name, (2) the datasets going in, then (3) Combine",
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-modal .name-input', kind: 'step', step: 1 },
+      { target: 'vt-modal table', kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Combine' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    // Posed, never combined.
+    async recipe(page, h) {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', [TRAIN_DATASET, TEST_DATASET]);
+      await page.locator('button[aria-label="Combine selected datasets"]').first().click();
+      await page.waitForSelector('vt-modal .name-input', { timeout: 10000 });
+      await h.wait(700);
+    },
+    after: async (page, h) => {
+      await page.keyboard.press('Escape');
+      await tickOnly(page, h, 'tr[vt-dataset-card]', []);
+    },
+  },
+  {
+    id: 'combine-detectors-dialog',
+    embeddedIn: `${HOWTO}/combine.md#combine-detectors`,
+    caption: "In Combine Trainable Detectors: (1) the new detector's name, then (2) Combine",
+    themes: BOTH,
+    annotations: [
+      { target: '#combine-new-name', kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Combine' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    // Posed, never combined.
+    async recipe(page, h) {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', []);
+      await tickOnly(page, h, 'tr[vt-detector-card]', [DETECTOR, REGION_DETECTOR]);
+      await page.locator('button[aria-label="Combine selected detectors"]').first().click();
+      await page.waitForSelector('#combine-new-name', { timeout: 10000 });
+      await page.locator('#combine-new-name').fill('Smileys (pooled)');
+      await h.wait(700);
+    },
+    after: async (page, h) => {
+      await page.locator('vt-modal .btn--secondary', { hasText: 'Cancel' }).first().click().catch(() => {});
+      await tickOnly(page, h, 'tr[vt-detector-card]', []);
+    },
+  },
+  icon({
+    id: 'icon-combine-datasets',
+    anchor: 'combine-datasets',
+    page: 'combine.md',
+    caption: 'The Combine selected datasets button',
+    target: 'button[aria-label="Combine selected datasets"]',
+    recipe: async (page, h) => {
+      await h.dashboard();
+      await tickOnly(page, h, 'tr[vt-dataset-card]', [TRAIN_DATASET, TEST_DATASET]);
+      await page.mouse.move(700, 60);
+    },
+    after: async (page, h) => tickOnly(page, h, 'tr[vt-dataset-card]', []),
+  }),
 ];

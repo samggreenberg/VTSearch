@@ -23,7 +23,7 @@ import { launchChromium } from './launch.mjs';
 // @ts-expect-error - plain .mjs helper, shared with the slide shooter
 import { drawCallouts, resolveBox } from './callouts.mjs';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { appClient, DETECTOR, REGION_DATASET, TRAIN_DATASET } from './smiley-example.mjs';
+import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smiley-example.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
@@ -77,7 +77,7 @@ const STILL_CSS =
  * version) with fixed strings so pixel-diffs are stable across runs.
  */
 async function maskVolatile(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate((repo) => {
     const fixedDate = '2026-01-01 00:00';
     const walk = (re: RegExp, replace: (m: string) => string) => {
       const it = document.createNodeIterator(document.body, NodeFilter.SHOW_TEXT);
@@ -108,13 +108,20 @@ async function maskVolatile(page: Page): Promise<void> {
     // event, so the form keeps the real path it validated against.
     const fixtureRe = /\S*\/data\/doc-fixtures\//g;
     walk(fixtureRe, () => '/data/');
+    // Any other path under the checkout (a default file path a form fills
+    // in, say) is shown as under a generic install folder.
+    const repoRe = new RegExp(repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/', 'g');
+    walk(repoRe, () => '/opt/vtsearch/');
     document.querySelectorAll('input').forEach((el) => {
       const input = el as HTMLInputElement;
       if (input.value.includes('/data/doc-fixtures/')) {
         input.value = input.value.replace(fixtureRe, '/data/');
       }
+      if (input.value.includes(repo + '/')) {
+        input.value = input.value.split(repo + '/').join('/opt/vtsearch/');
+      }
     });
-  });
+  }, REPO);
 }
 
 function makeHelpers(page: Page): Helpers {
