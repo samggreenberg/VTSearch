@@ -232,12 +232,94 @@ describe('DashboardComponent', () => {
         [{ id: 'd1', name: 'Data', media_type: 'audio' }],
         [{ id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true }],
       );
-      // Auto-selected single dataset + single detector.
+      component.setDetectorTab('autorun');
+      component.toggleDetectorSelection('m2', new MouseEvent('click'));
       expect(component.selectedDetectorIds.has('m2')).toBe(true);
       expect(component.labelEnabled).toBe(false);
       expect(component.labelHint).toBe('AutoRun detectors are frozen — move to Drafts to retrain');
       // Find (read-only scoring) stays available.
       expect(component.findEnabled).toBe(true);
+    });
+
+    describe('Find follows the visible tab only (#4228)', () => {
+      const dataset = [{ id: 'd1', name: 'Data', media_type: 'audio' }];
+      const loneAutorun = [
+        { id: 'm2', name: 'Frozen B', media_type: 'audio', num_training: 5, autofind: true },
+      ];
+
+      /** Answer a registry refresh, triggering one first unless the code
+       *  under test already has. The rows are copied: re-flushing the same
+       *  array would leave the registry signal unchanged, so `detectors$`
+       *  would never emit and the refresh would test nothing. */
+      function refreshRegistry(detectors: unknown[], trigger = true): void {
+        if (trigger) component.refresh();
+        httpMock.expectOne('/api/datasets/registry').flush({ datasets: [...dataset] });
+        httpMock.expectOne('/api/detectors/registry').flush({ detectors: [...detectors] });
+        TestBed.tick();
+        drainBackgroundRequests();
+      }
+
+      it('does not auto-select a lone AutoRun detector while Drafts is showing', () => {
+        flushInitialRequests(dataset, loneAutorun);
+        expect(component.detectorTab()).toBe('drafts');
+        expect(component.selectedDetectorIds.size).toBe(0);
+        expect(component.findEnabled).toBe(false);
+        expect(component.findHint).toBe('Select a detector in the table above.');
+      });
+
+      it('leaves Drafts empty after selecting on AutoRun and switching back, across refreshes', () => {
+        flushInitialRequests(dataset, loneAutorun);
+        component.setDetectorTab('autorun');
+        // With the grid showing it, the lone detector is auto-selected again.
+        refreshRegistry(loneAutorun);
+        expect(component.selectedDetectorIds.has('m2')).toBe(true);
+        expect(component.findEnabled).toBe(true);
+
+        component.setDetectorTab('drafts');
+        expect(component.selectedDetectorIds.size).toBe(0);
+        expect(component.findEnabled).toBe(false);
+        // A later registry refresh used to reselect the hidden detector.
+        refreshRegistry(loneAutorun);
+        expect(component.selectedDetectorIds.size).toBe(0);
+        expect(component.findEnabled).toBe(false);
+      });
+
+      it('leaves Drafts empty when its only detector moves to AutoRun', () => {
+        flushInitialRequests(dataset, [
+          { id: 'm1', name: 'Draft A', media_type: 'audio', num_training: 5 },
+        ]);
+        expect(component.selectedDetectorIds.has('m1')).toBe(true);
+
+        component.setDetectorAutorun(component.detectors[0], true);
+        httpMock.expectOne('/api/detectors/registry/m1/autofind').flush({ id: 'm1', autofind: true });
+        httpMock.expectOne('/api/datasets/registry').flush({ datasets: dataset });
+        httpMock.expectOne('/api/detectors/registry').flush({
+          detectors: [{ id: 'm1', name: 'Draft A', media_type: 'audio', num_training: 5, autofind: true }],
+        });
+        TestBed.tick();
+
+        expect(component.detectorTab()).toBe('drafts');
+        expect(component.selectedDetectorIds.size).toBe(0);
+        expect(component.findEnabled).toBe(false);
+      });
+
+      it('lands a detector created from Train on the AutoRun tab on Drafts, selected', () => {
+        flushInitialRequests(dataset, loneAutorun);
+        component.setDetectorTab('autorun');
+        const routerSpy = vi.spyOn(component['router'], 'navigate').mockResolvedValue(true);
+
+        // Train with no detector selected opens the new-detector modal and
+        // proceeds to training once the detector exists.
+        component.onLabel();
+        expect(component.trainAfterModelCreation).toBe(true);
+        // The created event refreshes the registry itself.
+        TestBed.inject(NewThingFlowsService).emitDetectorCreated('m9');
+        refreshRegistry([...loneAutorun, { id: 'm9', name: 'Fresh', media_type: 'audio' }], false);
+
+        expect(component.detectorTab()).toBe('drafts');
+        expect(component.selectedDetectorIds.has('m9')).toBe(true);
+        expect(routerSpy).toHaveBeenCalledWith(['/label', 'd1', 'm9']);
+      });
     });
 
     it('hides the Combine and Delete-selected section actions on the AutoRun tab', async () => {

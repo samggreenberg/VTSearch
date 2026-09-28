@@ -343,6 +343,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.datasetState.refresh();
     if (this.trainAfterModelCreation && modelId) {
       this.trainAfterModelCreation = false;
+      // A new detector is always a draft; surface its tab, or the selection
+      // (which only holds visible rows) drops it once the registry lists it.
+      this.dashSelection.setDetectorTab('drafts');
       this.dashSelection.selectOnly('detector', [modelId]);
       this.knownDetectorIds.add(modelId);
       this.datasetState.detectors$
@@ -474,7 +477,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (kind === 'detector') this.dashSelection.setDetectorTab('drafts');
       this.dashSelection.selectOnly(kind, newIds);
     } else if (currentIds.size === 1 && this.dashSelection.count(kind) === 0) {
-      // First load with exactly one item; auto-select it.
+      // Exactly one item and nothing selected; auto-select it. A lone
+      // detector on the hidden tab is refused by the selection service, so
+      // Drafts with only an AutoRun detector stays empty (#4228).
       this.dashSelection.selectOnly(kind, currentIds);
     }
     if (kind === 'dataset') this.knownDatasetIds = currentIds;

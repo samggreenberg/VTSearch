@@ -932,6 +932,11 @@ with bulk-action and per-card controls.
   detector in **Drafts**, move it to **AutoRun** once you trust it,
   and move it back to Drafts later if it needs more tuning.
 
+  Only detectors on the tab you're looking at can be selected, so
+  **Train** and **Find** always act on rows you can see. Switching
+  tabs clears the detector selection, and picking a detector from the
+  top bar switches to its tab.
+
 The **+** button on each card creates a new dataset (the Add Dataset
 dialog) or a new detector (the [New Detector](#creating-a-detector)
 modal).
