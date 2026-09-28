@@ -135,3 +135,65 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
         cache = det_ctx.calibration_cache
         assert cache is not None
         assert det_ctx.threshold == threshold_from_fold_orderings(cache[1].orderings, -3)
+
+
+class TestSlideLeavesUnfittedCutsAlone:
+    def test_too_few_votes_keeps_the_trained_cut(self):
+        """Folds that never split carry a sentinel, not a cut the knob can move.
+
+        With three votes the calibration folds fall back to 0.5 and training
+        stores the schedule blend over the haystack.  The slide used to write
+        the bare sentinel over it - moving the line on the first touch of the
+        stepper, in either direction (a step toward lenient could admit fewer).
+        """
+        rng = np.random.default_rng(3)
+        clips = _clips(rng, range(800, 840))
+        good = {800: None, 801: None}
+        bad = {802: None}
+
+        det_ctx = DetectorContext(detector_id="det-slide-fallback", media_type="audio")
+        _results, threshold, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=det_ctx)
+        assert model is not None
+        cache = det_ctx.calibration_cache
+        assert cache is not None and cache[1].fallback is not None, "the fixture must be below the fold floor"
+        assert det_ctx.anchored_cut_cache is None
+        assert threshold != cache[1].fallback, "training must have stored the blend, not the sentinel"
+
+        det_ctx.threshold = threshold
+        register_detector_context(det_ctx)
+        for k in (1, -3, 10):
+            recompute_detector_thresholds_for_inclusion(k)
+            assert det_ctx.threshold == threshold, k
+
+
+class TestEachDetectorKeepsItsOwnInclusion:
+    def test_a_detector_holding_its_own_value_is_not_recut(self):
+        """Inclusion is per detector (#3416): a change on one must not move another's line.
+
+        Before, every loaded detector was re-cut at the new value while only the
+        active one's ``inclusion`` was updated, so switching to another detector
+        showed a stepper at its old value over a line cut at the new one.
+        """
+        rng = np.random.default_rng(13)
+        clips = _clips(rng, range(900, 920))
+        good = {cid: None for cid in range(900, 904)}
+        bad = {cid: None for cid in range(904, 908)}
+
+        mine = DetectorContext(detector_id="det-own-inclusion", media_type="audio")
+        _r, at_zero, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=mine)
+        assert model is not None and mine.anchored_cut_cache is not None
+        mine.threshold = at_zero
+        mine.inclusion = 0
+        register_detector_context(mine)
+
+        unseeded = DetectorContext(detector_id="det-unseeded-inclusion", media_type="audio")
+        _r2, unseeded_zero, _m2 = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=unseeded)
+        unseeded.threshold = unseeded_zero
+        register_detector_context(unseeded)
+
+        recompute_detector_thresholds_for_inclusion(4)
+
+        assert mine.threshold == at_zero, "a detector with its own inclusion keeps its cut"
+        assert unseeded.threshold == unseeded.anchored_cut_cache.threshold_at(4), (
+            "an unseeded detector takes the new value, which is what it would be seeded with"
+        )

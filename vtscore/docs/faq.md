@@ -239,21 +239,34 @@ global RNG), and the BCE heads additionally isolate theirs via
 It moves the **decision threshold**, not the model. Inclusion never enters
 training: `train_model` is class-balanced regardless, so every item's score
 is identical at every inclusion setting, and only the cut moves. Range
-`[-10, +10]`, applied in
-`vtscore.training.thresholds.conformal_threshold`:
+`[-10, +10]` at the API edge.
 
-- **Positive `k`** buys a false-negative budget that halves per step:
-  `alpha(k) = min(1, 0.25 * 2**-k)` caps the threshold at the
-  `alpha`-quantile of the calibration *positives*, so "+k" means "the
-  fraction of true matches I'm willing to miss". The cap is an upper
-  bound - cleanly separated classes spend none of it.
-- **Negative `k`** walks the cut *up* from the gap midpoint at 0 toward
-  the 0.75 quantile of the positives at -10 ("just the surest matches"),
-  while a false-positive guard keeps it above the negatives' upper tail.
+Under the shipped cut (`FoldAnchoredCut.threshold_at`, see the next answer),
+`k` is a cost ratio: `inclusion_cost_weights(k)` prices a miss at `2**k`
+times a false alarm (or a false alarm at `2**-k` times a miss, below zero).
+The `mid_tilt` rule starts from the fold-anchored midpoint cut at `k = 0`
+and shifts its quantile by however far the rate-optimal cut moves at those
+weights. How far one step moves the line therefore depends on the fitted
+mixtures; it is not a fixed share of misses, and on measured data the steps
+come out shorter than their nominal size (`docs/ML.md`, "The knob
+under-delivers its own steps").
 
-Every component is monotone non-increasing in `k`, so the included sets are
+When a detector has no fitted estimator, the cut falls back to
+`vtscore.training.thresholds.conformal_threshold`, where `k` has a budget
+meaning: positive `k` caps the threshold at the `alpha(k) = min(1, 0.25 *
+2**-k)` quantile of the calibration positives, and negative `k` walks it up
+toward the 0.75 quantile of the positives at -10, above a false-positive
+guard.
+
+Both rules are monotone non-increasing in `k`, so the included sets are
 nested: everything included at `k` is still included at `k + 1`. That is
 what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
+
+The Inclusion control is being replaced in the app by a **precision floor**
+(#4224): the user names the share of returns that must be right, and the cut
+returns as much as it can at that share
+(`vtscore.training.thresholds.precision_floor_cut`). `k` stays underneath,
+as the unit Autopilot's acquisition offset is measured in.
 
 ### How is the decision threshold chosen?
 

@@ -69,9 +69,6 @@ folds.
 
 ## Relation to other plans
 
-- [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md)'s cold-start
-  item ("interpolating against the population score distribution") is the
-  ≤20-vote special case of the same idea, now subsumed by the shipped fusion.
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
   is orthogonal: it filters *which labels* enter calibration; this plan changed
   *what the labels are fused with*. Both can ship.
