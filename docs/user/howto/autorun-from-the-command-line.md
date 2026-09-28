@@ -99,5 +99,8 @@ it. The rest of the command's options are in `docs/CLI.md`.
 
 ## Where next
 
+- [Running AutoRun on a new dataset](../USER_GUIDE.md#running-autorun-on-a-new-dataset),
+  in the user guide, for the same detectors inside VTSearch: they run on each
+  dataset you import, and a dataset's **⋯** menu has **Run AutoRun**.
 - [Dashboard: managing datasets and detectors](../USER_GUIDE.md#dashboard-managing-datasets-and-detectors),
   in the user guide, on the **Drafts** and **AutoRun** tabs.

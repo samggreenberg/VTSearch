@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-import { AutoDetectResultsData, DatasetRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry } from '../models/api.models';
 
 export interface CombineDatasetsState {
   open: boolean;
@@ -20,11 +20,6 @@ export interface AddLabelsState {
   open: boolean;
   detectorId: string;
   detectorName: string;
-}
-
-export interface FindResultsState {
-  open: boolean;
-  data: AutoDetectResultsData;
 }
 
 export interface StatsState {
@@ -68,10 +63,6 @@ export class DashboardModalsService {
     detectorId: '',
     detectorName: '',
   });
-  private readonly findResultsSubject = new BehaviorSubject<FindResultsState>({
-    open: false,
-    data: { results: {} },
-  });
   private readonly statsSubject = new BehaviorSubject<StatsState>({
     open: false,
     datasetId: '',
@@ -87,7 +78,6 @@ export class DashboardModalsService {
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
   readonly export$ = this.exportSubject.asObservable();
   readonly addLabels$ = this.addLabelsSubject.asObservable();
-  readonly findResults$ = this.findResultsSubject.asObservable();
   readonly stats$ = this.statsSubject.asObservable();
   readonly detectorStats$ = this.detectorStatsSubject.asObservable();
 
@@ -105,10 +95,6 @@ export class DashboardModalsService {
 
   get addLabels(): AddLabelsState {
     return this.addLabelsSubject.value;
-  }
-
-  get findResults(): FindResultsState {
-    return this.findResultsSubject.value;
   }
 
   get stats(): StatsState {
@@ -149,14 +135,6 @@ export class DashboardModalsService {
 
   closeAddLabels(): void {
     this.addLabelsSubject.next({ open: false, detectorId: '', detectorName: '' });
-  }
-
-  openFindResults(data: AutoDetectResultsData): void {
-    this.findResultsSubject.next({ open: true, data });
-  }
-
-  closeFindResults(): void {
-    this.findResultsSubject.next({ open: false, data: { results: {} } });
   }
 
   openStats(datasetId: string, datasetName: string): void {

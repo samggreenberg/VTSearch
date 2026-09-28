@@ -78,6 +78,15 @@ These are the questions #4224 raised that no issue below can settle alone:
   `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
   are public `vtscore` API. Per CLAUDE.md they are deprecated with an
   `[Unreleased]` note, not deleted, and the break is raised before it is made.
+- **Verify the floor by audit?** #4257 priced random verification
+  ([`REPORT.md`](../experiments/2026-09-28-random-verification/REPORT.md)). The
+  user audits a uniform sample of the returned set. That keeps the promise at
+  every prevalence tested, with no calibration-positive gate. But the sets a
+  floor can honestly return are small, so at 0.44% and 0.1% most audited
+  promises end with the user having read the whole set. Two questions follow for
+  #4246 and #4247. Does the control ever ask for audit votes? And below what
+  promisable size does it just show the top k and let the user's votes be the
+  verification?
 
 ## Open work
 

@@ -110,7 +110,7 @@ class TestLearnedSort:
 class TestAutoRun:
     def _autorun(self, client, monkeypatch, n_pos: int | None) -> dict:
         """One Auto-Find detector, its trained context's estimate planted when *n_pos* is given."""
-        import vtsearch.routes.detectors.scoring as scoring_mod
+        import vtsearch.autorun_detectors as autorun_mod
         from vtsearch.settings import add_autofind_detector
 
         setup_trainable_model_in_registry(
@@ -118,7 +118,7 @@ class TestAutoRun:
         )
         add_autofind_detector("floor-autorun")
         if n_pos is not None:
-            real = scoring_mod.resolve_or_train_detector
+            real = autorun_mod.resolve_or_train_detector
 
             def _planting(*args, ctx_sink=None, **kwargs):
                 trained: list = []
@@ -127,7 +127,7 @@ class TestAutoRun:
                 ctx_sink.extend(trained)
                 return out
 
-            monkeypatch.setattr(scoring_mod, "resolve_or_train_detector", _planting)
+            monkeypatch.setattr(autorun_mod, "resolve_or_train_detector", _planting)
 
         resp = client.post("/api/auto-detect", json={})
         assert resp.status_code == 200, resp.get_json()
@@ -136,7 +136,7 @@ class TestAutoRun:
     @pytest.mark.parametrize(("min_precision", "n_pos", "status"), STATES)
     def test_each_result_carries_the_verdict(self, client, monkeypatch, caplog, min_precision, n_pos, status):
         set_min_precision(min_precision)
-        with caplog.at_level(logging.INFO, logger="vtsearch.routes.detectors.scoring"):
+        with caplog.at_level(logging.INFO, logger="vtsearch.autorun_detectors"):
             result = self._autorun(client, monkeypatch, n_pos)
 
         assert result["floor"] == {
@@ -159,7 +159,7 @@ class TestAutoRun:
     def test_a_real_train_reports_through_the_context_sink(self, client, monkeypatch, caplog):
         """No planting: the context ``resolve_or_train_detector`` trained is the one asked."""
         set_min_precision(0.5)
-        with caplog.at_level(logging.INFO, logger="vtsearch.routes.detectors.scoring"):
+        with caplog.at_level(logging.INFO, logger="vtsearch.autorun_detectors"):
             result = self._autorun(client, monkeypatch, None)
         assert result["floor"]["status"] == "insufficient_evidence"
         assert result["hits"], "an unpromised run still exports the Inclusion 0 set"

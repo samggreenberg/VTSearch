@@ -10,6 +10,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`resolve_or_train_detector(..., on_progress=, use_loaded_context=)`**
+  (issue #4252). Both keyword-only and optional, so every existing call
+  behaves as before. `on_progress` receives the cold train's progress (the
+  `update_find_progress` signature) instead of the shared Find tracker, for a
+  caller scoring off to the side of Find; `use_loaded_context=False` trains on
+  a throwaway context even when the detector is loaded, leaving the live
+  context's head and caches alone.
+
+- **`post_load` on the background dataset load** (issue #4252).
+  `vtscore.datasets.load_pipeline`'s load workers take an optional
+  `post_load(ctx)` hook, called once after a load that succeeded - with the new
+  dataset pinned as the thread's dataset context, after the load's own task has
+  parked and its timing recorders have finished - and never after a failure or
+  cancel. A hook that raises is logged; the dataset stays saved. The app uses it
+  to start AutoRun on an imported dataset.
+
 - **A precision floor for detectors** (issue #4245), all additive:
   - `PrecisionFloorCurve` / `fit_precision_floor_curve`: the lower-bound curve
     fitted once and cut at any floor. `precision_floor_cut` is now that fit

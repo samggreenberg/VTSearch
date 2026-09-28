@@ -22,7 +22,7 @@ entry point the detector-load and learned-sort paths use.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from vtscore.concurrency.progress import update_find_progress
 
@@ -85,6 +85,8 @@ def resolve_or_train_detector(
     *,
     progress_step: int = 2,
     progress_total_steps: int = 4,
+    on_progress: Callable[..., None] | None = None,
+    use_loaded_context: bool = True,
     ctx_sink: list | None = None,
 ) -> tuple[Any | None, float, dict | None]:
     """Return (mlp, threshold, diagnostic) for *detector_id*.
@@ -116,19 +118,35 @@ def resolve_or_train_detector(
     those orderings on it — without that cache a later Inclusion slide can't move
     the cutoff (it would silently no-op).
 
+    *on_progress* receives the training progress (the
+    :func:`~vtscore.concurrency.progress.update_find_progress` signature:
+    ``status, message, current=, total=, step=, total_steps=``); ``None`` keeps
+    the historical sink, the shared Find tracker.  A caller scoring off to the
+    side of Find - the app's background AutoRun - passes its own task's sink so
+    a cold train does not paint the Find bar, or leave it "running", behind a
+    user who never asked for a Find.
+
+    *use_loaded_context* ``False`` leaves a loaded detector's live
+    :class:`~vtscore.state.core.DetectorContext` untouched: the head is trained
+    on a throwaway context as if the detector were not loaded.  The live
+    context's caches belong to the dataset the user is working in, so a scorer
+    that runs unprompted against another dataset must neither invalidate them
+    nor train into them.
+
     *ctx_sink*, when given, receives the detector context whose head and
     threshold are returned - the loaded one, or the throwaway a never-loaded
     detector trains on - so a caller can ask what the precision floor says
     about that threshold (:func:`vtscore.state.core.detector_floor_state`,
     #4247).  Nothing is appended when no head is returned.
     """
+    report = on_progress if on_progress is not None else update_find_progress
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.dataset_sync import invalidate_detector_model_on_embedder_mismatch
     from vtscore.detectors.labelset_training import labelset_resolution_report, train_from_labelset
     from vtscore.embedding.binding import keying_embedder_for_snap
     from vtscore.state.core import DetectorContext, get_detector_context
 
-    det_ctx = get_detector_context(detector_id)
+    det_ctx = get_detector_context(detector_id) if use_loaded_context else None
     if det_ctx is not None:
         # Defense against H5: scoring Auto-Find detectors iterates contexts
         # that aren't the active one, so the before_request hook can't
@@ -152,7 +170,7 @@ def resolve_or_train_detector(
     if not labelset.elements:
         return None, 0.5, None
 
-    update_find_progress(
+    report(
         "running",
         "Training detector from labels…",
         current=0,
@@ -186,7 +204,7 @@ def resolve_or_train_detector(
         # train that can run long.  The final element hands over to the fold
         # fitting, which is the other one.
         done = current >= total
-        update_find_progress(
+        report(
             "running",
             "Cross-calibrating threshold…" if done else f"Resolving {total} label origins…",
             current=current,
