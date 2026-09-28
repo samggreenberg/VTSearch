@@ -1664,6 +1664,33 @@ def detector_precision_floor(ctx: "DetectorContext", min_precision: float) -> An
     return estimate.cut(min_precision)
 
 
+def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any]:
+    """What the precision floor says about *ctx*'s current line, for a response that carries the line.
+
+    Every place a detector's threshold leaves the process - a sort result, a
+    Find pass, a knob change, a headless export - reports it beside the
+    threshold, so a consumer can say whether the line it draws is a promise
+    (#4247).  ``status`` is ``"promised"`` when the line is the floor's own cut,
+    ``"unreachable"`` or ``"insufficient_evidence"`` when the floor promised
+    nothing and the line is the Inclusion 0 fallback, and ``None`` when no
+    floor is set and Inclusion drew the line.  ``calibration_positives`` counts
+    the evidence behind the verdict (the gate opens at 10).
+    """
+    if min_precision is None:
+        estimate = ctx.precision_floor_cache
+        return {
+            "min_precision": None,
+            "status": None,
+            "calibration_positives": estimate.calibration_positives if estimate is not None else 0,
+        }
+    verdict = detector_precision_floor(ctx, min_precision)
+    return {
+        "min_precision": min_precision,
+        "status": verdict.status.value,
+        "calibration_positives": verdict.calibration_positives,
+    }
+
+
 def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
 

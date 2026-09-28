@@ -646,26 +646,14 @@ def set_min_precision_route(body: dict):
 
 def _min_precision_payload() -> dict:
     """The ``/api/min-precision`` response for the active detector."""
-    from vtscore.state.core import _empty_detector_context, detector_precision_floor, get_active_detector_context
+    from vtscore.state.core import _empty_detector_context, detector_floor_state, get_active_detector_context
 
-    floor = get_min_precision()
     det_ctx = get_active_detector_context()
     threshold = _active_detector_threshold()
+    state = detector_floor_state(det_ctx, get_min_precision())
     estimate = None if det_ctx is _empty_detector_context else det_ctx.precision_floor_cache
-    status = None
-    positives = estimate.calibration_positives if estimate is not None else 0
-    if floor is not None:
-        verdict = detector_precision_floor(det_ctx, floor)
-        status = verdict.status.value
-        positives = verdict.calibration_positives
     n_returned = estimate.count_at(threshold) if estimate is not None and threshold is not None else None
-    return {
-        "min_precision": floor,
-        "status": status,
-        "threshold": threshold,
-        "n_returned": n_returned,
-        "calibration_positives": positives,
-    }
+    return {**state, "threshold": threshold, "n_returned": n_returned}
 
 
 def _active_detector_threshold() -> float | None:
