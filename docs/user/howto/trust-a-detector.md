@@ -22,12 +22,12 @@ In Find, click **Stats** <picture><source media="(prefers-color-scheme: dark)" s
 1. **Compare against**: pick the dataset the detector was trained on
    (`drawings` here). VTSearch can't tell which one that was, so it asks.
 2. **Training-domain overlap** says how much of *this* dataset looks unlike
-   the one you picked, for example "**12%** of this dataset looks atypical vs
+   the one you picked: here "**3%** of this dataset looks atypical vs
    **drawings** — largely in-domain".
 3. **Evidence coverage** says how much of the dataset the detector is calling
-   with no labelled example anything like it behind the call, for example
-   "**8%** of this dataset sits in an evidence vacuum — mostly backed by
-   labeled evidence".
+   with no labelled example anything like it behind the call: here "**0%** of
+   this dataset sits in an evidence vacuum — mostly backed by labeled
+   evidence".
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/trust-stats.dark.webp" />

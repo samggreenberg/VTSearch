@@ -18,7 +18,7 @@
 
 import type { Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
+import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -142,6 +142,7 @@ export interface Shot {
 const BOTH: Theme[] = ['light', 'dark'];
 
 const GUIDE = 'docs/user/USER_GUIDE.md';
+const HOWTO = 'docs/user/howto';
 const STEPS = `${GUIDE}#step-by-step-your-first-search`;
 
 /** A dashboard row, matched by its exact name (see `Target`). */
@@ -161,10 +162,18 @@ const dashButton = (hasText: 'Train' | 'Find'): Target => ({
  * Takes an object with a literal `id:` so `scripts/screenshots/wiring-check.py`,
  * which finds shot ids by that key, sees these shots like any other.
  */
-function icon(s: { id: string; anchor: string; caption: string; target: Target; recipe: Shot['recipe'] }): Shot {
+function icon(s: {
+  id: string;
+  anchor: string;
+  /** A how-to page under docs/user/howto/ to credit instead of the guide. */
+  page?: string;
+  caption: string;
+  target: Target;
+  recipe: Shot['recipe'];
+}): Shot {
   return {
     id: s.id,
-    embeddedIn: `${GUIDE}#${s.anchor}`,
+    embeddedIn: `${s.page ? `${HOWTO}/${s.page}` : GUIDE}#${s.anchor}`,
     caption: s.caption,
     themes: BOTH,
     clip: { target: s.target, pad: 6 },
@@ -187,8 +196,158 @@ async function cleanDashboard(page: Page, h: Helpers): Promise<void> {
   await h.wait(400);
 }
 
+/** The dashboard rows of the example's test pile and detector, for API calls. */
+async function findPair(h: Helpers): Promise<{ dataset: string; detector: string }> {
+  const ds = h.app.named(await h.app.datasets(), TEST_DATASET);
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  if (!ds || !det) throw new Error(`no ${TEST_DATASET} / ${DETECTOR} to run Find with`);
+  return { dataset: ds.id, detector: det.id };
+}
+
+/**
+ * End the detector's live Find session (its verified pictures) and put
+ * Inclusion back to 0, so the next Find shot starts from a fresh scoring run
+ * whatever an earlier recipe did. Find verifications live in server memory and
+ * survive leaving Find, so without this one shot's checked pictures would show
+ * up in the next.
+ */
+async function resetFind(h: Helpers): Promise<void> {
+  const pair = await findPair(h);
+  await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
+  await h.app.api('/api/inclusion', { method: 'POST', body: { inclusion: 0 }, ...pair });
+}
+
+/** The example's category for each picture of *dataset*, by file name. */
+function categories(dataset: string): Record<string, string> {
+  return Object.fromEntries(
+    corpus(dataset).pictures.map((p: { filename: string; category: string }) => [p.filename, p.category]),
+  );
+}
+
+/**
+ * The file name of the picture in the viewer (its alt text), once a new one
+ * has arrived and stopped changing. Until a picture's details load, the alt
+ * reads a placeholder ("Image media") rather than a file name, and a vote can
+ * make Autopilot re-pick a moment after it serves; both are waited out.
+ */
+async function servedPicture(page: Page, h: Helpers, previous: string | null): Promise<string | null> {
+  const alt = () => page.locator('img.image-element').first().getAttribute('alt');
+  await page
+    .waitForFunction((prev) => {
+      const a = document.querySelector('img.image-element')?.getAttribute('alt') ?? '';
+      return /\.[a-z0-9]+$/i.test(a) && a !== prev;
+    }, previous, { timeout: 20000 })
+    .catch(() => {});
+  let name = await alt();
+  for (let i = 0; i < 10; i++) {
+    await h.wait(600);
+    const again = await alt();
+    if (again === name) return name;
+    name = again;
+  }
+  return name;
+}
+
+/**
+ * In Find, answer the next *n* pictures it serves the way the example's user
+ * would: Good for a yellow smiley, Bad for anything else. The file name is the
+ * viewer's alt text, and the generator's account says what each picture is.
+ */
+async function verifyServed(page: Page, h: Helpers, n: number): Promise<void> {
+  const cats = categories(TEST_DATASET);
+  let name = await servedPicture(page, h, null);
+  for (let i = 0; i < n; i++) {
+    const good = name !== null && cats[name] === 'yellow-smiley';
+    await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
+    name = await servedPicture(page, h, name);
+  }
+}
+
+/**
+ * In the region fixture's label view, draw a box round the one yellow smiley
+ * in the hero scene with the Marquee, as a user would. The box is the
+ * generator's own box for that smiley, so it sits tight on the face rather
+ * than being eyeballed round it, and it is a real canvas drag.
+ */
+async function drawHeroRegion(page: Page, h: Helpers): Promise<void> {
+  const hero = corpus(REGION_DATASET).pictures.find((p: { filename: string }) => p.filename === HERO_REGION);
+  if (!hero) throw new Error(`${HERO_REGION} is not in the ${REGION_DATASET} corpus`);
+  const region = regionBox(hero);
+  await h.enterLabelView(REGION_DATASET, REGION_DETECTOR);
+  await h.leftTab('Manual');
+  await h.serveItem(HERO_REGION);
+  await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
+  await h.wait(600);
+  // The rendered *picture*, not the <img> element: the viewer sizes the
+  // element to the whole centre panel with `object-fit: contain`, so the
+  // picture is a letterboxed rectangle inside it.
+  const box = await page.locator('img.image-element').first().evaluate((el) => {
+    const img = el as HTMLImageElement;
+    const r = img.getBoundingClientRect();
+    const scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
+    const w = img.naturalWidth * scale;
+    const hh = img.naturalHeight * scale;
+    return { x: r.x + (r.width - w) / 2, y: r.y + (r.height - hh) / 2, width: w, height: hh };
+  });
+  const x0 = box.x + box.width * region.x0;
+  const y0 = box.y + box.height * region.y0;
+  const x1 = box.x + box.width * region.x1;
+  const y1 = box.y + box.height * region.y1;
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 8 });
+  await page.mouse.move(x1, y1, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForSelector('.region-box', { timeout: 10000 });
+  await h.wait(900);
+}
+
+/** A picture of *category* in the training pile, and its path on the server. */
+function trainingPicture(category: string): { filename: string; path: string } {
+  const [filename] = framesOf(corpus(TRAIN_DATASET).pictures, category, 1);
+  return { filename, path: `${corpusPath(TRAIN_DATASET)}/${filename}` };
+}
+
+/** New Detector on the Image tab, with the training pile ticked. */
+async function newDetectorImageTab(page: Page, h: Helpers): Promise<void> {
+  await h.dashboard();
+  await h.selectDatasetRow(TRAIN_DATASET);
+  await h.openNewDetector();
+  await page.waitForSelector('.new-detector-form', { timeout: 20000 });
+  await page.locator('.example-tab-bar .tab', { hasText: 'Image' }).first().click();
+  await page.waitForSelector('.example-panel .drop-zone', { timeout: 10000 });
+  await h.wait(500);
+}
+
+/** ...then hand it a yellow smiley from the training pile, as if dropped from the desktop. */
+async function dropExample(page: Page, h: Helpers): Promise<void> {
+  await newDetectorImageTab(page, h);
+  await page.locator('.example-panel .drop-zone-input').setInputFiles(trainingPicture('yellow-smiley').path);
+  await page.waitForSelector('[role=dialog][aria-label="Use This Example?"]', { timeout: 20000 });
+  await h.wait(800);
+}
+
+/**
+ * A target Autopilot's text ranking struggles with, for the unstick-autopilot
+ * shot: 8 of the 240 drawings are yellow smileys with rosy cheeks, and the
+ * description puts only 2 of them in its top ten (measured with SigLIP; the
+ * words find yellow smileys, but barely see the cheeks).
+ */
+const ROSY = 'Rosy Smileys';
+const ROSY_TEXT = 'yellow smiley face with rosy cheeks';
+
+type Drawing = { kind: string; objects: { shape: string; color: string; smiling?: boolean; cheeks?: boolean }[] };
+
+/** True if *picture* is a yellow smiley with rosy cheeks (the ROSY detector's target). */
+function isRosySmiley(picture: Drawing): boolean {
+  const [face] = picture.objects;
+  return picture.kind === 'face' && face.color === 'yellow' && !!face.smiling && !!face.cheeks;
+}
+
+
 /** Select a dataset + detector on the dashboard, then Find; wait out scoring. */
 async function openFind(page: Page, h: Helpers): Promise<void> {
+  await resetFind(h);
   await h.dashboard();
   await h.selectDatasetRow(TEST_DATASET);
   await h.selectDetectorRow(DETECTOR);
@@ -593,43 +752,13 @@ export const SHOTS: Shot[] = [
     annotations: [
       { target: '.region-box', kind: 'box', label: 'Vote good on this region' },
     ],
-    // Region voting needs a patch-region-aware embedder, so this shot uses the
-    // `drawing-regions` fixture (embedded with DINOv2 patch) and its own
-    // detector. The frame is a scene with one yellow smiley in it, beside a
-    // yellow face that is not smiling (see `smiley-example.mjs`), so the
-    // rectangle is visibly a claim about where the evidence is; the box is the
-    // generator's own box for that smiley. The rectangle is a real canvas drag.
+    // Region voting needs a region embedder and a detector locked to it, so
+    // this shot uses the `drawing-regions` fixture and its own detector. The
+    // frame is a scene with one yellow smiley in it, beside a yellow face that
+    // is not smiling (see `smiley-example.mjs`), so the rectangle is visibly a
+    // claim about where the evidence is.
     async recipe(page, h) {
-      const hero = corpus(REGION_DATASET).pictures.find((p: { filename: string }) => p.filename === HERO_REGION);
-      if (!hero) throw new Error(`${HERO_REGION} is not in the ${REGION_DATASET} corpus`);
-      const region = regionBox(hero);
-      await h.enterLabelView(REGION_DATASET, REGION_DETECTOR);
-      await h.leftTab('Manual');
-      await h.serveItem(HERO_REGION);
-      await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
-      await h.wait(600);
-      // The rendered *picture*, not the <img> element: the viewer sizes the
-      // element to the whole centre panel with `object-fit: contain`, so the
-      // picture is a letterboxed rectangle inside it.
-      const box = await page.locator('img.image-element').first().evaluate((el) => {
-        const img = el as HTMLImageElement;
-        const r = img.getBoundingClientRect();
-        const scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
-        const w = img.naturalWidth * scale;
-        const hh = img.naturalHeight * scale;
-        return { x: r.x + (r.width - w) / 2, y: r.y + (r.height - hh) / 2, width: w, height: hh };
-      });
-      const x0 = box.x + box.width * region.x0;
-      const y0 = box.y + box.height * region.y0;
-      const x1 = box.x + box.width * region.x1;
-      const y1 = box.y + box.height * region.y1;
-      await page.mouse.move(x0, y0);
-      await page.mouse.down();
-      await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 8 });
-      await page.mouse.move(x1, y1, { steps: 8 });
-      await page.mouse.up();
-      await page.waitForSelector('.region-box', { timeout: 10000 });
-      await h.wait(900);
+      await drawHeroRegion(page, h);
     },
   },
   {
@@ -796,6 +925,430 @@ export const SHOTS: Shot[] = [
       await page.locator('button[title^="Achievements:"]:visible').first().click();
       await page.waitForSelector('.achievements-total, vt-achievements-tab', { timeout: 15000 });
       await h.wait(800);
+    },
+  },
+  // ── How-to pages (docs/user/howto/): one task each, click by click ───────
+  //
+  // Each picks up where the guide's Step by step ends. A recipe that has to
+  // change the app to reach its frame (verify pictures in Find, move
+  // Inclusion) says how to put it back in `after`; one that only poses a form
+  // or a menu needs none.
+
+  // check-and-correct.md
+  {
+    id: 'correct-verify',
+    embeddedIn: `${HOWTO}/check-and-correct.md#step-1-check-the-pictures-the-detector-is-least-sure-of`,
+    caption:
+      'Step 1: (1) the picture Find is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad',
+    themes: BOTH,
+    annotations: [
+      { target: 'img.image-element', kind: 'step', step: 1, at: 'corner' },
+      { target: '.btn-good', kind: 'step', step: 2, at: 'right' },
+      { target: '.btn-bad', kind: 'step', step: 2 },
+      { target: '.panel-right', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await verifyServed(page, h, 6);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+  {
+    id: 'correct-add',
+    embeddedIn: `${HOWTO}/check-and-correct.md#step-2-hand-your-corrections-to-the-detector`,
+    caption: 'Step 2: (1) Add Corrections to Detector, then (2) Add Corrections to confirm',
+    themes: BOTH,
+    annotations: [
+      { target: '.corrections-btn', kind: 'step', step: 1 },
+      { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'Add Corrections' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    // Photographed with the dialog open and never confirmed: confirming writes
+    // the corrections into the fixture detector's labels for good.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await verifyServed(page, h, 6);
+      await page.locator('.corrections-btn').first().click();
+      await page.getByText('Add your corrections to this detector?').first().waitFor({ timeout: 10000 });
+      await h.wait(500);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+
+  // borderline-matches.md
+  {
+    id: 'borderline-inclusion',
+    embeddedIn: `${HOWTO}/borderline-matches.md#step-2-loosen-the-line`,
+    caption: 'Step 2: (1) Inclusion raised to 3, (2) the line in the list moves down, (3) the Unverified Good count grows',
+    themes: BOTH,
+    annotations: [
+      { target: '#inclusion-input', kind: 'step', step: 1, at: 'right' },
+      { target: '.media-threshold-line', kind: 'step', step: 2, at: 'right' },
+      { target: '.panel-right .folded-note', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('#inclusion-input').fill('3');
+      await page.locator('#inclusion-input').blur();
+      await h.wait(1500);
+      // Moving the line serves nothing new, and the list only draws the
+      // pictures near what it shows. Answer the next picture, as Step 3 has
+      // the reader do: Find then serves from the new line and the list
+      // scrolls to it.
+      await verifyServed(page, h, 1);
+      const line = page.locator('.media-threshold-line').first();
+      await line.waitFor({ timeout: 15000 });
+      // The served picture lands at the top of the list, with the line just
+      // above it under the header; centre the line so the picture shows it.
+      await line.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await page.mouse.move(700, 60);
+      await h.wait(800);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+  {
+    id: 'borderline-chart',
+    embeddedIn: `${HOWTO}/borderline-matches.md#step-4-see-the-trade-off`,
+    caption:
+      'The Missed vs. Wrong Matches by Inclusion chart: wrong matches rise and missed matches fall as Inclusion goes up, with the current setting marked',
+    themes: BOTH,
+    clip: { target: '.chart-wrap', pad: 16 },
+    async recipe(page, h) {
+      await openFind(page, h);
+      await verifyServed(page, h, 12);
+      await page.locator('#inclusion-input').fill('3');
+      await page.locator('#inclusion-input').blur();
+      await h.wait(1500);
+      await page.locator('button[aria-label="Stats"]').first().click();
+      await page.waitForSelector('.chart-wrap', { timeout: 20000 });
+      await page.locator('.chart-wrap').first().scrollIntoViewIfNeeded();
+      await h.wait(1200);
+    },
+    after: async (_page, h) => resetFind(h),
+  },
+
+  // trust-a-detector.md
+  {
+    id: 'trust-stats',
+    embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
+    caption:
+      'Step 2: in Detector Stats, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
+    themes: BOTH,
+    annotations: [
+      { target: '.domain-ref-select', kind: 'step', step: 1, at: 'right' },
+      { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2 },
+      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('button[aria-label="Stats"]').first().click();
+      await page.waitForSelector('.stats-table', { timeout: 20000 });
+      // The overlap check picks the first candidate itself; make sure it is
+      // the training pile, and wait for both verdicts to come back.
+      const select = page.locator('.domain-ref-select').first();
+      await select.waitFor({ timeout: 20000 });
+      const trainId = h.app.named(await h.app.datasets(), TRAIN_DATASET)?.id;
+      if (trainId && (await select.inputValue()) !== trainId) await select.selectOption(trainId);
+      await page.locator('.domain-chip', { hasText: 'atypical' }).first().waitFor({ timeout: 120000 });
+      await page.locator('.domain-chip', { hasText: 'evidence vacuum' }).first().waitFor({ timeout: 120000 });
+      await h.wait(800);
+    },
+  },
+
+  // export-matches.md
+  icon({
+    id: 'icon-to-dataset',
+    anchor: 'what-gets-sent',
+    page: 'export-matches.md',
+    caption: 'The To Dataset button in the Find view',
+    target: '.goods-actions button[aria-label="To Dataset"]',
+    recipe: async (page, h) => { await openFind(page, h); },
+  }),
+  {
+    id: 'export-choose',
+    embeddedIn: `${HOWTO}/export-matches.md#step-1-choose-what-to-send`,
+    caption: 'Step 1: in Export, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-modal .delimiter-row', kind: 'step', step: 1 },
+      { target: 'vt-modal .column-checkboxes', kind: 'step', step: 2 },
+      { target: 'vt-modal .table-scroll', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('button[title^="Export the full good set"]').first().click();
+      await page.waitForSelector('.export-tabs', { timeout: 15000 });
+      await h.wait(900);
+    },
+  },
+  {
+    id: 'export-server-csv',
+    embeddedIn: `${HOWTO}/export-matches.md#step-2-send-it`,
+    caption: 'Step 2: on the Server CSV File tab, (1) the path to save to on the server, then (2) Save',
+    themes: BOTH,
+    annotations: [
+      { target: '#field-filepath', kind: 'step', step: 1 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Save' }, kind: 'step', step: 2, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('button[title^="Export the full good set"]').first().click();
+      await page.waitForSelector('.export-tabs', { timeout: 15000 });
+      await page.locator('.export-tab', { hasText: 'Server CSV File' }).first().click();
+      await page.waitForSelector('#field-filepath', { timeout: 10000 });
+      await page.locator('#field-filepath').scrollIntoViewIfNeeded();
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'export-to-dataset',
+    embeddedIn: `${HOWTO}/export-matches.md#or-keep-the-matches-as-a-dataset`,
+    caption: "Keep the matches as a dataset: (1) To Dataset, (2) the new dataset's name, (3) OK",
+    themes: BOTH,
+    annotations: [
+      { target: '.goods-actions button[aria-label="To Dataset"]', kind: 'step', step: 1, at: 'bottom' },
+      { target: 'vt-dialog-host input.form-input', kind: 'step', step: 2 },
+      { target: { selector: 'vt-dialog-host .btn--primary', hasText: 'OK' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    // Posed with the name dialog open; OK would add a dataset to the fixtures.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('.goods-actions button[aria-label="To Dataset"]').first().click();
+      await page.waitForSelector('vt-dialog-host input.form-input', { timeout: 10000 });
+      await h.wait(500);
+    },
+  },
+  // start-from-an-example.md
+  {
+    id: 'example-image-tab',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#step-1-open-new-detector-on-the-examples-tab`,
+    caption: 'Step 1: in New Detector, (1) the Image tab, (2) the box to drop a picture on, (3) Browse Images…',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.example-tab-bar .tab', hasText: 'Image' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.example-panel .drop-zone', kind: 'step', step: 2 },
+      { target: '.example-panel .media-btn', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await newDetectorImageTab(page, h);
+    },
+  },
+  {
+    id: 'example-confirm',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#step-2-confirm-the-picture`,
+    caption: 'Step 2: Use This Example? (1) OK uses the whole picture, (2) OK but Crop trims it first',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-media-crop-modal .btn--primary', kind: 'step', step: 1, at: 'right' },
+      { target: { selector: 'vt-media-crop-modal .btn', hasText: 'OK but Crop' }, kind: 'step', step: 2, at: 'top' },
+    ],
+    async recipe(page, h) {
+      await dropExample(page, h);
+    },
+  },
+  {
+    id: 'example-stack',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#step-3-add-more-examples-name-it-create-it`,
+    caption: "Step 3: (1) the example, (2) + Add for another, (3) the detector's name, then (4) Create",
+    themes: BOTH,
+    annotations: [
+      { target: '.example-row', kind: 'step', step: 1 },
+      { target: '.add-example-btn', kind: 'step', step: 2 },
+      { target: '#detector-name', kind: 'step', step: 3 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 4, at: 'right' },
+    ],
+    // Posed, never created: Create would add a detector to the fixtures.
+    async recipe(page, h) {
+      await dropExample(page, h);
+      await page.locator('vt-media-crop-modal .btn--primary').first().click();
+      await page.waitForSelector('.example-row', { timeout: 30000 });
+      await page.locator('#detector-name').fill('Smileys by example');
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'example-seed-menu',
+    embeddedIn: `${HOWTO}/start-from-an-example.md#or-start-from-a-picture-already-in-the-dataset`,
+    caption: 'From the dataset: (1) the Manual tab, (2) right-click a picture, (3) Use as detector seed',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.thumbnail-wrap', kind: 'step', step: 2 },
+      { target: { selector: '.context-menu .menu-item', hasText: 'Use as detector seed' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await h.serveItem();
+      await page.locator('.thumbnail-wrap:visible').first().click({ button: 'right' });
+      await page.waitForSelector('.context-menu', { timeout: 10000 });
+      await h.wait(500);
+    },
+  },
+
+  // vote-on-a-region.md
+  {
+    id: 'region-import',
+    embeddedIn: `${HOWTO}/vote-on-a-region.md#step-1-make-a-dataset-that-can-see-regions`,
+    caption: 'Step 1: in Add Dataset, (1) Advanced, (2) a Region embedder, then (3) Import',
+    themes: BOTH,
+    annotations: [
+      { target: 'vt-import-advanced > .advanced-toggle', kind: 'step', step: 1 },
+      { target: '#import-advanced-patch-embedder', kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    // Posed, never imported: the fixture already holds this dataset.
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.openImporterDemo();
+      await page.locator('.importer-subtab', { hasText: 'Synthetic Media' }).first().click();
+      await page.waitForSelector('#field-size', { timeout: 10000 });
+      await page.locator('#field-size').fill('40');
+      await page.locator('#field-seed').fill('3');
+      await page.locator('#field-dataset_name').fill(REGION_DATASET);
+      await page.locator('vt-import-advanced > .advanced-toggle').first().click();
+      await page.waitForSelector('#import-advanced-patch-embedder', { timeout: 10000 });
+      await page.locator('#import-advanced-patch-embedder').selectOption({ label: 'DINOv2 patch (region-aware images)' });
+      // Scroll the dialog the way a reader would, with the wheel: a scripted
+      // scrollIntoView scrolls an inner box no reader can, and the form then
+      // paints over the tabs.
+      await page.mouse.move(720, 500);
+      await page.mouse.wheel(0, 600);
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'region-new-detector',
+    embeddedIn: `${HOWTO}/vote-on-a-region.md#step-2-make-a-detector-that-uses-regions`,
+    caption: 'Step 2: in New Detector, (1) Advanced, (2) Detector Embedder Type set to Patch Semantic, then (3) Create',
+    themes: BOTH,
+    annotations: [
+      { target: '.new-detector-form .advanced-toggle', kind: 'step', step: 1 },
+      { target: '#detector-embedder-type', kind: 'step', step: 2 },
+      { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.dashboard();
+      await h.selectDatasetRow(REGION_DATASET);
+      await h.openNewDetector();
+      await page.waitForSelector('.new-detector-form', { timeout: 20000 });
+      await page.locator('.example-panel input.form-input').first().fill(DETECTOR_TEXT);
+      await page.locator('#detector-name').fill('Smileys (regions)');
+      await page.locator('.new-detector-form .advanced-toggle').first().click();
+      await page.waitForSelector('#detector-embedder-type', { timeout: 10000 });
+      await page.locator('#detector-embedder-type').selectOption({ label: 'Patch Semantic' });
+      await h.wait(700);
+    },
+  },
+  {
+    id: 'region-draw',
+    embeddedIn: `${HOWTO}/vote-on-a-region.md#step-3-draw-a-box-and-vote`,
+    caption: 'Step 3: (1) the Marquee button, (2) a box drawn round the yellow smiley, then (3) Good',
+    themes: BOTH,
+    annotations: [
+      { target: 'button[aria-label="Marquee: draw region"]', kind: 'step', step: 1 },
+      { target: '.region-box', kind: 'step', step: 2, at: 'right' },
+      { target: '.btn-good', kind: 'step', step: 3, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await drawHeroRegion(page, h);
+    },
+  },
+
+  // unstick-autopilot.md
+  {
+    id: 'unstick-prompt',
+    embeddedIn: `${HOWTO}/unstick-autopilot.md#when-autopilot-asks`,
+    caption:
+      'Update Sort Example? (1) Keep clicking with the same sort, or supply a different one: (2) a new description, then Use, or (3) an example picture',
+    themes: BOTH,
+    annotations: [
+      { target: '.keep-btn', kind: 'step', step: 1 },
+      { target: '.resort-prompt .text-input-row input', kind: 'step', step: 2 },
+      { target: { selector: '.resort-prompt .media-btn', hasText: 'Browse Media' }, kind: 'step', step: 3 },
+    ],
+    // A fresh detector for a target its words find badly, answered honestly
+    // (Good only for a rosy-cheeked yellow smiley) until Autopilot runs out of
+    // patience. Made and dropped here: it is no part of the Smiley example.
+    async recipe(page, h) {
+      await h.app.dropDetectors(ROSY);
+      const train = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+      const det = await h.app.ensureDetector(ROSY, train, ROSY_TEXT);
+      await h.app.setVotes(train, det, { good: [], bad: [] });
+      await h.enterLabelView(TRAIN_DATASET, ROSY);
+      await h.leftTab('Autopilot');
+      await page.waitForSelector('.btn-good', { timeout: 120000 });
+      const byName: Record<string, Drawing> = Object.fromEntries(
+        corpus(TRAIN_DATASET).pictures.map((p: Drawing & { filename: string }) => [p.filename, p]),
+      );
+      const prompt = page.locator('[role=dialog][aria-label="Update Sort Example?"]');
+      let name = await servedPicture(page, h, null);
+      for (let i = 0; i < 30 && !(await prompt.count()); i++) {
+        const good = name !== null && !!byName[name] && isRosySmiley(byName[name]);
+        if (process.env.SHOT_DEBUG) console.log(`[unstick] ${name} -> ${good ? 'good' : 'bad'}`);
+        await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
+        await h.wait(400);
+        if (await prompt.count()) break;
+        name = await servedPicture(page, h, name);
+      }
+      await prompt.waitFor({ timeout: 10000 });
+      await h.wait(800);
+    },
+    after: async (_page, h) => h.app.dropDetectors(ROSY),
+  },
+
+  // label-in-manual-mode.md
+  {
+    id: 'manual-text-sort',
+    embeddedIn: `${HOWTO}/label-in-manual-mode.md#step-1-switch-to-manual-and-sort-the-list`,
+    caption: 'Step 1: (1) the Manual tab, (2) the Text sort, (3) a description, then (4) Search',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.left-tab', hasText: 'Manual' }, kind: 'step', step: 1, at: 'top' },
+      { target: { selector: '.sort-mode-group .sort-radio', hasText: 'Text' }, kind: 'step', step: 2, at: 'top' },
+      { target: '.text-sort-input', kind: 'step', step: 3, at: 'right' },
+      { target: '.text-sort-btn', kind: 'step', step: 4, at: 'right' },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Text' }).first().click();
+      await page.waitForSelector('.text-sort-input', { timeout: 10000 });
+      await page.locator('.text-sort-input').fill('yellow grinning face with tongue');
+      await page.locator('.text-sort-btn').first().click();
+      await page.waitForSelector('.thumbnail-wrap', { timeout: 60000 });
+      await h.wait(2500);
+    },
+    // The sort mode sticks to the detector; hand the next shot the Learned
+    // sort the rest of the guide is shot on.
+    after: async (page) => {
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Learned' }).first().click();
+      await page.waitForTimeout(1500);
+    },
+  },
+  {
+    id: 'manual-load-sort',
+    embeddedIn: `${HOWTO}/label-in-manual-mode.md#step-1-switch-to-manual-and-sort-the-list`,
+    caption: 'The Load sort: (1) Load, (2) the + beside No sort loaded, then (3) a saved detector to rank by',
+    themes: BOTH,
+    annotations: [
+      { target: { selector: '.sort-mode-group .sort-radio', hasText: 'Load' }, kind: 'step', step: 1, at: 'top' },
+      { target: '.load-sort-add-btn', kind: 'step', step: 2, at: 'right' },
+      { target: '.file-item', kind: 'step', step: 3 },
+    ],
+    async recipe(page, h) {
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Load' }).first().click();
+      await h.wait(800);
+      await page.locator('.load-sort-add-btn').first().click();
+      await page.waitForSelector('.file-item', { timeout: 15000 });
+      await h.wait(700);
+    },
+    after: async (page) => {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      await page.locator('.sort-mode-group .sort-radio', { hasText: 'Learned' }).first().click();
+      await page.waitForTimeout(1500);
     },
   },
 ];
