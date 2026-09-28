@@ -83,6 +83,9 @@ PRECISION_COORDINATES = ("percentile", "tail")
 #: The posterior fits :func:`precision_floor_cut` accepts.
 PRECISION_FITS = ("logistic", "isotonic")
 
+#: A 1-D run of scores or labels: a list, or the numpy array a caller already holds.
+ScoreArray = Sequence[float] | np.ndarray
+
 
 class PrecisionFloorStatus(str, enum.Enum):
     """What a precision floor can say about a corpus."""
@@ -136,8 +139,8 @@ def _to_coordinate(pct: np.ndarray, coordinate: str, n_ref: int) -> np.ndarray:
 
 
 def fold_rank_evidence(
-    fold_orderings: Sequence[tuple[Sequence[float], Sequence[float]]],
-    fold_haystacks: Sequence[Sequence[float]],
+    fold_orderings: Sequence[tuple[ScoreArray, ScoreArray]],
+    fold_haystacks: Sequence[ScoreArray],
 ) -> tuple[np.ndarray, np.ndarray]:
     """``(percentiles, labels)`` of every fold's held-out votes, each ranked in its own fold's haystack.
 
@@ -221,10 +224,10 @@ def _check_options(fit: str, coordinate: str) -> None:
 
 
 def precision_lower_bound_curve(
-    corpus_scores: Sequence[float] | np.ndarray,
-    pool_scores: Sequence[float] | np.ndarray,
-    fold_orderings: Sequence[tuple[Sequence[float], Sequence[float]]],
-    fold_haystacks: Sequence[Sequence[float]],
+    corpus_scores: ScoreArray,
+    pool_scores: ScoreArray,
+    fold_orderings: Sequence[tuple[ScoreArray, ScoreArray]],
+    fold_haystacks: Sequence[ScoreArray],
     *,
     fit: str = "logistic",
     coordinate: str = "percentile",
@@ -293,10 +296,10 @@ def precision_lower_bound_curve(
 
 def precision_floor_cut(
     floor: float,
-    corpus_scores: Sequence[float] | np.ndarray,
-    pool_scores: Sequence[float] | np.ndarray,
-    fold_orderings: Sequence[tuple[Sequence[float], Sequence[float]]],
-    fold_haystacks: Sequence[Sequence[float]],
+    corpus_scores: ScoreArray,
+    pool_scores: ScoreArray,
+    fold_orderings: Sequence[tuple[ScoreArray, ScoreArray]],
+    fold_haystacks: Sequence[ScoreArray],
     *,
     fit: str = "logistic",
     coordinate: str = "percentile",

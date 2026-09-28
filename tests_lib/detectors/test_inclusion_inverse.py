@@ -38,13 +38,20 @@ def _cut(n: int = 1801) -> FoldAnchoredCut:
     return FoldAnchoredCut(fits=(fit,), fold_haystacks=(hay,), final_haystack=hay, n_anchored=1)
 
 
+def _inverse(cut: FoldAnchoredCut, threshold: float) -> float:
+    """``inclusion_for_threshold`` on a cut and threshold where it must answer."""
+    recovered = cut.inclusion_for_threshold(threshold)
+    assert recovered is not None
+    return recovered
+
+
 class TestInclusionForThreshold:
     def test_a_realized_cut_round_trips_exactly(self):
         """The contract a precision floor relies on: the recovered inclusion cuts the same line."""
         cut = _cut()
         for k in KNOB:
             t = cut.threshold_at(k)
-            assert cut.threshold_at(cut.inclusion_for_threshold(t)) == t, k
+            assert cut.threshold_at(_inverse(cut, t)) == t, k
 
     def test_it_returns_the_strict_end_of_a_plateau(self):
         """On a coarse haystack a band of inclusions shares one cut; the inverse takes the strictest.
@@ -55,7 +62,7 @@ class TestInclusionForThreshold:
         """
         cut = _cut(n=25)
         for k in KNOB:
-            recovered = cut.inclusion_for_threshold(cut.threshold_at(k))
+            recovered = _inverse(cut, cut.threshold_at(k))
             assert recovered <= k + 1e-3, (k, recovered)
             acq_recovered = cut.threshold_at(recovered + ACQUISITION_INCLUSION_OFFSET)
             acq_original = cut.threshold_at(k + ACQUISITION_INCLUSION_OFFSET)
@@ -67,7 +74,7 @@ class TestInclusionForThreshold:
         hi_cut, lo_cut = cut.threshold_at(-2), cut.threshold_at(2)
         assert hi_cut > lo_cut, "the fixture must separate the two stops"
         between = 0.5 * (hi_cut + lo_cut)
-        recovered = cut.inclusion_for_threshold(between)
+        recovered = _inverse(cut, between)
         assert cut.threshold_at(recovered) <= between
         # ...and nothing measurably stricter would also admit everything *between* admits.
         assert cut.threshold_at(recovered - 2e-3) > between
@@ -76,7 +83,7 @@ class TestInclusionForThreshold:
         """A stricter cut maps to a stricter (lower) inclusion."""
         cut = _cut()
         thresholds = sorted({cut.threshold_at(k) for k in KNOB}, reverse=True)
-        recovered = [cut.inclusion_for_threshold(t) for t in thresholds]
+        recovered = [_inverse(cut, t) for t in thresholds]
         assert all(b >= a for a, b in zip(recovered, recovered[1:], strict=False)), recovered
 
     def test_it_clamps_to_the_search_bracket(self):
@@ -105,7 +112,7 @@ class TestAcquisitionFromTheReportingCut:
         ctx.anchored_cut_cache = cut
         for k in KNOB:
             ctx.threshold = cut.threshold_at(k)
-            recovered = cut.inclusion_for_threshold(ctx.threshold)
+            recovered = _inverse(cut, ctx.threshold)
             acq = detector_acquisition_threshold(ctx)
             assert acq == cut.threshold_at(recovered + ACQUISITION_INCLUSION_OFFSET)
             assert acq >= ctx.threshold

@@ -457,15 +457,13 @@ class TestColdFindTrainsUnderTheUsersSettings:
         import vtscore.detectors.labelset_training as labelset_mod
 
         real_from_settings = config_mod.CoreConfig.from_settings
-        monkeypatch.setattr(
-            config_mod.CoreConfig,
-            "from_settings",
-            classmethod(
-                lambda cls, *a, **kw: dataclasses.replace(
-                    real_from_settings(*a, **kw), inclusion=3, calibrate_count=3, calibration_fraction=0.4
-                )
-            ),
-        )
+
+        def _from_settings(cls, settings_path=None):
+            return dataclasses.replace(
+                real_from_settings(settings_path), inclusion=3, calibrate_count=3, calibration_fraction=0.4
+            )
+
+        monkeypatch.setattr(config_mod.CoreConfig, "from_settings", classmethod(_from_settings))
         seen: list[dict] = []
         real_train = labelset_mod.labelset_train_and_score
 

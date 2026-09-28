@@ -85,6 +85,7 @@ class TestTheThreeStates:
                     0.5, corpus_s, pool_s, orderings, haystacks, min_positives=5, lower_percentile=level
                 )
                 assert cut.status is PrecisionFloorStatus.PROMISED, (seed, level)
+                assert cut.estimated_precision is not None
                 assert cut.n_returned > 0 and cut.estimated_precision >= 0.5
                 achieved = _achieved(cut, corpus_s, corpus_y)
                 broken[level] += achieved < 0.5
@@ -130,7 +131,9 @@ class TestTheCut:
         ]
         promised = [c for c in cuts if c.status is PrecisionFloorStatus.PROMISED]
         assert len(promised) >= 2
-        assert all(b.threshold >= a.threshold for a, b in zip(promised, promised[1:], strict=False))
+        thresholds = [c.threshold for c in promised if c.threshold is not None]
+        assert len(thresholds) == len(promised)
+        assert all(b >= a for a, b in zip(thresholds, thresholds[1:], strict=False))
 
     def test_one_set_of_votes_yields_one_cut(self):
         """The bootstrap is seeded by default: a line that moved between identical requests would read as a bug."""
@@ -163,7 +166,9 @@ class TestTheCut:
 
     def test_the_curve_is_the_one_the_cut_reads(self):
         corpus_s, _y, pool_s, orderings, haystacks = _session(6)
-        scores, bound = precision_lower_bound_curve(corpus_s, pool_s, orderings, haystacks)
+        curve = precision_lower_bound_curve(corpus_s, pool_s, orderings, haystacks)
+        assert curve is not None
+        scores, bound = curve
         cut = precision_floor_cut(0.5, corpus_s, pool_s, orderings, haystacks, min_positives=5)
         assert np.all(np.diff(scores) <= 0)
         i = int(np.flatnonzero(bound >= 0.5).max())
