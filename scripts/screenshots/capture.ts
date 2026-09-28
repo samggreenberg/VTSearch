@@ -23,7 +23,7 @@ import { launchChromium } from './launch.mjs';
 // @ts-expect-error - plain .mjs helper, shared with the slide shooter
 import { drawCallouts, resolveBox } from './callouts.mjs';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { DETECTOR, REGION_DATASET, TRAIN_DATASET } from './smiley-example.mjs';
+import { appClient, DETECTOR, REGION_DATASET, TRAIN_DATASET } from './smiley-example.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
@@ -150,6 +150,7 @@ function makeHelpers(page: Page): Helpers {
   };
   const h: Helpers = {
     page,
+    app: appClient(APP),
     wait,
     click,
     async clickText(text) {
@@ -367,6 +368,10 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     encodeWebp(png, out);
     return out;
   } finally {
+    // A recipe that had to change the app to reach its frame (a verified
+    // item, a moved Inclusion) puts it back, pass or fail, so no later shot
+    // inherits the change.
+    if (shot.after) await shot.after(page, makeHelpers(page)).catch((e) => console.log(`[${shot.id}] after: ${e}`));
     await ctx.close();
   }
 }

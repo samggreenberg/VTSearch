@@ -61,6 +61,14 @@ export interface Annotation {
 /** Helpers implemented by the capture harness and passed to every recipe. */
 export interface Helpers {
   page: Page;
+  /**
+   * The running app's API client (`scripts/screenshots/app-client.mjs`):
+   * `api(path, {method, body, dataset, detector})`, `datasets()`,
+   * `detectors()`, `named(rows, name)`, `mediaIndex(dataset, detector)`,
+   * `vote(dataset, detector, id, target)`. For a recipe's `after` to undo what
+   * it changed, and for state a user would have built by hand.
+   */
+  app: any;
   /** Navigate to the dashboard and wait for it to settle. */
   dashboard(): Promise<void>;
   click(selector: string): Promise<void>;
@@ -121,6 +129,14 @@ export interface Shot {
   /** Declarative callouts, drawn as a pre-capture DOM overlay. */
   annotations?: Annotation[];
   recipe: (page: Page, h: Helpers) => Promise<void>;
+  /**
+   * Undo whatever the recipe changed in the app to reach its frame (items
+   * verified in Find, a moved Inclusion, a detector moved to AutoRun). Runs
+   * after the capture, pass or fail, so no later shot inherits the change.
+   * A recipe that only *poses* the app — a form filled in but not submitted,
+   * a menu opened — needs none.
+   */
+  after?: (page: Page, h: Helpers) => Promise<void>;
 }
 
 const BOTH: Theme[] = ['light', 'dark'];
