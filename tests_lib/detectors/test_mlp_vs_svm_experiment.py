@@ -235,6 +235,44 @@ class TestPrevalenceControl:
         assert_same_rows(drop_timing(with_none), drop_timing(with_natural))
 
 
+class TestPrecisionFrames:
+    """#4220: the per-image evidence and truth a precision-floor estimator is priced on."""
+
+    def _run(self, steps, sink):
+        clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
+        return simulate_voting_iterations(
+            clips,
+            "cat0",
+            seed=0,
+            max_steps=20,
+            style="whole_image",
+            safe_thresholds=True,
+            emit_calibration_metrics=True,
+            precision_frame_sink=sink,
+            precision_frame_steps=steps,
+        )
+
+    def test_one_frame_per_requested_step_with_consistent_shapes(self):
+        sink: list = []
+        self._run((12, 20), sink)
+        assert [int(f["t"]) for f in sink] == [12, 20]
+        for f in sink:
+            assert f["test_scores"].shape == f["test_labels"].shape
+            assert f["vote_scores"].shape == f["vote_labels"].shape == (int(f["t"]),)
+            assert f["fold_cal_scores"].shape == f["fold_cal_labels"].shape == f["fold_cal_fold"].shape
+            assert f["fold_hay_scores"].shape == f["fold_hay_fold"].shape
+            assert set(np.unique(f["fold_cal_fold"])) == set(np.unique(f["fold_hay_fold"])), (
+                "every fold has its haystack"
+            )
+            assert 0 < f["test_labels"].sum() < len(f["test_labels"])
+
+    def test_recording_does_not_change_the_run(self):
+        """The sink only reads: rows with and without it are the same."""
+        plain = self._run(None, None)
+        recorded = self._run((12, 20), [])
+        assert_same_rows(drop_timing(plain), drop_timing(recorded))
+
+
 class TestHaystackPrevalence:
     """The #4184/#4201 arm: thin the simulation half's negatives, touch nothing else."""
 
