@@ -95,6 +95,10 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
+- [ ] #4253 — Measure four ways to price Smart's error cost under the floor (Opus 4.8)
+
+<!-- item-sep -->
+
 - [ ] #4248 — Precision floor under region voting (Opus 4.8)
 
 <!-- item-sep -->

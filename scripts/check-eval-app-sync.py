@@ -247,7 +247,17 @@ MIRRORS: list[Mirror] = [
             "`scoring_rows_for_snap`, the harness through `score_sim_set_with_model` on the "
             "arm's style - rather than on whole-image vectors a patch head was never fitted "
             "on. Those live in the scorers, not in the flatness rule pinned here, so a change "
-            "to either scorer trips the `progress.eval_geometry` mirror below instead."
+            "to either scorer trips the `progress.eval_geometry` mirror below instead. "
+            "What a cost is priced at is shared too (issue #4243): both sides price at "
+            "`cost_trend.SMART_INCLUSION` and score each model at `cost_trend.smart_cut` of "
+            "its reporting line, not at the arm's or the user's inclusion. Only the re-cut "
+            "each side hands `smart_cut` differs. The app passes `recut_detector_threshold`, "
+            "which falls back to the conformal rule over the fold orderings when there is no "
+            "fold-anchored fit; the harness passes its step's fold-anchored fit or nothing "
+            "(`voting_iterations._no_recut`), keeping the reporting line. That matters only "
+            "on an arm reporting at another inclusion with no fold-anchored fit. The default "
+            "arm reports at `SMART_INCLUSION`, so `smart_cut` returns its reporting line "
+            "exactly and never re-cuts."
         ),
     ),
     Mirror(
@@ -260,7 +270,9 @@ MIRRORS: list[Mirror] = [
             "sides must score a head the way that head is served - max-pooled over the rows "
             "it was fitted against - or the indicator measures a geometry nobody ships, which "
             "is half of issue #3757. If you change which rows either side scores, or the "
-            "pooling over them, change both."
+            "pooling over them, change both. The cut each model is scored at is "
+            "`cost_trend.smart_cut`'s on both sides (issue #4243): the app reads it off the "
+            "step (`smart_threshold`), the harness off the window its caller built."
         ),
         divergence=(
             "The app reaches the rows through `scoring_rows_for_snap`, which is bound to the "
