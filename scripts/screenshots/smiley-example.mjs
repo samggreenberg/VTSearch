@@ -19,9 +19,11 @@
  *
  * `smiley_fixture.py` draws each corpus into `data/doc-fixtures/<name>/` with
  * the Synthetic Media importer's own generator, size and seed, and writes the
- * generator's account of every picture beside it (`<name>.json`). That account
- * is how the harness knows which drawings are the yellow smileys, the way a
- * COCO subfolder name told it which photos were books.
+ * generator's account of every picture beside it (`<name>.json`), each with
+ * the example's `category` for it: `yellow-smiley` for what the detector looks
+ * for, and a name for each near-miss. That is how the harness knows which
+ * drawings are the yellow smileys, the way a COCO subfolder name told it which
+ * photos were books. The categories are defined there, in Python, once.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -76,7 +78,10 @@ export function corpusPath(name) {
   }).trim();
 }
 
-/** The generator's account of corpus *name*: `{fingerprint, size, seed, pictures}`. */
+/**
+ * The generator's account of corpus *name*: `{fingerprint, size, seed,
+ * pictures}`, each picture with its `category` and its `yellow_smileys`' boxes.
+ */
 export function corpus(name) {
   return JSON.parse(readFileSync(`${corpusPath(name)}.json`, 'utf8'));
 }
@@ -91,27 +96,6 @@ export function corpus(name) {
  */
 export const shownPath = (name) => `/data/${name}`;
 
-const isYellowSmileyObject = (o) => o.shape === 'face' && o.color === 'yellow' && o.smiling;
-
-/**
- * The example's category of a picture, from the generator's account of it.
- *
- * `yellow-smiley` is what the example looks for: one yellow face, smiling
- * (a smile, a grin or a wink). The rest are named for the near-miss they are.
- */
-export function category(picture) {
-  const [first] = picture.objects;
-  if (picture.kind === 'face') {
-    if (first.color === 'yellow') return first.smiling ? 'yellow-smiley' : 'yellow-face';
-    if (first.smiling) return first.color === 'orange' ? 'orange-smiley' : 'smiley';
-    return 'face';
-  }
-  if (picture.kind === 'shapes') {
-    return picture.objects.some((o) => o.color === 'yellow') ? 'yellow-shapes' : 'shapes';
-  }
-  return picture.objects.some(isYellowSmileyObject) ? 'scene-yellow-smiley' : 'scene';
-}
-
 /**
  * The first *n* file names of *cat* among *pictures*, in a stable order.
  *
@@ -121,7 +105,7 @@ export function category(picture) {
  */
 export function framesOf(pictures, cat, n) {
   const names = pictures
-    .filter((p) => category(p) === cat)
+    .filter((p) => p.category === cat)
     .map((p) => p.filename)
     .sort()
     .slice(0, n);
@@ -166,11 +150,11 @@ export const HERO_REGION = 'scene_0019.png';
  * exactly one, which is what a changed generator would do to a named frame.
  */
 export function regionBox(picture) {
-  const smileys = picture.objects.filter(isYellowSmileyObject);
-  if (smileys.length !== 1) {
-    throw new Error(`${picture.filename} holds ${smileys.length} yellow smileys; pick a new HERO_REGION`);
+  const boxes = picture.yellow_smileys;
+  if (boxes.length !== 1) {
+    throw new Error(`${picture.filename} holds ${boxes.length} yellow smileys; pick a new HERO_REGION`);
   }
-  const [x0, y0, x1, y1] = smileys[0].box;
+  const [x0, y0, x1, y1] = boxes[0];
   const pad = 0.015;
   return {
     x0: Math.max(0, x0 - pad),

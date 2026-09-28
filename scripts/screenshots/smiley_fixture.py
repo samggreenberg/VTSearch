@@ -13,16 +13,18 @@ with the importer's own `size` and `seed` (`CORPORA`), so a reader who loads
 
 A corpus goes into `data/doc-fixtures/<name>/`, and beside it `<name>.json`:
 `describe_image_dataset`'s account of every picture (its kind, background,
-and the colour, expression and box of everything drawn on it) under
-`pictures`, and a `fingerprint`. That account is how the harness knows which
-drawings are the yellow smileys - the ground truth a folder of photographs
-carried in its subfolder names.
+and the colour, expression and box of everything drawn on it), each with the
+example's `category` for it and the boxes of its `yellow_smileys`, under
+`pictures`, and a `fingerprint`. That is how the harness knows which drawings
+are the yellow smileys - the ground truth a folder of photographs carried in
+its subfolder names - and `category` is defined here, once, for the harness
+and for `tests_lib/meta/test_smiley_example.py` alike.
 
 Idempotent: the fingerprint names the generator's source and the corpus's
-size and seed, and a corpus whose fingerprint still matches is left alone. A
+size and seed, and a corpus whose fingerprint still matches is not redrawn. A
 corpus drawn by an older generator is deleted and drawn again, so a changed
-generator can never leave last version's pictures in the folder. Nothing is
-written into the repo.
+generator can never leave last version's pictures in the folder. The account
+is rewritten every run (it costs no drawing). Nothing is written into the repo.
 """
 
 from __future__ import annotations
@@ -56,6 +58,48 @@ CORPORA: dict[str, tuple[int, int]] = {
 }
 
 
+def is_yellow_smiley(obj: dict) -> bool:
+    """Whether one drawn object is what the example looks for: a yellow face, smiling."""
+    return obj["shape"] == "face" and obj["color"] == "yellow" and obj["smiling"]
+
+
+def category(picture: dict) -> str:
+    """The example's category of *picture*, from the generator's account of it.
+
+    ``yellow-smiley`` is what the guide's detector is trained to find: a picture
+    of one yellow face, smiling (a smile, a grin or a wink). The rest are named
+    for the near-miss they are: ``yellow-face`` (yellow, not smiling),
+    ``orange-smiley`` (the nearest colour, smiling), ``smiley`` (another colour,
+    smiling), ``face`` (neither), ``yellow-shapes`` (a yellow shape, no face),
+    ``shapes``, and ``scene-yellow-smiley`` / ``scene`` (several things, with or
+    without a yellow smiley among them).
+    """
+    objects = picture["objects"]
+    if picture["kind"] == "face":
+        face = objects[0]
+        if face["color"] == "yellow":
+            return "yellow-smiley" if face["smiling"] else "yellow-face"
+        if face["smiling"]:
+            return "orange-smiley" if face["color"] == "orange" else "smiley"
+        return "face"
+    if picture["kind"] == "shapes":
+        return "yellow-shapes" if any(o["color"] == "yellow" for o in objects) else "shapes"
+    return "scene-yellow-smiley" if any(is_yellow_smiley(o) for o in objects) else "scene"
+
+
+def pictures(name: str) -> list[dict]:
+    """Corpus *name*'s pictures, as the generator describes them plus the example's reading."""
+    size, seed = CORPORA[name]
+    return [
+        {
+            **picture,
+            "category": category(picture),
+            "yellow_smileys": [o["box"] for o in picture["objects"] if is_yellow_smiley(o)],
+        }
+        for picture in generator.describe_image_dataset(size, seed=seed)
+    ]
+
+
 def fingerprint(name: str) -> str:
     """What decides corpus *name*'s pictures: the generator's source, its size, its seed."""
     size, seed = CORPORA[name]
@@ -70,15 +114,14 @@ def ensure_corpus(name: str) -> Path:
     folder = FIXTURES / name
     sidecar = FIXTURES / f"{name}.json"
     stamp = fingerprint(name)
-    if sidecar.exists() and folder.is_dir():
-        if json.loads(sidecar.read_text()).get("fingerprint") == stamp:
-            return folder
-    if folder.exists():
-        shutil.rmtree(folder)
-    print(f"drawing {name} ({size} pictures, seed {seed}) ...", file=sys.stderr)
-    generator.generate_image_dataset(folder, size, seed=seed)
-    pictures = generator.describe_image_dataset(size, seed=seed)
-    sidecar.write_text(json.dumps({"fingerprint": stamp, "size": size, "seed": seed, "pictures": pictures}))
+    drawn = sidecar.exists() and folder.is_dir() and json.loads(sidecar.read_text()).get("fingerprint") == stamp
+    if not drawn:
+        if folder.exists():
+            shutil.rmtree(folder)
+        print(f"drawing {name} ({size} pictures, seed {seed}) ...", file=sys.stderr)
+        generator.generate_image_dataset(folder, size, seed=seed)
+    account = {"fingerprint": stamp, "size": size, "seed": seed, "pictures": pictures(name)}
+    sidecar.write_text(json.dumps(account))
     return folder
 
 

@@ -8,8 +8,7 @@ button it clicks is decided by which COCO folder the frame is filed in — which
 counts every one of those as a book, because COCO's annotators did.
 
 So the Book example carries an override list (`NOT_A_BOOK` in
-`scripts/screenshots/book-example.mjs`, shared by the slide shoot and the user
-guide's screenshot fixtures), and the deck contradicts itself in front of the
+`scripts/screenshots/book-example.mjs`), and the deck contradicts itself in front of the
 room the moment the two drift apart: #3779 caught the session voting **Good**
 on the very shelf of box sets the intro had just held up as the canonical
 not-a-book. Neither file can import the other — one is Python for matplotlib,
