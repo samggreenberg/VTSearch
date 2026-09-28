@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.utils.synthetic.describe_image_dataset()` and
+  `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
+  seed)` draws, without drawing it: one dict per picture with its `filename`,
+  `kind`, `background` and `objects` (each a shape, a colour name and a box; a
+  face also its `expression` and whether it is `smiling`). The ground truth of
+  a generated set - which pictures are the yellow smileys, and where.
+
 - **`vtscore.training.thresholds.precision_floor`** (preparation for #4224).
   `precision_floor_cut` returns the largest top-*k* of a corpus whose
   lower-bound estimated precision clears a floor, in one of three
@@ -383,6 +390,23 @@ instead, since every commit on `dev` is effectively a new app release.)
   `loaded_backbone()` instead.
 
 ### Changed
+
+- **`generate_image_dataset` draws a small world of cartoon smiley faces**
+  (issue #4240). The two ideas (a smiley, or shapes, on a plain background at
+  256x256) become three kinds at 512x512: a `face` in one of seven colours
+  with one of seven expressions, `shapes` (stars added), and a `scene` of
+  several small faces and shapes; backgrounds gain polka dots, stripes, checks
+  and gradients. File names are `face_` / `shapes_` / `scene_` plus the index
+  (were `smiley_` / `shapes_`). Each picture is now seeded on `(seed, index)`
+  rather than `seed + index`, which had made two seeds share nearly every
+  picture - so a `(count, seed)` still always gives the same files, but not
+  the files it gave before. The signature is unchanged.
+
+- **The `synthetic` importer takes a `seed`** (issue #4240): a third,
+  optional field (default `1`; the seed used to be a fixed `42`), recorded in
+  the origin. Its cache folder is now `<media_type>_<size>_seed<seed>`, plus a
+  `_v<n>` for a generator whose drawing has changed, so no cache written
+  before this is reused.
 
 - **Context-registry lookups no longer take `_state_lock`** (issue #3869).
   `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only

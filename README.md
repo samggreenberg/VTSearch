@@ -10,7 +10,7 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/user/assets/dashboard-loaded.dark.webp" />
-  <img src="docs/user/assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
+  <img src="docs/user/assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them" width="720" />
 </picture>
 
 > **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
@@ -37,7 +37,7 @@ Open that URL. The app starts with no datasets loaded; add a demo dataset (below
 
 ## Loading a demo dataset
 
-When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. **Downloaded Media** lists open datasets by media type; each is downloaded and embedded on first use, then cached for instant loading afterward. **Synthetic Media** generates a dataset on the spot and downloads nothing, which makes it the quickest thing to try.
+When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. **Downloaded Media** lists open datasets by media type; each is downloaded and embedded on first use, then cached for instant loading afterward. **Synthetic Media** generates a dataset on the spot and downloads nothing, which makes it the quickest thing to try: its images are the cartoon smiley faces the [User Guide](docs/user/USER_GUIDE.md#step-by-step-your-first-search) walks through, so you can follow it step by step.
 
 See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
 
