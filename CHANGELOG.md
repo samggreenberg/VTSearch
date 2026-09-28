@@ -112,6 +112,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **`--import-labels-into` runs the detector it imports into, and only that
+  one** (issue #4235). Importing labels from the command line used to merge
+  them into the detector and then score with whatever was on the settings
+  file's Auto-Find list, so the detector you had just labelled only ran if you
+  had first opened the UI and moved it to **AutoRun**. Now
+  `--autodetect --import-labels-into NAME --label-importer-file …` scores with
+  NAME alone, whether or not it is on AutoRun, and nothing else on AutoRun
+  runs with it. A pipeline file's `import_labels:` block does the same unless
+  the file also lists `detectors:`. `--dry-run` shows the detector under
+  `Detectors (1; overrides the settings' Auto-Find list)`.
+
 - **`--autodetect` saves the dataset it imports to the dashboard** (issue
   #4226). A CLI run used to import a dataset, score it, and throw it away. It
   now imports through the same pipeline as **Add dataset**, saves the result,

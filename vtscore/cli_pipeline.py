@@ -323,6 +323,13 @@ def _dispatch(config: dict[str, Any]) -> None:
     else:
         spec = _SourceSpec(kind="pickle", dataset_path=config["dataset"], chunk_size=config["chunk_size"])
 
+    # As with ``--import-labels-into``, a label import names the detector the
+    # run scores with, in place of the settings' Auto-Find list - unless the
+    # file lists ``detectors:`` explicitly, which always wins (#4235).
+    detectors = config["detectors"]
+    if detectors is None and config["import_labels"] is not None:
+        detectors = [config["import_labels"]["detector"]]
+
     _run_source(
         spec,
         # Same default as the flags: the dataset is kept unless the file says
@@ -331,7 +338,7 @@ def _dispatch(config: dict[str, Any]) -> None:
         settings_path=settings_path,
         exporter_name=config["exporter"],
         exporter_field_values=config["exporter_fields"],
-        override_detectors=config["detectors"],
+        override_detectors=detectors,
         stream_results=config.get("stream_results", False),
         keep_negatives=config.get("keep_negatives", False),
     )

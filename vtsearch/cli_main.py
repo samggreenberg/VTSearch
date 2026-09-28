@@ -223,7 +223,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         dest="import_labels_into",
-        help=("Detector name to merge labels into before scoring. Used with --autodetect plus --label-importer-file."),
+        help=(
+            "Detector name to merge labels into before scoring. Used with "
+            "--autodetect plus --label-importer-file. That detector is then "
+            "the only one the run scores with: the settings file's Auto-Find "
+            "list is not consulted."
+        ),
     )
     parser.add_argument(
         "--label-importer",
@@ -502,7 +507,8 @@ def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
     from vtscore import cli_progress
 
     # Optional one-shot label import into a detector before scoring.
-    # The merged labelset is picked up by the autodetect pipeline below.
+    # The autodetect pipeline below then scores with that detector alone
+    # (see _dispatch_autodetect), using the merged labelset.
     if args.import_labels_into:
         field_values = _label_importer_field_values(args, parser)
         # Settings file controls detectors_dir, so apply it first.
@@ -579,7 +585,12 @@ def _dispatch_autodetect(
     keep_negatives,
     save_dataset,
 ) -> None:
-    """Run the autodetect workflow via the importer- or pickle-file code path."""
+    """Run the autodetect workflow via the importer- or pickle-file code path.
+
+    ``--import-labels-into NAME`` makes NAME the run's only detector, in place
+    of the settings file's Auto-Find list, so a labelled detector can be run
+    headlessly without first moving it to AutoRun in the UI (#4235).
+    """
     from vtscore.cli import (
         autodetect_importer_main,
         autodetect_importer_main_chunked,
@@ -614,6 +625,7 @@ def _dispatch_autodetect(
         stream_results=stream_results,
         keep_negatives=keep_negatives,
         save_dataset=save_dataset,
+        override_detectors=[args.import_labels_into] if args.import_labels_into else None,
     )
 
 

@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`override_detectors=` on the four `vtscore.cli.autodetect_*_main` entry
+  points** (issue #4235). A list of detector names to train and score in
+  place of the settings file's `autofind_detectors`, which the run then does
+  not consult (the file is never modified) - the same override the pipeline
+  YAML's `detectors:` already drove through the private `_run_source`. The
+  `dry_run_plan` event gains a `detectors_source` field (`"autofind"` or
+  `"override"`), and its `autofind_detectors` lists the override when one is
+  given. Additive: the keyword defaults to `None`, which reads the settings
+  list as before.
+
 - **ETA-less progress trackers and `CoreConfig.hide_ingest_eta`** (issue
   #4233). `ProgressTracker(..., publish_eta=False)` and
   `LoadingTasksTracker.create_task(..., publish_eta=False)` build a tracker
