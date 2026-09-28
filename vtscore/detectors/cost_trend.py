@@ -50,12 +50,20 @@ memoises on the *inputs*), so a rule that depended on the previous answer would
 make the light depend on when the page was loaded and would have to be threaded
 through the harness's per-step trajectory as well.  A noise model gets the same
 flapping away without a hidden variable.
+
+What a cost is priced at (issue #4243)
+--------------------------------------
+
+Every cost in the window is ``FPR + FNR`` at :data:`SMART_INCLUSION`, measured
+at each model's own cut for that inclusion (:func:`smart_cut`), whatever
+Inclusion or precision floor the user has set.  Both callers take the weight and
+the cut from here, so what Smart measures cannot depend on which tier asked.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -79,6 +87,23 @@ SMART_FLAT_THRESHOLD = -0.015
 #: freedom a full window has - see the module docstring for why the rule needs
 #: a noise model at all (issue #3832).
 SMART_SLOPE_T = 2.0
+
+#: The Inclusion every Smart cost is priced at, whatever line the user is shown:
+#: ``inclusion_cost_weights(0)``, i.e. FPR + FNR, at each model's own cut for
+#: this inclusion (:func:`smart_cut`), not at the line it was served with
+#: (issue #4243).
+#:
+#: Smart asks whether the *detector* is still improving, and the reporting line
+#: is not the detector.  Under a precision floor (#4224) the served line
+#: switches rule by itself: the Inclusion 0 fallback until the floor's evidence
+#: gate opens, the floor's cut after it, and back whenever the bound sits near
+#: the floor.  Nothing clears the progress cache when that happens, so a window
+#: scored at the served lines would mix models cut two ways.  Moving off the
+#: Inclusion 0 cut raises FPR + FNR, and a rising cost reads green, so the mix
+#: could end Autopilot's ``hard`` phase early.  One weight and one cut rule for
+#: every model keep the window's points comparable; the floor only moves the
+#: line.  Issue #4253 measures this rule against the alternatives.
+SMART_INCLUSION = 0
 
 
 @dataclass(frozen=True)
@@ -180,3 +205,32 @@ def smart_status_from_costs(costs: Sequence[float], good: int, bad: int) -> dict
             **extras,
         }
     return {"status": "yellow", "reason": "Error cost is still declining. Keep labeling.", **extras}
+
+
+def smart_cut(
+    served_threshold: float,
+    served_inclusion: float,
+    recut: Callable[[float], float | None],
+) -> float:
+    """The threshold Smart scores one model at: its own cut at :data:`SMART_INCLUSION`.
+
+    *served_threshold* is the line the model was served with, cut at
+    *served_inclusion*.  *recut* re-derives the same model's cut at another
+    inclusion from its fitted estimator; it returns ``None`` when there is no
+    inclusion-aware cut to re-derive (a fallback or schedule-blend cut).  The
+    served line is then the answer, because an inclusion-blind cut is the same
+    at every inclusion.
+
+    A model served at :data:`SMART_INCLUSION` is scored at its served line
+    exactly, without a re-cut, so a user at the default Inclusion sees the
+    indicator they always had.  The app passes its re-cut seam
+    (``vtscore.state.core.recut_detector_threshold``) and the eval harness its
+    step's fold-anchored fit; the rule for choosing between them lives here, so
+    the two cannot drift.
+    """
+    if served_inclusion == SMART_INCLUSION:
+        return served_threshold
+    cut = recut(SMART_INCLUSION)
+    if cut is None or not math.isfinite(cut):
+        return served_threshold
+    return float(cut)

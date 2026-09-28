@@ -53,7 +53,8 @@ whole label history (training any steps not yet cached), so it can be slow on a
 long history. The error-cost and stability series cover only the steps a
 detector was trained for (see the note under
 [Indicator score history](#indicator-score-history)); diversity covers every
-step.
+step. Each `error_cost` is `fpr + fnr`, measured at the line that detector
+would draw at Inclusion 0, whatever the `inclusion` setting is.
 
 →
 ```json
