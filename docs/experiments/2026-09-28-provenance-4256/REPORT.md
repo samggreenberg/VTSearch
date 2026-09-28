@@ -27,11 +27,11 @@ Part of #4224; the provenance test proposed on #4221 and filed as #4256. Pool:
   arms). That is 2,160 sessions and 7,986 frames (2,662 per arm; starved cells
   have no detector). The run used the #4222 launcher, with a harness that records
   which vote each calibration row came from.
-- **Provenance.** `compute_fold_orderings` now reports each fold's held-out
-  vote indices (`held_out_sink`, row-wise path only). Each precision frame names
-  its calibration votes (`fold_cal_vote`) and the phase that picked them
-  (`fold_cal_phase`). A test checks that the named votes' labels equal the
-  calibration labels.
+- **Provenance.** Each precision frame names its calibration votes
+  (`fold_cal_vote`) and the phase that picked them (`fold_cal_phase`). It reads
+  them through the held-out rows that `compute_fold_orderings` reports
+  (`holdout_sink`, the hook #4245 added). A test checks that the named votes'
+  labels equal the calibration labels.
 - **Evidence sets.**
   - **all**: every calibration vote, as the app would use them.
   - **learned**: only votes picked at or after the session's first
@@ -137,13 +137,17 @@ their shipped-pool rates are ±4–6 points.
   calibrate the posterior makes it honest. Hard picks sit at the old model's
   boundary, and learned Good picks at its top. Both are selected on the score
   the posterior is fitted against.
-- **Today's floor is safe by coupling, not by design.** The merged backend
-  (`min_precision`, #4245/PR #4262) is opt-in and uses the shipped pool. With
-  production's g3 opening it breaks 6.1% of X = 50% promises. That holds only
-  while the opening stays short. **Any longer opening breaks it**: g20 breaks 69%,
-  and #4222's dry-stop grammar (`g20+dry1/8@top`, PR #4254) is exactly such an
-  opening. Before a longer opening ships, the floor must move to a
-  selection-free estimate, or the two must be measured together.
+- **The app already filters, and that is why a long opening won't break it.**
+  The merged backend (#4245, PR #4262) calibrates only on the learned sort's
+  own draws (`calibrates_precision`, the owner's call from #4222), against the
+  shipped pool. That is this study's *learned + shipped* row: 5.3% broken with
+  today's g3 opening. Under a long walk (g20, or #4222's dry-stop
+  `g20+dry1/8@top`, PR #4254) it stops promising rather than breaking: 0.71% of
+  frames. Without the filter, g20 would break 69%. So the filter is worth
+  keeping, but as a gate-closer. Its docstring's rationale, "unbiased under
+  score-only selection", is refuted here; #4251 corrects it (and
+  the plan). The promise it keeps still rests on the pool's in-sample
+  offset.
 - **The route forward is random verification.** #4257 (PR #4264) shows that
   audited promises break at most 0.23% anywhere on the grid, at about 35 audit
   votes for X = 50%. It also shows that at these prevalences most honest promises
