@@ -676,7 +676,7 @@ class _AutoDetectResultSchema(Schema):
 class _AutoFindExportStatusSchema(PluginExtrasSchema):
     """Outcome of auto-exporting an Auto-Find run's results.
 
-    Built by ``_run_autofind_export``: a fixed ``{exporter, success}`` base
+    Built by ``vtsearch.autorun_detectors.run_autofind_export``: a fixed ``{exporter, success}`` base
     plus ``message`` on success / ``error`` on failure, and then whatever extra
     keys the chosen exporter's outcome dict carried (``filepath`` for
     file-based exporters, and so on).  Those extras are exporter-specific, so
@@ -733,6 +733,30 @@ class AutoDetectResponseSchema(Schema):
     # Present only when an Auto-Find results exporter is configured: the
     # outcome of auto-exporting these results.
     auto_export = fields.Nested(_AutoFindExportStatusSchema)
+
+
+class AutoRunRunResponseSchema(AutoDetectResponseSchema):
+    """Response for ``GET /api/autorun/runs/<run_id>``: one background AutoRun's results.
+
+    The ``POST /api/auto-detect`` body for the run, plus which dataset it
+    scored and what started it.  Served only to the user who started the run,
+    and only while it is among the most recent runs the server keeps.
+    """
+
+    run_id = fields.String(required=True)
+    dataset_id = fields.String(required=True)
+    dataset_name = fields.String(required=True)
+    trigger = fields.String(
+        required=True,
+        validate=validate.OneOf(["import", "manual"]),
+        metadata={
+            "description": (
+                "``import`` when a finished web import started the run, ``manual`` when "
+                "the dataset's Run AutoRun action did."
+            )
+        },
+    )
+    created_at = fields.Float(required=True, metadata={"description": "Unix seconds the run finished."})
 
 
 # ---------------------------------------------------------------------------
@@ -1056,6 +1080,7 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
 __all__ = [
     "AutoDetectRequestSchema",
     "AutoDetectResponseSchema",
+    "AutoRunRunResponseSchema",
     "DetectorBrowsePositivesReleaseResponseSchema",
     "DetectorBrowsePositivesResponseSchema",
     "DetectorCancelResponseSchema",

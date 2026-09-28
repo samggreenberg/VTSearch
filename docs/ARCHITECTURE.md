@@ -418,6 +418,8 @@ VTSearch/
 │   ├── achievements.py             Achievement state management
 │   ├── achievements_catalog.py     Static achievement declarations (no state machine)
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
+│   ├── autorun_detectors.py        Runs a user's AutoRun detectors on a dataset: /api/auto-detect's core,
+│   │                               the background run after an import / from Run AutoRun, kept results
 │   ├── logging_config.py           Logging setup
 │   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
 │   ├── torch_threads.py            Native-math thread count for the server process
@@ -914,7 +916,8 @@ field lists — this document names the tiers and the shape, not every key.
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the
   **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`.
+  `autofind_exporter_field_values`, and `autorun_on_import` (whether a web
+  import runs the AutoRun detectors; the Add Dataset checkbox's memory).
 
 Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,

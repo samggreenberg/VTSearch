@@ -191,6 +191,9 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "autorun_on_import": {
+            "type": "boolean"
+          },
           "bin_details_docked": {
             "additionalProperties": {
               "type": "boolean"
@@ -557,6 +560,65 @@
           "localizers_run",
           "media_type",
           "results"
+        ],
+        "type": "object"
+      },
+      "AutoRunRunResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_export": {
+            "$ref": "#/components/schemas/_AutoFindExportStatus"
+          },
+          "created_at": {
+            "description": "Unix seconds the run finished.",
+            "type": "number"
+          },
+          "dataset_id": {
+            "type": "string"
+          },
+          "dataset_name": {
+            "type": "string"
+          },
+          "detectors_run": {
+            "type": "integer"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "missing_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/_AutoDetectResult"
+            },
+            "type": "object"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "trigger": {
+            "description": "``import`` when a finished web import started the run, ``manual`` when the dataset's Run AutoRun action did.",
+            "enum": [
+              "import",
+              "manual"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "dataset_id",
+          "dataset_name",
+          "detectors_run",
+          "media_type",
+          "missing_detectors",
+          "results",
+          "run_id",
+          "trigger"
         ],
         "type": "object"
       },
@@ -1383,6 +1445,12 @@
       "DatasetLoadDemoRequest": {
         "additionalProperties": false,
         "properties": {
+          "autorun": {
+            "default": null,
+            "description": "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides.",
+            "nullable": true,
+            "type": "string"
+          },
           "build_projection": {
             "default": "false",
             "description": "When 'true', compute + persist the 2-D Browse projection at ingest.",
@@ -5879,6 +5947,9 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "autorun_on_import": {
+            "type": "boolean"
+          },
           "bin_details_docked": {},
           "browse_colormap": {},
           "browse_details_metadata_width": {
@@ -7512,7 +7583,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single Auto-Find detector.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoRun detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoRun\n(``POST /api/datasets/registry/<dataset_id>/autorun``); both run through\n:mod:`vtsearch.autorun_detectors`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {
@@ -7536,10 +7607,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "No medias loaded, or no Auto-Find detectors match the active media type."
+            "description": "No medias loaded, or no AutoRun detectors match the active media type."
           },
           "404": {
-            "description": "Named detector is not flagged for Auto-Find."
+            "description": "Named detector is not on the caller's AutoRun list."
           },
           "409": {
             "description": "Find was cancelled via /api/find/cancel."
@@ -7551,7 +7622,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Score the active dataset with every detector flagged for Auto-Find.",
+        "summary": "Score the active dataset with every detector on the caller's AutoRun list.",
         "tags": [
           "detector_scoring"
         ]
@@ -7912,6 +7983,45 @@
           "processors_crud"
         ]
       }
+    },
+    "/api/autorun/runs/{run_id}": {
+      "get": {
+        "description": "``run_id`` is the ``task_id`` of the AutoRun task (``autorun.run_id`` on\nits ``loading-tasks`` row).  Runs are kept in memory only, and only the\nmost recent few, so an old or pre-restart run answers 404 like one that\nnever existed.",
+        "operationId": "get_autorun_run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoRunRunResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Results of a finished background AutoRun, for the user who started it.",
+        "tags": [
+          "detector_scoring"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/browse": {
       "get": {
@@ -9300,6 +9410,54 @@
           }
         }
       ]
+    },
+    "/api/datasets/registry/{dataset_id}/autorun": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The Dashboard's dataset \u22ef **Run AutoRun**.  Scores the dataset with every\ndetector on the caller's AutoRun list that applies to it, sends the results\nto their Auto-Find exporter when one is set, and keeps them for the AutoRun\nResults dialog (``GET /api/autorun/runs/<task_id>``).  Progress is reported\non the ``loading-tasks`` channel of ``GET /api/events`` under the returned\n``task_id``, on a task keyed to this dataset; its ``autorun`` block carries\nthe summary once it finishes.  Cancellable like any loading task.",
+        "operationId": "run_dataset_autorun",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryLoadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "None of the caller's AutoRun detectors applies to this dataset (its media or embedder types)."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "409": {
+            "description": "Dataset is not currently loaded."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run the caller's AutoRun detectors on a loaded dataset, in the background.",
+        "tags": [
+          "datasets_registry"
+        ]
+      }
     },
     "/api/datasets/registry/{dataset_id}/coverage-atlas": {
       "parameters": [
@@ -14940,7 +15098,7 @@
       "name": "detectors_registry"
     },
     {
-      "description": "Run a detector against the active dataset (find-label) or run every Auto-Find detector at once (auto-detect).",
+      "description": "Run a detector against the active dataset (find-label) or run every AutoRun detector at once (auto-detect).",
       "name": "detector_scoring"
     },
     {

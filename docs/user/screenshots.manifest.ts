@@ -1621,7 +1621,8 @@ export const SHOTS: Shot[] = [
     themes: BOTH,
     annotations: [
       { target: { selector: '.side-tab', hasText: 'Auto-Find' }, kind: 'step', step: 1 },
-      { target: { selector: '.view-tab', hasText: 'Server CSV File' }, kind: 'step', step: 2, at: 'top' },
+      // Below the tab, not above: above it the marker lands on the pane's hint text.
+      { target: { selector: '.view-tab', hasText: 'Server CSV File' }, kind: 'step', step: 2, at: 'bottom' },
       { target: '#autofind-filepath', kind: 'step', step: 3 },
       { target: { selector: '.settings-actions .btn', hasText: 'Done' }, kind: 'step', step: 4, at: 'right' },
     ],

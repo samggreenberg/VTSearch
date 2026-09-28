@@ -434,6 +434,34 @@ If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
 
+### Running AutoRun on a new dataset
+
+Once you have a detector on the Dashboard's **AutoRun** tab, every
+importer shows a **Run AutoRun detectors on this dataset** checkbox
+(outside **Advanced**). Ticked, VTSearch runs your AutoRun detectors on
+the dataset as soon as it is saved - the ones for the dataset's media
+type, provided the dataset has the kind of embedder each one scores
+with. The dialog remembers the box the way you left it at your last
+import.
+
+The run shows on the new dataset's Dashboard row while it works, and its
+**Cancel** stops it. When it finishes, a notice tells you how many hits
+it found; its **View results** button opens the **AutoRun Results**
+dialog, which lists every item each detector called Good (switch to
+**Bad** or **Both** to see the rest), copies the list to the clipboard,
+and **Export**s the listed rows to any exporter. If you picked a results
+exporter on the Settings **Auto-Find** tab, the run has already sent the
+results there too. If none of your AutoRun detectors can run on the new
+dataset - they are all for another media type, or were built with a kind
+of embedder the dataset doesn't have - a notice says so instead.
+
+To run AutoRun on a dataset you already have - to try a detector you
+just moved to AutoRun, say - pick **Run AutoRun** from the dataset's
+**⋯** menu. It loads the dataset if it isn't loaded, runs the same
+detectors, and opens the AutoRun Results dialog when it is done. The
+item is greyed out when none of your AutoRun detectors are for that
+dataset's media type.
+
 ### Pre-computed embeddings (.npz)
 
 If you have already embedded your media offline - for example with
@@ -1022,8 +1050,9 @@ eight tabs:
   **Hide** show them always or never), the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
   (focus mode and thumbnail size).
-- **Auto-Find** - what exporter to send auto-run results to. (Which
-  detectors auto-run is chosen on the Dashboard's **AutoRun** tab.)
+- **Auto-Find** - what exporter to send AutoRun results to. (Which
+  detectors run is chosen on the Dashboard's **AutoRun** tab; see
+  [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset).)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view
@@ -1063,8 +1092,8 @@ with bulk-action and per-card controls.
   **Readers**. A row that isn't in memory shows an inline **Load**
   button, which disappears once the dataset is loaded. The name has a
   pencil for **Rename**, **Delete** is an inline button, and the
-  remaining actions (**Browse dataset**, **Stats**, and - on multi-user
-  deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.webp" /><img src="assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> overflow
+  remaining actions (**Browse dataset**, **Run AutoRun**, **Stats**, and -
+  on multi-user deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.webp" /><img src="assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> overflow
   menu.
 - **Detectors** - every saved detector, split across two tabs:
   - **Drafts** holds detectors you're still building or evaluating.
@@ -1074,10 +1103,11 @@ with bulk-action and per-card controls.
     labels** (see [Exporting your work](#exporting-your-work)), and
     **Move to AutoRun**.
   - **AutoRun** holds finalized detectors. They run automatically
-    against every dataset as it is imported (and during CLI
-    autodetect), and they are *frozen*: no rename, delete, retrain, or
-    label import until you pick **Move to Drafts** from the **⋯** menu
-    to unfreeze them. Read-only actions (**Load**, **Browse
+    against every dataset you import (see
+    [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset))
+    and during CLI autodetect, and they are *frozen*: no rename, delete,
+    retrain, or label import until you pick **Move to Drafts** from the
+    **⋯** menu to unfreeze them. Read-only actions (**Load**, **Browse
     positives**, **Stats**, **Export labels**) stay available, and
     **Find** works as usual.
 

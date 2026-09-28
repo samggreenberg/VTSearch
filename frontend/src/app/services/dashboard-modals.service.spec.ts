@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { DashboardModalsService } from './dashboard-modals.service';
-import { AutoDetectResultsData, DatasetRegistryEntry } from '../models/api.models';
+import { DatasetRegistryEntry } from '../models/api.models';
 
 describe('DashboardModalsService', () => {
   let service: DashboardModalsService;
@@ -16,7 +16,6 @@ describe('DashboardModalsService', () => {
     expect(service.combineDetectors.open).toBe(false);
     expect(service.export.open).toBe(false);
     expect(service.addLabels.open).toBe(false);
-    expect(service.findResults.open).toBe(false);
     expect(service.stats.open).toBe(false);
     expect(service.detectorStats.open).toBe(false);
   });
@@ -49,14 +48,6 @@ describe('DashboardModalsService', () => {
     expect(service.addLabels).toEqual({ open: true, detectorId: 'id-2', detectorName: 'Labeller' });
     service.closeAddLabels();
     expect(service.addLabels).toEqual({ open: false, detectorId: '', detectorName: '' });
-  });
-
-  it('openFindResults carries the results payload; close resets to an empty result', () => {
-    const data: AutoDetectResultsData = { results: { det: { hits: [] } } };
-    service.openFindResults(data);
-    expect(service.findResults).toEqual({ open: true, data });
-    service.closeFindResults();
-    expect(service.findResults).toEqual({ open: false, data: { results: {} } });
   });
 
   it('openStats carries dataset id + name; close clears both', () => {

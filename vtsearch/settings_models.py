@@ -408,6 +408,13 @@ class UserSettings(BaseModel):
     autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # Whether a web import runs the user's AutoRun detectors on the new dataset
+    # once it is saved. Not a Settings-modal widget: the Add Dataset dialog's
+    # "Run AutoRun" checkbox starts from it and each import that sends the
+    # checkbox writes the choice back, so the box comes up the way the user
+    # left it last time. Defaults on - moving a detector to AutoRun is the
+    # user saying they want it run on what they import.
+    autorun_on_import: bool = True
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview
