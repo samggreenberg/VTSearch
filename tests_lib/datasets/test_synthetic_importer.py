@@ -46,10 +46,10 @@ class TestSyntheticImporterRegistration:
         imp = get_importer("synthetic")
         assert imp.icon == "\U0001f3ed"  # 🏭
 
-    def test_importer_fields_are_just_media_type_and_size(self):
+    def test_importer_fields_are_media_type_size_and_seed(self):
         imp = get_importer("synthetic")
         keys = [f.key for f in imp.fields]
-        assert keys == ["media_type", "size"]
+        assert keys == ["media_type", "size", "seed"]
         media_type_field = imp.fields[0]
         assert media_type_field.field_type == "select"
         assert set(media_type_field.options) == {"image", "audio", "video"}
@@ -57,6 +57,11 @@ class TestSyntheticImporterRegistration:
         assert size_field.field_type == "number"
         assert size_field.min == "1"
         assert size_field.step == "1"
+        seed_field = imp.fields[2]
+        assert seed_field.field_type == "number"
+        assert seed_field.default == "1"
+        assert seed_field.min == "0"
+        assert not seed_field.required
 
 
 class TestSyntheticImporterValidation:
@@ -85,16 +90,39 @@ class TestSyntheticImporterValidation:
         out = imp.resolve_display_name({"media_type": "audio", "size": "7", "dataset_name": "My Tones"})
         assert out == "My Tones"
 
+    def test_display_name_names_a_non_default_seed(self):
+        imp = SyntheticDatasetImporter()
+        assert imp.default_display_name({"media_type": "image", "size": "5", "seed": "1"}) == "Synthetic image (5)"
+        assert imp.default_display_name({"media_type": "image", "size": "5", "seed": "2"}) == "Synthetic image (5, seed 2)"
+
+    @pytest.mark.parametrize(("raw", "seed"), [("", 1), (None, 1), ("7", 7), (" 3 ", 3), (0, 0), ("0", 0)])
+    def test_parses_seed(self, raw, seed):
+        assert SyntheticDatasetImporter._parse_seed({"seed": raw}) == seed
+
+    def test_missing_seed_is_the_default(self):
+        assert SyntheticDatasetImporter._parse_seed({}) == 1
+
+    @pytest.mark.parametrize("raw", ["-1", "lots", "1.5"])
+    def test_rejects_bad_seed(self, raw):
+        with pytest.raises(ValueError):
+            SyntheticDatasetImporter._parse_seed({"seed": raw})
+
 
 class TestOriginRoundTrip:
     def test_build_and_reload_origin(self):
         imp = SyntheticDatasetImporter()
-        origin = imp.build_origin({"media_type": "image", "size": "10"})
+        origin = imp.build_origin({"media_type": "image", "size": "10", "seed": "4"})
         assert origin["importer"] == "synthetic"
         assert origin["params"]["media_type"] == "image"
         assert origin["params"]["size"] == "10"
+        assert origin["params"]["seed"] == "4"
         assert imp.can_reload_from_origin(origin)
-        assert imp.reload_from_origin(origin) == {"media_type": "image", "size": "10"}
+        assert imp.reload_from_origin(origin) == {"media_type": "image", "size": "10", "seed": "4"}
+
+    def test_origin_without_a_seed_reloads_the_default_seed(self):
+        imp = SyntheticDatasetImporter()
+        origin = imp.build_origin({"media_type": "image", "size": "10"})
+        assert imp.reload_from_origin(origin) == {"media_type": "image", "size": "10", "seed": "1"}
 
     def test_cannot_reload_with_bad_params(self):
         imp = SyntheticDatasetImporter()
@@ -190,13 +218,115 @@ class TestImageGenerator:
             assert p.suffix == ".png"
             assert p.stat().st_size > 100
 
-    def test_includes_both_smiley_and_shapes(self, tmp_path):
+    def test_includes_every_kind(self, tmp_path):
         from vtscore.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
 
-        paths = generate_image_dataset(tmp_path, 4, seed=1)
+        paths = generate_image_dataset(tmp_path, 5, seed=1)
         prefixes = {p.name.split("_")[0] for p in paths}
-        assert "smiley" in prefixes
-        assert "shapes" in prefixes
+        assert prefixes == {"face", "shapes", "scene"}
+
+    def test_pictures_are_canvas_sized(self, tmp_path):
+        from PIL import Image  # noqa: PLC0415
+
+        from vtscore.utils.synthetic.images import CANVAS_SIZE, generate_image_dataset  # noqa: PLC0415
+
+        for path in generate_image_dataset(tmp_path, 3, seed=1):
+            with Image.open(path) as img:
+                assert img.size == (CANVAS_SIZE, CANVAS_SIZE)
+                assert img.mode == "RGB"
+
+    def test_same_seed_produces_same_bytes(self, tmp_path):
+        from vtscore.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
+
+        a = generate_image_dataset(tmp_path / "a", 5, seed=3)
+        b = generate_image_dataset(tmp_path / "b", 5, seed=3)
+        assert [p.read_bytes() for p in a] == [p.read_bytes() for p in b]
+
+    def test_two_seeds_share_no_picture(self, tmp_path):
+        """Seeding on ``seed + index`` made picture 1 of seed 1 picture 0 of seed 2."""
+        from vtscore.utils.synthetic.images import generate_image_dataset  # noqa: PLC0415
+
+        a = {p.read_bytes() for p in generate_image_dataset(tmp_path / "a", 10, seed=1)}
+        b = {p.read_bytes() for p in generate_image_dataset(tmp_path / "b", 10, seed=2)}
+        assert not a & b
+
+
+class TestDescribeImageDataset:
+    """``describe_image_dataset`` is the ground truth of what was drawn."""
+
+    def test_names_the_files_generate_writes(self, tmp_path):
+        pytest.importorskip("PIL")
+        from vtscore.utils.synthetic.images import describe_image_dataset, generate_image_dataset  # noqa: PLC0415
+
+        paths = generate_image_dataset(tmp_path, 12, seed=5)
+        assert [p.name for p in paths] == [d["filename"] for d in describe_image_dataset(12, seed=5)]
+
+    def test_is_deterministic(self):
+        from vtscore.utils.synthetic.images import describe_image_dataset  # noqa: PLC0415
+
+        assert describe_image_dataset(20, seed=9) == describe_image_dataset(20, seed=9)
+
+    def test_is_json_serialisable(self):
+        import json  # noqa: PLC0415
+
+        from vtscore.utils.synthetic.images import describe_image_dataset  # noqa: PLC0415
+
+        plans = describe_image_dataset(20, seed=2)
+        assert json.loads(json.dumps(plans)) == plans
+
+    def test_stable_keys(self):
+        from vtscore.utils.synthetic.images import SMILING_EXPRESSIONS, describe_image_dataset  # noqa: PLC0415
+
+        shapes = {"face", "circle", "square", "triangle", "star"}
+        styles = {"plain", "dots", "stripes", "checks", "gradient"}
+        for plan in describe_image_dataset(60, seed=4):
+            assert plan["kind"] in {"face", "shapes", "scene"}
+            assert plan["filename"].startswith(plan["kind"] + "_")
+            assert plan["background"]["style"] in styles
+            assert len(plan["background"]["colors"]) == (1 if plan["background"]["style"] == "plain" else 2)
+            assert plan["objects"]
+            for obj in plan["objects"]:
+                assert obj["shape"] in shapes
+                assert isinstance(obj["color"], str)
+                x0, y0, x1, y1 = obj["box"]
+                assert 0 <= x0 < x1 <= 1
+                assert 0 <= y0 < y1 <= 1
+                if obj["shape"] == "face":
+                    assert obj["smiling"] == (obj["expression"] in SMILING_EXPRESSIONS)
+
+    def test_a_face_picture_holds_one_face_not_the_colour_of_its_background(self):
+        from vtscore.utils.synthetic.images import describe_image_dataset  # noqa: PLC0415
+
+        faces = [p for p in describe_image_dataset(100, seed=6) if p["kind"] == "face"]
+        assert faces
+        for plan in faces:
+            (face,) = plan["objects"]
+            assert face["shape"] == "face"
+            assert plan["background"]["colors"][0] != face["color"]
+
+    def test_mix_holds_the_near_misses(self):
+        """Enough yellow smileys to hunt, and the pictures that make it hard."""
+        from vtscore.utils.synthetic.images import describe_image_dataset  # noqa: PLC0415
+
+        faces = [p["objects"][0] for p in describe_image_dataset(240, seed=1) if p["kind"] == "face"]
+        yellow_smiling = [f for f in faces if f["color"] == "yellow" and f["smiling"]]
+        yellow_not = [f for f in faces if f["color"] == "yellow" and not f["smiling"]]
+        other_smiling = [f for f in faces if f["color"] != "yellow" and f["smiling"]]
+        assert len(yellow_smiling) >= 20
+        assert len(yellow_not) >= 15
+        assert len(other_smiling) >= 20
+
+    def test_scene_objects_do_not_overlap(self):
+        import math  # noqa: PLC0415
+
+        from vtscore.utils.synthetic.images import describe_image_dataset  # noqa: PLC0415
+
+        for plan in describe_image_dataset(50, seed=8):
+            objs = plan["objects"]
+            for i, a in enumerate(objs):
+                for b in objs[i + 1 :]:
+                    gap = math.dist(a["center"], b["center"]) - a["radius"] - b["radius"]
+                    assert gap > 0
 
 
 # ---------------------------------------------------------------------------
@@ -234,15 +364,28 @@ class TestResolveFile:
 
         from vtscore.utils.synthetic.audio import generate_audio_dataset  # noqa: PLC0415
 
-        cache_dir = tmp_path / "synthetic" / "audio_3"
-        generate_audio_dataset(cache_dir, 3, seed=42)
+        cache_dir = tmp_path / "synthetic" / "audio_3_seed1"
+        generate_audio_dataset(cache_dir, 3, seed=1)
 
         imp = SyntheticDatasetImporter()
-        origin = imp.build_origin({"media_type": "audio", "size": "3"})
+        origin = imp.build_origin({"media_type": "audio", "size": "3", "seed": "1"})
         # The first generated file is "tone_0000.wav".
         resolved = imp.resolve_file(origin, origin_name="tone_0000.wav", filename="tone_0000.wav")
         assert resolved is not None
         assert resolved.name == "tone_0000.wav"
+
+    def test_image_cache_folder_names_seed_and_generator_version(self, tmp_path, monkeypatch):
+        """A cache the old image generator wrote must never be served as the new one's."""
+        pytest.importorskip("PIL")
+        from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
+
+        monkeypatch.setattr(syn, "DATA_DIR", tmp_path)
+        imp = SyntheticDatasetImporter()
+        one = imp._generate("image", 2, 1)
+        two = imp._generate("image", 2, 2)
+        assert one == tmp_path / "synthetic" / "image_2_seed1_v2"
+        assert two == tmp_path / "synthetic" / "image_2_seed2_v2"
+        assert {p.read_bytes() for p in one.iterdir()}.isdisjoint(p.read_bytes() for p in two.iterdir())
 
     def test_returns_none_for_missing_file(self, tmp_path, monkeypatch):
         from vtscore.datasets.importers import synthetic as syn  # noqa: PLC0415
@@ -374,12 +517,14 @@ class TestPartialRegeneration:
 class TestCliAndDisplay:
     def test_build_cli_args(self):
         imp = SyntheticDatasetImporter()
-        args = imp.build_cli_args({"media_type": "audio", "size": "10"})
+        args = imp.build_cli_args({"media_type": "audio", "size": "10", "seed": "3"})
         assert "--importer synthetic" in args
         assert "--media-type audio" in args
         assert "--size 10" in args
+        assert "--seed 3" in args
 
     def test_origin_display(self):
         imp = SyntheticDatasetImporter()
-        origin = imp.build_origin({"media_type": "image", "size": "25"})
-        assert imp.origin_display(origin) == "synthetic:image_25"
+        origin = imp.build_origin({"media_type": "image", "size": "25", "seed": "2"})
+        assert imp.origin_display(origin) == "synthetic:image_25_seed2"
+        assert imp.origin_display(imp.build_origin({"media_type": "image", "size": "25"})) == "synthetic:image_25_seed1"
