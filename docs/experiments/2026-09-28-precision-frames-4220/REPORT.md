@@ -8,13 +8,13 @@ votes it has. The one estimator that keeps its promise in every scenario takes
 the calibration folds' held-out votes, transfers them to the final model by
 rank, fits a logistic P(positive | score), cuts at a bootstrap lower bound, and
 re-estimates the corpus prior by EM. Gated on ≥10 positives among the
-calibration votes, it breaks **6%** of its X = 50% promises on the natural pool,
+calibration votes, it breaks **6%** of its X = 50% promises on the 0.44% pool,
 **1%** on a 5% pool, and **3%** when the corpus is poorer than the pool it was
-calibrated on. Ungated, it breaks **83%** on the natural pool. The in-sample
+calibrated on. Ungated, it breaks **83%** on the 0.44% pool. The in-sample
 estimator is never safe: it breaks 9–16% of its promises when gated, and **77%**
 under label shift. Even when it keeps its promise, the safe estimator is
 **timid**. Gated at X = 50% it recovers 0.55 recall where the best cut on the
-same model reaches 0.95 (natural pool), and 0.23 against 0.84 on the 5% pool.
+same model reaches 0.95 (0.44% pool), and 0.23 against 0.84 on the 5% pool.
 
 Follows #4223 (the ruling) and #4224 (the feasibility sim). It feeds #4221 (the
 rule) and #4222 (the harvest this depends on). Plan fixed before the first
@@ -23,7 +23,7 @@ result: #4220, comment of 2026-09-28.
 ## What was run
 
 - **Today's app (r7), unchanged,** on all 720 COCO Better cells (144 class@band
-  cells × 5 seeds, SigLIP, binary voting, 150 votes). It ran at the natural pool
+  cells × 5 seeds, SigLIP, binary voting, 150 votes). It ran at COCO Better's default pool
   (0.44% positive) and at the #4201 5% haystack arm.
 - **Precision frames** (`CALIB_PFRAME_STEPS=25,50,100,150`) at each checkpoint.
   - What the app has: its pool's final-model scores, each voted item's
@@ -41,7 +41,7 @@ result: #4220, comment of 2026-09-28.
     10th-percentile bootstrap lower bound, with or without an EM re-estimate of
     the corpus prior.
 - **Scenarios.**
-  - *same*: the corpus has the voted pool's prevalence (the natural arm's test
+  - *same*: the corpus has the voted pool's prevalence (the 0.44% arm's test
     half, or the 5% arm's test half thinned to 5%).
   - *shifted*: the 5% arm's untouched 0.44% test half, i.e. a detector
     calibrated on a rich session and run over a poor corpus.
@@ -68,9 +68,9 @@ one. A frame that promises nothing can't break a promise, so it's left out.
 
 | scenario | estimator | gate (calibration positives) | frames past the gate | broken, of promises made, X=50% | promises made | recall / oracle at X=50% |
 |---|---|---|---|---|---|---|
-| natural, same | fold-rank | none | 100% | 83% | 63% | 0.46 / 0.43 |
-| natural, same | fold-rank | ≥10 | **5%** | **6%** | 92% | 0.55 / 0.95 |
-| natural, same | in-sample | ≥10 | 5% | 9% | 100% | 0.92 / 0.95 |
+| 0.44%, same | fold-rank | none | 100% | 83% | 63% | 0.46 / 0.43 |
+| 0.44%, same | fold-rank | ≥10 | **5%** | **6%** | 92% | 0.55 / 0.95 |
+| 0.44%, same | in-sample | ≥10 | 5% | 9% | 100% | 0.92 / 0.95 |
 | 5%, same | fold-rank | ≥10 | 43% | **1%** | 49% | 0.23 / 0.84 |
 | 5%, same | in-sample | ≥10 | 43% | 16% | 100% | 0.81 / 0.84 |
 | 5%, shifted | fold-rank | ≥10 | 43% | **3%** | 18% | 0.11 / 0.58 |
@@ -81,7 +81,7 @@ any cut on the same model could reach at X. A recall above the oracle's means
 the cut returned more than the floor allows: a broken promise. X = 25/75/90%
 and gates 0/5/10 are in `gate_table.csv`.
 
-A gate of 5 is not enough on the natural pool (18% of promises broken). EM
+A gate of 5 is not enough on the 0.44% pool (18% of promises broken). EM
 matters under label shift. Counted over all shifted frames, fold-rank's lower
 bound breaks its promise 7–31% of the time without EM and 4–11% with it,
 ungated. With EM and the gate, it breaks 3% of the promises it makes
@@ -93,10 +93,10 @@ ungated. With EM and the gate, it breaks 3% of the promises it makes
 
 | pool | calibration positives at vote 25 / 50 / 100 / 150 (mean) | frames with ≥10 at vote 150 |
 |---|---|---|
-| natural (0.44%) | 2.0 / 2.4 / 3.1 / 4.1 | 13% large, 8% medium, 9% small |
+| 0.44% (COCO Better's default) | 2.0 / 2.4 / 3.1 / 4.1 | 13% large, 8% medium, 9% small |
 | 5% | 4.0 / 6.7 / 13 / 20 | 89% large, 89% medium, 86% small |
 
-On the natural pool, today's app spends 150 votes and holds a median of **two**
+On the 0.44% pool, today's app spends 150 votes and holds a median of **two**
 positives in its calibration folds. The gate is a statement about the harvest,
 not about the estimator. **#4222 (asking about likely positives) is what turns
 this promise on.**
@@ -105,9 +105,9 @@ this promise on.**
 
 | pool | band | frames | broken, of all frames | nothing promised | recall / oracle |
 |---|---|---|---|---|---|
-| natural | large | 54 | 9% | 2% | 0.63 / 0.97 |
-| natural | medium | 37 | 3% | 11% | 0.46 / 0.96 |
-| natural | small | 35 | 3% | 14% | 0.51 / 0.91 |
+| 0.44% | large | 54 | 9% | 2% | 0.63 / 0.97 |
+| 0.44% | medium | 37 | 3% | 11% | 0.46 / 0.96 |
+| 0.44% | small | 35 | 3% | 14% | 0.51 / 0.91 |
 | 5%, same | large | 529 | 1% | 32% | 0.35 / 0.97 |
 | 5%, same | medium | 383 | 1% | 60% | 0.16 / 0.82 |
 | 5%, same | small | 315 | 1% | 70% | 0.11 / 0.67 |
@@ -119,7 +119,7 @@ Safety holds in every band. The timidity grows as objects shrink: on the 5%
 pool the rule promises nothing for 70% of small cells, where the oracle could
 still reach 0.67 recall.
 
-## Literal examples (natural pool, vote 150, fold-rank lower bound + EM, X = 50%)
+## Literal examples (0.44% pool, vote 150, fold-rank lower bound + EM, X = 50%)
 
 **Promises broken below the gate:**
 
@@ -155,7 +155,7 @@ where autopilot finds positives: skis, tennis racket, airplane, baseball bat.
 At vote 150, median precision of what each existing cut returns
 (`reference_cuts.csv`):
 
-| cut | natural | 5%, same | 5%, shifted |
+| cut | 0.44% | 5%, same | 5%, shifted |
 |---|---|---|---|
 | shipped | 2.0% | 34% | 4.2% |
 | `tau_gumbel_priorfree` | 1.6% | 85% | 30% |
