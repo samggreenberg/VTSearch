@@ -400,9 +400,10 @@ MIRRORS: list[Mirror] = [
             "How the cross-calibration cut and the population estimate are fused into the "
             "shipped threshold. The harness's reported operating point is only comparable to "
             "the app's if this rule matches. Since #4245 this is also where the precision "
-            "floor's estimate is built (the final model's haystack as corpus and pool, each "
-            "fold's held-out votes cut down by eligible_fold_orderings, each fold's own "
-            "haystack) and where the line is chosen - both sides call the shared "
+            "floor's estimate is built (the unvoted remainder as corpus, the WHOLE haystack - "
+            "votes included - as the reference pool, each fold's held-out votes cut down by "
+            "eligible_fold_orderings, each fold's own excluded haystack; #4221 found the "
+            "promise's safety rests on that pool asymmetry) and where the line is chosen - both sides call the shared "
             "reporting_line, so which line an operating point draws is delegated; what this "
             "digest watches is the estimate's inputs, which the harness has to build the same way."
         ),
