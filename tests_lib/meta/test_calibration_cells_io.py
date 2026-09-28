@@ -30,6 +30,7 @@ Two independent guards, because the two ways in are independent:
 
 from __future__ import annotations
 
+import gzip
 import importlib.util
 import re
 import sys
@@ -494,3 +495,47 @@ def test_a_mis_tagged_cell_still_trips_the_guard(tmp_path: Path) -> None:
     (cells / "task_0000.csv").write_text("t,cost,gmm_variant,schedule,pool_variant\n1,0.5,weird_variant,,\n")
     with pytest.raises(SystemExit, match="check tag columns"):
         cells_io.load_arm(tmp_path / "arm")
+
+
+# --- Gzipped cells (#4184) ----------------------------------------------------
+#
+# ``CALIB_CELLS_GZIP=1`` writes ``task_NNNN.csv.gz``.  The readers learn that
+# from ``_cells_paths`` alone, so these hold the glob to both spellings and
+# refuse a directory that holds one cell in each.
+
+
+def test_a_gzipped_cell_reads_like_a_plain_one(tmp_path: Path) -> None:
+    """The same row, plain in one arm and gzipped in another, loads identically."""
+    cells_io = _load_cells_io()
+    plain = tmp_path / "plain" / "cells"
+    packed = tmp_path / "packed" / "cells"
+    for d in (plain, packed):
+        d.mkdir(parents=True)
+    (plain / "task_0000.csv").write_text(_ROW)
+    (packed / "task_0000.csv.gz").write_bytes(gzip.compress(_ROW.encode()))
+    (packed / "task_0000__picks.csv.gz").write_bytes(gzip.compress(b"t,media_id\n1,7\n"))
+    a, a_prov = cells_io.load_arm(plain.parent)
+    b, b_prov = cells_io.load_arm(packed.parent)
+    assert (b_prov["n_files"], b_prov["n_read"]) == (a_prov["n_files"], a_prov["n_read"]) == (1, 1)
+    assert a.equals(b)
+    assert [p.name for p in cells_io.side_frame_files(packed, "__picks")] == ["task_0000__picks.csv.gz"]
+
+
+def test_a_cell_in_both_spellings_is_refused(tmp_path: Path) -> None:
+    """A resume with the knob flipped would otherwise count that cell twice."""
+    cells_io = _load_cells_io()
+    cells = tmp_path / "cells"
+    cells.mkdir()
+    (cells / "task_0000.csv").write_text(_ROW)
+    (cells / "task_0000.csv.gz").write_bytes(gzip.compress(_ROW.encode()))
+    with pytest.raises(ValueError, match="both plain and gzipped"):
+        cells_io.main_frame_files(cells)
+
+
+def test_every_frame_the_runner_writes_goes_through_cell_file() -> None:
+    """``run_cells.cell_file`` is the one place the suffix is chosen; a frame
+    written around it would come out plain in a gzipped run."""
+    src = (CALIB / "run_cells.py").read_text()
+    written = re.findall(r'f"task_\{idx:04d\}[^"]*\.csv"', src)
+    wrapped = re.findall(r'cell_file\(outdir / f"task_\{idx:04d\}[^"]*\.csv"\)', src)
+    assert written and len(wrapped) == len(written), "a cell frame is written without cell_file()"

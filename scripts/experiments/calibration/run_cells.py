@@ -229,6 +229,11 @@ def cell_progress(idx: int, n_launched: int, results: Path | None = None) -> str
     return f"{plain} launched (grid_shape.json: {n_shape} — {verdict})"
 
 
+def cell_file(path: Path) -> Path:
+    """*path*, gzipped when ``CALIB_CELLS_GZIP=1`` (#4184).  pandas picks the codec off the suffix."""
+    return path.with_name(path.name + ".gz") if cfg.CELLS_GZIP else path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Calibration: one cell (dataset,embedder,category,seed).")
     parser.add_argument("--index", type=int, default=None, help="Cell index; defaults to $SLURM_ARRAY_TASK_ID.")
@@ -268,6 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"trainer={cfg.TRAINER} strategy={cfg.STRATEGY} standalone_cut={cfg.STANDALONE_CUT} "
+        f"haystack_prevalence={cfg.HAYSTACK_PREVALENCE or 'natural'} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
         f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
@@ -353,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             trainer=cfg.TRAINER,
             strategy=cfg.STRATEGY,
             standalone_cut=cfg.STANDALONE_CUT,
+            haystack_prevalence=cfg.HAYSTACK_PREVALENCE,
             head=cfg.HEAD,
             style=style,
             test_bands=cfg.TEST_BANDS,
@@ -474,32 +481,32 @@ def main(argv: list[str] | None = None) -> int:
         "live_threshold",
         "standalone_cut",
     ]
-    out = outdir / f"task_{idx:04d}.csv"
+    out = cell_file(outdir / f"task_{idx:04d}.csv")
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
     sweep_cols = [*INCLUSION_SWEEP_COLUMNS, "embedder"]
-    sweep_out = outdir / f"task_{idx:04d}__sweep.csv"
+    sweep_out = cell_file(outdir / f"task_{idx:04d}__sweep.csv")
     pd.DataFrame(all_sweep, columns=pd.Index(sweep_cols)).to_csv(sweep_out, index=False)
     # The #2836 cut-decomposition frame (one row per step per fit geometry).
     cutdiag_cols = [*CUT_DIAGNOSTIC_COLUMNS, "embedder"]
-    cutdiag_out = outdir / f"task_{idx:04d}__cutdiag.csv"
+    cutdiag_out = cell_file(outdir / f"task_{idx:04d}__cutdiag.csv")
     pd.DataFrame(all_cutdiag, columns=pd.Index(cutdiag_cols)).to_csv(cutdiag_out, index=False)
     # The #2865 cut-rule x inclusion frame (one row per step per arm per k).
     # Written unconditionally, like the frames above: an empty CSV with the
     # right header is what tells the analyzer the run had the sweep switched
     # off, rather than that its cells silently failed.
     cutincl_cols = [*CUT_INCLUSION_COLUMNS, "embedder"]
-    cutincl_out = outdir / f"task_{idx:04d}__cutincl.csv"
+    cutincl_out = cell_file(outdir / f"task_{idx:04d}__cutincl.csv")
     pd.DataFrame(all_cutincl, columns=pd.Index(cutincl_cols)).to_csv(cutincl_out, index=False)
     # The #3267 per-click pick log.  Written unconditionally, like the frames
     # above, so an empty file with the right header says "the log was off"
     # rather than "the cell failed".
     picks_cols = [*PICK_COLUMNS, "embedder"]
-    picks_out = outdir / f"task_{idx:04d}__picks.csv"
+    picks_out = cell_file(outdir / f"task_{idx:04d}__picks.csv")
     pd.DataFrame(all_picks, columns=pd.Index(picks_cols)).to_csv(picks_out, index=False)
     # The #3329 goodness-of-fit frame (one row per step per scope).  Same
     # unconditional-write rule as every frame above.
     fitq_cols = [*FIT_QUALITY_ROW_COLUMNS, "embedder"]
-    fitq_out = outdir / f"task_{idx:04d}__fitq.csv"
+    fitq_out = cell_file(outdir / f"task_{idx:04d}__fitq.csv")
     pd.DataFrame(all_fitq, columns=pd.Index(fitq_cols)).to_csv(fitq_out, index=False)
     common.log(
         f"wrote {len(all_rows)} rows to {out}, {len(all_sweep)} sweep rows to {sweep_out}, "

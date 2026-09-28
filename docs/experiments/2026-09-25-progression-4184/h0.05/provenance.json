@@ -1,0 +1,79 @@
+{
+  "r1_xcal": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475203,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r1_xcal/results"
+  },
+  "r2_gmm": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475177,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r2_gmm/results"
+  },
+  "r3_blend": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475071,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r3_blend/results"
+  },
+  "r4_rawmean": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475059,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r4_rawmean/results"
+  },
+  "r5_anchored": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475081,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r5_anchored/results"
+  },
+  "r6_split70": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475147,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r6_split70/results"
+  },
+  "r7_acq4": {
+    "n_files": 720,
+    "n_read": 720,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 3475080,
+    "n_rows": 105358,
+    "dir": "/expscratch/sgreenberg/progression-4184-h0.05/r7_acq4/results"
+  }
+}

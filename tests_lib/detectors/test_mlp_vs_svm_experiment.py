@@ -15,6 +15,7 @@ import pytest
 from vtscore.eval.timing_benchmark import run_timing_benchmark
 from vtscore.eval.sweep_trainers import _as_scores, _parse_trainer_spec, resolve_trainer
 from vtscore.eval.voting_iterations import (
+    thin_haystack,
     _downsample_to_prevalence,
     _prevalence,
     run_voting_iterations_eval,
@@ -232,6 +233,42 @@ class TestPrevalenceControl:
         with_none = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=15)
         with_natural = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=15, target_prevalence=None)
         assert_same_rows(drop_timing(with_none), drop_timing(with_natural))
+
+
+class TestHaystackPrevalence:
+    """The #4184/#4201 arm: thin the simulation half's negatives, touch nothing else."""
+
+    def test_thinning_hits_target_and_keeps_every_positive(self):
+        clips = _separable_clips(n_per_cat=200, n_cats=5, seed=0)  # cat0 = 20%
+        ids = sorted(clips)
+        pos = {c for c in ids if clips[c]["category"] == "cat0"}
+        out = thin_haystack(clips, ids, "cat0", 0.5, seed=0)
+        assert pos <= set(out)
+        assert _prevalence({c: clips[c] for c in out}, "cat0") == pytest.approx(0.5, abs=0.01)
+        assert out == thin_haystack(clips, ids, "cat0", 0.5, seed=0), "deterministic in the seed"
+
+    def test_a_pool_already_richer_is_left_alone(self):
+        clips = _separable_clips(n_per_cat=200, n_cats=5, seed=0)
+        ids = sorted(clips)
+        assert thin_haystack(clips, ids, "cat0", 0.05, seed=0) == ids
+
+    def test_test_set_is_the_natural_runs(self):
+        """Same held-out set, so a cell pairs with its natural twin; only the pool shrinks."""
+        clips = _separable_clips(n_per_cat=100, n_cats=5, seed=0)
+        natural = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=12)
+        thinned = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=12, haystack_prevalence=0.5)
+        assert thinned and thinned[0]["prevalence_arm"] == "haystack_0.5"
+        assert thinned[0]["realized_prevalence"] == pytest.approx(0.5, abs=0.02)
+        for a, b in zip(natural, thinned):
+            assert (a["n_test_pos"], a["n_test_neg"]) == (b["n_test_pos"], b["n_test_neg"])
+        assert thinned[-1]["n_haystack"] < natural[-1]["n_haystack"]
+
+    def test_refuses_both_prevalence_arms(self):
+        clips = _separable_clips(seed=1)
+        with pytest.raises(ValueError, match="two different arms"):
+            simulate_voting_iterations(
+                clips, "cat0", seed=0, max_steps=5, target_prevalence=0.05, haystack_prevalence=0.05
+            )
 
 
 # ---------------------------------------------------------------------------

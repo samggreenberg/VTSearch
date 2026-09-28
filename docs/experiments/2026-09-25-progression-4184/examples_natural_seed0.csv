@@ -1,0 +1,8 @@
+category,r4 cost,r5 cost,r4 cut pct,r5 cut pct,r4 flagged,r5 flagged,test positives
+keyboard@large,0.101,0.406,0.915,0.591,970,4.68e+03,55
+motorcycle@large,0.0685,0.376,0.94,0.621,690,4.37e+03,52
+knife@medium,0.441,0.752,0.633,0.618,4.16e+03,4.32e+03,47
+bicycle@large,0.101,0.446,0.917,0.552,956,5.13e+03,47
+bench@medium,0.822,0.687,0.697,0.675,3.45e+03,3.69e+03,51
+toothbrush@small,0.567,0.459,0.849,0.746,1.76e+03,2.96e+03,49
+book@medium,0.622,0.537,0.695,0.668,3.41e+03,3.71e+03,48

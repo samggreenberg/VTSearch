@@ -35,11 +35,35 @@ from pathlib import Path
 SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks", "__fitq")
 
 
+#: A run under ``CALIB_CELLS_GZIP=1`` writes every frame as ``task_NNNN.csv.gz``
+#: (#4184: a COCO Better cell is ~3.3 MB as text and ~180 KB gzipped, and that
+#: study's 5,040 cells did not fit the shared volume uncompressed).  pandas
+#: picks the codec off the suffix, so only the glob has to know.
+CELL_SUFFIXES = (".csv", ".csv.gz")
+
+
+def _cell_files(cells_dir: str | Path, pattern: str) -> list[Path]:
+    """*pattern* in either spelling, refusing a cell written in both.
+
+    Both at once means a directory was resumed with the knob flipped, and
+    reading both would count that cell twice.
+    """
+    files = sorted(p for ext in CELL_SUFFIXES for p in Path(cells_dir).glob(pattern + ext))
+    names = [p.name.removesuffix(".gz") for p in files]
+    twice = sorted({n for n in names if names.count(n) > 1})
+    if twice:
+        raise ValueError(
+            f"{cells_dir}: {len(twice)} cell file(s) exist both plain and gzipped, e.g. {twice[0]} - "
+            "delete one spelling before reading"
+        )
+    return files
+
+
 def main_frame_files(cells_dir: str | Path) -> list[Path]:
     """Every cell's **main** metric CSV under *cells_dir*, side frames excluded."""
-    return sorted(p for p in Path(cells_dir).glob("task_*.csv") if "__" not in p.stem)
+    return [p for p in _cell_files(cells_dir, "task_*") if "__" not in p.name]
 
 
 def side_frame_files(cells_dir: str | Path, suffix: str) -> list[Path]:
     """Every cell's side frame of one kind, e.g. ``suffix="__cutincl"``."""
-    return sorted(Path(cells_dir).glob(f"task_*{suffix}.csv"))
+    return _cell_files(cells_dir, f"task_*{suffix}")

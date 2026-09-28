@@ -48,6 +48,15 @@ export VTS_REPO="${VTS_REPO:-/expscratch/$USER/worktrees/vts-4184}"
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 BASE="${PROGRESSION_BASE:-/expscratch/$USER/progression-4184}"
+# The #4201 haystack arm: the same seven rungs with the simulation pool thinned
+# to CALIB_HAYSTACK_PREVALENCE (e.g. 0.05).  Its own results root and job names,
+# so it never mixes with the natural run it pairs against.
+TAG=""
+if [[ -n "${CALIB_HAYSTACK_PREVALENCE:-}" ]]; then
+  export CALIB_HAYSTACK_PREVALENCE
+  TAG="-h${CALIB_HAYSTACK_PREVALENCE}"
+  BASE="${PROGRESSION_BASE:-/expscratch/$USER/progression-4184${TAG}}"
+fi
 
 ALL_RUNGS="r1_xcal r2_gmm r3_blend r4_rawmean r5_anchored r6_split70 r7_acq4"
 
@@ -94,6 +103,9 @@ export CALIB_CELL_ORDER="${CALIB_CELL_ORDER:-seed}"
 # 150 votes: the deck's session is "a few minutes, twenty-seven questions", and
 # r7's measured worth is speed (#3319) - both live well inside 150.
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
+# Gzipped cells: measured 3.3 MB -> 178 KB per cell on the r1 sizing run, so
+# the 5,040 cells are ~1 GB instead of ~19 GB on a volume that had 7 GB free.
+export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}"
 
 # --- ops -----------------------------------------------------------------------
 export CALIB_PARTITION=cpu
@@ -133,7 +145,7 @@ require_jobid() {
 set_exp() {
   export CALIB_EXP="$BASE/$1"
   export CALIB_RESULTS="$CALIB_EXP/results"
-  export CALIB_JOB_NAME="prog4184-$1"
+  export CALIB_JOB_NAME="prog4184${TAG}-$1"
   mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
   ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
 }
@@ -186,7 +198,11 @@ run_preflight() {
   [[ -x "$WT/scripts/experiments/preflight.sh" ]] || return 0
   local div=()
   [[ -n "$RUNG_DIVERGES" ]] && div=(--diverges "$RUNG_DIVERGES")
-  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 10 \
+  # Gzipped, all seven rungs write ~1 GB (5,040 cells x ~190 KB); 3 GB is that
+  # with headroom.  Plain cells would need ~19 GB - raise this if the knob is off.
+  local need=3
+  [[ "$CALIB_CELLS_GZIP" == "1" ]] || need=25
+  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb "$need" \
     "${div[@]}" --job-name "$CALIB_JOB_NAME" --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
     echo "preflight FAILED ($CALIB_JOB_NAME)" >&2
     [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
@@ -200,7 +216,7 @@ grid_size() {
 case "$MODE" in
   prepare)
     set_exp prepare
-    P=$(sbatch --parsable --job-name=prog4184-prep --mem=32G --cpus-per-task=2 \
+    P=$(sbatch --parsable --job-name=prog4184${TAG}-prep --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
@@ -214,7 +230,7 @@ case "$MODE" in
     rung_env "$RUNG"
     set_exp "sizing-$RUNG"
     link_prepare
-    S=$(sbatch --parsable --job-name="prog4184-size-$RUNG-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
+    S=$(sbatch --parsable --job-name="prog4184${TAG}-size-$RUNG-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
@@ -228,7 +244,7 @@ case "$MODE" in
     # detector exists at click 0, so it is rung-independent - one file serves
     # all seven, and every curve starts from the same point by construction.
     set_exp prepare
-    T=$(sbatch --parsable --job-name=prog4184-baseline --mem=32G --cpus-per-task=2 \
+    T=$(sbatch --parsable --job-name=prog4184${TAG}-baseline --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/baseline-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $BASE/text_baseline.csv")
@@ -268,8 +284,8 @@ case "$MODE" in
     for rung in $ALL_RUNGS; do
       rung_env "$rung"
       set_exp "$rung"
-      n="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv' -size +0 2>/dev/null | wc -l)"
-      z="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv' -size 0 2>/dev/null | wc -l)"
+      n="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size +0 2>/dev/null | wc -l)"
+      z="$(find "$CALIB_RESULTS/cells" -maxdepth 1 -name 'task_[0-9][0-9][0-9][0-9].csv*' -size 0 2>/dev/null | wc -l)"
       q="$(squeue -u "$USER" -h -n "$CALIB_JOB_NAME" -o %i 2>/dev/null | wc -l)"
       printf '%-12s %5s cells written  %3s zero-byte  %3s queued/running jobs\n' "$rung" "$n" "$z" "$q"
     done
@@ -280,7 +296,7 @@ case "$MODE" in
     ARMS=""
     for rung in $ALL_RUNGS; do ARMS="$ARMS,$BASE/$rung/results=$rung"; done
     set_exp analysis
-    A=$(sbatch --parsable --job-name=prog4184-analyze --mem="${CALIB_ANALYZE_MEM:-32G}" \
+    A=$(sbatch --parsable --job-name=prog4184${TAG}-analyze --mem="${CALIB_ANALYZE_MEM:-32G}" \
       --cpus-per-task=4 --time="${CALIB_ANALYZE_TIME:-2:00:00}" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/analyze-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python analyze_progression_4184.py --arms ${ARMS#,} --baseline $BASE/text_baseline.csv --out $CALIB_EXP")
