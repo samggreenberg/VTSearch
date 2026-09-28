@@ -65,8 +65,8 @@ throwaway bug-hunt captures, which are working artifacts and belong nowhere near
 the manifest.
 
 **Locked decisions (2026-06-07).** Capture engine = checked-in automated
-Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md + README.md +
-demos.md only (dev/ops docs get none). Themes = both light + dark (each logical
+Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md, the how-to
+pages under `docs/user/howto/`, README.md and demos.md (dev/ops docs get none). Themes = both light + dark (each logical
 shot yields a `{light,dark}` pair). Annotations = declared in the manifest,
 drawn by the harness as a pre-capture DOM overlay — never hand-edited.
 
