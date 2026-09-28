@@ -16,7 +16,11 @@ instead, since every commit on `dev` is effectively a new app release.)
     plus one cut, with unchanged results.
   - `PrecisionFloorEstimate`: one detector's inputs, with the curve fitted the
     first time a floor is asked for, and `n_returned` counted on the whole
-    corpus above the 50k sample.
+    corpus above the 50k sample. `curve_for(corpus)` applies the same evidence
+    and reference pool to another corpus (the Find Stats chart, #4242). The
+    reference pool is the whole haystack with the voted items included, while
+    the corpus is the unvoted remainder: the configuration #4220 measured,
+    which #4221 found the promise's safety rests on.
   - `eligible_fold_orderings`: the held-out votes that may serve as evidence.
   - `reporting_line` / `ReportingLine` / `line_inclusion` / `unpromised`: which
     line an operating point draws (the floor's when promised, the Inclusion 0
