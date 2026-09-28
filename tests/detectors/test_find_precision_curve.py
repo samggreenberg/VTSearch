@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests.helpers import planted_fold_anchored_cut
+from tests.helpers import planted_precision_floor_estimate
 from vtscore.state.core import DetectorContext
 from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
 from vtsearch.routes.detectors import _find_precision
@@ -62,7 +62,7 @@ class TestVerifiedPrecision:
 class TestLargeCorpus:
     def _ctx(self) -> DetectorContext:
         ctx = DetectorContext()
-        ctx.anchored_cut_cache = planted_fold_anchored_cut(n_pos_per_fold=8)
+        ctx.precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
         return ctx
 
     def test_a_sampled_corpus_is_read_at_the_matching_rank(self, monkeypatch):

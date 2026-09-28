@@ -223,6 +223,22 @@ def reset_contexts(tmp_path, monkeypatch):
     config.register_core_config_builder(_lib_default_core_config)
 
 
+@pytest.fixture
+def no_precision_floor():
+    """The user has cleared the precision floor, so the Inclusion knob draws every line (#4245).
+
+    For tests of the Inclusion knob's own mechanics.  Under the default floor a
+    set floor wins and an Inclusion slide does not move the line; clearing it
+    is how a user gets the knob back.  ``reset_contexts`` re-registers the
+    default builder before the next test, so nothing needs undoing.
+    """
+    import dataclasses
+
+    config.register_core_config_builder(
+        lambda path=None: dataclasses.replace(_lib_default_core_config(path), min_precision=None)
+    )
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_unconfigure(config):
     """Print the run summary and force-exit (see ``tests_shared``).

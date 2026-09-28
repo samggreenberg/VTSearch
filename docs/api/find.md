@@ -255,12 +255,14 @@ an FP/FN threshold sweep, and the precision curve the Stats chart draws.
   top `n_returned` items, sampled at about 40 log-spaced counts plus the current
   cut's (`n_returned` at the top level). `verified_precision` is
   `checked_good / checked` over the items in it the user verified (`null` when
-  none). `estimated_precision` is the precision floor's lower-bound estimate
-  (`vtscore.training.thresholds.precision_lower_bound_curve`), from the
-  detector's calibration folds, with the final model's haystack as the pool and
-  this Find run's scores as the corpus (sampled to 50,000 above that).
+  none). `estimated_precision` is the precision floor's own lower-bound estimate
+  (the detector's `precision_floor_cache`, applied to this Find run's scores as
+  the corpus, sampled to 50,000 above that): the held-out calibration votes the
+  learned sort chose, and the whole haystack the detector trained against,
+  voted items included, as the reference pool. It is the curve the floor cuts
+  (see [labeling.md](labeling.md#get--set-the-precision-floor)).
 - `estimate_status` says whether the curve carries an estimate: `estimated`;
-  `insufficient_evidence` when the folds' held-out votes hold fewer than
+  `insufficient_evidence` when those votes hold fewer than
   `min_calibration_positives` Good ones (the precision floor's own gate); or
   `unavailable` when the detector has no calibration folds.
 - `sweep` covers inclusion −10..10. It is no longer charted and goes with the

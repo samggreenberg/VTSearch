@@ -209,7 +209,7 @@ def smart_status_from_costs(costs: Sequence[float], good: int, bad: int) -> dict
 
 def smart_cut(
     served_threshold: float,
-    served_inclusion: float,
+    served_inclusion: float | None,
     recut: Callable[[float], float | None],
 ) -> float:
     """The threshold Smart scores one model at: its own cut at :data:`SMART_INCLUSION`.
@@ -223,12 +223,14 @@ def smart_cut(
 
     A model served at :data:`SMART_INCLUSION` is scored at its served line
     exactly, without a re-cut, so a user at the default Inclusion sees the
-    indicator they always had.  The app passes its re-cut seam
+    indicator they always had.  *served_inclusion* is ``None`` when no
+    inclusion drew the served line - a precision floor that promised its own
+    cut (#4245) - and the model is then always re-cut.  The app passes its re-cut seam
     (``vtscore.state.core.recut_detector_threshold``) and the eval harness its
     step's fold-anchored fit; the rule for choosing between them lives here, so
     the two cannot drift.
     """
-    if served_inclusion == SMART_INCLUSION:
+    if served_inclusion is not None and served_inclusion == SMART_INCLUSION:
         return served_threshold
     cut = recut(SMART_INCLUSION)
     if cut is None or not math.isfinite(cut):

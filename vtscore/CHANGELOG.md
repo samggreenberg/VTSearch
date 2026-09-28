@@ -26,6 +26,54 @@ instead, since every commit on `dev` is effectively a new app release.)
   cancel. A hook that raises is logged; the dataset stays saved. The app uses it
   to start AutoRun on an imported dataset.
 
+- **A precision floor for detectors** (issue #4245), all additive:
+  - `PrecisionFloorCurve` / `fit_precision_floor_curve`: the lower-bound curve
+    fitted once and cut at any floor. `precision_floor_cut` is now that fit
+    plus one cut, with unchanged results.
+  - `PrecisionFloorEstimate`: one detector's inputs, with the curve fitted the
+    first time a floor is asked for, and `n_returned` counted on the whole
+    corpus above the 50k sample. `curve_for(corpus)` applies the same evidence
+    and reference pool to another corpus (the Find Stats chart, #4242). The
+    reference pool is the whole haystack with the voted items included, while
+    the corpus is the unvoted remainder: the configuration #4220 measured,
+    which #4221 found the promise's safety rests on.
+  - `eligible_fold_orderings`: the held-out votes that may serve as evidence.
+  - `reporting_line` / `ReportingLine` / `line_inclusion` / `unpromised`: which
+    line an operating point draws (the floor's when promised, the Inclusion 0
+    cut when not, Inclusion's when no floor is set) and where acquisition's
+    offset starts from.
+  - `resolve_min_precision`, `NO_PRECISION_FLOOR`, `DEFAULT_MIN_PRECISION`
+    (0.5, also in `vtscore.config`) and `PRECISION_FLOOR_FALLBACK_INCLUSION`.
+  - `vtscore.datasets.vote_provenance.calibrates_precision`: whether a vote's
+    surfacing provenance lets it calibrate a promise (drawn off the learned
+    sort's own ranking: flow `autopilot` / `list_review`, sort `learned`,
+    select mode `top` / `hard`).
+  - A `holdout_sink` on `compute_fold_orderings`,
+    `compute_grouped_fold_node_scores`, `calibration_folds` and
+    `calibration_folds_cached`: per fold, the training row behind each held-out
+    score. It is read-only and moves no split. `CalibrationFolds` keeps its
+    three fields.
+  - `vtscore.state.get_min_precision` / `set_min_precision`, the
+    `"min_precision"` setting-persister key, `CoreConfig.min_precision`
+    (defaulted), and `DetectorContext.min_precision` / `precision_floor_cache`.
+  - `recut_detector_threshold(ctx, inclusion_value=None, *, min_precision=None)`
+    takes a floor as its operating point. The positional inclusion call is
+    unchanged.
+  - `recompute_detector_thresholds`, `detector_precision_floor` and
+    `detector_line_inclusion` in `vtscore.state.core`.
+  - A `min_precision` keyword on `train_and_score`, `labelset_train_and_score`
+    and `run_learned_sort` (default `None`: no floor, the pre-#4245 behaviour).
+    `train_and_threshold` reads the active detector's floor itself, as it
+    reads its inclusion.
+
+- **Eval: the default arm draws the app's line** (issue #4245).
+  `simulate_voting_iterations` and both `run_voting_iterations_eval` drivers
+  take `min_precision` (`None` = the app's default floor, `"off"` = the
+  Inclusion arm every earlier study ran). The frame gains `min_precision`,
+  `floor_status` and `calibration_positives` columns. **A study that sweeps
+  `inclusion` must now pass `min_precision="off"`**, because a set floor wins
+  over the knob.
+
 - **`vtscore.detectors.cost_trend.SMART_INCLUSION` and `smart_cut`, and
   `inject_live_model(..., smart_threshold=None)`** (issue #4243). The Smart
   indicator prices every model's error at `SMART_INCLUSION` (0, so FPR + FNR),

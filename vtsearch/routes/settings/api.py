@@ -31,6 +31,7 @@ from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
     set_calibration_fraction as _state_set_calibration_fraction,
     set_inclusion as _state_set_inclusion,
+    set_min_precision as _state_set_min_precision,
 )
 
 settings_bp = Blueprint(
@@ -293,7 +294,8 @@ _CUSTOM_SETTERS: dict[str, _CustomSetter] = {
 # (``invalidate_loaded_detector_models``). ``inclusion`` is a pure cutoff
 # knob, so its setter keeps the MLP and only re-derives the threshold from
 # the cached fold orderings
-# (``recompute_detector_thresholds_for_inclusion``). All three persist back
+# (``recompute_detector_thresholds_for_inclusion``); ``min_precision`` is the
+# same kind of knob (``recompute_detector_thresholds``). All four persist back
 # to :mod:`vtsearch.settings` through the shim's setting-persister hook
 # (:func:`vtsearch.shim.register_app_persistence_hooks`), which is why the
 # state-tier setter is the whole write and no ``settings.set_<key>`` call
@@ -309,6 +311,7 @@ _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
     "calibrate_count": _state_set_calibrate_count,
     "calibration_fraction": _state_set_calibration_fraction,
     "inclusion": _state_set_inclusion,
+    "min_precision": _state_set_min_precision,
 }
 
 #: Keys that ``SettingsUpdateSchema`` accepts and that have a

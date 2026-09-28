@@ -189,6 +189,20 @@ def reset_state():
     register_app_config_builder()
 
 
+@pytest.fixture
+def no_precision_floor(isolated_settings):
+    """The user has cleared the precision floor, so the Inclusion knob draws every line (#4245).
+
+    For tests of the Inclusion knob's own mechanics.  Under the default floor a
+    set floor wins and an Inclusion slide does not move the line; clearing it
+    is how a user gets the knob back.  The settings file is per test, so
+    nothing needs undoing.
+    """
+    from vtsearch import settings as settings_mod
+
+    settings_mod.set_min_precision(None)
+
+
 class _MergedSettingsPath:
     """Path-like helper that bridges the two settings tiers in tests.
 

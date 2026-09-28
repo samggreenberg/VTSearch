@@ -202,7 +202,9 @@ def clear_all() -> None:
 #: fire - the same failure mode :data:`vtscore.achievements_hooks.KNOWN_EVENTS`
 #: exists to catch, so this seam rejects it the same way rather than accepting
 #: a registration nothing will ever call.
-KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"inclusion", "calibrate_count", "calibration_fraction"})
+KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
+    {"inclusion", "min_precision", "calibrate_count", "calibration_fraction"}
+)
 
 _setting_persisters: dict[str, Callable[[Any], None]] = {}
 
@@ -259,6 +261,45 @@ def set_inclusion(value: int) -> None:
         # the cutoff, so the new threshold must re-split them over the frozen
         # find_scores (no-op in Train mode / before a scoring pass).  Verified
         # items keep their human vote.
+        rethreshold_unverified_find_items()
+
+
+def get_min_precision() -> float | None:
+    """The active detector's precision floor, or ``None`` when no floor is set.
+
+    Seeded from the user's setting (``CoreConfig.min_precision``) the first
+    time it is read for a detector, as :func:`get_inclusion` is.  ``None`` means
+    the Inclusion knob draws the line; a float in ``(0, 1]`` means the cut
+    returns as much as it can while at least that fraction of it is right, and
+    falls back to the Inclusion 0 cut when it can promise nothing (#4245).
+    """
+    from vtscore.config import CoreConfig
+
+    with _state_lock:
+        seeded, val = _core._get_min_precision()
+        if not seeded:
+            val = CoreConfig.from_settings().min_precision
+            _core._set_min_precision(val)
+        return val
+
+
+def set_min_precision(value: float | None) -> None:
+    """Set the active detector's precision floor (``None`` clears it) and persist it via the registered hook.
+
+    A pure cutoff knob, like Inclusion: the active detector re-cuts its cached
+    estimators at the new floor (no retrain), and in Find mode the unverified
+    items re-split over the frozen scores.  Other loaded detectors keep their
+    own floor; one that has not read its floor yet takes this one.
+    """
+    if value is not None and not 0.0 < value <= 1.0:
+        raise ValueError(f"precision floor must be in (0, 1], got {value!r}")
+    with _state_lock:
+        seeded, old = _core._get_min_precision()
+        changed = not seeded or value != old
+        _core._set_min_precision(value)
+        _persist_setting("min_precision", value)
+    if changed:
+        _core.recompute_detector_thresholds(_core.user_inclusion(), value)
         rethreshold_unverified_find_items()
 
 

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from tests.helpers import planted_fold_anchored_cut, setup_trainable_model_in_registry
+from tests.helpers import planted_precision_floor_estimate, setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -249,7 +249,7 @@ class TestFindStats:
     def test_precision_curve_over_the_ranking(self, client):
         """Each point is the top k by score, with verified precision over what was checked in it."""
         self._setup()
-        get_active_detector_context().anchored_cut_cache = None
+        get_active_detector_context().precision_floor_cache = None
         data = client.get("/api/find/stats").get_json()
         assert data["n_scored"] == 4
         assert data["n_returned"] == 2  # 0.9 and 0.8 clear 0.5
@@ -262,7 +262,7 @@ class TestFindStats:
 
     def test_no_estimate_without_calibration_folds(self, client):
         self._setup()
-        get_active_detector_context().anchored_cut_cache = None
+        get_active_detector_context().precision_floor_cache = None
         data = client.get("/api/find/stats").get_json()
         assert data["estimate_status"] == "unavailable"
         assert data["calibration_positives"] == 0
@@ -272,7 +272,7 @@ class TestFindStats:
     def test_estimate_is_gated_like_the_floor(self, client):
         """Below the floor's calibration-positive gate the estimate is withheld, and the count says why."""
         self._setup()
-        get_active_detector_context().anchored_cut_cache = planted_fold_anchored_cut(n_pos_per_fold=3)
+        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=3)
         data = client.get("/api/find/stats").get_json()
         assert data["estimate_status"] == "insufficient_evidence"
         assert data["calibration_positives"] == 6
@@ -289,7 +289,7 @@ class TestFindStats:
         set_find_scores(scores)
         set_find_initial_labels({cid: "good" if s >= 0.5 else "bad" for cid, s in scores.items()})
         ctx.verified_ids.clear()
-        ctx.anchored_cut_cache = planted_fold_anchored_cut(n_pos_per_fold=8)
+        ctx.precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
         data = client.get("/api/find/stats").get_json()
         assert data["estimate_status"] == "estimated"
         assert data["calibration_positives"] == 16

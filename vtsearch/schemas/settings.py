@@ -70,6 +70,8 @@ class AppSettingsSchema(Schema):
     # Per-user, scalar
     volume = fields.Float()
     inclusion = fields.Integer()
+    # ``null`` = no precision floor; the Inclusion knob draws the line (#4245).
+    min_precision = fields.Float(allow_none=True)
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -258,6 +260,8 @@ class SettingsUpdateSchema(Schema):
 
     volume = fields.Float()
     inclusion = fields.Integer()
+    # ``null`` = no precision floor; the Inclusion knob draws the line (#4245).
+    min_precision = fields.Float(allow_none=True)
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
