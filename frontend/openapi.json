@@ -3753,6 +3753,40 @@
         ],
         "type": "object"
       },
+      "FindStatsPrecisionPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "checked": {
+            "type": "integer"
+          },
+          "checked_good": {
+            "type": "integer"
+          },
+          "estimated_precision": {
+            "nullable": true,
+            "type": "number"
+          },
+          "n_returned": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "verified_precision": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "checked",
+          "checked_good",
+          "estimated_precision",
+          "n_returned",
+          "threshold",
+          "verified_precision"
+        ],
+        "type": "object"
+      },
       "FindStatsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3760,6 +3794,9 @@
             "type": "number"
           },
           "agreements": {
+            "type": "integer"
+          },
+          "calibration_positives": {
             "type": "integer"
           },
           "confirmed_bad": {
@@ -3774,11 +3811,31 @@
           "culled_false_pos": {
             "type": "integer"
           },
+          "estimate_status": {
+            "enum": [
+              "estimated",
+              "insufficient_evidence",
+              "unavailable"
+            ],
+            "type": "string"
+          },
           "inclusion": {
             "type": "integer"
           },
-          "precision": {
-            "type": "number"
+          "min_calibration_positives": {
+            "type": "integer"
+          },
+          "n_returned": {
+            "type": "integer"
+          },
+          "n_scored": {
+            "type": "integer"
+          },
+          "precision_curve": {
+            "items": {
+              "$ref": "#/components/schemas/FindStatsPrecisionPoint"
+            },
+            "type": "array"
           },
           "rescued_false_neg": {
             "type": "integer"
@@ -3801,26 +3858,44 @@
           "total_good": {
             "type": "integer"
           },
+          "verified_called_good": {
+            "type": "integer"
+          },
           "verified_count": {
             "type": "integer"
+          },
+          "verified_kept_good": {
+            "type": "integer"
+          },
+          "verified_precision": {
+            "nullable": true,
+            "type": "number"
           }
         },
         "required": [
           "agreement_rate",
           "agreements",
+          "calibration_positives",
           "confirmed_bad",
           "confirmed_good",
           "corrections",
           "culled_false_pos",
+          "estimate_status",
           "inclusion",
-          "precision",
+          "min_calibration_positives",
+          "n_returned",
+          "n_scored",
+          "precision_curve",
           "rescued_false_neg",
           "stale",
           "sweep",
           "threshold",
           "total_bad",
           "total_good",
-          "verified_count"
+          "verified_called_good",
+          "verified_count",
+          "verified_kept_good",
+          "verified_precision"
         ],
         "type": "object"
       },
@@ -11859,7 +11934,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\nPure read; no new state.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items and the\nprecision floor's lower-bound estimate - at log-spaced return counts (see\n:mod:`vtsearch.routes.detectors._find_precision`).\nPure read; no new state.",
         "operationId": "find_stats",
         "responses": {
           "200": {
