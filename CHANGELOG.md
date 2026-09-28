@@ -34,6 +34,18 @@ not list every commit. Use `git log` for the full history.
   `GET|POST /api/min-precision`; see
   [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
 
+- **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
+  pages under `docs/user/howto/` each walk through one task click by click,
+  in the style of the user guide's *Step by step*, on the same Synthetic
+  Media drawings and `Yellow Smileys` detector: checking and correcting Find's
+  calls, borderline matches and Inclusion, how far to trust a detector,
+  exporting matches, starting from an example picture, region voting,
+  getting Autopilot unstuck, Manual mode, moving a detector, importing
+  labels, AutoRun from the command line, combining, Browse, dataset and
+  detector stats, import options, demo datasets, and saving settings. The
+  guide lists them under **How-to guides**, and the in-app Help panel now
+  opens a linked page in place, with **← Back** to return.
+
 - **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
   #4240). The **Demo → Synthetic Media** image generator used to draw one
   smiley or a few flat shapes on a plain background. It now draws round
@@ -72,6 +84,11 @@ not list every commit. Use `git log` for the full history.
 - **Changing Inclusion on one detector no longer moves another detector's
   line.** Switching to a detector afterwards showed its own Inclusion value
   over a line cut at the value you'd set elsewhere.
+
+- **Combined detectors appear on the Dashboard.** **Combine selected
+  detectors** wrote the new detector but never registered it, so it showed up
+  nowhere, and trying the same name again failed as taken. It now lands on the
+  Drafts tab like any new detector.
 
 - **"Dropped N item(s) whose embedding failed" now says which items, and why**
   (issue #4232). The warning ended with "See the server log for which embedder
@@ -167,6 +184,18 @@ not list every commit. Use `git log` for the full history.
   A query you are still typing keeps focus, as before.
 
 ### Changed
+
+- **Find Stats charts precision against how many items are returned** (issue
+  #4242). The chart that plotted wrong and missed matches at each Inclusion
+  stop now reads down the ranked list: for the top N items, on a log-scale
+  count axis, it draws the precision VTSearch estimates (a cautious lower
+  bound from the detector's own held-out votes, shown once they include 10
+  Good ones) and the precision of the items you have checked. A dashed line
+  marks the current cut, the line under the chart reads both numbers there,
+  and hovering reads them at any count. **Kept rate** now counts only the
+  matches you checked, with the count beside it ("7 of 10 checked"); it used
+  to count every unchecked match as right, so it read close to 100% however
+  the checks went.
 
 - **The Smart indicator measures every detector at Inclusion 0** (issue
   #4243). Smart asks whether the detector is still getting better, by

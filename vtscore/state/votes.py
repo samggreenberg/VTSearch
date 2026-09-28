@@ -139,8 +139,8 @@ def set_find_scores(scores: dict[int, float]) -> None:
     """Store the frozen per-item detector scores from a find-label run.
 
     These are the single-pass scores the cutoff (Inclusion) slides over
-    without re-scoring, and the basis for the Stats FP/FN sweep.  In-memory
-    only.
+    without re-scoring, and the basis for the Stats sweep and precision
+    curve.  In-memory only.
     """
     with _state_lock:
         ctx = get_active_detector_context()

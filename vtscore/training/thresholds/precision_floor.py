@@ -603,6 +603,20 @@ class PrecisionFloorEstimate:
                 )
             return self._curve
 
+    def curve_for(self, corpus_scores: ScoreArray) -> PrecisionFloorCurve:
+        """The curve over *another* corpus, from this estimate's evidence and reference pool.
+
+        What a chart of a different set's precision reads - the Find Stats
+        curve over a Find run's scores (#4242) - so it is the promise's own
+        estimate applied there: the same eligible votes, the same fold
+        haystacks, the same reference pool, the same gate and knobs.  Fitted
+        afresh on every call and not kept.  *corpus_scores* is used as given
+        apart from dropping unscorable entries; a caller with a very large
+        corpus samples it first.
+        """
+        corpus = scored_only(np.asarray(corpus_scores, dtype=np.float64))
+        return fit_precision_floor_curve(corpus, self._pool, self._fold_orderings, self._fold_haystacks, **self._knobs)
+
     def count_at(self, threshold: float) -> int:
         """How many corpus items score at or above *threshold*: what a line there returns."""
         return int(np.count_nonzero(self._corpus_full >= threshold))

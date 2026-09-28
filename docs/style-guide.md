@@ -85,6 +85,7 @@ Canonical roles:
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
 - **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
+- **Chart series:** `--chart-estimate` (the app's estimate), `--chart-verified` (what the user checked by hand). A categorical pair, validated per theme for colorblind separation and 3:1 on `--bg-surface`; not status colors, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
 - **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). These flip per theme - never hardcode `#fff` on a fill.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
