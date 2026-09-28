@@ -1123,7 +1123,7 @@ export const SHOTS: Shot[] = [
     id: 'borderline-chart',
     embeddedIn: `${HOWTO}/borderline-matches.md#step-4-see-the-trade-off`,
     caption:
-      'The Missed vs. Wrong Matches by Inclusion chart: wrong matches rise and missed matches fall as Inclusion goes up, with the current setting marked',
+      'The Precision by Number Returned chart for the top N pictures, with the current cut marked and the line under the chart reading it there',
     themes: BOTH,
     clip: { target: '.chart-wrap', pad: 6 },
     async recipe(page, h) {

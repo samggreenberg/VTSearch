@@ -69,13 +69,14 @@ matches, raise Inclusion another step and keep going.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
-  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart: estimated and checked precision of the top N pictures against N, with the current cut marked" width="720" />
+  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with the current cut marked and the line under the chart reading it there" width="720" />
 </picture>
 
 The chart has two lines:
 
 - **Estimated (at least)** is VTSearch's cautious estimate, worked out from the
-  detector's own answers. It needs at least 10 **Good** answers among them.
+  detector's own answers. It needs enough **Good** answers to test itself on;
+  until then the line is missing, and the chart says how many more it needs.
 - **Checked by you** counts only the pictures you have checked. You check the
   ones near the line, where the detector is least sure, so it can read lower
   than the matches as a whole.
