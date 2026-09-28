@@ -34,7 +34,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "calibration"))
 
-ARMS = ("svm", "linear", "mlp", "linconv", "svmc01", "svmc10")
+ARMS = ("svm", "linear", "mlp", "linconv", "svmc01", "svmc10", "lrconv")
 CHECKPOINTS = (10, 20, 40, 80, 150)
 METRICS = ("cost", "oracle_cost", "regret", "average_precision", "auroc", "f1", "fnr", "fpr", "n_good")
 KEYS = ["dataset", "embedder", "category", "seed"]
@@ -42,9 +42,17 @@ CLUSTER = ["dataset", "embedder", "category"]
 
 
 def env_of(df: pd.DataFrame) -> pd.Series:
-    return (
+    """The stratum a row reports under: dataset/embedder, plus the scale band.
+
+    A ``class@band`` category (``coco_better``, #4114) reports per band, so the
+    head comparison is read across the bands rather than averaged over them;
+    categories with no band keep the plain dataset/embedder stratum.
+    """
+    env = (
         df["dataset"].str.replace("visual_genome_m", "vg").str.replace("caltech101_m", "caltech") + "/" + df["embedder"]
     )
+    band = df["category"].astype(str).str.extract(r"@(\w+)$", expand=False)
+    return env.where(band.isna(), env + "@" + band.fillna(""))
 
 
 def load(root: Path) -> tuple[pd.DataFrame, dict]:
