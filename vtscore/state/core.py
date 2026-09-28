@@ -1674,20 +1674,22 @@ def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) ->
     ``"unreachable"`` or ``"insufficient_evidence"`` when the floor promised
     nothing and the line is the Inclusion 0 fallback, and ``None`` when no
     floor is set and Inclusion drew the line.  ``calibration_positives`` counts
-    the evidence behind the verdict (the gate opens at 10).
+    the evidence behind the verdict, and ``min_calibration_positives`` the gate
+    it has to reach before any promise is made.
     """
+    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES
+
     if min_precision is None:
         estimate = ctx.precision_floor_cache
-        return {
-            "min_precision": None,
-            "status": None,
-            "calibration_positives": estimate.calibration_positives if estimate is not None else 0,
-        }
-    verdict = detector_precision_floor(ctx, min_precision)
+        status, positives = None, estimate.calibration_positives if estimate is not None else 0
+    else:
+        verdict = detector_precision_floor(ctx, min_precision)
+        status, positives = verdict.status.value, verdict.calibration_positives
     return {
         "min_precision": min_precision,
-        "status": verdict.status.value,
-        "calibration_positives": verdict.calibration_positives,
+        "status": status,
+        "calibration_positives": positives,
+        "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
     }
 
 

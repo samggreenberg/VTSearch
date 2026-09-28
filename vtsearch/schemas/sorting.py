@@ -68,9 +68,10 @@ class FloorStateSchema(Schema):
     # ``insufficient_evidence``: the floor promised nothing and the line is the
     # Inclusion 0 cut, unpromised.  ``null`` with no floor.
     status = fields.String(required=True, allow_none=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
-    # Positives among the held-out votes that may calibrate the promise; the
-    # gate opens at 10.
+    # Positives among the held-out votes that may calibrate the promise.
     calibration_positives = fields.Integer(required=True)
+    # How many the floor needs before it promises anything.
+    min_calibration_positives = fields.Integer(required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +320,10 @@ class MinPrecisionResponseSchema(Schema):
     # #3308 exclusion applied).  ``null`` before a retrain has fitted one.
     n_returned = fields.Integer(required=True, allow_none=True)
     # Positives among the held-out votes the learned sort chose - the
-    # evidence a promise is calibrated on, gated at 10.
+    # evidence a promise is calibrated on.
     calibration_positives = fields.Integer(required=True)
+    # The gate: how many the floor needs before it promises anything.
+    min_calibration_positives = fields.Integer(required=True)
 
 
 def _validate_floor(value):

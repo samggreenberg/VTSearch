@@ -77,6 +77,7 @@ class TestTrainingRecordsTheVerdict:
             "min_precision": min_precision,
             "status": status,
             "calibration_positives": positives,
+            "min_calibration_positives": 10,
         }
         assert out["det"]["threshold"] == 0.5, "the cut is still the one training drew"
         unpromised = [e for e in _events(capsys) if e["event"] == "detector_unpromised"]
@@ -100,7 +101,12 @@ class TestTrainingRecordsTheVerdict:
         assert "exporting its Inclusion 0 cut" in out
 
 
-FLOOR = {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 4}
+FLOOR = {
+    "min_precision": 0.5,
+    "status": "insufficient_evidence",
+    "calibration_positives": 4,
+    "min_calibration_positives": 10,
+}
 
 
 class TestResultsCarryTheVerdict:

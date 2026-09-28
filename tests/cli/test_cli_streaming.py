@@ -185,7 +185,12 @@ class TestStreamingNdjsonExport:
         import vtscore.cli as cli_mod
 
         stub = cli_mod._load_and_train_detectors
-        floor = {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 0}
+        floor = {
+            "min_precision": 0.5,
+            "status": "insufficient_evidence",
+            "calibration_positives": 0,
+            "min_calibration_positives": 10,
+        }
         monkeypatch.setattr(
             cli_mod,
             "_load_and_train_detectors",

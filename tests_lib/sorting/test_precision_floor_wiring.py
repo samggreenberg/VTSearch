@@ -40,6 +40,7 @@ from vtscore.state.core import (
 )
 from vtscore.training.thresholds import (
     DEFAULT_MIN_PRECISION,
+    MIN_CALIBRATION_POSITIVES,
     NO_PRECISION_FLOOR,
     PRECISION_FLOOR_FALLBACK_INCLUSION,
     PrecisionFloorEstimate,
@@ -328,6 +329,7 @@ class TestTheDetectorsLine:
             "min_precision": min_precision,
             "status": status,
             "calibration_positives": ctx.precision_floor_cache.calibration_positives,
+            "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
         }
         assert state["calibration_positives"] >= 10
 
@@ -337,6 +339,7 @@ class TestTheDetectorsLine:
             "min_precision": 0.5,
             "status": "insufficient_evidence",
             "calibration_positives": 0,
+            "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
         }
         assert detector_floor_state(bare, None)["status"] is None
 

@@ -58,12 +58,18 @@ class TestTheInclusionKnob:
                 "min_precision": min_precision,
                 "status": status,
                 "calibration_positives": 2 * n_pos,
+                "min_calibration_positives": 10,
             }
 
     def test_no_trained_detector_is_no_evidence(self, client):
         set_min_precision(0.5)
         floor = client.get("/api/inclusion").get_json()["floor"]
-        assert floor == {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 0}
+        assert floor == {
+            "min_precision": 0.5,
+            "status": "insufficient_evidence",
+            "calibration_positives": 0,
+            "min_calibration_positives": 10,
+        }
 
 
 class TestFindLabel:
@@ -137,6 +143,7 @@ class TestAutoRun:
             "min_precision": min_precision,
             "status": status,
             "calibration_positives": 2 * n_pos,
+            "min_calibration_positives": 10,
         }
         # The exporters still take one float threshold, and the hits are cut at it.
         assert isinstance(result["threshold"], float)

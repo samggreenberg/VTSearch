@@ -151,7 +151,7 @@ everywhere except those held votes.
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
-  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14},
+  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks"
@@ -186,7 +186,7 @@ demand, and returns one result column per detector.
     "Dog Barks": {
       "detector_name": "Dog Barks",
       "threshold": 0.5,
-      "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3},
+      "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]

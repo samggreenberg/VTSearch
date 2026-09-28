@@ -3937,6 +3937,9 @@
           "calibration_positives": {
             "type": "integer"
           },
+          "min_calibration_positives": {
+            "type": "integer"
+          },
           "min_precision": {
             "nullable": true,
             "type": "number"
@@ -3954,6 +3957,7 @@
         },
         "required": [
           "calibration_positives",
+          "min_calibration_positives",
           "min_precision",
           "status"
         ],
@@ -5125,6 +5129,9 @@
           "calibration_positives": {
             "type": "integer"
           },
+          "min_calibration_positives": {
+            "type": "integer"
+          },
           "min_precision": {
             "nullable": true,
             "type": "number"
@@ -5150,6 +5157,7 @@
         },
         "required": [
           "calibration_positives",
+          "min_calibration_positives",
           "min_precision",
           "n_returned",
           "status",
