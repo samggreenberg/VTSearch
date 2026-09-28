@@ -2,7 +2,8 @@
 
 A pipeline file declares the same options as the ``--autodetect`` flag set
 (importer + fields, settings file, detector list, chunk size, optional
-one-shot label import, exporter + fields).  This module loads the YAML,
+one-shot label import, exporter + fields, and ``tempimport`` - whether the
+imported dataset is discarded rather than saved to the dashboard).  This module loads the YAML,
 validates the shape against the active plugin registries, and dispatches
 to the shared ``_run_pipeline`` in :mod:`vtscore.cli`.
 
@@ -25,6 +26,7 @@ _TOP_LEVEL_KEYS = {
     "keep_negatives",
     "import_labels",
     "exporter",
+    "tempimport",
 }
 
 _IMPORT_LABELS_KEYS = {"detector", "importer", "file"}
@@ -98,6 +100,13 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         raise ValueError("'stream_results:' requires 'chunk_size:' (it streams chunk by chunk).")
     if keep_negatives and not stream_results:
         raise ValueError("'keep_negatives:' only applies with 'stream_results:'.")
+    tempimport = raw.get("tempimport", False)
+    if not isinstance(tempimport, bool):
+        raise ValueError("'tempimport:' must be a boolean.")
+    if stream_results and not tempimport:
+        from vtscore.cli import _STREAM_CANNOT_SAVE  # noqa: PLC0415
+
+        raise ValueError(f"'stream_results:' requires 'tempimport: true': {_STREAM_CANNOT_SAVE}.")
 
     import_labels = raw.get("import_labels")
     parsed_import_labels: dict[str, Any] | None = None
@@ -121,6 +130,7 @@ def load_pipeline_file(path: str | Path) -> dict[str, Any]:  # noqa: C901
         "chunk_size": chunk_size,
         "stream_results": stream_results,
         "keep_negatives": keep_negatives,
+        "tempimport": tempimport,
         "import_labels": parsed_import_labels,
         "exporter": exporter_name,
         "exporter_fields": exporter_fields,
@@ -281,11 +291,8 @@ def run_pipeline_file(path: str | Path) -> None:
 def _dispatch(config: dict[str, Any]) -> None:
     """Run the parsed *config* against the existing autodetect pipeline."""
     from vtscore.cli import (  # noqa: PLC0415
-        _load_importer_chunked,
-        _load_importer_whole,
-        _load_pickle_chunked,
-        _load_pickle_whole,
-        _run_pipeline,
+        _run_source,
+        _SourceSpec,
         import_labels_into_detector,
     )
 
@@ -306,29 +313,25 @@ def _dispatch(config: dict[str, Any]) -> None:
             flush=True,
         )
 
-    chunk_size = config["chunk_size"]
     if config["importer"]:
-        if chunk_size:
-            source = _load_importer_chunked(config["importer"], config["importer_fields"], chunk_size)
-            empty_error = f"No medias loaded by importer '{config['importer']}'"
-        else:
-            source = _load_importer_whole(config["importer"], config["importer_fields"])
-            empty_error = f"No medias loaded by importer '{config['importer']}'"
+        spec = _SourceSpec(
+            kind="importer",
+            importer_name=config["importer"],
+            field_values=config["importer_fields"],
+            chunk_size=config["chunk_size"],
+        )
     else:
-        dataset_path = config["dataset"]
-        if chunk_size:
-            source = _load_pickle_chunked(dataset_path, chunk_size)
-        else:
-            source = _load_pickle_whole(dataset_path)
-        empty_error = f"No medias loaded from dataset: {dataset_path}"
+        spec = _SourceSpec(kind="pickle", dataset_path=config["dataset"], chunk_size=config["chunk_size"])
 
-    _run_pipeline(
-        source,
+    _run_source(
+        spec,
+        # Same default as the flags: the dataset is kept unless the file says
+        # ``tempimport: true`` (#4226).
+        save_dataset=not config.get("tempimport", False),
         settings_path=settings_path,
         exporter_name=config["exporter"],
         exporter_field_values=config["exporter_fields"],
         override_detectors=config["detectors"],
         stream_results=config.get("stream_results", False),
         keep_negatives=config.get("keep_negatives", False),
-        empty_error=empty_error,
     )

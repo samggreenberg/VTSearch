@@ -97,7 +97,7 @@ Errors: 400 (unknown/non-dynamic field key), 404 (unknown exporter),
 501 (exporter does not implement `get_field_options`),
 502 (remote service backing dynamic options failed).
 
-**Streaming support** (CLI `--autodetect --stream-results` for sources larger
+**Streaming support** (CLI `--autodetect --tempimport --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
 incrementally; `webhook` and `email_smtp` deliver in `batch_size`-sized batches
 (one POST / one email per batch) so they too stay bounded. This applies to the

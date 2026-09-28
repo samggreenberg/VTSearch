@@ -232,11 +232,45 @@ class TestLoadPipelineFile:
 
         p = tmp_path / "p.yaml"
         p.write_text(
-            yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True, "keep_negatives": True})
+            yaml.safe_dump(
+                {
+                    "dataset": "foo.pkl",
+                    "chunk_size": 10,
+                    "stream_results": True,
+                    "keep_negatives": True,
+                    "tempimport": True,
+                }
+            )
         )
         cfg = load_pipeline_file(p)
         assert cfg["stream_results"] is True
         assert cfg["keep_negatives"] is True
+        assert cfg["tempimport"] is True
+
+    def test_stream_results_requires_tempimport(self, tmp_path):
+        """A streamed run never holds the whole dataset, so it cannot be the
+        saved one (#4226): the file must say it is temporary."""
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "chunk_size": 10, "stream_results": True}))
+        with pytest.raises(ValueError, match="requires 'tempimport: true'"):
+            load_pipeline_file(p)
+
+    def test_tempimport_must_be_bool(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl", "tempimport": "yes"}))
+        with pytest.raises(ValueError, match="'tempimport:' must be a boolean"):
+            load_pipeline_file(p)
+
+    def test_tempimport_defaults_to_saving(self, tmp_path):
+        from vtscore.cli_pipeline import load_pipeline_file
+
+        p = tmp_path / "p.yaml"
+        p.write_text(yaml.safe_dump({"dataset": "foo.pkl"}))
+        assert load_pipeline_file(p)["tempimport"] is False
 
     def test_import_labels_default_importer_requires_filepath(self, tmp_path):
         """The default ``server_json_file`` importer still needs a path, via
@@ -554,6 +588,7 @@ class TestDispatchImportLabels:
                 "import_labels": {"detector": "Dogs", "importer": "x", "fields": {"detectors": "somestring"}},
                 "exporter": None,
                 "exporter_fields": {},
+                "tempimport": True,
             }
         )
         assert seen == {"detector": "Dogs", "importer": "x", "fields": {"detectors": "somestring"}}
