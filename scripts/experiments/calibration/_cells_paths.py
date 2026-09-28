@@ -67,3 +67,13 @@ def main_frame_files(cells_dir: str | Path) -> list[Path]:
 def side_frame_files(cells_dir: str | Path, suffix: str) -> list[Path]:
     """Every cell's side frame of one kind, e.g. ``suffix="__cutincl"``."""
     return _cell_files(cells_dir, f"task_*{suffix}")
+
+
+def pframe_files(cells_dir: str | Path) -> list[Path]:
+    """Every cell's #4220 precision-frame archive, ``task_NNNN__pframes.npz``.
+
+    Not a side *frame* - an npz of arrays, written only under
+    ``CALIB_PFRAME_STEPS`` - so it is outside the CSV registry, and its
+    cell is named by the main frame sharing its stem.
+    """
+    return sorted(Path(cells_dir).glob("task_*__pframes.npz"))
