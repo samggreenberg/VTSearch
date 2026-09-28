@@ -21,11 +21,13 @@ POST /api/exporters/export
     ``payload_kind`` says whether that payload is a scored run
     (``find_results``) or a detector's labels (``labelset``); omitting it
     falls back to inferring from the dict shape, for API clients written
-    before the kinds were named. ``field_values`` is permissive at the
-    schema layer because its inner keys depend on the named exporter; the
-    handler validates it against the selected plugin's :attr:`fields`.
-    Schema-level failures (missing ``exporter_name``, unknown
-    ``payload_kind``) surface as 422; handler-level rejects (unknown
+    before the kinds were named. The third kind, ``detector_bundles``, is
+    CLI-only: this route never sees a trained detector, so the schema refuses
+    it. ``field_values`` is permissive at the schema layer because its inner
+    keys depend on the named exporter; the handler validates it against the
+    selected plugin's :attr:`fields`.
+    Schema-level failures (missing ``exporter_name``, an unknown or
+    CLI-only ``payload_kind``) surface as 422; handler-level rejects (unknown
     exporter, an exporter that doesn't implement the requested kind,
     missing plugin field, invalid filepath, plugin error) keep their
     original HTTP codes (404 / 400 / 500) with the standard ``message``

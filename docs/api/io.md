@@ -41,17 +41,21 @@ POST /api/exporters/export
 the `GET /api/labels/export` response). When omitted it is inferred — a dict
 with a top-level `labels` key is a labelset — which exists only for older
 clients. A kind the exporter doesn't list in `supported_payloads` is a 400.
+`detector_bundles` is refused with a 422: it is the trained classifiers
+themselves, which only the CLI pipeline has, so this route cannot build one.
 
 → `{"success": true, "message": "...", "open_url": "...", "display_results": ...}`
 — `success` always; the rest only when the exporter returns them
 (`display_results` is what the `gui` exporter hands back for in-app display).
 400 (missing plugin field, invalid file path, unsupported payload kind, or the
-exporter rejected its input), 404 (unknown exporter), 500 (exporter error).
+exporter rejected its input), 404 (unknown exporter), 422 (unknown or
+CLI-only `payload_kind`), 500 (exporter error).
 
 Built-in exporters: `server_json_file`, `server_csv_file`, `webhook`,
 `email_smtp`, `open_url`, `gui` (picker-hidden; returns results for display
 rather than writing them), and `portable_detector` (picker-hidden; supports
-only `detector_bundles`, which this route cannot produce — it answers 500. Use
+only `detector_bundles`, which this route cannot produce — a `find_results`
+or `labelset` request is a 400, a `detector_bundles` one a 422. Use
 it from the CLI as `--autodetect --exporter portable_detector`, or export one
 saved detector with
 [`POST /api/detectors/{detector_id}/portable-bundle`](detectors.md#export-portable-bundle)).
