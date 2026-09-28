@@ -333,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     all_cutincl: list[dict] = []
     all_fitq: list[dict] = []
     all_picks: list[dict] = []
+    all_pframes: list[dict] = []
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
@@ -340,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
         cutincl_local: list[dict] = []
         fitq_local: list[dict] = [] if cfg.FIT_QUALITY else None
         picks_local: list[dict] | None = [] if cfg.EMIT_PICKS else None
+        pframes_local: list[dict] | None = [] if cfg.PFRAME_STEPS else None
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -390,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
             startup_schedule=cfg.STARTUP_SCHEDULE,
             pick_sink=picks_local,
+            precision_frame_sink=pframes_local,
+            precision_frame_steps=cfg.PFRAME_STEPS or None,
             calibration_seed=cal_seed,
         )
         # The recorded fraction is the one the run actually used: an explicit
@@ -450,6 +454,7 @@ def main(argv: list[str] | None = None) -> int:
         all_cutdiag.extend(cutdiag_local)
         all_cutincl.extend(cutincl_local)
         all_picks.extend(picks_local or [])
+        all_pframes.extend({**f, "style": np.array(style or "")} for f in pframes_local or [])
         all_fitq.extend(fitq_local or [])
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
@@ -508,6 +513,15 @@ def main(argv: list[str] | None = None) -> int:
     fitq_cols = [*FIT_QUALITY_ROW_COLUMNS, "embedder"]
     fitq_out = cell_file(outdir / f"task_{idx:04d}__fitq.csv")
     pd.DataFrame(all_fitq, columns=pd.Index(fitq_cols)).to_csv(fitq_out, index=False)
+    # The #4220 precision frames: arrays, not a table, so one npz per cell with
+    # each frame's fields prefixed by its step (``t150/test_scores``).  Written
+    # only when asked for - unlike the CSV side frames, an absent file here means
+    # "off", because nothing reads it by default.
+    if cfg.PFRAME_STEPS:
+        pframes_out = outdir / f"task_{idx:04d}__pframes.npz"
+        packed = {f"t{int(f['t'])}/{k}": v for f in all_pframes for k, v in f.items()}
+        np.savez_compressed(pframes_out, **packed)
+        common.log(f"wrote {len(all_pframes)} precision frames to {pframes_out}")
     common.log(
         f"wrote {len(all_rows)} rows to {out}, {len(all_sweep)} sweep rows to {sweep_out}, "
         f"{len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}, "

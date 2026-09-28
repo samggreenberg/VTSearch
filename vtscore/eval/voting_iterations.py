@@ -33,7 +33,7 @@ one.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -738,6 +738,58 @@ def _band_metrics(
             labels = np.concatenate([np.ones(n), np.zeros(len(neg_scores))])
             out[f"auroc_{band}"] = round(_auroc(np.concatenate([scores, neg_scores]), labels), 6)
     return out
+
+
+def _precision_frame(
+    t: int,
+    threshold: float,
+    test_scores: Any,
+    test_labels: Any,
+    pool_scores: "list[float] | None",
+    pool_ids: "list[int] | None",
+    voted: "dict[int, float]",
+    fold_orderings: list[Any],
+    fold_haystacks: list[Any],
+) -> dict[str, Any]:
+    """Everything a live precision estimate could read at step *t*, plus the truth (#4220).
+
+    The truth is the test half: its final-model scores and labels.  The
+    evidence is what the app has: its own pool scores, each voted item's
+    in-sample final-model score and label, and every calibration fold's
+    held-out vote scores with that fold model's own haystack - the fold scores
+    live on their model's scale, so an estimator that transfers them to the
+    final model needs the haystack to rank them against.  Folds are stored flat
+    with an index array because they differ in length.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    f32 = lambda a: np.asarray(a, dtype=np.float32)  # noqa: E731
+    frame: dict[str, Any] = {
+        "t": np.int32(t),
+        "threshold": np.float32(threshold),
+        "test_scores": f32(test_scores),
+        "test_labels": np.asarray(test_labels, dtype=np.uint8),
+        "pool_scores": f32(pool_scores if pool_scores is not None else []),
+    }
+    by_id = dict(zip(pool_ids or [], pool_scores or [], strict=False))
+    vids = [v for v in voted if v in by_id]
+    frame["vote_scores"] = f32([by_id[v] for v in vids])
+    frame["vote_labels"] = np.asarray([voted[v] for v in vids], dtype=np.uint8)
+    cal_s, cal_y, cal_f, hay_s, hay_f = [], [], [], [], []
+    for k, (sc, lb) in enumerate(fold_orderings):
+        cal_s.extend(sc)
+        cal_y.extend(lb)
+        cal_f.extend([k] * len(sc))
+    for k, hay in enumerate(fold_haystacks):
+        hay = np.asarray(hay).ravel()
+        hay_s.extend(hay.tolist())
+        hay_f.extend([k] * len(hay))
+    frame["fold_cal_scores"] = f32(cal_s)
+    frame["fold_cal_labels"] = np.asarray(cal_y, dtype=np.uint8)
+    frame["fold_cal_fold"] = np.asarray(cal_f, dtype=np.uint8)
+    frame["fold_hay_scores"] = f32(hay_s)
+    frame["fold_hay_fold"] = np.asarray(hay_f, dtype=np.uint8)
+    return frame
 
 
 def _evaluate_on_test(
@@ -1569,6 +1621,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
+    precision_frame_sink: Optional[list[dict[str, Any]]] = None,
+    precision_frame_steps: Optional[Sequence[int]] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
     live_threshold: Optional[str] = None,
@@ -1740,6 +1794,11 @@ def simulate_voting_iterations(  # noqa: C901
         pick_sink: List the per-click :data:`PICK_COLUMNS` rows are appended
             to - one per vote, including the opening's, which emit no main row
             because no model exists yet.  ``None`` (default) = off.
+        precision_frame_sink: List one :func:`_precision_frame` dict is
+            appended to at each step in *precision_frame_steps* - the per-image
+            evidence and truth a precision-floor estimator is priced on (#4220).
+            Only the calibration-metrics path fills it.  ``None`` (default) = off.
+        precision_frame_steps: The steps (``t``) to record; ignored without a sink.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -2596,6 +2655,20 @@ def simulate_voting_iterations(  # noqa: C901
 
         if calibration is not None:
             metric_rows, base_scores, base_labels = calibration
+            if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
+                precision_frame_sink.append(
+                    _precision_frame(
+                        t,
+                        threshold,
+                        base_scores,
+                        base_labels,
+                        sim_pooled_scores,
+                        sim_pooled_ids,
+                        {**{g: 1.0 for g in good_votes}, **{b: 0.0 for b in bad_votes}},
+                        details.get("fold_orderings") or [],
+                        sim_fold_haystacks,
+                    )
+                )
             # The final model's haystack under the #3308 population convention:
             # the voted items dropped, exactly as `_safe_threshold_for_step`
             # dropped them from the fold haystacks - so every fold-anchored

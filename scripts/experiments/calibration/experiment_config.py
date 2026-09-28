@@ -1005,6 +1005,13 @@ HAYSTACK_PREVALENCE = (
     float(os.environ["CALIB_HAYSTACK_PREVALENCE"]) if os.environ.get("CALIB_HAYSTACK_PREVALENCE") else None
 )
 
+#: Record a precision frame (``task_NNNN__pframes.npz``) at these steps
+#: (issue #4220), e.g. ``25,50,100,150``: the test half's scores and labels, the
+#: app's pool scores, the votes' in-sample scores, and every calibration fold's
+#: held-out vote scores with its own haystack - what a precision-floor
+#: estimator reads, and the truth it is graded on.  Unset = off.
+PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").replace(",", " ").split())
+
 #: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
 #: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
 #: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
