@@ -88,7 +88,7 @@ autodetect results.
 {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10}
 ```
 
-The three fields mean what they do on `/api/min-precision` above. When
+The four fields mean what they do on `/api/min-precision` above. When
 `status` is `unreachable` or `insufficient_evidence`, the floor promised
 nothing and `threshold` is the **Inclusion 0** cut: every match, count and
 action keeps working on it, and the app labels the line *unpromised*. It is

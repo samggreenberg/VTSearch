@@ -53,7 +53,7 @@ instead, since every commit on `dev` is effectively a new app release.)
 - **Whether a line is a promise travels with it** (issue #4247), all additive:
   - `vtscore.state.core.detector_floor_state(ctx, min_precision)`: the
     floor's verdict on a detector's current line, as
-    `{min_precision, status, calibration_positives}`. `status` is `promised`,
+    `{min_precision, status, calibration_positives, min_calibration_positives}`. `status` is `promised`,
     `unreachable` or `insufficient_evidence` (the last two: the line is the
     unpromised Inclusion 0 cut), or `None` when no floor is set.
   - `resolve_or_train_detector(..., ctx_sink=None)`: a list that receives the

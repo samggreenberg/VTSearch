@@ -305,7 +305,8 @@ class ResultsExporter(PluginBase):
 
                      **``floor``** says whether ``threshold`` is a promise
                      (:func:`vtscore.state.core.detector_floor_state`):
-                     ``{"min_precision", "status", "calibration_positives"}``.
+                     ``{"min_precision", "status", "calibration_positives",
+                     "min_calibration_positives"}``.
                      A ``status`` of ``"unreachable"`` or
                      ``"insufficient_evidence"`` means the floor promised
                      nothing and ``hits`` is the Inclusion 0 cut; ``None``
