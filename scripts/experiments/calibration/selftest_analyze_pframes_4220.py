@@ -13,6 +13,7 @@ analyzer recovers what the construction guarantees:
   scenario), the uncorrected estimate over-promises, and EM re-weighting to
   the corpus prior over-promises less;
 * votes without a single positive fit nothing and promise nothing;
+* a starved cell (header-only main frame) is skipped and counted, not a crash;
 * the shipped reference cut is read at exactly the precision its threshold gives.
 
     python selftest_analyze_pframes_4220.py
@@ -20,6 +21,7 @@ analyzer recovers what the construction guarantees:
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -102,6 +104,9 @@ def main() -> int:
         build_cell(same, i, seed=i, pool_prev=0.05, test_prev=0.05, n_votes=300)
         build_cell(rich, i, seed=100 + i, pool_prev=0.05, test_prev=0.01, n_votes=300)
     build_cell(same, 99, seed=99, pool_prev=0.05, test_prev=0.05, n_votes=150, no_pos=True)
+    # A starved cell: frames on disk, but a header-only main frame.
+    build_cell(same, 98, seed=98, pool_prev=0.05, test_prev=0.05, n_votes=150)
+    pd.DataFrame(columns=["dataset", "category", "seed", "t"]).to_csv(same / "task_0098.csv", index=False)
     out = root / "analysis"
     rc = A.main(["--arm", f"natural={root / 'natural'}", "--arm", f"h0.05={root / 'h0.05'}", "--out", str(out)])
     check(rc == 0, "the analyzer runs on planted frames", failures)
@@ -134,6 +139,13 @@ def main() -> int:
     em_v = sh[sh.reading == "point+em"]["violated"].mean()
     check(raw_v > 0.5, f"a richer pool than corpus over-promises without correction ({raw_v:.2f})", failures)
     check(em_v < raw_v, f"EM to the corpus prior over-promises less ({em_v:.2f} < {raw_v:.2f})", failures)
+
+    prov = json.loads((out / "provenance.json").read_text())
+    check(
+        prov["starved_skipped"] == 1 and "cls98@large" not in set(df["category"]),
+        "a starved cell is skipped and counted",
+        failures,
+    )
 
     nopos = df[df["category"] == "cls99@large"]
     check(

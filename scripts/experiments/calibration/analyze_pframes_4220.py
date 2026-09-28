@@ -257,6 +257,11 @@ def frame_rows(meta: dict, fr: dict, cutdiag: pd.DataFrame | None, rng: np.rando
 def cell_rows(job: tuple[str, str, str, str]) -> tuple[list, list]:
     arm, npz_path, main_path, cutdiag_path = job
     first = pd.read_csv(main_path, nrows=1)
+    if first.empty:
+        # A starved cell (header-only main frame): it never held a Good and a
+        # Bad vote at once, so it has no detector and nothing to promise.  It is
+        # counted by the caller, not scored.
+        return [], []
     meta = {
         "arm": arm,
         "category": str(first["category"].iloc[0]),
@@ -352,21 +357,27 @@ def main(argv: list[str] | None = None) -> int:
     if not jobs:
         raise SystemExit("no precision frames found - was the run launched with CALIB_PFRAME_STEPS?")
     rows, refs = [], []
+    starved = 0
     if args.jobs > 1:
         with ProcessPoolExecutor(args.jobs) as ex:
             for r, f in ex.map(cell_rows, jobs, chunksize=4):
+                starved += not r
                 rows += r
                 refs += f
     else:
         for j in jobs:
             r, f = cell_rows(j)
+            starved += not r
             rows += r
             refs += f
     df, rf = pd.DataFrame(rows), pd.DataFrame(refs)
     df.to_csv(args.out / "estimator_rows.csv.gz", index=False, float_format="%.5g")
     rf.to_csv(args.out / "reference_rows.csv.gz", index=False, float_format="%.5g")
     print(summarize(df, rf, args.out))
-    (args.out / "provenance.json").write_text(json.dumps({"cells": len(jobs), "arms": args.arm}, indent=2))
+    (args.out / "provenance.json").write_text(
+        json.dumps({"cells": len(jobs), "starved_skipped": starved, "arms": args.arm}, indent=2)
+    )
+    print(f"cells {len(jobs)}, starved (no detector, skipped) {starved}")
     return 0
 
 
