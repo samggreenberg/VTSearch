@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Find no longer runs a detector hidden on the other Dashboard tab**
+  (issue #4228). With a single detector on the AutoRun tab and none in
+  Drafts, the Dashboard selected that detector even while Drafts was
+  showing, and reselected it on every registry refresh after you switched
+  away from AutoRun, so Find stayed enabled with nothing visible selected.
+  Moving your only draft to AutoRun did the same. The detector selection
+  now only ever holds rows on the visible tab: Drafts stays empty, Find is
+  disabled until you select a detector you can see, and picking a detector
+  from the top bar switches to its tab.
+
 - **The folder importer's Browse opens at the folder you typed** (issue
   #4207). In **Add Dataset → Files → Folder**, clicking **Browse** after
   typing a path opened the browser at the server root, replaced the path with
