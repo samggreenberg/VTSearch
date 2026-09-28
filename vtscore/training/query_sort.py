@@ -291,5 +291,10 @@ def train_and_score_active(
     from vtscore.state import snapshot_medias
 
     snap = snapshot_medias()
-    model, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=embedder_name)
+    # External labels were not drawn off a learned ranking, so none of them may
+    # calibrate a precision-floor promise (#4245): under a floor this line is
+    # the Inclusion 0 cut, labelled unpromised.
+    model, threshold = train_and_threshold(
+        X_list, y_list, snap=snap, embedder_name=embedder_name, calibrating_groups=set()
+    )
     return score_media_with_model(model, snap, embedder_name), threshold

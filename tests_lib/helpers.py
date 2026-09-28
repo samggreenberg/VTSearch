@@ -289,3 +289,19 @@ def planted_fold_anchored_cut(n_pos_per_fold: int):
     cut = fit_fold_anchored_cut(haystacks, orderings, pool)
     assert cut is not None and len(cut.fold_orderings) == 2
     return cut
+
+
+def planted_precision_floor_estimate(n_pos_per_fold: int):
+    """The precision-floor estimate a retrain would park beside :func:`planted_fold_anchored_cut`.
+
+    The same folds, haystacks and pool (the rng draws are identical), with every
+    held-out vote allowed to serve as evidence.
+    """
+    from vtscore.training.thresholds import PrecisionFloorEstimate  # noqa: PLC0415
+
+    cut = planted_fold_anchored_cut(n_pos_per_fold)
+    return PrecisionFloorEstimate(
+        cut.final_haystack,
+        [(list(sc), list(lb)) for sc, lb in cut.fold_orderings],
+        list(cut.fold_haystacks),
+    )
