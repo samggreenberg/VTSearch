@@ -53,7 +53,7 @@ What follows is what the app still owes.
   opening, the coverage atlas's New picks, a list sorted by anything but the
   model) train the model but stay out of the evidence and the gate, because the
   posterior is unbiased only under score-only selection. Whether the atlas's
-  picks are fair enough to count is an experiment of its own.
+  picks are fair enough to count is #4261.
 - **The default floor is 50%, and a set floor wins over Inclusion** (owner,
   2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
 - **What waits on the GRID, and what doesn't.**
@@ -112,6 +112,10 @@ These are the questions #4224 raised that no issue below can settle alone:
 <!-- item-sep -->
 
 - [ ] #4244 — Slides: end *Hold the Line*'s "Preference" section on the floor (Sonnet 5)
+
+<!-- item-sep -->
+
+- [ ] #4261 — Should Autopilot's New-phase (atlas) votes calibrate the floor? (Sonnet 5)
 
 <!-- item-sep -->
 

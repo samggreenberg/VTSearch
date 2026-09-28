@@ -210,7 +210,8 @@ PRECISION_CALIBRATION_FLOWS = frozenset({"autopilot", "list_review"})
 #: The draws off the learned ranking that are score-only: its head (``top``) and
 #: the band around the acquisition cut (``hard``).  ``new`` is excluded: the
 #: coverage atlas picks the node on embedding coverage and only then reads the
-#: score inside it, so the selection is not score-only (owner, 2026-09-28).
+#: score inside it, so the selection is not score-only (owner, 2026-09-28;
+#: #4261 measures whether counting it would break promises).
 PRECISION_CALIBRATION_SELECT_MODES = frozenset({"top", "hard"})
 
 
