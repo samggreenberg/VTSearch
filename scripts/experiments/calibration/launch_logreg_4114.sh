@@ -46,8 +46,8 @@ WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 VOTING="${LOGREG_VOTING:-binary}"
 case "$VOTING" in
-  binary) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4114}" ;;
-  region) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4213}" ;;
+  binary) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4114}"; TAG=logreg4114 ;;
+  region) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4213}"; TAG=logreg4213 ;;
   *) echo "LOGREG_VOTING must be binary or region, not '$VOTING'" >&2; exit 2 ;;
 esac
 
@@ -121,7 +121,7 @@ require_jobid() {
 set_exp() {
   export CALIB_EXP="$BASE/$1"
   export CALIB_RESULTS="$CALIB_EXP/results"
-  export CALIB_JOB_NAME="logreg4114-$1"
+  export CALIB_JOB_NAME="$TAG-$1"
   mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
   ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
 }
@@ -168,7 +168,7 @@ run_preflight() {
 case "$MODE" in
   prepare)
     set_exp prepare
-    P=$(sbatch --parsable --job-name=logreg4114-prep --mem=32G --cpus-per-task=2 \
+    P=$(sbatch --parsable --job-name=$TAG-prep --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
@@ -178,7 +178,7 @@ case "$MODE" in
 
   baseline)
     set_exp prepare
-    T=$(sbatch --parsable --job-name=logreg4114-baseline --mem=32G --cpus-per-task=2 \
+    T=$(sbatch --parsable --job-name=$TAG-baseline --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/baseline-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $BASE/text_baseline.csv")
@@ -192,7 +192,7 @@ case "$MODE" in
     arm_env "$ARM"
     set_exp "sizing-$ARM"
     link_prepare
-    S=$(sbatch --parsable --job-name="logreg4114-size-$ARM-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
+    S=$(sbatch --parsable --job-name="$TAG-size-$ARM-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
