@@ -696,9 +696,12 @@ It has two tabs:
   label. Pick its **Media type** (locked to the active dataset's type
   when you have one selected; hidden entirely on a solo-media-type
   server), give it a **Detector name**, and seed it under **Example**
-  one of two ways: the **Text** tab takes a short description ("e.g. dog
-  barking sounds"), and the media tab next to it (named for the media
-  type, e.g. **Image**) takes one or more **media examples**. The
+  one of two ways: the **Text** tab takes a short description ("e.g.
+  large books"), and the media tab next to it (named for the media
+  type, e.g. **Image**) takes one or more **media examples**. A typed
+  description also fills in the name, title-cased with "Detector" on the
+  end ("large books" becomes **Large Books Detector**) until you type a
+  name of your own; pressing Enter in the name field clicks **Create**. The
   quickest way to supply one is the drop zone
   right there on the tab - drag a file from your computer onto it, or
   click it to browse. For anything else, the **Browse Images…** button
@@ -865,7 +868,9 @@ per-user override.
 The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
 eight tabs:
 
-- **Appearance** - theme, animations, the metadata panel, the
+- **Appearance** - theme, animations, the Dashboard's **RAM / Disk
+  bars** (**Default** shows them once you have a detector; **View** and
+  **Hide** show them always or never), the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
   (focus mode and thumbnail size).
 - **Auto-Find** - what exporter to send auto-run results to. (Which
@@ -930,7 +935,9 @@ with bulk-action and per-card controls.
   A detector lives on exactly one tab at a time, and every user
   curates their own AutoRun list. The typical loop: build and test a
   detector in **Drafts**, move it to **AutoRun** once you trust it,
-  and move it back to Drafts later if it needs more tuning.
+  and move it back to Drafts later if it needs more tuning. Until you
+  have a detector at all, both tabs are dimmed and the grid stays on
+  Drafts, where a new detector lands.
 
 The **+** button on each card creates a new dataset (the Add Dataset
 dialog) or a new detector (the [New Detector](#creating-a-detector)
@@ -943,7 +950,8 @@ or clean up several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them, then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
+row to select them (a detector you just made, with no labels yet, gets a
+"Click Train to teach your new detector." hint), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 

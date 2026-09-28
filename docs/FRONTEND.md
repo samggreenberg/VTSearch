@@ -757,7 +757,9 @@ bundle's *static* imports from `main.js` and fails if the package reappears.
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` are the small
-shared widgets. `directives/no-focus-steal.directive.ts` stops toolbar buttons
+shared widgets. `pointer-arrow/` draws a measured "look here" arrow from one
+element to another (the Dashboard's first-run hints); drop it under any
+positioned container that encloses both ends. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when

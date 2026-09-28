@@ -607,8 +607,9 @@ status messages, fallback labels).
 
 - **Sentence case**, no trailing ellipsis, no trailing period.
 - For "here's what to type" examples, prefix with `e.g. ` and match the casing
-  of the real value: a free-text query is lowercase (`e.g. dog barking
-  sounds`), a proper name is Title Case (`e.g. Dog Barks`).
+  of the real value: a free-text query is lowercase (`e.g. large books`), a
+  proper name is Title Case (`e.g. Large Book Detector`). Pick an example that
+  fits every media type the field can serve; don't assume audio.
 - For "leave blank to get a default" inputs, state that: `Leave blank to use a
   default name`.
 - For a server/file path, use the shared hint `path/to/file` (or

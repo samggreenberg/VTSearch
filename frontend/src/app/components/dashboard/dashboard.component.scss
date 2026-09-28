@@ -12,6 +12,9 @@
   // Positioning context for the first-run `<vt-pointer-arrow>`s, which span
   // from a panel's message to a header button or down to the Train button.
   position: relative;
+  // Width of each Train / Find group. Shared with `.intro-hint`, which uses
+  // it to sit directly above the Train button.
+  --action-btn-group-width: 220px;
 }
 
 .dashboard-section-wrap {
@@ -172,11 +175,16 @@
 }
 
 // "Click Train to teach your new detector." pinned under the detector grid,
-// shrink-wrapped so its arrow starts from the text rather than the panel edge.
+// shrink-wrapped so its arrow starts from the text rather than the panel edge,
+// and shifted from the panel's centre line to the Train button's (the left of
+// the two centred `.action-btn-group`s below) so the arrow drops straight onto
+// it instead of flattening into a sideways curve. The bottom margin lifts it
+// off the panel edge so that arrow is long enough to catch the eye.
 .intro-hint {
   flex-shrink: 0;
   align-self: center;
-  margin: var(--space-md) 0 0;
+  margin: var(--space-md) 0 var(--space-2xl);
+  transform: translateX(calc((var(--action-btn-group-width) + var(--space-lg)) / -2));
   font-size: var(--font-md);
   color: var(--text-secondary);
 }
@@ -289,7 +297,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-xs);
-  width: 220px;
+  width: var(--action-btn-group-width);
 }
 
 .btn-disabled-reason {
