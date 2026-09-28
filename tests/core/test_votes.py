@@ -1,3 +1,5 @@
+import pytest
+
 import vtscore.detectors.labeling_progress as labeling_progress
 from vtscore.detectors.labeling_progress import (
     _compute_stable_status,
@@ -1110,6 +1112,8 @@ class TestLiveModelReuse:
         # At the default Inclusion, Smart scores the model at its served line (#4243).
         assert smart_threshold == threshold
 
+    # Served at Inclusion 3 is Inclusion mode: a set floor would draw the line (#4245).
+    @pytest.mark.usefixtures("no_precision_floor")
     def test_learned_sort_injects_the_smart_cut(self, client):
         """Off the default Inclusion, Smart's cut is the detector's own Inclusion 0 cut (#4243).
 
