@@ -81,7 +81,7 @@ POST /api/find
 
 Each verdict is one of `Good`, `Bad`, `Error`, `N/A`. Errors: **400** (empty
 id lists, or a detector has no labels), **404** (unknown dataset/detector id),
-**500** (pickle load failed).
+**409** (cancelled via `POST /api/find/cancel`), **500** (pickle load failed).
 
 ### Cancel find
 
@@ -90,8 +90,8 @@ POST /api/find/cancel
 ```
 
 Sets the shared `find_progress` cancel flag so any in-flight scoring path
-(find / find-label / auto-detect) stops cooperatively. Always **200**, no-op
-when idle.
+(find / find-label / auto-detect) stops cooperatively; the cancelled request
+then answers **409**. Always **200**, no-op when idle.
 
 → `{"ok": true}`
 
@@ -160,7 +160,7 @@ everywhere except those held votes.
 On patch-region-aware datasets each result additionally carries `best_region`.
 Errors: **400** (no medias loaded, or detector has no labels), **404**
 (detector not found), **409** (active dataset can't supply the detector's
-embedder type).
+embedder type, or the run was cancelled).
 
 ### Auto-Detect
 
@@ -193,9 +193,10 @@ demand, and returns one result column per detector.
 ```
 
 When an exporter is configured for Auto-Find, an `auto_export` object
-(`{exporter, success, message?/error?}`) is added. Errors: **400** (no medias
-loaded, or no Auto-Find detectors for the media type), **404** (named detector
-not flagged for Auto-Find).
+(`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
+extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
+Auto-Find detectors for the media type), **404** (named detector not flagged
+for Auto-Find), **409** (cancelled).
 
 ### Find stats (detector evaluation)
 
@@ -221,7 +222,75 @@ threshold sweep.
 }
 ```
 
-`sweep` covers inclusion −10..10.
+`sweep` covers inclusion −10..10. `stale` is `true` once corrections have been
+folded into the detector since this Find run scored.
+
+### Find work queues
+
+These compute Find's working sets **server-side** from the frozen scores, the
+live cutoff, and the verified set, so a client holding only a window of a large
+ranking can still act on every matching item. Both **require** `X-Detector-Id`.
+Neither has a frontend caller yet: they were built ahead of the Find-view
+windowing work that switches the client onto them.
+
+```
+GET /api/find/queue-ids?filter=unverified_good
+```
+
+`filter`: `unverified_good` (default — the left work queue: above-cutoff items
+not yet verified) or `good` (verified-good plus unverified positives).
+
+→ `{"ids": [12, 7, 40], "count": 3}` in rank order; empty outside Find mode or
+before a scoring pass.
+
+```
+GET /api/find/boundary-next?side=above&exclude=12
+```
+
+The next unverified item on the boundary walk, which steps outward from the
+cutoff alternating faces, so "just sit and vote" samples marginal positives
+and marginal negatives. `side` (`above` default / `below`) is the preferred
+face, falling back to the other; `exclude` skips one id (the item just voted,
+whose verification may not be visible yet).
+
+→ `{"id": 57, "side": "below"}`, or `{"id": null, "side": null}` when both sides
+are exhausted.
+
+### Evidence coverage
+
+```
+GET /api/find/evidence-coverage
+```
+
+How much of the active dataset the active detector is calling **without
+labeled evidence behind the call**. For each scored item it compares the
+distance to the predicted class's labeled examples against the labelset's own
+leave-one-out distances (a conformal support p-value) and computes a trust-score
+ratio against the other class. It needs only the detector's labelset
+(re-embedded in memory at load), not the dataset it was trained on, so it works
+for a detector handed over from another user — the complement to the
+[domain-shift report](datasets.md#domain-shift-report), which needs the
+training dataset's atlas. Pure read.
+
+→
+```json
+{
+  "available": true,
+  "n_items": 5000, "n_pos_labels": 40, "n_neg_labels": 35,
+  "k": 1, "alpha": 0.05,
+  "frac_unsupported": 0.21, "expected_unsupported": 0.05, "z_score": 51.9,
+  "median_support": 0.34,
+  "frac_low_trust": 0.12, "median_trust": 1.6,
+  "unsupported": true
+}
+```
+
+`frac_unsupported` is the share of items whose support p-value falls below
+`alpha` (it sits near `expected_unsupported` when the labels cover the data);
+`frac_low_trust` the share closer to the other class's evidence than their
+own. `unsupported` is the headline verdict (z > 3 **and** `frac_unsupported ≥
+2·alpha`). `available: false` (with zeroed fields) — never a 4xx — when there
+is no scored Find run or no resolvable labelset.
 
 ### Fold corrections into the detector
 

@@ -227,8 +227,8 @@ register_error_handlers(app)
 # achievements_bp, auth_bp, and main_bp are flask-smorest Blueprints
 # (OpenAPI migration); register them via the Api so their decorated
 # routes appear in /api/openapi.json. Their undecorated routes (e.g.
-# main_bp's SPA-serving paths, achievements_bp's raw-markdown stream)
-# attach to Flask normally and are simply absent from the spec.
+# achievements_bp's raw-markdown stream) still appear in the spec, just
+# without a typed schema; see "Routes with no typed schema" in docs/API.md.
 api.register_blueprint(achievements_bp)
 api.register_blueprint(auth_bp)
 api.register_blueprint(eval_bp)

@@ -8,15 +8,11 @@ is app-uncoupled - they take their inputs explicitly and operate on bytes
 and strings, not request objects or settings. `login.py` carries the
 identity abstraction the path checks depend on.
 
-Related docs: [`state.md`](state.md) for the contexts that hold the
-deserialised dataset artefacts; [`concurrency.md`](concurrency.md) for
-the load pipeline that calls these helpers during dataset import.
-
 **Import from the defining module.** `vtscore/security/` has no
 `__init__.py` - it is a PEP 420 implicit namespace package, so
 `from vtscore.security import validate_url` raises `ImportError`. Import
-from `vtscore.security.path_validation`, `.url_validation`, or `.pickle`
-as the snippets below do.
+from the submodule (`vtscore.security.path_validation`,
+`.url_validation`, `.pickle`, …) as the snippets below do.
 
 ## Contents
 
@@ -56,19 +52,16 @@ directory, and that directory is the confinement root.
 
 | Name | Description |
 |------|-------------|
-| `LoginProvider` | ABC. Subclasses implement `get_user(request)` and `is_authenticated(request)`; override `get_user_data_dir(username, base_data_dir)` to opt into per-user confinement, and `login_required()` / `status_dict(request)` for the app's auth UI |
+| `LoginProvider` | ABC. Subclasses implement `get_user(request)` and `is_authenticated(request)`; override `get_user_data_dir(username, base_data_dir)` to opt into per-user confinement, and `login_required()` / `enforce_auth()` / `www_authenticate()` / `status_dict(request)` for a host's auth UI |
 | `DefaultLoginProvider` | Single-user, no auth. Every caller is `"default"`; the data dir is `DATA_DIR` itself, so nothing is confined |
 | `set_login_provider(p)` / `get_login_provider()` | The process-wide active provider. `DefaultLoginProvider()` until something replaces it |
 | `get_user_data_dir(username=None)` | `provider.get_user_data_dir(username or get_current_user(), DATA_DIR)` |
 | `is_safe_username(name)` | `True` when *name* is safe as a path component: matches `[A-Za-z0-9._-]+` and is not an all-dots traversal segment |
 
 The `request` argument is typed `Any` and never introspected by the
-library - it is handed straight back to the provider that asked for it.
-That is what lets the abstraction be Flask-free while the app's own
-providers (`TrivialLoginProvider`, `ApiKeyLoginProvider` in
-`vtsearch/auth/`, which read `flask.session` and the `Authorization`
-header) build on it. `vtsearch.auth` re-exports every name in the table,
-so there is exactly one active provider per process however you reach it.
+library - it is handed straight back to the provider that asked for it,
+which is what keeps the abstraction framework-free. There is exactly one
+active provider per process.
 
 Embedding `vtscore` without the app and want per-user confinement? Register
 a provider; every path check in the library starts enforcing it:
@@ -111,9 +104,10 @@ form, and every serve-time read of a path that arrived *on a media*.
 | `validate_server_filepath(filepath_str, base_dir=None) -> Path` | Resolve and (when `base_dir` is given) assert containment; raises on escape |
 | `media_file_read_roots() -> list[Path] \| None` | Roots a media-carried file reference may be read from; `None` (unrestricted) in single-user mode |
 | `resolve_media_file_path(filepath_str) -> Path \| None` | Confine a media-carried file reference; `None` (rather than a raise) when it escapes |
-| `sanitize_template_value(value) -> str` | Replace path separators / `..` tokens with `_` |
-| `rglob_follow_symlinks(root, pattern) -> list[Path]` | `Path.rglob`-equivalent that descends into symlinked directories |
-| `glob_top_level(root, pattern) -> list[Path]` | Non-recursive variant; direct children of `root` only |
+| `confine_server_filepath(filepath_str, base_dir) -> str` | Like `validate_server_filepath`, but returns the approved canonical path as a string (verbatim input when `base_dir` is `None`); see [Origin confinement](#origin-confinement) |
+| `sanitize_template_value(value) -> str` | Replace path separators / all-dots tokens with `_` |
+| `rglob_follow_symlinks(root, pattern) -> list[Path]` | `Path.rglob`-equivalent that descends into symlinked directories (`iter_rglob_follow_symlinks` is the lazy form) |
+| `glob_top_level(root, pattern) -> list[Path]` | Non-recursive variant; direct children of `root` only (`iter_glob_top_level` is the lazy form) |
 
 ### `get_file_access_base_dir()`
 
@@ -186,18 +180,10 @@ honoured.
 
 The single definition of where a detector's media exemplars are cached:
 `get_file_access_base_dir()` when it is set, else `DATA_DIR`, plus
-`example_media/`. Every writer (the upload / from-media-id /
-datasource-import routes, the browse-source copy) and every reader (media
-seeding, label building, the `example_media` sentinel resolver) goes
-through it.
-
-It exists because splitting those two halves is invisible in single-user
-mode and silently lossy in multi-user mode: uploads once landed in
-`data/<username>/example_media/` while the readers looked in
-`data/example_media/`, so an uploaded exemplar never became a vote and
-its label could never be thumbnailed, embedded, or exported (issue
-#3102). Resolve the directory here, never by re-spelling
-`DATA_DIR / "example_media"`.
+`example_media/`. Every writer and every reader of exemplar files must
+resolve the directory here, never by re-spelling
+`DATA_DIR / "example_media"` - in multi-user mode the two differ, and a
+writer/reader split silently loses the exemplar.
 
 ### `sanitize_template_value(value)`
 
@@ -205,8 +191,8 @@ Server-side sync sources accept admin-defined path templates like
 `data/labels/{detector_name}.json` and substitute user-controlled values
 at runtime. Without sanitisation, a `detector_name` of
 `../../etc/passwd` would let the substitution escape. The helper
-rewrites `/`, `\`, and `\0` to `_`, and collapses empty / `.` / `..` to
-`_`:
+rewrites `/`, `\`, and `\0` to `_`, and collapses an empty or all-dots
+value (`.`, `..`, `...`) to `_`:
 
 ```python
 from vtscore.security.path_validation import sanitize_template_value
@@ -234,9 +220,8 @@ itself - if you need it after a glob, pass each result through
 ### Origin confinement
 
 `vtscore/security/origin_validation.py` guards the flows that accept a
-**whole origin dict** from outside the server - a request body
-(`POST /api/example-sort-origin`), or a detector JSON's saved media
-examples. An origin is normally stamped by the server at import time and
+**whole origin dict** from outside the server - a request body, or a
+detector JSON's saved media examples. An origin is normally stamped by the server at import time and
 trusted afterwards; one that arrives from outside has not been, and
 resolving it re-runs filesystem or network access from user-supplied
 params.
@@ -256,8 +241,8 @@ Two design choices are worth knowing before you call it:
   a relative path at the user's data dir while the consuming source
   would anchor it at the process CWD, so a bare pass/fail would approve
   one path and open another. Only the params the source factories
-  actually resolve as filesystem paths (`_PATH_PARAM_KEYS`) are
-  rewritten - turning an opaque key into an absolute path would corrupt
+  actually resolve as filesystem paths (`path`, `manifest`,
+  `paths_file`) are rewritten - turning an opaque key into an absolute path would corrupt
   it. **Consume the returned origin, not the input.**
 
 URL-valued params are deliberately *not* path-checked here. They are
@@ -283,11 +268,22 @@ similar and defend against different things, so pick by **who makes the
 request**: `validate_url` for URLs *the server* fetches, and
 `validate_browser_url` for URLs *the user's browser* opens.
 
-Alongside them sit the two fetch primitives every server-side fetch is
-meant to go through, `open_validated_stream` and `fetch_validated_url`.
-A single up-front `validate_url` is not enough on its own - a public URL
-can `302` to an internal host - so the redirect chain has to be walked by
-hand with each hop re-checked.
+Alongside them sit the fetch primitives every server-side fetch is meant
+to go through. A single up-front `validate_url` is not enough on its own,
+for two reasons:
+
+- a public URL can `302` to an internal host, so the redirect chain is
+  walked by hand with each hop re-checked (`open_validated_stream`, at
+  most `MAX_REDIRECTS = 10` hops);
+- the fetch resolves the hostname *again* at connect time, so a
+  rebinding DNS server can answer the validation lookup with a public IP
+  and the connect lookup with `127.0.0.1`. `guarded_session()` returns a
+  `requests.Session` whose every freshly connected socket has its **peer
+  address** checked against the same blocklist, before TLS or any request
+  bytes, raising `BlockedAddressError` (a `ValueError`) on a hit.
+  Connections through an HTTP proxy are exempt (the peer is the proxy).
+  Issue server-side requests on such a session - validating a URL and
+  then handing it to a bare `requests.Session` reopens the hole.
 
 ### `validate_url` (SSRF guard)
 
@@ -351,16 +347,12 @@ bearer token, say - is never replayed to a redirect target on another.
 
 `fetch_validated_url` is the whole-body convenience wrapper for fetch
 sites that want bytes rather than a stream to spool to disk. It is what
-`vtscore.media.base._fetch_media_url` calls, so a media's `media_url` -
-which can arrive verbatim from a loaded pickle and whose bytes are served
-straight back to the requester - cannot name `file:///etc/passwd` or an
-internal service. (It previously used `urllib.request.urlopen`, whose
-default opener services `file://` and `ftp://` and obliged.)
-
-Users of these primitives: the dataset downloader
-(`vtscore/datasets/downloader/core.py`) and the `media_url` fallback in
-`vtscore/media/base.py`. A new outbound fetch belongs here too rather
-than reaching for `requests.get` / `urlopen` directly.
+the `media_url` fallback in `vtscore/media/base.py::_fetch_media_url`
+calls, so a media's `media_url` - which can arrive verbatim from a loaded
+pickle - cannot name `file:///etc/passwd` or an internal service. The
+dataset downloader (`vtscore/datasets/downloader/core.py`) uses the
+stream primitive. A new outbound fetch belongs here too rather than
+reaching for `requests.get` / `urlopen` directly.
 
 ### Browser-URL validation
 
@@ -370,8 +362,9 @@ def validate_browser_url(url: str) -> str:
     control characters, uses a non-HTTP(S) scheme, or has no hostname."""
 ```
 
-Used for the `open_url` an exporter can return so the frontend opens a
-third-party page in a new tab (see [Opening a URL in the
+Used for the `open_url` an exporter can return so a host UI opens a
+third-party page in a new tab, and by field normalization for `url` fields
+declaring `opened_in_browser=True` (see [Opening a URL in the
 browser](../extending/results-exporters.md#opening-a-url-in-the-browser)).
 
 This is deliberately **not** the SSRF guard. The fetch is made by the
@@ -384,7 +377,8 @@ and `https` pass; `javascript:`, `data:`, `file:` are rejected. Embedded
 whitespace and control characters are rejected too, since they let a URL
 render as one target while resolving to another.
 
-It makes no network call, so it is also free to run on every export.
+It makes no network call, so it is also free to run on every export. It
+returns the (stripped) URL, which callers should use.
 
 ```python
 from vtscore.security.url_validation import validate_browser_url
@@ -395,14 +389,8 @@ validate_browser_url("javascript:alert(1)")            # raises ValueError
 validate_browser_url("https://exa mple.com/")          # raises ValueError
 ```
 
-The frontend re-checks the scheme before calling `window.open`, and
-opens with `noopener` so the destination can't navigate the VTSearch tab
-(reverse tabnabbing).
-
-**Caveat:** DNS rebinding attacks are not addressed. A hostname that
-resolves to a public IP at validation time and a private IP at fetch
-time will pass `validate_url`. For rebinding protection, resolve to an
-IP yourself and pass that IP (plus a `Host:` header) to the HTTP client.
+A host UI should still re-check the scheme before `window.open` and open
+with `noopener` (reverse tabnabbing).
 
 ---
 
@@ -439,7 +427,7 @@ disk, and a restart signs the user out.
 | `set_credential(token, *, username="", expires_at=None, scopes="")` / `clear_credential()` | Store / drop the active credential (lock-guarded) |
 | `get_token()` / `is_authenticated()` / `get_status()` | Read the token, a boolean, or a JSON-serialisable snapshot for the UI |
 | `auth_header_for_url(url)` | `{"Authorization": "Bearer …"}` **iff** *url* targets the Hub, else `{}` |
-| `GatedResourceError` | Raised when a download fails because the resource is gated; carries `url` and `status` |
+| `GatedResourceError(message, *, url="", status=None)` | Raised when a download fails because the resource is gated; carries `url` and `status` |
 
 `auth_header_for_url` is the one to use on every request. It returns an
 empty dict for any non-Hub host, so callers can merge it in
@@ -448,8 +436,8 @@ redirect target - which matters because Hub downloads redirect to signed
 Xet URLs that carry their own authorization and neither need nor should
 see the bearer token.
 
-`GatedResourceError` exists as a distinct type because the frontend keys
-off it to offer a "Sign in with HuggingFace" affordance; raise it rather
+`GatedResourceError` exists as a distinct type so a host UI can key off
+it to offer a "Sign in with HuggingFace" affordance; raise it rather
 than a generic error when a 401/403 means "gated", not "broken".
 
 ---
@@ -473,10 +461,11 @@ primitives (`int`, `float`, `str`, `None`, `bool`, `dict`, `list`,
 | Module / class | Why |
 |----------------|-----|
 | `builtins.{set, frozenset, bytes, bytearray, complex}` | Container subclasses used inside VTSearch pickles |
+| `_codecs.encode` | Protocol 0-2 pickles serialise inline `bytes` through it; it dispatches only to text codecs |
 | `collections.OrderedDict` | Used when round-tripping ordered dicts |
 | `numpy.ndarray`, `numpy.dtype` | Embedding arrays |
 | `numpy.core.multiarray._reconstruct`, `scalar` | numpy's `__reduce__` helpers (legacy module path) |
-| `numpy._core.multiarray._reconstruct`, `scalar` | Same helpers under numpy's post-1.25 module rename |
+| `numpy._core.multiarray._reconstruct`, `scalar` (and `numpy` / `_core.multiarray._reconstruct`) | Same helpers under numpy's post-1.25 module rename |
 | `numpy.core.numeric._frombuffer`, `numpy._core.numeric._frombuffer` | Used by numpy's pickle protocol for some dtypes |
 
 Anything else - `os.system`, `subprocess.Popen`, `builtins.eval`,
@@ -489,7 +478,7 @@ Anything else - `os.system`, `subprocess.Popen`, `builtins.eval`,
 from vtscore.security.pickle import safe_pickle_load
 
 with open("dataset.pkl", "rb") as f:
-    medias, embeddings = safe_pickle_load(f)
+    data = safe_pickle_load(f)
 # Same as pickle.load(f) but rejects non-allowlisted classes.
 ```
 
@@ -510,17 +499,18 @@ def find_class(self, module: str, name: str) -> Any:
 
 ### `peek_pickle_dataset_summary(f)`
 
-A specialised unpickler for the dataset-upload preview flow. The same
-allowlist applies, but four opcodes are stubbed out so the loader can
-extract just the structural shape without materialising embeddings or
-media bytes: `BINFLOAT` (reads 8 bytes, appends `None`),
-`BINBYTES` / `BINBYTES8` / `SHORT_BINBYTES` (reads and discards the
-payload, appends `b""`), `APPEND` / `APPENDS` (drops the value(s) that
-would have been appended).
+A specialised unpickler for a cheap dataset preview. The same allowlist
+applies, but payload opcodes are stubbed so the loader extracts just the
+structural shape without materialising embeddings or media: floats
+(`BINFLOAT` / `FLOAT`) become `None`; byte blobs (`BINBYTES`,
+`BINBYTES8`, `SHORT_BINBYTES`, `BYTEARRAY8`) become `b""`; strings
+longer than 4096 bytes (`BINUNICODE` / `BINUNICODE8`) are skipped in
+bounded chunks and become `""`; `APPEND` / `APPENDS` drop their values;
+and numpy reconstruction callables return a stub.
 
 The outer dict structure is materialised (so you can index into
-`data["medias"][0]["media_type"]`), but embedding lists are empty and inline
-media-byte blobs are `b""`. For a multi-GB dataset upload this turns a
+`data["medias"][0]["media_type"]`), but embedding lists are empty and
+large payloads are blanked. For a multi-GB dataset upload this turns a
 30-second `pickle.load` into a sub-second peek.
 
 ```python
@@ -549,9 +539,9 @@ not do this.**
 The allowlist already encodes the contract that **no `vtsearch.*` or
 `vtscore.*` class reference can appear in a sanctioned pickle.**
 VTSearch pickles are by construction limited to plain Python containers
-and numpy arrays (see the "No Persisted Vectors or MLPs" rule in
-`CLAUDE.md`: embeddings are persisted as numpy arrays inside the media
-dicts, never as `vtsearch.*` objects). If a pickle contains a reference
+and numpy arrays (embeddings are persisted as numpy arrays inside the
+media dicts, never as `vtsearch.*` objects; see
+[architecture.md](../architecture.md#the-no-persisted-vectors-rule)). If a pickle contains a reference
 to any `vtsearch.*` or `vtscore.*` class, that pickle was not produced
 by a sanctioned code path - the right behaviour is to refuse it, not
 to silently rewrite the class name.

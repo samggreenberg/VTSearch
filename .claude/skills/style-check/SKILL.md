@@ -47,7 +47,7 @@ patterns alongside real bugs. Apply judgement before fixing:
 
 - **§5.13 `font: inherit`** is sometimes intentional - e.g. a button
   that is itself nested inside an explicitly-styled small-font header
-  (`folder-browser.component.scss:93` inherits its parent's
+  (the `.vfb-col` rule in `folder-browser.component.scss` inherits its parent's
   `--font-2xs` uppercase header style on purpose). Check the parent
   chain before flagging.
 - **§5.14 `flex-direction: column` without `gap`** is fine when each

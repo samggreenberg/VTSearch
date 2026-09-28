@@ -4,44 +4,56 @@
 
 ---
 
+The settings model is defined once, in `vtsearch/settings_models.py`
+(`ServerSettings` / `UserSettings`: types, defaults, clamps), and exposed
+through the marshmallow schemas in `vtsearch/schemas/settings.py`. The
+**`AppSettings`** and **`SettingsUpdate`** schemas in the
+[OpenAPI spec](../API.md#machine-readable-schema) are the exhaustive key list;
+this page covers the behaviour the schemas don't show.
+
 ### Get all settings
 
 ```
 GET /api/settings
 ```
 
-→
+→ The merged server-tier + per-user settings object (abridged):
+
 ```json
 {
   "volume": 1.0,
-  "theme": "dark",
+  "theme": "system",
   "inclusion": 0,
-  "enrich_descriptions": false,
   "calibrate_count": 2,
   "calibration_fraction": null,
-  "audio_playing": true,
   "show_animations": "show",
-  "show_metadata": false,
-  "focus_mode_left": {},
-  "focus_mode_right": {},
-  "grid_icon_size_left": {},
-  "grid_icon_size_right": {},
-  "panel_pct_left": {},
-  "panel_pct_right": {},
-  "autofind_detectors": [],
   "autopilot_enabled": true,
-  "hide_autopilot": false,
   "autopilot_top_greens": 3,
-  "autopilot_hard_reds": 4,
-  "autopilot_resort_interval": 10,
-  "autopilot_goal_diversity": 40,
+  "autofind_detectors": [],
+  "autofind_exporter": "",
+  "browse_graphics": "auto",
+  "grid_icon_size_left": {"audio": "M"},
   "saved_datasets_dir": "data/saved_datasets",
-  "detectors_dir": "data/detectors"
+  "detectors_dir": "data/detectors",
+  "solo_media_type": null,
+  "effective_solo_embedder_per_media_type": {},
+  "hidden_plugins": {}
 }
 ```
 
-Per-media-type settings (`focus_mode_*`, `grid_icon_size_*`,
-`panel_pct_*`) use dicts keyed by media type ID (e.g. `{"audio": "M"}`).
+Keys fall into these groups:
+
+| Group | Keys | Notes |
+|-------|------|-------|
+| Appearance & playback | `theme`, `show_animations`, `volume`, `audio_playing`, `show_metadata`, `label_hint_dismissed`, `enable_achievements` | `theme`: `dark` / `light` / `highviz` / `system` (default `system`, which follows the OS `prefers-color-scheme`). `show_animations`: `show` (default) / `hide` / `os`. `volume` 0–1. Turning `enable_achievements` off wipes the stored achievement counters. |
+| Training | `inclusion`, `calibrate_count`, `calibration_fraction`, `enrich_descriptions` | `inclusion` −10..10 (same value as `POST /api/inclusion`). `calibration_fraction` `null` = no explicit split; the per-embedder default applies (0.3 single-vector, 0.5 patch). Changing these drops stale thresholds/heads on every loaded detector. |
+| Autopilot | `autopilot_enabled`, `hide_autopilot`, `autopilot_top_greens`, `autopilot_hard_reds`, `autopilot_resort_interval`, `autopilot_goal_diversity` | Clamped to ≥ 1. |
+| Auto-Find | `autofind_detectors`, `autofind_exporter`, `autofind_exporter_field_values` | `autofind_exporter` must name a pickable exporter (`""` = none); field values are `{exporter: {key: value}}`. See [below](#detector-auto-find-flag). |
+| Per-media-type UI state | `focus_mode_{left,right}`, `grid_icon_size_{left,right,popup}`, `panel_pct_{left,right}`, `popup_metadata_shown`, `popup_preview_size`, `bin_details_docked`, `import_defaults_by_media_type`, `browse_colormap`, `browse_icon_size`, `browse_thumbnail_border`, `browse_mouse_zooms_per_level`, `browse_signposts`, `browse_signpost_captioner` | Dicts keyed by media type id, e.g. `{"audio": "M"}`; a missing entry means "use the frontend default". |
+| Browse panel sizes | `browse_graphics`, `browse_panel_width`, `browse_details_panel_width`, `browse_details_metadata_width` | `browse_graphics`: `auto` / `full` / `reduced`. Widths are clamped CSS px. |
+| Embedders | `solo_embedder_per_media_type`, `last_embedder_per_media_type` | `solo_embedder_per_media_type` locks a media type to one embedder (`""` opts that type out of a CLI-set lock); invalid type/embedder pairs are a 400. `last_embedder_per_media_type` is written by the load pipeline — accepted by `PUT` but ignored. |
+| Storage paths | `saved_datasets_dir`, `detectors_dir` | Path-validated; confined to the user's data dir in multi-user deployments. |
+| **Read-only** (admin / computed) | `solo_media_type`, `semantic_only`, `hidden_plugins`, `dataset_max_age_days`, `support_email`, `max_concurrent_dataset_downloads`, `max_concurrent_dataset_embeddings`, `browse_signpost_vocab`, `effective_solo_embedder_per_media_type` | Returned by `GET`, not accepted by `PUT` (dropped like any unknown key). Set by the operator via CLI flags, env vars, or the settings file; each reports the value actually in force (see `vtsearch/admin_overrides.py`). |
 
 ### Update settings
 
@@ -49,28 +61,23 @@ Per-media-type settings (`focus_mode_*`, `grid_icon_size_*`,
 PUT /api/settings
 ```
 
-**Body:** partial object with any settings keys to update.
+**Body:** a partial object with any writable keys.
 
 ```json
 {"volume": 0.5, "theme": "light"}
 ```
 
-→ Full settings object.
+→ The full settings object, as `GET` returns it.
 
-Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
-`"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
-`calibrate_count` (int), `calibration_fraction`
-(number or `null`; `null` = no explicit split, the per-embedder default
-applies — 0.3 single-vector / 0.5 patch), `audio_playing` (bool), `show_animations` (`"show"` / `"hide"` /
-`"os"`), `show_metadata` (bool),
-`focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
-(dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),
-`panel_pct_right` (dict),
-`autopilot_enabled` (bool),
-`hide_autopilot` (bool), `autopilot_top_greens` (int),
-`autopilot_hard_reds` (int), `autopilot_resort_interval` (int),
-`autopilot_goal_diversity` (int), `autofind_detectors` (list of detector names),
-`saved_datasets_dir` (string path), `detectors_dir` (string path).
+- **All-or-nothing.** Every key in the body is validated before any is
+  written, so a 400 means nothing changed.
+- **422** for anything the schema catches — a wrong type (`"volume": "x"`) or
+  an enum value outside its set (`"theme": "pink"`) — with the standard
+  `errors` envelope; **400** for a setter-level failure (unknown media type,
+  embedder, or exporter; an empty or escaping directory path).
+- **Numeric ranges clamp** rather than fail: `{"volume": 5}` stores `1.0`,
+  `{"inclusion": 99}` stores `10`.
+- **Unknown and read-only keys are silently dropped.**
 
 ### Get default settings
 
@@ -78,9 +85,9 @@ applies — 0.3 single-vector / 0.5 patch), `audio_playing` (bool), `show_animat
 GET /api/settings/defaults
 ```
 
-→ Default values for all settings (excluding infrastructure keys like
-`autofind_detectors`, `saved_datasets_dir`, `detectors_dir`,
-and `settings_source`).
+→ Default values for all settings, in the same shape (infrastructure keys like
+`autofind_detectors`, `saved_datasets_dir`, `detectors_dir`, and
+`settings_source` are absent).
 
 ### Detector Auto-Find flag
 
@@ -108,7 +115,8 @@ Field values support `{username}` template (resolved via `get_current_user()`).
 GET /api/settings-sources
 ```
 
-→ JSON array of source plugin objects:
+→ JSON array of source plugin objects (`name`, `display_name`, `description`,
+`icon`, `fields`, `ui_mode`, `hidden_from_picker`):
 
 ```json
 [
@@ -129,7 +137,11 @@ GET /api/settings-sources
 GET /api/settings-sources/active
 ```
 
-→ `{"source_name": "server_json_file", "field_values": {"filepath": "data/{username}.settings.json"}}` or `null`.
+→ `{"source_name": "server_json_file", "field_values": {"filepath": "data/{username}.settings.json"}, "inherited": false}` or `null`.
+
+`inherited` is `true` when the source in force is the deployment-wide
+`default_settings_source` (server settings file) rather than the user's own.
+`null` when no source resolves, or the user has opted out.
 
 ### Set or clear active settings source
 
@@ -139,7 +151,9 @@ PUT /api/settings-sources/active
 
 **Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "data/shared.settings.json"}}`
 
-To clear: `{"source_name": null}`
+To clear the user's own choice (and fall back to the deployment default, if
+any): `{}` or an empty `source_name`. To opt out even when a default exists:
+`{"source_name": "none"}`.
 
 → `{"ok": true, "message": "..."}`
 
@@ -155,7 +169,7 @@ Imports settings from the active source into the app.
 
 → `{"ok": true, "message": "Imported 5 setting(s) from source.", "keys": ["volume", "theme", ...]}`
 
-If no source is configured: `{"ok": false, "message": "No settings source configured or source is empty."}`.
+If no source is configured: `{"ok": false, "message": "No settings source configured or source is empty.", "keys": []}` (still 200).
 
 ---
 
@@ -167,6 +181,12 @@ labels imported, the labelset is automatically exported to the source.
 
 Field values support `{detector_id}` and `{detector_name}` templates
 (resolved from the active detector context).
+
+The link lives on the **loaded detector's in-memory context** — it is not
+persisted, and it is gone once the detector is unloaded. The path segment
+below is spelled `{detector_name}` in the spec, but it is looked up as the
+loaded context's key: the registry **detector id** (the `X-Detector-Id`
+value).
 
 ### List available labelset sources
 
@@ -192,35 +212,38 @@ GET /api/labelset-sources
 ### Get detector's labelset source
 
 ```
-GET /api/detectors/{name}/labelset-source
+GET /api/detectors/{detector_id}/labelset-source
 ```
 
-→ `{"source_name": "server_json_file", "field_values": {"filepath": "..."}}` or `null`.
-
-404 if detector not found.
+→ `{"source_name": "server_json_file", "field_values": {"filepath": "..."}}`, or
+`null` when no source is set **or the detector isn't loaded** (not a 404).
 
 ### Set or clear detector's labelset source
 
 ```
-PUT /api/detectors/{name}/labelset-source
+PUT /api/detectors/{detector_id}/labelset-source
 ```
 
 **Body:** `{"source_name": "server_json_file", "field_values": {"filepath": "labels/{detector_id}.json"}}`
 
-To clear: `{"source_name": null}`
+To clear: `{}` or an empty `source_name`.
 
 → `{"ok": true, "message": "..."}`
 
-404 if source_name is unknown. 404 if detector not found.
+404 if the detector isn't loaded or `source_name` is unknown.
 
 ### Force sync from labelset source
 
 ```
-POST /api/detectors/{name}/labelset-source/sync
+POST /api/detectors/{detector_id}/labelset-source/sync
 ```
 
 Imports labels from the detector's linked source.
 
 → `{"ok": true, "message": "Imported 42 label(s) from source."}`
 
-If no source configured: `{"ok": false, "message": "..."}`. 404 if detector not found.
+If no source is configured (or the source is empty): `{"ok": false, "message": "..."}`
+(still 200). 404 if the detector isn't loaded.
+
+A rename that moves the templated file path is handled by
+[`POST /api/detectors/registry/{detector_id}/labelset-source/move-file`](detectors.md#move-an-orphaned-labelset-file).

@@ -40,117 +40,88 @@ separately.
 
 <!-- item-sep -->
 
-- **The `run-tests.sh` gate list is still hand-maintained in two places.** CLAUDE.md's "What
-  `run-tests.sh` gates" table and the script's own usage header each restate the chain by hand;
-  the table was six gates stale before #2997.
-  This is the same inventory-drift shape as #2984, and it wants the same treatment — but note the
-  cheaper shape fits better here: rather than *generating* the table, an invariant check could
-  assert that the set of `echo "…"` stage banners in `run-tests.sh` matches the rows in CLAUDE.md's
-  table, which is a few lines inside whatever #2983's docs-drift gate becomes. Worth folding into
-  that gate rather than shipping its own script.
-
-<!-- item-sep -->
-
-- **README.md and SETUP.md — install-path drift.** `SETUP.md:205-207` describes GPU detection
-  as "nvidia-smi absent → CPU wheel", but `scripts/install.sh:1137-1173` only falls back to CPU
-  when no NVIDIA PCI hardware exists; with a card present and no driver it prompts for a sudo
-  driver install, and non-interactively it **stops with exit 1** (`:768-779`). Headless callers
-  need `VTSEARCH_AUTO_DRIVER=1` / `VTSEARCH_ASSUME_CPU=1`, documented nowhere. `SETUP.md:226-232`
-  omits that the GPU path also installs multi-gigabyte cuML/RAPIDS (skippable with
-  `VTSEARCH_SKIP_CUML=1`), runs a GPU smoke test, and installs toponymy, facenet-pytorch and the
-  pre-commit hook. `SETUP.md:599-601` claims `install.sh` provides the Angular build tools; it
-  never touches npm. Both files show a startup banner (`* Running on http://0.0.0.0:5000`) that
-  no code emits. `SETUP.md`'s env table omits `VTSEARCH_DATA_DIR`; the Docker section skips the
-  image-embedders variant; README's top-level tree omits directories a newcomer meets immediately.
-
-<!-- item-sep -->
-
-- **README.md — the media-type count is five, the code ships six.** The intro omits the `face`
-  convert-in half type (`vtscore/media/face/media_type.py`, FaceNet identity space, provisioned by
-  `install.sh:855-867`). The same undercount appears in the vtscore docs.
-
-<!-- item-sep -->
-
-- **CHANGELOG.md has no owner and no readers.** Last touched 2026-07-20; zero inbound links from
-  any doc; `docs/RELEASE.md`'s seven steps never mention it. Its `Unreleased` section records only
-  the library extraction, while breaking user-facing changes since (the `safe_thresholds` setting
-  deletion, the fold-anchored threshold, exporter open-URL, datasource importers, importer-named
-  datasets) went unrecorded. Under the repo's own "every commit on `dev` is a release" model,
-  nothing can stay `Unreleased`. Decide whether the file has a job — if it does, add it to the
-  release runbook and link it; if it doesn't, delete it rather than leave a rotting promise.
-  `vtscore/CHANGELOG.md` by contrast is actively maintained and should stay.
+- **The `run-tests.sh` gate list is still hand-maintained in two places.** The "What
+  `run-tests.sh` gates" table (now in `docs/TESTING.md`) and the script's own usage header each
+  restate the chain by hand; the table's stage-2 row had drifted again (it predated
+  `scripts/check-frontend-gate.py`) when the 2026-09-28 audit caught it. An invariant check —
+  the set of stage banners in `run-tests.sh` must match the table's rows — is a few lines inside
+  `scripts/check-docs.py` and cheaper than generating the table.
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **docs/api/ — undocumented endpoint families.** Beyond #2988: the four processor execution
-  endpoints (`/api/extract`, `/api/auto-extract`, `/api/localize`, `/api/auto-localize`); the
-  datasource-importer family (`GET /api/datasource-importers`, `POST /api/datasource-import/{name}`);
-  three Find endpoints (`/api/find/queue-ids`, boundary, evidence-coverage); the saved-labelset
-  element vote (`POST /api/detectors/{name}/labels/{element_id}/vote`); the labelset-source
-  move-file endpoint; and the `server` and heartbeat channels of `GET /api/events`.
-
 <!-- item-sep -->
 
-- **docs/api/ — wrong or incomplete contracts.** `settings.md` documents the theme enum and default
-  wrongly and omits roughly twenty real `PUT /api/settings` keys; `labeling.md` omits the resolved
-  detector fields both `/api/inclusion` verbs return; `detectors.md`'s second create example omits
-  the required `media_type`; `io.md`'s exporter list omits `portable_detector`;
-  `datasets.md` shows load responses in a shape the routes do not return; `auth.md` omits the SPA
-  deep-link routes. `API.md` undersells the error envelope (`{error, detail, request_id}`, plus the
-  422 marshmallow shape).
-
-<!-- item-sep -->
-
-- **ML.md and EVAL.md — narrow but real.** `docs/EVAL.md:254-266` tells the reader to pass
-  `acq_inclusion_offset=0` to `run_voting_iterations_eval`, which accepts no such parameter and
-  forwards none (`vtscore/eval/voting_iterations.py:2774-2792`, `:2880-2899`) — following the doc
-  at the documented entry point raises `TypeError`; the parameter exists only on
-  `simulate_voting_iterations`. The eval-dataset table is missing 6 of 23 datasets, and the torch
-  thread-configuration file pointer is stale. Everything else checked — every algorithmic constant
-  the audit sampled (Adam lr/weight-decay, 200-epoch cap, label smoothing, conformal BASE/QPOS_MAX,
-  kappa/mid_tilt, acquisition offset, autopilot quorum, atlas k/min-node-size) matches the source.
-
-<!-- item-sep -->
-
-- **vtscore/docs — inventory gaps.** Three real subpackages (`projection`, `timing`,
-  `datasource_importers`) and the sixth media type are absent from every vtscore inventory.
-  (The package-doc coverage gaps are #2999.)
-
-<!-- item-sep -->
-
-- **vtscore/docs/extending — stale contracts beyond #2989.** The media-dict key is `media_type`,
-  not `type`. The clipper naming convention shown (`sound_tiling_2.0s`) carries a parameter suffix
-  real names do not have. About a dozen `file.py:NNN` anchors are stale.
+- **CHANGELOG.md has readers but no release step.** It is maintained (29 commits since
+  2026-07-20) and linked from `CLAUDE.md`, but `docs/RELEASE.md` never mentions it, so nothing
+  closes an `Unreleased` section at a release: everything since the library extraction sits under
+  one `## Unreleased`, which repeats `### Fixed` / `### Changed` / `### Added` several times over
+  (merge residue from parallel PRs appending their own subsections). Decide whether the release
+  runbook cuts a dated section; if so, add the step and fold the repeated subsections then.
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **Hand-maintained line-number anchors have a 100% rot rate.** Nearly every `file.py:NNN`
-  reference in `vtscore/docs/packages/` is wrong, often by hundreds of lines, and the pattern
-  recurs in the extending guides and plans. Needs a policy call, not one more sweep: either stop
-  citing line numbers in prose and reference module-and-symbol instead (stable, greppable), or
-  generate them. Recommend the former.
+<!-- item-sep -->
+
+<!-- item-sep -->
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **Screenshot staleness is unverifiable.** `scripts/screenshots/wiring-check.py` validates id and
-  asset wiring only — nothing compares a shot against the current UI. So the reshoot queue's
-  "empty table means no known-stale shots" resting state is an unfalsifiable claim, and framed
-  surfaces changed after the last reshoot (all 40 PNGs committed 2026-07-20) with no rows filed.
-  Either downgrade the claim in `docs/user/screenshots-reshoot-queue.md`, or add a cheap staleness
-  signal — e.g. queue a shot automatically when a commit touches a component named in its
-  `embeddedIn`/`caption` fields.
+<!-- item-sep -->
+
+<!-- item-sep -->
+
+- **Line-number anchors are gated only in `vtscore/docs/`, and only in one spelling.** The
+  2026-09-28 audit converted every remaining `file.py:NNN` and `(line NNN)` reference in the
+  tracked docs (experiment reports aside) to module-and-symbol form. `scripts/check-vtscore-docs.py`
+  refuses new ones, but only under `vtscore/docs/` and only the `.py:NNN` spelling (`(line NNN)`
+  slipped past it). Moving the invariant into `scripts/check-docs.py`, with both spellings, would
+  hold `docs/`, the plans and the READMEs to the same rule.
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- **`media_sources` is a real extension point with no authoring guide.** Eleven library plugin
-  families, and `vtscore/datasets/sources/` (8 built-in plugins, third-party-extensible via the
-  `vtscore.media_sources` entry-point group) has no "Adding a…" section in `EXTENDING-plugins.md`
-  or `vtscore/docs/extending/`. Every other family has one.
+<!-- item-sep -->
+
+<!-- item-sep -->
+
+<!-- item-sep -->
+
+- **`patch-embedder.md` is a shipped plan kept alive as a spec.** Everything it owes has
+  shipped or is explicitly out of scope, but its "living spec" (the V3 trio, score precedence,
+  per-detector embedder type) is cited by ~20 source docstrings and exists nowhere in the permanent
+  docs. Fold it into `docs/ARCHITECTURE.md` (or `vtscore/docs/concepts.md`), repoint the citations,
+  then delete the plan. `structural-embedder.md`'s design spec (two-stage VLAD + RANSAC, the
+  match-statistics classifier, why 4-DoF) wants the same treatment once its open work ships, and
+  `user-docs-screenshots.md` is the de-facto reference for the screenshot system.
+
+<!-- item-sep -->
+
+- **Hand-restated API schemas.** `docs/api/medias.md` and `docs/api/datasets.md` still restate long
+  response schemas that `frontend/openapi.json` already carries. Accurate as of the 2026-09-28
+  audit, but they will drift; slim them to purpose, non-obvious semantics and a pointer to the spec,
+  as `settings.md` now does.
+
+<!-- item-sep -->
+
+- **Small code-side drift the doc audit found but did not fix.** `slides/render.sh`: its usage line
+  omits `png` / `--no-pageno`, and the comment above the `PIPESTATUS` check says the script has no
+  `pipefail` though it sets `set -euo pipefail` (so the check may be dead). `docker/Dockerfile*`:
+  the "OMP/MKL thread limits are already set in app.py" comment is misleading — `app.py` overwrites
+  them with the CPU allocation. `slides/figs/ui-autopilot.png` is referenced by nothing.
+  `scripts/experiments/pile/launch_pile.sh`'s header still shows a `--force` rebuild of `vg_scale`,
+  which can no longer be rebuilt; `scripts/experiments/max_patch/queue_all.sh` defaults
+  `NCELLS=240` against a 288-cell grid. `docs/user/screenshots.manifest.ts` pins
+  `settings-appearance` to the Solo-media-type section though the shot shows the Appearance pane.
+  `frontend/src/app/models/projection.models.ts` hand-writes three types the generated client
+  already has (FRONTEND.md records it as a known exception). `vtscore/eval/label_curve_main.py`'s
+  docstring uses `flowers102_s`, which is not a registered demo; `vtscore/exporters/__init__.py`
+  still labels its registry "labelset exporter"; `DetectorRegistryCreateRequestSchema.trainable` is
+  accepted and never read; the labelset-source routes name a detector-id path parameter
+  `detector_name`.

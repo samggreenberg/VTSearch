@@ -31,9 +31,6 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **`region-voting` scriptability** — confirm the canvas drag can be driven
-  deterministically; fall back to hand-capture only if not.
-
 <!-- item-sep -->
 
 - **`browse-view` determinism** — seed the UMAP fit (fixed `random_state`) so

@@ -25,6 +25,8 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/metrics.py`               | `QueryMetrics`, `LearnedSortMetrics`, `DatasetResult`, metric functions |
 | `vtscore/eval/labels.py`                | The ground-truth membership test shared by every harness |
 | `vtscore/eval/runner.py`                | `eval_text_sort`, `eval_learned_sort`, `run_eval`, `format_results_json` |
+| `vtscore/eval/row_metrics.py`           | Shaping one result row out of a scored test set          |
+| `vtscore/eval/score_dumps.py`           | Per-media prediction dumps behind an aggregate fpr/fnr   |
 | `vtscore/eval/visualize.py`             | `plot_eval_results`, `plot_voting_iterations` (matplotlib) |
 | `vtscore/eval/__main__.py`              | CLI for `python -m vtscore.eval`                         |
 
@@ -33,6 +35,10 @@ surface a programmatic consumer calls into.
 | Module                                  | Concern                                                  |
 |-----------------------------------------|----------------------------------------------------------|
 | `vtscore/eval/voting_iterations.py`     | Per-step cost simulator and multi-dataset sweep          |
+| `vtscore/eval/voting_columns.py`        | Output-row schemas for the voting-iterations eval        |
+| `vtscore/eval/step_model.py`            | The per-step ranker the simulation trains (`HEADS`, `PRODUCTION_HEAD`) |
+| `vtscore/eval/step_trainers.py`         | Per-step trainer registry (`app`, `svm_*`, `gp_*`) and pool scorers |
+| `vtscore/eval/startup_schedule.py`      | Parameterised Autopilot openings                          |
 | `vtscore/eval/al_strategies.py`         | The vote-order simulation: `STRATEGIES`, `ALContext`, `select_next` |
 | `vtscore/eval/al_benchmark.py`          | Hermetic harness around the voting-iterations eval       |
 | `vtscore/eval/autopilot_flow.py`        | The app's Autopilot phase machine, **ported** from TypeScript |
@@ -50,6 +56,12 @@ surface a programmatic consumer calls into.
 | `vtscore/eval/label_curve.py`           | MLP-vs-SVM label-curve sweep (`run_label_curve_eval`)    |
 | `vtscore/eval/label_curve_main.py`      | CLI for the label-curve sweep                            |
 | `vtscore/eval/timing_benchmark.py`      | GPU microbenchmark: MLP (torch) vs SVM (cuML)            |
+| `vtscore/eval/trainers.py`              | Deprecated alias for `sweep_trainers`                     |
+| `vtscore/eval/arms_anchored.py`, `arms_fit_quality.py`, `arms_fold_count.py`, `arms_inclusion.py`, `arms_safe_gmm.py`, `arms_schedule.py` | Per-study threshold arms run inside the voting simulation |
+| `vtscore/eval/fit_quality.py`           | Goodness-of-fit diagnostics for the score-mixture fits    |
+| `vtscore/eval/live_threshold_rules.py`  | Retired app threshold rules, kept as live arms            |
+| `vtscore/eval/scale_bands.py`           | Scale-banded cells: test across sizes, train on a size mix |
+| `vtscore/eval/transfer_rules.py`        | Estimators for the transfer (bias vs variance) study      |
 
 The package `__init__.py` re-exports the main entry points:
 
@@ -75,7 +87,6 @@ from vtscore.eval import (
 > current default. `scripts/check-eval-app-sync.py` (a `./run-tests.sh`
 > gate) pins a digest of each mirrored surface **on both sides** - the app
 > code and the harness copy of it - and fails when either moves.
-> See the "Eval Default Arm IS the App" rule in `CLAUDE.md`.
 
 ---
 
@@ -94,11 +105,11 @@ class EvalQuery:
 ```
 
 `EVAL_DATASETS` is a `dict[str, dict]` keyed by demo dataset id
-(`esc50_s`, `caltech101_m`, `20newsgroups_l`, `ucf101_s`, ...). Each
-value is `{"demo_dataset": "...", "queries": list[EvalQuery]}`. The
-registry covers all 50 ESC-50 categories, 25 Caltech-101 / Caltech-256
-categories, 15 of the 20-Newsgroups categories, and 10 UCF-101
-categories - see `vtscore/eval/config.py` for the full lists.
+(`esc50_s`, `caltech101_m`, `20newsgroups_l`, `ucf101_s`,
+`visual_genome_s`, `rvl_cdip_m`, ...). Each value is
+`{"demo_dataset": "...", "queries": list[EvalQuery]}`; see
+`vtscore/eval/config.py` (or `python -m vtscore.eval --list`) for the
+datasets and their queries.
 
 ### `QueryMetrics`
 
@@ -166,10 +177,10 @@ sort - they take what the runner produces and return numbers.
 
 | Function                                                          | Behaviour                                                 |
 |-------------------------------------------------------------------|-----------------------------------------------------------|
-| `compute_average_precision(ranked_ids, relevant_ids)` (line 107)  | AP = Σ(precision@k) / num_relevant over relevant positions; 0 when `relevant_ids` is empty |
-| `compute_precision_recall_at_k(ranked_ids, relevant_ids, k_values=None)` (line 132) | Tuple of `(precision_at_k, recall_at_k)` dicts keyed by k. Defaults to `[5, 10, 20]` |
-| `compute_metrics(ranked_ids, relevant_ids, query_text, target_category, k_values=None)` (line 163) | Bundle: returns a populated `QueryMetrics` |
-| `compute_binary_classification_metrics(predictions, labels)` (line 196) | Returns `(accuracy, precision, recall, f1)` from 0/1 lists |
+| `compute_average_precision(ranked_ids, relevant_ids)`             | AP = Σ(precision@k) / num_relevant over relevant positions; 0 when `relevant_ids` is empty |
+| `compute_precision_recall_at_k(ranked_ids, relevant_ids, k_values=None)` | Tuple of `(precision_at_k, recall_at_k)` dicts keyed by k. Defaults to `[5, 10, 20]` |
+| `compute_metrics(ranked_ids, relevant_ids, query_text, target_category, k_values=None)` | Bundle: returns a populated `QueryMetrics` |
+| `compute_binary_classification_metrics(predictions, labels)`      | Returns `(accuracy, precision, recall, f1)` from 0/1 lists |
 
 ```python
 from vtscore.eval.metrics import compute_metrics
@@ -188,7 +199,7 @@ print(qm.average_precision, qm.precision_at_k, qm.recall_at_k)
 
 ## Runners
 
-### `eval_text_sort(medias, queries, media_type, ...)`
+### `eval_text_sort(medias, queries, media_type, k_values=None, enrich=False, start_time=None, embedder_name="")`
 
 `vtscore/eval/runner.py`. For each query: embed the query text via
 `vtscore.embedding.helpers.embed_text_query`, score every media by
@@ -198,7 +209,7 @@ Returns a list of `QueryMetrics`. Pass `enrich=True` to use wrapper-
 averaged text embeddings; pass `start_time` (a `time.monotonic()`
 baseline) to populate `elapsed_seconds` on each result.
 
-### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, ...)`
+### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, calibrate_count=2, calibration_fraction=None, start_time=None, region_voting=False)`
 
 `vtscore/eval/runner.py`. For each query/category: split target-
 category vs. other medias, take `train_fraction` of each as training
@@ -248,6 +259,8 @@ Args:
 | `enrich`                  | Use wrapper-averaged text embeddings (default False)          |
 | `calibrate_count`         | Cross-cal folds (default 2)                                   |
 | `calibration_fraction`    | Cross-cal calibrate split (`None` = the app's per-space default: 0.3 single-vector / 0.5 patch) |
+| `embedder_name`           | Embedder to evaluate (`""` = the dataset's own)               |
+| `region_voting`           | Train on region (patch) votes, as the app does on patch datasets (default False) |
 
 ### `format_results_json(results)`
 
@@ -270,7 +283,7 @@ the user labels?" without spinning up a UI session.
 The vote-order strategy is `autopilot` (see
 `vtscore/eval/al_strategies.py`): the eval reproduces the real user flow
 rather than any academic active-learning heuristic.  Its two experiment
-variants, `autopilot_uncertainty` and `autopilot_maxvar` (issue #3954), keep
+variants, `autopilot_uncertainty` and `autopilot_maxvar`, keep
 every phase and swap only the Hard pick for a posterior-spread rule; they
 need a `gp_*` trainer and are never a default. Autopilot seeds the
 first few positives from text sort when a `seed_scores` ranking is
@@ -278,9 +291,16 @@ supplied, else from a handful of random known-good examples ("3 random
 examples pulled from the Good"), then gathers the initial negatives and
 cycles the standard Good / Bad / Hard / New phases.
 
-### `simulate_voting_iterations(clips_dict, target_category, seed, ...)`
+### `simulate_voting_iterations(clips_dict, target_category, seed, *, ...)`
 
-Run one `(dataset, category, seed)` simulation. Splits `clips_dict` into
+Run one `(dataset, category, seed)` simulation. Everything after `seed`
+is keyword-only; the commonly used knobs are `dataset_name`,
+`inclusion=0`, `sim_fraction=0.5`, `safe_thresholds=True`,
+`calibrate_count=2`, `calibration_fraction=None`, `region_voting=False`,
+`strategy="autopilot"`, `max_steps=None`, `seed_scores=None`,
+`trainer="app"`, `head=None` and `style=None`. The many remaining
+keywords select experiment arms or diagnostic sinks; see the
+function's docstring. Splits `clips_dict` into
 `D_sim` (used to draw votes) and `D_test` (held out for cost evaluation)
 by `sim_fraction`, then iterates:
 
@@ -324,7 +344,8 @@ test scores can't leak into calibration.  `safe_thresholds` defaults to
 
 ### `run_voting_iterations_eval(dataset_clips, seeds, categories=None, ...)`
 
-Sweep `simulate_voting_iterations` over `(seed × dataset × category)` and
+Sweep `simulate_voting_iterations` over `(seed × dataset × category)`
+(and any `strategies` / `trainers` / `prevalence_arms` / `styles` lists) and
 return a `pandas.DataFrame` with columns `seed, dataset, category,
 strategy, t, n_good, n_bad, cost, fpr, fnr, elapsed_seconds`. When
 `categories` is `None` or a dataset is missing from the dict, every
@@ -368,11 +389,12 @@ via cross-calibration. So `AUROC`, `AP`, and the production-path
 matter; Brier and F1@0.5 are kept as diagnostics. See
 `SWEEP_TRAINERS` for the plug-in registry of estimator functions.
 
-`label_curve_main.py` is the CLI:
+`label_curve_main.py` is the CLI (it loads each `--datasets` id with
+`load_demo_dataset`):
 
 ```bash
-python -m vtscore.eval.label_curve \
-    --datasets esc50_s flowers102_s \
+python -m vtscore.eval.label_curve_main \
+    --datasets esc50_s caltech101_s \
     --trainers mlp svm_linear svm_rbf \
     --label-counts 5 10 20 50 100 200 \
     --seeds 0 1 2 3 4 \
@@ -417,6 +439,8 @@ Notable flags:
 | `--enrich-descriptions`  | Wrapper-averaged text embeddings                             |
 | `--calibrate-count K`    | Cross-cal folds                                              |
 | `--calibration-fraction F` | Cross-cal calibration split                                |
+| `--embedder NAME`        | Evaluate with this embedder                                  |
+| `--region-voting`        | Train on region votes                                        |
 | `--output FILE`          | Write JSON results to `FILE`                                 |
 | `--plot-dir DIR`         | Generate visualisation PNGs in `DIR`                         |
 | `--no-plot`              | Disable plots even when `--plot-dir` is set                  |
@@ -438,7 +462,7 @@ return values directly and skip this module.
 | Function                                                   | Output                                                          |
 |------------------------------------------------------------|-----------------------------------------------------------------|
 | `plot_eval_results(results, output_dir="eval_output")`     | PNGs for mAP-by-dataset, AP-by-query, P@k curves, R@k curves, learned-sort F1, learned-sort metrics breakdown |
-| `plot_voting_iterations(df, output_dir="voting_output")`   | Cost-over-iterations and FPR/FNR-over-iterations line charts, one line per (dataset, category), with shaded ±1σ band over seeds |
+| `plot_voting_iterations(df, output_dir="eval_output")`     | Cost-over-iterations and FPR/FNR-over-iterations line charts, one line per (dataset, category), with shaded ±1σ band over seeds |
 
 Both functions create `output_dir` if missing and return a list of the
 generated `Path`s. They apply a clean default matplotlib style
@@ -451,9 +475,7 @@ matplotlib is not in the library's core dependencies - installing
 ## `trainer` vs `head`: two knobs, two registries
 
 The eval framework carries two things called a *trainer*. They answer different
-questions, and until issue #3764 they also shared the string `"mlp"`, which named
-an MLP in one of them and the app's pipeline in the other. Read a `trainer`
-column against the sweep that produced it:
+questions, so read a `trainer` column against the sweep that produced it:
 
 | | Voting simulation | Label curve / timing |
 |---|---|---|
@@ -471,13 +493,13 @@ heads:
 |---|---|
 | `linear_svm` | `Linear(d, 1)` fitted by liblinear. **The shipped detector head**; `head=None` resolves here. |
 | `linear` | The same `Linear(d, 1)` fitted by balanced BCE — the logistic head the SVM replaced. |
-| `mlp` | An auto-sized hidden layer, BCE — the head VTSearch shipped before #2790. |
+| `mlp` | An auto-sized hidden layer, BCE — the legacy head. |
 
 So `trainer="app", head="linear_svm"` is the shipped detector; `trainer="app",
 head="mlp"` is the app's pipeline around a legacy head; and `trainer="svm_rbf"`
 is a standalone estimator that has no head at all (its rows carry an empty
 `head` column). Passing `head=` with any `svm_*` or `gp_*` trainer is an error.
-The `gp_*` arms (issue #3954) are scikit-learn Gaussian-process classifiers
+The `gp_*` arms are scikit-learn Gaussian-process classifiers
 conditioned on the votes; in both registries they return `(score, per_item_std)`
 like the MLP ensembles, and in the voting simulation the spread is what the
 uncertainty strategies pick by.
@@ -499,10 +521,18 @@ from liblinear, scored and thresholded exactly as production does.
   `seed` argument; `np.random.RandomState(seed)` controls splits and
   vote order, `train_model` uses its own thread-safe RNG (see
   [`training.md`](training.md)).
-- **Pure computation.** The runner and voting-iterations modules take
-  pre-loaded medias dicts as input. The CLI is the only entry point
-  that calls `load_demo_dataset` - programmatic consumers are
-  expected to load their own data.
+- **Pure computation.** `eval_text_sort`, `eval_learned_sort` and the
+  voting-iterations functions take pre-loaded medias dicts as input.
+  Only `run_eval`, `run_voting_iterations_eval_from_pickles` and the
+  CLIs load data themselves.
 - **No Flask, no settings.** Every threshold knob (`inclusion`,
   `calibrate_count`, `calibration_fraction`, `sim_fraction`) is a
   function argument, not a global lookup.
+
+---
+
+## Cross-references
+
+- [`docs/EVAL.md`](../../../docs/EVAL.md) - the user-facing eval guide.
+- [`detectors.md`](detectors.md) and [`training.md`](training.md) - the shipped pipeline the default arm delegates to.
+- [`coverage.md`](coverage.md) - the atlas behind Autopilot's New phase.

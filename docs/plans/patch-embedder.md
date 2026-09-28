@@ -32,23 +32,6 @@ Per-detector embedder-type follow-ups:
 
 V3 open questions (design-level, still unresolved):
 
-1. **Where in the dataset header do the three slots live?** Today's single
-   `dataset.embedder` field probably can't just be renamed without breaking
-   labelset sync. Likely: keep the legacy field as a computed read-only alias to
-   the score-role slot for one release, then drop it. Confirm during impl.
-2. **Combine Datasets ergonomics.** *Resolved (shipped).* Rather than a strict
-   "embedder triple must match" refusal, combine now detects per-embedder-type
-   conflicts and offers, for each conflicting type, "re-embed every source to one
-   winner" or "drop that type". The route still refuses (400) an *unresolved*
-   conflict from a programmatic caller, so the strict guard remains the backstop.
-3. **Coverage-atlas vs score backbone (patch vs structural).** *Validated
-   (spike shipped).* Structural-over-patch for the shared score role is the
-   less obvious call — a structural embedder is a deliberate specialist pick,
-   but its Stage-1 VLAD vector may cluster *worse* than patch for the coverage
-   atlas. The trio spike validated the score precedence on a real
-   patch+structural dataset and confirmed the current single-precedence
-   default; the coverage-atlas revisit was folded into
-   [`coverage-atlas.md`](coverage-atlas.md) as a follow-up.
 4. **Patch + structural coexistence at score time.** Storage and routing support
    binding both; the open piece is whether a single detector can ever run *both*
    visual pipelines at once (region max-pool MLP *and* geometric verify) rather

@@ -453,10 +453,12 @@ class TestSignedWebhookExport:
             captured["headers"] = headers
             return _Resp()
 
-        # export() takes already-normalized field_values, so a unit test
-        # can hand it a plain dict without going through a route.
+        # Call the payload method directly: it takes already-normalized
+        # field_values, so a unit test can hand it a plain dict without
+        # going through a route. (The legacy export() is not implemented
+        # on this class and would raise NotImplementedError.)
         with patch("my_pkg.exporter.requests.post", _fake_post):
-            result = exp.export(results, {
+            result = exp.export_labelset(results, {
                 "url": "https://example.com/hook",
                 "hmac_secret": "s3cret",
             })
@@ -471,10 +473,13 @@ class TestSignedWebhookExport:
         assert signature == expected
 
     def test_rejects_autodetect_payload(self):
+        from vtscore.exporters.base import UnsupportedPayloadError
+
         exp = get_exporter("signed_webhook")
+        assert exp.supported_payloads == frozenset({"labelset"})
         import pytest
-        with pytest.raises(ValueError):
-            exp.export({"media_type": "audio", "results": {}}, {})
+        with pytest.raises(UnsupportedPayloadError):  # a ValueError subclass
+            exp.export_find_results({"media_type": "audio", "results": {}}, {})
 ```
 
 See [`tests_lib/io/test_importers.py`](../../../tests_lib/io/test_importers.py)

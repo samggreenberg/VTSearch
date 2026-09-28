@@ -78,7 +78,7 @@ is an ABC. Required overrides:
 | `file_extensions` (property) | `list[str]` | Glob patterns like `["*.obj", "*.stl"]` |
 | `loops` (property) | `bool` | True for content the viewer should auto-loop (audio, video) |
 | `demo_datasets` (property) | `list[DemoDataset]` | Demo entries surfaced in `/api/dataset/demo-list` |
-| `load_media_data(file_path)` | `(Path) -> dict` | Type-specific fields to merge into the media dict; must include `"duration"` |
+| `load_media_data(file_path, media_bytes=None)` | `(Path, bytes \| None) -> dict` | Type-specific fields to merge into the media dict; must include `"duration"`. Use `media_bytes` when the caller passes it instead of re-reading the file |
 | `media_response(media)` | `(dict) -> MediaResponse` | Framework-agnostic HTTP response payload |
 
 Optional overrides:
@@ -92,6 +92,23 @@ Optional overrides:
 | `image_response(media)` | `None` | A *paintable image* for the media, as a `MediaResponse` - the waveform, frame, or page a grid tile shows. `None` = this type has no visual form |
 | `ensure_thumbnail_bytes(media)` | cached value | Build + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that arrived with no readable file |
 | `load_demo_source(...)` | raises `ValueError` | Download and embed one of this type's `demo_datasets` entries |
+| `load_thin_media_data(file_path)` | `load_media_data` minus payload keys | Display fields for a *thin* (reference) load that keeps only `media_path` |
+| `has_thumbnail` | `False` | Class attr: `True` when items have a browsable still (every shipped type except `text`; audio uses its waveform) |
+| `converts_to` | `[]` | Class attr: embeddable `type_id`s a non-embeddable type must be converted into (first = default) |
+| `importable` | `True` | Whether users import this type directly; `False` for a type that only arises from converting another |
+
+`embeddable` is derived, not overridden: it is `True` exactly when at least
+one embedder is registered for the type.
+
+### Half types
+
+Two shipped types are *half types*. `document` is **convert-out**:
+importable but not embeddable, with `converts_to = ["image", "text"]`, so
+a PDF must pass through `document2image` or `document2text` before it can
+be searched. `face` is **convert-in**: embeddable (FaceNet) but not
+importable, because face crops only ever come from the `image2face`
+converter. A new type that fits either shape sets the same attributes;
+nothing else special-cases them.
 
 ### `image_response` vs. `media_response`
 
@@ -159,7 +176,7 @@ After registration:
 
 | Subsystem | Behaviour |
 |-----------|-----------|
-| Folder import | Files matching `file_extensions` are scanned and embedded by the default embedder for `type_id` |
+| Folder import | Files matching `file_extensions` are scanned into media dicts; the embed stage then fills vectors from the default embedder for `type_id` |
 | Generic media route | `GET /api/medias/<id>/media` calls your `media_response()` |
 | Demo listing | Entries in `demo_datasets` appear in `/api/dataset/demo-list` |
 | Pickle round-trip | Standard fields + anything in `pickle_extra_fields` survive export/import |
@@ -215,10 +232,11 @@ class Mesh3DMediaType(MediaType):
 
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
         raw = media_bytes if media_bytes is not None else file_path.read_bytes()
-        # Toy counts; a real impl would parse properly.
-        text = raw.decode("ascii", errors="replace")
-        vertex_count = text.count("\nv ") + text.count("\nvertex ")
-        face_count = text.count("\nf ") + text.count("\nfacet ")
+        # Toy counts (OBJ "v"/"f" lines, ASCII-STL "vertex"/"facet" lines);
+        # a real impl would parse properly.
+        words = [ln.split(maxsplit=1)[0] for ln in raw.decode("ascii", errors="replace").splitlines() if ln.strip()]
+        vertex_count = sum(w in ("v", "vertex") for w in words)
+        face_count = sum(w in ("f", "facet") for w in words)
         return {
             "media_bytes": raw,
             "duration": 0,

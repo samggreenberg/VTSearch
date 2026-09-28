@@ -14,14 +14,24 @@ GET /api/events
 ```
 
 `Content-Type: text/event-stream`. Connect with `new EventSource('/api/events')`.
+A plain Flask route, so it is not in the OpenAPI spec. It takes no context
+headers: every channel is process-global.
 
-The first frame on every channel is the **current snapshot** of that
-tracker, so clients do not need a separate REST bootstrap call.
+On connect the server sends a `server` frame, then the **current snapshot**
+of every state channel, so clients do not need a separate REST bootstrap call.
+
+**Connection cap.** Each open stream pins a server worker thread, so
+concurrent streams are capped (`VTSEARCH_SSE_MAX_CONNECTIONS`, default
+`VTSEARCH_THREADS − 2`; uncapped on the dev server). Over the cap the request
+gets **503** `{"message": "Too many live event streams open; retry shortly."}`
+with `Retry-After: 5`. `EventSource` treats a non-2xx as fatal and stops
+reconnecting, so a client must schedule its own retry.
 
 ## Channels
 
 | Event name | Payload | Source |
 |---|---|---|
+| `server` | `{ "boot_id": "<hex>" }` | Sent once per connection, first. `boot_id` is fixed for the life of the server process, so a different value after a reconnect means the backend restarted and any `task_id` / `job_id` the client holds is gone. |
 | `loading-tasks` | array of task objects | `loading_tasks` (parallel dataset loads and staging imports; a staging task carries `staging_result`) |
 | `detector-loading-tasks` | array of task objects | `detector_loading_tasks` |
 | `sort` | progress object | `sort_progress` (text sort) |
@@ -30,7 +40,10 @@ tracker, so clients do not need a separate REST bootstrap call.
 | `notification` | notification object | `notify()` — one-off messages from server-side code; rendered as toasts |
 | `heartbeat` | `{ "ts": <unix seconds> }` | periodic liveness ping (every ~5s) |
 
-Every channel except `notification` carries **state**: a snapshot sent on
+There is no `dataset` channel: dataset work reports per task on
+`loading-tasks`.
+
+Every channel except `server` and `notification` carries **state**: a snapshot sent on
 connect and re-sent on every heartbeat, so a dropped frame heals itself.
 `notification` carries **events** — see [Notification object
 shape](#notification-object-shape) for what that costs.

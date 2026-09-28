@@ -389,7 +389,7 @@ testpaths = ["tests", "tests_lib"]
 # tests_lib.helpers import ...`` (same convention the fixtures already use).
 markers = [
     "gpu: tests that require a CUDA GPU (deselected by default, run with: -m gpu)",
-    "slow: CLI subprocess tests that spawn a fresh Python process (~16s each)",
+    "slow: long-running tests (a CLI subprocess run of app.py, the real-toponymy fit tests)",
     "core: basic app functionality (audio, medias, votes, inclusion, settings, frontend)",
     "api: API contracts, error handling, dashboard",
     "sorting: text sort, learned sort, diversity, safe thresholds",

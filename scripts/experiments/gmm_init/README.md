@@ -26,12 +26,13 @@ same real inputs — which is also why the pre-#3585 fit stays in the tree as
 | cost | `bench_3585.py` | min-of-k per-call timings at the sample's own size and at resampled sizes |
 | tables | `analyze_3585.py` | the gate, environment, estimator, latency and cost tables |
 | figures | `figures_3585.py` | the trade-off scatter, the change ECDF, cost against *n* |
-| trajectory A/B | `run_cells_arm_3585.py` | an ordinary cell with one named fit installed for the whole run, for `analyze_ab.py` |
+| trajectory A/B | `run_cells_arm_3585.py` | an ordinary cell with one named fit installed for the whole run, for `../calibration/analyze_ab.py` |
 | the arms | `arms_3585.py` | every candidate, and `swap_fit`, which installs one everywhere |
 | self-test | `selftest_analyze_3585.py` | planted answers for the analyzer's joins and counts |
 
 `launch_gmm_3585.sh` drives all of it on SLURM (`list`, `size`, `capture`,
-`sorts`, `gate`, `bench`, `ab`, `abanalyze`, `status`). Set `DEP=afterany:<id>`
+`sorts`, `gate`, `bench`, `analyse`, `baseline`, `ab`, `abanalyze`,
+`abfigures`, `status`). Set `DEP=afterany:<id>`
 to chain a stage behind a running one GRID-side.
 
 ## Two things to know before reusing this

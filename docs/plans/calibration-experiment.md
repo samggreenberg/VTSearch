@@ -47,17 +47,6 @@ strategy.
 
 <!-- item-sep -->
 
-- **Cold-start degenerate defaults.** Post-#2784 the residual degenerate
-  thresholds are dominated by the `too_few_default` (0.5) path at < ~4 votes,
-  which the fix does not touch — filed separately as #2788. Its cold-start framing
-  did not survive PR #2789's Autopilot-fidelity alignment (the `too_few_default`
-  path turned out to be unreachable on the Autopilot flow); what survives is the
-  post-quorum 5–15 vote window, now owned by
-  [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md).
-  Note that this study ran before the harness's Autopilot-fidelity alignment, so
-  some of those sub-quorum steps are ones the app would never have shown a user;
-  the #2788 experiment measures the app-visible share.
-
 <!-- item-sep -->
 
 - **Re-run under Autopilot fidelity.** Every number in the report comes from the

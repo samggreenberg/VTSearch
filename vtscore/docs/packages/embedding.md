@@ -21,15 +21,18 @@ the file, return the vector".
 | `vtscore/embedding/media_vectors.py` | Per-media vector access out of the `media["embeddings"]` dict |
 | `vtscore/embedding/normalize.py` | Canonical L2 normalisation - the single ingest chokepoint |
 | `vtscore/embedding/binding.py` | Role-typed (text / patch / structural) embedder binding for a dataset |
+| `vtscore/embedding/precomputed.py` | Validation of externally-supplied vectors; `MismatchedVectorError` |
+| `vtscore/embedding/stack.py` | `embedding_stack()` - provenance record of the software/hardware stack that embedded |
 | `vtscore/embedding/__init__.py` | Re-exports the public façade |
 
 ---
 
 ## What's an embedder, in this package's vocabulary?
 
-A *embedder* is a `MediaEmbedder` instance registered under
-`embedders_for_type(media_type)`. The first entry in that list is
-the **default embedder** for that media type; the helpers below all
+An *embedder* is a `MediaEmbedder` instance registered under
+`embedders_for_type(media_type)` (which withholds `eval_only`
+embedders). The first entry in that list is the **default embedder**
+for that media type; the helpers below all
 pick it implicitly. To use a non-default embedder, call
 `vtscore.media.get_embedder(name)` directly or pass `embedder_name`
 to `embed_text_query`.
@@ -104,9 +107,9 @@ embedder is used; otherwise it falls back to the default for the
 given `media_type`. `enrich=True` runs `embed_text_enriched`, which
 averages the query across the embedder's `description_wrappers`
 (e.g. `"a photo of {text}"`, `"a video of {text}"`). Most embedders
-declare no wrappers - the ensemble was measured to *lose* to the typed
-query on `siglip`, `clap`, `e5` and `bge` (#3127/#3341) - so on those
-`enrich=True` is simply `embed_text`.
+declare no wrappers (the ensemble measured worse than the typed query on
+`siglip`, `clap`, `e5` and `bge`), so on those `enrich=True` is simply
+`embed_text`.
 
 Results are cached in a small process-wide LRU
 (`_query_cache` in `vtscore/embedding/helpers.py`):
@@ -144,12 +147,10 @@ clear_text_query_cache()                          # drop everything
 def get_torch_device() -> torch.device: ...
 ```
 
-(`vtscore/embedding/loader.py`.) Resolves
-`vtscore.config.DEVICE` (env `$VTSEARCH_DEVICE`, default `"auto"`)
-to a concrete `torch.device`. `"auto"` picks `cuda` when available,
-`mps` on Apple silicon, otherwise `cpu`. Torch is imported lazily
-here - calling `get_torch_device()` before any embedder runs is
-safe.
+(`vtscore/embedding/loader.py`.) `torch.device(vtscore.config.resolve_device())`
+- see [`config.md`](config.md#resolve_device) for how `VTSEARCH_DEVICE`
+resolves (including the CUDA smoke test). Torch is imported lazily
+here - calling `get_torch_device()` before any embedder runs is safe.
 
 ```python
 import torch
@@ -169,14 +170,18 @@ def initialize_models(on_progress: ProgressCallback | None = None) -> None: ...
 
 (`vtscore/embedding/loader.py`.) Pass `on_progress` to render console
 progress bars for the two heavy first-time imports it triggers (scikit-learn
-and transformers, ~10s combined on a cold start); omit it (the default, used
-by tests and the eval CLI) to run silently. Sets up the runtime environment:
+and transformers, ~10s combined on a cold start); omit it to run silently.
+Sets up the runtime environment:
 
-1. Creates `vtscore.config.MODELS_CACHE_DIR` on disk.
-2. Calls `ensure_torch_configured()` which applies
+1. Seeds `importlib.metadata`'s package map (avoids a slow scan on
+   network filesystems).
+2. Creates `vtscore.config.MODELS_CACHE_DIR` on disk.
+3. Calls `ensure_torch_configured()`, which applies
    `torch.set_num_threads(TORCH_THREADS)` **if** torch is already
    imported (otherwise defers to the first code path that imports it).
-3. Runs `gc.collect()`.
+4. Warms scikit-learn's threadpool controller and installs the
+   transformers → logging bridge.
+5. Runs `gc.collect()`.
 
 It does **not** load any embedder models. Call it once at process
 start so the model cache directory exists before the first embedder
@@ -190,17 +195,18 @@ The smart-preload functions walk the dataset and detector registries
 and warm the embedders the user is most likely to need next. The
 predict-step is dataset/detector-driven:
 
-- For each registered dataset: `entry["embedder"]` if set, else the
-  default for `entry["media_type"]`.
-- For each registered detector: the default for `entry["media_type"]`.
+- For each registered dataset and detector: `entry["embedder"]` if set
+  and recognised, else the default for `entry["media_type"]`.
+- Plus the defaults for any `extra_media_types` and any named
+  `extra_embedders` (used by the app's solo-media-type / solo-embedder
+  modes).
 
-Unknown names are dropped. Order is deterministic (datasets first,
-then detectors) so identical registries produce identical preload
-lists across runs.
+Order is deterministic (extras, then datasets, then detectors) so
+identical registries produce identical preload lists across runs.
 
 ```python
-def predict_embedders_to_preload() -> list[str]: ...
-def preload_predicted_embedders() -> list[str]: ...
+def predict_embedders_to_preload(extra_media_types=None, extra_embedders=None) -> list[str]: ...
+def preload_predicted_embedders(extra_media_types=None, extra_embedders=None) -> list[str]: ...
 def smart_preload_in_background() -> None: ...
 def predict_embedder_for_dataset(dataset_id: str) -> str: ...
 def preload_embedder_for_dataset(dataset_id: str) -> str: ...
@@ -219,8 +225,9 @@ def preload_embedder_for_dataset(dataset_id: str) -> str: ...
 `preload_predicted_embedders()` is the foreground variant used at
 startup; it prints intermediate status to stdout with a console
 progress bar. `smart_preload_in_background()` is the same predictor
-but quiet - used when a new dataset is registered, so the
-implied embedder is warmed without blocking the registration call.
+but quiet, skips embedders already in memory, and swallows failures -
+used when a new dataset is registered, so the implied embedder is
+warmed without blocking the registration call.
 
 ```python
 from vtscore.embedding import (
@@ -239,10 +246,9 @@ smart_preload_in_background()           # daemon thread, idempotent
 
 ## Backbone accessors
 
-Three legacy helpers expose the underlying torch model + processor
-of the most common embedders, for callers that need to drive the
-backbone directly (custom forward passes, intermediate-layer probes,
-etc.):
+Three helpers expose the underlying torch model + processor of the
+most common embedders, for callers that need to drive the backbone
+directly (custom forward passes, intermediate-layer probes, etc.):
 
 ```python
 def get_clap_model():   # (model, processor) for the "clap" embedder
@@ -255,9 +261,7 @@ def get_e5_model():     # SentenceTransformer for the "e5" embedder
 `MediaEmbedder` - which loads the model if it is not already resident
 and returns `(model, processor)`. `get_e5_model` returns just the
 first element, since a `SentenceTransformer` needs no processor.
-Prefer the public `embed_media` / `embed_text` API for new code -
-these helpers exist because parts of the legacy app reach into the
-backbone.
+Prefer the public `embed_media` / `embed_text` API for new code.
 
 `loaded_backbone()` is the supported way to reach any embedder's raw
 model, not just these three. Its default implementation reads the
@@ -278,11 +282,17 @@ and rebuilds it only when the context's `media_revision` counter
 changes (bumped on every `medias` mutation).
 
 ```python
-def get_embedding_matrix(ctx: DatasetContext) -> tuple[list[int], np.ndarray]: ...
+def get_embedding_matrix(ctx: DatasetContext, embedder_name: str | None = None) -> tuple[list[int], np.ndarray]: ...
 def invalidate_embedding_matrix(ctx: DatasetContext) -> None: ...
-def get_embedding_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray]: ...
-def scoreable_snapshot(snap: dict, embedder_name: str | None = None) -> tuple[dict, list[int]]: ...
+def get_embedding_matrix_for_snap(snap: dict, embedder_name: str | None = None) -> tuple[list[int], np.ndarray]: ...
+def get_region_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray, np.ndarray, np.ndarray]: ...
+def scoreable_snapshot(snap: dict, embedder_name: str | None = None, *, region_rows: bool = False) -> tuple[dict, list[int]]: ...
 ```
+
+`get_region_matrix_for_snap` is the patch-dataset twin: it returns
+`(sorted_ids, region_matrix, media_index_per_row, region_index_per_row)`,
+one row per `(media, region)`, cached on the active context when
+*snap*'s key set matches it.
 
 (`vtscore/embedding/matrix.py`.)
 
@@ -361,7 +371,7 @@ call is an **in-place** rewrite of an existing media's vector
 (`ctx.medias[cid]["embeddings"][name] = vec` during re-embed / clip): a
 dict subclass can't observe a mutation to a value's internals, so those
 stages call `invalidate_embedding_matrix(ctx)` (which bumps the counter)
-afterwards (logical-bug-audit root-cause Pattern #4).
+afterwards.
 
 `get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py`)
 is for callers that hold a media-dict snapshot (typically from
@@ -386,13 +396,13 @@ non-cached matrix is built. Cross-dataset Find takes the fresh path.
 
 #### The `.npy` sidecar, and why it isn't a "persisted vector"
 
-CLAUDE.md forbids persisting embeddings, with an exception for dataset
+The project forbids persisting embeddings, with an exception for dataset
 pickle files. The sidecar sits inside that exception rather than beside
 it: it is a **derived cache of data the pickle already stores durably**,
 regenerable from `ctx.medias` at any time, deterministic, and swept
 alongside the pkl by `registry.unregister_dataset` (both files share the
 pkl's stem, so the stem-glob delete catches them). Nothing reaches disk
-that was not already on disk. See S1 in `docs/plans/scalability.md`.
+that was not already on disk.
 
 The guard rails that make it safe to trust:
 
@@ -546,39 +556,41 @@ def default_concurrent_embeddings() -> int: ...
 (`vtscore/embedding/loader.py`.) Heuristics for the dataset-
 load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
 
-- **Downloads** - defaults to `min(4, os.cpu_count())`. Bandwidth and
-  disk-bound; a handful of concurrent downloads saturates a home
-  connection without thrashing FDs.
-- **Embeddings** - defaults to `1` on CPU-only boxes; on multi-GPU
-  rigs, `min(2, num_cuda_devices)` so two datasets can embed in
-  parallel without overcommitting a single device's VRAM.
+- **Downloads** - `VTSEARCH_MAX_CONCURRENT_DOWNLOADS` when set, else
+  `max(1, min(4, os.cpu_count()))`. Bandwidth- and disk-bound.
+- **Embeddings** - `VTSEARCH_MAX_CONCURRENT_EMBEDDINGS` when set, else
+  `1` whenever `resolve_device()` is an accelerator (embedders share
+  one device and forward passes serialise on it). On a CPU host it
+  scales with the scarcer of cores and total RAM, capped at a small
+  maximum, and falls back to 1 when RAM can't be read.
 
-These are *defaults*. The actual limits read through
-`vtscore.config.CoreConfig` so they can be overridden per-deployment.
+These are *defaults* for the app's settings; the actual limits are read
+through `vtscore.config.CoreConfig` at acquire time.
 
 ---
 
 ## Gotchas
 
 - **No persisted vectors.** Every result of `embed_*_file` and
-  `embed_text_query` is in-memory only. The text-query LRU caps at
-  32 entries. Persisting vectors to disk, settings, or a detector
-  JSON is a project-invariant violation - see CLAUDE.md.
+  `embed_text_query` is in-memory only. Persisting vectors to disk,
+  settings, or a detector JSON violates the project invariant (see
+  [`concepts.md`](../concepts.md)).
 - **The default-embedder choice is registry-order-dependent.**
-  `embedders_for_type(t)[0]` sorts `is_default=True` first. If two
-  embedders both claim default, the second-registered wins by
-  insertion order - fix by setting `is_default=False` on the loser.
-- **Reach the backbone through `loaded_backbone()`, not attributes.**
-  The three getters (`get_clap_model`, etc.) used to reach into each
-  subclass's private `_get_model_and_processor()` via
-  `typing.cast(Any, emb)`, which broke silently if an embedder was
-  reimplemented. They now go through the ABC method, so a custom
-  embedder either works via the default or overrides one documented
-  hook. New code should still prefer `embed_media` / `embed_text`.
-- **Matrix invalidation is implicit, but explicit is faster.** If you
-  mutate `ctx.medias`, calling `invalidate_embedding_matrix(ctx)`
-  costs nothing and avoids the next `get_embedding_matrix` doing a
-  full key-set comparison before rebuilding.
+  `embedders_for_type(t)[0]` stable-sorts `is_default=True` first. If
+  two embedders both claim default, the first-registered wins - fix by
+  setting `is_default=False` on the loser.
+- **Reach the backbone through `loaded_backbone()`, not private
+  attributes.** A custom embedder either works via its default
+  implementation or overrides that one hook.
+- **Structural `medias` mutations invalidate the matrix by
+  themselves** (revision counter). Only an in-place rewrite of a
+  vector needs `invalidate_embedding_matrix(ctx)`, which also latches
+  the on-disk sidecar off for that context.
+- **Validate external vectors.** Vectors from outside an embedder
+  (`.npz` manifests, `content_vectors`) go through
+  `vtscore.embedding.precomputed.normalize_vector` /
+  `normalize_vector_block`, which raise `MismatchedVectorError` naming
+  the bad width, dtype or non-finite row.
 - **`initialize_models()` does *not* load embedder weights.** It only
   sets the cache dir and configures torch threads. Use
   `preload_predicted_embedders()` if you want the predicted set

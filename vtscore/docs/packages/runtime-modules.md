@@ -20,14 +20,13 @@ see [`cli.md`](cli.md).)
 
 ## `vtscore.io`
 
-Shared file I/O for plugins that read or write server-side files. Two
-patterns used to live inline across importers, exporters and sources:
-the `exists()` / `is_file()` / `read_bytes()` / `json.loads()` dance
-with slightly different error text every time, and the tmp-file +
-`fsync` + `os.replace` ritual re-implemented per exporter. Forget one
-piece of the second and a crash mid-write leaves a half-written file.
+Shared file I/O for plugins that read or write server-side files: one
+place for the read-and-report-errors dance and for the tmp-file + `fsync`
++ `os.replace` ritual, so a crash mid-write never leaves a half-written
+file.
 
 ```python
+def read_server_bytes(path, *, missing_ok: bool = False) -> bytes | None: ...
 def read_server_json(path, *, missing_ok: bool = False) -> Any: ...
 def atomic_write_text(path, text: str) -> None: ...
 def atomic_write_bytes(path, data: bytes) -> None: ...
@@ -42,10 +41,16 @@ def atomic_write_stream(path, *, encoding="utf-8", newline="") -> Iterator[IO[st
 def file_lock(path) -> Iterator[None]: ...
 ```
 
-The helpers are deliberately small. Their job is to standardise the
-`ValueError` text the framework surfaces to users, and to make "a future
-file-writing plugin that forgets `fsync`" impossible without explicitly
-working around the helper.
+**Reads.** Every failure a caller-supplied path can produce - missing,
+not a file, unreadable, (for JSON) unparseable - is raised as
+`ValueError` with standard text, so a host can map it to a client error.
+`missing_ok=True` returns `None` for a missing file instead. These are
+not confinement checks; path confinement happens earlier, in
+[field normalization](plugins.md#field-value-normalization).
+`read_server_bytes` is public but not in `__all__`.
+
+**Writes.** The `atomic_write_*` helpers write a sibling tmp file,
+`fsync` it, and `os.replace` it over the destination.
 
 **Streaming writes.** `atomic_write_stream` is the same ritual for a writer
 that has no finished string to hand `atomic_write_text` - a `csv` writer fed
@@ -73,8 +78,7 @@ It takes an in-process `threading.Lock` first and *then* the POSIX
 `flock`, so threads within one process serialise even where `flock` is
 unavailable. `flock` releases when the process exits, so a crash never
 leaves a stale lock. On Windows (no `fcntl`) only the in-process lock
-applies and cross-process protection degrades silently; VTSearch is
-deployed on Linux, so this affects only the rare Windows-dev case.
+applies and cross-process protection degrades silently.
 
 ---
 
@@ -129,38 +133,23 @@ dataset pickle - so the non-reproducibility never surfaces. The
 *structure* (neighbourhoods, cluster topology) is preserved, which is
 the whole point of these algorithms.
 
-### Install and opt-out
+### Opt-out
 
-`scripts/install.sh` installs cuML by default on GPU hosts, but as a
-separate **best-effort** step (`vts_install_cuml`): it is a
-multi-gigabyte stack on a CUDA-major-pinned separate index
-(`pypi.nvidia.com`), so a slow or unreachable index, or a torch resolver
-conflict, must not abort an otherwise good GPU install. For the same
-reason it is kept out of the main `requirements/gpu.txt` pass;
-`docker/Dockerfile.gpu` installs it in its own dedicated fail-loud
-layer.
-
-Two distinct escape hatches:
-
-| Variable | When | Effect |
-|----------|------|--------|
-| `VTSEARCH_SKIP_CUML=1` | install time | Skip the host-script install step |
-| `VTSEARCH_DISABLE_CUML=1` | runtime | Force the CPU libraries even though cuML is installed and the GPU is usable |
-
-Whenever cuML is absent - skipped, failed to install, unsupported
-platform - everything falls back automatically. `cuml_enabled()` also
-routes its device check through `vtscore.config.resolve_device`, so it
-honours `VTSEARCH_DEVICE` and the CUDA smoke test: a GPU the installed
-wheels can't actually drive resolves to `"cpu"` and disables the cuML
-path.
+cuML is optional: when it is absent, everything falls back to the CPU
+libraries automatically. `VTSEARCH_DISABLE_CUML=1` forces the CPU path at
+runtime even when cuML is installed and the GPU is usable.
+`cuml_enabled()` routes its device check through
+`vtscore.config.resolve_device`, so it honours `VTSEARCH_DEVICE` and the
+CUDA smoke test: a GPU the installed wheels can't drive resolves to
+`"cpu"` and disables the cuML path. (How the repo's installer and GPU
+Dockerfile provision cuML is covered in `docs/SETUP.md`.)
 
 ---
 
 ## `vtscore.single_instance`
 
-A process-level lock so `python app.py` refuses to start twice on the
-same port. Running the server twice in one allocation reloads the model
-stack (~17 GB) and OOM-kills the SLURM job.
+A process-level lock so a server refuses to start twice on the same
+port (a second copy would load the whole model stack again).
 
 ```python
 def lock_path_for(port: int) -> str: ...
@@ -179,7 +168,4 @@ why `flock` was chosen: a crash never leaves a stale lock behind, so
 there is no "delete the pidfile and try again" recovery step.
 
 The lock lives in `VTSEARCH_RUNDIR` if set, else the system temp dir, as
-`vtsearch-<port>.lock`.
-
-POSIX only (`fcntl`), consistent with the rest of the server, which
-already relies on `/proc` and POSIX semantics.
+`vtsearch-<port>.lock` (`lock_path_for(port)`). POSIX only (`fcntl`).

@@ -74,7 +74,7 @@ There is no `--weight-bold` (700). If you find yourself wanting `font-weight: 70
 
 ### 1.5 Colors
 
-All colors are theme-aware CSS variables defined in `_variables.scss`. There are dark (default), light, and high-contrast themes. **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
+All colors are theme-aware CSS variables defined in `_variables.scss`. There are three token blocks: dark (the `:root` base), light, and high-contrast (`highviz`); the default `system` theme setting picks dark or light from the OS (`ThemeService`). **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
 
 Canonical roles:
 
