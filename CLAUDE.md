@@ -508,31 +508,11 @@ If a feature seems to require persisting a vector or a trained head, push back: 
 
 ## The Eval Default Arm IS the App (CRITICAL)
 
-`vtscore.eval` exists to measure **deviations** from the shipped algorithm. That only means something if its **default arm** *is* the shipped algorithm. When the app's algorithm moves and the harness doesn't, every experiment run after that point is measuring a detector nobody uses — and the damage is silent and retroactive, because the numbers still look fine. So: **an app-side algorithm change is not finished until the eval framework has caught up.**
+`vtscore.eval` exists to measure **deviations** from the shipped algorithm, which only means something if its **default arm** *is* the shipped algorithm. When the app moves and the harness doesn't, every later experiment silently measures a detector nobody uses. So: **an app-side algorithm change is not finished until the eval framework has caught up.** The full design (delegated / ported / default-resolution mirrors, gate output, reason codes) is in [`docs/EVAL.md`](docs/EVAL.md#the-eval-default-arm-is-the-app); the rules:
 
-Most of the harness is safe by construction because it **delegates** — `MaxPatchStyle` calls `pool_box_from_media` / `bad_negative_vecs` / `media_score_rows` rather than re-deriving them, so it cannot drift. Prefer delegation over copying every time; it is the only fix that can't rot. Two kinds of code can't delegate, and those are the ones that bite:
-
-- **Ported** — app logic re-implemented in the harness because the original is unreachable (it lives in TypeScript) or unusable (wrapped in interactive, lock-guarded, single-detector caches). Today these live in `vtscore/eval/autopilot_flow.py`, `al_strategies.py` and `step_trainers.py`; `MIRRORS` in the gate script below is the authoritative list.
-- **Default resolution** — where the harness resolves "no explicit arm" to whatever the app currently defaults to (`style=None` → `max_patch` on a patch dataset; `blend_schedule=None` → `production_schedule_for(...)`). When the app's default changes, the harness keeps handing out the old one *under the name "default"*.
-
-**The gate:** `scripts/check-eval-app-sync.py` pins a digest of every mirrored app surface (Python and TypeScript) **and of the harness code that mirrors it**, and `./run-tests.sh` fails when either moves. A copy stays faithful only while neither half moves without the other, so the gate names which half did:
-
-- `app-changed` — the original moved. Reconcile the harness copy to it.
-- `harness-changed` — the copy moved while the original stood still. Re-read the two against each other. (How the Smart-indicator plumbing drifted in #2923.)
-
-After reconciling — or after confirming nothing is owed — re-pin:
-
-```
-python scripts/check-eval-app-sync.py --update
-```
-
-Digests ignore comments, docstrings, and formatting, so only real logic changes trip it. **Re-pinning without looking at the other side defeats the entire gate**; the digest is a prompt to check, not a checkbox.
-
-**When you add a new mirror** (any new place the harness copies app logic or tracks an app default), add a `Mirror(...)` entry to `MIRRORS` in that script and run `--update`. Three fields carry the judgment:
-
-- If the harness *intentionally* differs from the app, put the reason in `divergence=` — the text is printed whenever that mirror trips, so the next person reconciling it knows which differences are deliberate.
-- The harness side is digest-pinned **by default**; opt out with `no_harness_pin=<reason>` only when the harness symbol is too coarse to be worth watching (one function serving several mirrors and much else besides — today only `_safe_threshold_for_step`). A `ported` mirror may never opt out; the harness side of a hand copy *is* the copy. When a coarse anchor's blind spot starts to matter, extract the reproduction into its own helper (as #3403 did for the two `*_default` mirrors) rather than digesting a thousand lines.
-- A harness side spread over more than one top-level name lists them all: `file.py::GOOD_TARGET,BAD_TARGET`. Each is resolved by parsing, so a name surviving only inside a comment does not count as present.
+- **Prefer delegation** (the harness calling the app's function, as `MaxPatchStyle` does) over copying, every time — it is the only fix that can't rot. The two kinds of code that can't delegate are **ported** app logic (unreachable TypeScript, or lock-guarded interactive caches) and **default resolution** (`style=None`, `blend_schedule=None`, … resolving to the app's current default).
+- **The gate:** `scripts/check-eval-app-sync.py` (a `./run-tests.sh` gate) digests both sides of every mirror. `app-changed` means reconcile the harness copy to the app; `harness-changed` means re-read the two against each other (#2923 drifted that way with the gate green). After reconciling — or confirming nothing is owed — re-pin with `python scripts/check-eval-app-sync.py --update`. **Re-pinning without looking at the other side defeats the entire gate.**
+- **When you add a new mirror** (any new place the harness copies app logic or tracks an app default), add a `Mirror(...)` entry to `MIRRORS` in that script and run `--update`. Record intentional differences in `divergence=`; a `ported` mirror may never opt out of the harness pin via `no_harness_pin=`; list every top-level name a multi-symbol harness side spans (`file.py::GOOD_TARGET,BAD_TARGET`).
 
 Named experiment arms (`whole_image`, `max_patch_hac`, …) are supposed to differ and are out of scope; this rule is about the **default** arm only.
 

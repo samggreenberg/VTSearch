@@ -815,3 +815,23 @@ the scores are and are not.
 the two datasets use different embedders, the reference uses a patch
 embedder, or the active dataset equals the reference; 403 if access is
 denied; 404 if the reference doesn't exist.
+
+---
+
+## VTSBrowse projection
+
+The Browse view's 2-D map of the **active** dataset (`X-Dataset-Id`): a UMAP
+layout binned into a multi-level tile pyramid. The bin shape (squares for
+image/video/document, hexagons otherwise) is fixed by the media type and never
+sent by the client; `meta` reports it as `bin_shape`. Every read endpoint takes
+`?subset=true` to address the ephemeral subset layout instead of the
+full-dataset one. Nothing here persists vectors: the layout is derived from the
+dataset's own embeddings (see `vtscore.projection.service`).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/projection/build` | Body (optional) `{"ids": [...], "force": false}`. Returns at once: `{"status": "ready", "projection_id"}` when a layout is cached or persisted, otherwise starts the background fit and returns `{"status": "building", "job_id"}`; poll `meta` until ready. `ids` fits a subset layout over just those items (e.g. a Find run's positives); `force` discards the existing layout and re-fits ("Re-project"). 409 if the dataset is empty or has no embeddings. |
+| GET | `/api/projection/meta` | Build status (`status`, plus `current` / `total` / `step` / `overall` / `eta_seconds` / `error` while building) and, once ready, `projection_id`, `bounds`, `levels` (`{level, n_cells, radius}`), `base_radius`, `tile_span`, `point_count`, `media_type`, `bin_shape`, `has_labels`, `content_version`. |
+| GET | `/api/projection/tiles/{level}/{tx}/{ty}` | One tile's cells: `{"level", "tx", "ty", "cells": [{q, r, cx, cy, count, rep_id, member_ids?}]}`. Tile coordinates may be negative. Immutable for a given layout, so the response is browser-cacheable (`Vary: X-Dataset-Id`). 404 until the projection is built. |
+| GET | `/api/projection/labels` | Region signpost labels: `{"status", "projection_id", "labels": [{text, x, y, level, score?, source?, has_coarser?, has_finer?}]}`. An empty list (not an error) when labeling hasn't run; `status` is `"idle"` only when no projection exists. |
+| POST | `/api/projection/subset/remove` | Body `{"ids": [...]}`. Culls items from the current subset layout **without re-fitting**: positions are kept, `projection_id` is unchanged, `content_version` bumps (busting the tile cache), and `bounds` shrink to the survivors. Returns the updated subset `meta`. 409 if no subset layout exists. |
