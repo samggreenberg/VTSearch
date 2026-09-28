@@ -375,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
     rf.to_csv(args.out / "reference_rows.csv.gz", index=False, float_format="%.5g")
     print(summarize(df, rf, args.out))
     (args.out / "provenance.json").write_text(
-        json.dumps({"cells": len(jobs), "starved_skipped": starved, "arms": args.arm}, indent=2)
+        json.dumps({"cells": len(jobs), "starved_skipped": starved, "arms": args.arm}, indent=2) + "\n"
     )
     print(f"cells {len(jobs)}, starved (no detector, skipped) {starved}")
     return 0
