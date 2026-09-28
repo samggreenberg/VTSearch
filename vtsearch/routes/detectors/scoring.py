@@ -374,10 +374,15 @@ def find_label(body: dict):
         # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
         # frontend onto them + windowing this response is the remaining slice (see
         # docs/plans/scalability.md S3/S17/S19).
+        from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+        from vtsearch.state import get_min_precision  # noqa: PLC0415
+
         return {
             "ok": True,
             "results": results,
             "threshold": round(threshold, 4),
+            # Whether the line is a promise, or the unpromised Inclusion 0 cut (#4247).
+            "floor": detector_floor_state(det_ctx, get_min_precision()),
             "good_count": good_count,
             "bad_count": bad_count,
             "detector_name": d.get("name", ""),
@@ -466,6 +471,7 @@ def _score_detector_for_auto_detect(
 
     try:
         detector_id = reg_entry["id"] if reg_entry else name
+        trained: list = []
         mlp, threshold, _diag = resolve_or_train_detector(
             detector_id,
             det_data,
@@ -473,9 +479,11 @@ def _score_detector_for_auto_detect(
             snap,
             progress_step=1,
             progress_total_steps=1,
+            ctx_sink=trained,
         )
         if mlp is None:
             return None
+        floor = _auto_detect_floor_state(name, trained[0] if trained else None)
 
         scores, _best_row = score_rows_with_model(mlp, rows)
 
@@ -495,6 +503,8 @@ def _score_detector_for_auto_detect(
         return name, {
             "detector_name": name,
             "threshold": round(threshold, 4),
+            # Whether that cut is a promise, or the unpromised Inclusion 0 cut (#4247).
+            "floor": floor,
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,
@@ -502,6 +512,32 @@ def _score_detector_for_auto_detect(
     except Exception:
         logger.exception("Auto-detect failed for detector %s", name)
         return None
+
+
+def _auto_detect_floor_state(name: str, det_ctx: Any) -> dict | None:
+    """What the precision floor says about *name*'s cut in an Auto-Find run, logged when unpromised.
+
+    Read at the floor its training read (the same thread's
+    :func:`vtsearch.state.get_min_precision`), off the context that drew the
+    line.  An unpromised cut is still the one exported - the Inclusion 0 cut -
+    and the log line is the headless record of it (#4247).
+    """
+    from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+    from vtsearch.state import get_min_precision  # noqa: PLC0415
+
+    if det_ctx is None:
+        return None
+    state = detector_floor_state(det_ctx, get_min_precision())
+    if state["status"] not in (None, "promised"):
+        logger.info(
+            "Auto-detect: detector %s makes no %.0f%% promise (%s, %d calibration positives); "
+            "exporting its Inclusion 0 cut",
+            name,
+            100 * state["min_precision"],
+            state["status"],
+            state["calibration_positives"],
+        )
+    return state
 
 
 def _collect_auto_detect_results(futures: list, results: dict[str, dict]) -> None:

@@ -49,6 +49,30 @@ class OkResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
+#: The states a precision floor can report; mirrors
+#: :class:`vtscore.training.thresholds.PrecisionFloorStatus`.
+PRECISION_FLOOR_STATES = ("promised", "unreachable", "insufficient_evidence")
+
+
+class FloorStateSchema(Schema):
+    """What the precision floor says about the line a response carries (#4247).
+
+    Rides beside ``threshold`` on every response that draws a detector's line,
+    so a client can say whether that line is a promise.  Built by
+    :func:`vtscore.state.core.detector_floor_state`.
+    """
+
+    # The detector's floor, or ``null`` when none is set and Inclusion drew the line.
+    min_precision = fields.Float(required=True, allow_none=True)
+    # ``promised``: the line is the floor's own cut.  ``unreachable`` /
+    # ``insufficient_evidence``: the floor promised nothing and the line is the
+    # Inclusion 0 cut, unpromised.  ``null`` with no floor.
+    status = fields.String(required=True, allow_none=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
+    # Positives among the held-out votes that may calibrate the promise; the
+    # gate opens at 10.
+    calibration_positives = fields.Integer(required=True)
+
+
 # ---------------------------------------------------------------------------
 # /api/sort, /api/example-sort
 # ---------------------------------------------------------------------------
@@ -175,6 +199,8 @@ class LearnedSortResponseSchema(Schema):
     # The acquisition cut Autopilot samples around; this is the only sort with a
     # detector behind it, so the only one that carries one.
     acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
+    # What the precision floor says about ``threshold`` (#4247), on ``done``.
+    floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
 
 
 class LearnedSortCancelResponseSchema(Schema):
@@ -243,6 +269,9 @@ class InclusionResponseSchema(Schema):
     # green/red line over the frozen scores without re-scoring.  ``None`` when
     # no detector context has computed a threshold yet.
     threshold = fields.Float(required=False, allow_none=True)
+    # What the precision floor says about ``threshold`` (#4247): under a set
+    # floor the line is the floor's, and Inclusion does not move it.
+    floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
 
 
 def _validate_numeric(value):
@@ -267,10 +296,6 @@ class InclusionRequestSchema(Schema):
 # ---------------------------------------------------------------------------
 # /api/min-precision
 # ---------------------------------------------------------------------------
-
-#: The states a precision floor can report; mirrors
-#: :class:`vtscore.training.thresholds.PrecisionFloorStatus`.
-PRECISION_FLOOR_STATES = ("promised", "unreachable", "insufficient_evidence")
 
 
 class MinPrecisionResponseSchema(Schema):

@@ -302,6 +302,7 @@ def _learned_sort_done_payload(job) -> dict:
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
         "acq_threshold": result.get("acq_threshold"),
+        "floor": result.get("floor"),
         "sort_token": result.get("sort_token"),
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
@@ -349,6 +350,7 @@ def learned_sort(body: dict):
     )
     from vtscore.state.core import (
         detector_acquisition_threshold,
+        detector_floor_state,
         detector_line_inclusion,
         get_active_context,
         get_active_detector_context,
@@ -423,7 +425,9 @@ def learned_sort(body: dict):
         # and it is derived from the line itself (#4245).
         line_incl = detector_line_inclusion(det_ctx, inclusion_value, min_precision_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl)
-        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4))
+        # Whether the line is a promise rides with it (#4247).
+        floor = detector_floor_state(det_ctx, min_precision_value)
+        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), floor=floor)
 
     job = learned_sort_jobs.start(
         signature,
@@ -574,7 +578,7 @@ def add_textsort_suggestion_route(body: dict):
 @sorting_bp.response(200, InclusionResponseSchema)
 def get_inclusion_route():
     """Get the current Inclusion setting and the cutoff it resolves to."""
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold(), "floor": _active_floor_state()}
 
 
 @sorting_bp.route("/api/inclusion", methods=["POST"])
@@ -606,7 +610,7 @@ def set_inclusion_route(body: dict):
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
     set_inclusion(new_inclusion)
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold(), "floor": _active_floor_state()}
 
 
 @sorting_bp.route("/api/min-precision", methods=["GET"])
@@ -654,6 +658,13 @@ def _min_precision_payload() -> dict:
     estimate = None if det_ctx is _empty_detector_context else det_ctx.precision_floor_cache
     n_returned = estimate.count_at(threshold) if estimate is not None and threshold is not None else None
     return {**state, "threshold": threshold, "n_returned": n_returned}
+
+
+def _active_floor_state() -> dict:
+    """What the precision floor says about the active detector's line (#4247)."""
+    from vtscore.state.core import detector_floor_state, get_active_detector_context
+
+    return detector_floor_state(get_active_detector_context(), get_min_precision())
 
 
 def _active_detector_threshold() -> float | None:
