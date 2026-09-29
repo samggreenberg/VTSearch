@@ -89,7 +89,7 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 - **Does the CLI get a flag for the floor?** Headless runs (AutoRun, CLI
   autodetect, the cold Find path) already cut at the user's floor.
-- **Retiring Inclusion from the extension surface.** `get_inclusion` /
+- **Retiring Inclusion from the extension surface** (#4269). `get_inclusion` /
   `set_inclusion`, `CoreConfig.inclusion`, the `inclusion_value=` parameters on
   `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
   are public `vtscore` API. Per CLAUDE.md they are deprecated with an
@@ -141,6 +141,10 @@ These are the questions #4224 raised that no issue below can settle alone:
 <!-- item-sep -->
 
 - [ ] #4261 — Should Autopilot's New-phase (atlas) votes calibrate the floor? (Sonnet 5)
+
+<!-- item-sep -->
+
+- [ ] #4269 — Retire Inclusion as a user preference (Sonnet 5; Opus 4.8 for the `vtscore` deprecation)
 
 <!-- item-sep -->
 
