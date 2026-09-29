@@ -212,7 +212,12 @@ line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
 the learned sort, but only from the POST's response: the learned sort reads
 the floor server-side and caches by it, so a re-sort that beat the POST would
 come back at the old floor. When the floor promised nothing before and after,
-both lines are the default cut, and only the verdict is swapped.
+both lines are the default cut, and only the verdict is swapped. The picker offers
+three named floors (`FLOOR_PRESETS` in `utils/line-floor.ts`: Complete,
+Centered, Correct) and never shows the number; a stored floor off the list is
+shown as the nearest preset and snapped to it through the picker's own
+`valueChange`, once `busy` (the host's `sortBusy`) is false, because Find
+drops a floor change while a pass is running (#4298).
 
 ### Find view (`components/find-view/`)
 

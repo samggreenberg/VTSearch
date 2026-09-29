@@ -14,20 +14,20 @@ where to click, in order.
 
 ## How the floor moves the line
 
-The floor sits at the top of the left-hand panel and reads **At least 50%
-right**. It offers **10%**, **25%**, **50%**, **75%** and **90%**: how much
-of what the detector returns should be right. The line returns as many
-pictures as it can while at least that share of them is estimated right, so a
-lower floor returns more. While the floor is promised, lower floors *nest*: everything
-the line returns at 75% it still returns at 50%, along with a band of extra
-borderline pictures.
+The floor sits at the top of the left-hand panel and reads **Lean:
+Centered**. It offers three: **Correct** returns only the pictures most likely
+to be matches, **Complete** returns as many as it can while accepting more
+misses among them, and **Centered** sits between the two. So the lower the
+floor, the more the line returns. While the floor is promised, lower floors
+*nest*: everything the line returns at **Correct** it still returns at
+**Centered**, along with a band of extra borderline pictures.
 
 The line only follows the floor once the detector can promise it. The note
 under the picker says whether it can:
 
-- **At least 50% right**, with a count - the line keeps the floor, and moving
-  the floor moves the line.
-- **Not enough evidence yet** or **Can't reach 50% on this dataset** - the line
+- **Promise kept**, with a count - the line keeps the floor, and moving the
+  floor moves the line.
+- **Not enough evidence yet** or **Can't reach Centered on this dataset** - the line
   stays at the default cut whatever floor you pick, and is marked
   *unpromised*. A new detector starts here: see
   [When the line is unpromised](../USER_GUIDE.md#when-the-line-is-unpromised)
@@ -49,8 +49,8 @@ matches just under it come up whatever the floor says. Every one you mark
 
 At the top of the left-hand panel:
 
-1. Pick a lower floor, such as **25%**.
-2. Read the note under it. **At least 25% right** means the line has moved
+1. Pick a lower floor: from **Centered**, that is **Complete**.
+2. Read the note under it. **Promise kept** means the line has moved
    down, so more pictures sit above it and the count of **Unverified Good**
    on the right grows by the pictures it has just let in.
 3. **Not enough evidence yet**, as here, means the line in the list has
@@ -59,7 +59,7 @@ At the top of the left-hand panel:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-floor.dark.webp" />
-  <img src="../assets/borderline-floor.light.webp" alt="Step 2: (1) the floor lowered to 25%, (2) the note under it, which says whether the line has moved, (3) the line in the list" width="720" />
+  <img src="../assets/borderline-floor.light.webp" alt="Step 2: (1) the floor lowered to Complete, (2) the note under it, which says whether the line has moved, (3) the line in the list" width="720" />
 </picture>
 
 ## Step 3: Review the pictures it let in

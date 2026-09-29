@@ -208,7 +208,7 @@ async function findPair(h: Helpers): Promise<{ dataset: string; detector: string
 
 /**
  * End the detector's live Find session (its verified pictures) and put its
- * precision floor back to the 50% default, so the next Find shot starts from a fresh scoring run
+ * precision floor back to the Centered default, so the next Find shot starts from a fresh scoring run
  * whatever an earlier recipe did. Find verifications live in server memory and
  * survive leaving Find, so without this one shot's checked pictures would show
  * up in the next.
@@ -1092,7 +1092,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'borderline-floor',
     embeddedIn: `${HOWTO}/borderline-matches.md#step-2-lower-the-floor`,
-    caption: 'Step 2: (1) the floor lowered to 25%, (2) the note under it, which says whether the line has moved, (3) the line in the list',
+    caption: 'Step 2: (1) the floor lowered to Complete, (2) the note under it, which says whether the line has moved, (3) the line in the list',
     themes: BOTH,
     annotations: [
       { target: '#precision-floor-select', kind: 'step', step: 1, at: 'top' },
@@ -1104,7 +1104,7 @@ export const SHOTS: Shot[] = [
     // says why: the state most readers meet first, as the page explains.
     async recipe(page, h) {
       await openFind(page, h);
-      await page.locator('#precision-floor-select').selectOption('0.25');
+      await page.locator('#precision-floor-select').selectOption('0.1');
       await h.wait(1500);
       // The list only draws the pictures near what it shows. Answer the next
       // picture, as Step 1 has the reader do: Find then serves from the line
@@ -1130,7 +1130,7 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await openFind(page, h);
       await verifyServed(page, h, 12);
-      await page.locator('#precision-floor-select').selectOption('0.25');
+      await page.locator('#precision-floor-select').selectOption('0.1');
       await h.wait(1500);
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.chart-wrap', { timeout: 20000 });

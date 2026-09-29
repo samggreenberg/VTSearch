@@ -12,7 +12,7 @@ import type { FindEvidenceCoverageResponse } from '../../../generated/api-client
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { floorPercent, isUnpromised, lineFloorFrom } from '../../../utils/line-floor';
+import { floorName, isUnpromised, lineFloorFrom } from '../../../utils/line-floor';
 
 /** A tick on the precision chart's log-scale x axis. */
 interface XTick {
@@ -284,6 +284,12 @@ export class FindStatsModalComponent implements OnInit {
     return p == null ? null : this.yFor(p);
   }
 
+  /** The floor's name ("Correct"), never its number (#4298); null before the stats arrive. */
+  get floorLabel(): string | null {
+    const p = this.stats()?.floor.min_precision;
+    return p == null ? null : floorName(p);
+  }
+
   /** True when the line is the unpromised default cut: the floor promised nothing (#4247). */
   get lineUnpromised(): boolean {
     return isUnpromised(lineFloorFrom(this.stats()?.floor));
@@ -297,7 +303,7 @@ export class FindStatsModalComponent implements OnInit {
   /** The line's legend entry: whether it keeps the floor, or is the unpromised default cut. */
   get lineLegend(): string {
     const floor = lineFloorFrom(this.stats()?.floor);
-    if (floor?.status === 'promised') return `Line: keeps the ${floorPercent(floor.minPrecision)} floor`;
+    if (floor?.status === 'promised') return `Line: keeps the ${floorName(floor.minPrecision)} floor`;
     if (isUnpromised(floor)) return 'Line: the default cut, unpromised';
     return 'Line';
   }

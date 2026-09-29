@@ -60,9 +60,10 @@ up the next picture that **Sort** and **Select** point to, so a run of answers
 needs no clicking in the list. You can still click any picture in the list to
 answer it out of turn.
 
-Below **Select**, the **precision floor** (**At least 50% right**) sets how
-much of what the detector returns should be right, which moves its line
-between match and not a match without changing the order of the list. The
+Below **Select**, the **precision floor** (**Lean: Centered**) sets whether
+the detector leans toward returning every match it can (**Complete**) or only
+the ones most likely right (**Correct**), which moves its line between match
+and not a match without changing the order of the list. The
 note under it says whether the line can keep that promise yet (see
 [Catch the borderline matches](borderline-matches.md)).
 

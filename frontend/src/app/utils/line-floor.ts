@@ -47,13 +47,27 @@ export function isUnpromised(floor: LineFloor | null): boolean {
   return floor?.status === 'unreachable' || floor?.status === 'insufficient_evidence';
 }
 
+/** One floor the control offers, and the word the user sees for it. */
+export interface FloorPreset {
+  /** The floor, a fraction. */
+  value: number;
+  /** Its name: the control never shows the number (#4298). */
+  name: string;
+}
+
 /**
- * The floors the control offers (owner, 2026-09-29): symmetric about the 50%
- * default, with 10% for a user willing to dig through a long list. The backend
- * takes any value in `[0.01, 1]`; a stored value outside this list still shows,
- * as its own option.
+ * The floors the control offers (owner, 2026-09-29, #4298): three, named
+ * rather than numbered. The spot check rarely delivers a floor exactly, so
+ * five percentages claimed a precision it could not keep; three words on one
+ * Complete - Correct scale promise only a direction. The backend takes any
+ * value in `[0.01, 1]`; the control snaps one outside this list to the
+ * nearest (see {@link nearestFloorPreset}).
  */
-export const FLOOR_PRESETS: readonly number[] = [0.1, 0.25, 0.5, 0.75, 0.9];
+export const FLOOR_PRESETS: readonly FloorPreset[] = [
+  { value: 0.1, name: 'Complete' },
+  { value: 0.5, name: 'Centered' },
+  { value: 0.9, name: 'Correct' },
+];
 
 /**
  * The floor the control shows before the detector's own value arrives from
@@ -63,9 +77,25 @@ export const FLOOR_PRESETS: readonly number[] = [0.1, 0.25, 0.5, 0.75, 0.9];
  */
 export const DEFAULT_MIN_PRECISION = 0.5;
 
-/** "50%" for 0.5. */
-export function floorPercent(p: number): string {
-  return `${Math.round(p * 100)}%`;
+/** True when `p` is one of the floors the control offers. */
+export function isFloorPreset(p: number): boolean {
+  return FLOOR_PRESETS.some((preset) => preset.value === p);
+}
+
+/**
+ * The preset closest to `p`, for a stored floor the control does not offer (a
+ * pick from before #4298, or one set through the CLI or the API). A tie goes
+ * to the lower preset.
+ */
+export function nearestFloorPreset(p: number): FloorPreset {
+  return FLOOR_PRESETS.reduce((best, preset) =>
+    Math.abs(preset.value - p) < Math.abs(best.value - p) ? preset : best,
+  );
+}
+
+/** "Centered" for 0.5; a floor off the list reads as the preset nearest it. */
+export function floorName(p: number): string {
+  return nearestFloorPreset(p).name;
 }
 
 /**
@@ -75,11 +105,11 @@ export function floorPercent(p: number): string {
  */
 export function unpromisedReason(floor: LineFloor | null): string | null {
   if (!floor || !isUnpromised(floor)) return null;
-  const target = floorPercent(floor.minPrecision);
+  const target = floorName(floor.minPrecision);
   const why =
     floor.status === 'unreachable'
-      ? `No cut reaches ${target} precision on this dataset, so no promise is made.`
-      : `Not enough evidence yet to promise ${target} precision: it has ` +
+      ? `No cut on this dataset reaches ${target}, so no promise is made.`
+      : `Not enough evidence yet to promise ${target}: it has ` +
         `${floor.calibrationPositives} of the ${floor.minCalibrationPositives} held-back Good votes it needs. ` +
         'Votes on Autopilot’s Hard picks, or down a learned sort, add evidence.';
   return `${why} The line stays at the default cut, where it sat before there was a floor.`;
@@ -87,21 +117,18 @@ export function unpromisedReason(floor: LineFloor | null): string | null {
 
 /**
  * The floor's state in one short line, for the control under the picker
- * (#4246): the floor and whether the line keeps it, never the estimate behind
- * it (owner, 2026-09-28). `returned` is how many items the line returns; null
- * when unknown. Null when there is no verdict to report (no line yet, or a
- * sort with no detector behind it).
+ * (#4246): whether the line keeps the floor, never the estimate behind it
+ * (owner, 2026-09-28), and never the floor as a number (#4298). `returned` is
+ * how many items the line returns; null when unknown. Null when there is no
+ * verdict to report (no line yet, or a sort with no detector behind it).
  */
 export function floorSummary(floor: LineFloor | null, returned: number | null): string | null {
   if (!floor) return null;
-  const target = floorPercent(floor.minPrecision);
   switch (floor.status) {
     case 'promised':
-      return returned === null
-        ? `At least ${target} right`
-        : `At least ${target} right · ${returned.toLocaleString()} returned`;
+      return returned === null ? 'Promise kept' : `Promise kept · ${returned.toLocaleString()} returned`;
     case 'unreachable':
-      return `Can't reach ${target} on this dataset · showing the default cut`;
+      return `Can't reach ${floorName(floor.minPrecision)} on this dataset · showing the default cut`;
     case 'insufficient_evidence':
       return (
         `Not enough evidence yet (${floor.calibrationPositives} of ${floor.minCalibrationPositives} Good votes)` +
@@ -116,12 +143,11 @@ export function floorSummary(floor: LineFloor | null, returned: number | null): 
  */
 export function floorExplanation(floor: LineFloor | null, returned: number | null): string | null {
   if (!floor) return null;
-  const target = floorPercent(floor.minPrecision);
   if (floor.status === 'promised') {
-    const what = returned === null ? 'what the line returns' : `the ${returned.toLocaleString()} items the line returns`;
+    const what = returned === null ? 'everything it returns' : `the ${returned.toLocaleString()} items it returns`;
     return (
-      `At least ${target} of ${what} is estimated to be right. The estimate is cautious: ` +
-      'the line returns as much as it can while keeping that promise.'
+      `The line keeps its ${floorName(floor.minPrecision)} promise on ${what}. The estimate behind it is ` +
+      'cautious: the line returns as much as it can while keeping that promise.'
     );
   }
   return unpromisedReason(floor);

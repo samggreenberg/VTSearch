@@ -20,10 +20,16 @@ describe('PrecisionFloorComponent (#4246)', () => {
     await settleZoneless(fixture);
   });
 
-  async function show(value: number | null, floor: LineFloor | null = null, returned: number | null = null) {
+  async function show(
+    value: number | null,
+    floor: LineFloor | null = null,
+    returned: number | null = null,
+    busy = false,
+  ) {
     fixture.componentRef.setInput('value', value);
     fixture.componentRef.setInput('floor', floor);
     fixture.componentRef.setInput('returned', returned);
+    fixture.componentRef.setInput('busy', busy);
     await settleZoneless(fixture);
     return fixture.nativeElement as HTMLElement;
   }
@@ -35,8 +41,8 @@ describe('PrecisionFloorComponent (#4246)', () => {
   const hints = () => (fixture.nativeElement as HTMLElement).querySelectorAll('vt-field-hint-icon');
 
   describe('the picker', () => {
-    it('offers the five preset floors, starting at the 50% default', () => {
-      expect(optionLabels()).toEqual(['10%', '25%', '50%', '75%', '90%']);
+    it('offers the three named floors, starting at the Centered default (#4298)', () => {
+      expect(optionLabels()).toEqual(['Complete', 'Centered', 'Correct']);
       expect(select().value).toBe('0.5');
     });
 
@@ -45,31 +51,18 @@ describe('PrecisionFloorComponent (#4246)', () => {
       expect((fixture.nativeElement as HTMLElement).querySelector('input[type="range"]')).toBeNull();
     });
 
-    it('reads as "at least X right"', async () => {
-      const el = await show(0.75);
-      expect(el.querySelector('.floor-picker')!.textContent!.replace(/\s+/g, ' ')).toContain('At least');
-      expect(el.querySelector('.floor-picker')!.textContent).toContain('right');
-      expect(select().value).toBe('0.75');
-    });
-
-    it('shows a stored floor that is not a preset as its own option, in order', async () => {
-      await show(0.6);
-      expect(optionLabels()).toEqual(['10%', '25%', '50%', '60%', '75%', '90%']);
-      expect(select().value).toBe('0.6');
-    });
-
-    it('orders a stored floor below every preset first', async () => {
-      await show(0.05);
-      expect(optionLabels()).toEqual(['5%', '10%', '25%', '50%', '75%', '90%']);
-      expect(select().value).toBe('0.05');
+    it('reads as "Lean: [name]", with no number anywhere on the control (#4298)', async () => {
+      const el = await show(0.9);
+      expect(el.querySelector('.floor-picker')!.textContent!.replace(/\s+/g, ' ')).toContain('Lean:');
+      expect(el.querySelector('.precision-floor')!.textContent).not.toMatch(/\d/);
+      expect(select().value).toBe('0.9');
+      expect(select().selectedOptions[0].textContent!.trim()).toBe('Correct');
     });
 
     it('follows the value through every transition', async () => {
       for (const [value, shown] of [
         [0.9, '0.9'],
-        [0.75, '0.75'],
-        [0.6, '0.6'],
-        [0.25, '0.25'],
+        [0.1, '0.1'],
         [0.5, '0.5'],
       ] as const) {
         await show(value);
@@ -79,17 +72,49 @@ describe('PrecisionFloorComponent (#4246)', () => {
 
     it('emits the picked floor as a fraction', () => {
       const emitted = vi.spyOn(component.valueChange, 'emit');
-      select().value = '0.25';
+      select().value = '0.1';
       select().dispatchEvent(new Event('change'));
-      expect(emitted).toHaveBeenCalledWith(0.25);
+      expect(emitted).toHaveBeenCalledWith(0.1);
     });
 
     it('hands focus back after a pick, so the arrow keys vote again', () => {
       select().focus();
       expect(document.activeElement).toBe(select());
-      select().value = '0.75';
+      select().value = '0.9';
       select().dispatchEvent(new Event('change'));
       expect(document.activeElement).not.toBe(select());
+    });
+  });
+
+  /** A stored floor off the list (#4298): an old 25% / 75% pick, or one set through the CLI or the API. */
+  describe('a stored floor off the list', () => {
+    it.each<[number, string, number]>([
+      [0.25, 'Complete', 0.1],
+      [0.75, 'Correct', 0.9],
+      [0.6, 'Centered', 0.5],
+    ])('shows %s as the nearest preset, %s, and snaps to it', async (stored, name, snapped) => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      await show(stored);
+      expect(optionLabels()).toEqual(['Complete', 'Centered', 'Correct']);
+      expect(select().selectedOptions[0].textContent!.trim()).toBe(name);
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(snapped);
+    });
+
+    it('waits for a running sort before it snaps', async () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      await show(0.25, null, null, true);
+      expect(emitted).not.toHaveBeenCalled();
+      expect(select().selectedOptions[0].textContent!.trim()).toBe('Complete');
+
+      fixture.componentRef.setInput('busy', false);
+      await settleZoneless(fixture);
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(0.1);
+    });
+
+    it('leaves a preset alone', async () => {
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      for (const value of [0.1, 0.5, 0.9]) await show(value);
+      expect(emitted).not.toHaveBeenCalled();
     });
   });
 
@@ -100,22 +125,22 @@ describe('PrecisionFloorComponent (#4246)', () => {
     });
 
     it('says a promised floor holds, with the count', async () => {
-      await show(0.75, lineFloor('promised', { minPrecision: 0.75 }), 1234);
+      await show(0.9, lineFloor('promised', { minPrecision: 0.9 }), 1234);
       expect(state()!.getAttribute('data-status')).toBe('green');
-      expect(stateText()!.textContent).toContain('At least 75% right · 1,234 returned');
-      expect(stateText()!.getAttribute('title')).toContain('At least 75% of the 1,234 items the line returns');
+      expect(stateText()!.textContent).toContain('Promise kept · 1,234 returned');
+      expect(stateText()!.getAttribute('title')).toContain('keeps its Correct promise on the 1,234 items it returns');
     });
 
     it('omits the count when it is unknown', async () => {
       await show(0.5, lineFloor('promised'));
-      expect(stateText()!.textContent!.trim()).toBe('At least 50% right');
+      expect(stateText()!.textContent!.trim()).toBe('Promise kept');
     });
 
     it('says an unreachable floor shows the default cut', async () => {
       await show(0.9, lineFloor('unreachable', { minPrecision: 0.9, calibrationPositives: 20 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('red');
-      expect(stateText()!.textContent).toContain("Can't reach 90% on this dataset · showing the default cut");
-      expect(stateText()!.getAttribute('title')).toContain('No cut reaches 90% precision');
+      expect(stateText()!.textContent).toContain("Can't reach Correct on this dataset · showing the default cut");
+      expect(stateText()!.getAttribute('title')).toContain('No cut on this dataset reaches Correct');
     });
 
     it('says a floor short of evidence shows the default cut, with the Good votes it has', async () => {
@@ -131,9 +156,9 @@ describe('PrecisionFloorComponent (#4246)', () => {
     });
 
     it('describes the line it was cut at, not a pick still on its way to the server', async () => {
-      await show(0.9, lineFloor('promised', { minPrecision: 0.5 }), 40);
+      await show(0.9, lineFloor('unreachable', { minPrecision: 0.5 }), 40);
       expect(select().value).toBe('0.9');
-      expect(stateText()!.textContent).toContain('At least 50% right');
+      expect(stateText()!.textContent).toContain("Can't reach Centered");
     });
   });
 

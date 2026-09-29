@@ -290,13 +290,15 @@ describe('FindStatsModalComponent', () => {
     const legend = (el: HTMLElement) => el.querySelector('.chart-legend')!.textContent!.replace(/\s+/g, ' ');
 
     it('draws the floor across the chart at X, and a promised line keeps it', async () => {
-      const el = await load({ floor: wireFloor('promised', { minPrecision: 0.75 }) });
+      const el = await load({ floor: wireFloor('promised', { minPrecision: 0.9 }) });
       const floor = el.querySelector('.precision-chart .floor')!;
-      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.75));
+      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
       expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
       expect(el.querySelector('.precision-chart .current')!.classList).not.toContain('unpromised');
-      expect(legend(el)).toContain('Floor: at least 75%');
-      expect(legend(el)).toContain('Line: keeps the 75% floor');
+      // The floor by name, never by number (#4298); the chart's axis keeps its percentages.
+      expect(legend(el)).toContain('Floor: Correct');
+      expect(legend(el)).toContain('Line: keeps the Correct floor');
+      expect(legend(el)).not.toContain('90%');
       // The Inclusion stepper's legend is gone.
       expect(legend(el)).not.toContain('incl');
     });
@@ -307,7 +309,7 @@ describe('FindStatsModalComponent', () => {
       expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
       expect(el.querySelector('.swatch-current')!.classList).toContain('unpromised');
       expect(legend(el)).toContain('Line: the default cut, unpromised');
-      expect(el.textContent).toContain('No cut reaches the 90% floor on this dataset');
+      expect(el.textContent).toContain('No cut reaches the Correct floor on this dataset');
     });
 
     it('says the line waits on evidence alongside the withheld estimate', async () => {

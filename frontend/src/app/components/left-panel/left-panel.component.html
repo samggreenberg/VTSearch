@@ -14,6 +14,7 @@
           [value]="minPrecision()"
           [floor]="floor()"
           [returned]="returned()"
+          [busy]="sortBusy()"
           (valueChange)="minPrecisionChange.emit($event)"
         >
           <div class="goods-actions find-queue-actions" floorActions>
@@ -168,6 +169,7 @@
           [value]="minPrecision()"
           [floor]="floor()"
           [returned]="returned()"
+          [busy]="sortBusy()"
           (valueChange)="minPrecisionChange.emit($event)"
         />
 

@@ -1,23 +1,22 @@
 <div class="precision-floor">
   <div class="floor-picker">
-    <!-- "At least [X] right" reads as one phrase, so it sits tighter than the
+    <!-- "Lean: [Centered]" reads as one phrase, so it sits tighter than the
          controls projected after it. -->
     <span class="floor-phrase">
-      <label class="floor-label" for="precision-floor-select" title="The share of what the detector returns that should be right">
-        At least
+      <label class="floor-label" for="precision-floor-select" title="Toward returning everything, or only what is right">
+        Lean:
       </label>
       <select
         id="precision-floor-select"
         class="form-select form-select--compact"
         aria-label="Precision floor"
-        title="How much of what the detector returns should be right"
+        title="Complete returns the most, Correct the fewest wrong ones, Centered sits between them"
         (change)="onChange($event)"
       >
-        @for (opt of options(); track opt.value) {
+        @for (opt of options; track opt.value) {
           <option [value]="opt.value" [selected]="opt.value === selected()">{{ opt.label }}</option>
         }
       </select>
-      <span class="floor-label">right</span>
       @if (!summary()) {
         <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
       }

@@ -110,10 +110,10 @@ was right.
 #### When the line is unpromised
 
 A detector draws its line at a **precision floor**: the line returns as
-many items as it can while at least that share of them is estimated right.
-You pick the floor at the top of the left panel, where it reads **At least
-50% right** (see [Precision floor](#3-precision-floor)). Every detector
-starts at **50%**. The estimate is cautious, so it only makes that promise
+many items as it can while enough of them are estimated right. You pick the
+floor at the top of the left panel, where it reads **Lean: Centered** (see
+[Precision floor](#3-precision-floor)). Every detector starts at
+**Centered**. The estimate is cautious, so it only makes that promise
 once it has enough evidence: about ten Good votes among the ones it holds
 back to check itself, counting only votes you made off the detector's own
 ranking (Autopilot's Hard picks, or working down a learned sort).
@@ -297,8 +297,8 @@ picks up where it leaves off.
 - [Check and correct a detector's calls](howto/check-and-correct.md): verify
   the pictures near the line and hand your corrections back to the detector.
 - [Catch the borderline matches](howto/borderline-matches.md): review the
-  pictures either side of the line, and lower the **precision floor** to let
-  more in.
+  pictures either side of the line, and lower the **precision floor** toward
+  **Complete** to let more in.
 - [Decide how far to trust a detector](howto/trust-a-detector.md): read the
   **Stats** that say which calls it is qualified to make.
 - [Send your matches somewhere](howto/export-matches.md): export to the
@@ -745,23 +745,24 @@ but in Manual mode you choose directly.
 
 ### 3. Precision floor
 
-Reads **At least 50% right**: pick how much of what the detector returns
-should be right - **10%**, **25%**, **50%** (the default), **75%** or **90%**.
-The line (see
+Reads **Lean: Centered**: pick what the detector's line leans toward -
+**Complete**, **Centered** (the default) or **Correct**. The line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
-then returns as many items as it can while at least that share of them is
-estimated right. A higher floor returns fewer items, more of them right; a
-lower one returns more, and more of them may be wrong. Changing it moves
-the line over the scores the detector already has; the ranking itself does
-not change.
+then returns as many items as it can while enough of them are estimated
+right. **Correct** returns the fewest items, with little of it wrong;
+**Complete** returns the most, and more of it may be wrong; **Centered** sits
+between them. The floors are named rather than numbered because the estimate
+behind the line is cautious, not exact. Changing the floor moves the line
+over the scores the detector already has; the ranking itself does not
+change.
 
 Once the list is ranked by the detector (a **Learned** sort, or Find), the
 note under the picker says what the floor is doing to the line, in one of
 three states:
 
-- **At least 50% right**, with how many items the line returns - the
-  detector can promise the floor, and the line keeps it.
-- **Can't reach 50% on this dataset** - there is enough evidence, but no
+- **Promise kept**, with how many items the line returns - the detector
+  can promise the floor, and the line keeps it.
+- **Can't reach Centered on this dataset** - there is enough evidence, but no
   line on this dataset gets there. The line stays at the default cut.
 - **Not enough evidence yet**, with how many Good votes the detector has
   of the ten it needs - the usual state for a new detector. The line stays
@@ -772,14 +773,17 @@ move it (see [When the line is unpromised](#when-the-line-is-unpromised)).
 The **?** beside the note explains the floor.
 
 While the floor is promised, lower floors *nest*: everything the line
-returns at 75% it still returns at 50%, plus a band of borderline items.
+returns at **Correct** it still returns at **Centered**, plus a band of
+borderline items.
 That makes a two-pass workflow natural: work at a strict floor first, then
 lower it and review the newly admitted band - the items just above the
 moved line (see [Catch the borderline matches](howto/borderline-matches.md)).
 
 Each detector keeps its own floor while VTSearch runs, and one you haven't
-set yet starts from the last floor you picked. Leave it at 50% unless you
-want to lean toward catching everything or toward only the surest matches.
+set yet starts from the last floor you picked. Leave it at **Centered**
+unless you want to lean toward catching everything (**Complete**) or toward
+only the surest matches (**Correct**). A floor set some other way, such as
+from the command line, shows as the nearest of the three, and moves to it.
 
 ---
 
