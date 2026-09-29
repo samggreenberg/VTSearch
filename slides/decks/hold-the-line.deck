@@ -7,8 +7,9 @@
 # room that has not seen the tool cannot be told about a threshold inside it.
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
-# same machinery walked a second time along the Inclusion axis — where
-# the *user* wants it. Then the places the loop never asks about, the data the
+# same machinery walked a second time along the axis the *user* sets — a
+# slider, and then the precision floor that replaced it (#4244). Then the
+# places the loop never asks about, the data the
 # experiments run on, the region-voting idea (whose measured verdict waits for
 # the Results section with the runs still reporting), and logos.
 #
@@ -54,13 +55,19 @@ slides:
   quantile-transfer
   split-fraction
 
-  # 3 — Preference
+  # 3 — Preference: why a line needs one, the slider we shipped and what it
+  # took to make it mean anything, then the number a person can actually say
+  # — a precision floor — and the spot check that earns it (#4224, #4267).
+  # Second Cut stays last: the acquisition cut is measured from wherever the
+  # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
   inclusion-rank
   inclusion-cost
   inclusion-knob
   inclusion-walk
   inclusion-tilt
+  floor-ask
+  floor-check
   inclusion-acq
 
   # 4 — Exploration: the Coverage Atlas, how autopilot decides what to ask

@@ -18,6 +18,7 @@ The decomposition figure re-plots published numbers from
 """
 
 import functools
+import math
 import sys
 from pathlib import Path
 
@@ -3686,7 +3687,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
         ax.text(
             zoom_acq_x - LABEL_GAP,
             zoom_y0 - 0.32 - LABEL_GAP,
-            _sub(rf"\theta_{{acq}}\ \ (k = {k_acq})"),
+            _sub(r"\theta_{acq}\ \ (k - 4)"),
             ha="right",
             va="top",
             fontsize=16,
@@ -5042,6 +5043,332 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
     return fig
 
 
+# ── the precision-floor pair (#4244) ─────────────────────────────────────────
+
+#: The two figures that close the Preference section share one drawing: the
+#: corpus ranked as a strip of items, the candidate the floor works on
+#: bracketed at its top, and the line at the candidate's foot. `calib-floor-ask`
+#: states the floor and shows why the session's own votes cannot certify it;
+#: `calib-floor-check` runs the spot check on the same strip. Same canvas and
+#: same rows, so the strip does not move between the two slides.
+#: Each figure's canvas is exactly what it draws, because `tight_box` crops to
+#: the canvas: the axes fill it, so a short figure on a tall canvas would keep
+#: a band of white under its last line (#3265). Every row is measured *down
+#: from the canvas top*, so the two share their top rows — statement, vote row,
+#: strip, candidate, line — and differ only in how far below the strip they go.
+FLOOR_ASK_CANVAS_H = 6.35
+FLOOR_CHECK_CANVAS_H = 10.1
+#: How many items the strip shows, and how many of them the candidate is: the
+#: top 32 unvoted items, which is the check's candidate at every floor from 50%
+#: up (#4272). Forty-eight leaves a third of the strip below the line, enough
+#: to read the candidate as the *top* of something rather than as all of it.
+FLOOR_ITEMS = 48
+FLOOR_K = 32
+#: The floor the figures are drawn at — the default every detector starts with —
+#: and the level the check is tested at.
+FLOOR_X = 0.5
+FLOOR_ALPHA = 0.05
+#: The strip's geometry. It starts at the left margin and spans the canvas:
+#: the strip sits low enough that the title notch falls above it, so the top
+#: row needs no indent; the statement above it is what has to start right of
+#: the notch (`FLOOR_STATEMENT_X`). `save()`'s notch check holds that claim.
+FLOOR_STRIP_X0, FLOOR_STRIP_W, FLOOR_STRIP_H = 1.2, 21.05, 0.62
+FLOOR_STRIP_DROP = 3.0
+FLOOR_STATEMENT_X = 8.4
+FLOOR_STATEMENT_DROP = 0.75
+#: The row above the strip that both figures label: the model's votes on one
+#: slide, the picks on the other.
+FLOOR_ROW_LABEL_DROP = 1.85
+#: The spot check's five picks, as strip indices — all inside the candidate
+#: (the top 32 of 48 are indices 16–47) and spread through it rather than
+#: crowding its top, which is the one thing about the picks the slide has to
+#: show. Four come back right: the check falls short of 50%, which is the
+#: common outcome at COCO Better's prevalence and the state the copy has to be
+#: honest about.
+FLOOR_PICKS = (18, 25, 31, 38, 45)
+FLOOR_PICK_VOTES = (True, True, False, True, True)
+#: The session's own votes, at the strip positions their scores fall on: a
+#: cluster around the line, where autopilot asks the hard questions, and a
+#: cluster at the top, where it asks for likely matches. They are drawn *above*
+#: the strip because they are not in it — the strip is the unvoted corpus.
+FLOOR_MODEL_VOTES = (
+    (3, False),
+    (6, False),
+    (9, True),
+    (11, False),
+    (13, True),
+    (15, False),
+    (17, True),
+    (20, False),
+    (44, True),
+    (46, True),
+    (47, True),
+)
+FLOOR_ASK_STAGES = 3
+FLOOR_CHECK_STAGES = 5
+
+
+def _binomial_tail(s: int, n: int, p: float) -> float:
+    """P(X ≥ s) for X ~ Binomial(n, p)."""
+    return float(sum(math.comb(n, k) * p**k * (1 - p) ** (n - k) for k in range(s, n + 1)))
+
+
+def clopper_pearson(s: int, n: int, tail: float) -> tuple[float, float]:
+    """The range the control shows for `s` right of `n` uniform picks, each tail at `tail`.
+
+    The same interval `analyze_floor_candidate_4267.likely_range` prices — the
+    one-sided Clopper–Pearson bounds at level `tail` on each side — computed
+    here by bisection on the exact binomial tail rather than through scipy, so
+    the figure generators keep to the project's own dependencies. Its lower
+    end is the very bound the check is tested at, which is why a check confirms
+    the floor iff that end clears it.
+    """
+    if not 0 <= s <= n:
+        raise ValueError(f"{s} right of {n}")
+
+    def solve(hits: int) -> float:
+        # The p at which P(X ≥ hits) = tail; the tail rises monotonically in p.
+        lo, hi = 0.0, 1.0
+        for _ in range(200):
+            mid = (lo + hi) / 2
+            if _binomial_tail(hits, n, mid) < tail:
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2
+
+    lower = 0.0 if s == 0 else solve(s)
+    upper = 1.0 if s == n else 1.0 - solve(n - s)
+    return lower, upper
+
+
+def floor_ask_fig() -> None:
+    """The floor stated, and why the session's own votes cannot certify it (#4244).
+
+    Three stages: the sentence a person can say and the candidate it is asked
+    about; the votes the session already holds, drawn where the model chose to
+    look; and the conclusion — they say where the model looked, not how right
+    the candidate is. The 83% is #4256's: learned-sort evidence alone, with a
+    consistent reference pool, broke that share of X = 50% promises.
+    """
+    final = _floor_stage(FLOOR_ASK_STAGES, "ask")
+    box = tight_box(final)
+    for stage in range(1, FLOOR_ASK_STAGES):
+        save(_floor_stage(stage, "ask"), OUT, f"calib-floor-ask.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-floor-ask.png", column=FULL_BLEED, box=box)
+
+
+def floor_check_fig() -> None:
+    """The spot check that earns the floor's promise, and its three states (#4244, #4272).
+
+    Five stages: the same candidate; five picks drawn uniformly from it; their
+    votes; the likely range those votes support, against the floor; and the
+    three states the control can end in. The range is the shipped rule's —
+    `clopper_pearson` at the check's own level — so the numbers on the drawing
+    are the ones the control would show for these five votes.
+    """
+    final = _floor_stage(FLOOR_CHECK_STAGES, "check")
+    box = tight_box(final)
+    for stage in range(1, FLOOR_CHECK_STAGES):
+        save(_floor_stage(stage, "check"), OUT, f"calib-floor-check.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-floor-check.png", column=FULL_BLEED, box=box)
+
+
+def _floor_cell_x(index: int) -> float:
+    """The left edge of the `index`-th strip cell, worst first."""
+    return FLOOR_STRIP_X0 + index * FLOOR_STRIP_W / FLOOR_ITEMS
+
+
+def _floor_stage(stage: int, variant: str) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of one of the pair."""
+    top = FLOOR_ASK_CANVAS_H if variant == "ask" else FLOOR_CHECK_CANVAS_H
+    fig, ax = _incl_figure(top)
+    cell_w = FLOOR_STRIP_W / FLOOR_ITEMS
+    strip_top = top - FLOOR_STRIP_DROP
+    strip_y0 = strip_top - FLOOR_STRIP_H
+    row_label_y = top - FLOOR_ROW_LABEL_DROP
+    first = FLOOR_ITEMS - FLOOR_K
+    line_x = _floor_cell_x(first)
+    cand_x0, cand_x1 = line_x, FLOOR_STRIP_X0 + FLOOR_STRIP_W
+    cand_cx = (cand_x0 + cand_x1) / 2
+
+    # ── stage 1: the sentence, the corpus, the candidate, the line ────────────
+    # The statement is the one line of the section a user could say aloud, and
+    # it is the only ink above the strip on the first page. It starts right of
+    # the title notch; the strip below runs from the margin.
+    ax.text(
+        FLOOR_STATEMENT_X,
+        top - FLOOR_STATEMENT_DROP,
+        "“Show me what is at least 50% right.”",
+        ha="left",
+        va="bottom",
+        fontsize=18,
+        color=INK,
+    )
+    voted = {}
+    if variant == "check" and stage >= 3:
+        voted = dict(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True))
+    for index in range(FLOOR_ITEMS):
+        kind = "unlabeled"
+        if index in voted:
+            kind = "good" if voted[index] else "bad"
+        _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, kind)
+    # The axis, named the way every score axis in the deck is: best on the right.
+    # Under the strip's left third, which nothing else uses; above it is where
+    # the two figures draw their votes.
+    ax.text(FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT)
+    # The candidate: a bracket under the top 32, named once.
+    brace_y = strip_y0 - 0.42
+    ax.plot(
+        [cand_x0, cand_x0, cand_x1, cand_x1],
+        [brace_y + 0.12, brace_y, brace_y, brace_y + 0.12],
+        color=INK,
+        linewidth=1.6,
+        zorder=5,
+    )
+    ax.text(
+        cand_cx,
+        brace_y - LABEL_GAP,
+        f"the candidate: the top {FLOOR_K} nobody has voted on",
+        ha="center",
+        va="top",
+        fontsize=15,
+        color=INK,
+    )
+    # The line, at the candidate's foot, in the palette's blue: it is the shipped
+    # decision, and the one thing on the drawing the fragment names in colour.
+    line_bottom = strip_y0 - 1.15
+    ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=BLUE, linewidth=2.6, zorder=6)
+    ax.text(line_x - 0.14, line_bottom + 0.05, "the line", ha="right", va="bottom", fontsize=16, color=INK)
+
+    if variant == "ask":
+        # ── stage 2: the votes the session already holds ─────────────────────
+        if stage >= 2:
+            for index, good in FLOOR_MODEL_VOTES:
+                ax.text(
+                    _floor_cell_x(index) + cell_w / 2,
+                    strip_top + 0.10,
+                    "✓" if good else "✗",
+                    ha="center",
+                    va="bottom",
+                    fontsize=VOTE_PANEL_MARK_PT,
+                    color=GREEN if good else RED,
+                    fontweight="bold",
+                )
+            ax.text(
+                (line_x + cand_x1) / 2 - 1.0,
+                row_label_y,
+                "the session's own votes, at their scores: where the model chose to look",
+                ha="center",
+                va="bottom",
+                fontsize=15,
+                color=INK,
+            )
+        # ── stage 3: what they can and cannot say ────────────────────────────
+        if stage >= 3:
+            ax.text(
+                INCL_CANVAS_W / 2,
+                brace_y - 1.75,
+                "They say where the model looked, not how right the candidate is.",
+                ha="center",
+                va="center",
+                fontsize=17,
+                color=INK,
+            )
+        return fig
+
+    # ── stage 2: five picks, uniform within the candidate ─────────────────────
+    if stage >= 2:
+        for index in FLOOR_PICKS:
+            _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
+        ax.text(
+            cand_cx,
+            row_label_y,
+            f"{len(FLOOR_PICKS)} picks, drawn uniformly from the candidate",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+    # ── stage 3: the user's votes on them ─────────────────────────────────────
+    right = sum(FLOOR_PICK_VOTES)
+    if stage >= 3:
+        for index, good in zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True):
+            ax.text(
+                _floor_cell_x(index) + cell_w / 2,
+                strip_top + 0.10,
+                "✓" if good else "✗",
+                ha="center",
+                va="bottom",
+                fontsize=VOTE_PANEL_MARK_PT,
+                color=GREEN if good else RED,
+                fontweight="bold",
+            )
+        ax.text(
+            cand_x1,
+            row_label_y,
+            f"{right} of {len(FLOOR_PICKS)} right",
+            ha="right",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+    # ── stage 4: the range those votes support, against the floor ─────────────
+    lo, hi = clopper_pearson(right, len(FLOOR_PICKS), FLOOR_ALPHA)
+    gauge_x0, gauge_w = FLOOR_STRIP_X0 + 3.6, FLOOR_STRIP_W - 3.6
+    gauge_y = brace_y - 1.85
+    if stage >= 4:
+        _range_line(ax, gauge_x0, gauge_x0 + gauge_w, gauge_y, z=3)
+        ax.text(gauge_x0 - LABEL_GAP - 0.1, gauge_y, "likely right", ha="right", va="center", fontsize=16, color=INK)
+        for frac, name in ((0.0, "0%"), (1.0, "100%")):
+            ax.text(gauge_x0 + frac * gauge_w, gauge_y - RANGE_FOOT - LABEL_GAP, name, ha="center", va="top", fontsize=15, color=SOFT)
+        # The range: a bar on the axis, its ends named.
+        ax.plot([gauge_x0 + lo * gauge_w, gauge_x0 + hi * gauge_w], [gauge_y] * 2, color=INK, linewidth=9, solid_capstyle="butt", zorder=4)
+        # An end of the range that all but touches an end of the axis takes the
+        # axis's own label rather than printing "99%" over "100%".
+        for frac in (lo, hi):
+            if min(frac, 1.0 - frac) < 0.05:
+                continue
+            ax.text(
+                gauge_x0 + frac * gauge_w,
+                gauge_y - RANGE_FOOT - LABEL_GAP,
+                f"{round(100 * frac):d}%",
+                ha="center",
+                va="top",
+                fontsize=15,
+                color=INK,
+                fontweight="bold",
+            )
+        # The floor, marked above the axis the way every cut in the deck is: a
+        # notch and a name. It is the line's blue because it is what the line
+        # was asked for.
+        floor_x = gauge_x0 + FLOOR_X * gauge_w
+        ax.plot([floor_x] * 2, [gauge_y, gauge_y + 0.42], color=BLUE, linewidth=2.6, zorder=5)
+        ax.text(floor_x, gauge_y + 0.42 + LABEL_GAP, "the floor, 50%", ha="center", va="bottom", fontsize=15, color=INK)
+        ax.text(
+            INCL_CANVAS_W / 2,
+            gauge_y - 1.15,
+            f"“Aimed at 50%: likely {round(100 * lo):d}–{round(100 * hi):d}% right (checked {len(FLOOR_PICKS)}).”",
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+    # ── stage 5: the three states ─────────────────────────────────────────────
+    if stage >= 5:
+        states = (
+            ("unchecked", "nobody has voted on the candidate yet; no range"),
+            ("confirmed", "the range's lower end clears the floor"),
+            ("short", f"it does not: the line keeps the {FLOOR_K} it checked, and says how close"),
+        )
+        name_x = INCL_CANVAS_W / 2 - 3.2
+        for row, (name, meaning) in enumerate(states):
+            y = gauge_y - 2.25 - row * 0.62
+            ax.text(name_x, y, name, ha="right", va="top", fontsize=15, color=INK, fontweight="bold")
+            ax.text(name_x + 0.25, y, "— " + meaning, ha="left", va="top", fontsize=15, color=INK)
+    return fig
+
+
 if __name__ == "__main__":
     cost_knob_fig()
     crossing_fig()
@@ -5056,6 +5383,8 @@ if __name__ == "__main__":
     walk_flow_fig()
     tilt_flow_fig()
     acq_flow_fig()
+    floor_ask_fig()
+    floor_check_fig()
     blend_schedule_fig()
     split_fraction_fig()
     anchored_fig()
