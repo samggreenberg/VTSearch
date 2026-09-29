@@ -71,11 +71,48 @@ describe('ImportAdvancedComponent', () => {
 
   describe('toggleAdvanced', () => {
     it('flips the advanced-open flag', () => {
-      expect(component.advancedOpen).toBe(false);
+      expect(component.advancedOpen()).toBe(false);
       component.toggleAdvanced();
-      expect(component.advancedOpen).toBe(true);
+      expect(component.advancedOpen()).toBe(true);
       component.toggleAdvanced();
-      expect(component.advancedOpen).toBe(false);
+      expect(component.advancedOpen()).toBe(false);
+    });
+
+    // The toggle lives in the Add Dataset modal's footer (#4305), so this
+    // component renders none, and while collapsed its host takes no box: an
+    // empty flex item would still collect the form's gap.
+    it('renders no toggle of its own and hides its host until opened', async () => {
+      await settleZoneless(fixture);
+      const host = fixture.nativeElement as HTMLElement;
+      expect(host.querySelector('.advanced-toggle')).toBeNull();
+      expect(host.classList.contains('is-open')).toBe(false);
+      component.toggleAdvanced();
+      await settleZoneless(fixture);
+      expect(host.classList.contains('is-open')).toBe(true);
+    });
+
+    it('scrolls the opened block into view in its scrolling parent, and not on closing', async () => {
+      // jsdom lays nothing out: pose the host 200 px below a 400 px scroller.
+      const host = fixture.nativeElement as HTMLElement;
+      const scroller = document.createElement('div');
+      host.replaceWith(scroller);
+      scroller.appendChild(host);
+      scroller.style.overflowY = 'auto';
+      let scrollTop = 0;
+      Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTop, set: (v: number) => (scrollTop = v) });
+      Object.defineProperty(scroller, 'clientHeight', { value: 400 });
+      Object.defineProperty(scroller, 'scrollHeight', { value: 1200 });
+      scroller.getBoundingClientRect = () => ({ top: 0, bottom: 400, height: 400 }) as DOMRect;
+      host.getBoundingClientRect = () => ({ top: 500 - scrollTop, bottom: 600 - scrollTop, height: 100 }) as DOMRect;
+
+      component.toggleAdvanced();
+      await settleZoneless(fixture);
+      expect(scrollTop).toBe(200);
+
+      scrollTop = 0;
+      component.toggleAdvanced();
+      await settleZoneless(fixture);
+      expect(scrollTop).toBe(0);
     });
   });
 
@@ -129,11 +166,10 @@ describe('ImportAdvancedComponent', () => {
       convertTargets: ['image', 'text'],
     };
 
-    /** Click the real toggle so the OnPush component is marked dirty the way
-     *  a user's click marks it (assigning `advancedOpen` directly would not
-     *  schedule a re-render). */
+    /** Open through the same method the modal's footer toggle calls; the
+     *  signal write schedules the OnPush re-render. */
     async function openAdvanced(): Promise<void> {
-      fixture.nativeElement.querySelector('.advanced-toggle').click();
+      component.toggleAdvanced();
       await settleZoneless(fixture);
     }
 
@@ -145,9 +181,8 @@ describe('ImportAdvancedComponent', () => {
       );
     }
 
-    it('renders only the toggle, whatever has been overridden', async () => {
+    it('renders nothing, whatever has been overridden', async () => {
       await setInputs(everything);
-      expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeTruthy();
       expect(labels()).toEqual([]);
       expect(fixture.nativeElement.querySelectorAll('select').length).toBe(0);
       expect(fixture.nativeElement.querySelectorAll('input').length).toBe(0);
@@ -378,7 +413,7 @@ describe('ImportAdvancedComponent', () => {
   describe('cleanup gates', () => {
     it('showCleanupSection stays hidden when no cleaners are registered', async () => {
       await setInputs({ cleaners: [], selectedCleaners: [] });
-      component.advancedOpen = true;
+      component.advancedOpen.set(true);
       expect(component.showCleanupSection).toBe(false);
     });
 
@@ -394,7 +429,7 @@ describe('ImportAdvancedComponent', () => {
       await setInputs({ cleaners, selectedCleaners: [] });
       expect(component.isDefaultCleanupSelected).toBe(false);
       expect(fixture.nativeElement.querySelectorAll('.cleanup-row').length).toBe(0);
-      fixture.nativeElement.querySelector('.advanced-toggle').click();
+      component.toggleAdvanced();
       await settleZoneless(fixture);
       expect(fixture.nativeElement.querySelectorAll('.cleanup-row').length).toBe(cleaners.length);
     });
@@ -465,7 +500,7 @@ describe('ImportAdvancedComponent', () => {
     });
 
     it('renders one checkbox per cleaner, checked per the selection', async () => {
-      component.advancedOpen = true;
+      component.advancedOpen.set(true);
       await setInputs({ cleaners, selectedCleaners: defaultSelection });
       const boxes = fixture.nativeElement.querySelectorAll('.cleanup-row input[type="checkbox"]');
       expect(boxes.length).toBe(2);
@@ -474,7 +509,7 @@ describe('ImportAdvancedComponent', () => {
     });
 
     it('renders parameter inputs only for a checked cleaner that declares them', async () => {
-      component.advancedOpen = true;
+      component.advancedOpen.set(true);
       await setInputs({ cleaners, selectedCleaners: defaultSelection });
       expect(fixture.nativeElement.querySelectorAll('.cleanup-param').length).toBe(0);
 

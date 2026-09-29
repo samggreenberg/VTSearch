@@ -43,6 +43,15 @@ not list every commit. Use `git log` for the full history.
   set and say so (the CLI's `detector_unpromised` event is now
   `detector_unchecked`, with the set's size).
 
+- **Tighter New Detector and Add Dataset dialogs** (#4305). The collapsed
+  **Advanced ▾** toggle no longer takes a line of its own above
+  **Cancel** / **Create** (or **Import**): it sits at the left end of that
+  row, and the options it opens appear at the foot of the form, scrolled into
+  view. In New Detector, a typed description now names the detector with your
+  own words, first letter capitalised and "detector" on the end ("large
+  books" becomes **Large books detector**, "NASA rockets" **NASA rockets
+  detector**), instead of title-casing every word.
+
 ### Added
 
 - **AutoRun detectors really run on what you import, and on demand** (issue
