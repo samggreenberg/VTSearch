@@ -688,9 +688,10 @@ The phase panel labels them, in order:
    ends when this coverage hits your goal (default: 40).
 
 The current phase carries one light that shows how close it is to done.
-It starts **red**, turns **yellow** once the phase is past halfway, and
-goes **green** when the phase is finished, at which point Autopilot
-moves on to the next one. For the three Find phases, halfway is half the
+It starts as a **red** circle, turns **yellow** once the phase is past
+halfway, and becomes a **green check** when the phase is finished, at
+which point Autopilot moves on to the next one; every finished phase
+keeps its check. For the three Find phases, halfway is half the
 vote target (2 of 3 goods, 10 of 20); for Refine Boundary the light
 shows whichever of the smart and stable indicators is further behind;
 for Explore Diversity it is half the coverage goal. Hover the light for

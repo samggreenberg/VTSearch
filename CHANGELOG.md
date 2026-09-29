@@ -18,8 +18,9 @@ not list every commit. Use `git log` for the full history.
 ### Changed
 
 - **Each Autopilot phase has one progress light** (issue #4319). The current
-  phase's marker is now a single light that goes red, then yellow past
-  halfway, then green as the phase finishes. The Find phases are paced by
+  phase's marker is now a single light: a red circle, a yellow one past
+  halfway, then a green check once the phase finishes, lined up with the
+  checks the finished phases keep. The Find phases are paced by
   their vote target, Refine Boundary shows the lower of Smart and Stable
   (replacing its two dots), and Explore Diversity is paced against its
   coverage goal, now shown as *Diversity: 13/40*. The labeling-status span

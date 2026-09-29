@@ -49,11 +49,15 @@
   align-items: flex-start;
   gap: var(--space-md);
   padding: var(--space-sm) var(--space-md);
+  // Every row carries the active row's border width, so the highlight moving
+  // on never shifts a row's contents: the check a finished step keeps lands
+  // exactly where its light was.
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
 
   &.active {
     background: var(--accent-highlight-bg);
-    border: 1px solid var(--accent-highlight-border);
+    border-color: var(--accent-highlight-border);
   }
 
   &.clickable {
