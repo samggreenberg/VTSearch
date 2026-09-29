@@ -149,7 +149,8 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 drawings) and a fixed vote baseline;
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`); mask volatile
-text (app version — a git timestamp — and any wall-clock/elapsed/gauge text);
+text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)
+and pin the RAM / disk gauges' fill bar at a fixed fraction;
 stub randomness the UI exposes (never rely on unseeded draws).
 
 ### 3. Driver scripts — `scripts/screenshots/`

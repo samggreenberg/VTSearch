@@ -52,9 +52,9 @@ function ramFreeMB(): number {
 }
 
 /**
- * Injected before every capture: kill animations so frames are stable, and hide
+ * Injected before every capture: kill animations so frames are stable, hide
  * the toast stack, the Settings footer's stale-bundle chip, and the trophy's
- * unseen-achievement dot.
+ * unseen-achievement dot, and pin the RAM / disk gauges' fill.
  *
  * The toasts are an artefact of the harness rather than of the product: it
  * drives a dev checkout, where `static/` is a build artefact that goes stale the
@@ -67,14 +67,23 @@ function ramFreeMB(): number {
  * looked at yet, which depends on everything that data dir has ever done: a
  * fresh one lights it with the fixtures' own imports and votes. It is volatile
  * state in every top bar, like the gauges `maskVolatile` blanks.
+ *
+ * The gauges' fill is the machine's used fraction of RAM / disk: its width, and
+ * its green → red colour, move on every run and every machine (#4294). It is
+ * pinned here at half full, in the colour the bar itself paints at 50%
+ * (`ProgressBarComponent.fillColor`, `'high-bad'`), rather than in
+ * `maskVolatile`, because the usage poll re-binds the inline width and colour
+ * after any DOM write; an `!important` rule outranks both, whenever they land.
  */
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
-  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot{display:none!important}`;
+  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot{display:none!important}` +
+  `vt-usage-bar .progress-fill{width:50%!important;background:var(--text-warning)!important}`;
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp
- * version) with fixed strings so pixel-diffs are stable across runs.
+ * version) with fixed strings so pixel-diffs are stable across runs. The
+ * gauges' fill bar is not text; `STILL_CSS` pins it.
  */
 async function maskVolatile(page: Page): Promise<void> {
   await page.evaluate((repo) => {
