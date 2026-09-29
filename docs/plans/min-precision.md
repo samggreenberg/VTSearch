@@ -64,6 +64,11 @@ What follows is what the app still owes.
     selection-free route is random verification (#4257).
 - **The default floor is 50%, and a set floor wins over Inclusion** (owner,
   2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
+- **The control offers four presets and no off switch** (owner, 2026-09-28,
+  #4246): 25/50/75/90%, the floors #4220 priced, so every choice is a
+  measured one. The API still takes any value in `[0.01, 1]` and `null`; the
+  control shows a stored non-preset or `null` as it is, and never sends
+  `null`.
 - **What waits on the GRID, and what doesn't.**
   - #4222 answered how the opening moves the gate. A longer text walk opens it
     but breaks the promise (above). A moderate one (Good target 6) is the only
@@ -82,8 +87,6 @@ What follows is what the app still owes.
 
 These are the questions #4224 raised that no issue below can settle alone:
 
-- **Whether X is free or a few presets** in the control (#4246). #4220 priced
-  25/50/75/90%. The backend takes any value in `[0.01, 1]`.
 - **Does the CLI get a flag for the floor?** Headless runs (AutoRun, CLI
   autodetect, the cold Find path) already cut at the user's floor.
 - **Retiring Inclusion from the extension surface.** `get_inclusion` /
@@ -183,7 +186,6 @@ screenshots, which #4246 and #4242 own.
     rounds, and "inclusion-weighted" cost;
   - [`docs/api/labeling.md`](../api/labeling.md) § Inclusion & Thresholds;
   - [`docs/api/settings.md`](../api/settings.md), the `inclusion` rows;
-  - [`docs/api/find.md`](../api/find.md), the Find Stats `sweep`;
   - [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md), the settings example;
   - [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), per-detector inclusion.
 - **Library docs:**

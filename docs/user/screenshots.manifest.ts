@@ -131,7 +131,7 @@ export interface Shot {
   recipe: (page: Page, h: Helpers) => Promise<void>;
   /**
    * Undo whatever the recipe changed in the app to reach its frame (items
-   * verified in Find, a moved Inclusion, a detector moved to AutoRun). Runs
+   * verified in Find, a moved precision floor, a detector moved to AutoRun). Runs
    * after the capture, pass or fail, so no later shot inherits the change.
    * A recipe that only *poses* the app — a form filled in but not submitted,
    * a menu opened — needs none.
@@ -207,8 +207,8 @@ async function findPair(h: Helpers): Promise<{ dataset: string; detector: string
 }
 
 /**
- * End the detector's live Find session (its verified pictures) and put
- * Inclusion back to 0, so the next Find shot starts from a fresh scoring run
+ * End the detector's live Find session (its verified pictures) and put its
+ * precision floor back to the 50% default, so the next Find shot starts from a fresh scoring run
  * whatever an earlier recipe did. Find verifications live in server memory and
  * survive leaving Find, so without this one shot's checked pictures would show
  * up in the next.
@@ -216,7 +216,7 @@ async function findPair(h: Helpers): Promise<{ dataset: string; detector: string
 async function resetFind(h: Helpers): Promise<void> {
   const pair = await findPair(h);
   await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
-  await h.app.api('/api/inclusion', { method: 'POST', body: { inclusion: 0 }, ...pair });
+  await h.app.api('/api/min-precision', { method: 'POST', body: { min_precision: 0.5 }, ...pair });
 }
 
 /** The example's category for each picture of *dataset*, by file name. */
@@ -838,14 +838,14 @@ export const SHOTS: Shot[] = [
   {
     id: 'manual-controls',
     embeddedIn: `${GUIDE}#manual-mode-for-power-users`,
-    caption: 'The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion slider',
+    caption: 'The three Manual-mode control rows: Sort mode, Selection strategy, and the precision floor',
     themes: BOTH,
     // Labels to the right: the three rows are stacked tight, so a label above
     // each box would sit on the row before it.
     annotations: [
       { target: '.sort-mode-group, vt-sort-bar', kind: 'box', label: 'Sort mode', at: 'right' },
       { target: '.select-mode-group, vt-select-mode', kind: 'box', label: 'Selection strategy', at: 'right' },
-      { target: '.inclusion-selector, vt-inclusion-slider', kind: 'box', label: 'Inclusion slider', at: 'right' },
+      { target: 'vt-precision-floor', kind: 'box', label: 'Precision floor', at: 'right' },
     ],
     async recipe(_page, h) {
       await h.enterLabelView();
@@ -1045,7 +1045,7 @@ export const SHOTS: Shot[] = [
   //
   // Each picks up where the guide's Step by step ends. A recipe that has to
   // change the app to reach its frame (verify pictures in Find, move
-  // Inclusion) says how to put it back in `after`; one that only poses a form
+  // the floor) says how to put it back in `after`; one that only poses a form
   // or a menu needs none.
 
   // check-and-correct.md
@@ -1090,24 +1090,25 @@ export const SHOTS: Shot[] = [
 
   // borderline-matches.md
   {
-    id: 'borderline-inclusion',
-    embeddedIn: `${HOWTO}/borderline-matches.md#step-2-loosen-the-line`,
-    caption: 'Step 2: (1) Inclusion raised to 3, (2) the line in the list moves down, (3) the Unverified Good count grows',
+    id: 'borderline-floor',
+    embeddedIn: `${HOWTO}/borderline-matches.md#step-2-lower-the-floor`,
+    caption: 'Step 2: (1) the floor lowered to 25%, (2) the note under it, which says whether the line has moved, (3) the line in the list',
     themes: BOTH,
     annotations: [
-      { target: '#inclusion-input', kind: 'step', step: 1, at: 'right' },
-      { target: '.media-threshold-line', kind: 'step', step: 2, at: 'right' },
-      { target: '.panel-right .folded-note', kind: 'step', step: 3 },
+      { target: '#precision-floor-select', kind: 'step', step: 1, at: 'right' },
+      { target: '.find-floor-row .floor-state-text', kind: 'step', step: 2, at: 'right' },
+      { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
+    // The fixture detector has no promise to keep (its votes were not drawn
+    // off a learned sort), so the line stays at the default cut and the note
+    // says why: the state most readers meet first, as the page explains.
     async recipe(page, h) {
       await openFind(page, h);
-      await page.locator('#inclusion-input').fill('3');
-      await page.locator('#inclusion-input').blur();
+      await page.locator('#precision-floor-select').selectOption('0.25');
       await h.wait(1500);
-      // Moving the line serves nothing new, and the list only draws the
-      // pictures near what it shows. Answer the next picture, as Step 3 has
-      // the reader do: Find then serves from the new line and the list
-      // scrolls to it.
+      // The list only draws the pictures near what it shows. Answer the next
+      // picture, as Step 1 has the reader do: Find then serves from the line
+      // and the list scrolls to it.
       await verifyServed(page, h, 1);
       const line = page.locator('.media-threshold-line').first();
       await line.waitFor({ timeout: 15000 });
@@ -1123,14 +1124,13 @@ export const SHOTS: Shot[] = [
     id: 'borderline-chart',
     embeddedIn: `${HOWTO}/borderline-matches.md#step-4-see-the-trade-off`,
     caption:
-      'The Precision by Number Returned chart for the top N pictures, with the current cut marked and the line under the chart reading it there',
+      'The Precision by Number Returned chart for the top N pictures, with the floor drawn across it, the line marked, and the line under the chart reading it there',
     themes: BOTH,
     clip: { target: '.chart-wrap', pad: 6 },
     async recipe(page, h) {
       await openFind(page, h);
       await verifyServed(page, h, 12);
-      await page.locator('#inclusion-input').fill('3');
-      await page.locator('#inclusion-input').blur();
+      await page.locator('#precision-floor-select').selectOption('0.25');
       await h.wait(1500);
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.chart-wrap', { timeout: 20000 });

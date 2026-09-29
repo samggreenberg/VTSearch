@@ -111,17 +111,19 @@ was right.
 
 A detector draws its line at a **precision floor**: the line returns as
 many items as it can while at least that share of them is estimated right.
-Every detector starts at **50%**. The estimate is cautious, so it only
-makes that promise once it has enough evidence: about ten Good votes among
-the ones it holds back to check itself, counting only votes you made off
-the detector's own ranking (Autopilot's Hard picks, or working down a
-learned sort).
+You pick the floor at the top of the left panel, where it reads **At least
+50% right** (see [Precision floor](#3-precision-floor)). Every detector
+starts at **50%**. The estimate is cautious, so it only makes that promise
+once it has enough evidence: about ten Good votes among the ones it holds
+back to check itself, counting only votes you made off the detector's own
+ranking (Autopilot's Hard picks, or working down a learned sort).
 
-When it can't promise the floor, the line doesn't disappear. It stays
-where it has always been - the cut at Inclusion 0 - and is labelled
-**unpromised**: the threshold line in the media list is dashed, with
-*UNPROMISED* under its *THRESHOLD* label, and its marker on the minimap
-beside the list is dashed too. Hover the line to see which of the two reasons applies:
+When it can't promise the floor, the line doesn't disappear. It stays at
+the **default cut** - where the line sat before there was a floor - and is
+labelled **unpromised**: the note under the floor says so, the threshold
+line in the media list is dashed, with *UNPROMISED* under its *THRESHOLD*
+label, and its marker on the minimap beside the list is dashed too. The
+note, or a hover over the line, says which of the two reasons applies:
 
 - **Not enough evidence yet** - the detector has fewer than ten held-back
   Good votes to check itself on. This is the usual state for a new
@@ -294,8 +296,9 @@ picks up where it leaves off.
 
 - [Check and correct a detector's calls](howto/check-and-correct.md): verify
   the pictures near the line and hand your corrections back to the detector.
-- [Catch the borderline matches](howto/borderline-matches.md): loosen the line
-  with **Inclusion** and review what it lets in.
+- [Catch the borderline matches](howto/borderline-matches.md): review the
+  pictures either side of the line, and lower the **precision floor** to let
+  more in.
 - [Decide how far to trust a detector](howto/trust-a-detector.md): read the
   **Stats** that say which calls it is qualified to make.
 - [Send your matches somewhere](howto/export-matches.md): export to the
@@ -588,7 +591,7 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 </picture>
 
 - **Left panel** - the sort bar, your selection-strategy controls,
-  the inclusion stepper, and the **media list** (ranked by the current
+  the precision floor, and the **media list** (ranked by the current
   sort). This is where you pick what to look at next.
 - **Centre panel** - the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
@@ -698,7 +701,7 @@ The Manual tab shows three control rows above the media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/manual-controls.dark.webp" />
-  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion stepper" width="720" />
+  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the precision floor" width="720" />
 </picture>
 
 ### 1. Sort mode
@@ -734,36 +737,43 @@ Picks *which unlabeled item* the app highlights next.
 Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
 
-### 3. Inclusion stepper
+### 3. Precision floor
 
-A numeric stepper from **-10** (strict) to **+10** (lenient),
-default 0.
+Reads **At least 50% right**: pick how much of what the detector returns
+should be right - **25%**, **50%** (the default), **75%** or **90%**.
+The line (see
+[Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
+then returns as many items as it can while at least that share of them is
+estimated right. A higher floor returns fewer items, more of them right; a
+lower one returns more, and more of them may be wrong. Changing it moves
+the line over the scores the detector already has; the ranking itself does
+not change.
 
-Moves the detector's line (see
-[Matches, the line, precision and recall](#matches-the-line-precision-and-recall)).
-Negative values mean "only call it good if you're very sure": fewer
-matches, but the ones you get are more likely right. Positive values
-mean "include borderline items": more matches, but more of them may be
-wrong. Changing it moves the line over the scores the detector already
-has; the ranking itself does not change.
+Once the list is ranked by the detector (a **Learned** sort, or Find), the
+note under the picker says what the floor is doing to the line, in one of
+three states:
 
-The steps *nest*: everything included at Inclusion 1 is still included
-at Inclusion 4, plus a band of extra borderline items. That makes a
-two-pass workflow natural: work at a strict setting first, then raise
-inclusion a few steps and review the newly admitted band - the items just
-above the moved line - to be confident you've seen "all the potential
-items" (see [Catch the borderline matches](howto/borderline-matches.md)).
-How far one step moves
-the line is not a fixed amount: it depends on the detector and the
-dataset, so the same setting can return a very different number of
-matches on two detectors.
+- **At least 50% right**, with how many items the line returns - the
+  detector can promise the floor, and the line keeps it.
+- **Can't reach 50% on this dataset** - there is enough evidence, but no
+  line on this dataset gets there. The line stays at the default cut.
+- **Not enough evidence yet**, with how many Good votes the detector has
+  of the ten it needs - the usual state for a new detector. The line stays
+  at the default cut.
 
-Until the detector has at least two Good and two Bad votes, it has no
-calibration for the stepper to move, and the line stays where training
-put it.
+In the last two the line is *unpromised*, and moving the floor doesn't
+move it (see [When the line is unpromised](#when-the-line-is-unpromised)).
+The **?** beside the note explains the floor.
 
-Leave at 0 unless you want to deliberately lean toward catching
-everything or toward only the surest matches.
+While the floor is promised, lower floors *nest*: everything the line
+returns at 75% it still returns at 50%, plus a band of borderline items.
+That makes a two-pass workflow natural: work at a strict floor first, then
+lower it and review the newly admitted band - the items just above the
+moved line (see [Catch the borderline matches](howto/borderline-matches.md)).
+
+Each detector keeps its own floor while VTSearch runs, and one you haven't
+set yet starts from the last floor you picked. Leave it at 50% unless you
+want to lean toward catching everything or toward only the surest matches.
 
 ---
 
@@ -948,10 +958,11 @@ runs).
 </picture>
 
 - **Left pane** - the **work queue** of items the detector hasn't been
-  confirmed on yet, ranked by score, with the same inclusion stepper
-  you use while labeling. The line through it is dashed and marked
-  *unpromised* while the detector can't yet promise its precision floor;
-  see [When the line is unpromised](#when-the-line-is-unpromised).
+  confirmed on yet, ranked by score, under the same
+  [precision floor](#3-precision-floor) you use while labeling. The line
+  through it is dashed and marked *unpromised* while the detector can't
+  yet promise its floor; see
+  [When the line is unpromised](#when-the-line-is-unpromised).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.
 - **Right pane** - the **Verified Good** and **Verified Bad** piles,
@@ -1017,8 +1028,8 @@ a one-line verdict and a line of supporting numbers:
   handed-over detector is least reliable.
 
 If either share is large, the fastest fix is usually to label a few items
-from the flagged region and retrain, rather than to nudge the inclusion
-stepper.
+from the flagged region and retrain, rather than to move the precision
+floor.
 
 ---
 
@@ -1349,7 +1360,7 @@ you can map just the matched items and use **Verified Good** /
 In the labeling view, the right panel's **Export** button saves your current
 labels. In Find, the **Export** icons at the top of the **Verified Good** and
 **Verified Bad** piles send each set (checked or not), and the one beside
-**Inclusion** sends only the matches you haven't checked (see
+the precision floor sends only the matches you haven't checked (see
 [Send your matches somewhere](howto/export-matches.md)). Formats (by their
 display names):
 
