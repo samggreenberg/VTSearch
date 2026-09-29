@@ -85,7 +85,56 @@ def main() -> int:
     out["s"] = out.apply(lambda r: f"{r['mean']:+.4f}±{r['se']:.4f}", axis=1)
     print("\nother - svm, mean over clicks per cell, SE clustered on category:")
     print(out.pivot_table(index=["arm", "inclusion_k"], columns="metric", values="s", aggfunc="first").to_string())
+
+    levels = pd.concat(
+        [
+            f.groupby("inclusion_k")[["cut_cost", "k_oracle_cost"]].mean().assign(arm=a).reset_index()
+            for a, f in frames.items()
+        ]
+    )
+    levels.to_csv(args.out / "cutincl_levels.csv", index=False)
+    figure(out, levels, args.out / "cutincl_by_stop.png")
     return 0
+
+
+def figure(paired: pd.DataFrame, levels: pd.DataFrame, path: Path) -> None:
+    """Left: each arm's cost at its own cut and at the best cut, per stop.  Right: paired
+    ``other - svm`` cost and regret per stop, +-2 SE."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    colors = {"svm": "#1f77b4", "lrconv": "#d9730d", "svmc01": "#7b52ab"}
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.2))
+    for arm, g in levels.groupby("arm"):
+        a1.plot(g["inclusion_k"], g["cut_cost"], "o-", color=colors.get(arm), label=f"{arm}: shipped cut")
+        a1.plot(g["inclusion_k"], g["k_oracle_cost"], "--", color=colors.get(arm), alpha=0.6, label=f"{arm}: best cut")
+    a1.set_yscale("log")
+    a1.set_xlabel("Inclusion stop k  (negative = false alarms cost more)")
+    a1.set_ylabel("cost at k (log scale; mean over clicks and cells)")
+    a1.set_title("Every head, shipped cut vs the best cut", fontsize=10)
+    a1.legend(fontsize=7, ncol=2)
+    for arm, g in paired.groupby("arm"):
+        for metric, style in (("cut_cost", "o-"), ("cut_regret", "s:")):
+            h = g[g["metric"] == metric].sort_values("inclusion_k")
+            a2.errorbar(
+                h["inclusion_k"],
+                h["mean"],
+                yerr=2 * h["se"],
+                fmt=style,
+                color=colors.get(arm),
+                capsize=3,
+                label=f"{arm} − svm: {'cost' if metric == 'cut_cost' else 'regret (the cut)'}",
+            )
+    a2.axhline(0, color="black", lw=0.8)
+    a2.set_yscale("symlog", linthresh=0.02)
+    a2.set_xlabel("Inclusion stop k")
+    a2.set_ylabel("paired difference from the shipped SVM (±2 SE)")
+    a2.set_title("Below 0 = better than the shipped SVM", fontsize=10)
+    a2.legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
 
 
 if __name__ == "__main__":
