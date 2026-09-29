@@ -226,7 +226,7 @@ describe('MediaListComponent', () => {
       expect(line.getAttribute('aria-label')).toBe('Good/Bad threshold, unpromised');
     });
 
-    it.each([lineFloor('promised'), lineFloor(null), null])('draws the plain line otherwise (%o)', (floor) => {
+    it.each([lineFloor('promised'), null])('draws the plain line otherwise (%o)', (floor) => {
       const line = drawWith(floor);
       expect(line).not.toBeNull();
       expect(line.classList).not.toContain('media-threshold-line--unpromised');

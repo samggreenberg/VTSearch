@@ -122,13 +122,14 @@ What follows is what the app still owes.
   - The estimator's open questions no longer bear on the promise: #4221's knobs,
     and #4261's question of whether atlas votes may calibrate. Whether either
     still earns its run is the owner's call.
-- **The default floor is 50%, and a set floor wins over Inclusion** (owner,
-  2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
+- **The default floor is 50%, and every detector has one** (owner,
+  2026-09-28; `null` refused since #4269, which retired Inclusion as a user
+  preference).
 - **The control offers five presets and no off switch** (owner, #4246 on
   2026-09-28, with 10% added on 2026-09-29): 10/25/50/75/90%, symmetric about
   the 50% default. The 10% preset is for a user willing to dig through a long
-  list. The API still takes any value in `[0.01, 1]` and `null`. The control
-  shows a stored non-preset or `null` as it is, and never sends `null`.
+  list. The API still takes any value in `[0.01, 1]`; the control shows a
+  stored non-preset as it is.
   - Under the spot check, the presets cost at most 15 picks at 10% (3 rounds
     of 5), 10 at 25% (2 rounds of 5), 5 at 50%, 11 at 75% and 29 at 90%.
   - #4220 never priced the estimator at 10%, so until #4272 replaces it, the
@@ -143,16 +144,6 @@ What follows is what the app still owes.
     AP at vote 150 by +0.052 at 0.44% and +0.032 at 0.1%.
   - The closed loop is unmeasured: check votes training the model, and
     re-checks after a retrain. Both feed #4272's lifecycle decision.
-
-## Open decisions (owner)
-
-These are the questions #4224 raised that no issue below can settle alone:
-
-- **Retiring Inclusion from the extension surface** (#4269). `get_inclusion` /
-  `set_inclusion`, `CoreConfig.inclusion`, the `inclusion_value=` parameters on
-  `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
-  are public `vtscore` API. Per CLAUDE.md they are deprecated with an
-  `[Unreleased]` note, not deleted, and the break is raised before it is made.
 
 ## Open work
 
@@ -202,8 +193,6 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
-- [ ] #4269 — Retire Inclusion as a user preference (Sonnet 5; Opus 4.8 for the `vtscore` deprecation)
-
 <!-- item-sep -->
 
 - **Re-derive `provenance-partitioned-calibration.md` before running it.** That
@@ -235,26 +224,3 @@ These are the questions #4224 raised that no issue below can settle alone:
   estimator's haystack, not the objective, and stays live.
 
 <!-- item-sep -->
-
-## Where Inclusion is documented today
-
-This is a reference for the issues above. Each PR prunes what it replaces, and
-this list goes when the last one lands. It excludes the user guide and
-screenshots, which #4246 and #4242 own.
-
-- **App docs:**
-  - [`docs/ML.md`](../ML.md) § Threshold Calibration: how Inclusion reaches the
-    cut, and the conformal rule's budget semantics;
-  - [`docs/EVAL.md`](../EVAL.md): `acq_inclusion_offset`, the `@k` startup
-    rounds, and "inclusion-weighted" cost;
-  - [`docs/api/labeling.md`](../api/labeling.md) § Inclusion & Thresholds;
-  - [`docs/api/settings.md`](../api/settings.md), the `inclusion` rows;
-  - [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md), the settings example;
-  - [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), per-detector inclusion.
-- **Library docs:**
-  - [`vtscore/docs/faq.md`](../../vtscore/docs/faq.md);
-  - [`vtscore/docs/concepts.md`](../../vtscore/docs/concepts.md);
-  - `vtscore/docs/packages/` (`config`, `state`, `training`, `detectors`,
-    `eval`);
-  - the executed samples in `quickstart.md`, `tutorials/train-and-score.md` and
-    `integration.md`, which pass `inclusion`.

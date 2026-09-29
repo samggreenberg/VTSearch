@@ -59,7 +59,7 @@ class TestDetectorContext:
         assert ctx.last_learned_scores == {}
         assert ctx.textsort_suggestions == []
         assert ctx.find_initial_labels == {}
-        assert ctx.inclusion is None
+        assert ctx.min_precision is None and not ctx.min_precision_seeded
         assert ctx.training_medias == {}
         assert ctx.model is None
         assert ctx.threshold == 0.5
@@ -554,23 +554,23 @@ class TestScalarContextState:
         set_thread_detector_context(det_a)
         assert _get_click_counter() == 10  # preserved
 
-    def test_inclusion_per_detector(self):
-        """inclusion is per-detector (training parameter)."""
-        from vtscore.state.core import _get_inclusion, _set_inclusion
+    def test_min_precision_per_detector(self):
+        """The precision floor is per-detector (an operating point)."""
+        from vtscore.state.core import _get_min_precision, _set_min_precision
 
-        det_a = DetectorContext("inc_det_a")
+        det_a = DetectorContext("floor_det_a")
         register_detector_context(det_a)
         set_thread_detector_context(det_a)
-        _set_inclusion(5)
+        _set_min_precision(0.75)
 
-        det_b = DetectorContext("inc_det_b")
+        det_b = DetectorContext("floor_det_b")
         register_detector_context(det_b)
         set_thread_detector_context(det_b)
-        _set_inclusion(-3)
+        _set_min_precision(0.25)
 
-        assert _get_inclusion() == -3
+        assert _get_min_precision() == (True, 0.25)
         set_thread_detector_context(det_a)
-        assert _get_inclusion() == 5
+        assert _get_min_precision() == (True, 0.75)
 
     def test_display_name_per_dataset(self):
         from vtscore.state.core import _get_dataset_display_name, _set_dataset_display_name

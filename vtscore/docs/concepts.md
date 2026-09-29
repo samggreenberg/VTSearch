@@ -311,8 +311,8 @@ Training (`vtscore.training.train_model`):
 
 - The production head is fitted by liblinear (`LinearSVC`, squared hinge + L2,
   `class_weight="balanced"`), deterministic given the caller-supplied seed
-  (default 42). Inclusion does *not* enter training - it is applied later as a
-  pure threshold knob.
+  (default 42). Inclusion does *not* enter training - it is the unit cuts are
+  measured in, applied later at threshold time.
 - The BCE heads instead run a class-weighted BCE-with-logits loop with
   inverse-frequency balancing and label-smoothed targets
   (`MLP_LABEL_SMOOTHING`), using a local `torch.Generator` seeded with the

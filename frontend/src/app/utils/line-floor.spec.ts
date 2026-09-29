@@ -33,19 +33,17 @@ describe('line-floor (#4247)', () => {
       expect(lineFloorFrom(undefined)).toBeNull();
     });
 
-    it('reads a null status as no floor, whatever the generated type spells it', () => {
-      const wire = { min_precision: null, status: null, calibration_positives: 0, min_calibration_positives: 10 };
-      expect(lineFloorFrom(wire as unknown as FloorState)?.status).toBeNull();
-      expect(lineFloorFrom({ ...wire, status: 'null' } as FloorState)?.status).toBeNull();
+    it('reads a status outside the three states as no verdict', () => {
+      const wire = { min_precision: 0.5, status: 'bogus', calibration_positives: 0, min_calibration_positives: 10 };
+      expect(lineFloorFrom(wire as unknown as FloorState)).toBeNull();
     });
   });
 
   describe('isUnpromised', () => {
-    it.each<[FloorStatus | null, boolean]>([
+    it.each<[FloorStatus, boolean]>([
       ['promised', false],
       ['unreachable', true],
       ['insufficient_evidence', true],
-      [null, false],
     ])('%s -> %s', (status, expected) => {
       expect(isUnpromised(lineFloor(status))).toBe(expected);
     });
@@ -69,9 +67,8 @@ describe('line-floor (#4247)', () => {
       expect(why).toContain('default cut');
     });
 
-    it('has nothing to say about a promised line or no floor', () => {
+    it('has nothing to say about a promised line or no verdict', () => {
       expect(unpromisedReason(lineFloor('promised'))).toBeNull();
-      expect(unpromisedReason(lineFloor(null))).toBeNull();
       expect(unpromisedReason(null)).toBeNull();
     });
   });
@@ -82,11 +79,10 @@ describe('line-floor (#4247)', () => {
       expect(FLOOR_PRESETS.map(floorPercent)).toEqual(['10%', '25%', '50%', '75%', '90%']);
     });
 
-    it.each<[FloorStatus | null, string]>([
+    it.each<[FloorStatus, string]>([
       ['promised', 'At least 50% right · 1,200 returned'],
       ['unreachable', "Can't reach 50% on this dataset · showing the default cut"],
       ['insufficient_evidence', 'Not enough evidence yet (3 of 10 Good votes) · showing the default cut'],
-      [null, 'No floor set · the line makes no promise'],
     ])('summarises %s', (status, expected) => {
       expect(floorSummary(lineFloor(status), 1200)).toBe(expected);
     });

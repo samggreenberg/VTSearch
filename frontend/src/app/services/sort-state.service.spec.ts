@@ -157,11 +157,9 @@ describe('SortStateService', () => {
     expect(service.sortStatus).toBe('Sorting...');
   });
 
-  it('setMinPrecision should update, null included', () => {
+  it('setMinPrecision should update', () => {
     service.setMinPrecision(0.75);
     expect(service.minPrecision).toBe(0.75);
-    service.setMinPrecision(null);
-    expect(service.minPrecision).toBeNull();
   });
 
   it('setFloor replaces the verdict and leaves the line where it was', () => {
@@ -257,10 +255,8 @@ describe('SortStateService', () => {
       expect(service.acqThreshold).toBe(0.5);
     });
 
-    it('a promised line, or no floor, is not unpromised', () => {
+    it('a promised line, or no verdict, is not unpromised', () => {
       service.setSortWindow(win(lineFloor('promised')));
-      expect(service.unpromised).toBe(false);
-      service.setSortWindow(win(lineFloor(null)));
       expect(service.unpromised).toBe(false);
       service.setSortWindow(win(null));
       expect(service.floor).toBeNull();

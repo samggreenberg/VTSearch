@@ -14,10 +14,9 @@ export type FloorStatus = 'promised' | 'unreachable' | 'insufficient_evidence';
 
 /** The floor's verdict on the current line, as the sort state holds it. */
 export interface LineFloor {
-  /** The detector's floor, or null when none is set and Inclusion drew the line. */
-  minPrecision: number | null;
-  /** Null when no floor is set. */
-  status: FloorStatus | null;
+  /** The detector's floor. Every detector has one (#4269). */
+  minPrecision: number;
+  status: FloorStatus;
   /** Positives among the held-out votes that may calibrate a promise. */
   calibrationPositives: number;
   /** How many the floor needs before it promises anything. */
@@ -28,24 +27,22 @@ const STATUSES: readonly FloorStatus[] = ['promised', 'unreachable', 'insufficie
 
 /**
  * The wire `floor` object, as a {@link LineFloor}; null when the response
- * carried none (a sort with no detector behind it).
- *
- * The generated type spells a null `status` as the string `'null'` (the
- * generator's reading of a nullable enum); the JSON carries a real null, and
- * anything outside the three states is read as no floor.
+ * carried none (a sort with no detector behind it), or a status outside the
+ * three states.
  */
 export function lineFloorFrom(wire: FloorState | null | undefined): LineFloor | null {
   if (!wire) return null;
-  const status = STATUSES.find((s) => s === (wire.status as string | null)) ?? null;
+  const status = STATUSES.find((s) => s === wire.status);
+  if (!status) return null;
   return {
-    minPrecision: wire.min_precision ?? null,
+    minPrecision: wire.min_precision,
     status,
     calibrationPositives: wire.calibration_positives ?? 0,
     minCalibrationPositives: wire.min_calibration_positives ?? 0,
   };
 }
 
-/** True when a floor is set and promises nothing: the line is the Inclusion 0 fallback. */
+/** True when the floor promises nothing: the line is the Inclusion 0 fallback. */
 export function isUnpromised(floor: LineFloor | null): boolean {
   return floor?.status === 'unreachable' || floor?.status === 'insufficient_evidence';
 }
@@ -67,8 +64,8 @@ export const FLOOR_PRESETS: readonly number[] = [0.1, 0.25, 0.5, 0.75, 0.9];
 export const DEFAULT_MIN_PRECISION = 0.5;
 
 /** "50%" for 0.5. */
-export function floorPercent(p: number | null): string {
-  return `${Math.round((p ?? 0) * 100)}%`;
+export function floorPercent(p: number): string {
+  return `${Math.round(p * 100)}%`;
 }
 
 /**
@@ -110,8 +107,6 @@ export function floorSummary(floor: LineFloor | null, returned: number | null): 
         `Not enough evidence yet (${floor.calibrationPositives} of ${floor.minCalibrationPositives} Good votes)` +
         ' · showing the default cut'
       );
-    default:
-      return 'No floor set · the line makes no promise';
   }
 }
 
@@ -128,9 +123,6 @@ export function floorExplanation(floor: LineFloor | null, returned: number | nul
       `At least ${target} of ${what} is estimated to be right. The estimate is cautious: ` +
       'the line returns as much as it can while keeping that promise.'
     );
-  }
-  if (floor.status === null) {
-    return 'This detector has no precision floor, so its line makes no promise. Pick a floor to set one.';
   }
   return unpromisedReason(floor);
 }

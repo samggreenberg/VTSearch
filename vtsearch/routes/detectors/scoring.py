@@ -267,7 +267,7 @@ def find_label(body: dict):
             get_active_detector_context(), labelset, results, threshold, snap
         )
         # Store the final (post-rerank) cutoff on the context so server-side reads of
-        # the Find cutoff — the work-queue / boundary-walk endpoints, Inclusion
+        # the Find cutoff — the work-queue / boundary-walk endpoints, floor
         # re-thresholding — agree with the labels this pass just applied. A no-op for
         # the non-structural path (threshold unchanged), authoritative for the
         # structural one.
@@ -298,9 +298,9 @@ def find_label(body: dict):
         # verified item the retrained detector now disagrees with reads as a
         # correction rather than vanishing.
         set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
-        # Freeze the single-pass scores so the line (the precision floor, or
-        # Inclusion) re-thresholds without re-scoring, and the Stats precision
-        # curve can read them.
+        # Freeze the single-pass scores so the line (the precision floor's)
+        # re-thresholds without re-scoring, and the Stats precision curve can
+        # read them.
         set_find_scores({entry["id"]: entry["score"] for entry in results})
 
         from vtscore.detectors.registry import set_find_mode

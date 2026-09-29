@@ -14,7 +14,6 @@ describe('SettingsStateService', () => {
     volume: 0.8,
     theme: 'dark' as const,
     show_animations: 'os' as const,
-    inclusion: 0.5,
   };
 
   // `load()` drives the `rxResource`, whose loader runs in an effect rather than

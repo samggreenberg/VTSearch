@@ -503,6 +503,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`vtscore.state.core`'s floor helpers drop their Inclusion argument** (issue
+  #4269). `recompute_detector_thresholds(min_precision)` (was
+  `(inclusion_value, min_precision)`) and
+  `detector_line_inclusion(ctx, min_precision)` (was
+  `(ctx, inclusion_value, min_precision)`), both unreleased since #4245. A
+  detector with no floor is re-cut at Inclusion 0. `user_inclusion()` is gone,
+  as are `DetectorContext.inclusion` and the private `_get_inclusion` /
+  `_set_inclusion`: there is no per-detector Inclusion left to hold.
+  `is_status_cache_fresh(label_history, inclusion_value=0)` gains a default, as
+  its siblings have.
+
 - **Smart no longer prices at the caller's inclusion** (issue #4243).
   `calculate_error_cost_over_time`, `compute_labeling_status`,
   `analyze_labeling_progress` and `cached_indicator_history` still take
@@ -717,6 +728,39 @@ instead, since every commit on `dev` is effectively a new app release.)
   public API with no in-repo caller, and is documented as such.
 
 ### Deprecated
+
+- **Inclusion is retired as a user preference, and pinned to 0** (issue
+  #4269). The precision floor (`min_precision`, #4245) is the operating point,
+  and the app no longer sets or stores an Inclusion. Inclusion stays the unit
+  the threshold machinery measures cuts in: the floor's fallback, Autopilot's
+  acquisition cut and Smart's pricing are all Inclusion arithmetic, and the
+  functions that take `inclusion_value` as a cut position
+  (`conformal_threshold`, `threshold_from_folds`, `FoldAnchoredCut.threshold_at`,
+  `recut_detector_threshold`, `reporting_line`, `train_svm`,
+  `train_detector_from_origins`, the labeling-progress functions) are
+  unchanged.
+
+  The names that set the *preference* keep importing, but only `0` still means
+  what it did, so only `0` is accepted - with a `DeprecationWarning`. Any other
+  value raises `ValueError` naming the precision floor, rather than being
+  silently ignored:
+  - `vtscore.state.get_inclusion()` always returns `0`.
+  - `vtscore.state.set_inclusion(value)` and
+    `vtscore.state.core.recompute_detector_thresholds_for_inclusion(value)`.
+  - `CoreConfig.inclusion` moves to the end of the field list and defaults to
+    `None` ("not given"); `CoreConfig(inclusion=0)` warns. A positional
+    `CoreConfig(...)` call that reached `inclusion` must switch to keywords.
+  - The `inclusion_value=` parameter of `train_and_score`,
+    `labelset_train_and_score`, `run_learned_sort` and
+    `build_learned_sort_signature` now defaults to `None`. Leave it unset; pass
+    `min_precision=` to choose where the line goes.
+  - `register_setting_persister("inclusion", fn)` warns and never fires;
+    `"inclusion"` leaves `KNOWN_SETTING_KEYS`.
+
+  **What changes for a caller that never touched Inclusion:** nothing. With no
+  floor (`min_precision=None`) the line is the Inclusion 0 cut, as it was at the
+  default Inclusion. `train_and_threshold` and `evaluate_proposed_changes` read
+  no stored Inclusion. The names above will be removed in a future release.
 
 - **`vtscore.eval.trainers` has moved to `vtscore.eval.sweep_trainers`**
   (issue #3764). The package had two registries called "trainers": the

@@ -42,28 +42,44 @@ class TestSettingsModule:
         settings_mod.set_volume(-3.0)
         assert settings_mod.get_volume() == 0.0
 
-    def test_get_set_inclusion(self, isolated_settings):
-        settings_mod.set_inclusion(5)
-        assert settings_mod.get_inclusion() == 5
+    def test_get_set_min_precision(self, isolated_settings):
+        settings_mod.set_min_precision(0.75)
+        assert settings_mod.get_min_precision() == 0.75
 
         # Persisted to disk
         raw = json.loads(isolated_settings.read_text())
-        assert raw["inclusion"] == 5
+        assert raw["min_precision"] == 0.75
 
-    def test_inclusion_clamped(self):
-        settings_mod.set_inclusion(100)
-        assert settings_mod.get_inclusion() == 10
+    def test_min_precision_clamped(self):
+        settings_mod.set_min_precision(5.0)
+        assert settings_mod.get_min_precision() == 1.0
 
-        settings_mod.set_inclusion(-100)
-        assert settings_mod.get_inclusion() == -10
+        settings_mod.set_min_precision(0.0)
+        assert settings_mod.get_min_precision() == 0.01
 
-    def test_inclusion_default(self):
-        assert settings_mod.get_inclusion() == 0
+    def test_min_precision_default(self):
+        from vtscore.config import DEFAULT_MIN_PRECISION
 
-    def test_inclusion_persists_across_reset(self, isolated_settings):
-        settings_mod.set_inclusion(7)
-        settings_mod.reset()
-        assert settings_mod.get_inclusion() == 7
+        assert settings_mod.get_min_precision() == DEFAULT_MIN_PRECISION
+
+    def test_min_precision_refuses_null(self):
+        """Every detector has a floor (#4269): there is no "no floor" to store."""
+        with pytest.raises(ValueError):
+            settings_mod.set_min_precision(None)  # type: ignore[arg-type]
+
+    def test_a_stored_null_floor_reads_as_the_default(self, isolated_settings):
+        """A ``null`` left by the pre-#4269 "no floor" reads as the default floor."""
+        from vtscore.config import DEFAULT_MIN_PRECISION
+
+        isolated_settings.write_text(json.dumps({"min_precision": None}))
+
+        assert settings_mod.get_min_precision() == DEFAULT_MIN_PRECISION
+        assert settings_mod.get_all()["min_precision"] == DEFAULT_MIN_PRECISION
+
+    def test_inclusion_is_no_longer_a_setting(self):
+        """Inclusion is retired as a user preference (#4269): no accessor reads or writes it."""
+        assert not hasattr(settings_mod, "get_inclusion")
+        assert not hasattr(settings_mod, "set_inclusion")
 
     def test_autofind_detectors_default_empty(self):
         assert settings_mod.get_autofind_detectors() == []
@@ -643,12 +659,12 @@ class TestConcurrentWrites:
         user_path.write_text(json.dumps(existing))
 
         # Our next write should re-read disk first and merge.
-        settings_mod.set_inclusion(3)
+        settings_mod.set_calibrate_count(3)
 
         raw = json.loads(user_path.read_text())
         assert raw["volume"] == 0.5
         assert raw["theme"] == "dark"  # would be lost without the RMW fix
-        assert raw["inclusion"] == 3
+        assert raw["calibrate_count"] == 3
 
     def test_atomic_write_uses_unique_tmp_filenames(self, isolated_settings):
         """Tmp files must include PID + uuid so two writers can't truncate
@@ -707,7 +723,7 @@ class TestConcurrentWrites:
 
         threads = [
             threading.Thread(target=writer, args=(settings_mod.set_volume, 0.5)),
-            threading.Thread(target=writer, args=(settings_mod.set_inclusion, 3)),
+            threading.Thread(target=writer, args=(settings_mod.set_calibrate_count, 3)),
         ]
         for t in threads:
             t.start()
@@ -719,7 +735,7 @@ class TestConcurrentWrites:
             assert not t.is_alive(), "thread hung (likely deadlock)"
 
         assert settings_mod.get_volume() == pytest.approx(0.5)
-        assert settings_mod.get_inclusion() == 3
+        assert settings_mod.get_calibrate_count() == 3
 
     def test_mutate_user_rmw_preserves_concurrent_writes(self, isolated_settings):
         """``mutate_user`` re-reads disk before applying its mutator, so
@@ -860,6 +876,6 @@ class TestFileLockWithoutFcntl:
 
         monkeypatch.setattr(settings_store_mod, "_fcntl", None)
         settings_mod.set_volume(0.5)
-        settings_mod.set_inclusion(3)
+        settings_mod.set_calibrate_count(3)
         assert settings_mod.get_volume() == pytest.approx(0.5)
-        assert settings_mod.get_inclusion() == 3
+        assert settings_mod.get_calibrate_count() == 3

@@ -48,7 +48,6 @@ def _build_config(settings_path=None) -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 register_core_config_builder(_build_config)

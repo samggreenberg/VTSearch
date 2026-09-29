@@ -80,7 +80,6 @@ class TestPlaceholderAgreement:
             X_list,
             y_list,
             snap,
-            inclusion_value=0,
             calibrate_count=2,
             calibration_fraction=0.5,
             det_ctx=None,

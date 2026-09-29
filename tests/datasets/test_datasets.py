@@ -304,8 +304,6 @@ class TestDatasetEndpoints:
 
             dest = example_media_dir() / data["filename"]
             assert dest.exists()
-            # Clean up
-            dest.unlink(missing_ok=True)
 
     def test_detect_media_type_finds_dominant(self, client, tmp_path, monkeypatch):
         """GET /api/dataset/detect-media-type returns the dominant media type."""

@@ -988,8 +988,8 @@ def train_from_labelset(
 
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the safe-threshold pass in that same space.
-    # Pass det_ctx so the fold orderings are cached for a no-retrain Inclusion
-    # slide (otherwise the slide can't move the cutoff — see train_and_threshold).
+    # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
+    # (otherwise a floor change can't move the cutoff — see train_and_threshold).
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
     voted_ids = labeled_media_ids(labelset, snap)
     if haystack is not None:
@@ -1022,7 +1022,7 @@ def labelset_train_and_score(
     *,
     media_type: str,
     clips_dict: dict[int, dict[str, Any]],
-    inclusion_value: int = 0,
+    inclusion_value: int | None = None,
     calibrate_count: int = 2,
     calibration_fraction: float | None = None,
     rows: Any = None,
@@ -1057,11 +1057,16 @@ def labelset_train_and_score(
     patch detector, one ``patch_forward``).  A caller driving a progress bar -
     or wanting a cancellation checkpoint - passes it.
 
-    *min_precision* is the precision floor to cut at, or ``None`` to cut at
-    *inclusion_value*; only the elements the learned sort chose calibrate it
-    (:func:`labelset_calibrating_groups`).
+    *min_precision* is the precision floor to cut at, or ``None`` for no floor
+    (the Inclusion 0 cut); only the elements the learned sort chose calibrate
+    it (:func:`labelset_calibrating_groups`).  *inclusion_value* is deprecated
+    (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
+    any other value raises ``ValueError``.
     """
+    from vtscore.config.core_config import _retired_inclusion
     from vtscore.detectors.training import _train_and_score_xy
+
+    _retired_inclusion("labelset_train_and_score(inclusion_value=...)", inclusion_value)
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict, on_progress=on_progress)
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
@@ -1069,7 +1074,6 @@ def labelset_train_and_score(
         X_list,
         y_list,
         clips_dict,
-        inclusion_value=inclusion_value,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,

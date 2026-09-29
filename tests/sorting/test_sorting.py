@@ -512,10 +512,10 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] != first_key
 
-    def test_inclusion_change_reuses_cached_orderings(self):
-        """Inclusion is a pure threshold knob now: changing it must reuse the
-        cached fold orderings (no fold refit) and only re-run the cheap
-        min-cost search."""
+    def test_floor_change_reuses_cached_orderings(self):
+        """The precision floor is a pure threshold knob: a retrain at another
+        floor must reuse the cached fold orderings (no fold refit) and only
+        re-run the cheap cut."""
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
@@ -526,8 +526,8 @@ class TestCalibrationCache:
             medias,
             good_votes,
             bad_votes,
-            inclusion_value=0,
             det_ctx=det_ctx,
+            min_precision=0.5,
         )
         assert det_ctx.calibration_cache is not None
         key_before = det_ctx.calibration_cache[0]
@@ -541,10 +541,10 @@ class TestCalibrationCache:
                 medias,
                 good_votes,
                 bad_votes,
-                inclusion_value=2,
                 det_ctx=det_ctx,
+                min_precision=0.9,
             )
-        # No fold refit, and the cache key is unchanged (inclusion is not in it).
+        # No fold refit, and the cache key is unchanged (the floor is not in it).
         assert patched.call_count == 0
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] == key_before
