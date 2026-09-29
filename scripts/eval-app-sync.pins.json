@@ -16,11 +16,11 @@
     "harness": "b60b9d9187200e8f3857275e752100c841aa7c2c8822bf9b5e77ce8b13ece4e2"
   },
   "autopilot.startup_default": {
-    "app": "251df90138378972791c1728e43c9074fcf2df0829093a73659f48dcb2cbd515",
+    "app": "0895209e8fa0e2c0f2c4f6ec922e5ea17a8cdaf3d0e7f22cf8e57d7fa0792f16",
     "harness": "1e2f0e59ddd85cb3504335ac5259eb202a623ea1d5f939a61ebd2a1ff5d58dc8"
   },
   "autopilot.vote_targets": {
-    "app": "251df90138378972791c1728e43c9074fcf2df0829093a73659f48dcb2cbd515",
+    "app": "0895209e8fa0e2c0f2c4f6ec922e5ea17a8cdaf3d0e7f22cf8e57d7fa0792f16",
     "harness": "c73eed9f2e65df07b0851b2550aaea6a33079b6002674b772387647cbfc177da"
   },
   "floor.check_rounds": {
@@ -44,7 +44,7 @@
     "harness": "e0f83049070827f322fc988bf510fc64c29020db8e1be28e95149082eb0a3119"
   },
   "progress.span_status": {
-    "app": "7da887d32d0559066dd3d51ad1045e5b9322f2e295aa6bc8e5ca62e6f81ba3a3",
+    "app": "b71a2dafe924d31d47cb7bf0e292f900559bb5c1b4329b9318841b176577bd02",
     "harness": "943c601eab9f7b60b323015d29c3e3e9da6b54edcc17c0d4ceffee3e287530cd"
   },
   "progress.stable_status": {

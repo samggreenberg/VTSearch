@@ -443,10 +443,10 @@ MIRRORS: list[Mirror] = [
         divergence=(
             "The app reads its green target from `CoreConfig.autopilot_goal_diversity`; the "
             "harness takes it per-run so a sweep can vary it, defaulting to the same value. "
-            "The harness also *reports* the resolved bar (`span_target`, on every emitted "
-            "row); the app computes the same quantity and keeps it to itself, spelling it into "
-            "the indicator's reason string instead. That is a reporting addition on the "
-            "harness side, not a difference in the rule."
+            "Both sides *report* the resolved bar: the harness as `span_target` on every "
+            "emitted row, the app as the indicator's `target` key, which the autopilot panel "
+            "paces its Diversity light against (issue #4319). Reporting only, not a difference "
+            "in the rule."
         ),
     ),
     # ----------------------------------------------------------------- default

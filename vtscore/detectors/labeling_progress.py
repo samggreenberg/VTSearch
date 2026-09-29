@@ -1123,6 +1123,11 @@ def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
     (``level`` = consecutive BFS-order seen nodes, ``depth`` = total nodes),
     not on the per-step MLP cache, so it stays cheap and is reused verbatim by
     the pending-status placeholder.
+
+    ``target`` is the green bar itself, ``min(autopilot_goal_diversity,
+    depth)``: the autopilot panel paces its Diversity light against it (#4319),
+    so it reads the same number that turns this indicator green rather than
+    re-deriving it from settings.
     """
     # The old metric required 4 full tree levels for green, which in a k=3
     # tree is 1+3+9+27 = 40 nodes.  We preserve that scale: green at 40
@@ -1137,6 +1142,7 @@ def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
             "reason": "Diversity tree not available.",
             "level": 0,
             "depth": 0,
+            "target": 0,
         }
 
     level = span_info["level"]
@@ -1144,23 +1150,26 @@ def _compute_span_status(span_info: Optional[dict[str, Any]]) -> dict[str, Any]:
     green_at = min(SPAN_GREEN, tree_total)
     yellow_at = min(SPAN_YELLOW, green_at)
     if tree_total <= 0:
-        return {"status": "green", "reason": "Degenerate tree.", **span_info}
+        return {"status": "green", "reason": "Degenerate tree.", **span_info, "target": 0}
     if level >= green_at:
         return {
             "status": "green",
             "reason": "All tree nodes covered." if level >= tree_total else f"{level}/{tree_total} nodes covered.",
             **span_info,
+            "target": green_at,
         }
     if level >= yellow_at:
         return {
             "status": "yellow",
             "reason": f"{level}/{tree_total} nodes covered.",
             **span_info,
+            "target": green_at,
         }
     return {
         "status": "red",
         "reason": "No tree coverage yet." if level == 0 else f"{level}/{tree_total} nodes covered.",
         **span_info,
+        "target": green_at,
     }
 
 

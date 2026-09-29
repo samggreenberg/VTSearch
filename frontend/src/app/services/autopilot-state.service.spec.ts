@@ -404,6 +404,18 @@ describe('AutopilotStateService', () => {
     expect(service.state.stablePlateau).toBe(false);
   });
 
+  it('updateFromLabelingStatus should carry the Span green target, keeping it when unreported', () => {
+    service.activate();
+    expect(service.state.spanTarget).toBe(0);
+    service.updateFromLabelingStatus(
+      makeStatus({ status: 'green' }, { status: 'green' }, { status: 'red', diversity_level: 5, target: 40 }),
+    );
+    expect(service.state.spanTarget).toBe(40);
+
+    service.updateFromLabelingStatus(makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }));
+    expect(service.state.spanTarget).toBe(40);
+  });
+
   it('clear should reset to initial state', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
