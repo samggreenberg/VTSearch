@@ -57,6 +57,17 @@ Use the summary verbatim as the PR body (step 5) and also output it in chat, wri
 - Run `python scripts/punchcard/punchcard.py`, which rewrites `scripts/punchcard/vtsearch_pr_punchcard.png`.
 - Commit the regenerated PNG and the updated `pr_merges.txt`.
 
+## 4b. Drain the screenshot reshoot queue
+
+GUI-changing sessions don't re-render the app's screenshots; they queue the shots they moved as one file each under [`docs/reshoot-queue/`](reshoot-queue/README.md), and this step shoots them all at once, so `main` never ships a stale screenshot. If the directory holds nothing but its `README.md`, skip this step.
+
+- **Docs shots** (any entry naming a manifest id): run `scripts/screenshots/refresh.sh` with **no ids**, so it re-renders the whole set. A GUI change routinely moves shots its session didn't think to list, and a full run's `git diff --stat docs/user/assets/` is the exact list of what moved; a shot whose UI didn't change comes out byte-identical and leaves no diff.
+- **Slide figures** (any entry naming `slides:<group>`): run `node slides/figs/src/shoot-ui-figs.mjs <group>...` with the queued groups, per [`slides/README.md`](../slides/README.md) (it downloads COCO val2017 on its first run, and needs `cd scripts/screenshots && npm install` once for playwright).
+- **Review the diff like any other.** Look at every changed image, not only the queued ones: a frame showing an error toast, a spinner or an empty panel is a harness failure rather than a GUI change, so leave that shot's old image in place and file an issue for the harness. A queued shot that didn't move is fine; its change may have been reverted, or its session listed it to be safe.
+- **Commit the images and delete the drained entry files in the same commit**, leaving `README.md`. Entries whose shots could not be rendered stay queued for the next release; say which in chat.
+
+A harness that won't run at all doesn't block the release: stale screenshots are a docs defect, not a reason to hold shipped fixes back. Leave the queue as it is, file an issue for the harness failure, and carry on with step 5.
+
 ## 5. Open the release PR
 
 - **Title:** `Release: dev → main (YYYY-MM-DD)` using today's date.

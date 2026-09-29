@@ -180,7 +180,7 @@ GET /api/labeling-status
 {
   "smart": {"status": "green", "reason": "..."},
   "stable": {"status": "yellow", "reason": "..."},
-  "span": {"status": "red", "reason": "..."},
+  "span": {"status": "red", "reason": "...", "level": 13, "depth": 121, "target": 40},
   "good_count": 12,
   "bad_count": 9,
   "total_count": 500,
@@ -189,7 +189,11 @@ GET /api/labeling-status
 ```
 
 Each metric has a `status` of `"red"`, `"yellow"`, or `"green"` and an
-optional human-readable `reason`. The frontend polls this every ~2 s while
+optional human-readable `reason`. `span` also carries its coverage-atlas
+counts: `level` (consecutive covered nodes, also sent as `diversity_level`),
+`depth` (total nodes, also `max_level`), and `target`, the level that turns it
+green (the diversity goal capped at `depth`; the Autopilot panel paces its
+Explore Diversity light against it). The frontend polls this every ~2 s while
 labeling, so it never blocks on training: when the per-step cache already
 covers the label history the status is computed inline (`stale: false`);
 otherwise the last snapshot is returned at once with `stale: true` (counts and

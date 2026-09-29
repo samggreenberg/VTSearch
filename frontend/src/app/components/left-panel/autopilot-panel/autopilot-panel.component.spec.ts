@@ -180,31 +180,162 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('hard');
   });
 
-  it('should show the diversity (span) status icon during new phase', () => {
-    // Advance to new phase
-    autopilotState.checkPhaseTransition(3, 0);
-    autopilotState.checkPhaseTransition(20, 4);
-    autopilotState.updateFromLabelingStatus({
-      good_count: 0,
-      bad_count: 0,
-      total_count: 0,
-      smart: { status: 'green' },
-      stable: { status: 'green' },
-      span: { status: 'yellow' },
-    });
-    autopilotState.checkPhaseTransition(20, 10);
-    expect(component.state.phase).toBe('new');
+  describe('step light (#4319)', () => {
+    /** The active step's light colour, straight off the step model. */
+    function activeLight(): string | undefined {
+      return component.steps.find((st) => st.state === 'active')?.light?.color;
+    }
 
-    const steps = component.steps;
-    const newStep = steps.find((s: any) => s.phase === 'new');
-    // The diversity (new) phase runs after smart + stable are already green,
-    // so it shows a single span/diversity dot instead of repeating those two.
-    expect(newStep!.statusIcons.length).toBe(1);
-    // span was reported yellow above, so the diversity dot is yellow.
-    expect(newStep!.statusIcons[0].color).toBe('yellow');
-    // Tooltip explains the diversity indicator, not just its raw colour.
-    expect(newStep!.statusIcons[0].title).toContain('Diverse');
-    expect(newStep!.statusIcons[0].title).toContain('cover');
+    /** A labeling-status payload carrying the given indicator readings. */
+    function status(smart: string, stable: string, span: Record<string, unknown>) {
+      return { good_count: 0, bad_count: 0, total_count: 0, smart: { status: smart }, stable: { status: stable }, span };
+    }
+
+    it('gives the active step exactly one light and no other step a light', async () => {
+      await settleZoneless(fixture);
+      const lit = component.steps.filter((st) => st.light !== null);
+      expect(lit.map((st) => st.phase)).toEqual(['good']);
+      expect(fixture.nativeElement.querySelectorAll('.ap-light').length).toBe(1);
+      expect(fixture.nativeElement.querySelectorAll('.ap-step.active .ap-light').length).toBe(1);
+    });
+
+    it('shows the light in the collapsed rail too', async () => {
+      fixture.componentRef.setInput('collapsed', true);
+      await settleZoneless(fixture);
+      const lights = fixture.nativeElement.querySelectorAll('.collapsed-step.active .ap-light');
+      expect(lights.length).toBe(1);
+      expect(lights[0].getAttribute('data-color')).toBe('red');
+    });
+
+    it('count steps go red, then yellow at half the target', async () => {
+      // Initial goods: target 3.
+      expect(activeLight()).toBe('red');
+      fixture.componentRef.setInput('goodVotes', goods(1));
+      await settleZoneless(fixture);
+      expect(activeLight()).toBe('red');
+      fixture.componentRef.setInput('goodVotes', goods(2));
+      await settleZoneless(fixture);
+      expect(activeLight()).toBe('yellow');
+      const rendered = fixture.nativeElement.querySelector('.ap-step.active .ap-light');
+      expect(rendered.getAttribute('data-color')).toBe('yellow');
+      expect(rendered.title).toContain('Yellow.');
+
+      // Initial bads: target 4, a fresh light that starts red again.
+      fixture.componentRef.setInput('goodVotes', goods(3));
+      fixture.componentRef.setInput('badVotes', bads(1));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('bad');
+      expect(activeLight()).toBe('red');
+      fixture.componentRef.setInput('badVotes', bads(2));
+      await settleZoneless(fixture);
+      expect(activeLight()).toBe('yellow');
+
+      // More goods: target 20.
+      fixture.componentRef.setInput('badVotes', bads(4));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('more');
+      expect(activeLight()).toBe('red');
+      fixture.componentRef.setInput('goodVotes', goods(10));
+      await settleZoneless(fixture);
+      expect(activeLight()).toBe('yellow');
+    });
+
+    it('a count step capped to what a tiny dataset holds is paced against the cap', async () => {
+      // 2 items: at most 2 goods, so one good is already halfway.
+      fixture.componentRef.setInput('datasetSize', 2);
+      fixture.componentRef.setInput('goodVotes', goods(1));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('good');
+      expect(component.effGoodTarget).toBe(2);
+      expect(activeLight()).toBe('yellow');
+    });
+
+    it('the boundary step shows the lower of Smart and Stable', async () => {
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(4));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('hard');
+      // Nothing reported yet reads red.
+      expect(activeLight()).toBe('red');
+
+      fixture.componentRef.setInput('labelingStatus', status('yellow', 'red', { status: '' }));
+      await settleZoneless(fixture);
+      expect(activeLight()).toBe('red');
+
+      fixture.componentRef.setInput('labelingStatus', status('green', 'yellow', { status: '' }));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('hard');
+      expect(activeLight()).toBe('yellow');
+      const light = component.steps.find((st) => st.phase === 'hard')!.light!;
+      expect(light.title).toContain('Smart (green)');
+      expect(light.title).toContain('Stable (yellow)');
+    });
+
+    it('the diversity step is paced against the Span green target', async () => {
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(10));
+      fixture.componentRef.setInput(
+        'labelingStatus',
+        status('green', 'green', { status: 'yellow', diversity_level: 13, target: 40 }),
+      );
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('new');
+      // Past the backend's own yellow cutoff (10), but not yet halfway to 40.
+      expect(activeLight()).toBe('red');
+      const step = component.steps.find((st) => st.phase === 'new')!;
+      expect(step.detail).toBe('Diversity: 13/40');
+      expect(step.light!.title).toContain('cover');
+      expect(step.light!.title).toContain('13 of the 40');
+
+      fixture.componentRef.setInput(
+        'labelingStatus',
+        status('green', 'green', { status: 'yellow', diversity_level: 20, target: 40 }),
+      );
+      await settleZoneless(fixture);
+      expect(activeLight()).toBe('yellow');
+
+      // Green is the indicator's call, never the count's: the level can sit at
+      // the target a poll ahead of the status that confirms it.
+      fixture.componentRef.setInput(
+        'labelingStatus',
+        status('green', 'green', { status: 'yellow', diversity_level: 40, target: 40 }),
+      );
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('new');
+      expect(activeLight()).toBe('yellow');
+    });
+
+    it('the diversity step reads red until a target is reported', async () => {
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(10));
+      fixture.componentRef.setInput('labelingStatus', status('green', 'green', { status: 'yellow' }));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('new');
+      expect(activeLight()).toBe('red');
+    });
+
+    it('the done step is green, drawn as the check a finished step keeps', async () => {
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(5));
+      fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('done');
+      expect(activeLight()).toBe('green');
+
+      // Red circle, yellow circle, green check: no green circle is ever drawn.
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelectorAll('.ap-light').length).toBe(0);
+      const activeCheck = el.querySelector('.ap-step.active .ap-check')!;
+      expect(activeCheck).toBeTruthy();
+      expect(activeCheck.getAttribute('aria-label')).toBe('Step progress: green');
+      // ...and every finished step before it carries the same check.
+      expect(el.querySelectorAll('.ap-step.done .ap-check').length).toBe(5);
+
+      fixture.componentRef.setInput('collapsed', true);
+      await settleZoneless(fixture);
+      expect(el.querySelectorAll('.collapsed-step.active .ap-check').length).toBe(1);
+      expect(el.querySelectorAll('.ap-light').length).toBe(0);
+    });
   });
 
   it('should deactivate autopilot', () => {

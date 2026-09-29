@@ -687,6 +687,16 @@ The phase panel labels them, in order:
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
 
+The current phase carries one light that shows how close it is to done.
+It starts as a **red** circle, turns **yellow** once the phase is past
+halfway, and becomes a **green check** when the phase is finished, at
+which point Autopilot moves on to the next one; every finished phase
+keeps its check. For the three Find phases, halfway is half the
+vote target (2 of 3 goods, 10 of 20); for Refine Boundary the light
+shows whichever of the smart and stable indicators is further behind;
+for Explore Diversity it is half the coverage goal. Hover the light for
+the details.
+
 When all five phases are done, Autopilot shows **Done!** and a
 **Detector Trained** dialog offers you the choice: **Continue
 Training** stays put so you can keep labeling (the detector continues
@@ -698,7 +708,8 @@ back later to refine it further will not raise it again.
 ### The collapsed bar
 
 You can collapse Autopilot to a thin strip that just shows the
-five phase indicators. Click any active phase to re-pick the
+five phase indicators, with the current phase's light above its name.
+Click any active phase to re-pick the
 current recommendation (useful if you voted the wrong way and
 want a fresh suggestion). Collapsed mode is handy once you're
 comfortable with the flow and want more vertical room for the

@@ -2,6 +2,7 @@
 
 import pytest
 
+from vtscore.config import CoreConfig
 from vtsearch.state import (
     add_label_to_history,
     bad_votes,
@@ -502,6 +503,29 @@ class TestDiversityLevelOverTime:
         data = resp.get_json()
         assert "diversity_level" in data["span"]
         assert isinstance(data["span"]["diversity_level"], (int, float))
+
+    def test_labeling_status_reports_span_green_target(self, client):
+        """The span indicator carries the bar that turns it green (#4319).
+
+        The autopilot panel paces its Diversity light against ``target``, so it
+        must be the very number the status is decided by: the diversity goal,
+        capped at the atlas's node count.
+        """
+        atlas = _build_atlas()
+        expected = min(CoreConfig.from_settings().autopilot_goal_diversity, atlas.total_nodes)
+
+        data = client.get("/api/labeling-status").get_json()
+        assert data["span"]["target"] == expected
+        assert data["span"]["status"] == "red"
+
+        for vid in atlas.vector_to_leaf:
+            coverage_atlas_label(vid, good=True)
+            good_votes[vid] = None
+
+        data = client.get("/api/labeling-status").get_json()
+        assert data["span"]["target"] == expected
+        assert data["span"]["level"] >= data["span"]["target"]
+        assert data["span"]["status"] == "green"
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,21 @@
           (click)="step.state === 'active' && refocus.emit()"
         >
           @if (step.state === 'active') {
+            @if (step.light; as light) {
+              @if (light.color === 'green') {
+                <span class="ap-check" role="img" [attr.aria-label]="light.ariaLabel" [title]="light.title">
+                  <vt-icon type="check" [size]="14"></vt-icon>
+                </span>
+              } @else {
+                <span
+                  class="ap-light"
+                  [attr.data-color]="light.color"
+                  [attr.aria-label]="light.ariaLabel"
+                  [title]="light.title"
+                  role="img"
+                ></span>
+              }
+            }
             <span class="collapsed-step-label">{{ step.shortLabel }}</span>
           } @else {
             <span class="collapsed-step-number" [class.struck]="step.state === 'done'">{{ step.stepNumber }}</span>
@@ -51,8 +66,20 @@
             <div class="ap-step-marker">
               @if (step.state === 'done') {
                 <span class="ap-check" title="Complete" aria-label="Complete"><vt-icon type="check" [size]="14"></vt-icon></span>
-              } @else if (step.state === 'active') {
-                <span class="ap-dot active-dot" title="Current step" aria-label="Current step"></span>
+              } @else if (step.light; as light) {
+                @if (light.color === 'green') {
+                  <span class="ap-check" role="img" [attr.aria-label]="light.ariaLabel" [title]="light.title">
+                    <vt-icon type="check" [size]="14"></vt-icon>
+                  </span>
+                } @else {
+                  <span
+                    class="ap-light"
+                    [attr.data-color]="light.color"
+                    [attr.aria-label]="light.ariaLabel"
+                    [title]="light.title"
+                    role="img"
+                  ></span>
+                }
               } @else {
                 <span class="ap-dot" title="Upcoming step" aria-label="Upcoming step"></span>
               }
@@ -61,19 +88,8 @@
               <span class="ap-step-label" [title]="step.state === 'active' ? step.intent + ' Click to reselect recommendation.' : step.intent">
                 {{ step.label }}
               </span>
-              @if (step.detail || step.statusIcons.length) {
-                <span class="ap-step-detail" [title]="step.detailTitle">
-                  {{ step.detail }}
-                  @for (icon of step.statusIcons; track icon.ariaLabel) {
-                    <span
-                      class="ap-status-icon"
-                      [attr.data-color]="icon.color"
-                      [attr.aria-label]="icon.ariaLabel"
-                      [title]="icon.title"
-                      role="img"
-                    ></span>
-                  }
-                </span>
+              @if (step.detail) {
+                <span class="ap-step-detail" [title]="step.detailTitle">{{ step.detail }}</span>
               }
             </div>
           </div>
