@@ -50,14 +50,20 @@ def _load_saved_detector(client, name: str):
     return ctx
 
 
-def test_reloaded_detector_starts_on_the_anchored_cut(client):
+def test_reloaded_detector_starts_on_the_floors_set(client):
+    from vtscore.state.core import human_voted_ids
+
     ctx = _load_saved_detector(client, "reload-anchored")
 
     assert ctx.anchored_cut_cache is not None, (
         "the registry load path must fit the fold-anchored population estimator; "
         "without it a resumed session would start on the pooled conformal cut"
     )
-    assert ctx.threshold == ctx.anchored_cut_cache.threshold_at(0)
+    # Under the floor the line keeps the floor's starting candidate of the
+    # haystack the load scored (#4272), and acquisition re-cuts the anchored
+    # estimator from it.
+    assert ctx.line_ranking is not None
+    assert ctx.threshold == ctx.line_ranking.threshold_for(32, human_voted_ids(ctx))
 
 
 def test_reloaded_threshold_is_not_the_pooled_conformal_cut(client):

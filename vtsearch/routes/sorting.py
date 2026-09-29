@@ -570,7 +570,7 @@ def add_textsort_suggestion_route(body: dict):
 @sorting_bp.route("/api/min-precision", methods=["GET"])
 @sorting_bp.response(200, MinPrecisionResponseSchema)
 def get_min_precision_route():
-    """Get the active detector's precision floor, what it can promise, and the line it draws."""
+    """Get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws."""
     return _min_precision_payload()
 
 
@@ -580,11 +580,12 @@ def get_min_precision_route():
 def set_min_precision_route(body: dict):
     """Set the precision floor, a fraction clamped to ``[0.01, 1]``.
 
-    A pure cutoff knob: the active detector re-cuts its cached estimators at
-    the new floor (no retrain) and, in Find mode, re-splits the unverified
-    items over the frozen scores.  The new line comes back in the same round
-    trip.  A floor that can promise nothing draws the Inclusion 0 line and says
-    why in ``status``.  Every detector has a floor, so ``null`` is refused.
+    A pure cutoff knob: the active detector's line moves to the set the new
+    floor keeps (no retrain) and, in Find mode, the unverified items re-split
+    over the frozen scores.  The new line comes back in the same round trip,
+    with the floor's state: ``unchecked`` until a spot check runs at this
+    floor (``/api/precision-check``), then ``confirmed`` or ``short`` with the
+    check's likely range.  Every detector has a floor, so ``null`` is refused.
     """
     # The clamp is not spelled out here: ``settings.validate_min_precision`` is
     # generated from the bound declared once on ``UserSettings.min_precision``,
@@ -611,9 +612,10 @@ def _min_precision_payload() -> dict:
 
     det_ctx = get_active_detector_context()
     threshold = _active_detector_threshold()
-    state = detector_floor_state(det_ctx, get_min_precision())
-    estimate = None if det_ctx is _empty_detector_context else det_ctx.precision_floor_cache
-    n_returned = estimate.count_at(threshold) if estimate is not None and threshold is not None else None
+    # The app always sets a floor, so the state is never ``None`` here.
+    state = detector_floor_state(det_ctx, get_min_precision()) or {}
+    ranking = None if det_ctx is _empty_detector_context else det_ctx.line_ranking
+    n_returned = ranking.above(threshold) if ranking is not None and threshold is not None else None
     return {**state, "threshold": threshold, "n_returned": n_returned}
 
 

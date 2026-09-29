@@ -181,15 +181,16 @@ class TestStreamingNdjsonExport:
         assert not out.with_name(out.name + ".tmp").exists()
 
     def test_the_header_carries_each_detectors_floor_verdict(self, client, tmp_path, monkeypatch, _stub_split_training):
-        """An unpromised detector's verdict reaches the NDJSON ``_meta``; its hits still stream (#4247)."""
+        """Each detector's floor state reaches the NDJSON ``_meta``; its hits still stream (#4247, #4272)."""
         import vtscore.cli as cli_mod
 
         stub = cli_mod._load_and_train_detectors
         floor = {
             "min_precision": 0.5,
-            "status": "insufficient_evidence",
-            "calibration_positives": 0,
-            "min_calibration_positives": 10,
+            "status": "unchecked",
+            "count": 32,
+            "range": None,
+            "schedule": {"candidate": 32, "rounds": 1, "picks": 5},
         }
         monkeypatch.setattr(
             cli_mod,

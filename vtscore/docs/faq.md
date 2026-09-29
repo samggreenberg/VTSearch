@@ -263,10 +263,11 @@ what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
 
 Inclusion is no longer a user preference (#4269): the app's control is the
 **precision floor** (#4224), where the user names the share of returns that
-must be right and the cut returns as much as it can at that share
-(`vtscore.training.thresholds.precision_floor_cut`). `k` stays underneath,
-as the unit the floor's fallback, Autopilot's acquisition offset and the
-Smart indicator's pricing are measured in. The entry points that used to take
+should be right: the line keeps the top of the ranking and a spot check of
+random picks measures how much of it is right
+(`vtscore.training.thresholds.spot_check`, #4272). `k` stays underneath, as
+the unit Autopilot's acquisition offset and the Smart indicator's pricing are
+measured in. The entry points that used to take
 the user's Inclusion (`train_and_score(inclusion_value=...)` and its
 siblings, `vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are
 deprecated: they accept only `0`, with a `DeprecationWarning`. The

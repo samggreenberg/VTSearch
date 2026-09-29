@@ -265,7 +265,7 @@ def score_detector(
         return name, {
             "detector_name": name,
             "threshold": round(threshold, 4),
-            # Whether that cut is a promise, or the unpromised Inclusion 0 cut (#4247).
+            # The floor's state on that cut: unchecked, headless (#4247, #4272).
             "floor": floor,
             "total_hits": len(positive_hits),
             "hits": positive_hits,
@@ -277,27 +277,27 @@ def score_detector(
 
 
 def _floor_state(name: str, det_ctx: Any) -> dict | None:
-    """What the precision floor says about *name*'s cut in an AutoRun, logged when unpromised.
+    """What the precision floor says about *name*'s cut in an AutoRun: unchecked, because nobody can vote.
 
     Read at the floor its training read (the same thread's
     :func:`vtsearch.state.get_min_precision`), off the context that drew the
-    line.  An unpromised cut is still the one exported - the Inclusion 0 cut -
-    and the log line is the headless record of it (#4247).
+    line.  A headless run cannot spot-check its floor (#4272), so the cut
+    exported is the floor's starting candidate, and the log line is the
+    record that it was never checked.
     """
     from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+    from vtscore.training.thresholds import FLOOR_UNCHECKED  # noqa: PLC0415
     from vtsearch.state import get_min_precision  # noqa: PLC0415
 
     if det_ctx is None:
         return None
     state = detector_floor_state(det_ctx, get_min_precision())
-    if state["status"] not in (None, "promised"):
+    if state is not None and state["status"] == FLOOR_UNCHECKED:
         logger.info(
-            "Auto-detect: detector %s makes no %.0f%% promise (%s, %d calibration positives); "
-            "exporting its Inclusion 0 cut",
+            "Auto-detect: detector %s exports its top %d unchecked (aiming at %.0f%% right); nobody is here to check it",
             name,
+            state["count"],
             100 * state["min_precision"],
-            state["status"],
-            state["calibration_positives"],
         )
     return state
 

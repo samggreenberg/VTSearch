@@ -218,6 +218,76 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="floor.check_schedule",
+        app="py:vtscore.training.thresholds.spot_check.check_schedule",
+        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::schedule_for",
+        kind="ported",
+        note=(
+            "The spot check's schedule (#4272): the starting candidate K(X) = 32 * 2**max(0, "
+            "floor(log2(0.5 / X))), the rounds R = log2(K / 32) + 1, and the picks a round "
+            "m = max(5, ceil(ln(alpha / R) / ln X)). The owner priced this exact rule on the "
+            "#4224 rank frames (docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md); the "
+            "library's check_schedule is a port of the analysis script's schedule_for, and the "
+            "presets must keep resolving to (128, 3, 5), (64, 2, 5), (32, 1, 5), (32, 1, 11) and "
+            "(32, 1, 29) - tests_lib/sorting/test_spot_check.py pins them literally. The eval "
+            "harness itself delegates to the library (voting_iterations calls check_schedule / "
+            "SpotCheck), so the pair pinned here is library vs. the priced reference."
+        ),
+        divergence=(
+            "INTENTIONAL: the library validates X in (0, 1] and, at X >= 1, makes the picks the "
+            "candidate itself (no finite sample bounds a proportion at 1; only a census reaches "
+            "it) where the reference would divide by ln 1 = 0. The reference reads EPS and "
+            "BASE off its sibling module; the library spells them as its own constants."
+        ),
+    ),
+    Mirror(
+        id="floor.likely_range",
+        app="py:vtscore.training.thresholds.spot_check.likely_range",
+        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
+        kind="ported",
+        note=(
+            "The likely range a checked set carries (#4272): a Clopper-Pearson interval from "
+            "the check's labels inside the set, each tail at alpha / R (range_tail - the level "
+            "every round is tested at, so the lower end IS the bound the check tested and a "
+            "check confirms X iff lo >= X), exact (s / K) once the labels cover the set. The "
+            "reference's coverage numbers (99% of sessions) hold only for this tail; a plain "
+            "90% range showed above the truth 11% of the time after a first-round pass. If "
+            "the tail or the census rule moves on either side, move the other."
+        ),
+        divergence=(
+            "INTENTIONAL: the reference is vectorised over frames (numpy arrays, a cached bound "
+            "table); the library bounds one set at a time through scipy's beta quantile, "
+            "clopper_pearson_lower / clopper_pearson_upper, and returns a LikelyRange record. "
+            "range_tail is a separate one-liner on both sides; it is named here because the "
+            "tail is half of what this mirror is about."
+        ),
+    ),
+    Mirror(
+        id="floor.check_rounds",
+        app="py:vtscore.training.thresholds.spot_check.SpotCheck",
+        harness="scripts/experiments/calibration/analyze_random_verification.py::simulate_rounds",
+        kind="ported",
+        note=(
+            "The check's rounds (#4257's rule b, ruled in #4267 and #4272): m fresh picks drawn "
+            "uniformly from the current candidate, the labels already seen inside it kept, a "
+            "round confirming iff the one-sided bound at alpha / R clears X, a failed round "
+            "halving the candidate down to 32, no redraw on the same candidate, and a census "
+            "decided exactly. SpotCheck is the app's live state machine over one fixed candidate; "
+            "simulate_rounds is the vectorised simulation the rule was priced with. If either "
+            "changes what is kept across a halving, how many picks a round draws, or the level "
+            "a round is tested at, the other has to follow or the pricing no longer describes "
+            "the shipped check."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
+            "carries a fingerprint for the stale flag, and reports its state to a client; the "
+            "simulation has none of that, and draws hypergeometrically from planted positive "
+            "ranks rather than asking a user. A candidate smaller than the schedule's K (a "
+            "small corpus) gets the halvings it really has (rounds_for) on the app side; the "
+            "simulation always starts at the rule's K."
+        ),
+    ),
+    Mirror(
         id="thresholds.min_precision_default",
         app="py:vtscore.state.__init__.get_min_precision",
         harness="vtscore/training/thresholds/precision_floor.py::resolve_min_precision",
@@ -408,16 +478,21 @@ MIRRORS: list[Mirror] = [
         note=(
             "How the cross-calibration cut and the population estimate are fused into the "
             "shipped threshold. The harness's reported operating point is only comparable to "
-            "the app's if this rule matches. Since #4245 this is also where the precision "
-            "floor's estimate is built (the unvoted remainder as corpus, the WHOLE haystack - "
-            "votes included - as the reference pool, each fold's held-out votes cut down by "
-            "eligible_fold_orderings, each fold's own excluded haystack; #4221 found the "
-            "promise's safety rests on that pool asymmetry) and where the line is chosen - both sides call the shared "
-            "reporting_line, so which line an operating point draws is delegated; what this "
-            "digest watches is the estimate's inputs, which the harness has to build the same way. "
-            "Since #4269 the app hands reporting_line PRECISION_FLOOR_FALLBACK_INCLUSION (0) "
-            "rather than a stored Inclusion; the harness hands it the arm's `inclusion`, whose "
-            "default is that 0."
+            "the app's if this rule matches. Since #4272 this is where the line is drawn under "
+            "a floor: the set the floor keeps, through the shared floor_line over a LineRanking "
+            "built from the final model's scores with the voted items marked - delegated, so "
+            "which line a floor draws cannot drift; what this digest watches is the ranking's "
+            "inputs (every scored item, unscorable ones dropped, the trainer's voted set), which "
+            "the harness has to build the same way, and the order of the fallbacks under it "
+            "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no floor, the "
+            "schedule blend with no fitted cut). Since #4245 this is also where the #4220 "
+            "estimate is built (the unvoted remainder as corpus, the WHOLE haystack - votes "
+            "included - as the reference pool, each fold's held-out votes cut down by "
+            "eligible_fold_orderings, each fold's own excluded haystack); it no longer draws "
+            "the line on either side and feeds only the Find Stats curve, but the harness still "
+            "builds it the same way. Since #4269 the app hands reporting_line "
+            "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
+            "hands it the arm's `inclusion`, whose default is that 0."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "

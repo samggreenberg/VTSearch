@@ -1107,9 +1107,12 @@ class TestLiveModelReuse:
         model, threshold, smart_threshold = _prog_cache().live_models[key]
         assert model is not None
         assert isinstance(threshold, float)
-        # The line is the Inclusion 0 cut (the fixture's floor has no evidence), so
-        # Smart scores the model at its served line (#4243).
-        assert smart_threshold == threshold
+        # Under a floor the line keeps a set, not an inclusion (#4272), so Smart
+        # re-cuts the model at its own Inclusion 0 cut (#4243).
+        from vtscore.detectors.cost_trend import SMART_INCLUSION
+        from vtscore.state.core import get_active_detector_context, recut_detector_threshold
+
+        assert smart_threshold == recut_detector_threshold(get_active_detector_context(), SMART_INCLUSION)
 
     def test_live_model_stability_computed(self, client):
         """When a live model is reused, stability should still be computed."""

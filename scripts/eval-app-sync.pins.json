@@ -23,6 +23,18 @@
     "app": "251df90138378972791c1728e43c9074fcf2df0829093a73659f48dcb2cbd515",
     "harness": "c73eed9f2e65df07b0851b2550aaea6a33079b6002674b772387647cbfc177da"
   },
+  "floor.check_rounds": {
+    "app": "0753b37b48f46e772f09a84a59ba0f58c7519424f1d5704ba02d069e88f8cb7c",
+    "harness": "e0547c6395666e2f22396fdd86897763848fd2ca05d6d76ecb754f61ccdb1a2b"
+  },
+  "floor.check_schedule": {
+    "app": "3a95e68bedacda13205d230b0eecdcae9b12b2e13aaecbe9fc7fe8abc1c09000",
+    "harness": "c654a3da3efff65121c7dd74c60c9a1a0853f5ae9ef324618072041ed508020b"
+  },
+  "floor.likely_range": {
+    "app": "688403ef3258c8411d709a2295f8fc8b7c0af7bcff1002927c81c38cb87e362b",
+    "harness": "8df1a1803ff42c2f736d6c100f1086f5827655c2d00563738abaa2f3e675d157"
+  },
   "progress.eval_geometry": {
     "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
     "harness": "48ea3b3f453fac243b6fae36284405b9785805ca819dafb7d53b4c15f93b707e"
@@ -62,14 +74,14 @@
     "app": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1"
   },
   "training.fused_threshold": {
-    "app": "8c74adfbed7bd4cda0210ca0aa395b3669588dc096c1e61555ddf0ad797916db"
+    "app": "147f1f5e65275d9fe6a290011b535e313d9e7fd51aaccdae7e7bab451a1d98cc"
   },
   "training.split_fraction_default": {
     "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "5d98729ff24153feef0ea6f3045a06e24d62492d4463159610c84b21ad1f50ab",
+    "app": "6ce860559bc7c48dd38a49e0448f114084f48be17ccb414d7c4b9b06cf324d6a",
     "harness": "232cb298fb7f7ae7991ca8b3391e55964c67de7ef01180fb58599e8b6f8f9025"
   }
 }

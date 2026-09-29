@@ -226,7 +226,7 @@ describe('MediaListComponent', () => {
       expect(line.getAttribute('aria-label')).toBe('Good/Bad threshold, unpromised');
     });
 
-    it.each([lineFloor('promised'), null])('draws the plain line otherwise (%o)', (floor) => {
+    it.each([lineFloor('confirmed'), null])('draws the plain line otherwise (%o)', (floor) => {
       const line = drawWith(floor);
       expect(line).not.toBeNull();
       expect(line.classList).not.toContain('media-threshold-line--unpromised');
@@ -235,8 +235,8 @@ describe('MediaListComponent', () => {
     });
 
     it('drops the label once a promise is made', () => {
-      drawWith(lineFloor('insufficient_evidence'));
-      const line = drawWith(lineFloor('promised', { calibrationPositives: 12 }));
+      drawWith(lineFloor('unchecked'));
+      const line = drawWith(lineFloor('confirmed'));
       expect(line.classList).not.toContain('media-threshold-line--unpromised');
     });
   });

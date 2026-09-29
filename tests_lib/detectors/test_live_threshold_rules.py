@@ -235,6 +235,9 @@ def _run(live=None):
             style="whole_image",
             emit_calibration_metrics=True,
             live_threshold=live,
+            # The Inclusion arm: the shipped baseline here is the estimator's
+            # cut, which a floor's set would replace (#4272).
+            min_precision="off",
         )
     )
 

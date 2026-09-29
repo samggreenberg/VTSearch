@@ -123,6 +123,7 @@ from vtsearch.routes import (  # noqa: E402
     sessions_bp,
     settings_bp,
     settings_io_bp,
+    precision_check_bp,
     sorting_bp,
     sync_sources_bp,
 )
@@ -242,6 +243,7 @@ api.register_blueprint(seed_importers_bp)
 api.register_blueprint(main_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)
+api.register_blueprint(precision_check_bp)
 api.register_blueprint(sessions_bp)
 api.register_blueprint(processors_crud_bp)
 api.register_blueprint(processors_scoring_bp)

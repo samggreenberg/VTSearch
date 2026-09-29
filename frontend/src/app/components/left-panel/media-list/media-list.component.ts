@@ -67,9 +67,9 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
   /**
-   * What the precision floor says about `threshold` (#4247). When it promises
-   * nothing the line still draws, at the Inclusion 0 cut, and is labelled
-   * unpromised; null (a sort with no detector) draws the plain line.
+   * What the precision floor says about `threshold` (#4247, #4272). An
+   * unchecked line, or one a check fell short on, still draws and is
+   * labelled unpromised; null (a sort with no detector) draws the plain line.
    */
   readonly floor = input<LineFloor | null>(null);
   readonly selectedId = input<number | null>(null);
@@ -89,7 +89,7 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   /** True while a page fetch is in flight (disables the Load-more trigger). */
   readonly loadingMore = input(false);
 
-  /** True when the line is the unpromised Inclusion 0 fallback. */
+  /** True when the set the line keeps is not a confirmed one. */
   readonly unpromised = computed(() => isUnpromised(this.floor()));
   /** The line's tooltip: what it is, and why it is unpromised when it is. */
   readonly thresholdTitle = computed(() => {

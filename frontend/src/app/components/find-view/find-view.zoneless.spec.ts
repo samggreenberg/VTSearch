@@ -388,9 +388,9 @@ describe('FindViewComponent (floor supersession)', () => {
     vi.advanceTimersByTime(200);
     const req = httpMock.expectOne('/api/min-precision');
     expect(req.request.body).toEqual({ min_precision: 0.75 });
-    req.flush({ ...wireFloor('promised', { minPrecision: 0.75 }), threshold: 0.7, n_returned: 1 });
+    req.flush({ ...wireFloor('confirmed', { minPrecision: 0.75 }), threshold: 0.7, n_returned: 1 });
     expect(sortState.threshold).toBe(0.7);
-    expect(sortState.floor?.status).toBe('promised');
+    expect(sortState.floor?.status).toBe('confirmed');
     expect(sortState.floor?.minPrecision).toBe(0.75);
   });
 
@@ -416,7 +416,7 @@ describe('FindViewComponent (floor supersession)', () => {
     expect(stale.cancelled).toBe(true);
     const fresh = httpMock.expectOne('/api/min-precision');
     expect(fresh.request.body).toEqual({ min_precision: 0.9 });
-    fresh.flush({ ...wireFloor('promised', { minPrecision: 0.9 }), threshold: 0.9, n_returned: 1 });
+    fresh.flush({ ...wireFloor('confirmed', { minPrecision: 0.9 }), threshold: 0.9, n_returned: 1 });
     expect(sortState.threshold).toBe(0.9);
   });
 
@@ -438,7 +438,7 @@ describe('FindViewComponent (floor supersession)', () => {
     vi.advanceTimersByTime(200);
     const retry = httpMock.expectOne('/api/min-precision');
     expect(retry.request.body).toEqual({ min_precision: 0.25 });
-    retry.flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.6, n_returned: 1 });
+    retry.flush({ ...wireFloor('confirmed', { minPrecision: 0.25 }), threshold: 0.6, n_returned: 1 });
     expect(sortState.threshold).toBe(0.6);
   });
 
@@ -700,14 +700,14 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       expect(sortState.floor?.minPrecision).toBe(0.9);
     });
 
-    it('move the line to the floor\'s own cut once it is promised', () => {
-      sortState.setSortResults(ranking, 0.5, lineFloor('insufficient_evidence'));
+    it('move the line to the floor\'s own cut once a check confirms it', () => {
+      sortState.setSortResults(ranking, 0.5, lineFloor('unchecked'));
       vi.useFakeTimers();
       fixture.componentInstance.onMinPrecisionChange(0.25);
       vi.advanceTimersByTime(200);
       httpMock
         .expectOne((req) => req.url === '/api/min-precision' && req.method === 'POST')
-        .flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.3, n_returned: 3 });
+        .flush({ ...wireFloor('confirmed', { minPrecision: 0.25 }), threshold: 0.3, n_returned: 3 });
       expect(sortState.threshold).toBe(0.3);
       expect(sortState.unpromised).toBe(false);
       expect(view().unverifiedGoodIds()).toEqual([1, 2, 3]);
@@ -717,11 +717,11 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       await settleZoneless(fixture);
       const state = (fixture.nativeElement as HTMLElement).querySelector('.find-floor-row .floor-state')!;
-      expect(state.textContent).toContain('showing the default cut');
+      expect(state.textContent).toMatch(/unchecked|Aimed at/);
     });
 
     it('treat a promised line the same, unlabelled', async () => {
-      sortState.setSortResults(ranking, 0.5, lineFloor('promised'));
+      sortState.setSortResults(ranking, 0.5, lineFloor('confirmed'));
       await settleZoneless(fixture);
       view().nextFindSide = 'above';
       view().advanceToBoundary();

@@ -12,11 +12,11 @@ import pytest
 
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
-from vtscore.state.core import get_active_detector_context
-from vtscore.training.thresholds import DEFAULT_MIN_PRECISION, resolve_min_precision
+from vtscore.state.core import get_active_detector_context, human_voted_ids
+from vtscore.training.thresholds import DEFAULT_MIN_PRECISION, FLOOR_STATES, resolve_min_precision
 from vtsearch.state import snapshot_medias
 
-_STATES = {"promised", "unreachable", "insufficient_evidence"}
+_STATES = set(FLOOR_STATES)
 
 
 def _load_trained_detector(client) -> None:
@@ -52,11 +52,11 @@ class TestTheSetting:
 
 
 class TestTheRoute:
-    def test_no_trained_detector_no_evidence(self, client):
+    def test_no_trained_detector_is_unchecked_with_no_line(self, client):
         data = client.get("/api/min-precision").get_json()
-        assert data["status"] == "insufficient_evidence"
+        assert data["status"] == "unchecked" and data["range"] is None
         assert data["n_returned"] is None
-        assert data["calibration_positives"] == 0
+        assert data["count"] == 32 and data["schedule"] == {"candidate": 32, "rounds": 1, "picks": 5}
 
     def test_set_persists_and_null_is_refused(self, client):
         data = client.post("/api/min-precision", json={"min_precision": 0.8}).get_json()
@@ -76,17 +76,18 @@ class TestTheRoute:
 
 
 class TestTheLine:
-    def test_an_unmet_floor_draws_the_inclusion_zero_line(self, client):
-        """The test labels carry no learned-sort provenance, so no promise can be made."""
+    def test_an_unchecked_floor_keeps_the_starting_candidate(self, client):
+        """Before any check the line sits at the last of the top K unvoted items (#4272)."""
         _load_trained_detector(client)
         ctx = get_active_detector_context()
-        assert ctx.anchored_cut_cache is not None
+        assert ctx.line_ranking is not None
 
         data = client.post("/api/min-precision", json={"min_precision": 0.5}).get_json()
-        assert data["status"] == "insufficient_evidence"
-        assert data["calibration_positives"] == 0
-        assert data["threshold"] == ctx.threshold == ctx.anchored_cut_cache.threshold_at(0)
-        assert data["n_returned"] == ctx.precision_floor_cache.count_at(ctx.threshold)
+        assert data["status"] == "unchecked" and data["range"] is None
+        # 20 media, 12 voted: the 8 unvoted are the whole candidate.
+        assert data["count"] == 8
+        assert data["threshold"] == ctx.threshold == ctx.line_ranking.threshold_for(32, human_voted_ids(ctx))
+        assert data["n_returned"] == ctx.line_ranking.above(ctx.threshold)
 
 
 class TestTheClampHasOneOwner:
