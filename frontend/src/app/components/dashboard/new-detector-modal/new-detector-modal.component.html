@@ -343,11 +343,10 @@
       }
 
       <div class="form-group">
-        <label class="form-label" for="detector-name" title="A short name to identify this detector">Detector name <span class="required">*</span></label>
+        <label class="form-label" for="detector-name" title="A short name to identify this detector">Detector name</label>
         <input
           id="detector-name"
           class="form-input"
-          required
           [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"

@@ -24,9 +24,9 @@ not list every commit. Use `git log` for the full history.
   filled. This covers every plugin form (Add Dataset, Import Labels, Export,
   AutoRun, and the Settings importer and exporter), the drop zones for a
   required folder or file, **Combine Detectors**' name, and **New
-  Detector**'s example and name. Two fields that were always required but
-  never starred now say so: **Detector name** in New Detector and **Folder
-  to import** in Add Dataset.
+  Detector**'s example. Add Dataset's **Folder to import**, always required
+  but never starred, now says so. New Detector's **Detector name** stays
+  unmarked: the app fills it in from the example.
 - **Check the line from the floor control, and see how close it got** (issue
   #4273, the app half of #4272). Beside the precision floor's note, **Check 5
   picks** (29 at Correct) opens the spot check: a random pick at a time
