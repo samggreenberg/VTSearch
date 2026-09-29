@@ -276,17 +276,17 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
   /** `autoSelect` for whichever of the two pending seed sorts above is armed:
-   *  a seeded re-rank defers its selection to the seed effect below, and the
-   *  deferral must survive the wait for medias. */
+   *  a seeded re-rank defers its selection to the centre effect below, and
+   *  the deferral must survive the wait for medias. */
   private pendingSeedAutoSelect = true;
   /** Armed on entry and on each pair reload; consumed once medias first render
    *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
   private pendingSnapOnLoad = false;
-  /** Armed on each pair reload; consumed by the first ranking that lands for
-   *  the new pair, which the centre viewer is then seeded from. See the effect
-   *  in the constructor for why the pair change cannot just auto-select itself.
-   */
-  private pendingSelectOnPairChange = false;
+  /** True from entry, and from each pair reload, until the user acts on the
+   *  centre: the item on screen is then the view's pick, not the user's, and
+   *  every ranking that lands for the pair re-picks it. See the effect in the
+   *  constructor. */
+  private centreProvisional = false;
 
   constructor() {
     // Warm the next review image while the reviewer is looking at this one
@@ -380,27 +380,35 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         }
         if (this.autopilotTextSortPending && medias.length > 0 && infos !== null) {
           this.autopilotTextSortPending = false;
-          this.triggerAutopilotTextSort(this.pendingSeedAutoSelect);
+          if (this.autopilotSeedWanted) this.triggerAutopilotTextSort(this.pendingSeedAutoSelect);
         }
         if (this.autopilotMediaSortPending && medias.length > 0) {
           this.autopilotMediaSortPending = false;
-          this.triggerAutopilotMediaSort(this.pendingSeedAutoSelect);
+          if (this.autopilotSeedWanted) this.triggerAutopilotMediaSort(this.pendingSeedAutoSelect);
         }
       });
     });
 
-    // Seed the centre viewer for the new pair, once the pair change produces a
-    // ranking to seed it from.
+    // Place the centre viewer's item on entry and after a pair switch, and keep
+    // placing it until the user acts on it.
     //
     // The pair change clears the selection, because a media id from the pair we
     // left means nothing under the new one (`PairScopeService.clearPairState`,
     // #3489). Something has to put an item back, and every re-rank a switch
     // fires passes `autoSelect: false` — correctly, since those same calls also
     // run underneath a user who is mid-labelling, where moving them off the item
-    // they are looking at is the bug. So the seed is armed by the pair change
-    // itself and consumed here, once, by whichever re-rank lands first (an
-    // Autopilot phase change, or `seedRankingIfUnranked` when nothing else
-    // ranked the pair at all).
+    // they are looking at is the bug. So the pick is armed by the entry or the
+    // pair change itself ({@link centreProvisional}) and made here.
+    //
+    // It is made again for every ranking, Select mode and cut that lands while
+    // the user has not acted — not only for the first ranking. Entry fires
+    // several sorts whose order varies from visit to visit (Autopilot's seed,
+    // its phase change onto the learned sort, `seedRankingIfUnranked`), and the
+    // Select mode moves with the phase, so the first ranking in is whichever won
+    // a race rather than the one the view settles on (#4318). It waits for the
+    // pair's votes, too: until they land every item reads as unlabeled, and the
+    // pick can be one the user labeled long ago. Once the user clicks, votes or
+    // steps, the centre is theirs and no re-rank moves it (#4092).
     //
     // Deliberately silent when no ranking ever arrives: switching to a pair
     // nothing can rank — no labelset for learned sort, no Autopilot to seed a
@@ -408,13 +416,16 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // a fresh entry to that same pair leaves it.
     effect(() => {
       const order = this.sortState.sortOrder;
+      const votesLoaded = this.voteState.votesLoaded;
+      // Tracked but not read below: either one moves the pick over the same
+      // ranking. The vote sets are left out on purpose: the vote poll replaces
+      // them every tick, and a New-mode pick is a server round trip.
+      void this.sortState.selectMode;
+      void this.sortState.acqThreshold;
       untracked(() => {
-        if (!this.pendingSelectOnPairChange) return;
+        if (!this.centreProvisional || !votesLoaded) return;
         if (!order || order.length === 0) return;
-        this.pendingSelectOnPairChange = false;
-        // A re-rank that auto-selected on its own (or a click that beat us to
-        // it) already owns the centre; never move the user off it.
-        if (this.mediaState.selectedId() === null) this.sortRunner.autoSelectNext();
+        this.sortRunner.autoSelectNext();
       });
     });
 
@@ -445,7 +456,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // and the seed below re-runs them against this pair (#4092).
     this.pairScope.clearPairState();
     this.pendingSeed = 'entry';
-    this.pendingSelectOnPairChange = true;
+    this.centreProvisional = true;
     this.layoutRef().nativeElement.style.setProperty('--left-width', `${this.leftWidth()}px`);
     this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     this.pendingSnapOnLoad = true;
@@ -536,8 +547,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.pendingSeed = 'pair';
       // Read by the medias effect when the reload below lands.
       this.pendingSnapOnLoad = true;
-      // Read by the seed effect when the new pair's first ranking lands.
-      this.pendingSelectOnPairChange = true;
+      // Read by the centre effect as the new pair's rankings land.
+      this.centreProvisional = true;
     });
     this.loadTrainingVotes();
   }
@@ -574,10 +585,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * what falls back to Text when the new pair can't run it (#4092). Any ranking
    * already present means someone sorted since the reset, so it stands down.
    *
-   * Every sort runs with `autoSelect: false`. The centre is seeded by the
-   * pair-change effect above, which declines to override a selection the user
-   * has already made — a re-rank must not move someone who has started
-   * labelling.
+   * Every sort runs with `autoSelect: false`. The centre is placed by the
+   * centre effect above, which stops placing it once the user has acted — a
+   * re-rank must not move someone who has started labelling.
    */
   private seedRankingIfUnranked(): void {
     this.seedTimer = null;
@@ -931,6 +941,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
+    this.centreProvisional = false;
     this.pickedWhileDone.set(id);
     this.mediaState.selectMedia(id);
   }
@@ -950,6 +961,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * `null` as its start and `forward` from it lands back on the pane.
    */
   onNavigate(direction: NavDirection): void {
+    this.centreProvisional = false;
     const here = this.centreExhausted() ? null : this.mediaState.selectedId();
     if (direction === 'back') {
       const id = this.voteHistory.stepBack(here);
@@ -1121,6 +1133,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   onMediaVoted(event: { id: number; vote: 'good' | 'bad' }): void {
+    // A vote is labelling: from here the advance places the centre, and the
+    // re-rank the vote schedules must not.
+    this.centreProvisional = false;
     // Back to labelling, so the "nothing left" pane is welcome again if the
     // advance below has nowhere to go — see {@link pickedWhileDone}.
     this.pickedWhileDone.set(null);
@@ -1202,10 +1217,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * re-rank): set the Select mode its phase calls for and fire the seed sort.
    *
    * @param autoSelect Whether the seed sort may move the centre viewer. False on
-   *                   the pair-switch path, where the selection is the seed
-   *                   effect's to place (see {@link seedRankingIfUnranked}).
+   *                   the pair-switch path, and ignored while the centre is
+   *                   {@link centreProvisional} (Autopilot's activation on
+   *                   entry): the centre effect places the item then.
    */
   onAutopilotStart(autoSelect = true): void {
+    const selects = autoSelect && !this.centreProvisional;
     // Initialize re-sort tracking
     this.resortVoteCount = 0;
     this.resortNextThreshold = this.resortInterval;
@@ -1233,26 +1250,43 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (phase === 'good' || phase === 'bad' || phase === 'more') {
       const textQuery = this.labelSession.textQuery;
       const hasMediaExamples = this.labelSession.mediaExampleFilenames.length > 0;
-      this.pendingSeedAutoSelect = autoSelect;
+      this.pendingSeedAutoSelect = selects;
       if (textQuery) {
         // Defer until both medias and the embedder registry are loaded so the
         // no-text check in `triggerAutopilotTextSort` is reliable.
         if (this.mediaState.mediasSignal().length > 0 && this.embedderCaps.infos() !== null) {
-          this.triggerAutopilotTextSort(autoSelect);
+          this.triggerAutopilotTextSort(selects);
         } else {
           this.autopilotTextSortPending = true;
         }
       } else if (hasMediaExamples) {
         if (this.mediaState.mediasSignal().length > 0) {
-          this.triggerAutopilotMediaSort(autoSelect);
+          this.triggerAutopilotMediaSort(selects);
         } else {
           this.autopilotMediaSortPending = true;
         }
-      } else if (autoSelect) {
+      } else if (selects) {
         // No sort query configured; try to select from existing sort results.
         this.sortRunner.autoSelectNext();
       }
     }
+  }
+
+  /**
+   * Whether Autopilot still wants the text / example seed sort that
+   * {@link onAutopilotStart} deferred until the medias loaded: it is running,
+   * in a phase that draws off the seed ranking, and not in retrain mode, where
+   * every phase draws off the learned sort.
+   *
+   * The deferral is armed on the retrain-mode *guess* Autopilot makes as it
+   * activates, and on entry the labelset's first real reading can overturn
+   * that guess — and move the phase onto the learned sort — before the medias
+   * arrive (#3535). A seed fired after that would be the newest sort and
+   * replace the learned ranking (#4318).
+   */
+  private get autopilotSeedWanted(): boolean {
+    const { phase, retrainMode } = this.autopilotStateService.state;
+    return !retrainMode && (phase === 'good' || phase === 'bad' || phase === 'more');
   }
 
   private triggerAutopilotTextSort(autoSelect = true): void {

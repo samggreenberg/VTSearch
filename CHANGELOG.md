@@ -181,6 +181,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Opening Train shows the same first item every time** (issue #4318).
+  Entering Train with a detector that already had labels could show one of
+  several items, depending on which of the sorts it starts on entry answered
+  first. Autopilot's text-hint sort could even land after the detector's own
+  ranking and replace it. A newer sort now always wins over an older one
+  still running, and until you click, vote or step, the first item follows
+  the ranking the window settles on.
 - **Undo gets you out of "Nothing left in this ranking" in the New select
   mode** (issue #4312). Once New had no unseen items left to offer, Cmd/Ctrl-Z
   undid the vote but left the message on screen. The undone item now comes
