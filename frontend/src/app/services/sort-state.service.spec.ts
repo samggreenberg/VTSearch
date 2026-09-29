@@ -163,9 +163,9 @@ describe('SortStateService', () => {
   });
 
   it('setFloor replaces the verdict and leaves the line where it was', () => {
-    service.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.2 }], 0.5, lineFloor('insufficient_evidence'));
-    service.setFloor(lineFloor('unreachable', { calibrationPositives: 12 }));
-    expect(service.floor?.status).toBe('unreachable');
+    service.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.2 }], 0.5, lineFloor('unchecked'));
+    service.setFloor(lineFloor('short'));
+    expect(service.floor?.status).toBe('short');
     expect(service.threshold).toBe(0.5);
     expect(service.aboveThreshold).toBe(1);
     expect(service.sortOrder?.length).toBe(2);
@@ -256,21 +256,21 @@ describe('SortStateService', () => {
     });
 
     it('a promised line, or no verdict, is not unpromised', () => {
-      service.setSortWindow(win(lineFloor('promised')));
+      service.setSortWindow(win(lineFloor('confirmed')));
       expect(service.unpromised).toBe(false);
       service.setSortWindow(win(null));
       expect(service.floor).toBeNull();
     });
 
     it('setSortResults sets the floor with the threshold, and clears it when none is given', () => {
-      service.setSortResults([{ id: 1, score: 0.9 }], 0.4, lineFloor('unreachable'));
+      service.setSortResults([{ id: 1, score: 0.9 }], 0.4, lineFloor('short'));
       expect(service.unpromised).toBe(true);
       service.setSortResults([{ id: 1, score: 0.9 }], 0.4);
       expect(service.floor).toBeNull();
     });
 
     it('clear drops the floor', () => {
-      service.setSortWindow(win(lineFloor('insufficient_evidence')));
+      service.setSortWindow(win(lineFloor('unchecked')));
       service.clear();
       expect(service.floor).toBeNull();
       expect(service.unpromised).toBe(false);
@@ -279,7 +279,7 @@ describe('SortStateService', () => {
     it('unpromised is reactive (drives a computed that reads it)', () => {
       const derived = TestBed.runInInjectionContext(() => computed(() => service.unpromised));
       expect(derived()).toBe(false);
-      service.setSortWindow(win(lineFloor('insufficient_evidence')));
+      service.setSortWindow(win(lineFloor('unchecked')));
       expect(derived()).toBe(true);
     });
   });

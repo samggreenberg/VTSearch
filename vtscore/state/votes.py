@@ -52,6 +52,9 @@ def clear_votes() -> None:
         ctx.verified_ids.clear()
         ctx.find_scores.clear()
         ctx.find_eval_stale = False
+        # A spot check was over these votes' ranking; its result goes with them.
+        ctx.precision_check = None
+        ctx.precision_check_run = None
         # Everything that *made* this a Find session is gone, so the flag that
         # says "these votes are scoring output" must go too.  Leaving it set
         # would keep suppressing labelset write-back
@@ -333,6 +336,20 @@ def _store_provenance(ctx, media_id: int, provenance: dict[str, Any] | None) -> 
         ctx.vote_provenance.pop(media_id, None)
     else:
         ctx.vote_provenance[media_id] = cleaned
+
+
+def record_vote_provenance(media_id: int, provenance: dict[str, Any] | None) -> None:
+    """Record *media_id*'s surfacing provenance on the active detector, whatever its vote's history.
+
+    :func:`set_vote` keeps an idempotent re-vote's provenance as the original
+    click recorded it, so a stale tab cannot rewrite it.  A spot check's pick
+    (#4272) is a genuine surfacing event even when the vote it draws agrees
+    with the label the item already carries - in Find mode every item carries
+    the machine's call - so the check records its provenance through here after
+    the vote lands.
+    """
+    with _state_lock:
+        _store_provenance(get_active_detector_context(), media_id, provenance)
 
 
 def _current_label_locked(ctx, media_id: int) -> str:

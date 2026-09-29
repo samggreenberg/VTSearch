@@ -220,10 +220,13 @@ those getters resolve through `CoreConfig`, so library consumers running
 outside an app must register a `register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
-the precision-floor estimate (`precision_floor_cache`), so moving the floor
-re-cuts too. The threshold is the floor's line when the floor promises it, and
-the Inclusion 0 cut otherwise (a floor that promises nothing, or none set). Pass `calibrating_groups` (the bags whose vote the learned
-sort chose) to keep every other vote out of the floor's evidence.
+the ranking the line keeps a set of (`line_ranking`, #4272) and the #4220
+estimate the Find Stats curve reads (`precision_floor_cache`). Under a floor
+the threshold keeps a set - the top *count* unvoted items of the haystack, the
+set the detector's last spot check ended on or the floor's starting candidate
+- and with no floor it is the Inclusion 0 cut. Pass `calibrating_groups` (the
+bags whose vote the learned sort chose) to keep every other vote out of the
+estimate's evidence.
 
 ### `train_and_score(...)`
 

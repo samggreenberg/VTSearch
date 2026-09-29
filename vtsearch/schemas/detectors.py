@@ -573,7 +573,7 @@ class FindLabelResponseSchema(Schema):
     ok = fields.Boolean(required=True)
     results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
     threshold = fields.Float(required=True)
-    # What the precision floor says about ``threshold`` (#4247).
+    # What the precision floor says about ``threshold`` (#4247, #4272).
     floor = fields.Nested(FloorStateSchema, required=True)
     good_count = fields.Integer(required=True)
     bad_count = fields.Integer(required=True)
@@ -995,9 +995,8 @@ class FindStatsResponseSchema(Schema):
     verified_precision = fields.Float(required=True, allow_none=True)
     verified_called_good = fields.Integer(required=True)
     verified_kept_good = fields.Integer(required=True)
-    # Run context: the line, and what the precision floor says about it (the
-    # floor it was cut at, and whether it keeps it or is the unpromised
-    # default cut).
+    # Run context: the line, and what the precision floor says about it - the
+    # floor it was cut at, its state and the spot check's likely range (#4272).
     threshold = fields.Float(required=True)
     floor = fields.Nested(FloorStateSchema, required=True)
     # How many items the Find run scored, and how many clear the current cut.

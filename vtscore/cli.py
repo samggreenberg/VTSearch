@@ -365,8 +365,8 @@ def _load_and_train_detectors(
         out[det_name] = {
             "mlp": det_ctx.model,
             "threshold": det_ctx.threshold,
-            # Whether that threshold is a promise, or the unpromised Inclusion 0
-            # cut (#4247); it rides into every result the detector produces.
+            # The floor's state on that threshold - unchecked, headless (#4272);
+            # it rides into every result the detector produces.
             "floor": _record_floor_state(det_name, det_ctx),
             "embedder": det_ctx.embedder or "",
             "media_type": det_media_type or media_type,
@@ -381,28 +381,31 @@ def _load_and_train_detectors(
     return out
 
 
-def _record_floor_state(det_name: str, det_ctx: Any) -> dict[str, Any]:
-    """What the precision floor says about *det_name*'s trained cut, announced when unpromised.
+def _record_floor_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
+    """What the precision floor says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
     Read at the floor the training read (:func:`vtscore.state.get_min_precision`).
-    A floor that promised nothing still leaves a cut - the Inclusion 0 one -
-    and that is what gets exported; the ``detector_unpromised`` event is the
-    run's record that the set it exports carries no precision promise (#4247).
+    A headless run cannot spot-check its floor (#4272), so it exports the
+    floor's starting candidate - the top 128 unvoted at 10%, the top 64 at
+    25%, the top 32 at 50% and above - and the ``detector_unchecked`` event
+    is the run's record that the set it exports was never checked.
     """
     from vtscore.state import get_min_precision  # noqa: PLC0415
     from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+    from vtscore.training.thresholds import FLOOR_UNCHECKED  # noqa: PLC0415
 
     state = detector_floor_state(det_ctx, get_min_precision())
-    if state["status"] not in (None, "promised"):
+    if state is not None and state["status"] == FLOOR_UNCHECKED:
         cli_progress.emit(
-            "detector_unpromised",
+            "detector_unchecked",
             text=(
-                f"Detector '{det_name}' makes no {100 * state['min_precision']:.0f}% precision promise "
-                f"({state['status'].replace('_', ' ')}, {state['calibration_positives']} calibration "
-                "positives); exporting its Inclusion 0 cut."
+                f"Detector '{det_name}' exports its top {state['count']} unchecked (aiming at "
+                f"{100 * state['min_precision']:.0f}% right); nobody is here to check it."
             ),
             detector=det_name,
-            **state,
+            min_precision=state["min_precision"],
+            status=state["status"],
+            count=state["count"],
         )
     return state
 

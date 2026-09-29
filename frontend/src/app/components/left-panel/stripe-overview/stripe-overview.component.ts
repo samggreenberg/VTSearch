@@ -42,7 +42,7 @@ export class StripeOverviewComponent {
   readonly cachedDots = computed(() => this.buildDots());
   /** Threshold position, recomputed automatically when inputs change. */
   readonly cachedThresholdPosition = computed(() => this.buildThresholdPosition());
-  /** True when the marker is the unpromised Inclusion 0 line. */
+  /** True when the set the marker's line keeps is not a confirmed one. */
   readonly unpromised = computed(() => isUnpromised(this.floor()));
   /** The strip's tooltip; the 1px marker is too thin to carry one of its own. */
   readonly stripeTitle = computed(() => {

@@ -87,6 +87,12 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
+    CHECK_PROVENANCE,
+    LineRanking,
+    SpotCheck,
+    check_schedule,
+    floor_line,
+    floor_state,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -367,19 +373,36 @@ def _calibration_rows(details: dict[str, Any], vote_provenance: "dict[int, Any] 
 
 
 def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, Any]:
-    """The precision-floor columns of a step's row: the floor, its verdict, and the evidence behind it.
+    """The precision-floor columns of a step's row: the floor, the set its line keeps, and the check's range.
 
-    ``floor_status`` is empty and ``calibration_positives`` -1 on a step with
-    no floor estimate - safe thresholds off, a standalone trainer with no
-    folds, or no usable folds yet.
+    The state is the app's own (:func:`~vtscore.training.thresholds.floor_state`,
+    #4272), built by :func:`_safe_threshold_for_step`.  ``floor_status`` is
+    empty and every count -1 / range NaN on a step with no floor line - the
+    Inclusion arm, safe thresholds off, or nothing scored yet.
     """
-    line = details.get("reporting_line")
-    estimate = details.get("precision_floor_estimate")
-    verdict = line.floor if line is not None else None
+    nan = float("nan")
+    state = details.get("floor_state")
+    if floor is None or state is None:
+        return {
+            "min_precision": floor if floor is not None else nan,
+            "floor_status": "",
+            "floor_count": -1,
+            "range_lo": nan,
+            "range_hi": nan,
+            "check_labelled": -1,
+            "check_right": -1,
+            "check_stale": -1,
+        }
+    rng = state.range
     return {
-        "min_precision": floor if floor is not None else float("nan"),
-        "floor_status": verdict.status.value if verdict is not None else "",
-        "calibration_positives": estimate.calibration_positives if estimate is not None else -1,
+        "min_precision": floor,
+        "floor_status": state.status,
+        "floor_count": state.count,
+        "range_lo": round6(rng.lo) if rng is not None else nan,
+        "range_hi": round6(rng.hi) if rng is not None else nan,
+        "check_labelled": rng.labelled if rng is not None else -1,
+        "check_right": rng.right if rng is not None else -1,
+        "check_stale": (1 if state.stale else 0) if rng is not None else -1,
     }
 
 
@@ -400,6 +423,7 @@ def _safe_threshold_for_step(
     cut_rule: str | None = None,
     min_precision: float | None = None,
     calibration_rows: "list[bool] | None" = None,
+    check: "SpotCheck | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -455,23 +479,34 @@ def _safe_threshold_for_step(
     resolves to the app's :data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`
     inside this function, so the default arm is production by construction.
 
-    **The line is drawn where the app draws it** (#4245): *min_precision* is the
-    resolved floor (``None`` for the Inclusion arm) and *calibration_rows* marks
-    the training rows whose vote may calibrate it.  The floor's estimate is
-    built from this step's own populations, exactly as
-    :func:`vtscore.detectors.training._fused_threshold` builds it - the
-    remainder as the corpus, the whole sim set (votes included) as the
-    reference pool, the excluded fold haystacks as the evidence's scale - and the line
-    comes from the shared :func:`~vtscore.training.thresholds.reporting_line` -
-    delegation, not a copy.  The line and the floor's verdict ride out in
-    ``details["reporting_line"]`` so the acquisition cut can take its origin
-    from the line.
+    **The line is drawn where the app draws it.**  *min_precision* is the
+    resolved floor (``None`` for the Inclusion arm).  Under a floor the line
+    keeps a set (#4272): the top *count* unvoted items of the sim set this
+    final model scored, where *count* is the set *check* - the run's spot
+    check, finished or not - ended on, or the floor's unchecked starting
+    candidate; :func:`~vtscore.training.thresholds.floor_line` is the app's
+    own rule, called, not copied, and its ranking rides out in
+    ``details["line_ranking"]`` for the check to draw its candidate from, with
+    the floor's state in ``details["floor_state"]`` for the row.  With no
+    floor the line is the fold-anchored cut at *inclusion* through the shared
+    :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
+    rides out in ``details["reporting_line"]`` so the acquisition cut can take
+    its origin from it.
+
+    The #4220 estimate is still built, from this step's own populations,
+    exactly as :func:`vtscore.detectors.training._fused_threshold` builds it -
+    the remainder as the corpus, the whole sim set (votes included) as the
+    reference pool, the excluded fold haystacks as the evidence's scale, and
+    *calibration_rows* marking the training rows whose vote may serve - because
+    the app keeps building it for the Find Stats curve; it no longer draws the
+    line on either side.
     """
     import numpy as np  # noqa: PLC0415
 
     from vtscore.training.thresholds import (  # noqa: PLC0415
         FOLD_ANCHOR_CUT_RULE,
         PrecisionFloorEstimate,
+        ReportingLine,
         drop_voted,
         eligible_fold_orderings,
         fit_fold_anchored_cut,
@@ -579,9 +614,20 @@ def _safe_threshold_for_step(
         if fold_haystacks
         else None
     )
-    line = reporting_line(cut, estimate, inclusion_value=inclusion, min_precision=min_precision)
-    details["reporting_line"] = line
     details["precision_floor_estimate"] = estimate
+    # The ranking the line keeps a set of: every scored sim item, the voted
+    # ones marked, as ``_fused_threshold`` parks it on the detector context.
+    ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
+    details["line_ranking"] = ranking
+    if min_precision is not None:
+        details["floor_state"] = floor_state(min_precision, check, ranking)
+        kept = floor_line(ranking, min_precision, check)
+        if kept is not None:
+            # No inclusion drew this line: acquisition derives its origin from it.
+            details["reporting_line"] = ReportingLine(kept, None, None)
+            return kept, all_scores, ids, fold_haystacks, "floor", cut
+    line = reporting_line(cut, None, inclusion_value=inclusion, min_precision=None)
+    details["reporting_line"] = line
     if cut is not None and line.threshold is not None:
         return line.threshold, all_scores, ids, fold_haystacks, cut.provenance, cut
     blended = calculate_safe_threshold(_blend_xcal_input(threshold, details), all_scores, ctx, schedule=schedule)
@@ -1724,6 +1770,7 @@ def simulate_voting_iterations(  # noqa: C901
     train_mix: "Optional[str | dict[str, float]]" = None,
     test_band_auroc: bool = False,
     min_precision: "Optional[float | str]" = None,
+    spot_check: str = "end",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2033,14 +2080,34 @@ def simulate_voting_iterations(  # noqa: C901
             (#4245), resolved by
             :func:`~vtscore.training.thresholds.resolve_min_precision`.
             ``None`` (the default) is the app's own default floor, so the
-            default arm reports the line a live detector draws: the floor's cut
-            when it can promise it, else the Inclusion 0 cut.  ``"off"`` is the
+            default arm reports the line a live detector draws: the set the
+            floor keeps (#4272) - the top *count* unvoted items of the sim set,
+            where *count* is the floor's starting candidate until the run's
+            spot check ends, then the set the check ended on.  ``"off"`` is the
             **Inclusion arm** - the line at *inclusion* - which is what every
             study before #4245 measured; an arm that sweeps *inclusion* has to
             pass it, because a set floor wins over the knob.  A number pins a
-            floor.  Evidence is filtered as the app filters it: under the
-            phase machine only the votes Autopilot drew off the learned sort
-            (``hard`` picks) calibrate the promise; without one every vote does.
+            floor.  The #4220 estimate the Find Stats curve reads is still
+            built each step, its evidence filtered as the app filters it: under
+            the phase machine only the votes Autopilot drew off the learned sort
+            (``hard`` picks) serve; without one every vote does.
+        spot_check: When the simulated user runs the floor's **spot check**
+            (#4272).  ``"end"`` (the default): once the voting steps are spent
+            - *max_steps* reached, or the pool exhausted - the user checks the
+            line the way the app's check step does: the candidate is fixed off
+            the current ranking (the floor's schedule: the top 128 unvoted at
+            10%, 64 at 25%, 32 at 50% and above), each round's picks are
+            answered from ground truth **and cast as votes** (provenance
+            ``check``), the model retrains on them and one row is emitted per
+            round with ``phase == "check"`` and ``t`` still counting every
+            vote cast, so the check's rows sit past *max_steps*.  A failed
+            round halves the candidate down to 32; the check ends
+            ``confirmed`` or ``short``, and the last row's line keeps the set it
+            ended on, its range flagged ``check_stale`` where the retrain moved
+            the set.  Until then every row reports the ``unchecked`` starting
+            candidate, which is exactly what a headless run exports.  ``"off"``
+            never checks: the whole run is the unchecked line.  Ignored on the
+            Inclusion arm, and when nothing is left unvoted to check.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2391,35 +2458,11 @@ def simulate_voting_iterations(  # noqa: C901
     # app's ``_eval_cached_models`` does over its per-step cache.
     recent_steps: list[tuple[Any, float]] = []
 
-    for t in range(1, n_steps + 1):
-        if not pool:
-            break
-        phase = flow.phase if flow is not None else None
-        startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
-        startup_cut = startup_cuts[startup_round] if startup_round >= 0 else None
-        ctx = ALContext(
-            pool_ids=pool,
-            embeddings=sim_embeddings,
-            labeled=labeled,
-            scores=pool_scores,
-            model=step,
-            # The ONLY consumer that moves.  Reporting, the metric rows and the
-            # phase machine all stay on ``threshold``.
-            threshold=acq_threshold,
-            atlas=atlas,
-            rng=rng,
-            pool_labels=pool_labels,
-            seed_scores=seed_scores,
-            phase=phase,
-            startup_cut=startup_cut,
-            uncertainty=pool_uncertainty,
-        )
-        cid = select_next(strategy, ctx)
+    def _cast(cid: int, phase_name: str | None, provenance: dict[str, str] | None) -> bool:
+        """Reveal *cid*'s ground truth as a vote, recorded as the app records one; whether it was positive."""
         pool.remove(cid)
-        vote_phase[cid] = phase or ""
-        # What the app would record for this click - the precision floor
-        # calibrates only on votes the learned sort chose (#4245).
-        vote_provenance[cid] = pick_provenance(phase)
+        vote_phase[cid] = phase_name or ""
+        vote_provenance[cid] = provenance
         is_positive = media_is_positive(clips_dict[cid], target_category)
         if is_positive:
             good_votes[cid] = None
@@ -2431,43 +2474,121 @@ def simulate_voting_iterations(  # noqa: C901
         # advances past covered regions (the app labels the atlas the same way).
         if atlas is not None and cid in atlas.vector_to_leaf:
             atlas.label(cid, good=is_positive)
+        return is_positive
 
-        if pick_sink is not None:
-            rank = seed_rank.get(cid, -1)
-            n_sorted = len(seed_rank)
-            pick_sink.append(
-                {
-                    "seed": seed,
-                    "dataset": dataset_name,
-                    "category": target_category,
-                    "startup_schedule": startup_schedule or "",
-                    "calibration_seed": calibration_seed,
-                    "style": style or "",
-                    "t": t,
-                    "phase": phase or "",
-                    "startup_round": startup_round,
-                    "startup_held": bool(startup_state.held_for_quorum) if startup_state is not None else False,
-                    "startup_extended_clicks": int(startup_state.extended_clicks) if startup_state is not None else 0,
-                    "startup_cut": round6(startup_cut) if startup_cut is not None else float("nan"),
-                    "startup_cut_percentile": (
-                        _sorted_percentile(seed_sorted_scores, startup_cut) if startup_cut is not None else float("nan")
-                    ),
-                    "picked_id": cid,
-                    "picked_label": 1 if is_positive else 0,
-                    "picked_seed_rank": rank,
-                    "picked_seed_percentile": (
-                        round6(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")
-                    ),
-                    "picked_seed_score": round6(seed_scores[cid])
-                    if seed_scores and cid in seed_scores
-                    else float("nan"),
-                    "picked_detector_score": round6(pool_scores[cid]) if cid in pool_scores else float("nan"),
-                    "acq_threshold": round6(acq_threshold),
-                    "n_good": len(good_votes),
-                    "n_bad": len(bad_votes),
-                    "n_pool": len(pool),
-                }
+    def _log_pick(cid: int, is_positive: bool, phase_name: str | None, startup_round: int, startup_cut) -> None:
+        """One pick-log row, after the vote landed (the counts are post-vote)."""
+        if pick_sink is None:
+            return
+        rank = seed_rank.get(cid, -1)
+        n_sorted = len(seed_rank)
+        pick_sink.append(
+            {
+                "seed": seed,
+                "dataset": dataset_name,
+                "category": target_category,
+                "startup_schedule": startup_schedule or "",
+                "calibration_seed": calibration_seed,
+                "style": style or "",
+                "t": len(good_votes) + len(bad_votes),
+                "phase": phase_name or "",
+                "startup_round": startup_round,
+                "startup_held": bool(startup_state.held_for_quorum) if startup_state is not None else False,
+                "startup_extended_clicks": int(startup_state.extended_clicks) if startup_state is not None else 0,
+                "startup_cut": round6(startup_cut) if startup_cut is not None else float("nan"),
+                "startup_cut_percentile": (
+                    _sorted_percentile(seed_sorted_scores, startup_cut) if startup_cut is not None else float("nan")
+                ),
+                "picked_id": cid,
+                "picked_label": 1 if is_positive else 0,
+                "picked_seed_rank": rank,
+                "picked_seed_percentile": (
+                    round6(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")
+                ),
+                "picked_seed_score": round6(seed_scores[cid]) if seed_scores and cid in seed_scores else float("nan"),
+                "picked_detector_score": round6(pool_scores[cid]) if cid in pool_scores else float("nan"),
+                "acq_threshold": round6(acq_threshold),
+                "n_good": len(good_votes),
+                "n_bad": len(bad_votes),
+                "n_pool": len(pool),
+            }
+        )
+
+    if spot_check not in ("end", "off"):
+        raise ValueError(f"spot_check must be 'end' or 'off', got {spot_check!r}")
+    # The floor's spot check (#4272), run once the voting steps are spent: the
+    # simulated user checks the line as the app's check step does, its picks
+    # answered from ground truth and cast as votes.  ``line_ranking`` is the
+    # ranking the last step's line was drawn over, which the candidate is
+    # fixed off and a finished result is fingerprinted against.
+    check: SpotCheck | None = None
+    line_ranking: LineRanking | None = None
+    # ``t`` counts every vote cast, the check's included: one per ordinary
+    # step, a round's worth per check round.
+    t = 0
+    while True:
+        picks: list[int] | None = None
+        if check is not None and check.running:
+            picks = list(check.pending)
+        elif t >= n_steps or not pool:
+            # The voting steps are spent.  Check the line once, if the run
+            # checks at all and there is a ranking with something unvoted in it.
+            if spot_check != "end" or check is not None or floor is None or line_ranking is None:
+                break
+            candidate = line_ranking.candidate(check_schedule(floor).candidate, set(good_votes) | set(bad_votes))
+            if not candidate:
+                break
+            # Seeded off the run's own RNG, after every trajectory draw, so a
+            # run without the check is byte-identical up to here.
+            check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))
+            picks = list(check.pending)
+            if not picks:
+                break
+
+        if picks is not None:
+            # A check round: every pick is answered at once.  The candidate was
+            # fixed at the start, so the retrain each round triggers cannot
+            # move what the next round samples.
+            phase = "check"
+            startup_round, startup_cut = -1, None
+            round_votes = {cid: _cast(cid, phase, dict(CHECK_PROVENANCE)) for cid in picks}
+            t = len(good_votes) + len(bad_votes)
+            for cid in picks:
+                _log_pick(cid, round_votes[cid], phase, startup_round, startup_cut)
+            is_positive = round_votes[picks[-1]]
+            assert check is not None and line_ranking is not None
+            check.record(round_votes)
+            if check.finished:
+                # The set the line keeps from here on, as it stands with the
+                # check's own votes cast: what the retrains below are
+                # compared against for ``check_stale``.
+                check.fingerprint = line_ranking.fingerprint(check.k, set(good_votes) | set(bad_votes))
+        else:
+            phase = flow.phase if flow is not None else None
+            startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
+            startup_cut = startup_cuts[startup_round] if startup_round >= 0 else None
+            ctx = ALContext(
+                pool_ids=pool,
+                embeddings=sim_embeddings,
+                labeled=labeled,
+                scores=pool_scores,
+                model=step,
+                # The ONLY consumer that moves.  Reporting, the metric rows and the
+                # phase machine all stay on ``threshold``.
+                threshold=acq_threshold,
+                atlas=atlas,
+                rng=rng,
+                pool_labels=pool_labels,
+                seed_scores=seed_scores,
+                phase=phase,
+                startup_cut=startup_cut,
+                uncertainty=pool_uncertainty,
             )
+            cid = select_next(strategy, ctx)
+            # What the app would record for this click (#4245).
+            is_positive = _cast(cid, phase, pick_provenance(phase))
+            t = len(good_votes) + len(bad_votes)
+            _log_pick(cid, is_positive, phase, startup_round, startup_cut)
 
         n_votes_now = len(good_votes) + len(bad_votes)
         # Need at least 1 good and 1 bad to train
@@ -2549,8 +2670,10 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_rule=live_cut_rule,
                     min_precision=floor,
                     calibration_rows=_calibration_rows(details, vote_provenance if flow is not None else None),
+                    check=check,
                 )
             )
+            line_ranking = details.get("line_ranking")
             if live_threshold is not None:
                 # A retired rung replaces the shipped cut, and the fit it
                 # replaced is dropped with it so acquisition cannot re-cut an
@@ -2751,7 +2874,7 @@ def simulate_voting_iterations(  # noqa: C901
             # bounded by the votes' share of the haystack.
             "n_haystack": len(sim_ids),
             "n_remainder": len(pool),
-            "phase": flow.phase if flow is not None else "",
+            "phase": "check" if picks is not None else (flow.phase if flow is not None else ""),
             # The three lights behind that phase (#3560).  Already computed by
             # `flow.update` above and previously discarded; the phase alone
             # cannot say whether Smart or Stable is what holds a run in `hard`.

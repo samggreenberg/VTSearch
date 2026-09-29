@@ -752,8 +752,13 @@ class TestAutopilotStrategy:
         medias = _make_separable_clips(n_per_cat=20)
         rows = simulate_voting_iterations(medias, "alpha", seed=1, calibrate_count=1, max_steps=6)
         assert rows
-        # No row can reflect more than max_steps votes cast.
-        assert max(r["t"] for r in rows) <= 6
+        # No voting step can reflect more than max_steps votes cast.  The
+        # floor's spot check (#4272) runs once those steps are spent, and its
+        # rounds are the only rows past the cap.
+        assert max(r["t"] for r in rows if r["phase"] != "check") <= 6
+        assert all(r["t"] > 6 for r in rows if r["phase"] == "check")
+        without = simulate_voting_iterations(medias, "alpha", seed=1, calibrate_count=1, max_steps=6, spot_check="off")
+        assert max(r["t"] for r in without) <= 6
 
     def test_determinism(self):
         medias = _make_separable_clips(n_per_cat=10)

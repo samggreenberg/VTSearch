@@ -434,7 +434,7 @@ describe('SortRunnerService', () => {
       sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
 
       runner.onMinPrecisionChange(0.25);
-      httpMock.expectOne(floorPost).flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.1, n_returned: 9 });
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.1, n_returned: 9 });
       vi.advanceTimersByTime(1000);
 
       httpMock.expectNone('/api/learned-sort');
@@ -446,7 +446,7 @@ describe('SortRunnerService', () => {
       'keeps the default cut and swaps only the verdict when the floor still promises nothing (%s)',
       (status) => {
         vi.useFakeTimers();
-        learnedRanking('insufficient_evidence');
+        learnedRanking('unchecked');
 
         runner.onMinPrecisionChange(0.9);
         httpMock.expectOne(floorPost).flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
@@ -462,7 +462,7 @@ describe('SortRunnerService', () => {
 
     it('re-runs the learned sort only once the server has the new floor', () => {
       vi.useFakeTimers();
-      learnedRanking('promised');
+      learnedRanking('confirmed');
 
       runner.onMinPrecisionChange(0.25);
       const post = httpMock.expectOne(floorPost);
@@ -470,7 +470,7 @@ describe('SortRunnerService', () => {
       vi.advanceTimersByTime(1000);
       httpMock.expectNone('/api/learned-sort');
 
-      post.flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.15, n_returned: 2 });
+      post.flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.15, n_returned: 2 });
       vi.advanceTimersByTime(300);
       httpMock.expectOne('/api/learned-sort').flush({
         status: 'done',
@@ -480,7 +480,7 @@ describe('SortRunnerService', () => {
         ],
         threshold: 0.15,
         acq_threshold: 0.18,
-        floor: wireFloor('promised', { minPrecision: 0.25 }),
+        floor: wireFloor('confirmed', { minPrecision: 0.25, count: 64 }),
         total: 2,
         above_threshold: 1,
         has_more_below: false,
@@ -495,19 +495,19 @@ describe('SortRunnerService', () => {
       expect(mediaState.selectedId()).toBe(6);
     });
 
-    it('re-sorts when a floor becomes promised', () => {
+    it('re-sorts when a check confirms the floor', () => {
       vi.useFakeTimers();
-      learnedRanking('insufficient_evidence');
+      learnedRanking('unchecked');
 
       runner.onMinPrecisionChange(0.25);
-      httpMock.expectOne(floorPost).flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.15, n_returned: 2 });
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.15, n_returned: 2 });
       vi.advanceTimersByTime(300);
 
       httpMock.expectOne('/api/learned-sort');
     });
 
     it('drops a floor the user moved past', () => {
-      learnedRanking('insufficient_evidence');
+      learnedRanking('unchecked');
 
       runner.onMinPrecisionChange(0.75);
       const stale = httpMock.expectOne(floorPost);
@@ -516,20 +516,20 @@ describe('SortRunnerService', () => {
       expect(stale.cancelled).toBe(true);
       const fresh = httpMock.expectOne(floorPost);
       expect(fresh.request.body).toEqual({ min_precision: 0.25 });
-      fresh.flush({ ...wireFloor('unreachable', { minPrecision: 0.25 }), threshold: 0.5, n_returned: 1 });
+      fresh.flush({ ...wireFloor('short', { minPrecision: 0.25 }), threshold: 0.5, n_returned: 1 });
       expect(sortState.floor?.minPrecision).toBe(0.25);
     });
 
     it('keeps posting after a failed change', () => {
-      learnedRanking('insufficient_evidence');
+      learnedRanking('unchecked');
 
       runner.onMinPrecisionChange(0.75);
       httpMock.expectOne(floorPost).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
       expect(sortState.floor?.minPrecision).toBe(0.5);
 
       runner.onMinPrecisionChange(0.9);
-      httpMock.expectOne(floorPost).flush({ ...wireFloor('unreachable', { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
-      expect(sortState.floor?.status).toBe('unreachable');
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('short', { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
+      expect(sortState.floor?.status).toBe('short');
     });
   });
 

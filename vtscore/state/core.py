@@ -1074,15 +1074,28 @@ class DetectorContext:
         # estimator instead of the raw cross-calibration one.  Holds fitted Gaussians and
         # sorted score samples - process-scoped, never serialised.
         "anchored_cut_cache",  # FoldAnchoredCut | None
-        # The precision-floor estimate behind the current threshold
-        # (``PrecisionFloorEstimate``): the final model's haystack and the
-        # calibration folds' held-out votes that may serve as evidence, with
-        # the curve fitted the first time a floor is asked for.  Written on
-        # every retrain beside ``anchored_cut_cache`` and read by the same
-        # re-cut (``recut_detector_threshold``), so moving the floor re-cuts
-        # without a retrain.  Score arrays only - process-scoped, never
+        # The #4220 precision estimate (``PrecisionFloorEstimate``): the final
+        # model's haystack and the calibration folds' held-out votes that may
+        # serve as evidence, with the curve fitted on first use.  Written on
+        # every retrain beside ``anchored_cut_cache``.  Since #4272 it no
+        # longer draws the line - the spot check does - and feeds only the Find
+        # Stats precision curve.  Score arrays only - process-scoped, never
         # serialised.
         "precision_floor_cache",  # PrecisionFloorEstimate | None
+        # The ranking the line is drawn over (``LineRanking``, #4272): the
+        # haystack the last retrain scored, sorted, with the items the trainer
+        # held as voted.  The floor keeps the top *count* unvoted items of it;
+        # a re-cut (``recut_detector_threshold``) and the spot check's
+        # candidate both read it.  Ids and scores only - never serialised.
+        "line_ranking",  # LineRanking | None
+        # The spot check (``SpotCheck``, #4272) that last finished on this
+        # detector - its fixed candidate, labels, verdict and the fingerprint
+        # of the set it left the line on - and the one running now, if any.
+        # A finished result is kept across retrains and goes stale rather than
+        # vanishing; a running check keeps the floor's state as it was until it
+        # ends.  Ids and labels only - never serialised.
+        "precision_check",  # SpotCheck | None (finished)
+        "precision_check_run",  # SpotCheck | None (running)
     )
 
     def __init__(
@@ -1156,6 +1169,9 @@ class DetectorContext:
         self.calibration_cache: tuple[Any, ...] | None = None
         self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
         self.precision_floor_cache: Any = None  # PrecisionFloorEstimate | None
+        self.line_ranking: Any = None  # LineRanking | None
+        self.precision_check: Any = None  # SpotCheck | None
+        self.precision_check_run: Any = None  # SpotCheck | None
 
 
 # ---------------------------------------------------------------------------
@@ -1593,25 +1609,31 @@ def recut_detector_threshold(
 
     The operating point is a precision floor (*min_precision*) or, when no
     floor is given, an inclusion (*inclusion_value*) - the internal unit, not
-    a user preference (#4269).  A floor that promises nothing re-cuts at
-    :data:`~vtscore.training.thresholds.PRECISION_FLOOR_FALLBACK_INCLUSION`, so
-    the line never empties (#4247); which line an operating point draws is
-    :func:`~vtscore.training.thresholds.reporting_line`, shared with training
-    and the eval harness.
+    a user preference (#4269).
 
-    In order:
+    **Under a floor the line keeps a set** (#4272): the top *count* unvoted
+    items of the ranking the last retrain scored (``ctx.line_ranking``), where
+    *count* is the set the detector's last spot check ended on, or the floor's
+    unchecked starting candidate before any check
+    (:func:`~vtscore.training.thresholds.floor_line`, shared with training and
+    the eval harness).  Nothing falls back to the Inclusion 0 cut any more.
+    The unvoted remainder is read against the live votes, so the line follows
+    the ranking at the same count as votes come in.  With no ranking to read
+    (never trained against a haystack, or a structural detector) the floor
+    has no line and the fallbacks below answer at the inclusion given.
+
+    With no floor, in order:
 
     * **The fold-anchored estimator** (``ctx.anchored_cut_cache``), when training
-      fitted one - the shipped cut - with the floor read off
-      ``ctx.precision_floor_cache``.  Re-cutting both is arithmetic on fitted
-      state, so the result is exactly what a retrain at this operating point
-      would have stored.
+      fitted one - the shipped cut, re-cut at *inclusion_value*.  Arithmetic on
+      fitted state, so the result is exactly what a retrain at this operating
+      point would have stored.
     * **The conformal rule over the cached fold orderings**, when there is no
-      estimator (safe thresholds off, or a degenerate fit), at the inclusion
-      the operating point resolves to: the slide behaviour this path has always
-      had.  Under safe thresholds that drops the schedule blend a retrain would
-      have mixed in, which needs state the cache does not keep (the
-      comprehensive-audit-2026-07 "skip blend on slides" ruling).
+      estimator (safe thresholds off, or a degenerate fit), at that inclusion:
+      the slide behaviour this path has always had.  Under safe thresholds that
+      drops the schedule blend a retrain would have mixed in, which needs state
+      the cache does not keep (the comprehensive-audit-2026-07 "skip blend on
+      slides" ruling).
     * **``None`` - leave the threshold alone** - in every other case: no cached
       folds, or folds that never split (``folds.fallback`` set: too few votes,
       or one class).  The stored threshold there came from an inclusion-blind
@@ -1621,15 +1643,19 @@ def recut_detector_threshold(
       touch of the stepper, which could even admit *fewer* items on a step
       toward lenient.
     """
-    from vtscore.training.thresholds import reporting_line
+    from vtscore.training.thresholds import floor_line, reporting_line
 
     if min_precision is None and inclusion_value is None:
         raise ValueError("an operating point needs an inclusion or a precision floor")
+    if min_precision is not None:
+        kept = floor_line(ctx.line_ranking, min_precision, ctx.precision_check, human_voted_ids(ctx))
+        if kept is not None:
+            return kept
     line = reporting_line(
         ctx.anchored_cut_cache,
-        ctx.precision_floor_cache,
+        None,
         inclusion_value=inclusion_value if inclusion_value is not None else 0.0,
-        min_precision=min_precision,
+        min_precision=None,
     )
     if line.threshold is not None:
         return line.threshold
@@ -1645,12 +1671,16 @@ def recut_detector_threshold(
 
 
 def detector_precision_floor(ctx: "DetectorContext", min_precision: float) -> Any:
-    """The floor's verdict for *ctx* at *min_precision*: a :class:`~vtscore.training.thresholds.PrecisionFloorCut`.
+    """The #4220 estimator's verdict for *ctx* at *min_precision*: a :class:`~vtscore.training.thresholds.PrecisionFloorCut`.
 
     Reads the estimate the last retrain cached, fitting its curve on first use.
     A detector with no estimate - never trained, trained without a haystack, or
     a structural detector - has no evidence, so the verdict is
     ``insufficient_evidence`` with zero calibration positives.
+
+    Off the line's path since #4272: the spot check decides the line
+    (:func:`detector_floor_state`).  Kept as library API for callers that want
+    the estimator's own reading.
     """
     from vtscore.training.thresholds import unpromised
 
@@ -1660,34 +1690,36 @@ def detector_precision_floor(ctx: "DetectorContext", min_precision: float) -> An
     return estimate.cut(min_precision)
 
 
-def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any]:
+def human_voted_ids(ctx: "DetectorContext") -> set[int]:
+    """The items a person has voted on in *ctx*'s current session: never a spot check's candidate.
+
+    In Find mode every scored item carries a machine label, so the human's
+    votes are the verified ones; elsewhere they are the vote dicts themselves.
+    """
+    if ctx.find_mode:
+        return set(ctx.verified_ids)
+    return set(ctx.good_votes) | set(ctx.bad_votes)
+
+
+def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any] | None:
     """What the precision floor says about *ctx*'s current line, for a response that carries the line.
 
     Every place a detector's threshold leaves the process - a sort result, a
-    Find pass, a knob change, a headless export - reports it beside the
-    threshold, so a consumer can say whether the line it draws is a promise
-    (#4247).  ``status`` is ``"promised"`` when the line is the floor's own cut,
-    ``"unreachable"`` or ``"insufficient_evidence"`` when the floor promised
-    nothing and the line is the Inclusion 0 fallback, and ``None`` when no
-    floor is set (a library caller's choice; the app always sets one) and the
-    line is the Inclusion 0 cut with no promise attempted.  ``calibration_positives`` counts
-    the evidence behind the verdict, and ``min_calibration_positives`` the gate
-    it has to reach before any promise is made.
+    Find pass, a floor change, a headless export - reports it beside the
+    threshold (#4247, #4272).  ``status`` is ``unchecked`` (the line is the
+    floor's starting candidate, no check has run), ``confirmed`` (the last spot
+    check's range clears the floor) or ``short`` (it ended below it, and the
+    line keeps the top 32 it ended on); ``count`` is the size of the set the
+    line keeps; ``range`` is the check's likely range for how much of that set
+    is right, with ``stale`` once the ranking under it has moved since the
+    check; ``schedule`` is what a check at this floor costs.  ``None`` when no
+    floor is set (a library caller's choice; the app always sets one).
     """
-    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES
+    from vtscore.training.thresholds import floor_state
 
     if min_precision is None:
-        estimate = ctx.precision_floor_cache
-        status, positives = None, estimate.calibration_positives if estimate is not None else 0
-    else:
-        verdict = detector_precision_floor(ctx, min_precision)
-        status, positives = verdict.status.value, verdict.calibration_positives
-    return {
-        "min_precision": min_precision,
-        "status": status,
-        "calibration_positives": positives,
-        "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
-    }
+        return None
+    return floor_state(min_precision, ctx.precision_check, ctx.line_ranking, human_voted_ids(ctx)).as_dict()
 
 
 def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:
@@ -1703,11 +1735,11 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
 
     The offset is relative to **the inclusion the reporting cut sits at**.
     *inclusion_value* names it when the caller knows it in those units (the
-    Inclusion 0 cut a floor falls back to).  ``None`` recovers it from ``ctx.threshold`` through
+    Inclusion 0 cut of a detector with no floor).  ``None`` recovers it from ``ctx.threshold`` through
     :meth:`~vtscore.training.thresholds.FoldAnchoredCut.inclusion_for_threshold`,
     which is the path a cut chosen by another rule takes: under a precision
-    floor (#4224) the reporting cut is wherever the floor lands, and acquisition
-    samples four steps stricter than *that*.
+    floor (#4224) the reporting cut is wherever the set the floor keeps ends,
+    and acquisition samples four steps stricter than *that*.
 
     Derived on demand rather than stored beside ``ctx.threshold``: there are
     four places that write a threshold onto a detector context, and a second
@@ -1740,20 +1772,17 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
 def detector_line_inclusion(ctx: "DetectorContext", min_precision: float | None) -> float | None:
     """The inclusion *ctx*'s reporting line sits at, for Autopilot's acquisition offset.
 
-    Under a floor it is the fallback inclusion when the floor promises nothing,
-    and ``None`` when it promises - :func:`detector_acquisition_threshold` then
-    recovers it from the line itself (owner, 2026-09-28: acquisition sits at
-    *X - 4*, where *X* is the derived inclusion of the production cut).  With
-    no floor it is Inclusion 0, the line's own cut (#4269).
+    Under a floor the line keeps a set rather than an inclusion, so it is
+    ``None`` and :func:`detector_acquisition_threshold` recovers it from the
+    line itself (owner, 2026-09-28: acquisition sits at *X - 4*, where *X* is
+    the derived inclusion of the production cut).  With no floor it is
+    Inclusion 0, the line's own cut (#4269).
     """
-    from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION, reporting_line
+    from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 
-    return reporting_line(
-        ctx.anchored_cut_cache,
-        ctx.precision_floor_cache,
-        inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION,
-        min_precision=min_precision,
-    ).inclusion
+    if min_precision is not None:
+        return None
+    return float(PRECISION_FLOOR_FALLBACK_INCLUSION)
 
 
 def recompute_detector_thresholds(min_precision: float | None) -> None:
@@ -1771,7 +1800,8 @@ def recompute_detector_thresholds(min_precision: float | None) -> None:
     only the active detector's.  *min_precision* is what a detector that has
     not read its own floor yet takes - the user's setting, which is what that
     first read will seed it with.  A detector already holding its own floor
-    keeps its cut.  With no floor the line is the Inclusion 0 cut (#4269).
+    keeps its cut.  Under a floor the line keeps the set the floor keeps
+    (#4272); with no floor it is the Inclusion 0 cut (#4269).
     """
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 

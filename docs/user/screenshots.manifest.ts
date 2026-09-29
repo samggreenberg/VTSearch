@@ -859,7 +859,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'autopilot-progress',
     embeddedIn: `${GUIDE}#the-collapsed-bar`,
-    caption: 'The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order',
+    caption: 'The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order',
     themes: BOTH,
     clip: { target: '.autopilot-panel' },
     async recipe(_page, h) {

@@ -8,6 +8,39 @@ only when a release is cut - there is no auto-bump on commit. (The companion
 [`vtsearch`](../README.md) application uses a git-derived timestamp version
 instead, since every commit on `dev` is effectively a new app release.)
 
+### Changed
+
+- **The precision floor's line is a set the spot check measures** (issue
+  #4272). Under a floor, `train_and_threshold` / `train_and_score` /
+  `labelset_train_and_score` / `run_learned_sort` and
+  `recut_detector_threshold(ctx, min_precision=...)` now cut at the last of
+  the top *count* unvoted items of the haystack - the set the detector's last
+  spot check ended on, or the floor's starting candidate (128 / 64 / 32 at
+  10% / 25% / 50% and above) - never at the Inclusion 0 fallback.
+  `reporting_line` is unchanged as library API but the app no longer draws
+  its line through it under a floor, and `precision_floor_cut` /
+  `PrecisionFloorEstimate` stay as the estimator behind the Find Stats curve.
+  - `vtscore.state.core.detector_floor_state` now returns
+    `{min_precision, status, count, range, schedule}` with `status` in
+    `unchecked` / `confirmed` / `short` (`FLOOR_STATES`), or `None` with no
+    floor; the `promised` / `unreachable` / `insufficient_evidence` states and
+    the `calibration_positives` / `min_calibration_positives` fields are gone.
+  - `detector_line_inclusion` returns `None` under any floor: a set, not an
+    inclusion, draws the line.
+  - CLI autodetect's `detector_unpromised` event is now `detector_unchecked`,
+    with `detector`, `min_precision`, `status` and `count`; every result's
+    `floor` carries the new state.
+  - `vtscore.datasets.vote_provenance.FLOWS` gains `check`, the flow a spot
+    check's votes are recorded with (`CHECK_PROVENANCE`); it does not
+    `calibrates_precision`.
+  - Eval: `simulate_voting_iterations` gains `spot_check` (`"end"`, the
+    default, runs the check once the voting steps are spent, its votes cast and
+    trained on, one row per round with `phase == "check"` past `max_steps`;
+    `"off"` never checks). The frame's `floor_status` values are the new
+    states, `calibration_positives` is replaced by `floor_count`, `range_lo`,
+    `range_hi`, `check_labelled`, `check_right` and `check_stale`, and
+    `_safe_threshold_for_step` takes `check=`.
+
 ### Added
 
 - **A seed for the Browse projection** (issue #4296), all additive:
@@ -16,6 +49,22 @@ instead, since every commit on `dev` is effectively a new app release.)
   stamp that the dataset container persists. With no seed set nothing changes:
   the fit stays unseeded and any persisted layout still serves. With one set,
   every fit runs under it and a layout persisted under another seed is refit.
+
+- **`vtscore.training.thresholds.spot_check`** (issue #4272): the precision
+  floor's spot check. `check_schedule` / `CheckSchedule` / `rounds_for`
+  (the candidate, rounds and picks a floor costs, at `CHECK_ALPHA`,
+  `CHECK_BASE_CANDIDATE`, `CHECK_MIN_PICKS`), `clopper_pearson_lower` /
+  `clopper_pearson_upper` / `likely_range` / `LikelyRange` / `range_tail`,
+  `LineRanking` (the ranking the line keeps a set of; `line_under` places the
+  line on the four-decimal response grid), `SpotCheck` (the check's state
+  machine; `CHECK_RUNNING` / `CHECK_CANCELLED`, `CHECK_PROVENANCE`),
+  `applicable_result` / `floor_count` / `floor_line` / `floor_state` /
+  `FloorState` and `FLOOR_UNCHECKED` / `FLOOR_CONFIRMED` / `FLOOR_SHORT` /
+  `FLOOR_STATES`; all re-exported from `vtscore.training.thresholds`.
+  `DetectorContext` gains `line_ranking`, `precision_check` and
+  `precision_check_run`; `vtscore.state.core.human_voted_ids` names the votes
+  a candidate excludes; `vtscore.state.votes.record_vote_provenance` records
+  a vote's provenance whatever its history.
 
 - **`resolve_or_train_detector(..., on_progress=, use_loaded_context=)`**
   (issue #4252). Both keyword-only and optional, so every existing call

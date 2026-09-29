@@ -151,7 +151,7 @@ everywhere except those held votes.
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
-  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
+  "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks"
@@ -159,8 +159,9 @@ everywhere except those held votes.
 ```
 
 `floor` is the [floor state](labeling.md#the-floor-state) of `threshold`:
-whether the Good/Bad split is a precision promise or the unpromised Inclusion 0
-cut. On patch-region-aware datasets each result additionally carries `best_region`.
+the set the Good/Bad split keeps, and whether a spot check confirmed the
+floor on it. A fresh pass is `unchecked` until one runs. On patch-region-aware
+datasets each result additionally carries `best_region`.
 Errors: **400** (no medias loaded, or detector has no labels), **404**
 (detector not found), **409** (active dataset can't supply the detector's
 embedder type, or the run was cancelled).
@@ -186,7 +187,7 @@ demand, and returns one result column per detector.
     "Dog Barks": {
       "detector_name": "Dog Barks",
       "threshold": 0.5,
-      "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10},
+      "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -197,9 +198,9 @@ demand, and returns one result column per detector.
 ```
 
 Each detector's `floor` is the [floor state](labeling.md#the-floor-state) of
-its `threshold` (`null` only when there was no trained context to ask). A
-detector whose floor promised nothing is still exported at its Inclusion 0
-cut, and the server logs that the set is unpromised.
+its `threshold` (`null` only when there was no trained context to ask). Nobody
+can vote in a headless run, so every detector exports its floor's `unchecked`
+starting candidate, and the server logs that the set was never checked.
 
 When an exporter is configured for Auto-Find, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
@@ -249,7 +250,7 @@ chart draws.
   "agreement_rate": 0.93,
   "verified_precision": 0.82, "verified_called_good": 17, "verified_kept_good": 14,
   "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
-  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
+  "floor": {"min_precision": 0.5, "status": "confirmed", "count": 32, "range": {"lo": 0.55, "hi": 1.0, "labelled": 5, "right": 5, "stale": false}, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
   "precision_curve": [
     {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
      "verified_precision": 1.0, "estimated_precision": 0.91}, ...
@@ -265,11 +266,12 @@ chart draws.
   top `n_returned` items, sampled at about 40 log-spaced counts plus the current
   cut's (`n_returned` at the top level). `verified_precision` is
   `checked_good / checked` over the items in it the user verified (`null` when
-  none). `estimated_precision` is the precision floor's own lower-bound estimate
-  (the detector's `precision_floor_cache`, applied to this Find run's scores as
-  the corpus, sampled to 50,000 above that): the held-out calibration votes the
+  none). `estimated_precision` is the #4220 estimator's lower-bound curve (the
+  detector's `precision_floor_cache`, applied to this Find run's scores as the
+  corpus, sampled to 50,000 above that): the held-out calibration votes the
   learned sort chose, and the whole haystack the detector trained against,
-  voted items included, as the reference pool. It is the curve the floor cuts
+  voted items included, as the reference pool. It is a model-based reading of
+  the ranking; the line itself is drawn by the spot check, not by this curve
   (see [labeling.md](labeling.md#get--set-the-precision-floor)).
 - `estimate_status` says whether the curve carries an estimate: `estimated`;
   `insufficient_evidence` when those votes hold fewer than
@@ -277,7 +279,7 @@ chart draws.
   `unavailable` when the detector has no calibration folds.
 - `floor` is the [floor state](labeling.md#the-floor-state) of the line at
   `threshold`: the floor it was cut at (the chart draws it across at that
-  precision), and whether the line keeps it or is the unpromised default cut.
+  precision), the set the line keeps, and the spot check's likely range for it.
 - `stale` is `true` once corrections have been folded into the detector since
   this Find run scored.
 
