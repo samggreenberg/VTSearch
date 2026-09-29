@@ -35,8 +35,8 @@ describe('PrecisionFloorComponent (#4246)', () => {
   const hints = () => (fixture.nativeElement as HTMLElement).querySelectorAll('vt-field-hint-icon');
 
   describe('the picker', () => {
-    it('offers the four floors #4220 priced, starting at the 50% default', () => {
-      expect(optionLabels()).toEqual(['25%', '50%', '75%', '90%']);
+    it('offers the five preset floors, starting at the 50% default', () => {
+      expect(optionLabels()).toEqual(['10%', '25%', '50%', '75%', '90%']);
       expect(select().value).toBe('0.5');
     });
 
@@ -54,13 +54,19 @@ describe('PrecisionFloorComponent (#4246)', () => {
 
     it('shows a stored floor that is not a preset as its own option, in order', async () => {
       await show(0.6);
-      expect(optionLabels()).toEqual(['25%', '50%', '60%', '75%', '90%']);
+      expect(optionLabels()).toEqual(['10%', '25%', '50%', '60%', '75%', '90%']);
       expect(select().value).toBe('0.6');
+    });
+
+    it('orders a stored floor below every preset first', async () => {
+      await show(0.05);
+      expect(optionLabels()).toEqual(['5%', '10%', '25%', '50%', '75%', '90%']);
+      expect(select().value).toBe('0.05');
     });
 
     it('shows a detector with no floor as "No floor", which cannot be picked back', async () => {
       await show(null);
-      expect(optionLabels()).toEqual(['No floor', '25%', '50%', '75%', '90%']);
+      expect(optionLabels()).toEqual(['No floor', '10%', '25%', '50%', '75%', '90%']);
       expect(select().value).toBe('none');
       expect(select().options[0].disabled).toBe(true);
     });

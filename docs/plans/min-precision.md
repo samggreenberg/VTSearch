@@ -32,31 +32,45 @@ What follows is what the app still owes.
     internal coordinate this is measured in.
 - **A spot check earns the promise** (owner, 2026-09-29, #4267, from the
   decision page built on #4257's rank frames). The promise certifies a list
-  the user acts on without looking, and it costs about 5 votes.
-  - **The rule** (#4257's `a:top32`). The candidate is the top 32 *unvoted*
-    items of the current ranking. The user votes on m(X) of them, drawn
-    uniformly at random. The whole candidate is promised iff the one-sided
-    Clopper–Pearson lower bound on the hit rate, at α = 5%, is ≥ X. There is
-    one round, with no redraw on the same candidate.
-  - **The check grows with X** (owner, 2026-09-29). m(X) = max(5,
-    ⌈ln α / ln X⌉), the fewest picks that can promise X when all are right.
-    That is 5 picks up to X = 54.9%, 11 at 75% and 29 at 90%.
+  the user acts on without looking, and it costs 5 votes a round.
+  - **The rule** (#4257's `a:top32`, extended below 50%). The candidate is
+    the top K *unvoted* items of the current ranking. The user votes on m of
+    them, drawn uniformly at random. The whole candidate is promised iff the
+    one-sided Clopper–Pearson lower bound on the hit rate is ≥ X at level
+    α / R, with α = 5%. A failed round halves K and draws m fresh picks, down
+    to the top 32. There is no redraw on the same candidate.
+  - **The check grows with X** (owner, 2026-09-29). Each round draws
+    m = max(5, ⌈ln(α / R) / ln X⌉) picks, the fewest that can reach X when all
+    are right: 5 up to X = 54.9%, 11 at 75% and 29 at 90%.
+  - **The candidate grows as X falls** (owner, 2026-09-29), so a low floor
+    returns more.
+    - It starts at K = 32 · 2^max(0, ⌊log₂(0.5 / X)⌋): the top 128 at 10%, the
+      top 64 at 25%, and the top 32 at 50% and above.
+    - That gives R = log₂(K / 32) + 1 rounds of 5 picks each: 3 at 10%, 2 at
+      25%.
+    - The owner picked 5 picks a round from the grid in
+      [`REPORT.md`](../experiments/2026-09-29-floor-candidate-4267/REPORT.md).
+      At 10% (0.44%) it costs 12 votes and promises in 59% of sessions. A
+      promise returns 68 items on average, and the check recovers 0.63 of the
+      oracle's recall, against 0.43 for a fixed top 32. That beats reading the
+      top 32 yourself by +0.058.
   - **The picks are a separate check, not the ranking** (owner, 2026-09-29).
-    They come from anywhere in the top 32, so the UI must not show them as the
-    top of the sort (#4273).
-  - **What it buys** at 0.44% (COCO Better's default): a promise in 41%, 28%
-    and 20% of sessions at X = 25%, 50% and 75%, with at most 0.28% of promises
-    broken. It hands over 9.6, 6.9 and 4.0 matches per session that the user
-    never saw. On recall it gets 0.38 of the oracle at X = 50%, against 0.73
-    for reading the top 32. That gap is the price of the ~5-vote budget.
-  - **At 0.1% a pass is almost always luck.** The check promises in 0.09% of
-    sessions, and 88% of those promises break. Clopper–Pearson bounds broken
+    They come from anywhere in the candidate, so the UI must not show them as
+    the top of the sort. A check can take up to three rounds (#4273).
+  - **What it buys** at 0.44% (COCO Better's default): a promise in 59%, 43%,
+    28%, 20% and 12% of sessions at X = 10%, 25%, 50%, 75% and 90%, with at
+    most 0.29% of promises broken. It hands over 17, 12, 6.9, 4.0 and 0.37
+    matches per session that the user never saw. On recall it gets 0.38 of the
+    oracle at X = 50%, against 0.73 for reading the top 32. That gap is the
+    price of the ~5-vote budget.
+  - **At 0.1% a pass is almost always luck.** At X = 50% the check promises
+    in 0.09% of sessions, and 88% of those promises break. Clopper–Pearson bounds broken
     promises per session (≤ α of all sessions), not per promise made. The
     no-cause wording below covers this case.
   - **Headless runs can't be checked**, because nobody is there to vote. AutoRun,
     CLI autodetect and the cold Find path always export the labelled fallback.
   - **Not yet decided:** what a retrain does to a promise. Check votes train
-    the model and move the top 32, and repeated checks compound α. #4272 raises
+    the model and move the candidate, and repeated checks compound α. #4272 raises
     this with the owner before building it.
 - **Three states, not a number.**
   - `unchecked`: no check has been run on the current candidate.
@@ -93,12 +107,15 @@ What follows is what the app still owes.
     still earns its run is the owner's call.
 - **The default floor is 50%, and a set floor wins over Inclusion** (owner,
   2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
-- **The control offers four presets and no off switch** (owner, 2026-09-28,
-  #4246): 25/50/75/90%, the floors #4220 priced, so every choice is a
-  measured one. The API still takes any value in `[0.01, 1]` and `null`; the
-  control shows a stored non-preset or `null` as it is, and never sends
-  `null`.
-  Under #4267's growing check, the presets cost 5, 5, 11 and 29 picks.
+- **The control offers five presets and no off switch** (owner, #4246 on
+  2026-09-28, with 10% added on 2026-09-29): 10/25/50/75/90%, symmetric about
+  the 50% default. The 10% preset is for a user willing to dig through a long
+  list. The API still takes any value in `[0.01, 1]` and `null`. The control
+  shows a stored non-preset or `null` as it is, and never sends `null`.
+  - Under the spot check, the presets cost at most 15 picks at 10% (3 rounds
+    of 5), 10 at 25% (2 rounds of 5), 5 at 50%, 11 at 75% and 29 at 90%.
+  - #4220 never priced the estimator at 10%, so until #4272 replaces it, the
+    10% floor runs unmeasured.
 - **What waits on the GRID, and what doesn't.**
   - The spot check needs no GRID run: #4257's rank frames price it exactly.
   - #4222's opening now matters for detector quality only, since the promise no
@@ -134,7 +151,7 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
-- [ ] #4272 — Backend: earn the promise with a spot check of the top 32, not the estimator (Opus 4.8)
+- [ ] #4272 — Backend: earn the promise with a spot check, not the estimator (Opus 4.8)
 
 <!-- item-sep -->
 

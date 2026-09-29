@@ -15,10 +15,10 @@ where to click, in order.
 ## How the floor moves the line
 
 The floor sits at the top of the left-hand panel and reads **At least 50%
-right**. It offers **25%**, **50%**, **75%** and **90%**: how much of what
-the detector returns should be right. The line returns as many pictures as it
-can while at least that share of them is estimated right, so a lower floor
-returns more. While the floor is promised, lower floors *nest*: everything
+right**. It offers **10%**, **25%**, **50%**, **75%** and **90%**: how much
+of what the detector returns should be right. The line returns as many
+pictures as it can while at least that share of them is estimated right, so a
+lower floor returns more. While the floor is promised, lower floors *nest*: everything
 the line returns at 75% it still returns at 50%, along with a band of extra
 borderline pictures.
 

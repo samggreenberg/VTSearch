@@ -51,11 +51,12 @@ export function isUnpromised(floor: LineFloor | null): boolean {
 }
 
 /**
- * The floors the control offers (#4246, owner 2026-09-28): the four #4220
- * priced, so every choice is a measured one. The backend takes any value in
- * `[0.01, 1]`; a stored value outside this list still shows, as its own option.
+ * The floors the control offers (owner, 2026-09-29): symmetric about the 50%
+ * default, with 10% for a user willing to dig through a long list. The backend
+ * takes any value in `[0.01, 1]`; a stored value outside this list still shows,
+ * as its own option.
  */
-export const FLOOR_PRESETS: readonly number[] = [0.25, 0.5, 0.75, 0.9];
+export const FLOOR_PRESETS: readonly number[] = [0.1, 0.25, 0.5, 0.75, 0.9];
 
 /**
  * The floor the control shows before the detector's own value arrives from

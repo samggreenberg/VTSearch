@@ -67,8 +67,8 @@ detector re-cuts without retraining and, in Find mode, re-splits the
 unverified items — and the same value is settable as `min_precision` on
 `PUT /api/settings`. Both verbs return the new line in the same round trip,
 so the app's floor control moves its line without re-scoring. The control
-offers 25%, 50%, 75% and 90%, the floors the estimator was measured at, and
-never sends `null`; the API takes any value in range.
+offers 10%, 25%, 50%, 75% and 90%, and never sends `null`; the API takes any
+value in range.
 
 | Field | Meaning |
 |---|---|

@@ -215,8 +215,8 @@ not list every commit. Use `git log` for the full history.
 
 - **The Inclusion stepper is gone: pick a precision floor instead** (issue
   #4246). Where the Manual tab and Find's left pane had the -10..10
-  Inclusion box, they now read **At least [50%] right**, with **25%**,
-  **50%**, **75%** and **90%** to pick from. A note under it says what the
+  Inclusion box, they now read **At least [50%] right**, with **10%**,
+  **25%**, **50%**, **75%** and **90%** to pick from. A note under it says what the
   floor is doing to the line: *At least 50% right* with how many items it
   returns, *Can't reach 50% on this dataset*, or *Not enough evidence yet*
   with the Good votes it has - the last two showing the default cut, as the
