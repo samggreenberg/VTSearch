@@ -103,10 +103,11 @@ export interface Helpers {
    */
   enterLabelView(dataset?: string, detector?: string): Promise<void>;
   /**
-   * Wait until the label view has had no sort running for a few seconds. The
-   * view re-sorts on entry and on a tab switch, and what it serves and the
-   * floor line it shows follow that sort, so a fixed wait photographs
-   * whichever side of it the clock lands on (#4299).
+   * Wait for the sorts the label view is running, or is about to start, to
+   * settle. The view re-sorts on entry (once its votes load) and on a tab
+   * switch, and what it serves and the floor line it shows follow that sort,
+   * so a fixed wait photographs whichever side of it the clock lands on
+   * (#4299). `enterLabelView` and `leftTab` already do this.
    */
   sortsSettled(): Promise<void>;
   /** In the label view, switch the left-panel tab (Autopilot / Manual). */

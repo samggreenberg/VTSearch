@@ -184,6 +184,54 @@ function makeHelpers(page: Page): Helpers {
     if (!found) throw new Error(`no ${cardTag} row named ${name}`);
     await wait(400);
   };
+  // The label view's sorts, as the page runs them: counted when the request
+  // goes out, settled when the answer does. A learned sort may answer
+  // `running` and be polled to its end, so its poll settles it. What the view
+  // serves, and the floor line it shows, follow the sort that settled last,
+  // and a fixed wait photographed whichever side of it the clock landed on
+  // (#4299).
+  const sorts = { started: 0, settled: 0, running: new Set<string>() };
+  const isSort = (url: string, method: string) =>
+    method === 'POST' && /\/api\/(learned-sort|sort)(\?|$)/.test(url);
+  page.on('request', (req) => {
+    if (isSort(req.url(), req.method())) sorts.started += 1;
+  });
+  page.on('response', async (res) => {
+    const url = res.url();
+    const method = res.request().method();
+    const polled = method === 'GET' && url.includes('/api/learned-sort/result');
+    if (!isSort(url, method) && !polled) return;
+    const body = await res.json().catch(() => ({}));
+    const job: string | undefined = body?.job_id;
+    if (body?.status === 'running' && job) {
+      if (!polled) sorts.running.add(job);
+      return;
+    }
+    if (polled) {
+      if (job && sorts.running.delete(job)) sorts.settled += 1;
+    } else {
+      sorts.settled += 1;
+    }
+  });
+  /**
+   * Wait for any sort started since *mark* (given *startWindow* ms to begin)
+   * to settle, then for the view to draw what it served. A sort the view
+   * abandons never answers, so an overlay that has stayed gone for a few
+   * seconds also counts as settled.
+   */
+  const settleSorts = async (mark: number, startWindow: number) => {
+    const overlay = page.locator('vt-progress-indicators .sort-overlay');
+    const t0 = Date.now();
+    while (sorts.started === mark && Date.now() - t0 < startWindow) await wait(250);
+    const until = Date.now() + 180000;
+    let quietSince = Date.now();
+    while (sorts.settled < sorts.started && Date.now() < until) {
+      if (await overlay.count()) quietSince = Date.now();
+      else if (Date.now() - quietSince >= 5000) break;
+      await wait(250);
+    }
+    await wait(1500);
+  };
   const h: Helpers = {
     page,
     app: appClient(APP),
@@ -248,24 +296,16 @@ function makeHelpers(page: Page): Helpers {
       await h.dashboard();
       await h.selectDatasetRow(dataset);
       await h.selectDetectorRow(detector);
+      const mark = sorts.started;
       await page.getByRole('button', { name: 'Train', exact: true }).click();
       // label view: wait for the three panels
       await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 60000 });
-      await h.sortsSettled();
+      // The view only sorts once the detector's votes have loaded, which can
+      // take several seconds on a cold page; give it that long to start.
+      await settleSorts(mark, 15000);
     },
     async sortsSettled() {
-      // Settled means no sort overlay for QUIET ms in a row: a sort can start a
-      // beat after the view opens, so "none running right now" is not enough.
-      const QUIET = 3000;
-      const overlay = page.locator('vt-progress-indicators .sort-overlay');
-      const until = Date.now() + 180000;
-      let quietSince = Date.now();
-      while (Date.now() < until) {
-        if (await overlay.count()) quietSince = Date.now();
-        else if (Date.now() - quietSince >= QUIET) break;
-        await wait(250);
-      }
-      await wait(500);
+      await settleSorts(sorts.started, 3000);
     },
     async leftTab(name) {
       // The tab strip is hidden while the left panel is collapsed to its rail,
@@ -274,8 +314,9 @@ function makeHelpers(page: Page): Helpers {
         await page.locator('.collapse-toggle').first().click();
         await wait(1200);
       }
+      const mark = sorts.started;
       await page.locator('.left-tab', { hasText: name }).first().click();
-      await h.sortsSettled();
+      await settleSorts(mark, 5000);
     },
     async serveItem(filename) {
       // Clicking a thumbnail selects the item; the centre viewer + Good/Bad
