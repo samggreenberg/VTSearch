@@ -147,10 +147,10 @@ describe('StripeOverviewComponent', () => {
       expect(component.cachedThresholdPosition()).toBe(50);
       const title = el.querySelector('.stripe-overview')!.getAttribute('title')!;
       expect(title).toContain('The dashed line is unpromised');
-      expect(title).toContain('default cut');
+      expect(title).toContain('the line keeps');
     });
 
-    it.each([lineFloor('promised'), null])('draws a plain line otherwise (%o)', async (floor) => {
+    it.each([lineFloor('confirmed'), null])('draws a plain line otherwise (%o)', async (floor) => {
       const el = await drawWith(floor);
       const marker = el.querySelector('.stripe-threshold');
       expect(marker).not.toBeNull();

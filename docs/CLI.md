@@ -251,16 +251,17 @@ converter-routed or re-clipped one the threshold moves, and moving it is the
 fix. The first chunk is prepared once and handed to both passes, so the
 correction costs no extra conversion or embedding work.
 
-**An unpromised cut is still exported, and the run says so.** Each detector's
-line is drawn at its precision floor (the `min_precision` setting,
-50% unless you change it). When the floor can promise nothing - fewer than ten
-calibration positives among the detector's votes, or no cut on this dataset
-reaches it - the detector falls back to its Inclusion 0 cut and exports that
-set, exactly as the app shows it. The run prints a line naming the detector
-(a `detector_unpromised` event under `--progress-format json`), and every
-result the detector produces carries a `floor` object beside its `threshold`
-(`status` `unreachable` or `insufficient_evidence`), which the JSON exporters
-write out with the hits. See [the floor state](api/labeling.md#the-floor-state).
+**The exported set is unchecked, and the run says so.** Each detector's line
+keeps the top of its ranking at its precision floor (the `min_precision`
+setting, 50% unless you change it): the top 128 unvoted items at 10%, the top
+64 at 25%, the top 32 at 50% and above. In the app a spot check measures how
+much of that set is right; nobody can vote in a headless run, so the run
+exports the floor's starting candidate as it is. The run prints a line naming
+the detector and the size of the set (a `detector_unchecked` event under
+`--progress-format json`), and every result the detector produces carries a
+`floor` object beside its `threshold` (`status` `unchecked`, with `count`),
+which the JSON exporters write out with the hits. See
+[the floor state](api/labeling.md#the-floor-state).
 
 **How to get the files:**
 

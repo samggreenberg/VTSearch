@@ -139,6 +139,9 @@ canonical persisted form.
 | `labelset_source` | `dict \| None` | Active sync target |
 | `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another floor or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
+| `precision_floor_cache` | `PrecisionFloorEstimate \| None` | The #4220 estimate the Find Stats curve reads; off the line's path since #4272 |
+| `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the floor keeps the top *count* unvoted items of it, and the spot check draws its candidate from it |
+| `precision_check` / `precision_check_run` | `SpotCheck \| None` | The floor's last finished spot check (kept across retrains; its range goes `stale`) and the one running now |
 
 Everything in this table is in-memory only. `model`,
 `verification_classifier`, `label_embeddings`, `label_local_features`
@@ -607,11 +610,16 @@ register_setting_persister("min_precision", my_settings.save_min_precision)
 
 `get_min_precision()` seeds its first read from `CoreConfig.from_settings()`
 (see [config.md](config.md)), per detector. The floor is a float in `(0, 1]`
-or `None`: `None` means no floor, and the line is the Inclusion 0 cut, with no
-promise attempted (the app always sets one). `set_min_precision` re-cuts the
-active detector at the new floor with no retrain
+or `None`: `None` means no floor, and the line is the Inclusion 0 cut (the app
+always sets one). Under a floor the line keeps a set - the top *count* unvoted
+items of `line_ranking`, *count* being the set the last spot check ended on or
+the floor's starting candidate (#4272) - and `set_min_precision` moves the
+active detector's line there with no retrain
 (`recut_detector_threshold(ctx, min_precision=...)`) and, in Find mode,
-re-splits the unverified items.
+re-splits the unverified items. `detector_floor_state(ctx, min_precision)`
+is the state every response carries beside the line, and
+`human_voted_ids(ctx)` names the votes a candidate excludes (the verified
+items in Find mode, the vote dicts otherwise).
 
 **Inclusion is retired as a user preference** (#4269). `get_inclusion()` is
 deprecated and always returns `0`; `set_inclusion()` accepts only `0`, with a

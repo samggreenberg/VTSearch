@@ -144,15 +144,15 @@ describe('PairScopeService', () => {
 
   it('seedMinPrecision pushes the per-detector floor into SortStateService', () => {
     service.seedMinPrecision();
-    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('promised', { minPrecision: 0.75 }), threshold: 0.3, n_returned: 12 });
+    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('confirmed', { minPrecision: 0.75 }), threshold: 0.3, n_returned: 12 });
     expect(sortState.minPrecision).toBe(0.75);
   });
 
   it('seedMinPrecision seeds only the value; the verdict arrives with the line', () => {
-    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineFloor('promised'));
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineFloor('confirmed'));
     service.seedMinPrecision();
-    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('unreachable'), threshold: 0.3, n_returned: 1 });
-    expect(sortState.floor?.status).toBe('promised');
+    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('short'), threshold: 0.3, n_returned: 1 });
+    expect(sortState.floor?.status).toBe('confirmed');
     expect(sortState.threshold).toBe(0.5);
   });
 

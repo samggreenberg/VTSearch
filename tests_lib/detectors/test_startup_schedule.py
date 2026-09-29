@@ -80,6 +80,9 @@ def _run(schedule, *, max_steps=24, seed=3, n_pos=70):
         seed_scores=seed_scores,
         atlas_min_node_size=8,
         startup_schedule=schedule,
+        # The opening is the subject here; the floor's spot check after the
+        # voting steps (#4272) would only add picks past max_steps.
+        spot_check="off",
         pick_sink=picks,
     )
     return rows, picks

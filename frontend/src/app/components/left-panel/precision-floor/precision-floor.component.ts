@@ -24,10 +24,11 @@ type Dot = 'green' | 'yellow' | 'red' | 'none';
  * floor is picked (see {@link onChange}).
  *
  * Under the picker, one line says what the floor does to the current line -
- * the floor and its state, never the estimate behind it (owner, 2026-09-28):
- * at least X% right with the count, can't reach X% (showing the default cut),
- * or not enough evidence yet (showing the default cut, with the Good votes it
- * has). There is no "off": every detector has a floor (#4269).
+ * the floor, the set the line keeps and how close the spot check got, never
+ * an estimate from the model (owner, 2026-09-29, #4272): at least X% right
+ * with the check's likely range and the count kept, the range a short check
+ * found, or the top N kept unchecked. There is no "off": every detector has
+ * a floor (#4269). The check step itself is #4273's.
  *
  * Content marked `floorActions` is projected onto the picker's line, so a host
  * can seat controls beside the picker (Find's work-queue actions) while the
@@ -46,17 +47,17 @@ export class PrecisionFloorComponent {
   readonly value = input<number>(DEFAULT_MIN_PRECISION);
   /** The floor's verdict on the line the list draws; null when there is no line from the detector. */
   readonly floor = input<LineFloor | null>(null);
-  /** How many items the line returns; null when unknown. */
+  /** How many items the line returns; the state line reads the kept count off the floor instead. */
   readonly returned = input<number | null>(null);
 
   /** A floor the user picked, as a fraction. */
   readonly valueChange = output<number>();
 
   readonly hint =
-    'Pick how much of what the detector returns should be right. The line then returns as much as it can ' +
-    'while at least that share of it is estimated right. It can only promise that once it has enough ' +
-    'evidence; until then, or when no line on this dataset gets there, the line stays at the default cut ' +
-    'and is marked unpromised.';
+    'Pick how much of what the detector returns should be right. The line keeps the top of the ranking: ' +
+    'the top 128 unvoted items at 10%, 64 at 25%, 32 at 50% and above. A check of a few random picks from ' +
+    'that set measures how much of it is right; until one runs the set is unchecked, and a check that falls ' +
+    'short keeps the top 32 it ended on and says how close it got.';
 
   /** The presets, plus the current value when it is not one of them, in order. */
   readonly options = computed(() => {
@@ -68,16 +69,16 @@ export class PrecisionFloorComponent {
   /** The `<select>`'s current value. */
   readonly selected = computed(() => String(this.value()));
 
-  readonly summary = computed(() => floorSummary(this.floor(), this.returned()));
-  readonly explanation = computed(() => floorExplanation(this.floor(), this.returned()));
+  readonly summary = computed(() => floorSummary(this.floor()));
+  readonly explanation = computed(() => floorExplanation(this.floor()));
 
   readonly dot = computed<Dot>(() => {
     switch (this.floor()?.status) {
-      case 'promised':
+      case 'confirmed':
         return 'green';
-      case 'insufficient_evidence':
+      case 'unchecked':
         return 'yellow';
-      case 'unreachable':
+      case 'short':
         return 'red';
       default:
         return 'none';

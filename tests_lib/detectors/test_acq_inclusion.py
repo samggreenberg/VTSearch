@@ -79,6 +79,9 @@ def _run(**kw):
             # acquisition columns; it needs a style, exactly as the harness passes one.
             style="whole_image",
             emit_calibration_metrics=True,
+            # The Inclusion arm: the offset's origin is the estimator's cut at
+            # `inclusion`, which a floor's set would replace (#4272).
+            min_precision=kw.pop("min_precision", "off"),
             **kw,
         )
     )

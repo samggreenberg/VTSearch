@@ -9,14 +9,18 @@ that promise
 fold-rank evidence, a logistic posterior, a 10th-percentile bootstrap lower
 bound, and an EM prior re-estimate, gated on 10 positives among the calibration
 votes. The owner's ruling on #4267 (2026-09-29) moved the promise off that
-estimator and onto a **spot check** (below). The library already holds:
+estimator and onto a **spot check** (below). The backend of the check landed
+with #4272: `vtscore.training.thresholds.spot_check` holds the rule, the line
+keeps the set the check ended on, `/api/precision-check` runs it, and the eval
+default arm runs the same check. The library also holds:
 - the estimator, `vtscore.training.thresholds.precision_floor_cut`, which is
-  public API and stays, off the promise path;
+  public API and stays, off the promise path (the Find Stats curve reads it);
 - one re-cut seam, `vtscore.state.core.recut_detector_threshold`;
 - the inverse that lets acquisition find its origin off any line,
   `FoldAnchoredCut.inclusion_for_threshold`.
 
-What follows is what the app still owes.
+What follows is the design the remaining slices (the frontend, #4273, first)
+build on.
 
 ## Design
 
@@ -140,8 +144,8 @@ What follows is what the app still owes.
   stored non-preset as it is.
   - Under the spot check, the presets cost at most 15 picks at 10% (3 rounds
     of 5), 10 at 25% (2 rounds of 5), 5 at 50%, 11 at 75% and 29 at 90%.
-  - #4220 never priced the estimator at 10%, so until #4272 replaces it, the
-    10% floor runs unmeasured.
+  - #4220 never priced the estimator at 10%; the spot check (#4272) measures
+    that floor in its three rounds instead.
 - **What waits on the GRID, and what doesn't.**
   - The spot check needs no GRID run: #4257's rank frames price it exactly.
   - #4222's opening no longer decides whether a promise can be made, since the
@@ -226,14 +230,10 @@ What follows is what the app still owes.
 
 - **Triage the FPR + FNR cut-rule issues against the ruling.** These tune the
   reporting line under an objective the floor replaces:
-  - #4118, a hinge rule for the reporting line only;
-  - #4136, the guarded text-sort line as display only;
   - #4115, where C = 0.1 ranks better but the shipped cut gives it back;
   - #4219, the production head decision, read partly through Inclusion.
 
   Their acquisition-side findings may survive, because acquisition still
-  re-cuts `mid_tilt`. Their reporting-side ones do not. #4121 (the fused cut
-  drifting into the negatives once positives are exhausted) is about the
-  estimator's haystack, not the objective, and stays live.
+  re-cuts `mid_tilt`. Their reporting-side ones do not.
 
 <!-- item-sep -->
