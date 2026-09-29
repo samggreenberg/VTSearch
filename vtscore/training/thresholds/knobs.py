@@ -247,8 +247,9 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #: the *steps* are short, and the shortfall shrinks when the ranking separates.
 #: It is not a constant gain (the residuals curve, and ``k = +2`` does not sit on
 #: the fitted line) - "approximately calibrated near 0, increasingly compressed
-#: with depth" is what the data supports.  This reaches the **user-facing
-#: Inclusion slider**, which drives the same :meth:`FoldAnchoredCut.threshold_at`.
+#: with depth" is what the data supports.  It reached the **user-facing
+#: Inclusion slider** while there was one (retired, #4269), which drove the same
+#: :meth:`FoldAnchoredCut.threshold_at`.
 #: It also explains the history above: the arms were never sweeping "aggression",
 #: they were sweeping *nominal* bits against an environment-dependent debt.
 #:

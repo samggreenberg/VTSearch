@@ -222,14 +222,14 @@ What follows is what the app still owes.
 
 - **Triage the FPR + FNR cut-rule issues against the ruling.** These tune the
   reporting line under an objective the floor replaces:
-  - #4118, a hinge rule for the reporting line only;
-  - #4136, the guarded text-sort line as display only;
   - #4115, where C = 0.1 ranks better but the shipped cut gives it back;
   - #4219, the production head decision, read partly through Inclusion.
 
   Their acquisition-side findings may survive, because acquisition still
   re-cuts `mid_tilt`. Their reporting-side ones do not. #4121 (the fused cut
-  drifting into the negatives once positives are exhausted) is about the
-  estimator's haystack, not the objective, and stays live.
+  drifting into the negatives once positives are exhausted) is live only while
+  an unpromised floor falls back to the Inclusion 0 cut. Close it as not
+  planned when #4272 merges: the line then reads the ranking, which past
+  exhaustion is unharmed.
 
 <!-- item-sep -->
