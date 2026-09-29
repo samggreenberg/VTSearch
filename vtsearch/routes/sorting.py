@@ -389,8 +389,13 @@ def learned_sort(body: dict):
         min_precision_value=min_precision_value,
     )
 
+    # A cached result is only as good as the ranking its line was drawn over.
+    # A dataset switch drops ``line_ranking`` (media ids are per dataset) while
+    # the votes, and so the signature, come back unchanged; reusing the result
+    # then would draw a line the detector can no longer re-cut or spot-check,
+    # so train again instead (#4317).
     cached = learned_sort_jobs.cached_for(signature)
-    if cached is not None:
+    if cached is not None and det_ctx.line_ranking is not None:
         return _learned_sort_done_payload(cached)
 
     # _run closes over the resolved inputs and delegates the train → score →
