@@ -240,6 +240,8 @@ Rules:
 
 A borderless icon button inside a card row or action cluster is **not** a `.btn` variant - use `.card-icon-btn` (§2.11).
 
+Nor is a muted, link-like text button - a secondary affordance that sits beside real controls without competing with them (the **Advanced ▾** disclosures in the New Detector and Add Dataset footers, the **Details ▸** openers on Add Dataset's Include media rows). Use `.link-btn`: no border or fill, `--font-sm`, `--text-muted` at rest, underlined `--text-primary` on hover. It has no box, so it takes no size modifier. Class names like `advanced-toggle` that ride alongside it are unstyled hooks for specs and the screenshot manifest; add a class of your own only for placement (e.g. `.ssp-details-toggle`'s grid column).
+
 ### 2.3 Forms
 
 ```html
@@ -656,7 +658,7 @@ detector-stats table (standard ML terminology in that context).
 12. **Designing for mobile.** Desktop only.
 13. **`font: inherit` on a class that combines with `.form-input` / `.form-select`** (or any shared element class whose font-size is set globally). Angular's view-encapsulated component selectors get an attribute-selector specificity bump that beats the global `.form-input` rule, so a component-scoped `font: inherit` silently drops `var(--font-md)` and renders the page-root `1rem` instead - which is why a custom dropdown trigger can render its content larger than the `.form-label` above it. If you need the button to inherit something from the parent, be explicit: `font-family: inherit; font-size: var(--font-md);`. The same trap applies to any shorthand that sets `font-size` (raw `font: 14px ...`, `font: bold 1rem`, etc.) under a component-scoped selector.
 14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing - either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
-15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
+15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.link-btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
 16. **Hand-writing modal markup instead of using `<vt-modal>`.** Copying `.modal-backdrop` / `.modal-content` / `.modal-header` into a component drops focus trapping, `role="dialog"`, `aria-modal`, the Escape stack, and backdrop dismissal. See §2.4.
 
 > A static scan for items 1-3, 6-7, 10, 13-15 lives at
@@ -683,7 +685,7 @@ When you add a new token:
 ## 7. References
 
 - `frontend/src/scss/_variables.scss` - every design token.
-- `frontend/src/scss/_components.scss` - buttons, forms, modal chrome, headings, picker cards, segmented toggle, side/view tabs, entity cards, pane divider, info/error/success text, motion utilities.
+- `frontend/src/scss/_components.scss` - buttons (including `.link-btn`), forms, modal chrome, headings, picker cards, segmented toggle, side/view tabs, entity cards, pane divider, info/error/success text, motion utilities.
 - `frontend/src/scss/_picker-shared.scss` - the horizontal tab strip and its subclasses, picker table deltas, badges.
 - `frontend/src/scss/_data-table.scss` - the `.data-table` core, the interactive grid modifier, and the dashboard/stats variants.
 - `frontend/src/scss/_layout.scss` - 3-panel grid.

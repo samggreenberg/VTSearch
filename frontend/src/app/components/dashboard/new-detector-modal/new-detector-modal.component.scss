@@ -335,21 +335,6 @@
   line-height: 1.35;
 }
 
-// Toggle for the collapsible "Advanced" section holding the Detector Embedder
-// Type picker. It sits at the left end of the footer row (`[modal-footer-start]`,
-// #4305), and mirrors the Add Dataset one (transparent, muted, link-like).
-.advanced-toggle {
-  background: transparent;
-  border: none;
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover { color: var(--text-primary); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-}
-
 // Progress readout for the background media ingest that Create & Import waits
 // on, so a long fetch reads as work in flight instead of a stuck dialog.
 .ingest-progress {
