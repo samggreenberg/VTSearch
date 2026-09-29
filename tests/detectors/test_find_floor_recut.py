@@ -13,23 +13,27 @@ change re-derives the threshold and re-splits the unverified items, with the
 ``/api/votes`` good set (what Browse reads) staying in lock-step with the export
 partition (what Export reads).
 
-The fixture's labels carry no learned-sort provenance, so a real retrain never
-gives the floor evidence and every floor would draw the same Inclusion 0 line.
-A promised estimate is planted on the context instead
-(:func:`~tests.helpers.planted_precision_floor_estimate`), and the stored cutoff
-is poisoned before the change so a skipped recompute is observable.
+Under a floor the line keeps a set (#4272): the floor's starting candidate,
+or the set a finished spot check ended on.  The fixture leaves 8 unvoted
+items, so every preset's candidate is those 8 and a floor change alone moves
+nothing; a finished check is planted instead
+(:func:`~tests.helpers.planted_spot_check`), the stored cutoff is poisoned
+before the change so a skipped recompute is observable, and the re-cut is
+pinned to land on the set the check ended on.
 """
 
 from __future__ import annotations
 
 from tests import load_detector_and_wait
-from tests.helpers import planted_precision_floor_estimate, setup_trainable_model_in_registry
-from vtscore.state.core import get_active_detector_context
+from tests.helpers import planted_spot_check, setup_trainable_model_in_registry
+from vtscore.state.core import get_active_detector_context, human_voted_ids
 from vtsearch.state import snapshot_medias
 
 
 def _votes_good(client):
-    return len(client.get("/api/votes").get_json()["good"])
+    """The unverified Good votes, which is what the unverified export partition counts."""
+    data = client.get("/api/votes").get_json()
+    return len(set(data["good"]) - set(data["verified"]))
 
 
 def _export_good(client):
@@ -64,14 +68,16 @@ def test_find_label_populates_calibration_cache(client):
     assert ctx.calibration_cache is not None
     assert ctx.anchored_cut_cache is not None
     assert ctx.precision_floor_cache is not None
+    assert ctx.line_ranking is not None, "the ranking the floor keeps a set of"
 
 
 def test_a_floor_change_recuts_and_resplits(client):
     _run_find(client)
     ctx = get_active_detector_context()
-    ctx.precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
-    promised = ctx.precision_floor_cache.cut(0.5)
-    assert promised.threshold is not None and promised.status.value == "promised"
+    client.post("/api/min-precision", json={"min_precision": 0.5})
+    check = planted_spot_check(ctx, 0.5)
+    assert check.status == "confirmed" and check.k == 8
+    kept = ctx.line_ranking.threshold_for(8, human_voted_ids(ctx))
 
     # Start from another floor, so the move to 0.5 is a change, then poison the
     # stored cutoff so a skipped recompute is observable no matter where the
@@ -82,8 +88,8 @@ def test_a_floor_change_recuts_and_resplits(client):
     # Change the floor WITHOUT re-running find-label (the pure re-cut path).
     resp = client.post("/api/min-precision", json={"min_precision": 0.5}).get_json()
 
-    assert ctx.threshold == promised.threshold
+    assert ctx.threshold == kept
     assert resp["threshold"] == ctx.threshold
-    assert resp["status"] == "promised"
+    assert resp["status"] == "confirmed" and resp["count"] == 8
     # Browse (votes) and Export (partition) never diverge.
     assert _export_good(client) == _votes_good(client)

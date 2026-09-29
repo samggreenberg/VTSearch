@@ -658,16 +658,17 @@ export class SortRunnerService {
    * line, so only it can move: every other sort ranks by something else and
    * keeps its own threshold.
    *
-   * When the floor promised nothing before and still promises nothing, both
-   * lines are the default cut, so the line stays put and only its verdict
-   * changes (the Good votes it has, or unreachable becoming too little
-   * evidence). Otherwise the learned sort re-runs at the new floor, which
-   * brings the line, its verdict, the count above it and Autopilot's
-   * acquisition cut back together, and lands on the next pick from them.
+   * When the line was unpromised before and still is, and keeps the same
+   * count of items (a floor at 50% or above keeps the top 32 either way,
+   * #4272), the line stays put and only its state changes. Otherwise the
+   * learned sort re-runs at the new floor, which brings the line, its state,
+   * the count above it and Autopilot's acquisition cut back together, and
+   * lands on the next pick from them.
    */
   private afterFloorChange(floor: LineFloor | null): void {
     if (this.sortState.sortMode !== 'learned') return;
-    if (isUnpromised(this.sortState.floor) && isUnpromised(floor)) {
+    const before = this.sortState.floor;
+    if (isUnpromised(before) && isUnpromised(floor) && before?.count === floor?.count) {
       this.sortState.setFloor(floor);
       return;
     }

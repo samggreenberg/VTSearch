@@ -211,8 +211,9 @@ land last. Find's (`minPrecisionRequests$`, debounced) installs the returned
 line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
 the learned sort, but only from the POST's response: the learned sort reads
 the floor server-side and caches by it, so a re-sort that beat the POST would
-come back at the old floor. When the floor promised nothing before and after,
-both lines are the default cut, and only the verdict is swapped.
+come back at the old floor. When the line was unpromised before and after and
+keeps the same count of items (any floor at 50% or above keeps the top 32),
+the line stays put and only its state is swapped.
 
 ### Find view (`components/find-view/`)
 

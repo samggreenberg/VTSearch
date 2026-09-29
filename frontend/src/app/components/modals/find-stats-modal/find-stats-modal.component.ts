@@ -12,7 +12,7 @@ import type { FindEvidenceCoverageResponse } from '../../../generated/api-client
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { floorPercent, isUnpromised, lineFloorFrom } from '../../../utils/line-floor';
+import { floorPercent, isUnpromised, lineFloorFrom, rangePercent } from '../../../utils/line-floor';
 
 /** A tick on the precision chart's log-scale x axis. */
 interface XTick {
@@ -284,22 +284,30 @@ export class FindStatsModalComponent implements OnInit {
     return p == null ? null : this.yFor(p);
   }
 
-  /** True when the line is the unpromised default cut: the floor promised nothing (#4247). */
+  /** True when the line is not a confirmed set: unchecked, or a check that fell short (#4247, #4272). */
   get lineUnpromised(): boolean {
     return isUnpromised(lineFloorFrom(this.stats()?.floor));
   }
 
-  /** True when the floor is waiting on evidence, which the estimate notes then explain. */
-  get floorWaiting(): boolean {
-    return lineFloorFrom(this.stats()?.floor)?.status === 'insufficient_evidence';
+  /** The floor's state as the sort state would hold it; null before the stats arrive. */
+  get lineFloor() {
+    return lineFloorFrom(this.stats()?.floor);
   }
 
-  /** The line's legend entry: whether it keeps the floor, or is the unpromised default cut. */
+  /** "11–73%" for a range, for the template. */
+  rangeText(range: { lo: number; hi: number }): string {
+    return rangePercent({ ...range, labelled: 0, right: 0, stale: false });
+  }
+
+  /** The line's legend entry: whether the check confirmed the floor, fell short of it, or never ran. */
   get lineLegend(): string {
-    const floor = lineFloorFrom(this.stats()?.floor);
-    if (floor?.status === 'promised') return `Line: keeps the ${floorPercent(floor.minPrecision)} floor`;
-    if (isUnpromised(floor)) return 'Line: the default cut, unpromised';
-    return 'Line';
+    const floor = this.lineFloor;
+    if (!floor) return 'Line';
+    const target = floorPercent(floor.minPrecision);
+    const range = floor.range ? `, likely ${rangePercent(floor.range)}` : '';
+    if (floor.status === 'confirmed') return `Line: keeps the ${target} floor${range}`;
+    if (floor.status === 'short') return `Line: fell short of ${target}${range}`;
+    return `Line: the top ${floor.count.toLocaleString()}, unchecked`;
   }
 
   /** X position of the line's marker, or null when nothing clears it. */

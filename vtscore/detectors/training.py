@@ -253,33 +253,34 @@ def _fused_threshold(
     refitting or re-scoring anything (see
     :func:`vtscore.state.core.recompute_detector_thresholds`).
 
-    **The line is drawn at an operating point** (#4245): the precision floor
-    *min_precision* when one is set, else the Inclusion 0 cut (#4269), through
-    :func:`~vtscore.training.thresholds.reporting_line` - the rule the re-cut
-    and the eval harness's default arm share.  The floor reads a
-    :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` built here
-    from the same populations as the fold-anchored cut.  Its **corpus** is the
-    final model's haystack less the voted items when the #3308 exclusion
-    applies (a promise is about what the user has not yet seen); its evidence
-    is each fold's held-out votes ranked in that fold's (equally excluded)
-    haystack; and its **reference pool** - what the corpus is ranked against -
-    is the final model's scores over the *whole* haystack, voted items
-    included.  That last choice is the configuration #4220 measured safe, and
-    it is load-bearing: #4221 found the voted positives at the top of the
-    reference push unseen positives down its percentiles, a conservative offset
-    without which the same estimator breaks ~90% of its X = 50% promises
-    (#4221's comment of 2026-09-28).  Making the pool "consistent" with the
-    fold haystacks is therefore not a clean-up; it is a different, unsafe
-    estimator.  Only
+    **The line is drawn at an operating point.**  Under a precision floor
+    *min_precision* (the app's case, #4245) **the line keeps a set** (#4272):
+    the top *count* unvoted items of the haystack this final model scored,
+    where *count* is the set the detector's last spot check ended on, or the
+    floor's unchecked starting candidate before any check
+    (:func:`~vtscore.training.thresholds.floor_line`, the rule the re-cut and
+    the eval harness's default arm share).  The ranking is parked on
+    ``det_ctx.line_ranking`` so a floor change re-cuts, and a spot check draws
+    its candidate, without a retrain.  With no floor (#4269, a library
+    caller's choice) the line is the fold-anchored cut at Inclusion 0 through
+    :func:`~vtscore.training.thresholds.reporting_line`, and with no fitted cut
+    at all the schedule blend answers as it always has.
+
+    **The #4220 estimate is still built**, though it no longer draws the
+    line: the Find Stats precision curve reads it.  A
+    :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` from the same
+    populations as the fold-anchored cut.  Its **corpus** is the final model's
+    haystack less the voted items when the #3308 exclusion applies; its
+    evidence is each fold's held-out votes ranked in that fold's (equally
+    excluded) haystack; and its **reference pool** is the final model's scores
+    over the *whole* haystack, voted items included - the configuration #4220
+    measured, whose safety #4221 found to rest on exactly that asymmetry.  Only
     the held-out votes whose training row (*holdout_rows*, per fold, from the
     calibration's ``holdout_sink``) *calibration_rows* marks may serve as
     evidence - the votes the learned sort chose
     (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`); ``None``
-    keeps them all.  The estimate is parked on ``det_ctx.precision_floor_cache``
-    whether or not a floor is set, so setting one later re-cuts without a
-    retrain; its bootstrap is fitted only when a floor is first asked for.  A
-    floor that promises nothing draws the Inclusion 0 line, and with no fitted
-    cut at all the schedule blend answers as it always has.
+    keeps them all.  The estimate is parked on ``det_ctx.precision_floor_cache``;
+    its bootstrap is fitted only when a curve is first asked for.
 
     **Unscorable media never reach the fit.**  A media the head cannot score
     (a broken vector, a destabilised model) is recorded at
@@ -292,6 +293,7 @@ def _fused_threshold(
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
         NO_GOOD_THRESHOLD,
+        LineRanking,
         PrecisionFloorEstimate,
         apply_vote_exclusion,
         calculate_safe_threshold,
@@ -299,6 +301,7 @@ def _fused_threshold(
         eligible_fold_orderings,
         PRECISION_FLOOR_FALLBACK_INCLUSION,
         fit_fold_anchored_cut,
+        floor_line,
         reporting_line,
     )
     from vtscore.utils.scores import scored_only  # noqa: PLC0415
@@ -346,9 +349,19 @@ def _fused_threshold(
             pool_scores=final_scores,
         )
 
+    # The ranking the line keeps a set of: every scored item, with the voted
+    # ones marked so the set is drawn from the unvoted remainder (#4272).  The
+    # marking is unconditional - a candidate is unvoted by definition - unlike
+    # the #3308 exclusion above, which is about what a *population estimate*
+    # is fitted on.
+    ranking = LineRanking.from_scores(
+        final_ids if final_ids is not None else range(len(final_scores)), final_scores, voted_ids or ()
+    )
+
     if det_ctx is not None:
         det_ctx.anchored_cut_cache = cut
         det_ctx.precision_floor_cache = estimate
+        det_ctx.line_ranking = ranking
 
     if cut is not None and cut.n_unconverged:
         # Not a fallback and not an error - the threshold is still this fit's -
@@ -362,9 +375,11 @@ def _fused_threshold(
             ",".join(str(i) for i in cut.fold_iterations),
         )
 
-    line = reporting_line(
-        cut, estimate, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=min_precision
-    )
+    if min_precision is not None:
+        kept = floor_line(ranking, min_precision, det_ctx.precision_check if det_ctx is not None else None)
+        if kept is not None:
+            return kept
+    line = reporting_line(cut, None, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=None)
     if line.threshold is not None:
         return line.threshold
     xcal = NO_GOOD_THRESHOLD if folds.fallback is not None else xcal_threshold
@@ -514,8 +529,9 @@ def train_and_threshold(
     The precision floor is read from ``get_min_precision()``, which resolves to
     the *active detector context's* floor (seeded from the user's settings the
     first time it's read for a detector).  Both Train and Find therefore cut at
-    the same per-detector floor within a session.  With no floor, or one that
-    promises nothing, the line is the Inclusion 0 cut (see
+    the same per-detector floor within a session.  Under a floor the line
+    keeps the set the floor keeps - the top *count* unvoted items of the
+    haystack (#4272); with no floor it is the Inclusion 0 cut (see
     :func:`_fused_threshold`).
 
     Args:
@@ -725,9 +741,11 @@ def train_and_threshold(
             holdout_rows=holdouts,
         )
     elif det_ctx is not None:
-        # Safe thresholds off: no population estimator to re-cut on a slide.
+        # Safe thresholds off: no population estimator to re-cut on a slide,
+        # and no ranking for a floor to keep a set of.
         det_ctx.anchored_cut_cache = None
         det_ctx.precision_floor_cache = None
+        det_ctx.line_ranking = None
 
     return model, threshold
 
@@ -1306,7 +1324,8 @@ def _train_and_score_xy(
 
     *min_precision* is the operating point's floor (``None``: the line is the
     Inclusion 0 cut) and *calibrating_groups* the bags whose vote may calibrate
-    it; see :func:`_fused_threshold` and :func:`calibration_rows_for`.
+    the Find Stats estimate; see :func:`_fused_threshold` and
+    :func:`calibration_rows_for`.
     """
     import torch  # noqa: PLC0415
 
@@ -1463,8 +1482,8 @@ def train_and_score(
             votes may calibrate a precision floor; without a context every vote
             may.
         min_precision: The precision floor to cut at, in ``(0, 1]``, or
-            ``None`` (the default) for no floor: the Inclusion 0 cut.  A floor
-            that promises nothing also cuts at Inclusion 0 (see
+            ``None`` (the default) for no floor: the Inclusion 0 cut.  Under a
+            floor the line keeps the set the floor keeps (#4272; see
             :func:`_fused_threshold`).
 
     Returns:

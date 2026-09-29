@@ -220,16 +220,16 @@ class TestFindStats:
         assert data["verified_precision"] == 0.5
 
     def test_floor_rides_with_the_line(self, client):
-        """The chart marks the floor and says whether the line keeps it (#4246)."""
+        """The chart marks the floor and says whether the line keeps it (#4246, #4272)."""
         self._setup()
         client.post("/api/min-precision", json={"min_precision": 0.75})
-        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=3)
         data = client.get("/api/find/stats").get_json()
         assert data["floor"] == {
             "min_precision": 0.75,
-            "status": "insufficient_evidence",
-            "calibration_positives": 6,
-            "min_calibration_positives": 10,
+            "status": "unchecked",
+            "count": 32,
+            "range": None,
+            "schedule": {"candidate": 32, "rounds": 1, "picks": 11},
         }
         # The sweep went with the Inclusion stepper.
         assert "sweep" not in data

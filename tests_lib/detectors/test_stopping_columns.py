@@ -209,7 +209,9 @@ class TestNotMeasuredIsNotNotGreen:
         )
         assert rows
         for r in rows:
-            assert r["phase"] == ""
+            # No Autopilot phase; the floor's spot check still runs after the
+            # voting steps and names its own rows (#4272).
+            assert r["phase"] in ("", "check")
             assert [r[k] for k in LIGHTS] == ["", "", ""]
             assert r["span_level"] == -1 and r["span_depth"] == -1 and r["span_target"] == -1
             # NaN, not 0.0: zero is a real slope, and on the flatness test it is

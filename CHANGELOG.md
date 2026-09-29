@@ -15,6 +15,34 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **A spot check, not an estimate, decides a detector's line and says how
+  close it got** (issue #4272, the backend of #4267; the check's step in the
+  app is #4273). Under a precision floor the line now always keeps a set: the
+  top of the ranking, sized to the floor - the top 128 unvoted items at 10%,
+  the top 64 at 25%, the top 32 at 50% and above. Nothing falls back to the old
+  Inclusion 0 cut any more, and no floor empties the results. A **spot check**
+  measures the set: you vote on a few random picks from it (5 a round at
+  10-50%, 11 at 75%, 29 at 90%), and a bound on those picks either confirms
+  the floor or, round by round, halves the set down to the top 32 and reports
+  a **likely range** for how much of it is right - from your picks alone,
+  never from the model. The check's votes are ordinary votes and train the
+  detector. A finished result stays with the detector: later votes move the
+  line along the new ranking at the same count, and the range is only marked
+  *stale*. The floor's state is now `unchecked`, `confirmed` or `short`, with
+  the count kept and the range, in every response that carries a line
+  (`/api/min-precision`, the learned sort, `/api/find-label`,
+  `/api/auto-detect`, `/api/find/stats`, the CLI's results); the old
+  `promised` / `unreachable` / `insufficient_evidence` states and the
+  calibration-positive gate are gone from it. New endpoints:
+  `GET /api/precision-check`, `POST /api/precision-check/start`, `.../votes`
+  and `.../cancel`; see
+  [the spot check](docs/api/labeling.md#the-spot-check). AutoRun and
+  command-line runs, where nobody can vote, export the unchecked starting
+  set and say so (the CLI's `detector_unpromised` event is now
+  `detector_unchecked`, with the set's size).
+
 ### Added
 
 - **AutoRun detectors really run on what you import, and on demand** (issue
