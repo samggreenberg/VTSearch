@@ -398,8 +398,10 @@ function outFromMiddle(reach: number, step: number): [number, number][] {
  *
  * Where the tiles fall is up to the UMAP layout, and they leave gaps between
  * clusters, so any fixed point can land on empty space (#4296). The pointer
- * instead sweeps out from the middle until the hover preview says it is over a
- * tile, and clicks there. Hovering changes nothing, where a stray right-click
+ * instead sweeps out from the middle until it is over a tile, and clicks there.
+ * An image tile says so only on the canvas: the hovered thumbnail lifts, and no
+ * DOM changes. So a point is over a tile when the pixels around it change as
+ * the pointer arrives. Hovering changes nothing else, where a stray right-click
  * on empty space soon after another zooms the map out.
  */
 async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: () => Promise<boolean>): Promise<void> {
@@ -407,12 +409,15 @@ async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: 
   if (!box) throw new Error('no Browse canvas');
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  const hovering = page.locator('.hover-popup');
-  for (const [dx, dy] of outFromMiddle(Math.min(box.width, box.height) / 2 - TILE_PROBE_STEP, TILE_PROBE_STEP)) {
-    await page.mouse.move(cx + dx, cy + dy);
-    await h.wait(120);
-    if (!(await hovering.count())) continue;
-    await page.mouse.click(cx + dx, cy + dy, { button });
+  const r = TILE_PROBE_STEP;
+  const around = (x: number, y: number) => page.screenshot({ clip: { x: x - r, y: y - r, width: 2 * r, height: 2 * r } });
+  for (const [dx, dy] of outFromMiddle(Math.min(box.width, box.height) / 2 - 2 * r, r)) {
+    const [x, y] = [cx + dx, cy + dy];
+    const before = await around(x, y);
+    await page.mouse.move(x, y);
+    await h.wait(150);
+    if (before.equals(await around(x, y))) continue;
+    await page.mouse.click(x, y, { button });
     await h.wait(1200);
     if (await hit()) return;
   }
