@@ -163,8 +163,8 @@ class TestRethresholdUnverified:
         # No re-split: the initial 0.5 assignment stands.
         assert 2 in good_votes
 
-    def test_inclusion_post_returns_threshold(self, client):
-        resp = client.post("/api/inclusion", json={"inclusion": 0})
+    def test_floor_post_returns_threshold(self, client):
+        resp = client.post("/api/min-precision", json={"min_precision": 0.5})
         assert resp.status_code == 200
         assert "threshold" in resp.get_json()
 
@@ -234,14 +234,6 @@ class TestFindStats:
         # The sweep went with the Inclusion stepper.
         assert "sweep" not in data
         assert "inclusion" not in data
-
-    def test_floor_is_null_with_no_floor_set(self, client):
-        self._setup()
-        client.post("/api/min-precision", json={"min_precision": None})
-        get_active_detector_context().precision_floor_cache = None
-        floor = client.get("/api/find/stats").get_json()["floor"]
-        assert floor["min_precision"] is None
-        assert floor["status"] is None
 
     def test_empty_when_no_votes(self, client):
         ctx = get_active_detector_context()
@@ -480,7 +472,7 @@ class TestReScoreKeepsVerifiedVotes:
     bulk apply used to reassign *every* vote from the new threshold split while
     nothing cleared ``verified_ids``, so an item the human had ruled on came
     back carrying the machine's opposite label - excluded from the work queue,
-    counted in ``verified_count``, and pinned there by the Inclusion
+    counted in ``verified_count``, and pinned there by the floor's
     re-threshold - i.e. the human's decision silently inverted while still
     presented as human-verified.
     """

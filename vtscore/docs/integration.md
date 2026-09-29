@@ -80,7 +80,6 @@ def _build_core_config(settings_path=None) -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 register_core_config_builder(_build_core_config)
@@ -213,7 +212,6 @@ register_core_config_builder(lambda _settings_path=None: CoreConfig(
     dataset_max_age_days=None,
     calibrate_count=2, calibration_fraction=0.5,
     enrich_descriptions=False, autopilot_goal_diversity=8,
-    inclusion=0,
 ))
 
 # That's it. Now use the library.
@@ -263,7 +261,6 @@ register_core_config_builder(lambda _settings_path=None: CoreConfig(
     calibration_fraction=settings.calibration_fraction,
     enrich_descriptions=settings.enrich_descriptions,
     autopilot_goal_diversity=settings.autopilot_goal_diversity,
-    inclusion=settings.inclusion,
 ))
 
 

@@ -31,7 +31,6 @@ STATES = [
     pytest.param(0.5, 8, "promised", id="promised"),
     pytest.param(1.0, 8, "unreachable", id="unreachable"),
     pytest.param(0.5, 3, "insufficient_evidence", id="insufficient_evidence"),
-    pytest.param(None, 8, None, id="no-floor"),
 ]
 
 
@@ -43,7 +42,7 @@ def _load_detector(client, name: str = "floor-carrier") -> str:
     return detector_id
 
 
-class TestTheInclusionKnob:
+class TestTheFloorRoute:
     @pytest.mark.parametrize(("min_precision", "n_pos", "status"), STATES)
     def test_get_and_post_report_the_verdict_on_the_line_they_return(self, client, min_precision, n_pos, status):
         ctx = get_active_detector_context()
@@ -51,29 +50,19 @@ class TestTheInclusionKnob:
         set_min_precision(min_precision)
 
         for data in (
-            client.get("/api/inclusion").get_json(),
-            client.post("/api/inclusion", json={"inclusion": 2}).get_json(),
+            client.get("/api/min-precision").get_json(),
+            client.post("/api/min-precision", json={"min_precision": min_precision}).get_json(),
         ):
-            assert data["floor"] == {
+            assert {k: data[k] for k in ("min_precision", "status", "calibration_positives")} == {
                 "min_precision": min_precision,
                 "status": status,
                 "calibration_positives": 2 * n_pos,
-                "min_calibration_positives": 10,
             }
-
-    def test_no_trained_detector_is_no_evidence(self, client):
-        set_min_precision(0.5)
-        floor = client.get("/api/inclusion").get_json()["floor"]
-        assert floor == {
-            "min_precision": 0.5,
-            "status": "insufficient_evidence",
-            "calibration_positives": 0,
-            "min_calibration_positives": 10,
-        }
+            assert data["min_calibration_positives"] == 10
 
 
 class TestFindLabel:
-    @pytest.mark.parametrize(("min_precision", "status"), [(0.5, "insufficient_evidence"), (None, None)])
+    @pytest.mark.parametrize(("min_precision", "status"), [(0.5, "insufficient_evidence"), (1.0, "insufficient_evidence")])
     def test_carries_the_verdict_on_its_threshold(self, client, min_precision, status):
         detector_id = _load_detector(client)
         set_min_precision(min_precision)
@@ -90,7 +79,7 @@ class TestFindLabel:
 
 
 class TestLearnedSort:
-    @pytest.mark.parametrize(("min_precision", "status"), [(0.5, "insufficient_evidence"), (None, None)])
+    @pytest.mark.parametrize(("min_precision", "status"), [(0.5, "insufficient_evidence"), (1.0, "insufficient_evidence")])
     def test_the_done_payload_carries_the_verdict(self, client, min_precision, status):
         set_min_precision(min_precision)
         good_votes.update({k: None for k in [1, 2, 3]})

@@ -112,7 +112,6 @@ config = CoreConfig(
     calibration_fraction=0.5,
     enrich_descriptions=False,
     autopilot_goal_diversity=8,
-    inclusion=0,
     data_dir=DATA_DIR,
 )
 ```

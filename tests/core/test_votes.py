@@ -1109,38 +1109,9 @@ class TestLiveModelReuse:
         model, threshold, smart_threshold = _prog_cache().live_models[key]
         assert model is not None
         assert isinstance(threshold, float)
-        # At the default Inclusion, Smart scores the model at its served line (#4243).
+        # The line is the Inclusion 0 cut (the fixture's floor has no evidence), so
+        # Smart scores the model at its served line (#4243).
         assert smart_threshold == threshold
-
-    # Served at Inclusion 3 is Inclusion mode: a set floor would draw the line (#4245).
-    @pytest.mark.usefixtures("no_precision_floor")
-    def test_learned_sort_injects_the_smart_cut(self, client):
-        """Off the default Inclusion, Smart's cut is the detector's own Inclusion 0 cut (#4243).
-
-        The served line sits at the user's Inclusion.  The cut the Smart
-        indicator scores the model at is re-derived at ``SMART_INCLUSION`` from
-        the estimator the same training run parked on the detector.
-        """
-        from vtscore.detectors.cost_trend import SMART_INCLUSION
-        from vtscore.detectors.labeling_progress import clear_progress_cache
-        from vtscore.state.core import get_active_detector_context, recut_detector_threshold
-        from vtsearch.state import set_inclusion
-
-        set_inclusion(3)
-        clear_progress_cache()
-
-        good_votes.update({k: None for k in [1, 2, 3, 4, 5, 6]})
-        bad_votes.update({k: None for k in [15, 16, 17, 18, 19, 20]})
-
-        resp = client.post("/api/learned-sort", json={"wait": True})
-        assert resp.status_code == 200
-
-        key = (frozenset(good_votes), frozenset(bad_votes))
-        _model, threshold, smart_threshold = _prog_cache().live_models[key]
-        expected = recut_detector_threshold(get_active_detector_context(), SMART_INCLUSION)
-        assert expected is not None, "the fixture should fit an estimator that can be re-cut"
-        assert smart_threshold == expected
-        assert smart_threshold != threshold, "Inclusion 3 and Inclusion 0 should cut at different lines here"
 
     def test_live_model_stability_computed(self, client):
         """When a live model is reused, stability should still be computed."""

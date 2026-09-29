@@ -108,7 +108,6 @@ def _lib_default_core_config(_settings_path=None):
         calibration_fraction=0.1,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
         data_dir=data_dir,
     )
 
@@ -225,12 +224,12 @@ def reset_contexts(tmp_path, monkeypatch):
 
 @pytest.fixture
 def no_precision_floor():
-    """The user has cleared the precision floor, so the Inclusion knob draws every line (#4245).
+    """No precision floor, so every line is the Inclusion 0 cut, with no promise attempted.
 
-    For tests of the Inclusion knob's own mechanics.  Under the default floor a
-    set floor wins and an Inclusion slide does not move the line; clearing it
-    is how a user gets the knob back.  ``reset_contexts`` re-registers the
-    default builder before the next test, so nothing needs undoing.
+    The app always sets a floor (#4269); a library caller can still leave it
+    unset.  For tests whose subject is a line no floor decides.
+    ``reset_contexts`` re-registers the default builder before the next test,
+    so nothing needs undoing.
     """
     import dataclasses
 

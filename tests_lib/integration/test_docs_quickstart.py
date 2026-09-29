@@ -142,7 +142,6 @@ class TestCoreConfigSetup:
                 calibration_fraction=0.5,
                 enrich_descriptions=False,
                 autopilot_goal_diversity=8,
-                inclusion=0,
             )
 
         monkeypatch.setattr(config_mod, "_core_config_builder", _build)
@@ -180,7 +179,6 @@ def _minimal_config() -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 
