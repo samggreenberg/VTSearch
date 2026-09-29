@@ -20,6 +20,15 @@ One row per (world, cell, seed, vote checkpoint):
   including the voted items) and with a consistent reference pool (voted items
   removed, as the fold haystacks do): ``*_status_xNN`` and ``*_k_xNN`` (the
   number of corpus items returned; 0 when nothing is promised).
+* **best effort** (#4267): what a floor returns if it never refuses.
+  ``fallback_k`` is the app's own line (the shipped cut at its Inclusion), which
+  a floor that promises nothing falls back to today (#4247).
+  ``best_{med,lb}_{shipped,consistent}_k_xNN`` read the same curve *ungated*:
+  ``med`` at the median of the bootstrap refits (a point estimate), ``lb`` at
+  the shipped 10th percentile.  Each is the largest top k the curve puts at
+  >= X; where the curve never gets there, the k with the highest estimate; and
+  where no curve can be formed, ``fallback_k``.  ``best_*_how_xNN`` says which:
+  ``reached`` / ``short`` / ``none``.
 
     python export_rank_frames.py --world 0.44%=DIR --world 5%=DIR --world 0.1%=DIR --out OUT_DIR [--jobs N]
 
@@ -53,6 +62,31 @@ def _cut(floor, corpus, pool, orderings, haystacks):
     c = precision_floor_cut(floor, corpus, pool, orderings, haystacks)
     k = int(np.count_nonzero(corpus >= c.threshold)) if c.status.value == "promised" else 0
     return c.status.value, k
+
+
+#: Best-effort readings of the same curve, ungated: the median of the bootstrap
+#: refits (a point estimate) and the shipped 10th percentile without the gate.
+BEST_EFFORT = {"med": 50.0, "lb": 10.0}
+
+
+def _best_effort(floors, corpus, pool, orderings, haystacks, lower_percentile):
+    """``{floor: (k, how)}``: the largest top k the ungated curve puts at >= floor.
+
+    Where the curve never reaches the floor, the k whose estimate is highest
+    (``how = "short"``: the estimator's own best guess); where no curve can be
+    formed, ``(None, "none")`` - the caller falls back to the app's line.
+    """
+    from vtscore.training.thresholds.precision_floor import precision_lower_bound_curve  # noqa: PLC0415
+
+    curve = precision_lower_bound_curve(corpus, pool, orderings, haystacks, lower_percentile=lower_percentile)
+    if curve is None:
+        return {x: (None, "none") for x in floors}
+    _, bound = curve
+    out = {}
+    for x in floors:
+        ok = np.flatnonzero(bound >= x)
+        out[x] = (int(ok.max()) + 1, "reached") if len(ok) else (int(np.argmax(bound)) + 1, "short")
+    return out
 
 
 def cell_rows(job: tuple[str, str, str]) -> list[dict]:
@@ -109,6 +143,16 @@ def cell_rows(job: tuple[str, str, str]) -> list[dict]:
                 status, k = _cut(x, test_s, ref, orderings, haystacks)
                 row[f"{name}_status_{tag}"] = status
                 row[f"{name}_k_{tag}"] = k
+        # The app's own line (the shipped cut at its Inclusion), which a floor
+        # that promises nothing falls back to (#4247).
+        row["fallback_k"] = int(np.count_nonzero(test_s >= float(g("threshold"))))
+        for how, pct in BEST_EFFORT.items():
+            for name, ref in (("shipped", pool), ("consistent", pool[keep])):
+                cuts = _best_effort(FLOORS, test_s, ref, orderings, haystacks, pct)
+                for x, (k, reached) in cuts.items():
+                    tag = f"x{int(round(x * 100))}"
+                    row[f"best_{how}_{name}_k_{tag}"] = row["fallback_k"] if k is None else k
+                    row[f"best_{how}_{name}_how_{tag}"] = reached
         rows.append(row)
     return rows
 
