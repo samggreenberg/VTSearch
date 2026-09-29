@@ -477,7 +477,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (!prev.retrainMode && curr.retrainMode) this.scheduleSeedRanking('retrain');
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
-        if (curr.phase === 'good') {
+        // 'more' (#4282) resumes the Good phase's draw: the top of the seed sort
+        // the Bad phase left on screen.
+        if (curr.phase === 'good' || curr.phase === 'more') {
           this.sortState.setSelectMode('top');
           if (curr.retrainMode) {
             this.sortState.setSortMode('learned');
@@ -1167,8 +1169,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // For phases beyond 'good', the phase-transition subscription already set
     // the correct selectMode and (for 'hard') triggered a learned sort.
-    // Only override selectMode for the initial 'good' phase.
-    if (phase === 'good') {
+    // Only override selectMode for the seed-sort 'good' and 'more' phases.
+    if (phase === 'good' || phase === 'more') {
       this.sortState.setSelectMode('top');
     }
 
@@ -1179,9 +1181,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // For 'hard' and later phases the subscription already triggered learned
-    // sort; no text/media sort needed.  For 'good' and 'bad' phases, kick off
-    // the text/media sort so the user has results to vote on.
-    if (phase === 'good' || phase === 'bad') {
+    // sort; no text/media sort needed.  For the seed-sort phases ('good',
+    // 'bad', 'more'), kick off the text/media sort so the user has results.
+    if (phase === 'good' || phase === 'bad' || phase === 'more') {
       const textQuery = this.labelSession.textQuery;
       const hasMediaExamples = this.labelSession.mediaExampleFilenames.length > 0;
       this.pendingSeedAutoSelect = autoSelect;
@@ -1338,7 +1340,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       : (isMediaBased ? 'load' : 'text');
 
     // Map autopilot phase to the same Sort + Select that autopilot was using.
-    if (phase === 'good') {
+    if (phase === 'good' || phase === 'more') {
       this.sortState.setSortMode(earlySortMode);
       this.sortState.setSelectMode('top');
     } else if (phase === 'bad') {

@@ -19,7 +19,14 @@ import math
 import numpy as np
 import pytest
 
-from vtscore.eval.autopilot_flow import BAD_TARGET, GOOD_TARGET, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import (
+    BAD_TARGET,
+    GOOD_TARGET,
+    MORE_DRY_RUN,
+    MORE_TARGET,
+    AutopilotFlow,
+    app_has_detector,
+)
 from vtscore.eval.startup_schedule import (
     PRODUCTION_STARTUP,
     StartupRound,
@@ -61,8 +68,8 @@ def _seeded_dataset(n_pos=70, n_neg=200, seed=0):
     return medias, {i: cos(m["embedding"]) for i, m in medias.items()}
 
 
-def _run(schedule, *, max_steps=24, seed=3):
-    medias, seed_scores = _seeded_dataset()
+def _run(schedule, *, max_steps=24, seed=3, n_pos=70):
+    medias, seed_scores = _seeded_dataset(n_pos=n_pos)
     picks: list[dict] = []
     rows = simulate_voting_iterations(
         medias,
@@ -89,6 +96,7 @@ class TestParsing:
         assert rounds == (
             StartupRound(stop="good", n=GOOD_TARGET, cut="top"),
             StartupRound(stop="bad", n=BAD_TARGET, cut="mid"),
+            StartupRound(stop="good", n=MORE_TARGET, cut="top", dry_goods=1, dry_window=MORE_DRY_RUN),
         )
 
     @pytest.mark.parametrize(
@@ -126,7 +134,9 @@ class TestParsing:
             parse_startup_schedule(spec)
 
     def test_whitespace_and_trailing_commas_are_tolerated(self):
-        assert parse_startup_schedule(" g3@top , b4@mid ,") == parse_startup_schedule(PRODUCTION_STARTUP)
+        assert parse_startup_schedule(" g3@top , b4@mid , g20+dry1/16@top ,") == parse_startup_schedule(
+            PRODUCTION_STARTUP
+        )
 
     def test_dry_stop_parses_to_its_count_and_window(self):
         assert parse_startup_schedule("g20+dry1/8@top,b4@mid") == (
@@ -366,15 +376,34 @@ class TestFlowIntegration:
 
 
 class TestProductionScheduleIsTheDefault:
+    #: Long enough for the #4282 walk to end and hand over, so the comparison
+    #: covers the whole opening rather than stopping inside the walk.
+    STEPS = 60
+
     def test_it_reproduces_the_default_opening_click_for_click(self):
-        base_rows, base_picks = _run(None)
-        prod_rows, prod_picks = _run(PRODUCTION_STARTUP)
+        base_rows, base_picks = _run(None, max_steps=self.STEPS)
+        prod_rows, prod_picks = _run(PRODUCTION_STARTUP, max_steps=self.STEPS)
+        assert [p["picked_id"] for p in prod_picks] == [p["picked_id"] for p in base_picks]
+        assert [r["cost"] for r in prod_rows] == [r["cost"] for r in base_rows]
+        assert any(p["phase"] == "hard" for p in base_picks), "the run never left the opening"
+
+    def test_it_reproduces_a_walk_that_runs_dry(self):
+        """A sparse pool: the walk ends on its run of misses, not its target."""
+        base_rows, base_picks = _run(None, max_steps=self.STEPS, n_pos=8)
+        prod_rows, prod_picks = _run(PRODUCTION_STARTUP, max_steps=self.STEPS, n_pos=8)
+        phases = [p["phase"] for p in base_picks]
+        assert "hard" in phases, "the walk never ended"
+        handover = phases.index("hard")
+        assert sum(p["picked_label"] for p in base_picks[:handover]) < MORE_TARGET, "the walk met its target"
         assert [p["picked_id"] for p in prod_picks] == [p["picked_id"] for p in base_picks]
         assert [r["cost"] for r in prod_rows] == [r["cost"] for r in base_rows]
 
     def test_only_the_phase_labels_differ(self):
-        _, base_picks = _run(None)
-        _, prod_picks = _run(PRODUCTION_STARTUP)
+        _, base_picks = _run(None, max_steps=self.STEPS)
+        _, prod_picks = _run(PRODUCTION_STARTUP, max_steps=self.STEPS)
+        # The walk is the default arm's `more` phase and the schedule's third round.
+        assert [(b["phase"], p["phase"]) for b, p in zip(base_picks, prod_picks) if b["phase"] == "more"]
+        assert all(p["phase"] == "s2" for b, p in zip(base_picks, prod_picks) if b["phase"] == "more")
         assert [p["phase"] for p in base_picks][:GOOD_TARGET] == ["good"] * GOOD_TARGET
         assert [p["phase"] for p in prod_picks][:GOOD_TARGET] == ["s0"] * GOOD_TARGET
         # And both hand over to the same learned phase at the same click.
@@ -432,9 +461,9 @@ class TestTheLeverMoves:
 
 class TestDryStopInTheHarness:
     def test_a_dry_stop_that_never_fires_changes_nothing(self):
-        """Production's three goods arrive long before a 50-pick window fills,
-        so this arm *is* the production opening, click for click."""
-        _, prod = _run(PRODUCTION_STARTUP)
+        """The three goods arrive long before a 50-pick window fills, so this arm
+        *is* the plain two-round opening, click for click."""
+        _, prod = _run("g3@top,b4@mid")
         _, dry = _run("g3+dry1/50@top,b4@mid")
         assert [p["picked_id"] for p in dry] == [p["picked_id"] for p in prod]
 

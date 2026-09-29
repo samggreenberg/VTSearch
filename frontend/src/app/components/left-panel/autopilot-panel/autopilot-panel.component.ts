@@ -210,8 +210,13 @@ export class AutopilotPanelComponent implements OnInit {
     return Math.min(this.state.badToStart, this.badVotes().size + this.remainingUnlabeled);
   }
 
+  /** The "more" walk's Good target, capped to what the dataset can supply. */
+  get effMoreTarget(): number {
+    return Math.min(this.state.moreToStart, this.goodVotes().size + this.remainingUnlabeled);
+  }
+
   get steps(): StepDisplay[] {
-    const phases: AutopilotPhase[] = ['good', 'bad', 'hard', 'new', 'done'];
+    const phases: AutopilotPhase[] = ['good', 'bad', 'more', 'hard', 'new', 'done'];
     const phaseIndex = phases.indexOf(this.state.phase);
 
     return phases.map((phase, i) => {
@@ -303,6 +308,7 @@ export class AutopilotPanelComponent implements OnInit {
     switch (phase) {
       case 'good': return 'Find Initial Goods.';
       case 'bad': return 'Find Initial Bads.';
+      case 'more': return 'Find More Goods.';
       case 'hard': return 'Refine Boundary.';
       case 'new': return 'Explore Diversity.';
       case 'done': return 'Done!';
@@ -314,6 +320,7 @@ export class AutopilotPanelComponent implements OnInit {
     switch (phase) {
       case 'good': return 'Good';
       case 'bad': return 'Bad';
+      case 'more': return 'More';
       case 'hard': return 'Boundary';
       case 'new': return 'Diversity';
       case 'done': return 'Done';
@@ -362,6 +369,7 @@ export class AutopilotPanelComponent implements OnInit {
     switch (phase) {
       case 'good': return 'Label a few examples of what you are looking for so the system can learn what "good" looks like.';
       case 'bad': return 'Label examples that are not what you want, helping the system learn the good/bad cutoff.';
+      case 'more': return 'Keep labeling the best matches for your search. Stops once the matches stop turning up goods.';
       case 'hard': return 'The system shows you items near the good/bad cutoff. Labeling these improves accuracy where it matters most.';
       case 'new': return 'Explore a broad mix of items the system is less certain about, ensuring nothing important is missed.';
       case 'done': return this.state.stablePlateau ? DONE_PLATEAU_HELP : DONE_HELP;
@@ -381,6 +389,8 @@ export class AutopilotPanelComponent implements OnInit {
         return `Phase ${stepNumber}: Find initial goods. Label a few positives so the detector knows what "good" looks like.`;
       case 'bad':
         return `Phase ${stepNumber}: Find initial bads. Label a few negatives so the detector has both sides of the good/bad cutoff.`;
+      case 'more':
+        return `Phase ${stepNumber}: Find more goods. Keep labeling the best matches for your search while they keep turning up goods; more goods early make a better detector later.`;
       case 'hard':
         return `Phase ${stepNumber}: Refine the cutoff. Votes on uncertain items train the detector fastest.`;
       case 'new':
@@ -401,6 +411,8 @@ export class AutopilotPanelComponent implements OnInit {
         return `${this.goodVotes().size}/${this.effGoodTarget} good labels`;
       case 'bad':
         return `${this.badVotes().size}/${this.effBadTarget} bad labels`;
+      case 'more':
+        return `${this.goodVotes().size}/${this.effMoreTarget} good labels`;
       case 'hard': {
         // No count target here — the phase ends when the smart and stable
         // indicators (the dots rendered right after this text) both go green.
@@ -425,6 +437,8 @@ export class AutopilotPanelComponent implements OnInit {
    */
   private phaseDetailTitle(phase: AutopilotPhase): string {
     switch (phase) {
+      case 'more':
+        return `Ends at ${this.effMoreTarget} good labels, or after ${this.state.moreDryRun} matches in a row that are not good.`;
       case 'hard':
         return 'Ends when both indicators turn green.';
       case 'new':

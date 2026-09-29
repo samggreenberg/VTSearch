@@ -2,12 +2,25 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
 
-export type AutopilotPhase = 'idle' | 'good' | 'bad' | 'hard' | 'new' | 'done' | 'exhausted';
+export type AutopilotPhase = 'idle' | 'good' | 'bad' | 'more' | 'hard' | 'new' | 'done' | 'exhausted';
 
 export interface AutopilotState {
   phase: AutopilotPhase;
   goodToStart: number;
   badToStart: number;
+  /**
+   * The "more" walk (#4282): after the Good and Bad quorum, go back to the top
+   * of the seed sort until the labelset holds ``moreToStart`` positives, or
+   * until ``moreDryRun`` walk picks in a row held none. #4222's study measured
+   * it against the old two-round opening on COCO Better: +0.05 AP by vote 150,
+   * with the same share of sessions left without a detector.
+   */
+  moreToStart: number;
+  moreDryRun: number;
+  /** Walk picks in a row without a positive, toward ``moreDryRun``. */
+  moreMisses: number;
+  /** The walk has ended (target met, ran dry, or skipped) and never resumes. */
+  moreDone: boolean;
   smartStatus: string;
   stableStatus: string;
   /**
@@ -34,6 +47,10 @@ const INITIAL_STATE: AutopilotState = {
   phase: 'idle',
   goodToStart: 3,
   badToStart: 4,
+  moreToStart: 20,
+  moreDryRun: 16,
+  moreMisses: 0,
+  moreDone: false,
   smartStatus: '',
   stableStatus: '',
   stablePlateau: false,
@@ -79,6 +96,13 @@ export class AutopilotStateService {
   /** Whether {@link noteInitialLabelset} has taken its one reading this run. */
   private initialLabelsetKnown = false;
 
+  /**
+   * The vote counts at the last {@link checkPhaseTransition}. The phase check
+   * sees only counts, so the "more" walk reads each vote's outcome off which
+   * count rose (``vtscore/eval/autopilot_flow.py`` reads it the same way).
+   */
+  private lastCounts: { good: number; bad: number } | null = null;
+
   get state(): AutopilotState {
     return this.stateSubject.value;
   }
@@ -110,7 +134,11 @@ export class AutopilotStateService {
     this.startedTrained = goodCount > 0 || badCount > 0;
     const retrainMode = goodCount > 0 && badCount > 0;
     if (retrainMode !== this.stateSubject.value.retrainMode) {
-      this.stateSubject.next({ ...this.stateSubject.value, retrainMode });
+      this.stateSubject.next({
+        ...this.stateSubject.value,
+        retrainMode,
+        moreDone: this.stateSubject.value.moreDone || retrainMode,
+      });
     }
   }
 
@@ -146,9 +174,14 @@ export class AutopilotStateService {
     this.completionAnnounced = false;
     this.startedTrained = false;
     this.initialLabelsetKnown = false;
+    this.lastCounts = null;
     this.stateSubject.next({
       ...this.stateSubject.value,
       phase: 'good',
+      moreMisses: 0,
+      // A detector that already had labels starts in retrain mode, where every
+      // phase draws off the learned sort: there is no seed sort to walk.
+      moreDone: retrainMode,
       smartStatus: '',
       stableStatus: '',
       stablePlateau: false,
@@ -194,8 +227,22 @@ export class AutopilotStateService {
    * ``0`` (the default) when the size is unknown to keep the targets uncapped.
    */
   checkPhaseTransition(goodCount: number, badCount: number, totalCount = 0): void {
-    const st = this.stateSubject.value;
+    let st = this.stateSubject.value;
     if (st.phase === 'idle') return;
+
+    // The "more" walk's run of misses. Only a vote cast *in* the walk counts,
+    // and its outcome is read off the counts: a rise in Goods is a hit, a rise
+    // in Bads alone is a miss. Repeated checks with unchanged counts are no-ops.
+    const prev = this.lastCounts;
+    this.lastCounts = { good: goodCount, bad: badCount };
+    if (prev && st.phase === 'more' && !st.moreDone) {
+      if (goodCount > prev.good) {
+        st = { ...st, moreMisses: 0 };
+      } else if (badCount > prev.bad) {
+        const moreMisses = st.moreMisses + 1;
+        st = { ...st, moreMisses, moreDone: moreMisses >= st.moreDryRun };
+      }
+    }
 
     // How many items still carry no vote. Treat the size as "unknown" — and so
     // leave targets uncapped and never exhaust — unless it is a finite positive
@@ -212,6 +259,7 @@ export class AutopilotStateService {
     // tiny dataset can still satisfy — and advance past — the initial phases.
     const effGoodTarget = Math.min(st.goodToStart, goodCount + remainingUnlabeled);
     const effBadTarget = Math.min(st.badToStart, badCount + remainingUnlabeled);
+    const effMoreTarget = Math.min(st.moreToStart, goodCount + remainingUnlabeled);
 
     // Derive the correct phase from current counts and indicator statuses.
     // This allows both forward and backward transitions (e.g. if votes are
@@ -221,6 +269,8 @@ export class AutopilotStateService {
       nextPhase = 'good';
     } else if (badCount < effBadTarget) {
       nextPhase = 'bad';
+    } else if (!st.moreDone && goodCount < effMoreTarget) {
+      nextPhase = 'more';
     } else if (st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green') {
       nextPhase = 'done';
     } else if (remainingUnlabeled === 0) {
@@ -235,8 +285,11 @@ export class AutopilotStateService {
       nextPhase = 'hard';
     }
 
-    if (nextPhase !== st.phase) {
-      this.stateSubject.next({ ...st, phase: nextPhase });
+    // Once the machine has moved past the walk it is spent, as a schedule
+    // round is in the harness: un-voting a positive later does not resume it.
+    const moreDone = st.moreDone || !['good', 'bad', 'more'].includes(nextPhase);
+    if (nextPhase !== st.phase || st !== this.stateSubject.value || moreDone !== st.moreDone) {
+      this.stateSubject.next({ ...st, phase: nextPhase, moreDone });
     }
   }
 
@@ -244,6 +297,7 @@ export class AutopilotStateService {
     this.completionAnnounced = false;
     this.startedTrained = false;
     this.initialLabelsetKnown = false;
+    this.lastCounts = null;
     this.stateSubject.next({ ...INITIAL_STATE });
   }
 }

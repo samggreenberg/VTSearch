@@ -37,7 +37,7 @@ export type VoteFlow =
 export interface VoteProvenance {
   flow?: VoteFlow;
   /** Autopilot phase; only meaningful when `flow` is `autopilot`. */
-  phase?: 'good' | 'bad' | 'hard' | 'new';
+  phase?: 'good' | 'bad' | 'more' | 'hard' | 'new';
   /** How the item was drawn off the ranking. */
   select_mode?: 'top' | 'hard' | 'new';
   /** Which ranking the user was looking at. */
@@ -82,7 +82,7 @@ export class VoteProvenanceService {
 
     const phase = this.autopilot.state.phase;
     const labelingPhase =
-      phase === 'good' || phase === 'bad' || phase === 'hard' || phase === 'new' ? phase : null;
+      phase === 'good' || phase === 'bad' || phase === 'more' || phase === 'hard' || phase === 'new' ? phase : null;
 
     // Autopilot only claims the vote while it is actually surfacing items. Its
     // `done` / `exhausted` states leave the user labeling off the last sort by

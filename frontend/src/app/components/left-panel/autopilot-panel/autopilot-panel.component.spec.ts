@@ -15,6 +15,16 @@ const ALL_GREEN = {
   span: { status: 'green' },
 };
 
+/** Good vote ids 1..n: 20 of them carry a run past the "more" walk (#4282). */
+function goods(n: number): Set<number> {
+  return new Set(Array.from({ length: n }, (_, i) => i + 1));
+}
+
+/** Bad vote ids, numbered clear of {@link goods}. */
+function bads(n: number): Set<number> {
+  return new Set(Array.from({ length: n }, (_, i) => i + 101));
+}
+
 describe('AutopilotPanelComponent', () => {
   let component: AutopilotPanelComponent;
   let fixture: ComponentFixture<AutopilotPanelComponent>;
@@ -44,8 +54,8 @@ describe('AutopilotPanelComponent', () => {
     // votesLoaded with a 0/0 labelset is "brand-new detector, votes have
     // arrived" — the run that actually did the training.
     fixture.componentRef.setInput('votesLoaded', true);
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
-    fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(5));
     fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
     TestBed.tick();
   }
@@ -70,7 +80,7 @@ describe('AutopilotPanelComponent', () => {
 
   it('should show steps immediately', () => {
     const steps = fixture.nativeElement.querySelectorAll('.ap-step');
-    expect(steps.length).toBe(5);
+    expect(steps.length).toBe(6);
   });
 
   it('should transition from good to bad phase', async () => {
@@ -79,20 +89,27 @@ describe('AutopilotPanelComponent', () => {
     expect(component.state.phase).toBe('bad');
   });
 
-  it('should transition from bad to hard phase', async () => {
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
+  it('should transition from bad to the more walk, then to hard at its target', async () => {
+    fixture.componentRef.setInput('goodVotes', goods(3));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('bad');
 
-    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    fixture.componentRef.setInput('badVotes', bads(4));
+    await settleZoneless(fixture);
+    expect(component.state.phase).toBe('more');
+    const more = component.steps.find((st: any) => st.phase === 'more');
+    expect(more!.label).toBe('Find More Goods.');
+    expect(more!.detail).toBe('3/20 good labels');
+
+    fixture.componentRef.setInput('goodVotes', goods(20));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
   });
 
   it('should transition from hard to new when smart+stable are green', async () => {
     // Advance to hard phase
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
-    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(4));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
 
@@ -110,8 +127,8 @@ describe('AutopilotPanelComponent', () => {
 
   it('should transition from new to done when span is green', async () => {
     // Advance to new phase
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
-    fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]));
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(10));
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
@@ -137,8 +154,8 @@ describe('AutopilotPanelComponent', () => {
 
   it('should bounce from new back to hard when smart drops to yellow', async () => {
     // Advance to new phase
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
-    fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15, 16, 17, 18, 19, 20]));
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(10));
     fixture.componentRef.setInput('labelingStatus', {
       good_count: 0,
       bad_count: 0,
@@ -166,7 +183,7 @@ describe('AutopilotPanelComponent', () => {
   it('should show the diversity (span) status icon during new phase', () => {
     // Advance to new phase
     autopilotState.checkPhaseTransition(3, 0);
-    autopilotState.checkPhaseTransition(3, 4);
+    autopilotState.checkPhaseTransition(20, 4);
     autopilotState.updateFromLabelingStatus({
       good_count: 0,
       bad_count: 0,
@@ -175,7 +192,7 @@ describe('AutopilotPanelComponent', () => {
       stable: { status: 'green' },
       span: { status: 'yellow' },
     });
-    autopilotState.checkPhaseTransition(10, 10);
+    autopilotState.checkPhaseTransition(20, 10);
     expect(component.state.phase).toBe('new');
 
     const steps = component.steps;
@@ -215,8 +232,8 @@ describe('AutopilotPanelComponent', () => {
 
   it('should regress from hard to good when vote counts drop to zero', async () => {
     // Advance to hard phase with sufficient votes
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
-    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(4));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
 
@@ -228,21 +245,21 @@ describe('AutopilotPanelComponent', () => {
   });
 
   it('should regress from hard to bad when good count drops below threshold', async () => {
-    fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3]));
-    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    fixture.componentRef.setInput('goodVotes', goods(20));
+    fixture.componentRef.setInput('badVotes', bads(4));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('hard');
 
     // Good votes drop below threshold but bad are still sufficient
-    fixture.componentRef.setInput('goodVotes', new Set([1]));
-    fixture.componentRef.setInput('badVotes', new Set([4, 5, 6, 7]));
+    fixture.componentRef.setInput('goodVotes', goods(1));
+    fixture.componentRef.setInput('badVotes', bads(4));
     await settleZoneless(fixture);
     expect(component.state.phase).toBe('good');
   });
 
   it('should show tooltip on each step label via title attribute', () => {
     const stepLabels = fixture.nativeElement.querySelectorAll('.ap-step-label');
-    expect(stepLabels.length).toBe(5);
+    expect(stepLabels.length).toBe(6);
     // Active step (phase 1) leads with phase intent and ends with reselect hint
     expect(stepLabels[0].title).toContain('Phase 1');
     expect(stepLabels[0].title).toContain('Find initial goods');
@@ -250,21 +267,25 @@ describe('AutopilotPanelComponent', () => {
     // Future steps show phase intent only
     expect(stepLabels[1].title).toContain('Phase 2');
     expect(stepLabels[1].title).toContain('Find initial bads');
-    expect(stepLabels[2].title).toContain('Refine the cutoff');
-    expect(stepLabels[3].title).toContain('Cover a broad mix');
+    expect(stepLabels[2].title).toContain('Phase 3');
+    expect(stepLabels[2].title).toContain('Find more goods');
+    expect(stepLabels[3].title).toContain('Refine the cutoff');
+    expect(stepLabels[4].title).toContain('Cover a broad mix');
   });
 
   it('should show phase intent tooltip on each collapsed-step dot', async () => {
     fixture.componentRef.setInput('collapsed', true);
     await settleZoneless(fixture);
     const dots = fixture.nativeElement.querySelectorAll('.collapsed-step');
-    expect(dots.length).toBe(5);
+    expect(dots.length).toBe(6);
     expect(dots[0].title).toContain('Phase 1');
     expect(dots[0].title).toContain('Find initial goods');
     expect(dots[0].title).toContain('reselect');
     expect(dots[2].title).toContain('Phase 3');
-    expect(dots[2].title).toContain('Refine the cutoff');
-    expect(dots[2].title).toContain('uncertain items');
+    expect(dots[2].title).toContain('Find more goods');
+    expect(dots[3].title).toContain('Phase 4');
+    expect(dots[3].title).toContain('Refine the cutoff');
+    expect(dots[3].title).toContain('uncertain items');
   });
 
   it('should emit refocus when clicking the active step', async () => {
@@ -413,8 +434,8 @@ describe('AutopilotPanelComponent', () => {
       revisit.componentRef.setInput('labelsetGoodCount', 5);
       revisit.componentRef.setInput('labelsetBadCount', 5);
       revisit.componentRef.setInput('votesLoaded', true);
-      revisit.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
-      revisit.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+      revisit.componentRef.setInput('goodVotes', goods(20));
+      revisit.componentRef.setInput('badVotes', bads(5));
       revisit.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(revisit);
 
@@ -435,8 +456,8 @@ describe('AutopilotPanelComponent', () => {
 
       // ...and it finishes here too. Still no hand-off: this detector was
       // already trained when the run started.
-      fresh.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
-      fresh.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+      fresh.componentRef.setInput('goodVotes', goods(20));
+      fresh.componentRef.setInput('badVotes', bads(5));
       fresh.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fresh);
 
@@ -463,8 +484,8 @@ describe('AutopilotPanelComponent', () => {
       fixture.componentRef.setInput('votesLoaded', true);
       fixture.componentRef.setInput('labelsetGoodCount', 9);
       fixture.componentRef.setInput('labelsetBadCount', 9);
-      fixture.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
-      fixture.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+      fixture.componentRef.setInput('goodVotes', goods(20));
+      fixture.componentRef.setInput('badVotes', bads(5));
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
 
@@ -478,8 +499,8 @@ describe('AutopilotPanelComponent', () => {
       // votesLoaded still false: the 0/0 labelset counts are defaults, not
       // facts, so we must not read them as "brand-new detector" and announce.
       pending.componentRef.setInput('votesLoaded', false);
-      pending.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
-      pending.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+      pending.componentRef.setInput('goodVotes', goods(20));
+      pending.componentRef.setInput('badVotes', bads(5));
       pending.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(pending);
 

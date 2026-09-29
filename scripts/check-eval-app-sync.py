@@ -119,17 +119,21 @@ MIRRORS: list[Mirror] = [
         note=(
             "The phase ordering and every transition trigger of the simulated Autopilot user. "
             "Lives in TypeScript, so there is nothing to import - it is a hand copy. If you "
-            "add, remove or reorder a phase, or change what gates one, port the same change."
+            "add, remove or reorder a phase, or change what gates one, port the same change. "
+            "The 'more' walk (#4282) keeps history the counts cannot: its run of misses, read "
+            "off which vote count rose. The app keeps it in checkPhaseTransition; the harness "
+            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done."
         ),
     ),
     Mirror(
         id="autopilot.vote_targets",
         app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
-        harness="vtscore/eval/autopilot_flow.py::GOOD_TARGET,BAD_TARGET",
+        harness="vtscore/eval/autopilot_flow.py::GOOD_TARGET,BAD_TARGET,MORE_TARGET,MORE_DRY_RUN",
         kind="ported",
         note=(
-            "goodToStart / badToStart are copied as GOOD_TARGET / BAD_TARGET, which decide how "
-            "many votes the simulation spends before its first learned sort. Pinned literally "
+            "goodToStart / badToStart / moreToStart / moreDryRun are copied as GOOD_TARGET / "
+            "BAD_TARGET / MORE_TARGET / MORE_DRY_RUN, which decide how many votes the simulation "
+            "spends before its first learned sort. Pinned literally "
             "by tests_lib/detectors/test_autopilot_flow.py::TestPortedConstants. Both harness "
             "constants are named here, because the mirror is the pair: watching only GOOD_TARGET "
             "would leave a change to BAD_TARGET alone as silent as the app-side half used to be."
@@ -142,7 +146,7 @@ MIRRORS: list[Mirror] = [
         kind="ported",
         note=(
             "Which Sort and which Select each Autopilot phase drives - good=text+top, "
-            "bad=text+hard, hard=learned+hard, new=learned+new. The simulated user picks the "
+            "bad=text+hard, more=text+top, hard=learned+hard, new=learned+new. The simulated user picks the "
             "next item from exactly this pairing, so re-pointing a phase at a different sort "
             "or select here silently changes what every study's vote order means. The load- "
             "bearing row is `bad`: it is still on the TEXT sort, so the harness must not "
@@ -197,6 +201,7 @@ MIRRORS: list[Mirror] = [
         note=(
             "Which ranking each Autopilot phase draws off, and how: the label view sets the sort "
             "and select mode on every phase change (good: seed sort, top; bad: seed sort, hard; "
+            "more: seed sort, top; "
             "hard: learned, hard; new: learned, new) and VoteProvenanceService records them with "
             "each vote. The precision floor calibrates only on votes calibrates_precision accepts "
             "- learned-sort draws off the ranking itself (#4245) - and the harness decides that "
@@ -238,7 +243,8 @@ MIRRORS: list[Mirror] = [
         kind="default",
         note=(
             "issue #3267 made the Autopilot opening a parameter, so the harness now has a "
-            "spelling of the app's own opening - 'g3@top,b4@mid' - that a study's control arm "
+            "spelling of the app's own opening - 'g3@top,b4@mid,g20+dry1/16@top' since #4282 "
+            "(it was 'g3@top,b4@mid') - that a study's control arm "
             "runs. If goodToStart/badToStart move, or the opening stops being 'top of the "
             "seed sort then its cutoff', this constant has to move with them or every #3267 "
             "study measures its deviations from an opening nobody ships. "

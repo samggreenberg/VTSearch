@@ -292,7 +292,7 @@ class TestPrecisionFrames:
             assert len(votes) == len(f["fold_cal_scores"]) == len(f["fold_cal_phase"]) > 0
             truth = [1 if media_is_positive(clips[v], "cat0") else 0 for v in votes]
             assert truth == f["fold_cal_labels"].astype(int).tolist()
-            assert set(f["fold_cal_phase"].tolist()) <= {"good", "bad", "hard", "new", "done"}
+            assert set(f["fold_cal_phase"].tolist()) <= {"good", "bad", "more", "hard", "new", "done"}
 
     def test_recording_does_not_change_the_run(self):
         """The sink only reads: rows with and without it are the same."""

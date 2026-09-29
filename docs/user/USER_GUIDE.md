@@ -623,7 +623,7 @@ just picks *which* items to show you and *when* each phase ends.
   <img src="assets/autopilot-vote.light.webp" alt="An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel" width="720" />
 </picture>
 
-### The four phases
+### The five phases
 
 The phase panel labels them, in order:
 
@@ -638,17 +638,23 @@ The phase panel labels them, in order:
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
    is usually quick.
-3. **Refine Boundary.** - Autopilot serves items the detector is
+3. **Find More Goods.** - Autopilot goes back to the best text matches
+   and keeps offering them while they keep turning up goods: until you
+   have 20 goods, or until 16 matches in a row were not good. More goods
+   early make a noticeably better detector later. While this phase runs
+   the detector is still learning, so it catches up with (and then
+   passes) the old, shorter opening after about 50 votes.
+4. **Refine Boundary.** - Autopilot serves items the detector is
    **uncertain about** - the borderline cases it can't yet call
    confidently. Voting these teaches the detector fastest. This phase
    continues until the detector's judgments settle down (the "smart"
    and "stable" indicators in the status bar both turn green).
-4. **Explore Diversity.** - Autopilot serves items from parts of the
+5. **Explore Diversity.** - Autopilot serves items from parts of the
    dataset the detector hasn't seen yet, so your votes cover a broad
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
 
-When all four phases are done, Autopilot shows **Done!** and a
+When all five phases are done, Autopilot shows **Done!** and a
 **Detector Trained** dialog offers you the choice: **Continue
 Training** stays put so you can keep labeling (the detector continues
 to improve), and **Head to Dashboard** takes you out to export it or
@@ -659,7 +665,7 @@ back later to refine it further will not raise it again.
 ### The collapsed bar
 
 You can collapse Autopilot to a thin strip that just shows the
-four phase indicators. Click any active phase to re-pick the
+five phase indicators. Click any active phase to re-pick the
 current recommendation (useful if you voted the wrong way and
 want a fresh suggestion). Collapsed mode is handy once you're
 comfortable with the flow and want more vertical room for the
