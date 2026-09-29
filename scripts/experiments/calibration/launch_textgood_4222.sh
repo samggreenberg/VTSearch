@@ -5,6 +5,11 @@
 #   bash launch_textgood_4222.sh plan               # the arm table; submits nothing
 #   bash launch_textgood_4222.sh prepare            # link the #4184 prepare output (once)
 #   bash launch_textgood_4222.sh arms [ARM..]       # submit; default: every arm
+#
+# An arm is <world>-g<G>, or <world>-g<G>d<W> for the adaptive stop the report
+# recommended (#4254's grammar): g20d8 opens `g20+dry1/8@top,b4@mid`, the text
+# sort until 20 Goods or until 8 picks in a row hold none.  `plan` lists the
+# fixed-G arms only; name a dry arm to run it.
 #   bash launch_textgood_4222.sh status
 #
 # Today's app (the #4184 r7 rung: shipped cut, 70/30 split, acquisition offset)
@@ -56,12 +61,13 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
-arm_env() {  # arm = <world>-g<G>
-  local world="${1%%-*}" g="${1##*-g}"
+arm_env() {  # arm = <world>-g<G>[d<W>]; d<W> adds the #4254 dry stop +dry1/<W>
+  local world="${1%%-*}" g="${1##*-g}" dry=""
+  if [[ "$g" == *d* ]]; then dry="+dry1/${g##*d}"; g="${g%%d*}"; fi
   unset CALIB_STARTUP_SCHEDULE CALIB_TARGET_PREVALENCE
   DIVERGES=""
-  if [[ "$g" != "3" ]]; then
-    export CALIB_STARTUP_SCHEDULE="g${g}@top,b4@mid"
+  if [[ "$g" != "3" || -n "$dry" ]]; then
+    export CALIB_STARTUP_SCHEDULE="g${g}${dry}@top,b4@mid"
     DIVERGES="startup_schedule"
   fi
   case "$world" in
