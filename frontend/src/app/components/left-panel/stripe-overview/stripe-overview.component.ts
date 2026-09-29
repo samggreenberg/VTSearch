@@ -1,6 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { SortedItem } from '../left-panel.component';
+import { isUnpromised, unpromisedReason, type LineFloor } from '../../../utils/line-floor';
+
+/** The strip's tooltip; an unpromised line adds a sentence of its own. */
+const STRIPE_TITLE =
+  'Minimap of all items in sort order. Green = good votes, red = bad votes, white = selected. Click to jump.';
 
 /**
  * Sort size above which the minimap is disabled rather than drawn.  The stripe
@@ -25,6 +30,8 @@ export const STRIPE_MAX_ITEMS = 20000;
 export class StripeOverviewComponent {
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
+  /** What the precision floor says about `threshold` (#4247); an unpromised marker is dashed. */
+  readonly floor = input<LineFloor | null>(null);
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -35,6 +42,13 @@ export class StripeOverviewComponent {
   readonly cachedDots = computed(() => this.buildDots());
   /** Threshold position, recomputed automatically when inputs change. */
   readonly cachedThresholdPosition = computed(() => this.buildThresholdPosition());
+  /** True when the marker is the unpromised Inclusion 0 line. */
+  readonly unpromised = computed(() => isUnpromised(this.floor()));
+  /** The strip's tooltip; the 1px marker is too thin to carry one of its own. */
+  readonly stripeTitle = computed(() => {
+    const why = unpromisedReason(this.floor());
+    return why ? `${STRIPE_TITLE} The dashed line is unpromised: ${why}` : STRIPE_TITLE;
+  });
 
   /**
    * True when the sort is too large for an honest minimap.  In this state the

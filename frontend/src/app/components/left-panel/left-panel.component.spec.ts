@@ -6,6 +6,7 @@ import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { NO_PROMISE_STATES, lineFloor } from '../../testing/line-floor';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -297,6 +298,54 @@ describe('LeftPanelComponent', () => {
       reqs.forEach((r) => r.flush({ media_types: [{ type_id: 'audio', name: 'Sound Clips' }] }));
       await settleResource();
       expect(component.mediaTypeName()).toBe('Sound Clips');
+    });
+  });
+
+  /**
+   * With no precision promise the line is the Inclusion 0 cut, and it is still
+   * the line: the Find work-queue actions (Browse / To Dataset / Export) gate
+   * on the positives above it exactly as they would above a promised one
+   * (#4247). A null cut used to disable them silently.
+   */
+  describe('with no precision promise (#4247)', () => {
+    const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
+    const ranking = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.6 },
+      { id: 3, score: 0.4 },
+    ];
+
+    function show(panelMode: 'label' | 'find', floor: ReturnType<typeof lineFloor>): HTMLElement {
+      fixture.componentRef.setInput('panelMode', panelMode);
+      fixture.componentRef.setInput('medias', ranking.map(({ id }) => stub(id)));
+      fixture.componentRef.setInput('sortOrder', ranking);
+      fixture.componentRef.setInput('threshold', 0.5);
+      fixture.componentRef.setInput('floor', floor);
+      if (panelMode === 'label') component.setTab('manual');
+      TestBed.tick();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it.each(NO_PROMISE_STATES)('counts the unverified positives above the fallback cut when %s', (status) => {
+      show('find', lineFloor(status));
+      expect(component.unverifiedGoodCount).toBe(2);
+    });
+
+    it.each(NO_PROMISE_STATES)('labels the line unpromised in Find when %s', (status) => {
+      const el = show('find', lineFloor(status));
+      expect(el.querySelector('.media-threshold-line--unpromised')).not.toBeNull();
+    });
+
+    it.each(NO_PROMISE_STATES)('labels the line unpromised in Label when %s', (status) => {
+      const el = show('label', lineFloor(status));
+      expect(el.querySelector('.media-threshold-line--unpromised')).not.toBeNull();
+    });
+
+    it('counts the same positives under a promised line, unlabelled', () => {
+      const el = show('find', lineFloor('promised'));
+      expect(component.unverifiedGoodCount).toBe(2);
+      expect(el.querySelector('.media-threshold-line')).not.toBeNull();
+      expect(el.querySelector('.media-threshold-line--unpromised')).toBeNull();
     });
   });
 });

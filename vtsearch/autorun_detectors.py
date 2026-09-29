@@ -231,6 +231,7 @@ def score_detector(
 
     try:
         detector_id = reg_entry["id"] if reg_entry else name
+        trained: list = []
         mlp, threshold, _diag = resolve_or_train_detector(
             detector_id,
             det_data,
@@ -240,9 +241,11 @@ def score_detector(
             progress_total_steps=1,
             on_progress=on_progress,
             use_loaded_context=use_loaded_context,
+            ctx_sink=trained,
         )
         if mlp is None:
             return None
+        floor = _floor_state(name, trained[0] if trained else None)
 
         scores, _best_row = score_rows_with_model(mlp, rows)
 
@@ -262,6 +265,8 @@ def score_detector(
         return name, {
             "detector_name": name,
             "threshold": round(threshold, 4),
+            # Whether that cut is a promise, or the unpromised Inclusion 0 cut (#4247).
+            "floor": floor,
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,
@@ -269,6 +274,32 @@ def score_detector(
     except Exception:
         logger.exception("Auto-detect failed for detector %s", name)
         return None
+
+
+def _floor_state(name: str, det_ctx: Any) -> dict | None:
+    """What the precision floor says about *name*'s cut in an AutoRun, logged when unpromised.
+
+    Read at the floor its training read (the same thread's
+    :func:`vtsearch.state.get_min_precision`), off the context that drew the
+    line.  An unpromised cut is still the one exported - the Inclusion 0 cut -
+    and the log line is the headless record of it (#4247).
+    """
+    from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+    from vtsearch.state import get_min_precision  # noqa: PLC0415
+
+    if det_ctx is None:
+        return None
+    state = detector_floor_state(det_ctx, get_min_precision())
+    if state["status"] not in (None, "promised"):
+        logger.info(
+            "Auto-detect: detector %s makes no %.0f%% promise (%s, %d calibration positives); "
+            "exporting its Inclusion 0 cut",
+            name,
+            100 * state["min_precision"],
+            state["status"],
+            state["calibration_positives"],
+        )
+    return state
 
 
 def score_autorun(

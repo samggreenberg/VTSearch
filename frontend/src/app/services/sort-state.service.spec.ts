@@ -4,6 +4,7 @@ import { Subject } from 'rxjs';
 import { SortStateService, SortedItem } from './sort-state.service';
 import { ProgressEventsService } from './progress-events.service';
 import type { ProgressEvent } from '../models/api.models';
+import { NO_PROMISE_STATES, lineFloor } from '../testing/line-floor';
 
 describe('SortStateService', () => {
   let service: SortStateService;
@@ -208,6 +209,72 @@ describe('SortStateService', () => {
     service.clear();
 
     expect(service.acqThreshold).toBeNull();
+  });
+
+  describe('the floor on the line (#4247)', () => {
+    const win = (floor: ReturnType<typeof lineFloor> | null, acqThreshold: number | null = 0.72) => ({
+      items: [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.3 },
+      ],
+      threshold: 0.5,
+      acqThreshold,
+      floor,
+      total: 2,
+      hasMore: false,
+      token: null,
+      aboveThreshold: 1,
+    });
+
+    it.each(NO_PROMISE_STATES)('keeps the fallback cut as the line and flags it when %s', (status) => {
+      service.setSortWindow(win(lineFloor(status)));
+      expect(service.threshold).toBe(0.5);
+      expect(service.floor?.status).toBe(status);
+      expect(service.unpromised).toBe(true);
+    });
+
+    it.each(NO_PROMISE_STATES)(
+      "Autopilot samples around the sort's acquisition cut when %s (Inclusion -4 below the fallback line)",
+      (status) => {
+        service.setSortWindow(win(lineFloor(status)));
+        expect(service.acqThreshold).toBe(0.72);
+      },
+    );
+
+    it.each(NO_PROMISE_STATES)('and falls back to the fallback line, never to null, when %s', (status) => {
+      service.setSortWindow(win(lineFloor(status), null));
+      expect(service.acqThreshold).toBe(0.5);
+    });
+
+    it('a promised line, or no floor, is not unpromised', () => {
+      service.setSortWindow(win(lineFloor('promised')));
+      expect(service.unpromised).toBe(false);
+      service.setSortWindow(win(lineFloor(null)));
+      expect(service.unpromised).toBe(false);
+      service.setSortWindow(win(null));
+      expect(service.floor).toBeNull();
+    });
+
+    it('setSortResults sets the floor with the threshold, and clears it when none is given', () => {
+      service.setSortResults([{ id: 1, score: 0.9 }], 0.4, lineFloor('unreachable'));
+      expect(service.unpromised).toBe(true);
+      service.setSortResults([{ id: 1, score: 0.9 }], 0.4);
+      expect(service.floor).toBeNull();
+    });
+
+    it('clear drops the floor', () => {
+      service.setSortWindow(win(lineFloor('insufficient_evidence')));
+      service.clear();
+      expect(service.floor).toBeNull();
+      expect(service.unpromised).toBe(false);
+    });
+
+    it('unpromised is reactive (drives a computed that reads it)', () => {
+      const derived = TestBed.runInInjectionContext(() => computed(() => service.unpromised));
+      expect(derived()).toBe(false);
+      service.setSortWindow(win(lineFloor('insufficient_evidence')));
+      expect(derived()).toBe(true);
+    });
   });
 
   it('sortMode getter is reactive (drives a computed that reads it)', () => {

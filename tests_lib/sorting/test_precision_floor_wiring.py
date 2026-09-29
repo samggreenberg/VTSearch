@@ -30,6 +30,7 @@ from tests_lib.sorting.test_precision_floor import _session
 from vtscore.datasets.vote_provenance import calibrates_precision
 from vtscore.state.core import (
     DetectorContext,
+    detector_floor_state,
     detector_line_inclusion,
     detector_precision_floor,
     recompute_detector_thresholds,
@@ -39,6 +40,7 @@ from vtscore.state.core import (
 )
 from vtscore.training.thresholds import (
     DEFAULT_MIN_PRECISION,
+    MIN_CALIBRATION_POSITIVES,
     NO_PRECISION_FLOOR,
     PRECISION_FLOOR_FALLBACK_INCLUSION,
     PrecisionFloorEstimate,
@@ -314,6 +316,32 @@ class TestTheDetectorsLine:
         assert detector_line_inclusion(ctx, 3, None) == 3
         assert detector_line_inclusion(ctx, 3, 1.0) == PRECISION_FLOOR_FALLBACK_INCLUSION
         assert detector_line_inclusion(ctx, 3, 0.5) is None
+
+    @pytest.mark.parametrize(
+        ("min_precision", "status"),
+        [(0.5, "promised"), (1.0, "unreachable"), (None, None)],
+    )
+    def test_the_floor_state_a_response_carries(self, min_precision, status):
+        """What rides beside ``threshold`` wherever the line leaves the process (#4247)."""
+        ctx = self._ctx()
+        state = detector_floor_state(ctx, min_precision)
+        assert state == {
+            "min_precision": min_precision,
+            "status": status,
+            "calibration_positives": ctx.precision_floor_cache.calibration_positives,
+            "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
+        }
+        assert state["calibration_positives"] >= 10
+
+    def test_the_floor_state_without_an_estimate_is_no_evidence(self):
+        bare = DetectorContext("det-bare-state")
+        assert detector_floor_state(bare, 0.5) == {
+            "min_precision": 0.5,
+            "status": "insufficient_evidence",
+            "calibration_positives": 0,
+            "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
+        }
+        assert detector_floor_state(bare, None)["status"] is None
 
     def test_each_detector_keeps_its_own_floor(self):
         """As with Inclusion (#3416): a floor change moves only the detector that holds it and the unseeded."""

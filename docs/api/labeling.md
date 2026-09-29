@@ -15,7 +15,7 @@
 GET /api/inclusion
 ```
 
-→ `{"inclusion": 0, "threshold": 0.5123}`
+→ `{"inclusion": 0, "threshold": 0.5123, "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10}}`
 
 ```
 POST /api/inclusion
@@ -30,7 +30,7 @@ without retraining, and in Find mode re-splits the unverified items over the
 frozen scores. The same value is also settable as `inclusion` on
 `PUT /api/settings`.
 
-→ `{"inclusion": 3, "threshold": 0.4471}`
+→ `{"inclusion": 3, "threshold": 0.4471, "floor": {"min_precision": null, "status": null, "calibration_positives": 3, "min_calibration_positives": 10}}`
 
 Both verbs return the cutoff the inclusion resolves to on the **active
 detector** (`X-Detector-Id`), so the Find slider can move its line without
@@ -39,6 +39,8 @@ computed a threshold yet.
 
 Inclusion draws the line only while the detector has **no precision floor**:
 a set floor wins (see below), and `threshold` is then the floor's line.
+`floor` says which: it is the [floor state](#the-floor-state) of the line
+`threshold` names.
 
 ### Get / set the precision floor
 
@@ -46,7 +48,7 @@ a set floor wins (see below), and `threshold` is then the floor's line.
 GET /api/min-precision
 ```
 
-→ `{"min_precision": 0.5, "status": "insufficient_evidence", "threshold": 0.5123, "n_returned": 412, "calibration_positives": 3}`
+→ `{"min_precision": 0.5, "status": "insufficient_evidence", "threshold": 0.5123, "n_returned": 412, "calibration_positives": 3, "min_calibration_positives": 10}`
 
 ```
 POST /api/min-precision
@@ -71,6 +73,26 @@ unverified items — and the same value is settable as `min_precision` on
 | `threshold` | The line: the floor's cut when promised, the **Inclusion 0** cut when the floor promises nothing, Inclusion's cut when no floor is set. |
 | `n_returned` | Items at or above `threshold` in the corpus the cut decides — the dataset the detector last trained against, less its voted items when those are excluded from the population estimate. `null` before a retrain has fitted one. |
 | `calibration_positives` | Positives among the held-out calibration votes that may serve as evidence. Only votes drawn off the learned sort's own ranking count (Autopilot's Hard picks, or the top / cutoff band of a learned-sorted list): votes from the text sort, the coverage atlas, Find verification or bulk actions train the detector but not the promise. |
+| `min_calibration_positives` | The gate: how many calibration positives the floor needs before it promises anything (10). |
+
+### The floor state
+
+Every response that carries a detector's line carries a `floor` object beside
+its `threshold`, so a client can say whether the line is a promise:
+`/api/inclusion`, the [learned sort](medias.md#learned-sort),
+[`/api/find-label`](find.md#find-label-score--label-the-active-dataset), each
+detector of [`/api/auto-detect`](find.md#auto-detect), and the CLI's
+autodetect results.
+
+```json
+{"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10}
+```
+
+The four fields mean what they do on `/api/min-precision` above. When
+`status` is `unreachable` or `insufficient_evidence`, the floor promised
+nothing and `threshold` is the **Inclusion 0** cut: every match, count and
+action keeps working on it, and the app labels the line *unpromised*. It is
+never `null` for want of a promise.
 
 ---
 

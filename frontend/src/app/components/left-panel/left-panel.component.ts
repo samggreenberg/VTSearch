@@ -29,6 +29,7 @@ import { EmbedderCapabilityService } from '../../services/embedder-capability.se
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { allItemsLabeled } from '../../utils/all-labeled';
+import type { LineFloor } from '../../utils/line-floor';
 
 export type { SortMode, SelectMode, SortedItem };
 
@@ -55,6 +56,8 @@ export class LeftPanelComponent implements OnInit {
   readonly medias = input<Media[]>([]);
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
+  /** What the precision floor says about `threshold` (#4247), for the list line and minimap marker. */
+  readonly floor = input<LineFloor | null>(null);
   /** True when the ranking is windowed and more rows can be paged in. */
   readonly sortHasMore = input(false);
   /** True while a page fetch is in flight. */

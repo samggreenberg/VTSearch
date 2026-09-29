@@ -13,6 +13,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { NO_PROMISE_STATES, lineFloor, wireFloor } from '../../testing/line-floor';
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -532,5 +533,166 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     TestBed.tick();
 
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
+  });
+});
+
+/**
+ * #4247: when the precision floor promises nothing, find-label still returns a
+ * cut - the Inclusion 0 one - with the floor's verdict beside it. Every
+ * consumer of the cut keeps working on it: the boundary walk, the queue-empty
+ * state, and the positive sets behind Browse / To Dataset / Export. Only the
+ * line's label changes.
+ */
+describe('FindViewComponent with no precision promise (#4247)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+  let sortState: SortStateService;
+
+  // Descending by score; the fallback cut at 0.5 sits between ids 2 and 3.
+  const ranking = [
+    { id: 1, score: 0.9 },
+    { id: 2, score: 0.6 },
+    { id: 3, score: 0.4 },
+    { id: 4, score: 0.2 },
+  ];
+
+  /** The private consumers under test, reached the way the prefetch spec reaches `nextFindSide`. */
+  type Consumers = {
+    unverifiedGoodIds(): number[];
+    goodIds(): number[];
+    advanceToBoundary(): void;
+    nextFindSide: string;
+  };
+  const view = () => fixture.componentInstance as unknown as Consumers;
+
+  /** Drain the init loads for *ids*, all images (the viewer's audio path needs Web Audio). */
+  async function flushInit(ids: number[]): Promise<void> {
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush(ids.map((id) => ({ id, media_type: 'image' }))));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
+    }
+  }
+
+  async function setUp(withPair: boolean): Promise<void> {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    // With a pair active `runFindLabel` scores on init; without one it no-ops
+    // and the ranking is installed straight into the sort state, as the
+    // prefetch spec above does.
+    if (withPair) TestBed.inject(ActiveContextService).setActivePair('ds1', 'det1');
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+    sortState = TestBed.inject(SortStateService);
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    fixture.destroy();
+    TestBed.inject(VoteStateService).stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  describe('a scoring pass', () => {
+    beforeEach(() => setUp(true));
+
+    it.each(NO_PROMISE_STATES)('installs the fallback cut with its verdict and labels the line when %s', async (status) => {
+      await flushInit([1]);
+      httpMock.expectOne('/api/find-label').flush({
+        ok: true,
+        results: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+        floor: wireFloor(status),
+        good_count: 1,
+        bad_count: 0,
+        detector_name: 'det',
+      });
+      await flushInit([1]);
+      await settleZoneless(fixture);
+
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.floor?.status).toBe(status);
+      expect(sortState.unpromised).toBe(true);
+      // The walk still seeds on the marginal positive. (One result draws no
+      // line - nothing falls below it - so the label is pinned further down.)
+      expect(TestBed.inject(MediaStateService).selectedId()).toBe(1);
+    });
+  });
+
+  describe('the consumers of the cut', () => {
+    beforeEach(async () => {
+      await setUp(false);
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+    });
+
+    it.each(NO_PROMISE_STATES)('walk the boundary of the fallback cut when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      const mediaState = TestBed.inject(MediaStateService);
+      view().nextFindSide = 'above';
+      view().advanceToBoundary();
+      expect(mediaState.selectedId()).toBe(2);
+      view().advanceToBoundary();
+      expect(mediaState.selectedId()).toBe(3);
+    });
+
+    it.each(NO_PROMISE_STATES)('empty the queue only once every item is verified, when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      expect(fixture.componentInstance.queueEmpty()).toBe(false);
+      const voteState = TestBed.inject(VoteStateService);
+      ranking.forEach(({ id }) => voteState.setOptimisticVerified(id, true));
+      expect(fixture.componentInstance.queueEmpty()).toBe(true);
+    });
+
+    it.each(NO_PROMISE_STATES)('hand Browse / To Dataset / Export the positives above the fallback cut when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      expect(view().unverifiedGoodIds()).toEqual([1, 2]);
+      expect(view().goodIds()).toEqual([1, 2]);
+    });
+
+    it.each(NO_PROMISE_STATES)('label the line in the work queue when %s', async (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.media-threshold-line--unpromised')).not.toBeNull();
+      expect(el.querySelector('.stripe-threshold--unpromised')).not.toBeNull();
+    });
+
+    it.each(NO_PROMISE_STATES)('keep the verdict through an Inclusion slide when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      vi.useFakeTimers();
+      fixture.componentInstance.onInclusionChange(3);
+      vi.advanceTimersByTime(200);
+      // Under a set floor Inclusion does not move the line; the verdict rides along.
+      httpMock
+        .expectOne((req) => req.url === '/api/inclusion' && req.method === 'POST')
+        .flush({ inclusion: 3, threshold: 0.5, floor: wireFloor(status) });
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.floor?.status).toBe(status);
+    });
+
+    it('treat a promised line the same, unlabelled', async () => {
+      sortState.setSortResults(ranking, 0.5, lineFloor('promised'));
+      await settleZoneless(fixture);
+      view().nextFindSide = 'above';
+      view().advanceToBoundary();
+      expect(TestBed.inject(MediaStateService).selectedId()).toBe(2);
+      expect(view().unverifiedGoodIds()).toEqual([1, 2]);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('.media-threshold-line')).not.toBeNull();
+      expect(el.querySelector('.media-threshold-line--unpromised')).toBeNull();
+    });
   });
 });

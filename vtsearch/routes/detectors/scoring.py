@@ -341,10 +341,15 @@ def find_label(body: dict):
         # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
         # frontend onto them + windowing this response is the remaining slice (see
         # docs/plans/scalability.md S3/S17/S19).
+        from vtscore.state.core import detector_floor_state  # noqa: PLC0415
+        from vtsearch.state import get_min_precision  # noqa: PLC0415
+
         return {
             "ok": True,
             "results": results,
             "threshold": round(threshold, 4),
+            # Whether the line is a promise, or the unpromised Inclusion 0 cut (#4247).
+            "floor": detector_floor_state(det_ctx, get_min_precision()),
             "good_count": good_count,
             "bad_count": bad_count,
             "detector_name": d.get("name", ""),

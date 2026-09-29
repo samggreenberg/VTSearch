@@ -1664,6 +1664,35 @@ def detector_precision_floor(ctx: "DetectorContext", min_precision: float) -> An
     return estimate.cut(min_precision)
 
 
+def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any]:
+    """What the precision floor says about *ctx*'s current line, for a response that carries the line.
+
+    Every place a detector's threshold leaves the process - a sort result, a
+    Find pass, a knob change, a headless export - reports it beside the
+    threshold, so a consumer can say whether the line it draws is a promise
+    (#4247).  ``status`` is ``"promised"`` when the line is the floor's own cut,
+    ``"unreachable"`` or ``"insufficient_evidence"`` when the floor promised
+    nothing and the line is the Inclusion 0 fallback, and ``None`` when no
+    floor is set and Inclusion drew the line.  ``calibration_positives`` counts
+    the evidence behind the verdict, and ``min_calibration_positives`` the gate
+    it has to reach before any promise is made.
+    """
+    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES
+
+    if min_precision is None:
+        estimate = ctx.precision_floor_cache
+        status, positives = None, estimate.calibration_positives if estimate is not None else 0
+    else:
+        verdict = detector_precision_floor(ctx, min_precision)
+        status, positives = verdict.status.value, verdict.calibration_positives
+    return {
+        "min_precision": min_precision,
+        "status": status,
+        "calibration_positives": positives,
+        "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
+    }
+
+
 def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
 

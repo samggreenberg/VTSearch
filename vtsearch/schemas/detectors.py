@@ -73,6 +73,7 @@ from marshmallow import Schema, fields, validate
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
+from vtsearch.schemas.sorting import FloorStateSchema
 
 #: Upper bound on user-supplied detector names.  A name this long is already
 #: past any reasonable display use, and capping it here keeps the derived
@@ -572,6 +573,8 @@ class FindLabelResponseSchema(Schema):
     ok = fields.Boolean(required=True)
     results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
     threshold = fields.Float(required=True)
+    # What the precision floor says about ``threshold`` (#4247).
+    floor = fields.Nested(FloorStateSchema, required=True)
     good_count = fields.Integer(required=True)
     bad_count = fields.Integer(required=True)
     detector_name = fields.String(required=True)
@@ -668,6 +671,9 @@ class _AutoDetectResultSchema(Schema):
 
     detector_name = fields.String(required=True)
     threshold = fields.Float(required=True)
+    # Whether ``threshold`` is a promise, or the unpromised Inclusion 0 cut
+    # (#4247); ``null`` for a detector with no trained context to ask.
+    floor = fields.Nested(FloorStateSchema, allow_none=True)
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)

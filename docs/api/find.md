@@ -151,13 +151,16 @@ everywhere except those held votes.
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
+  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks"
 }
 ```
 
-On patch-region-aware datasets each result additionally carries `best_region`.
+`floor` is the [floor state](labeling.md#the-floor-state) of `threshold`:
+whether the Good/Bad split is a precision promise or the unpromised Inclusion 0
+cut. On patch-region-aware datasets each result additionally carries `best_region`.
 Errors: **400** (no medias loaded, or detector has no labels), **404**
 (detector not found), **409** (active dataset can't supply the detector's
 embedder type, or the run was cancelled).
@@ -183,6 +186,7 @@ demand, and returns one result column per detector.
     "Dog Barks": {
       "detector_name": "Dog Barks",
       "threshold": 0.5,
+      "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -191,6 +195,11 @@ demand, and returns one result column per detector.
   "missing_detectors": []
 }
 ```
+
+Each detector's `floor` is the [floor state](labeling.md#the-floor-state) of
+its `threshold` (`null` only when there was no trained context to ask). A
+detector whose floor promised nothing is still exported at its Inclusion 0
+cut, and the server logs that the set is unpromised.
 
 When an exporter is configured for Auto-Find, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific

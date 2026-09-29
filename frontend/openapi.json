@@ -3710,6 +3710,9 @@
           "detector_name": {
             "type": "string"
           },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState"
+          },
           "good_count": {
             "type": "integer"
           },
@@ -3729,6 +3732,7 @@
         "required": [
           "bad_count",
           "detector_name",
+          "floor",
           "good_count",
           "ok",
           "results",
@@ -3992,6 +3996,38 @@
           "false_pos",
           "inclusion",
           "threshold"
+        ],
+        "type": "object"
+      },
+      "FloorState": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_positives": {
+            "type": "integer"
+          },
+          "min_calibration_positives": {
+            "type": "integer"
+          },
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "promised",
+              "unreachable",
+              "insufficient_evidence",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "calibration_positives",
+          "min_calibration_positives",
+          "min_precision",
+          "status"
         ],
         "type": "object"
       },
@@ -4299,6 +4335,10 @@
       "InclusionResponse": {
         "additionalProperties": false,
         "properties": {
+          "floor": {
+            "$ref": "#/components/schemas/FloorState",
+            "nullable": true
+          },
           "inclusion": {
             "type": "integer"
           },
@@ -4690,6 +4730,10 @@
           },
           "error": {
             "type": "string"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState",
+            "nullable": true
           },
           "has_more_below": {
             "type": "boolean"
@@ -5153,6 +5197,9 @@
           "calibration_positives": {
             "type": "integer"
           },
+          "min_calibration_positives": {
+            "type": "integer"
+          },
           "min_precision": {
             "nullable": true,
             "type": "number"
@@ -5178,6 +5225,7 @@
         },
         "required": [
           "calibration_positives",
+          "min_calibration_positives",
           "min_precision",
           "n_returned",
           "status",
@@ -6548,6 +6596,10 @@
         "properties": {
           "detector_name": {
             "type": "string"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState",
+            "nullable": true
           },
           "hits": {
             "items": {

@@ -87,6 +87,7 @@ def resolve_or_train_detector(
     progress_total_steps: int = 4,
     on_progress: Callable[..., None] | None = None,
     use_loaded_context: bool = True,
+    ctx_sink: list | None = None,
 ) -> tuple[Any | None, float, dict | None]:
     """Return (mlp, threshold, diagnostic) for *detector_id*.
 
@@ -131,6 +132,12 @@ def resolve_or_train_detector(
     context's caches belong to the dataset the user is working in, so a scorer
     that runs unprompted against another dataset must neither invalidate them
     nor train into them.
+
+    *ctx_sink*, when given, receives the detector context whose head and
+    threshold are returned - the loaded one, or the throwaway a never-loaded
+    detector trains on - so a caller can ask what the precision floor says
+    about that threshold (:func:`vtscore.state.core.detector_floor_state`,
+    #4247).  Nothing is appended when no head is returned.
     """
     report = on_progress if on_progress is not None else update_find_progress
     from vtscore.datasets.labelset import LabelSet
@@ -153,6 +160,8 @@ def resolve_or_train_detector(
         invalidate_detector_model_on_embedder_mismatch(det_ctx, snap_embedder)
     labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
     if det_ctx is not None and cached_head_is_current(det_ctx, labelset):
+        if ctx_sink is not None:
+            ctx_sink.append(det_ctx)
         return det_ctx.model, det_ctx.threshold, None
 
     if det_data is None:
@@ -205,6 +214,8 @@ def resolve_or_train_detector(
         )
 
     if train_from_labelset(train_ctx, labelset, media_type=media_type, snap=snap, on_progress=_on_label):
+        if ctx_sink is not None:
+            ctx_sink.append(train_ctx)
         return train_ctx.model, train_ctx.threshold, None
 
     return None, 0.5, labelset_resolution_report(train_ctx, labelset, media_type=media_type, snap=snap)
