@@ -87,6 +87,14 @@
   white-space: nowrap;
 }
 
+// Stacked rather than side by side: Find's work queue can be one thumbnail
+// wide, and "threshold unpromised" on one row does not fit there.
+.threshold-labels {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .threshold-label--unpromised {
   color: var(--text-warning);
 }

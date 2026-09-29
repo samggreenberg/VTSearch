@@ -29,10 +29,12 @@
           [title]="thresholdTitle()"
           [attr.aria-label]="unpromised() ? 'Good/Bad threshold, unpromised' : 'Good/Bad threshold'"
         >
-          <span class="threshold-label">threshold</span>
-          @if (unpromised()) {
-            <span class="threshold-label threshold-label--unpromised">unpromised</span>
-          }
+          <span class="threshold-labels">
+            <span class="threshold-label">threshold</span>
+            @if (unpromised()) {
+              <span class="threshold-label threshold-label--unpromised">unpromised</span>
+            }
+          </span>
         </div>
       } @else if (row.kind === 'loadmore') {
         <div class="media-load-more">
@@ -67,10 +69,12 @@
           [title]="thresholdTitle()"
           [attr.aria-label]="unpromised() ? 'Good/Bad threshold, unpromised' : 'Good/Bad threshold'"
         >
-          <span class="threshold-label">threshold</span>
-          @if (unpromised()) {
-            <span class="threshold-label threshold-label--unpromised">unpromised</span>
-          }
+          <span class="threshold-labels">
+            <span class="threshold-label">threshold</span>
+            @if (unpromised()) {
+              <span class="threshold-label threshold-label--unpromised">unpromised</span>
+            }
+          </span>
         </div>
       }
       <vt-media-item

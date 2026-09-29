@@ -119,9 +119,9 @@ learned sort).
 
 When it can't promise the floor, the line doesn't disappear. It stays
 where it has always been - the cut at Inclusion 0 - and is labelled
-**unpromised**: the threshold line in the media list is dashed and reads
-*THRESHOLD UNPROMISED*, and its marker on the minimap beside the list is
-dashed too. Hover the line to see which of the two reasons applies:
+**unpromised**: the threshold line in the media list is dashed, with
+*UNPROMISED* under its *THRESHOLD* label, and its marker on the minimap
+beside the list is dashed too. Hover the line to see which of the two reasons applies:
 
 - **Not enough evidence yet** - the detector has fewer than ten held-back
   Good votes to check itself on. This is the usual state for a new
