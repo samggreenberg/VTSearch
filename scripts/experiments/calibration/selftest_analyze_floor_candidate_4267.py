@@ -14,6 +14,11 @@ Checks what the construction of the schedule and of planted rank frames fixes:
 * an all-positive top 128 is promised whole at 10% on every draw, for 5 votes;
 * a top 32 that is all positive behind a top 128 at 25% is always promised at
   10%, never broken, and at one of 128, 64 or 32;
+* **the likely range (do your best):** a census's range is its exact precision;
+  on a planted top 32 at 50% precision, the one-round range covers the truth at
+  least 1 - 2 alpha of the time; a check confirms X iff its range's lower end
+  clears X (``best_attempt_rows`` asserts it); and a short check still returns a
+  set, the top 32, so the line is never empty;
 * the whole pipeline runs on planted files and is deterministic under its seed.
 
     python selftest_analyze_floor_candidate_4267.py
@@ -129,6 +134,43 @@ def test_planted_promises(failures: list[str]) -> None:
     )
 
 
+def test_range(failures: list[str]) -> None:
+    lo, hi = F.likely_range(np.array([7, 3]), np.array([16, 5]), np.array([16, 32]), 0.05)
+    check(
+        lo[0] == hi[0] == 7 / 16 and 0 < lo[1] < 3 / 5 < hi[1] < 1,
+        f"a census's range is its exact precision (7/16), a sample's straddles its hit rate: {lo}, {hi}",
+        failures,
+    )
+    half = frames_of([frame_row(list(range(0, 32, 2)) + [1500], i) for i in range(40)])
+    rule, m = F.schedule_rule(0.5)
+    out = A.simulate(half, rule, m, 0.5, F.ALPHA, 300, seed=13)
+    k, n, s_, _ = F.final_round(out)
+    lo, hi = F.likely_range(s_, n, k, F.range_tail(1))
+    truth = half.hits(k) / k
+    cover = float(((lo <= truth + A.EPS) & (truth <= hi + A.EPS)).mean())
+    se = np.sqrt(2 * F.ALPHA * (1 - 2 * F.ALPHA) / out.k.size)
+    check(
+        cover >= 1 - 2 * F.ALPHA - 3 * se,
+        f"on a top 32 at 50%, the one-round range covers the truth {cover:.3f} >= {1 - 2 * F.ALPHA:.2f}",
+        failures,
+    )
+    rng = np.random.default_rng(9)
+    mixed = frames_of([frame_row(rng.choice(300, size=int(rng.integers(3, 60)), replace=False), i) for i in range(60)])
+    rows = []
+    try:
+        for x in F.FLOORS:
+            rows += F.best_attempt_rows(mixed, x, draws=20, seed=F.SEED)
+        agree = True
+    except AssertionError:
+        agree = False
+    returned = min(r["returned"] for r in rows) if rows else 0
+    check(
+        agree and returned >= 32 - A.EPS,
+        f"on 60 mixed frames at every floor a check confirms X iff its range clears X, and returns >= 32 ({returned})",
+        failures,
+    )
+
+
 def test_pipeline(failures: list[str]) -> None:
     rng = np.random.default_rng(5)
     rows = []
@@ -153,6 +195,7 @@ def main() -> int:
     test_schedule(failures)
     test_validity(failures)
     test_planted_promises(failures)
+    test_range(failures)
     test_pipeline(failures)
     print(f"\n{'ALL CHECKS PASSED' if not failures else f'{len(failures)} CHECK(S) FAILED'}")
     return 1 if failures else 0

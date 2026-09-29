@@ -16,6 +16,17 @@ series to beat reading the top 32 yourself on recall at the default pool:
 **+0.058 ± 0.006**, for 12 votes against 32. At 25% it spends 9 votes and
 recovers 0.55 (0.44). Above 50% nothing changes.
 
+**Then the promise stopped being make-or-break** (owner, 2026-09-29): "Do your
+best. How close did we get?" The line always keeps the set the check ended on, and
+the control shows a **likely range** for how much of it is right. The range's
+tails are at the level the check's rounds are tested at, so a check confirms X
+exactly when the range's lower end clears X. That range contains the true precision
+in **99%** of sessions at every floor and richer pool. At 10% and 0.44%, a session
+now returns **53 items** on average, **40%** right, and meets the floor in **84%**
+of sessions. When the check falls short, the top 32 it ends on is 18% right on
+average, and the range it shows is about 2–55%. See
+[Do your best](#do-your-best-how-close-did-we-get) below.
+
 Part of #4224; follows #4257 and the #4267 ruling. Data: the #4224 rank frames
 ([`2026-09-28-rank-frames`](../2026-09-28-rank-frames/README.md)). Analysis:
 `scripts/experiments/calibration/analyze_floor_candidate_4267.py`, which reuses
@@ -81,6 +92,68 @@ X, α = 5%, pooled over t. "Δ recall vs reading" is paired on the same frames
   (#4267's caveat). Per session, the breaks stay far under α: 0.17%, 0.08% and
   0.05% of all frames. As at 50%, the no-cause failure wording covers this.
 
+## Do your best: how close did we get?
+
+After #4267 the owner changed what the check is for: not a make-or-break promise,
+but "do your best, and say how close we got" (2026-09-29). So:
+
+- **The line always keeps the set the check ended on.** That is the promised set
+  after a passed check, and the top 32 after a short one. Before any check, and in
+  headless runs, it is the schedule's starting candidate, unchecked. Nothing falls
+  back to today's cut any more.
+- **The control shows a likely range** for how much of that set is right. It is a
+  Clopper–Pearson interval from the labels inside the set, with each tail at α / R,
+  the level each round is tested at (`range_tail`). It is exact for a census.
+  Because the lower end is the very bound the check tested, **a check confirms X
+  iff the range's lower end is at least X.** The analyzer asserts this on every
+  frame and draw.
+
+`best_attempt.csv`, pooled over t (20 draws a frame):
+
+| pool | X | votes | check confirms X | returned | right, mean | set meets X | recall ÷ oracle | range contains the truth | range width | after a short check: right, range |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 0.44% | 10% | 12 | 59% | 53 | 40% | 84% | 0.70 | 99.3% | 0.63 | 18%, 2–55% |
+| 0.44% | 25% | 9.1 | 43% | 38 | 49% | 71% | 0.75 | 99.4% | 0.58 | 27%, 6–64% |
+| 0.44% | 50% | 5 | 28% | 32 | 53% | 53% | 0.79 | 98.8% | 0.57 | 38%, 11–73% |
+| 0.44% | 75% | 11 | 20% | 32 | 53% | 37% | 0.96 | 99.2% | 0.39 | 42%, 22–65% |
+| 0.44% | 90% | 29 | 12% | 32 | 53% | 26% | 1.14 | 100% | 0.23 | 46%, 34–59% |
+| 5% | 10% | 10 | 90% | 70 | 56% | 99.7% | 0.76 | 99.3% | 0.70 | 37%, 4–67% |
+| 5% | 25% | 8.1 | 71% | 44 | 70% | 98% | 0.71 | 99.5% | 0.61 | 49%, 12–79% |
+| 5% | 50% | 5 | 50% | 32 | 78% | 85% | 0.68 | 99.0% | 0.57 | 60%, 19–87% |
+| 0.1% | 10% | 15 | 10% | 33 | 16% | 57% | 0.90 | 99.5% | 0.53 | 14%, 2–52% |
+| 0.1% | 50% | 5 | 0.1% | 32 | 16% | 0.3% | 1.28 | 99.2% | 0.57 | 16%, 3–60% |
+
+- **The range is honest, but wide.** Five picks can't pin a set's precision down.
+  At 50% the range is 0.57 wide on average, and 0.23 wide at 90%, where the check
+  reads 29 of 32. That width *is* the answer to "how close did we get?" after 5
+  votes.
+- **Recall now counts every session.** A short check still returns its top 32, so
+  recall ÷ oracle rises from 0.63 to 0.70 at 10% (0.44%). Above 1 at 75% and 90%,
+  it means the returned 32 hold more positives than the largest set that really is
+  that pure, bought with lower precision. The range says so.
+- **Before a check, the starting set is often already there.** With no labels at
+  all (headless, or before the user checks), the top 128 at 10% is 22% right on
+  average and meets 10% in 76% of sessions at 0.44% (99.5% at 5%). At 50% the top
+  32 is 53% right and meets it in 53%. An unchecked set carries no range; the
+  control says it is unchecked.
+
+**Why each tail is at α / R, not 5%.** The same labels decide the check and draw
+the range. A check that passes in its first round did so partly by luck, so its
+labels run high. With a plain 90% range (each tail 5%), at 10% and 0.44% a check
+confirmed in its first round showed a range above the truth **11%** of the time.
+With each tail at α / 3 it is **4.0%**, and the range is 0.10 wider on average.
+Checks that end in rounds 2 and 3 cover the truth 99.5% and 99.8% of the time.
+At one round the two are the same range. At 0.1% the rare early passes (0.2% of
+sessions) are the check's α failures. No range drawn from their labels can
+contain the truth.
+
+| X = 10% | check ended in | share of sessions | range contains the truth | range above the truth |
+|---|---|---|---|---|
+| 0.44% | round 1 (confirmed at 128) | 12% | 96.0% | 4.0% |
+| 0.44% | round 2 (confirmed at 64) | 30% | 99.5% | 0.5% |
+| 0.44% | round 3 (32, confirmed or short) | 58% | 99.8% | 0.1% |
+| 5% | round 1 | 22% | 97.6% | 2.4% |
+
 ## How the schedule was chosen
 
 X = 10% and 25% at 0.44%, α = 5% (`part = grid`). The chosen schedule is in bold.
@@ -130,6 +203,9 @@ checkpoint nothing moves: at 10%, recall ÷ oracle is 0.62–0.64 at every t fro
 
 ## What this changes for #4272 and #4273
 
+- **The line never falls back.** It keeps the set the check ended on, or the
+  unchecked starting candidate. The control shows the likely range, and the check
+  confirms X iff the range's lower end clears X.
 - **The candidate and the pick count both depend on X,** by the two formulas
   above. The presets resolve to (K, rounds, picks a round) = (128, 3, 5) at 10%,
   (64, 2, 5) at 25%, and (32, 1, m(X)) at 50%, 75% and 90%. The API's other
@@ -155,7 +231,8 @@ checkpoint nothing moves: at 10%, recall ÷ oracle is 0.62–0.64 at every t fro
 | file | what |
 |---|---|
 | `summary.csv` | every rule × m × X × pool, per slice (all, by t, by band): #4257's metrics, plus `returned` and the oracle's median cut. `part` is `schedule` (the chosen rule and reading the top 32, at all five presets) or `grid` (the candidates, at 10–50%) |
-| `provenance.json` | input hashes, α, draws, seed, the schedule, and the grid |
+| `best_attempt.csv` | the schedule under "do your best", per pool × X × slice (all, by t, by band, and by the round a check ended in): whether the check confirmed X, the returned set's size and true precision, whether it meets X, recall ÷ oracle, how often the likely range contains the truth (overall, confirmed, short; `se_coverage` is clustered by cell), its width, and the unchecked starting candidate's precision |
+| `provenance.json` | input hashes, α, draws, seed, the schedule, the grid, and the range's definition |
 
 Rebuild: `python scripts/experiments/calibration/analyze_floor_candidate_4267.py`
 (about 30 seconds on one core).

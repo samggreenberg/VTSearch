@@ -28,7 +28,17 @@ and the **schedule** the owner picked from this grid (``schedule``):
   is the ruled m(X): 5 up to X = 54.9%, 11 at 75%, 29 at 90%.
 
 Metrics are ``analyze_random_verification.summarise``'s, plus ``returned``: the
-mean size of a promised set.
+mean size of a promised set (``summary.csv``).
+
+**Do your best** (owner, 2026-09-29, ``best_attempt.csv``). The promise is not
+make-or-break: the line always keeps the set the check ended on (the promised set,
+or the top 32 after a short check), and the control shows how close it got as a
+**likely range**: a Clopper-Pearson interval from the labels inside that set, each
+tail at the level the check's rounds are tested at (``range_tail``), and exact for a
+census. This measures how often that range contains the
+set's true precision (``coverage``, split by a confirmed and a short check and by
+the round a check ended in), how close a short check gets, and how good the
+unchecked starting candidate is on its own (what a headless run returns).
 
     python analyze_floor_candidate_4267.py [--frames DIR] [--out DIR] [--draws 20]
 """
@@ -110,6 +120,124 @@ def rows_for(fr: A.Frames, x: float, rules: list[tuple[A.Rule, int]], draws: int
     return rows
 
 
+def range_tail(rounds: int, alpha: float = ALPHA) -> float:
+    """Each tail of the "likely range": the level every round of the check is tested at.
+
+    So the range's lower end is exactly the bound the check tested, and a check
+    confirms X iff that lower end is >= X. At one round it is a two-sided 90%
+    Clopper-Pearson interval. The narrower 90% range at every round count covers
+    too rarely after an early pass: at 10%, 0.44%, a check confirmed in its first
+    round showed a range above the truth 11% of the time (winner's curse), against
+    4.0% with this tail.
+    """
+    return alpha / rounds
+
+
+def likely_range(s: np.ndarray, n: np.ndarray, k: np.ndarray, tail: float) -> tuple[np.ndarray, np.ndarray]:
+    """The range shown for a set of ``k`` whose ``n`` uniform labels hold ``s`` right; exact for a census."""
+    lo = A.lower_bound(s, n, tail)
+    hi = 1.0 - A.lower_bound(n - s, n, tail)
+    exact = s / np.maximum(k, 1)
+    census = n >= k
+    return np.where(census, exact, lo), np.where(census, exact, hi)
+
+
+def final_round(out: A.Outcome) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Per frame x draw: the set the check ended on, its labels (n, s), and the round (1-based)."""
+    shape = out.k.shape
+    k_fin, n_fin, s_fin = (np.zeros(shape, dtype=np.int64) for _ in range(3))
+    r_fin = np.zeros(shape, dtype=np.int64)
+    for r, step in enumerate(out.trace):
+        live = step["live"]
+        k_fin = np.where(live, np.broadcast_to(step["k"][:, None], shape), k_fin)
+        n_fin = np.where(live, step["n"], n_fin)
+        s_fin = np.where(live, step["s"], s_fin)
+        r_fin = np.where(live, r + 1, r_fin)
+    return k_fin, n_fin, s_fin, r_fin
+
+
+def best_attempt_rows(fr: A.Frames, x: float, draws: int, seed: int) -> list[dict]:
+    """Do your best (owner, 2026-09-29): the line always keeps the set the check ended on, with its range.
+
+    A passed check keeps the promised set; a short one keeps the set its last round
+    audited (the top 32 after every halving). Before any check, and headless, the line
+    is the schedule's starting candidate, unchecked.
+    """
+    rule, m = schedule_rule(x)
+    out = A.simulate(fr, rule, m, x, ALPHA, draws, seed)
+    k_fin, n_fin, s_fin, r_fin = final_round(out)
+    if not np.array_equal(out.k[out.k > 0], k_fin[out.k > 0]):
+        raise AssertionError("a promised set differs from the set the check ended on")
+    rounds = rule.rounds if rule.kind == "b" else 1
+    lo, hi = likely_range(s_fin, n_fin, k_fin, range_tail(rounds))
+    if not np.array_equal(confirmed_by_range := lo >= x - A.EPS, out.k > 0):
+        raise AssertionError(f"{int((confirmed_by_range != (out.k > 0)).sum())} checks disagree with their range")
+    hits = fr.hits(k_fin)
+    prec = hits / np.maximum(k_fin, 1)
+    n_pos = fr.meta["n_pos"].to_numpy()[:, None]
+    ok = A.oracle_k(fr, x)
+    orec = np.broadcast_to(A.recall_of(fr, ok)[:, None], k_fin.shape)
+    k_unc = A.start_k(fr, rule, x)
+    p_unc = np.broadcast_to((fr.hits(k_unc) / np.maximum(k_unc, 1))[:, None], k_fin.shape)
+    r_unc = np.broadcast_to((fr.hits(k_unc) / fr.meta["n_pos"].to_numpy())[:, None], k_fin.shape)
+    confirmed = out.k > 0
+    covered = (lo - A.EPS <= prec) & (prec <= hi + A.EPS)
+    cells = fr.meta["cell"].to_numpy()
+
+    masks = [(name, np.broadcast_to(sel[:, None], k_fin.shape)) for name, sel in A.slices(fr)]
+    if rule.rounds > 1:
+        masks += [(f"ended in round {r}", r_fin == r) for r in range(1, rule.rounds + 1)]
+    rows = []
+    for name, sel in masks:
+        if not sel.any():
+            continue
+        short = sel & ~confirmed
+        conf = sel & confirmed
+
+        def mean(v: np.ndarray, where: np.ndarray) -> float:
+            return float(v[where].mean()) if where.any() else float("nan")
+
+        def ratio(a: float, b: float) -> float:
+            return a / b if b > 0 else float("nan")
+
+        rows.append(
+            {
+                "world": fr.world,
+                "X": x,
+                "rule": rule.name,
+                "K": int(rule.start),
+                "rounds": rounds,
+                "m": m,
+                "slice": name,
+                "draws": int(sel.sum()),
+                "confirmed": mean(confirmed, sel),
+                "votes_mean": mean(out.votes, sel),
+                "returned": mean(k_fin, sel),
+                "precision": mean(prec, sel),
+                "reached_x": mean(prec >= x - A.EPS, sel),
+                "recall_share": ratio(mean(hits / n_pos, sel), mean(orec, sel)),
+                "coverage": mean(covered, sel),
+                "se_coverage": A.cluster_se((covered & sel).sum(1), sel.sum(1), cells),
+                "range_above_truth": mean(prec < lo - A.EPS, sel),
+                "range_below_truth": mean(prec > hi + A.EPS, sel),
+                "range_width": mean(hi - lo, sel),
+                "coverage_confirmed": mean(covered, conf),
+                "coverage_short": mean(covered, short),
+                "short_precision": mean(prec, short),
+                "short_range_lo": mean(lo, short),
+                "short_range_hi": mean(hi, short),
+                "unchecked_precision": mean(p_unc, sel),
+                "unchecked_reached_x": mean(p_unc >= x - A.EPS, sel),
+                "unchecked_recall_share": ratio(mean(r_unc, sel), mean(orec, sel)),
+            }
+        )
+    return rows
+
+
+def run_best_attempt(frames: dict[str, A.Frames], draws: int, seed: int) -> pd.DataFrame:
+    return pd.DataFrame([r for fr in frames.values() for x in FLOORS for r in best_attempt_rows(fr, x, draws, seed)])
+
+
 def run(frames: dict[str, A.Frames], draws: int, seed: int, grid: bool = True) -> pd.DataFrame:
     rows = []
     for fr in frames.values():
@@ -136,6 +264,8 @@ def main() -> None:
         "se_d_recall_vs_read32",
     ]  # fmt: skip
     df[keep].to_csv(args.out / "summary.csv", index=False, float_format="%.5g")
+    best = run_best_attempt(frames, args.draws, SEED)
+    best.to_csv(args.out / "best_attempt.csv", index=False, float_format="%.5g")
     sched = [{"X": x, **dict(zip(("K", "rounds", "m"), schedule_for(x)))} for x in FLOORS]
     prov = {
         "inputs": {w: hashlib.sha256((args.frames / f).read_bytes()).hexdigest()[:16] for w, f in A.WORLDS.items()},
@@ -145,9 +275,10 @@ def main() -> None:
         "floors": FLOORS,
         "schedule": sched,
         "grid": {"one_round": ONE_ROUND, "shrinking_to_32": SHRINKING},
+        "likely_range": "Clopper-Pearson from the labels inside the set, each tail at alpha / rounds",
     }
     (args.out / "provenance.json").write_text(json.dumps(prov, indent=2) + "\n")
-    print(f"wrote {args.out / 'summary.csv'} ({len(df)} rows)")
+    print(f"wrote {args.out / 'summary.csv'} ({len(df)} rows) and best_attempt.csv ({len(best)} rows)")
 
 
 if __name__ == "__main__":

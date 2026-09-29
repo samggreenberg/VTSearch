@@ -1,8 +1,8 @@
 {
   "inputs": {
-    "0.44%": "f0d800cfdf4ff533",
-    "0.1%": "fb77050906731394",
-    "5%": "fdc53851bd1beb0a"
+    "0.44%": "af83fa2ee41f55c2",
+    "0.1%": "9d944764c913bdd5",
+    "5%": "28ed44b367dcd0d7"
   },
   "alpha": 0.05,
   "draws": 20,
@@ -110,5 +110,6 @@
         ]
       ]
     ]
-  }
+  },
+  "likely_range": "Clopper-Pearson from the labels inside the set, each tail at alpha / rounds"
 }

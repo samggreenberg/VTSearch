@@ -21,8 +21,8 @@ What follows is what the app still owes.
 ## Design
 
 - **The operating point is X; Inclusion survives only as a unit.**
-  - The reporting cut is the checked candidate when a spot check has promised
-    it, and the Inclusion 0 fallback otherwise (#4272).
+  - The reporting cut is the set the spot check ended on, or the unchecked
+    starting candidate before any check (#4272).
   - Autopilot's acquisition cut stays where #3319 put it: four inclusion steps
     stricter than the line.
   - The "line's inclusion" is now *derived*: `inclusion_for_threshold(line)`,
@@ -33,9 +33,23 @@ What follows is what the app still owes.
 - **A spot check earns the promise** (owner, 2026-09-29, #4267, from the
   decision page built on #4257's rank frames). The promise certifies a list
   the user acts on without looking, and it costs 5 votes a round.
+  - **Do your best, and say how close we got** (owner, 2026-09-29). The
+    promise is not make-or-break. The line always keeps the set the check ended
+    on: the confirmed set, or the top 32 after a short check. The control shows
+    a **likely range** for how much of it is right. The range is a
+    Clopper–Pearson interval from the labels inside the set, with each tail at
+    α / R, so a check confirms X iff the range's lower end clears X.
+    - At 0.44% and X = 10%, a session returns 53 items on average, 40% right,
+      and meets the floor in 84% of sessions.
+    - The range contains the truth in 99% of sessions. With plain 90% tails it
+      sat above the truth 11% of the time after a first-round pass (4.0% at
+      α / R).
+    - The range is wide at 5 picks: 0.57 on average at 50%. That width is the
+      honest answer to "how close?". See
+      [`REPORT.md`](../experiments/2026-09-29-floor-candidate-4267/REPORT.md#do-your-best-how-close-did-we-get).
   - **The rule** (#4257's `a:top32`, extended below 50%). The candidate is
     the top K *unvoted* items of the current ranking. The user votes on m of
-    them, drawn uniformly at random. The whole candidate is promised iff the
+    them, drawn uniformly at random. The whole candidate is confirmed iff the
     one-sided Clopper–Pearson lower bound on the hit rate is ≥ X at level
     α / R, with α = 5%. A failed round halves K and draws m fresh picks, down
     to the top 32. There is no redraw on the same candidate.
@@ -68,32 +82,35 @@ What follows is what the app still owes.
     promises per session (≤ α of all sessions), not per promise made. The
     no-cause wording below covers this case.
   - **Headless runs can't be checked**, because nobody is there to vote. AutoRun,
-    CLI autodetect and the cold Find path always export the labelled fallback.
+    CLI autodetect and the cold Find path export the schedule's starting
+    candidate, marked unchecked and with no range (owner, 2026-09-29). At
+    0.44% the top 128 is 22% right on average at 10%, and the top 32 is 53%
+    right at 50%.
   - **Not yet decided:** what a retrain does to a promise. Check votes train
     the model and move the candidate, and repeated checks compound α. #4272 raises
     this with the owner before building it.
-- **Three states, not a number.**
-  - `unchecked`: no check has been run on the current candidate.
-  - `promised`: a check passed; the candidate is at least X right.
-  - `not_promised`: the check failed.
-
-  Every consumer of the cut has to handle the two states with no promise on
-  purpose (#4247).
-- **When nothing is promised, fall back to today's cut, labelled** (owner,
-  2026-09-28). The line, the matches and every match action (Export, To
-  Dataset, Browse, AutoRun) keep working at the Inclusion 0 cut, with the
-  control saying why no promise is made. A floor that can't be met never
-  empties the results.
-  - **A failed check names no cause** (owner, 2026-09-29). A check fails both
+- **Three states, and a range.**
+  - `unchecked`: no check has run on the current candidate. The line is the
+    starting candidate, with no range.
+  - `confirmed`: the check's range clears X.
+  - `short`: the check ended with its range below X. The line keeps the top 32
+    it ended on.
+- **The line never falls back** (owner, 2026-09-29). This replaces the
+  2026-09-28 ruling (#4247) that put the line at the Inclusion 0 cut when nothing
+  was promised; at 0.44% that cut returns about 2,300 items at 2% right. Every
+  match action (Export, To Dataset, Browse, AutoRun) works on the set the line
+  keeps, and a floor never empties the results.
+  - **A short check names no cause** (owner, 2026-09-29). A check fails both
     for a sparse corpus (0.1%) and for a weak model (tv@small at 0.44%), and
     the app can't tell them apart. The wording must be true in both cases, for
     example "Too few matches near the top to promise X%."
 - **The floor is per detector, seeded from the user's last value** (owner,
   2026-09-28), as Inclusion is today (#3416). A floor one detector can meet,
   another may not.
-- **The control shows the floor and its state, not the estimate** (owner,
-  2026-09-28). No "about 60% of these should be right": the lower bound stays
-  internal.
+- **The control shows the floor, its state, and the check's likely range**
+  (owner, 2026-09-29). An example: "Likely 11–73% right (checked 5)". The range
+  comes only from the check's uniform picks, never from the model. This
+  replaces the 2026-09-28 ruling that kept every estimate internal.
 - **Why not the estimator.** Every vote a model chose is a biased sample of
   that model's scores (#4256). The merged backend (#4245) calibrates only on
   learned-sort draws. That filter stops a long text walk from breaking promises,
@@ -121,7 +138,9 @@ What follows is what the app still owes.
   - #4222's opening now matters for detector quality only, since the promise no
     longer depends on the calibration gate. A moderate text walk (Good target 6)
     is the only tested change that helps the detector at both 0.44% and 0.1%.
-    Its adaptive stop (`g20+dry1/8@top`) is still running.
+    Its dry stop has since landed (`g3@top,g20+dry1/16@top,b4@mid`,
+    [`REPORT.md`](../experiments/2026-09-29-drystop-4222/REPORT.md)). It raises
+    AP at vote 150 by +0.052 at 0.44% and +0.032 at 0.1%.
   - The closed loop is unmeasured: check votes training the model, and
     re-checks after a retrain. Both feed #4272's lifecycle decision.
 
