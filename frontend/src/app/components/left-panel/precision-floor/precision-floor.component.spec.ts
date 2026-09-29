@@ -42,8 +42,8 @@ describe('PrecisionFloorComponent (#4246, #4317)', () => {
   const hints = () => root().querySelectorAll('vt-field-hint-icon');
 
   describe('the spectrum (#4317)', () => {
-    it('reads "Threshold", from False Positives to False Negatives', () => {
-      expect(root().querySelector('.floor-label')!.textContent!.trim()).toBe('Threshold');
+    it('reads "Threshold:", from False Positives to False Negatives', () => {
+      expect(root().querySelector('.floor-label')!.textContent!.trim()).toBe('Threshold:');
       const ends = Array.from(root().querySelectorAll('.spectrum-bar span')).map((e) => e.textContent!.trim());
       expect(ends).toEqual(['False Positives', 'False Negatives']);
       expect(root().textContent).not.toContain('Lean');
@@ -68,7 +68,7 @@ describe('PrecisionFloorComponent (#4246, #4317)', () => {
 
     it('is one radio group, labelled by its heading', () => {
       const group = root().querySelector('[role="radiogroup"]')!;
-      expect(root().querySelector(`#${group.getAttribute('aria-labelledby')}`)!.textContent!.trim()).toBe('Threshold');
+      expect(root().querySelector(`#${group.getAttribute('aria-labelledby')}`)!.textContent!.trim()).toBe('Threshold:');
       expect(new Set(radios().map((r) => r.name)).size).toBe(1);
     });
 

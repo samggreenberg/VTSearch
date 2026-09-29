@@ -19,7 +19,7 @@ not list every commit. Use `git log` for the full history.
 
 - **The precision floor is now the Threshold, a spectrum with three radios**
   (issue #4317). The **Lean: Complete / Centered / Correct** pulldown in Train
-  and Find is gone. In its place, **Threshold** heads a spectrum from **False
+  and Find is gone. In its place, **Threshold:** heads a spectrum from **False
   Positives** to **False Negatives**, with a radio button under each third of
   it; the radios carry no words or numbers, and hovering one says what it
   does. The floors behind them are unchanged (10, 50 and 90%, the middle one

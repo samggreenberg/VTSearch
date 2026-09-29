@@ -814,7 +814,7 @@ your Threshold (29 on the False Negatives radio). See
 [How close the line got](#how-close-the-line-got) for the check and its
 likely range. Find shows the same note with no check beside it: there you
 test the Threshold, and it is too late to label more to set it. The **?**
-beside **Threshold** explains it in a sentence.
+beside **Threshold:** explains it in two short sentences.
 
 A Threshold toward False Positives keeps a longer list, and the lists nest:
 everything the line keeps on the False Negatives radio it still keeps on the
