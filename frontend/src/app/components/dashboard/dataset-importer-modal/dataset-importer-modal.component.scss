@@ -23,20 +23,6 @@
 // would push the buttons off-centre from the Advanced toggle beside them.
 .form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); }
 
-// The "Advanced ▾" disclosure at the left end of the footer row (#4305): muted
-// and link-like, so it reads as a secondary affordance beside the actions.
-.advanced-toggle {
-  background: transparent;
-  border: none;
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover { color: var(--text-primary); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-}
-
 // The Run AutoRun box sits under whichever picker is showing; indent it like
 // the importer forms (`.importer-form`) so it lines up with their controls
 // rather than with the tab bars.

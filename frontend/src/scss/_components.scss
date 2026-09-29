@@ -157,6 +157,27 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 }
 
+// --- Link button ---
+//
+// A muted, borderless text button that reads as a link: a secondary affordance
+// set beside real controls rather than competing with them. The "Advanced ▾"
+// disclosures at the left of the New Detector and Add Dataset footers, and the
+// "Details ▸" openers on Add Dataset's Include media rows. Not a `.btn` variant:
+// it has no box, so no size modifier applies. (The Advanced toggles also carry
+// `.advanced-toggle`, an unstyled hook the specs and screenshot manifest use to
+// tell them apart from the Details buttons.)
+.link-btn {
+  background: transparent;
+  border: none;
+  padding: var(--space-2xs) 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover { color: var(--text-primary); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
 // --- Segmented toggle ---
 //
 // A connected row of buttons acting as a single-select control: the
