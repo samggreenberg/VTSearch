@@ -428,8 +428,10 @@ shot on it too (#4202), until they moved to generated drawings of their own,
 the Smiley example (`scripts/screenshots/smiley-example.mjs`, #4240), which
 needs no COCO download. The two harnesses still drive one app, so each clears
 the other's datasets and detectors before it shoots. **A GUI change that moves
-the docs screenshots moves these too** — reshoot both, or the deck keeps
-showing an app that no longer exists.
+the docs screenshots moves these too**, so queue both: a GUI-changing session
+names the groups it moved as `slides:<group>` in its
+[`docs/reshoot-queue/`](../docs/reshoot-queue/README.md) entry, and the release
+run reshoots them, or the deck keeps showing an app that no longer exists.
 
 **Never drop a report figure straight onto a slide.** It was sized for a page,
 and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`

@@ -465,13 +465,15 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
   excerpts here, merge to `dev`, and the release follows. `scripts/publish-slides.sh`
   is the same path by hand, from a laptop with `gh`. See `slides/README.md`.
 
-## Screenshot reshoots (when you change the GUI)
+## Screenshot reshoots: queue them, don't shoot them (when you change the GUI)
 
-User-facing docs embed screenshots captured by a Playwright harness that **needs a real browser**. The cloud container *does* have one (see "Environment Notes" below), so the default when you change a framed GUI surface is to **reshoot in the same session**: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, and commit the regenerated screenshots. **Do not let that drift go silently unrecorded.**
+The user docs (`docs/user/assets/`) and the slide deck's UI figures (`slides/figs/ui-*.webp`) are screenshots of the app, rendered by Playwright harnesses: `scripts/screenshots/refresh.sh` and `slides/figs/src/shoot-ui-figs.mjs`. **A session that changes the GUI does not run either one.** Booting the app, building fixtures and re-rendering costs far more than most GUI changes do, and the next change moves the same shots again anyway. Instead:
 
-Only when a reshoot genuinely isn't possible — no browser, or the shot needs a fixture the harness doesn't build — add the affected shot id(s) to the **reshoot queue**: `docs/user/screenshots-reshoot-queue.md`. Each id must match an entry in `docs/user/screenshots.manifest.ts`; the wiring check (`scripts/screenshots/wiring-check.py`, gated in `run-tests.sh`) fails if a queued id has no matching shot, so the queue can't rot. To know whether a change touches a shot, scan the manifest's `embeddedIn` / `caption` fields for the surface you modified (e.g. a modal, a panel, a toolbar).
+- **Queue what your change moves.** Add one new file under `docs/reshoot-queue/` naming the shots your change alters: a docs shot by its manifest id (scan `docs/user/screenshots.manifest.ts`'s `embeddedIn` / `caption` for the surface you touched), a slide figure as `slides:<group>`. The format is in [`docs/reshoot-queue/README.md`](docs/reshoot-queue/README.md). A new file per change, never a row in a shared table, so parallel PRs can't conflict on it. A rough list is fine: the drain re-renders the whole docs set, so a missed shot is still caught.
+- **Dev2Main drains the queue** at every release ([`docs/RELEASE.md`](docs/RELEASE.md#4b-drain-the-screenshot-reshoot-queue)), before the release PR opens, so `main` never ships a stale screenshot. `dev`'s screenshots may lag its GUI in between; that is the trade.
+- **A brand-new shot is the exception.** A change that adds a shot to the manifest captures it in the same session with `scripts/screenshots/refresh.sh <new-id>`, because a doc cannot embed an image that doesn't exist and the wiring check requires both theme files on disk. Only *re*shoots are deferred.
 
-If you *do* have a browser this session, drain the queue instead of growing it: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, commit the regenerated screenshots, and delete the drained rows. The full system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
+The wiring check (`scripts/screenshots/wiring-check.py`, a `run-tests.sh` gate) fails on a queued id that names no manifest shot and no slide group, so the queue can't rot. The full screenshot system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
 
 ## No Persisted Vectors or MLPs (CRITICAL)
 

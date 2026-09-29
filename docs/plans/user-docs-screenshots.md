@@ -145,7 +145,7 @@ stub randomness the UI exposes (never rely on unseeded draws).
 
 - `refresh.sh` — regenerate **every** shot from the manifest in place; then
   `git diff --stat docs/user/assets/` is the precise list of shots the GUI
-  change moved. The everyday refresh. Unless an app is already serving, it
+  change moved. What the release drain runs. Unless an app is already serving, it
   starts one on a fresh data dir (`data/.screenshots-app`, emptied every run,
   the model cache shared) and stops it afterwards, so no refresh photographs
   state an earlier one left behind; the fixtures are imported afresh each run.
@@ -154,26 +154,23 @@ stub randomness the UI exposes (never rely on unseeded draws).
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
 - `wiring-check.py` — browser-free, **wired into `run-tests.sh`**: asserts every
   manifest `id` has both theme files on disk, every embed in the three docs has
-  a matching manifest entry, and every reshoot-queue id is a real manifest id.
+  a matching manifest entry, and every reshoot-queue id is a real manifest id
+  or slide group.
 
 ## Refresh workflow (when the GUI changes)
 
-1. GUI changes land.
-2. In a browser-ready session, run `scripts/screenshots/refresh.sh`.
+1. GUI changes land, each with an entry in **`docs/reshoot-queue/`** naming the
+   shots it moved (one file per change, so parallel PRs never conflict on it).
+   The changing session does not render anything.
+2. At release, Dev2Main drains the queue (`docs/RELEASE.md` step 4b): one full
+   `scripts/screenshots/refresh.sh` run.
 3. `git diff docs/user/assets/` shows exactly which shots moved; review like any
    diff.
-4. Commit the regenerated images. `check.sh` is the optional pre-release tripwire.
+4. Commit the regenerated images and delete the drained entries. `check.sh` is
+   the optional pre-release tripwire.
 
-### The reshoot queue (for sessions that can't render)
-
-The cloud container ships a chromium (under `PLAYWRIGHT_BROWSERS_PATH`), so most
-GUI-changing sessions *can* run `refresh.sh` and should. When one can't — no
-browser, or a shot needing a fixture `ensure-fixtures.mjs` doesn't build — it
-instead records the affected shot id(s) in
-**`docs/user/screenshots-reshoot-queue.md`** — a tracked list of known-stale
-shots. `wiring-check.py` validates every queued id is a real manifest id, so the
-queue can't reference a renamed/deleted shot. A later browser-capable session
-**drains** it: run `refresh.sh`, commit the images, delete the drained rows.
+`wiring-check.py` validates every queued id is a real manifest id (or a slide
+group, `slides:<group>`), so the queue can't reference a renamed/deleted shot.
 CLAUDE.md → "Screenshot reshoots" points contributors here.
 
 ## Doc-embedding convention (locked 2026-06-07)

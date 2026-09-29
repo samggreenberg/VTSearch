@@ -833,10 +833,10 @@ classes, patterns, and copy style. The structural facts:
 - Themes (dark / light / high-viz / system) are token swaps driven by
   `ThemeService`; components should read tokens, not hardcode colors.
 
-If your change alters a GUI surface framed by a screenshot in the user docs,
-reshoot it (`scripts/screenshots/refresh.sh`) in the same change; queue the
-shot id in `docs/user/screenshots-reshoot-queue.md` only when a reshoot is not
-possible. The full rule is "Screenshot reshoots" in `CLAUDE.md`.
+If your change alters a GUI surface framed by a screenshot in the user docs
+or the slides, don't reshoot it: queue the shot in `docs/reshoot-queue/` and
+the release run re-renders it. The full rule is "Screenshot reshoots" in
+`CLAUDE.md`.
 
 ---
 

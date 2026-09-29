@@ -34,6 +34,13 @@ export interface AutopilotState {
   spanStatus: string;
   fracDiversity: number;
   /**
+   * The coverage level that turns the Span indicator green (the span payload's
+   * ``target``: the diversity goal, capped at the atlas's node count). The
+   * Diversity step paces its light against it (#4319); ``0`` until the first
+   * labeling status reports one.
+   */
+  spanTarget: number;
+  /**
    * True when autopilot started against a detector that already has labels
    * (e.g. trained on DatasetA, now continuing on DatasetB).  In retrain mode
    * every phase uses learned sort; the initial "good"/"bad" phases use
@@ -56,6 +63,7 @@ const INITIAL_STATE: AutopilotState = {
   stablePlateau: false,
   spanStatus: '',
   fracDiversity: 0,
+  spanTarget: 0,
   retrainMode: false,
 };
 
@@ -187,6 +195,7 @@ export class AutopilotStateService {
       stablePlateau: false,
       spanStatus: '',
       fracDiversity: 0,
+      spanTarget: 0,
       retrainMode,
     });
   }
@@ -207,6 +216,8 @@ export class AutopilotStateService {
         status.span['diversity_level'] != null
           ? (status.span['diversity_level'] as number)
           : current.fracDiversity,
+      spanTarget:
+        status.span['target'] != null ? (status.span['target'] as number) : current.spanTarget,
     });
   }
 
