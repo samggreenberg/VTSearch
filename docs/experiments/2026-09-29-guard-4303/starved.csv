@@ -1,0 +1,9 @@
+pool,arm,band,cells,starved,delta_vs_g3,se,n_paired
+5%,g3,all,720,0,0,0,720
+5%,g3,large,245,0,0,0,245
+5%,g3,medium,245,0,0,0,245
+5%,g3,small,230,0,0,0,230
+5%,g3b4g20d16,all,720,0,0,0,720
+5%,g3b4g20d16,large,245,0,0,0,245
+5%,g3b4g20d16,medium,245,0,0,0,245
+5%,g3b4g20d16,small,230,0,0,0,230

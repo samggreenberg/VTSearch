@@ -12,15 +12,16 @@ votes. The owner's ruling on #4267 (2026-09-29) moved the promise off that
 estimator and onto a **spot check** (below). The backend of the check landed
 with #4272: `vtscore.training.thresholds.spot_check` holds the rule, the line
 keeps the set the check ended on, `/api/precision-check` runs it, and the eval
-default arm runs the same check. The library also holds:
+default arm runs the same check. Its frontend, the check step and the likely
+range in the floor control and on the Stats chart, landed with #4273. The
+library also holds:
 - the estimator, `vtscore.training.thresholds.precision_floor_cut`, which is
   public API and stays, off the promise path (the Find Stats curve reads it);
 - one re-cut seam, `vtscore.state.core.recut_detector_threshold`;
 - the inverse that lets acquisition find its origin off any line,
   `FoldAnchoredCut.inclusion_for_threshold`.
 
-What follows is the design the remaining slices (the frontend, #4273, first)
-build on.
+What follows is the design the remaining slices build on.
 
 ## Design
 
@@ -137,13 +138,14 @@ build on.
 - **The default floor is 50%, and every detector has one** (owner,
   2026-09-28; `null` refused since #4269, which retired Inclusion as a user
   preference).
-- **The control offers five presets and no off switch** (owner, #4246 on
-  2026-09-28, with 10% added on 2026-09-29): 10/25/50/75/90%, symmetric about
-  the 50% default. The 10% preset is for a user willing to dig through a long
-  list. The API still takes any value in `[0.01, 1]`; the control shows a
-  stored non-preset as it is.
+- **The control offers three named presets and no off switch** (owner,
+  #4298 on 2026-09-29): **Lean: Complete / Centered / Correct**, for 10, 50
+  and 90%, symmetric about the 50% default. The control never shows the
+  number, since the check rarely delivers a floor exactly. The API still takes
+  any value in `[0.01, 1]`; the control snaps a stored non-preset to the
+  nearest preset.
   - Under the spot check, the presets cost at most 15 picks at 10% (3 rounds
-    of 5), 10 at 25% (2 rounds of 5), 5 at 50%, 11 at 75% and 29 at 90%.
+    of 5), 5 at 50% and 29 at 90%.
   - #4220 never priced the estimator at 10%; the spot check (#4272) measures
     that floor in its three rounds instead.
 - **What waits on the GRID, and what doesn't.**

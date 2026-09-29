@@ -35,6 +35,7 @@ from vtsearch.settings_models import (
     VALID_PANEL_PX,
     ServerSettings,
     UserSettings,
+    partition_docs_links,
 )
 from vtsearch.settings_store import UserSettingsStore, UserSyncState as _UserSyncState
 
@@ -116,6 +117,8 @@ if TYPE_CHECKING:
     def set_dataset_max_age_days(value: int | None) -> None: ...
     def get_support_email() -> str: ...
     def set_support_email(value: str) -> None: ...
+    def get_docs_links() -> list[dict[str, str]]: ...
+    def set_docs_links(value: list[dict[str, str]]) -> None: ...
     def get_semantic_only() -> bool: ...
     def set_semantic_only(value: bool) -> None: ...
     def get_hide_ingest_eta() -> bool: ...
@@ -619,6 +622,10 @@ def get_all() -> dict[str, Any]:
     result["autofind_detectors"] = get_autofind_detectors()
     result["autofind_exporter"] = get_autofind_exporter()
     result["autofind_exporter_field_values"] = get_autofind_exporter_field_values()
+    # The raw file value can hold entries the normalizer drops (a blank label,
+    # a ``javascript:`` URL); read through the accessor so only usable links
+    # ever reach the Help modal.
+    result["docs_links"] = get_docs_links()
     return result
 
 
@@ -1157,6 +1164,18 @@ def get_effective_support_email() -> str:
     "Email us" link opens a pre-addressed compose window.
     """
     return get_effective_override("support_email")
+
+
+def get_rejected_docs_links() -> list[Any]:
+    """Return the persisted ``docs_links`` entries that :func:`get_docs_links` drops.
+
+    The accessor quietly keeps only the usable links (see
+    :func:`~vtsearch.settings_models.partition_docs_links`), so an operator
+    whose link is missing from the Help modal would otherwise have nothing to
+    go on. ``app.py`` names each of these in the startup log instead.
+    """
+    raw = _read_value("docs_links")
+    return partition_docs_links(raw)[1] if isinstance(raw, list) else []
 
 
 def set_cli_semantic_only(value: bool | None) -> None:

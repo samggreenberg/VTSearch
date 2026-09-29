@@ -149,9 +149,19 @@
         @if (floorY !== null) {
           <line class="floor" [attr.x1]="axisLeft" [attr.y1]="floorY" [attr.x2]="axisRight" [attr.y2]="floorY" />
         }
-        <!-- the line (current cut); dashed when it is the unpromised default cut -->
+        <!-- the line (current cut): the last item of the set the floor keeps -->
         @if (cutX !== null) {
-          <line class="current" [class.unpromised]="lineUnpromised" [attr.x1]="cutX" [attr.y1]="axisTop" [attr.x2]="cutX" [attr.y2]="axisBottom" />
+          <line class="current" [attr.x1]="cutX" [attr.y1]="axisTop" [attr.x2]="cutX" [attr.y2]="axisBottom" />
+        }
+        <!-- the check's likely range for that set, standing at the line where it
+             meets the floor; a stale range differs only in its tooltip -->
+        @if (cutX !== null && lineRange; as r) {
+          <g class="likely-range" role="img" [attr.aria-label]="rangeTooltip">
+            <title>{{ rangeTooltip }}</title>
+            <rect class="range-bar" [attr.x]="cutX - 4" [attr.y]="yFor(r.hi)" width="8" [attr.height]="yFor(r.lo) - yFor(r.hi)" />
+            <line class="range-cap" [attr.x1]="cutX - 6" [attr.y1]="yFor(r.hi)" [attr.x2]="cutX + 6" [attr.y2]="yFor(r.hi)" />
+            <line class="range-cap" [attr.x1]="cutX - 6" [attr.y1]="yFor(r.lo)" [attr.x2]="cutX + 6" [attr.y2]="yFor(r.lo)" />
+          </g>
         }
         <!-- the two curves -->
         <polyline class="line-estimate" [attr.points]="estimatedPolyline" />
@@ -171,9 +181,12 @@
         <span class="legend-item"><span class="swatch swatch-estimate"></span>Estimated (at least)</span>
         <span class="legend-item"><span class="swatch swatch-verified"></span>Checked by you</span>
         @if (floorY !== null) {
-          <span class="legend-item"><span class="swatch swatch-floor"></span>Floor: at least {{ pct(stats.floor.min_precision) }}</span>
+          <span class="legend-item"><span class="swatch swatch-floor"></span>Floor: {{ floorLabel }}</span>
         }
-        <span class="legend-item"><span class="swatch swatch-current" [class.unpromised]="lineUnpromised"></span>{{ lineLegend }}</span>
+        <span class="legend-item"><span class="swatch swatch-current"></span>{{ lineLegend }}</span>
+        @if (lineRange) {
+          <span class="legend-item" [title]="rangeTooltip"><span class="swatch swatch-range"></span>{{ rangeLegend }}</span>
+        }
       </div>
       <p class="chart-readout" aria-live="polite">
         @if (hoverPoint; as hp) {
@@ -199,10 +212,11 @@
         @if (floor.status === 'unchecked') {
           <p class="chart-note" role="note">
             The line keeps the top {{ floor.count | number }}, unchecked: no check has measured how much of it is right.
+            <strong>{{ checkText }}</strong> beside the floor measures it.
           </p>
         } @else if (floor.status === 'short' && floor.range) {
-          <p class="chart-note" role="note">
-            A check of {{ floor.range.labelled }} random picks fell short of the {{ pct(floor.minPrecision) }} floor: the top {{ floor.count | number }} the line keeps is likely {{ rangeText(floor.range) }} right.
+          <p class="chart-note" role="note" [title]="rangeTooltip">
+            Aimed at {{ floorLabel }}: a check of {{ floor.range.labelled }} random picks found the top {{ floor.count | number }} the line keeps likely {{ rangeText(floor.range) }} right.
           </p>
         }
       }

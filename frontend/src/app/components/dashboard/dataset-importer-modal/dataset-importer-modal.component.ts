@@ -9,6 +9,7 @@ import { GenericFormPickerComponent } from './pickers/generic-form/generic-form-
 import { ServerFolderPickerComponent } from './pickers/server-folder/server-folder-picker.component';
 import { LocalFolderPickerComponent } from './pickers/local-folder/local-folder-picker.component';
 import { DemoPickerComponent } from './pickers/demo/demo-picker.component';
+import { ImportAdvancedComponent } from './import-advanced/import-advanced.component';
 import { ImportDefaultsService } from './pickers/shared/import-defaults.service';
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
@@ -325,6 +326,25 @@ export class DatasetImporterModalComponent implements OnInit {
    *  below the inner tab row. */
   get activePickerView(): string {
     return this.selectedImporter()?.picker_view || '';
+  }
+
+  /** The showing picker's "Advanced" block, whose toggle this modal renders at
+   *  the left end of the footer row (#4305): collapsed, it shares the Cancel /
+   *  Import line instead of taking a half-empty one at the foot of the form.
+   *  ``undefined`` before an importer is picked, when there is no footer. */
+  get activeImportAdvanced(): ImportAdvancedComponent | undefined {
+    if (!this.selectedImporter()) return undefined;
+    switch (this.activePickerView) {
+      case 'demo':
+        return this.demoPicker().importAdvanced();
+      case 'local_folder':
+      case 'local_files':
+        return this.localFolderPicker().importAdvanced();
+      case 'server_folder':
+        return this.serverFolderPicker().importAdvanced();
+      default:
+        return this.genericFormPicker().importAdvanced();
+    }
   }
 
   /** Dispatch importer selection to the picker view matching its

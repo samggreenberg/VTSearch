@@ -1,23 +1,22 @@
 <div class="precision-floor">
   <div class="floor-picker">
-    <!-- "At least [X] right" reads as one phrase, so it sits tighter than the
+    <!-- "Lean: [Centered]" reads as one phrase, so it sits tighter than the
          controls projected after it. -->
     <span class="floor-phrase">
-      <label class="floor-label" for="precision-floor-select" title="The share of what the detector returns that should be right">
-        At least
+      <label class="floor-label" for="precision-floor-select" title="Toward returning everything, or only what is right">
+        Lean:
       </label>
       <select
         id="precision-floor-select"
         class="form-select form-select--compact"
         aria-label="Precision floor"
-        title="How much of what the detector returns should be right"
+        title="Complete returns the most, Correct the fewest wrong ones, Centered sits between them"
         (change)="onChange($event)"
       >
-        @for (opt of options(); track opt.value) {
+        @for (opt of options; track opt.value) {
           <option [value]="opt.value" [selected]="opt.value === selected()">{{ opt.label }}</option>
         }
       </select>
-      <span class="floor-label">right</span>
       @if (!summary()) {
         <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
       }
@@ -26,9 +25,23 @@
     <ng-content select="[floorActions]" />
   </div>
   @if (summary(); as text) {
+    <!-- The dot rides inside the note, so a narrow panel wraps the check
+         button below the note rather than squeezing the note beside it. -->
     <p class="floor-state" [attr.data-status]="dot()">
-      <span class="indicator-dot" aria-hidden="true"></span>
-      <span class="floor-state-text" role="status" [title]="explanation() ?? ''">{{ text }}</span>
+      <span class="floor-state-text" role="status" [title]="explanation() ?? ''"
+        ><span class="indicator-dot" aria-hidden="true"></span>{{ text }}</span
+      >
+      @if (checkText(); as label) {
+        <button
+          type="button"
+          class="btn btn--toolbar floor-check-btn"
+          [disabled]="!checkable()"
+          [title]="checkHint()"
+          (click)="check.emit()"
+        >
+          {{ label }}
+        </button>
+      }
       <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
     </p>
   }

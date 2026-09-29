@@ -33,6 +33,7 @@
       (sortModeChange)="onSortModeChange($event)"
       (selectModeChange)="onSelectModeChange($event)"
       (minPrecisionChange)="onMinPrecisionChange($event)"
+      (floorCheck)="onFloorCheck()"
       (textSort)="onTextSort($event)"
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
@@ -77,6 +78,7 @@
       [exhausted]="centreExhausted()"
       [exhaustedHeading]="exhaustedHeading()"
       [exhaustedDetail]="exhaustedDetail()"
+      [advancePending]="advancePending()"
       (mediaVoted)="onMediaVoted($event)"
       (navigateRequested)="onNavigate($event)"
     />
@@ -127,6 +129,10 @@
     (confirmed)="onCropConfirmed($event)"
     (cancelled)="onCropCancelled()"
   />
+}
+
+@if (showFloorCheck()) {
+  <vt-floor-check-modal (closed)="onFloorCheckClosed()" (voted)="onFloorCheckVoted($event)" />
 }
 
 @if (showResortPrompt()) {

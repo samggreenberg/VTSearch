@@ -1,0 +1,95 @@
+<vt-modal [open]="true" [title]="title()" (closed)="close()">
+  <div class="floor-check">
+    @switch (phase()) {
+      @case ('starting') {
+        <p class="check-note" role="status">Drawing picks…</p>
+      }
+      @case ('error') {
+        <p class="error-text" role="alert">{{ error() }}</p>
+      }
+      @case ('done') {
+        <div class="check-result" role="status" [attr.data-status]="floor()?.status">
+          <p class="check-result-headline">
+            <span class="indicator-dot" aria-hidden="true"></span>
+            {{ resultHeadline() }}
+          </p>
+          <p class="check-note">{{ resultDetail() }}</p>
+        </div>
+      }
+      @default {
+        @if (shorter()) {
+          <p class="check-shorter" role="status">Not there yet: checking a shorter list.</p>
+        }
+        <p class="check-brief">{{ brief() }} Is each one a match?</p>
+
+        <!-- The picks are a check, not the ranking: they come in the order they
+             were drawn, which is random, with no rank and no score. The dots
+             only count what is left. -->
+        <div class="pick-dots" role="group" aria-label="This round's picks, in random order">
+          @for (id of picks(); track id; let i = $index) {
+            <button
+              type="button"
+              class="pick-dot"
+              [class.current]="i === index()"
+              [attr.data-vote]="votes().get(id) ?? null"
+              [attr.aria-current]="i === index() ? 'true' : null"
+              [attr.aria-label]="'Pick ' + (i + 1) + ' of ' + picks().length + (votes().get(id) ? ': ' + votes().get(id) : '')"
+              [disabled]="phase() === 'sending'"
+              (click)="show(i)"
+            ></button>
+          }
+        </div>
+
+        <div class="pick-stage">
+          @if (currentMedia(); as media) {
+            @switch (mediaType()) {
+              @case ('audio') {
+                <vt-audio-player [media]="media"></vt-audio-player>
+              }
+              @case ('image') {
+                <vt-image-viewer [media]="media"></vt-image-viewer>
+              }
+              @case ('video') {
+                <vt-video-player [media]="media"></vt-video-player>
+              }
+              @case ('text') {
+                <vt-text-viewer [media]="media"></vt-text-viewer>
+              }
+              @default {
+                <vt-document-viewer [media]="media"></vt-document-viewer>
+              }
+            }
+          } @else {
+            <p class="check-note">Loading the pick…</p>
+          }
+        </div>
+
+        <vt-voting-overlay
+          [isGood]="currentVote() === 'good'"
+          [isBad]="currentVote() === 'bad'"
+          [disabled]="phase() === 'sending'"
+          [unavailable]="phase() === 'sending'"
+          (voted)="vote($event)"
+        ></vt-voting-overlay>
+        <p class="check-keys">&rarr; Good · &larr; Bad · &darr; back a pick. The last vote sends the round.</p>
+
+        @if (error()) {
+          <p class="error-text" role="alert">
+            {{ error() }}
+            <button type="button" class="btn btn--secondary btn--sm" (click)="retry()">Send again</button>
+          </p>
+        }
+      }
+    }
+  </div>
+
+  <div modal-footer>
+    @if (phase() === 'done' || phase() === 'error') {
+      <button class="btn btn--primary" (click)="close()">Done</button>
+    } @else {
+      <button class="btn btn--secondary" (click)="close()" title="Stop the check: the line and its state stay as they were">
+        Cancel
+      </button>
+    }
+  </div>
+</vt-modal>

@@ -12,7 +12,7 @@ import type { FindEvidenceCoverageResponse } from '../../../generated/api-client
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { floorPercent, isUnpromised, lineFloorFrom, rangePercent } from '../../../utils/line-floor';
+import { checkLabel, floorName, lineFloorFrom, rangePercent, rangeTitle, type LikelyRange } from '../../../utils/line-floor';
 
 /** A tick on the precision chart's log-scale x axis. */
 interface XTick {
@@ -34,7 +34,9 @@ function compactCount(n: number): string {
  * a dependency-free inline SVG line chart: the estimated (lower-bound)
  * precision of the top N and the verified precision of the checked items in
  * it, on a log-scale count axis with the line (the current cut) marked, and
- * the precision floor it was cut at drawn across it (#4246).
+ * the precision floor it was cut at drawn across it (#4246). Where the line
+ * meets the floor, the spot check's likely range for the set the line keeps
+ * stands as a bar (#4273): the check's picks alone, never the estimate.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -284,9 +286,10 @@ export class FindStatsModalComponent implements OnInit {
     return p == null ? null : this.yFor(p);
   }
 
-  /** True when the line is not a confirmed set: unchecked, or a check that fell short (#4247, #4272). */
-  get lineUnpromised(): boolean {
-    return isUnpromised(lineFloorFrom(this.stats()?.floor));
+  /** The floor's name ("Correct"), never its number (#4298); null before the stats arrive. */
+  get floorLabel(): string | null {
+    const p = this.stats()?.floor.min_precision;
+    return p == null ? null : floorName(p);
   }
 
   /** The floor's state as the sort state would hold it; null before the stats arrive. */
@@ -295,19 +298,44 @@ export class FindStatsModalComponent implements OnInit {
   }
 
   /** "11–73%" for a range, for the template. */
-  rangeText(range: { lo: number; hi: number }): string {
-    return rangePercent({ ...range, labelled: 0, right: 0, stale: false });
+  rangeText(range: Pick<LikelyRange, 'lo' | 'hi'>): string {
+    return rangePercent(range);
+  }
+
+  /** The check's likely range for the set the line keeps; null while unchecked. */
+  get lineRange(): LikelyRange | null {
+    return this.lineFloor?.range ?? null;
+  }
+
+  /**
+   * The range's tooltip, on the bar and its legend entry. A stale range is
+   * drawn exactly as a current one: this is the only place it differs.
+   */
+  get rangeTooltip(): string {
+    const r = this.lineRange;
+    return r ? rangeTitle(r) : '';
+  }
+
+  /** The range's legend entry: "Likely 11–73% right (checked 5)". */
+  get rangeLegend(): string {
+    const r = this.lineRange;
+    return r ? `Likely ${rangePercent(r)} right (checked ${r.labelled})` : '';
+  }
+
+  /** What the floor control's check affordance reads, for the unchecked note. */
+  get checkText(): string {
+    return checkLabel(this.lineFloor) ?? 'Check';
   }
 
   /** The line's legend entry: whether the check confirmed the floor, fell short of it, or never ran. */
   get lineLegend(): string {
     const floor = this.lineFloor;
     if (!floor) return 'Line';
-    const target = floorPercent(floor.minPrecision);
-    const range = floor.range ? `, likely ${rangePercent(floor.range)}` : '';
-    if (floor.status === 'confirmed') return `Line: keeps the ${target} floor${range}`;
-    if (floor.status === 'short') return `Line: fell short of ${target}${range}`;
-    return `Line: the top ${floor.count.toLocaleString()}, unchecked`;
+    const target = floorName(floor.minPrecision);
+    const kept = floor.count.toLocaleString();
+    if (floor.status === 'confirmed') return `Line: keeps the ${target} floor (${kept} kept)`;
+    if (floor.status === 'short') return `Line: the top ${kept}, aimed at ${target}`;
+    return `Line: the top ${kept}, unchecked`;
   }
 
   /** X position of the line's marker, or null when nothing clears it. */

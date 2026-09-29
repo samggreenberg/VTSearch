@@ -2,19 +2,23 @@ import type { FloorState } from '../generated/api-client/models/floor-state';
 import { SAMPLE_RANGE, lineFloor } from '../testing/line-floor';
 import {
   FLOOR_PRESETS,
+  checkLabel,
+  checkTitle,
   floorExplanation,
-  floorPercent,
+  floorName,
   floorSummary,
-  isUnpromised,
+  isFloorPreset,
   lineFloorFrom,
+  nearestFloorPreset,
   rangePercent,
-  unpromisedReason,
+  rangeTitle,
+  staleNote,
   type FloorStatus,
 } from './line-floor';
 
-describe('line-floor (#4247, #4272)', () => {
+describe('line-floor (#4272, #4273)', () => {
   describe('lineFloorFrom', () => {
-    it('reads the wire object', () => {
+    it('reads the wire object, schedule included', () => {
       const wire: FloorState = {
         min_precision: 0.25,
         status: 'confirmed',
@@ -27,12 +31,26 @@ describe('line-floor (#4247, #4272)', () => {
         status: 'confirmed',
         count: 64,
         range: { lo: 0.55, hi: 1, labelled: 5, right: 5, stale: true },
+        schedule: { candidate: 64, rounds: 2, picks: 5 },
       });
     });
 
     it('reads an unchecked line with no range', () => {
       const wire = { min_precision: 0.1, status: 'unchecked', count: 128, range: null, schedule: { candidate: 128, rounds: 3, picks: 5 } };
-      expect(lineFloorFrom(wire as unknown as FloorState)).toEqual({ minPrecision: 0.1, status: 'unchecked', count: 128, range: null });
+      expect(lineFloorFrom(wire as unknown as FloorState)).toEqual({
+        minPrecision: 0.1,
+        status: 'unchecked',
+        count: 128,
+        range: null,
+        schedule: { candidate: 128, rounds: 3, picks: 5 },
+      });
+    });
+
+    it('reads a range with no stale flag as current', () => {
+      const wire = { min_precision: 0.5, status: 'short', count: 32, range: { lo: 0.11, hi: 0.73, labelled: 5, right: 2 }, schedule: null };
+      const floor = lineFloorFrom(wire as unknown as FloorState)!;
+      expect(floor.range!.stale).toBe(false);
+      expect(floor.schedule).toBeNull();
     });
 
     it('is null for a response with no detector behind it', () => {
@@ -46,87 +64,142 @@ describe('line-floor (#4247, #4272)', () => {
     });
   });
 
-  describe('isUnpromised', () => {
-    it.each<[FloorStatus, boolean]>([
-      ['confirmed', false],
-      ['unchecked', true],
-      ['short', true],
-    ])('%s -> %s', (status, expected) => {
-      expect(isUnpromised(lineFloor(status))).toBe(expected);
+  describe('the floor presets (#4298)', () => {
+    it('offers three floors, named, symmetric about the Centered default', () => {
+      expect(FLOOR_PRESETS.map((p) => p.value)).toEqual([0.1, 0.5, 0.9]);
+      expect(FLOOR_PRESETS.map((p) => p.name)).toEqual(['Complete', 'Centered', 'Correct']);
     });
 
-    it('is false with no floor object at all', () => {
-      expect(isUnpromised(null)).toBe(false);
-    });
-  });
-
-  describe('unpromisedReason', () => {
-    it('says an unchecked line has not been measured, and how to', () => {
-      const why = unpromisedReason(lineFloor('unchecked', { count: 128 }));
-      expect(why).toContain('Unchecked');
-      expect(why).toContain('top 128 the line keeps');
-      expect(why).toContain('Run a check');
+    it('knows a preset from a floor off the list', () => {
+      expect(FLOOR_PRESETS.every((p) => isFloorPreset(p.value))).toBe(true);
+      expect(isFloorPreset(0.25)).toBe(false);
+      expect(isFloorPreset(0.75)).toBe(false);
     });
 
-    it('says how close a short check got, naming no cause', () => {
-      const why = unpromisedReason(lineFloor('short'))!;
-      expect(why).toContain('Aimed at 50%');
-      expect(why).toContain('5 random picks');
-      expect(why).toContain('likely 11–73% right');
-      expect(why).not.toMatch(/sparse|weak|evidence/);
+    it.each<[number, number]>([
+      [0.01, 0.1],
+      [0.25, 0.1],
+      [0.29, 0.1],
+      [0.31, 0.5],
+      [0.6, 0.5],
+      [0.75, 0.9],
+      [1, 0.9],
+    ])('snaps %s to the nearest preset, %s', (stored, snapped) => {
+      expect(nearestFloorPreset(stored).value).toBe(snapped);
     });
 
-    it('notes a stale range in the tooltip only', () => {
-      const why = unpromisedReason(lineFloor('short', { range: { ...SAMPLE_RANGE, stale: true } }))!;
-      expect(why).toContain('Measured before your later votes');
-      expect(floorSummary(lineFloor('short', { range: { ...SAMPLE_RANGE, stale: true } }))).toBe(
-        floorSummary(lineFloor('short')),
-      );
-    });
-
-    it('has nothing to say about a confirmed line or no verdict', () => {
-      expect(unpromisedReason(lineFloor('confirmed'))).toBeNull();
-      expect(unpromisedReason(null)).toBeNull();
+    it('names a floor off the list after the preset it snaps to', () => {
+      expect(floorName(0.5)).toBe('Centered');
+      expect(floorName(0.25)).toBe('Complete');
+      expect(floorName(0.75)).toBe('Correct');
     });
   });
 
   describe('the floor control copy (#4246, #4273)', () => {
-    it('offers five floors, symmetric about the 50% default', () => {
-      expect(FLOOR_PRESETS).toEqual([0.1, 0.25, 0.5, 0.75, 0.9]);
-      expect(FLOOR_PRESETS.map(floorPercent)).toEqual(['10%', '25%', '50%', '75%', '90%']);
+    it("shows a check's range as a number", () => {
       expect(rangePercent(SAMPLE_RANGE)).toBe('11–73%');
     });
 
     it.each<[FloorStatus, string]>([
-      ['confirmed', 'At least 50% right · likely 55–100% (checked 5) · 32 kept'],
-      ['short', 'Aimed at 50%: likely 11–73% right (checked 5) · top 32 kept'],
-      ['unchecked', 'Top 32 kept, unchecked · aiming at 50%'],
+      ['confirmed', 'Confirmed · likely 55–100% right (checked 5) · 32 kept'],
+      ['short', 'Aimed at Centered: likely 11–73% right (checked 5) · top 32 kept'],
+      ['unchecked', 'Top 32 kept, unchecked · aiming at Centered'],
     ])('summarises %s', (status, expected) => {
       expect(floorSummary(lineFloor(status))).toBe(expected);
     });
 
+    it.each<FloorStatus>(['confirmed', 'short', 'unchecked'])('names the floor, never numbers it (%s, #4298)', (status) => {
+      for (const minPrecision of [0.1, 0.25, 0.5, 0.9]) {
+        const floor = lineFloor(status, { minPrecision });
+        const target = `${Math.round(minPrecision * 100)}%`;
+        expect(floorSummary(floor)).not.toContain(target);
+        expect(floorExplanation(floor)).not.toContain(target);
+      }
+    });
+
     it('reads the count from the result, never from the preset', () => {
       expect(floorSummary(lineFloor('confirmed', { minPrecision: 0.1, count: 64 }))).toContain('64 kept');
+      expect(floorSummary(lineFloor('confirmed', { minPrecision: 0.1, count: 128 }))).toContain('128 kept');
       expect(floorSummary(lineFloor('unchecked', { minPrecision: 0.1, count: 128 }))).toBe(
-        'Top 128 kept, unchecked · aiming at 10%',
+        'Top 128 kept, unchecked · aiming at Complete',
       );
     });
 
-    it('has nothing to summarise or explain without a verdict', () => {
+    it('carries the range wide as the check left it: a five-pick range at 50% is 0.62 wide', () => {
+      const text = floorSummary(lineFloor('short'))!;
+      expect(text).toContain('11–73%');
+      expect(text).toContain('(checked 5)');
+    });
+
+    it('has nothing to summarise, explain or check without a verdict', () => {
       expect(floorSummary(null)).toBeNull();
       expect(floorExplanation(null)).toBeNull();
+      expect(checkLabel(null)).toBeNull();
     });
 
     it('explains a confirmed line by its check, with the range from the picks alone', () => {
       const why = floorExplanation(lineFloor('confirmed'))!;
       expect(why).toContain('5 random picks from the 32 items the line keeps found 5 right');
-      expect(why).toContain('likely 55–100% of them are: at least 50%');
+      expect(why).toContain('likely 55–100% of them are: enough for Centered');
       expect(why).not.toMatch(/estimate/i);
     });
 
-    it('explains an unpromised line with its reason', () => {
-      expect(floorExplanation(lineFloor('short'))).toBe(unpromisedReason(lineFloor('short')));
-      expect(floorExplanation(lineFloor('unchecked'))).toBe(unpromisedReason(lineFloor('unchecked')));
+    it('explains an unchecked line as unmeasured, and what a check costs', () => {
+      const why = floorExplanation(lineFloor('unchecked', { count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }))!;
+      expect(why).toContain('Unchecked: the line keeps the top 128');
+      expect(why).toContain('5 random picks a round, in up to 3 rounds');
+      expect(why).not.toMatch(/likely/);
+    });
+
+    it('explains a short check by how close it got, naming no cause', () => {
+      const why = floorExplanation(lineFloor('short'))!;
+      expect(why).toContain('Aimed at Centered');
+      expect(why).toContain('5 random picks from the top 32');
+      expect(why).toContain('likely 11–73% of them are, short of Centered');
+      // The app can't tell a sparse corpus from a weak model (owner, 2026-09-29).
+      expect(why).not.toMatch(/sparse|weak|evidence|too few|model/i);
+    });
+
+    it.each<FloorStatus>(['short', 'confirmed'])('says a stale %s range is stale in the tooltip, and only there', (status) => {
+      const fresh = lineFloor(status);
+      const stale = lineFloor(status, { range: { ...fresh.range!, stale: true } });
+      expect(floorSummary(stale)).toBe(floorSummary(fresh));
+      expect(floorExplanation(stale)).toBe(floorExplanation(fresh) + staleNote(stale.range));
+      expect(floorExplanation(stale)).toContain('Measured before your later votes');
+      expect(floorExplanation(fresh)).not.toContain('later votes');
+    });
+  });
+
+  describe('the check affordance (#4273)', () => {
+    it.each<[number, number, string]>([
+      [0.1, 5, 'Check 5 picks'],
+      [0.5, 5, 'Check 5 picks'],
+      [0.9, 29, 'Check 29 picks'],
+    ])('at %s reads "%s picks" off the schedule', (x, picks, label) => {
+      const floor = lineFloor('unchecked', { minPrecision: x, schedule: { candidate: 32, rounds: 1, picks } });
+      expect(checkLabel(floor)).toBe(label);
+    });
+
+    it('is offered in every state: after a finished check it runs a fresh one', () => {
+      for (const status of ['unchecked', 'confirmed', 'short'] as const) {
+        expect(checkLabel(lineFloor(status))).toBe('Check 5 picks');
+      }
+    });
+
+    it('says what a check does and that its votes are votes', () => {
+      const title = checkTitle(lineFloor('unchecked', { schedule: { candidate: 64, rounds: 2, picks: 5 } }));
+      expect(title).toContain('5 random picks a round, in up to 2 rounds');
+      expect(title).toContain('ordinary votes');
+    });
+  });
+
+  describe('rangeTitle', () => {
+    it('names the picks the range comes from', () => {
+      expect(rangeTitle(SAMPLE_RANGE)).toBe('Likely 11–73% right, from 5 random picks (2 right).');
+    });
+
+    it('adds the stale sentence for a stale range', () => {
+      expect(rangeTitle({ ...SAMPLE_RANGE, stale: true })).toContain('Measured before your later votes');
     });
   });
 });

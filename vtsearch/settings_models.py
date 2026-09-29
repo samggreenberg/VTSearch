@@ -23,6 +23,7 @@ loss.
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
@@ -194,6 +195,50 @@ def _normalize_signpost_vocab(v: Any) -> Any:
     return out
 
 
+def _docs_link_url_ok(url: str) -> bool:
+    """True for an absolute ``http``/``https`` URL or a root-relative ``/path``.
+
+    Anything else (``javascript:``, ``data:``, a protocol-relative ``//host``,
+    a bare relative path whose meaning would depend on where the SPA is
+    mounted) is refused, since the value ends up as a link's ``href``.
+    """
+    parts = urlsplit(url)
+    if parts.scheme:
+        return parts.scheme in ("http", "https") and bool(parts.netloc)
+    return not parts.netloc and url.startswith("/")
+
+
+def partition_docs_links(entries: list[Any]) -> tuple[list[dict[str, str]], list[Any]]:
+    """Split a raw ``docs_links`` list into ``(usable links, rejected entries)``.
+
+    An entry is usable when it is an object whose ``label`` and ``url`` are
+    non-blank strings and whose ``url`` passes :func:`_docs_link_url_ok`.
+    Usable entries come back as ``{"label": ..., "url": ...}`` with
+    surrounding whitespace stripped and any other keys dropped, in the order
+    the operator wrote them (the order is the Help modal's order).
+    """
+    kept: list[dict[str, str]] = []
+    rejected: list[Any] = []
+    for entry in entries:
+        label = entry.get("label") if isinstance(entry, dict) else None
+        url = entry.get("url") if isinstance(entry, dict) else None
+        if isinstance(label, str) and isinstance(url, str) and label.strip() and _docs_link_url_ok(url.strip()):
+            kept.append({"label": label.strip(), "url": url.strip()})
+        else:
+            rejected.append(entry)
+    return kept, rejected
+
+
+def _normalize_docs_links(v: Any) -> Any:
+    """Keep only the usable entries of a ``docs_links`` list (see :func:`partition_docs_links`).
+
+    Non-list input is passed through untouched for Pydantic to reject.
+    """
+    if not isinstance(v, list):
+        return v
+    return partition_docs_links(v)[0]
+
+
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
@@ -251,6 +296,17 @@ class ServerSettings(BaseModel):
     # the ``mailto:`` link. See
     # :func:`vtsearch.settings.get_effective_support_email`.
     support_email: str = DEFAULT_SUPPORT_EMAIL
+
+    # This deployment's own documentation, listed in the Help modal beside the
+    # built-in user guide: an ordered list of ``{"label": ..., "url": ...}``
+    # objects, each opened in a new browser tab. It is how an operator who
+    # adds plugins or extensions points users at the docs for them. Shared
+    # across all users and read-only over the API; set it by editing this key
+    # in the settings file. Normalized on read and write (see
+    # :func:`partition_docs_links`): an entry without a label, or whose URL is
+    # not an absolute ``http(s)`` URL or a root-relative ``/path``, is dropped,
+    # and the startup log names each one it drops.
+    docs_links: Annotated[list[dict[str, str]], BeforeValidator(_normalize_docs_links)] = Field(default_factory=list)
 
     # Lock this deployment to **Semantic** embedders only.  The Patch Semantic
     # and Structural embedder types are still prototypes; an operator running a

@@ -16,6 +16,12 @@
 # its 3rd (92 of 720 cells at 0.44% then found no positive at all, against 18).
 # <world>-g3g20d16 keeps today's walk as a floor: `g3@top,g20+dry1/16@top,b4@mid`
 # walks to 3 Goods exactly as the app does, then on toward 20 unless it runs dry.
+# **Since #4288 the app default IS `g3@top,b4@mid,g20+dry1/16@top`**, so an arm
+# named <world>-g3 (schedule left unset) now runs the new opening, not the old
+# one. #4303's arms name both sides plainly: <world>-old spells the pre-#4288
+# `g3@top,b4@mid` out; <world>-new leaves the default. World h<frac> thins the
+# haystack to that prevalence (the 5% scenario, CALIB_HAYSTACK_PREVALENCE).
+#
 # <world>-g3b4g20d16 runs today's two rounds first, then the walk:
 # `g3@top,b4@mid,g20+dry1/16@top` (#4282: does the Bad round's early negatives
 # remove the long walk's early-session cost?).
@@ -70,8 +76,23 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
-arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>]; see the header
+arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>], or <world>-old / <world>-new; see the header
   local world="${1%%-*}" g="${1#*-g}" dry="" first=""
+  unset CALIB_HAYSTACK_PREVALENCE
+  if [[ "${1##*-}" == "old" || "${1##*-}" == "new" ]]; then
+    # #4303: the openings either side of #4288. "new" is the app default (unset);
+    # "old" spells the pre-#4288 opening out, since the default no longer is it.
+    unset CALIB_STARTUP_SCHEDULE CALIB_TARGET_PREVALENCE
+    DIVERGES=""
+    if [[ "${1##*-}" == "old" ]]; then
+      export CALIB_STARTUP_SCHEDULE="g3@top,b4@mid"
+      DIVERGES="startup_schedule"
+    fi
+    world_env "$world"
+    export CALIB_EXP="$BASE/$1" CALIB_RESULTS="$BASE/$1/results" CALIB_JOB_NAME="tg4222-$1"
+    mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
+    return
+  fi
   if [[ "$g" == *d* ]]; then dry="+dry1/${g##*d}"; g="${g%%d*}"; fi
   if [[ "$g" == *b*g* ]]; then  # g<M>b<B>g<G>: today's two rounds first, then the walk
     first="g${g%%b*}@top,b$(sed -E 's/^[0-9]+b([0-9]+)g.*/\1/' <<<"$g")@mid,"; g="${g##*g}"
@@ -84,13 +105,18 @@ arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>]; see the header
     export CALIB_STARTUP_SCHEDULE="${first}g${g}${dry}@top${tail}"
     DIVERGES="startup_schedule"
   fi
-  case "$world" in
-    natural) ;;
-    p*) export CALIB_TARGET_PREVALENCE="${world#p}"; DIVERGES="${DIVERGES:+$DIVERGES,}target_prevalence" ;;
-    *) echo "unknown world '$world'" >&2; exit 2 ;;
-  esac
+  world_env "$world"
   export CALIB_EXP="$BASE/$1" CALIB_RESULTS="$BASE/$1/results" CALIB_JOB_NAME="tg4222-$1"
   mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
+}
+
+world_env() {  # natural (0.44%), p<frac> (positives thinned), h<frac> (haystack thinned, #4303)
+  case "$1" in
+    natural) ;;
+    p*) export CALIB_TARGET_PREVALENCE="${1#p}"; DIVERGES="${DIVERGES:+$DIVERGES,}target_prevalence" ;;
+    h*) export CALIB_HAYSTACK_PREVALENCE="${1#h}"; DIVERGES="${DIVERGES:+$DIVERGES,}haystack_prevalence" ;;
+    *) echo "unknown world '$1'" >&2; exit 2 ;;
+  esac
 }
 
 all_arms() { for w in $WORLDS; do for g in $GOODS; do echo "$w-g$g"; done; done; }

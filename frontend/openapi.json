@@ -279,6 +279,13 @@
             "readOnly": true,
             "type": "string"
           },
+          "docs_links": {
+            "items": {
+              "$ref": "#/components/schemas/DocsLink"
+            },
+            "readOnly": true,
+            "type": "array"
+          },
           "effective_solo_embedder_per_media_type": {
             "additionalProperties": {
               "type": "string"
@@ -3019,6 +3026,22 @@
           "depth",
           "diversity_level",
           "num_labels"
+        ],
+        "type": "object"
+      },
+      "DocsLink": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
         ],
         "type": "object"
       },

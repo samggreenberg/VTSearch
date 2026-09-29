@@ -9,9 +9,17 @@ const TRAIL_MAX = 50;
  *
  * This is what the ``↓`` shortcut walks (#4032): "wait, go back to the one I
  * was just at", either to change the vote or just to look again.  ``↑`` is the
- * way forward, but it is *not* the inverse walk — it re-enters the queue at
- * whatever the host's advance rule picks next, which is what the user means by
- * "never mind, back to work".  So only the backward direction needs history.
+ * way forward, but it is *not* the inverse walk — one press ends the walk,
+ * which is what the user means by "never mind, back to work".
+ *
+ * Back to work means back to the item they left (#4306), not to whatever the
+ * host's advance rule would pick now.  The two often differ.  In Train a vote
+ * advances off the ranking it was cast against, and the learned re-sort that
+ * vote schedules lands a moment later without moving the selection, so the
+ * item on screen need not be the new ranking's pick; in Find every advance
+ * flips which side of the cutoff it serves.  Re-running the advance on ``↑``
+ * would swap the item for one the user has never seen, so the walk remembers
+ * where it started ({@link origin}) and ``↑`` returns there.
  *
  * Deliberately separate from {@link VoteStateService}'s undo stack even though
  * both are fed by the same clicks.  The undo stack is a stack of *reversible
@@ -38,6 +46,13 @@ export class VoteHistoryService {
    */
   private cursor: number | null = null;
 
+  /**
+   * Where the user was standing when the walk in progress began, or ``null``
+   * when no walk is in progress or it began with nothing on screen.  This is
+   * what {@link stepForward} returns them to.
+   */
+  private origin: number | null = null;
+
   /** Note that the user just voted on (or un-voted) *mediaId*. */
   record(mediaId: number): void {
     const at = this.trail.indexOf(mediaId);
@@ -45,14 +60,15 @@ export class VoteHistoryService {
     this.trail.push(mediaId);
     if (this.trail.length > TRAIL_MAX) this.trail.shift();
     // A fresh vote is a new "here": the next ↓ starts from the newest end
-    // again rather than resuming the walk that led to this item.
-    this.cursor = null;
+    // again rather than resuming the walk that led to this item, and ↑ takes
+    // the host's advance, since the vote changed what it should be.
+    this.endWalk();
   }
 
   /** Drop the trail (dataset/detector switch). */
   clear(): void {
     this.trail = [];
-    this.cursor = null;
+    this.endWalk();
   }
 
   /** The trail, oldest first.  Read-only; for tests and debugging. */
@@ -69,14 +85,49 @@ export class VoteHistoryService {
    * a re-sort selecting for them — means the walk they were on is over, and
    * resuming it from wherever it had got to would jump somewhere they have no
    * reason to expect.
+   *
+   * A walk that (re)starts remembers *selectedId* as its origin, for
+   * {@link stepForward}.  Pass ``null`` when nothing is on screen (a "nothing
+   * left" pane standing in for the viewer): that is where ``↑`` should return
+   * the user, even though the selection still names the last item shown.
    */
   stepBack(selectedId: number | null): number | null {
-    if (this.cursor === null || this.trail[this.cursor] !== selectedId) {
-      this.cursor = this.trail.length;
+    let cursor = this.walking(selectedId) ? this.cursor : null;
+    if (cursor === null) {
+      if (this.trail.length === 0) return null;
+      cursor = this.trail.length;
+      this.origin = selectedId;
     }
-    const next = this.cursor - 1;
-    if (next < 0) return null;
-    this.cursor = next;
-    return this.trail[next];
+    // Nothing older: stay put rather than wrap, keeping the walk (and its
+    // origin) alive for the ↑ that follows.
+    if (cursor === 0) return null;
+    this.cursor = cursor - 1;
+    return this.trail[this.cursor];
+  }
+
+  /**
+   * End the walk, returning the item it started from — or ``null`` when the
+   * host should take its own forward step instead.
+   *
+   * That is the case whenever the user is no longer standing where the last
+   * {@link stepBack} left them (the same test ``stepBack`` makes, so the two
+   * agree on whether a walk is in progress), when no walk was ever begun, and
+   * when the walk began with nothing on screen.
+   */
+  stepForward(selectedId: number | null): number | null {
+    const back = this.walking(selectedId) ? this.origin : null;
+    this.endWalk();
+    return back;
+  }
+
+  /** Whether *selectedId* is exactly where the previous {@link stepBack} put
+   *  the user, i.e. a walk is in progress and nothing has moved them off it. */
+  private walking(selectedId: number | null): boolean {
+    return this.cursor !== null && this.trail[this.cursor] === selectedId;
+  }
+
+  private endWalk(): void {
+    this.cursor = null;
+    this.origin = null;
   }
 }

@@ -17,6 +17,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Check the line from the floor control, and see how close it got** (issue
+  #4273, the app half of #4272). Beside the precision floor's note, **Check 5
+  picks** (29 at Correct) opens the spot check: a random pick at a time
+  from the set the line keeps, in the order it was drawn, with no rank or
+  score. Vote each one with → / ← or the Good / Bad buttons (↓ goes back to
+  change one); the last vote sends the round. A round that falls short says
+  *Not there yet: checking a shorter list* and draws a fresh one, and the
+  check ends on the result. The note then reads *Confirmed · likely 55–100%
+  right (checked 5) · 32 kept*, or *Aimed at Centered: likely 19–92% right
+  (checked 5) · top 32 kept*, naming no cause. The Find **Stats** chart stands
+  the same likely range at the line where it meets the floor. A range that
+  later votes have left stale looks the same everywhere; only its tooltip says
+  it was measured before them. The threshold line in the list and on the
+  minimap is no longer dashed or marked *unpromised*: it keeps a set in every
+  state. Cancelling a check leaves the floor as it was. A Find pass that
+  reuses the detector's cached head (re-entering Find, or Find straight after
+  training) now draws the floor's set too, rather than the head's old score
+  cut, and can be checked.
 - **A spot check, not an estimate, decides a detector's line and says how
   close it got** (issue #4272, the backend of #4267; the check's step in the
   app is #4273). Under a precision floor the line now always keeps a set: the
@@ -43,8 +61,25 @@ not list every commit. Use `git log` for the full history.
   set and say so (the CLI's `detector_unpromised` event is now
   `detector_unchecked`, with the set's size).
 
+- **Tighter New Detector and Add Dataset dialogs** (#4305). The collapsed
+  **Advanced ▾** toggle no longer takes a line of its own above
+  **Cancel** / **Create** (or **Import**): it sits at the left end of that
+  row, and the options it opens appear at the foot of the form, scrolled into
+  view. In New Detector, a typed description now names the detector with your
+  own words, first letter capitalised and "detector" on the end ("large
+  books" becomes **Large books detector**, "NASA rockets" **NASA rockets
+  detector**), instead of title-casing every word.
+
 ### Added
 
+- **A deployment can list its own docs in the Help modal** (issue #4310). An
+  operator who adds plugins or extensions points users at the docs for them
+  with a new `docs_links` key in `data/settings.json`: an ordered list of
+  `{"label": ..., "url": ...}` objects. The Help modal lists them under **Docs
+  for this server**, above the *Email us* line, on every tab; each opens in a
+  new browser tab. A URL must be an absolute `http(s)` URL or a `/path` on the
+  same host; an entry that isn't, or has no label, is left out, and the startup
+  log names it. Read-only over the API, like the other operator settings.
 - **AutoRun detectors really run on what you import, and on demand** (issue
   #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
   detectors run on every imported dataset, but only the CLI's `--autodetect`
@@ -128,6 +163,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **`↓` then `↑` returns you to the item you were on** (issue #4306). `↑`
+  re-ran the advance instead, and the ranking has often moved since the item
+  was picked (in Train the re-sort a vote triggers lands after it; in Find each
+  advance switches sides of the cutoff), so it landed on an item you had not
+  seen. `↑` now goes back to where the first `↓` started, and only takes the
+  usual advance once you have voted or picked something else in between.
+- **Voting in Train no longer flashes the item you just voted on** (issue
+  #4307). In the New select mode, and in Autopilot's Explore Diversity phase,
+  the next item is fetched from the server after each vote. While that
+  request was out, the item you had just swiped away slid back into view,
+  then snapped to the next one. It now stays off-screen until the next item
+  arrives.
 - **The Inclusion stepper no longer jumps the line early in a session.** With
   too few votes for the calibration splits, the first change of the stepper
   replaced the trained cutoff with a fixed 0.5, so the matches could change in
@@ -240,6 +287,21 @@ not list every commit. Use `git log` for the full history.
   A query you are still typing keeps focus, as before.
 
 ### Changed
+
+- **The precision floor offers three named floors: Lean: Complete, Centered or
+  Correct** (issue #4298). The picker read **At least [50%] right**, with five
+  percentages to pick from, which claimed a precision the cautious estimate
+  behind the line rarely delivers exactly. It now reads **Lean: [Centered]**,
+  with **Complete** (the old 10%), **Centered** (50%, still the default) and
+  **Correct** (90%). The number is gone everywhere the floor is named: the
+  note under the picker says *Confirmed*, *Aimed at Correct: likely 11–73%
+  right (checked 5)* or *Top 32 kept, unchecked · aiming at Centered*, and
+  Find's **Stats** legend reads *Floor: Correct*. What a check measured - its
+  likely range - and the chart's axis stay numbers. A floor
+  that is not one of the three - a 25% or 75% picked before, or one set from
+  the command line or `POST /api/min-precision` - shows as the nearest of
+  them, and the picker moves the detector to it once no sort is running. The
+  CLI's `--min-precision` and the API still take any value.
 
 - **The Export window says whether it is sending a detector's labels or
   Find's results** (issue #4079). The same window, with the same

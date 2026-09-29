@@ -10,6 +10,7 @@ import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-modal.component';
+import { FloorCheckModalComponent, type FloorCheckVoted } from '../modals/floor-check-modal/floor-check-modal.component';
 import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
@@ -72,6 +73,7 @@ const FLOOR_POST_DEBOUNCE_MS = 150;
     ProgressBarComponent,
     ExportModalComponent,
     FindStatsModalComponent,
+    FloorCheckModalComponent,
   ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
@@ -189,6 +191,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   exportFilter: LabelFilter = 'good';
   /** Detector-evaluation Stats modal visibility. */
   showStats = false;
+  /** The precision floor's spot check is open (#4273). */
+  readonly showFloorCheck = signal(false);
 
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
@@ -248,7 +252,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       )
       .subscribe((resp) => {
         // The response is the floor's verdict and the line it draws, in one:
-        // a floor that promises nothing still draws the default cut.
+        // the line always keeps a set, checked or not (#4272).
         if (resp.threshold != null && this.sortState.sortOrder) {
           this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineFloorFrom(resp));
         }
@@ -452,9 +456,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         next: (response: any) => {
           const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score, bestRegion: r.best_region }));
           const threshold = response.threshold;
-          // Set sort results for stripe display. With no precision promise
-          // the threshold is still a cut (the default one), labelled unpromised
-          // by the floor that rides with it (#4247).
+          // Set sort results for stripe display. The threshold is the last item
+          // of the set the precision floor keeps, and the floor's state rides
+          // with it (#4272).
           this.sortState.setSortResults(sorted, threshold, lineFloorFrom(response.floor));
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
@@ -577,13 +581,24 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * `back` walks the trail of items already voted on, one press per step, and
    * counts as an explicit pick (so the "all items reviewed" pane gets out of
    * the way, exactly as clicking the item in the verified pile would).
-   * `forward` is the same boundary walk a vote makes, and is the user saying
-   * they are done looking back, so it releases that pick.
+   * `forward` is the user saying they are done looking back: it returns them to
+   * the item the walk started from (#4306), or — with no walk to end — takes
+   * the same boundary walk a vote makes and releases that pick.
+   *
+   * While the "all items reviewed" pane is up the user is standing on no item,
+   * so the walk records `null` as its start and `forward` from it lands back
+   * on the pane — see `LabelViewComponent.onNavigate`.
    */
   onNavigate(direction: NavDirection): void {
+    const here = this.centreExhausted() ? null : this.mediaState.selectedId();
     if (direction === 'back') {
-      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      const id = this.voteHistory.stepBack(here);
       if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    const origin = this.voteHistory.stepForward(here);
+    if (origin !== null) {
+      this.onMediaSelect(origin);
       return;
     }
     this.pickedWhileDone.set(null);
@@ -594,11 +609,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * Precision-floor change in Find: a pure cutoff move, **no retrain**. The
    * model and every item's frozen score are floor-independent, so the floor
    * only moves the green/red line over the cached scores. POST
-   * /api/min-precision re-cuts the cached estimators at the new floor and
+   * /api/min-precision moves the line to the set the new floor keeps and
    * re-splits the *unverified* items server-side (verified items hold). We
    * reconcile the new line and its verdict, and the re-split votes, on the
-   * cheap response — there is no scoring spinner. A floor that promises
-   * nothing leaves the line at the default cut and only changes the verdict.
+   * cheap response — there is no scoring spinner.
    *
    * The picker moves at once; the round trip is deferred to the debounced
    * {@link minPrecisionRequests$} pipeline, which is what keeps a superseded
@@ -732,6 +746,42 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Open the detector-evaluation Stats modal. */
   onStats(): void {
     this.showStats = true;
+  }
+
+  /** The floor control's "Check N picks": open the spot check (#4273). */
+  onFloorCheck(): void {
+    if (this.sortState.sortBusy) return;
+    this.showFloorCheck.set(true);
+  }
+
+  /**
+   * A round of the check landed. Its votes verify their items, as any Find
+   * vote does, so the left/right split catches up. A finished check has moved
+   * the line to the set it ended on and re-split the unverified items over the
+   * frozen scores: install that line over the ranking on screen.
+   */
+  onFloorCheckVoted(event: FloorCheckVoted): void {
+    this.voteState.loadVotes();
+    if (event.finished) this.refreshFloorLine();
+  }
+
+  /** The check closed, however it ended: catch up on anything it left behind. */
+  onFloorCheckClosed(): void {
+    this.showFloorCheck.set(false);
+    this.refreshFloorLine();
+  }
+
+  /** Install the line the server now draws, with its verdict, over the ranking on screen. */
+  private refreshFloorLine(): void {
+    this.sortingApi
+      .getMinPrecision()
+      .pipe(this.pairScope.scoped())
+      .subscribe((resp) => {
+        if (resp.threshold != null && this.sortState.sortOrder) {
+          this.sortState.setLine(resp.threshold, lineFloorFrom(resp));
+        }
+        this.voteState.loadVotes();
+      });
   }
 
   /**

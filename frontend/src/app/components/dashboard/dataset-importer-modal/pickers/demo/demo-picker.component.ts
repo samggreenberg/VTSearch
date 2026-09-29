@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, HostListener, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -34,6 +34,10 @@ export class DemoPickerComponent {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
+
+  /** This view's "Advanced" block. The Add Dataset modal reads it to render
+   *  the block's toggle in its footer row (#4305). */
+  readonly importAdvanced = viewChild(ImportAdvancedComponent);
 
   readonly guessedMediaType = input('');
   readonly guessedMediaEmbedder = input('');

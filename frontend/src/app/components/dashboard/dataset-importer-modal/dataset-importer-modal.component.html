@@ -154,6 +154,22 @@
   }
 
 
+  <!-- The showing picker's "Advanced ▾" toggle, at the left end of the footer
+       row so it shares the Cancel / Import line (#4305). The block it opens
+       stays in the picker's form. Its own @if, so it projects as a single root. -->
+  @if (activeImportAdvanced; as advanced) {
+    <button
+      modal-footer-start
+      type="button"
+      class="advanced-toggle"
+      (click)="advanced.toggleAdvanced()"
+      [attr.aria-expanded]="advanced.advancedOpen()"
+      [title]="advanced.advancedToggleTitle"
+    >
+      Advanced {{ advanced.advancedOpen() ? '▴' : '▾' }}
+    </button>
+  }
+
   @if (activePickerView !== 'demo' && activePickerView !== 'local_folder' && activePickerView !== 'local_files' && activePickerView !== 'server_folder' && selectedImporter()) {
     <div class="form-actions" modal-footer>
       <button class="btn btn--secondary" (click)="close()">Cancel</button>

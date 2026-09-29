@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
@@ -65,6 +65,10 @@ export class ServerFolderPickerComponent {
   private datasetsUiApi = inject(DatasetsUiApiService);
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
+
+  /** This view's "Advanced" block. The Add Dataset modal reads it to render
+   *  the block's toggle in its footer row (#4305). */
+  readonly importAdvanced = viewChild(ImportAdvancedComponent);
 
   readonly importers = input<ImporterInfo[]>([]);
   readonly mediaTypes = input<MediaTypeInfo[]>([]);

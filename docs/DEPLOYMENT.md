@@ -613,6 +613,10 @@ working.
   "hidden_plugins": {},
   "dataset_max_age_days": null,
   "support_email": "ops@example.org",
+  "docs_links": [
+    {"label": "Acme plugin guide", "url": "https://docs.example.org/acme-plugin"},
+    {"label": "Lab data policy", "url": "/wiki/data-policy"}
+  ],
   "semantic_only": false,
   "hide_ingest_eta": false,
   "solo_media_type": null,
@@ -658,6 +662,18 @@ working.
   `VTSEARCH_SUPPORT_EMAIL` (either applies process-wide and wins over the
   persisted value). Surfaced read-only at `GET /api/settings`; not editable via
   `PUT`.
+- `docs_links`: this deployment's own documentation, for when you add plugins
+  or extensions users need to read up on. An ordered list of
+  `{"label": ..., "url": ...}` objects; the Help modal lists them, in this
+  order, under **Docs for this server** at the bottom of every tab, and each
+  opens in a new browser tab. `url` must be an absolute `http://` / `https://`
+  URL or a root-relative `/path` on the VTSearch host; an entry whose URL is
+  anything else, or whose `label` is blank, is dropped, and the startup log
+  prints an `Ignoring docs_links entry …` line for each one (a good entry is
+  listed on a `Help-modal docs: …` line). Empty (the default) shows nothing.
+  Settings-file only (there is no flag or env var); surfaced read-only at
+  `GET /api/settings`, not editable via `PUT`. Read at startup, so restart
+  after editing it.
 - `semantic_only`: locks the deployment to Semantic embedders, hiding the
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with

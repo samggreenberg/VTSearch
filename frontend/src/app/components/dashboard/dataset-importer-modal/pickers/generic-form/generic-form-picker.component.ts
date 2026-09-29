@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EMPTY, Subject, catchError, debounceTime, filter, switchMap } from 'rxjs';
 
@@ -57,6 +57,10 @@ export class GenericFormPickerComponent {
   private datasetsListingsApi = inject(DatasetsListingsApiService);
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
+
+  /** This view's "Advanced" block. The Add Dataset modal reads it to render
+   *  the block's toggle in its footer row (#4305). */
+  readonly importAdvanced = viewChild(ImportAdvancedComponent);
 
   /** Every registered importer (used to resolve the active importer's
    *  ``available_converters_by_media_type`` for the source-specs picker). */

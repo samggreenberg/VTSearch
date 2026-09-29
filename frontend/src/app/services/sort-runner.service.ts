@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { EMPTY, Subject, of, throwError } from 'rxjs';
-import { catchError, filter, switchMap, take, tap } from 'rxjs/operators';
+import { catchError, filter, finalize, switchMap, take, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
 import { ActiveContextService } from './active-context.service';
@@ -18,7 +18,7 @@ import { allItemsLabeled } from '../utils/all-labeled';
 import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 import type { FloorState } from '../generated/api-client/models/floor-state';
-import { isUnpromised, lineFloorFrom, type LineFloor } from '../utils/line-floor';
+import { lineFloorFrom, type LineFloor } from '../utils/line-floor';
 
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
@@ -73,6 +73,24 @@ export class SortRunnerService {
    *  Select mode, whose pick is a server round-trip rather than a rule over the
    *  loaded window — see {@link fetchDiversityNext}. */
   private readonly diversityExhausted = signal(false);
+
+  /** Coverage-atlas probes still in the air. A count rather than a flag, so an
+   *  older probe finishing cannot clear {@link advancePending} under a newer one. */
+  private readonly diversityProbesInFlight = signal(0);
+
+  /**
+   * True while {@link autoSelectNext} has asked the server for the next item
+   * and not yet heard back — the `new` Select mode's pick, which is the only
+   * advance that is not a rule over the loaded window.
+   *
+   * The centre panel takes this as its `advancePending` input and keeps the
+   * voted item's swipe parked off-screen until it settles. Without it the
+   * panel cannot tell "the next item is on its way" from "there is no next
+   * item", un-pins the swipe either way, and the item just voted on slides
+   * back into view for the length of the round-trip before the next one
+   * replaces it (#4307).
+   */
+  readonly advancePending = computed(() => this.diversityProbesInFlight() > 0);
 
   /**
    * True when the current Sort + Select has nothing left to advance to: every
@@ -627,12 +645,19 @@ export class SortRunnerService {
     const scores = sortOrder
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
+    this.diversityProbesInFlight.update((n) => n + 1);
     this.sortingApi
       // The New pick reads the threshold as a sampling position too (it steers
       // the atlas probe by a node's median score), so it takes the acquisition
       // cut alongside the Hard pick.
       .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
-      .pipe(this.pairScope.scoped())
+      .pipe(
+        this.pairScope.scoped(),
+        // Every way out — an answer, an error, a pair switch superseding the
+        // probe — ends the wait. `finalize` runs after `next`, so an answer
+        // lands its selection before the centre panel is told to stop waiting.
+        finalize(() => this.diversityProbesInFlight.update((n) => n - 1)),
+      )
       .subscribe({
         next: (response) => {
           this.diversityExhausted.set(response.id === null);
@@ -658,9 +683,10 @@ export class SortRunnerService {
    * line, so only it can move: every other sort ranks by something else and
    * keeps its own threshold.
    *
-   * When the line was unpromised before and still is, and keeps the same
-   * count of items (a floor at 50% or above keeps the top 32 either way,
-   * #4272), the line stays put and only its state changes. Otherwise the
+   * When the line keeps the same count of items before and after (an
+   * unchecked floor at 50% or above keeps the top 32 either way, #4272), it
+   * is the same line - the count, not the state, decides where it sits - so
+   * it stays put and only its state changes. Otherwise the
    * learned sort re-runs at the new floor, which brings the line, its state,
    * the count above it and Autopilot's acquisition cut back together, and
    * lands on the next pick from them.
@@ -668,13 +694,32 @@ export class SortRunnerService {
   private afterFloorChange(floor: LineFloor | null): void {
     if (this.sortState.sortMode !== 'learned') return;
     const before = this.sortState.floor;
-    if (isUnpromised(before) && isUnpromised(floor) && before?.count === floor?.count) {
+    if (before && floor && before.count === floor.count) {
       this.sortState.setFloor(floor);
       return;
     }
     if (this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort();
     }
+  }
+
+  /**
+   * Re-read the line after a spot check ends (#4273). The server has moved it
+   * to the set the check ended on, a new count over the ranking already on
+   * screen, so this moves the line without a re-sort. Only a learned ranking
+   * draws the detector's line.
+   */
+  refreshLine(): void {
+    this.sortingApi
+      .getMinPrecision()
+      .pipe(
+        this.pairScope.scoped(),
+        catchError(() => EMPTY),
+      )
+      .subscribe((resp) => {
+        if (this.sortState.sortMode !== 'learned' || resp.threshold == null) return;
+        this.sortState.setLine(resp.threshold, lineFloorFrom(resp), resp.n_returned ?? null);
+      });
   }
 
   /** Coalesce a flurry of re-rank triggers (a vote, a floor change) into one
