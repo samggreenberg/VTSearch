@@ -26,9 +26,12 @@
     <ng-content select="[floorActions]" />
   </div>
   @if (summary(); as text) {
+    <!-- The dot rides inside the note, so a narrow panel wraps the check
+         button below the note rather than squeezing the note beside it. -->
     <p class="floor-state" [attr.data-status]="dot()">
-      <span class="indicator-dot" aria-hidden="true"></span>
-      <span class="floor-state-text" role="status" [title]="explanation() ?? ''">{{ text }}</span>
+      <span class="floor-state-text" role="status" [title]="explanation() ?? ''"
+        ><span class="indicator-dot" aria-hidden="true"></span>{{ text }}</span
+      >
       @if (checkText(); as label) {
         <button
           type="button"
