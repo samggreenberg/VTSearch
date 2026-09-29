@@ -24,7 +24,7 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **`autopilot-progress` phase.** Captured with phase 3 (Refine Boundary) active
+- **`autopilot-progress` phase.** Captured with phase 4 (Refine Boundary) active
   thanks to the 27-vote `Yellow Smileys` fixture (`VOTES` in `smiley-example.mjs`);
   if the fixture vote count changes, the active phase in this shot moves with
   it.

@@ -614,7 +614,7 @@ remembers your layout per media type.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into four phases and tells you what to do at each step.
+labeling into five phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -673,7 +673,7 @@ media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -740,7 +740,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its four phases,
+Autopilot cycles through these automatically in its five phases,
 but in Manual mode you choose directly.
 
 ### 3. Precision floor
