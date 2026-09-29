@@ -172,7 +172,7 @@ export class KeyboardHelpModalComponent implements OnInit {
             { keys: ['→'], description: 'Vote good' },
             { keys: ['←'], description: 'Vote bad' },
             { keys: ['↓'], description: 'Back to the item you just voted on (again to step further back)' },
-            { keys: ['↑'], description: 'Forward to the next unlabeled item' },
+            { keys: ['↑'], description: 'Forward to the item you were on before ↓ (else the next unlabeled item)' },
           ],
         },
         {

@@ -10,6 +10,7 @@ import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -548,6 +549,79 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     TestBed.tick();
 
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
+  });
+});
+
+/**
+ * #4306: every boundary-walk advance flips which side of the cutoff it serves,
+ * so re-running it on `↑` could never land back on the item `↓` left.
+ */
+describe('FindViewComponent ↓ then ↑ (#4306)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+
+  // Descending by score; the cutoff at 0.5 sits between ids 2 and 3.
+  const ranking = [
+    { id: 1, score: 0.9 },
+    { id: 2, score: 0.6 },
+    { id: 3, score: 0.4 },
+    { id: 4, score: 0.2 },
+  ];
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock
+        .match('/api/medias/ids')
+        .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    }
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    TestBed.inject(VoteStateService).stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  it('returns to the item the walk started from, not the other side of the line', () => {
+    const component = fixture.componentInstance;
+    const selected = () => TestBed.inject(MediaStateService).selectedId();
+    TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
+    // Verifying 2 (the marginal positive) advanced below the line, to 3; the
+    // next advance would serve the positive side again.
+    TestBed.inject(VoteStateService).setOptimisticVerified(2, true);
+    TestBed.inject(VoteHistoryService).record(2);
+    TestBed.inject(MediaStateService).selectMedia(3);
+    (component as unknown as { nextFindSide: string }).nextFindSide = 'above';
+    TestBed.tick();
+
+    component.onNavigate('back');
+    expect(selected()).toBe(2);
+    component.onNavigate('forward');
+    expect(selected()).toBe(3);
+
+    // With no walk left to end, `↑` is the boundary walk again.
+    component.onNavigate('forward');
+    expect(selected()).toBe(1);
   });
 });
 

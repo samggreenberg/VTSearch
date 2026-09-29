@@ -904,14 +904,25 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *
    * `back` walks the trail of items already voted on, one press per step, and
    * counts as an explicit pick (so the "nothing left" pane gets out of the
-   * way, exactly as clicking the item in a pile would). `forward` is the same
-   * advance a vote makes — the top unlabeled item of the ranking — and is the
-   * user saying they are done looking back, so it releases that pick.
+   * way, exactly as clicking the item in a pile would). `forward` is the user
+   * saying they are done looking back: it returns them to the item the walk
+   * started from (#4306), or — with no walk to end — takes the same advance a
+   * vote makes and releases that pick.
+   *
+   * While the "nothing left" pane is up the user is standing on no item, even
+   * though the selection still names the last one shown, so the walk records
+   * `null` as its start and `forward` from it lands back on the pane.
    */
   onNavigate(direction: NavDirection): void {
+    const here = this.centreExhausted() ? null : this.mediaState.selectedId();
     if (direction === 'back') {
-      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      const id = this.voteHistory.stepBack(here);
       if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    const origin = this.voteHistory.stepForward(here);
+    if (origin !== null) {
+      this.onMediaSelect(origin);
       return;
     }
     this.pickedWhileDone.set(null);
