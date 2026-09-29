@@ -1,4 +1,3 @@
-
 import vtscore.detectors.labeling_progress as labeling_progress
 from vtscore.detectors.labeling_progress import (
     _compute_stable_status,
