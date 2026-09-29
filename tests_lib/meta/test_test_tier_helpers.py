@@ -82,6 +82,7 @@ _SHARED_CONFTEST_NAMES = (
     "fake_embed_audio",
     "fake_embed_text",
     "allow_test_tmp_paths",
+    "isolated_example_media_dir",
     "reset_shared_state",
     "install_startup_contexts",
     "pin_training_budget",

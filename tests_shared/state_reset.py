@@ -301,3 +301,31 @@ def allow_test_tmp_paths(monkeypatch):
             return original(filepath_str, Path(tempfile.gettempdir()))
 
     monkeypatch.setattr(paths_mod, "validate_server_filepath", _permissive)
+
+
+@pytest.fixture(autouse=True)
+def isolated_example_media_dir(tmp_path, monkeypatch):
+    """Point single-user ``example_media_dir()`` at ``tmp_path`` (issue #4271).
+
+    In single-user / no-auth mode the resolver answers ``DATA_DIR / "example_media"``,
+    the checkout's real ``data/example_media/``.  Every exemplar a test uploaded,
+    copied or wrote through the resolver used to land there and survive the run,
+    and the app then listed it as server example media.
+
+    Only the single-user branch is redirected.  Multi-user mode already resolves
+    under the login provider's per-user dir, which its tests root at their own
+    ``tmp_path``, so that branch still runs the real resolver.  Every caller
+    imports ``example_media_dir`` inside the function that uses it, so patching
+    the module attribute reaches all of them.
+    """
+    import vtscore.security.path_validation as paths_mod
+
+    original = paths_mod.example_media_dir
+    media_dir = tmp_path / "example_media"
+
+    def _isolated():
+        if paths_mod.get_file_access_base_dir() is None:
+            return media_dir
+        return original()
+
+    monkeypatch.setattr(paths_mod, "example_media_dir", _isolated)

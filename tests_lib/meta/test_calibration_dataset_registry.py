@@ -159,3 +159,31 @@ class TestTrainMixCells:
         assert cfg.train_mix_for("bus@mix-natural") == {"small": 0.05, "medium": 0.27, "large": 0.68}
         with pytest.raises(KeyError):
             cfg.train_mix_for("dog@mix-natural")
+
+
+class TestCategoryFile:
+    """#4213: ``CALIB_CATEGORY_FILE`` narrows a designated grid and refuses a typo."""
+
+    def test_it_keeps_only_the_listed_categories(self, cfg, monkeypatch, tmp_path):
+        f = tmp_path / "cats.txt"
+        f.write_text("# hard + easy\nbus@small\n\ndog@large\n")
+        monkeypatch.setattr(cfg, "CATEGORY_MODE", "all")
+        monkeypatch.setattr(cfg, "CATEGORY_FILE", str(f))
+        counts = {"bus@small": 100, "dog@large": 100, "cup@medium": 100}
+        selected, report = cfg.select_categories({}, counts)
+        assert selected == ["bus@small", "dog@large"]
+        assert report["not_in_category_file"] == ["cup@medium"]
+
+    def test_a_name_the_selection_did_not_produce_is_refused(self, cfg, monkeypatch, tmp_path):
+        f = tmp_path / "cats.txt"
+        f.write_text("bus@small\nbus@tiny\n")
+        monkeypatch.setattr(cfg, "CATEGORY_MODE", "all")
+        monkeypatch.setattr(cfg, "CATEGORY_FILE", str(f))
+        with pytest.raises(ValueError, match="bus@tiny"):
+            cfg.select_categories({}, {"bus@small": 100})
+
+    def test_unset_changes_nothing(self, cfg, monkeypatch):
+        monkeypatch.setattr(cfg, "CATEGORY_MODE", "all")
+        monkeypatch.setattr(cfg, "CATEGORY_FILE", "")
+        selected, _ = cfg.select_categories({}, {"a@small": 1, "b@large": 1})
+        assert selected == ["a@small", "b@large"]
