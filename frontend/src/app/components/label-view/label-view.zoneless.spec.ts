@@ -4,7 +4,6 @@ import { By } from '@angular/platform-browser';
 
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
-import { By } from '@angular/platform-browser';
 
 import { LabelViewComponent } from './label-view.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
