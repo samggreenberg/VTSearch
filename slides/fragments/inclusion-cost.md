@@ -32,5 +32,6 @@
      doubles the price of a miss, each step down the price of a false alarm.
      It sits down with the prices because that is all it sets — the ratio, not
      a place on the ranking.
-     One definition, shared by every rule in this section — and the rest of the
-     section is what happened when we tried to make the slider mean it. -->
+     One definition, shared by every rule in this section. The next three
+     slides are what it took to make the slider mean it; the two after that
+     are what replaced it, and why. -->
