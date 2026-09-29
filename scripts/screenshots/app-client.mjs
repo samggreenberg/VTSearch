@@ -126,6 +126,28 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
     return row;
   }
 
+  /**
+   * Lay out *dataset*'s Browse map now, if it has none, and wait for it.
+   *
+   * The first visit to Browse starts the UMAP fit, and on a small CPU box that
+   * outlasts any wait a recipe can sensibly make (#4296). Built here, before
+   * any shot, every recipe opens a map that is already there. A map persisted
+   * by an earlier run is reused, so this costs nothing once it exists; the app
+   * refits one made under a different seed (`VTSEARCH_PROJECTION_SEED`).
+   */
+  async function ensureProjection(dataset) {
+    const started = await api('/api/projection/build', { method: 'POST', body: {}, dataset: dataset.id });
+    if (started.status !== 'ready') {
+      log(`laying out the ${dataset.name} Browse map — the UMAP fit takes a while on CPU`);
+      await waitFor(`the ${dataset.name} Browse map`, async () => {
+        const meta = await api('/api/projection/meta', { dataset: dataset.id });
+        if (meta.status === 'error') throw new Error(`the ${dataset.name} Browse map failed: ${meta.error}`);
+        return meta.status === 'ready';
+      });
+    }
+    log(`${dataset.name} Browse map ready`);
+  }
+
   /** Unregister every dataset called one of *names* (and its pickle). */
   async function dropDatasets(...names) {
     for (const row of await datasets()) {
@@ -210,6 +232,7 @@ export function appClient(app, log = () => {}, { corpusPath, query }) {
     loadDataset,
     ensureDataset,
     ensureDetector,
+    ensureProjection,
     dropDatasets,
     dropDetectors,
     mediaIndex,

@@ -467,8 +467,18 @@ def _region_is_covered(members: np.ndarray, adjacent: np.ndarray | None) -> bool
     return named * 2 >= members.size
 
 
-def _clusterable_vectors(matrix: np.ndarray, on_progress: ProgressFn | None = None) -> np.ndarray:
-    """The dedicated ~5-D cosine UMAP Toponymy clusters on (not the 2-D layout)."""
+def _clusterable_vectors(
+    matrix: np.ndarray,
+    on_progress: ProgressFn | None = None,
+    *,
+    random_state: int | None = None,
+) -> np.ndarray:
+    """The dedicated ~5-D cosine UMAP Toponymy clusters on (not the 2-D layout).
+
+    *random_state* seeds it, as the layout's own fit was seeded: which regions
+    the signs name follows these clusters, so a reproducible map needs them
+    reproducible too (#4296).  ``None`` is the shipped unseeded fit.
+    """
     import umap  # noqa: PLC0415
 
     if on_progress is not None:
@@ -478,7 +488,7 @@ def _clusterable_vectors(matrix: np.ndarray, on_progress: ProgressFn | None = No
     # doesn't guarantee it never writes to its input in place.
     matrix = np.array(matrix, dtype=np.float32, copy=True, order="C")
     n_components = min(_CLUSTER_DIM, matrix.shape[1], max(2, matrix.shape[0] - 2))
-    reducer = umap.UMAP(n_components=n_components, metric="cosine")
+    reducer = umap.UMAP(n_components=n_components, metric="cosine", random_state=random_state)
     return np.asarray(reducer.fit_transform(matrix), dtype=np.float32)
 
 
@@ -512,7 +522,7 @@ def build_region_labels(
     if n < _MIN_POINTS or n != len(texts) or score_matrix.shape[0] != n or embed_matrix.shape[0] != n:
         return empty
 
-    clusterable = _clusterable_vectors(score_matrix, on_progress)
+    clusterable = _clusterable_vectors(score_matrix, on_progress, random_state=getattr(proj, "random_state", None))
     if on_progress is not None:
         on_progress(0, 0, "Naming regions…")
 

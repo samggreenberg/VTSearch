@@ -88,6 +88,14 @@ class TestResolveProjectionParams:
     def test_compaction_follows_the_shipped_default(self):
         assert resolve_projection_params(_ctx("clip")).compact is PROJECTION_COMPACT_DEFAULT
 
+    def test_the_seed_is_the_env_knob_and_off_by_default(self, monkeypatch):
+        # ``PROJECTION_SEED`` is read from ``VTSEARCH_PROJECTION_SEED`` at import
+        # time; patch the name the resolver reads rather than reload the config.
+        monkeypatch.setattr("vtscore.projection.params.PROJECTION_SEED", None)
+        assert resolve_projection_params(_ctx("siglip")).random_state is None
+        monkeypatch.setattr("vtscore.projection.params.PROJECTION_SEED", 7)
+        assert resolve_projection_params(_ctx("siglip")).random_state == 7
+
     def test_explicit_override_beats_the_tuned_default(self, override_settings):
         override_settings(projection_n_neighbors=42, projection_min_dist=0.33)
         params = resolve_projection_params(_ctx("siglip"))

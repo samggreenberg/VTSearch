@@ -7,7 +7,8 @@
  * baseline every run. refresh.sh runs this before capture.ts. See
  * docs/plans/user-docs-screenshots.md.
  *
- *   - drawings        : the training pile, SigLIP (the main fixture)
+ *   - drawings        : the training pile, SigLIP (the main fixture), with its
+ *                       Browse map laid out up front
  *   - drawings-new    : the test pile, SigLIP — another seed, no picture shared
  *                       with `drawings`, so Find runs over media nobody voted
  *                       on (and Detector Stats has a training set to compare with)
@@ -50,6 +51,7 @@ await app.dropDetectors('doc-demo', ...BOOK_FIXTURES.detectors);
 await app.dropDatasets('syn-imgs', 'syn-patch', ...BOOK_FIXTURES.datasets);
 
 const train = await app.ensureCorpus(TRAIN_DATASET, 'siglip');
+await app.ensureProjection(train);
 await app.ensureCorpus(TEST_DATASET, 'siglip');
 const regions = await app.ensureCorpus(REGION_DATASET, 'siglip', ['dinov2_patch']);
 

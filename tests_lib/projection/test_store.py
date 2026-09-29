@@ -28,11 +28,11 @@ from vtscore.projection.store import (
 from vtscore.state.core import DatasetContext
 
 
-def _params(n_neighbors: int, min_dist: float, compact: bool):
+def _params(n_neighbors: int, min_dist: float, compact: bool, random_state: int | None = None):
     """Patch what the active configuration would resolve for any dataset."""
     return patch(
         "vtscore.projection.params.resolve_projection_params",
-        lambda ctx=None: ProjectionParams(n_neighbors, min_dist, compact),
+        lambda ctx=None: ProjectionParams(n_neighbors, min_dist, compact, random_state),
     )
 
 
@@ -90,6 +90,28 @@ class TestProjectionParamsMatch:
             assert projection_params_match(compacted) is True
             assert projection_params_match(unstamped) is True
             assert projection_params_match(uncompacted) is False
+
+    def test_a_seed_is_only_checked_when_one_is_asked_for(self):
+        """Asking for a seed refits any layout fit under another; not asking refits nothing.
+
+        The screenshot harness sets ``VTSEARCH_PROJECTION_SEED`` to get the same
+        map every run, so a layout persisted unseeded (or under another seed)
+        must not be served to it (issue #4296).  The shipped unseeded default
+        has no layout to reproduce, so a seeded one serves it as well as any.
+        """
+        ids = [0, 1, 2]
+        unseeded = _projection("p", ids, "umap", 15, 0.1, False, None)
+        seed_7 = _projection("p", ids, "umap", 15, 0.1, False, 7)
+        seed_8 = _projection("p", ids, "umap", 15, 0.1, False, 8)
+
+        with _params(15, 0.1, False):
+            assert projection_params_match(unseeded) is True
+            assert projection_params_match(seed_7) is True
+
+        with _params(15, 0.1, False, random_state=7):
+            assert projection_params_match(seed_7) is True
+            assert projection_params_match(unseeded) is False
+            assert projection_params_match(seed_8) is False
 
 
 class TestPklPathFor:
@@ -183,6 +205,18 @@ class TestLoadPersistedLayout:
             with _params(15, 0.1, False):
                 assert load_persisted_layout(ctx, [1, 2, 3], "hex") is not None
             with _params(30, 0.1, False):
+                assert load_persisted_layout(ctx, [1, 2, 3], "hex") is None
+
+    def test_a_layout_under_another_seed_reads_as_absent(self, tmp_path):
+        """The seed stamp survives the container, so a seeded process refits the rest."""
+        pkl = self._stored(tmp_path, [1, 2, 3], method="umap", knobs=(15, 0.1, False, 7))
+        ctx = DatasetContext("ds")
+        with patch("vtscore.datasets.registry.get_dataset", return_value={"pkl_path": str(pkl)}):
+            with _params(15, 0.1, False, random_state=7):
+                loaded = load_persisted_layout(ctx, [1, 2, 3], "hex")
+                assert loaded is not None
+                assert loaded[0].random_state == 7
+            with _params(15, 0.1, False, random_state=8):
                 assert load_persisted_layout(ctx, [1, 2, 3], "hex") is None
 
     def test_unstored_shape_reads_as_absent(self, tmp_path):

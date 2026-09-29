@@ -2,14 +2,11 @@
 
 **Status:** This doc is the full-system reference for the screenshot pipeline
 (manifest + Playwright harness + driver scripts); the open follow-ups below
-(temp-data-dir determinism, annotation polish, canvas-shot scriptability,
-pixel-diff tolerance) are the remaining work.
+(annotation polish, pixel-diff tolerance) are the remaining work.
 
 ## Open follow-ups
 
 <!-- item-sep -->
-
-- [ ] #4299 — Shared data-dir state piles up between refreshes (temp-data-dir determinism)
 
 <!-- item-sep -->
 
@@ -27,11 +24,6 @@ pixel-diff tolerance) are the remaining work.
 <!-- item-sep -->
 
 <!-- item-sep -->
-
-- **`browse-view` determinism** — seed the UMAP fit (fixed `random_state`) so
-  the layout is stable across runs, and pose the hover-preview popup; otherwise
-  hand-capture. The projection is expensive to build, so reuse a cached fixture
-  projection rather than rebuilding per run.
 
 <!-- item-sep -->
 
@@ -141,7 +133,8 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 (deterministic, so `check.sh` can still compare bytes).
 
 **Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
-drawings) and a fixed vote baseline;
+drawings) and a fixed vote baseline, on a fresh app data dir every run (#4299)
+with a seeded Browse map (#4296);
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`); mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)
@@ -152,7 +145,10 @@ stub randomness the UI exposes (never rely on unseeded draws).
 
 - `refresh.sh` — regenerate **every** shot from the manifest in place; then
   `git diff --stat docs/user/assets/` is the precise list of shots the GUI
-  change moved. The everyday refresh.
+  change moved. The everyday refresh. Unless an app is already serving, it
+  starts one on a fresh data dir (`data/.screenshots-app`, emptied every run,
+  the model cache shared) and stops it afterwards, so no refresh photographs
+  state an earlier one left behind; the fixtures are imported afresh each run.
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
@@ -209,6 +205,10 @@ Images are served by an `angular.json` asset glob copying `docs/user/assets/**`
 
 The manifest (`docs/user/screenshots.manifest.ts`) is the source of truth for
 the current shot set; `wiring-check.py` (gated in `run-tests.sh`) keeps it in
-sync with the docs and the reshoot queue. Two `<canvas>` shots (`region-voting`,
-`browse-view`) are the determinism-risk cases — seed + disable animations, or
-hand-capture; the rest are DOM and diff cleanly.
+sync with the docs and the reshoot queue. The `<canvas>` shots are the
+determinism-risk cases. The Browse map is a UMAP layout, so `refresh.sh` starts
+the app with `VTSEARCH_PROJECTION_SEED` for the same map every run, and
+`ensure-fixtures.mjs` lays out the `drawings` map before any shot, since the
+first fit outlasts a recipe's wait on a small CPU box; the Browse recipes find
+a tile by hovering out from the middle rather than clicking a fixed point
+(#4296). The rest are DOM and diff cleanly.
