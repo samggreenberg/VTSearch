@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
-import { EMPTY, Subject, of, throwError } from 'rxjs';
-import { catchError, filter, finalize, switchMap, take, tap } from 'rxjs/operators';
+import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
+import { catchError, filter, finalize, switchMap, take, takeUntil, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
 import { ActiveContextService } from './active-context.service';
@@ -44,6 +44,15 @@ import { lineFloorFrom, type LineFloor } from '../utils/line-floor';
  * `utils/auto-select-next` (digest-pinned against the eval harness by
  * `scripts/check-eval-app-sync.py`'s `autopilot.auto_select_next` mirror);
  * {@link autoSelectNext} below is only the side-effecting half.
+ *
+ * ## A newer sort ends an older one
+ *
+ * The ranking on screen is the answer to the sort asked for *last*, not to the
+ * one answered last: starting a sort tears down whichever is still in flight
+ * (see {@link beginSort}), the same cancellation the pair scope applies across
+ * a pair switch. Without it two sorts in the air install whichever lands
+ * second, which on entry to Train was Autopilot's text seed landing on top of
+ * the learned sort that had already replaced it (#4318).
  *
  * ## What stays with the view
  *
@@ -179,6 +188,34 @@ export class SortRunnerService {
     this.sortState.setSortBusy(false);
   }
 
+  /** Fires when a sort starts, ending the one before it. See {@link beginSort}. */
+  private readonly sortSuperseded$ = new Subject<void>();
+
+  /**
+   * Start a sort: end whichever sort is still in flight, and return the
+   * teardown for this one — the pair scope, and the next sort to start.
+   *
+   * Call it *before* issuing the request, so the supersede it fires cannot
+   * reach the request it scopes. A learned sort pipes both its POST and its
+   * result poll through the one operator it gets back.
+   *
+   * The superseded sort's handlers never run, so it cannot drop the busy flag
+   * the new sort has just raised. What it owned without a handler to reset it
+   * goes here, as in {@link quiesce}: the Find progress feed, which would
+   * otherwise keep writing its status over the new sort, the count it last
+   * reported, and the job id the Cancel button targets. Its learned-sort job
+   * is left to finish on the server rather than cancelled there, because the
+   * server coalesces a burst of learned sorts for one pair into a single job:
+   * cancelling the old id can cancel the new request's.
+   */
+  private beginSort(): <T>(source: Observable<T>) => Observable<T> {
+    this.sortSuperseded$.next();
+    this.sortState.stopFindProgressTracking();
+    this.sortState.setSortProgress(0, 0);
+    this.currentLearnedSortJobId = null;
+    return (source) => source.pipe(this.pairScope.scoped(), takeUntil(this.sortSuperseded$));
+  }
+
   /**
    * Precision floors awaiting their `POST /api/min-precision`, one at a time.
    *
@@ -263,18 +300,20 @@ export class SortRunnerService {
     const offset = this.sortState.sortOrder?.length ?? 0;
     this.sortingApi
       .getSortPage(token, offset, 200)
-      .pipe(this.pairScope.scoped())
-      .subscribe({
-        next: (page) => {
-          const items = (page.results ?? []).map((r) => ({
-            id: r['id'] as number,
-            score: (r['score'] ?? r['similarity'] ?? 0) as number,
-            bestRegion: r['best_region'] as number[] | undefined,
-          }));
-          this.sortState.appendSortItems(items, page.has_more);
-          this.loadingMoreSort.set(false);
-        },
-        error: () => this.loadingMoreSort.set(false),
+      .pipe(
+        this.pairScope.scoped(),
+        // A page of the ranking a newer sort replaced must not be appended to
+        // the new one; `finalize` then clears the flag however the fetch ends.
+        takeUntil(this.sortSuperseded$),
+        finalize(() => this.loadingMoreSort.set(false)),
+      )
+      .subscribe((page) => {
+        const items = (page.results ?? []).map((r) => ({
+          id: r['id'] as number,
+          score: (r['score'] ?? r['similarity'] ?? 0) as number,
+          bestRegion: r['best_region'] as number[] | undefined,
+        }));
+        this.sortState.appendSortItems(items, page.has_more);
       });
   }
 
@@ -287,7 +326,7 @@ export class SortRunnerService {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
-    this.sortingApi.sort({ text }).pipe(this.pairScope.scoped()).subscribe({
+    this.sortingApi.sort({ text }).pipe(this.beginSort()).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
@@ -303,15 +342,16 @@ export class SortRunnerService {
 
   onLearnedSort(autoSelect = true): void {
     if (!this.voteState.learnedSortAvailable) return;
+    const scope = this.beginSort();
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training…');
-    this.sortingApi.learnedSort().pipe(this.pairScope.scoped()).subscribe({
+    this.sortingApi.learnedSort().pipe(scope).subscribe({
       next: (response) => {
         if (response.status === 'done') {
           this.applyLearnedSortResult(response, autoSelect);
         } else if (response.status === 'running') {
           this.currentLearnedSortJobId = response.job_id;
-          this.pollLearnedSortJob(response.job_id, autoSelect);
+          this.pollLearnedSortJob(response.job_id, autoSelect, scope);
         } else {
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus(response.error || 'Training failed');
@@ -345,7 +385,11 @@ export class SortRunnerService {
    * poll down and reported 'Training failed' for a job still running
    * server-side.
    */
-  private pollLearnedSortJob(jobId: string, autoSelect: boolean): void {
+  private pollLearnedSortJob(
+    jobId: string,
+    autoSelect: boolean,
+    scope: <T>(source: Observable<T>) => Observable<T>,
+  ): void {
     let consecutiveErrors = 0;
     const settledWith = (error: string): LearnedSortResponse => ({
       job_id: jobId,
@@ -373,10 +417,11 @@ export class SortRunnerService {
       { fastMs: 500, slowMs: 2000 },
     )
       .pipe(
-        // Pair-scoped: a training job can outlive the pair it was started for,
-        // and its result must not be applied to whatever pair is active when it
-        // finally settles (see `PairScopeService`).
-        this.pairScope.scoped(),
+        // The sort's own scope: a training job can outlive the pair it was
+        // started for, or the sort that asked for it, and its result must not
+        // be applied over either one's successor (see `PairScopeService`,
+        // `beginSort`).
+        scope,
         filter((res) => res.status !== 'running'),
         take(1),
       )
@@ -429,6 +474,8 @@ export class SortRunnerService {
 
   onModelSelected(modelId: string, autoSelect = true): void {
     if (!modelId) return;
+    // Before the progress feed starts: superseding the previous sort stops it.
+    const scope = this.beginSort();
     this.sortState.setSortMode('load');
     this.sortState.setLoadSortSource({ kind: 'detector', detectorId: modelId });
     this.sortState.setSortBusy(true);
@@ -439,7 +486,7 @@ export class SortRunnerService {
 
     // Pair-scoped: scoring runs for minutes on a large dataset, so a pair switch
     // mid-run must kill this before it ranks the new pair with old scores.
-    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(this.pairScope.scoped()).subscribe({
+    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(scope).subscribe({
       next: (raw) => {
         const response = raw as {
           results: { id: number; score: number; best_region?: number[] }[];
@@ -469,6 +516,13 @@ export class SortRunnerService {
    * (#4092); a response without one simply can't be.
    */
   onExampleSortStarted(data: unknown, autoSelect = true): void {
+    // Installed on the spot, but still the newest sort: nothing already in
+    // flight may land on top of it.
+    this.beginSort();
+    this.installExampleSort(data, autoSelect);
+  }
+
+  private installExampleSort(data: unknown, autoSelect: boolean): void {
     const response = data as {
       results: { id: number; similarity: number; best_region?: number[] }[];
       threshold: number;
@@ -488,8 +542,8 @@ export class SortRunnerService {
   private uploadExampleSort(file: File, cropParams: Record<string, unknown> | undefined, autoSelect: boolean): void {
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting by example…');
-    this.sortingApi.exampleSort(file, cropParams).pipe(this.pairScope.scoped()).subscribe({
-      next: (response) => this.onExampleSortStarted({ ...response, source: { kind: 'upload', file, cropParams } }, autoSelect),
+    this.sortingApi.exampleSort(file, cropParams).pipe(this.beginSort()).subscribe({
+      next: (response) => this.installExampleSort({ ...response, source: { kind: 'upload', file, cropParams } }, autoSelect),
       error: () => {
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('Example sort failed');
@@ -518,7 +572,7 @@ export class SortRunnerService {
     this.sortState.setSortStatus('Sorting by example…');
     this.sortingApi
       .exampleSortById({ media_id: mediaId, crop_params: cropParams })
-      .pipe(this.pairScope.scoped())
+      .pipe(this.beginSort())
       .subscribe({
         next: (response) => {
           this.sortState.setSortMode('load');
@@ -549,7 +603,7 @@ export class SortRunnerService {
     if (filenames.length === 0) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
-    this.sortingApi.exampleSortServer({ filenames }).pipe(this.pairScope.scoped()).subscribe({
+    this.sortingApi.exampleSortServer({ filenames }).pipe(this.beginSort()).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
