@@ -5,7 +5,8 @@
 # after a GUI change but weren't.
 #
 # This is a MANUAL pre-release / periodic chore, NOT a run-tests.sh gate: it
-# needs a running app with the fixture datasets loaded, and it is far too slow
+# renders through refresh.sh (so, like the baselines, on a fresh data dir with
+# the seeded Browse map, when no app is already running), and it is far too slow
 # and machine-sensitive (font hinting, see below) to gate every test run.
 # (The cheap, browser-free docs⇄manifest gate is wiring-check.py.)
 #
@@ -20,7 +21,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "Rendering to $TMP …"
-OUT_DIR="$TMP" node_modules/.bin/tsx capture.ts "$@"
+OUT_DIR="$TMP" ./refresh.sh "$@"
 
 drift=0
 shopt -s nullglob

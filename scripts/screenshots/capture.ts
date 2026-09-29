@@ -3,13 +3,13 @@
  * and, for each shot × theme, drives a running VTSearch app in headless
  * chromium and writes docs/user/assets/<id>.<theme>.webp.
  *
- * Design notes specific to this machine (see docs/plans/user-docs-screenshots.md
- * "What shipped"): the box is RAM-tight (~3.7 GB), so the harness connects to a
- * SINGLE already-running app (started by refresh.sh) rather than booting its own
- * per run — two app instances would load the image embedder twice and risk OOM.
- * Determinism still holds because the fixtures are the Smiley example's
- * generated drawings (`smiley-example.mjs`), a pure function of the generator
- * and its seeds.
+ * Design notes (see docs/plans/user-docs-screenshots.md): the dev box is
+ * RAM-tight (~3.7 GB), so the harness connects to a SINGLE running app rather
+ * than booting its own per shot — two app instances would load the image
+ * embedder twice and risk OOM. refresh.sh starts that app on a fresh data dir
+ * with a seeded Browse map, so every run begins from the same state; the
+ * fixtures are the Smiley example's generated drawings (`smiley-example.mjs`),
+ * a pure function of the generator and its seeds.
  *
  * Usage:
  *   tsx capture.ts                 # capture every shot, both themes
@@ -31,6 +31,9 @@ import { execFileSync, execSync } from 'node:child_process';
 import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
 
 const APP = process.env.APP || 'http://localhost:5000';
+// The fresh data dir refresh.sh gives the app it starts (#4299), or unset when
+// the harness drives an app someone else started on the checkout's own.
+const APP_DATA_DIR = process.env.SHOTS_APP_DATA_DIR || '';
 const HERE = dirname(fileURLToPath(import.meta.url));
 // OUT_DIR lets check.sh render to a temp dir for pixel-diffing without
 // clobbering the committed baselines; defaults to the real assets dir.
@@ -82,11 +85,11 @@ const STILL_CSS =
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp
- * version) with fixed strings so pixel-diffs are stable across runs. The
- * gauges' fill bar is not text; `STILL_CSS` pins it.
+ * version, how long an import took) with fixed strings so pixel-diffs are
+ * stable across runs. The gauges' fill bar is not text; `STILL_CSS` pins it.
  */
 async function maskVolatile(page: Page): Promise<void> {
-  await page.evaluate((repo) => {
+  await page.evaluate(([repo, dataDir]) => {
     const fixedDate = '2026-01-01 00:00';
     const walk = (re: RegExp, replace: (m: string) => string) => {
       const it = document.createNodeIterator(document.body, NodeFilter.SHOW_TEXT);
@@ -111,26 +114,43 @@ async function maskVolatile(page: Page): Promise<void> {
       el.textContent = (el.textContent || '').replace(/[\d.]+\s*[GM]B\s+free\s+of/i, '— free of');
     });
     // version stamp "v 2026-..." already covered by the date rule.
+    // How long an import took (Dataset Stats' Duration: `45s`, `1m 41s`, …)
+    // is the machine's speed, and moves on every run.
+    document.querySelectorAll('td.stat-label').forEach((label) => {
+      const value = label.nextElementSibling;
+      if (label.textContent?.trim() === 'Duration' && value?.textContent?.trim() !== '-') {
+        value!.textContent = '1m 30s';
+      }
+    });
     // The fixture corpora live under `<checkout>/data/doc-fixtures/`, which is
     // a different path on every machine. Show it as `/data/<corpus>` — in text
     // and in the importer's path field, whose value is set without an input
     // event, so the form keeps the real path it validated against.
     const fixtureRe = /\S*\/data\/doc-fixtures\//g;
     walk(fixtureRe, () => '/data/');
+    // refresh.sh runs the app on a fresh data dir of its own; a path under it
+    // (the server exporters' default file) reads as under the install's data
+    // dir, as it did when the app ran on the checkout's.
+    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dataDirRe = dataDir ? new RegExp(escape(dataDir) + '/', 'g') : null;
+    if (dataDirRe) walk(dataDirRe, () => '/opt/vtsearch/data/');
     // Any other path under the checkout (a default file path a form fills
     // in, say) is shown as under a generic install folder.
-    const checkoutRe = new RegExp(repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/', 'g');
+    const checkoutRe = new RegExp(escape(repo) + '/', 'g');
     walk(checkoutRe, () => '/opt/vtsearch/');
     document.querySelectorAll('input').forEach((el) => {
       const input = el as HTMLInputElement;
       if (input.value.includes('/data/doc-fixtures/')) {
         input.value = input.value.replace(fixtureRe, '/data/');
       }
+      if (dataDir && input.value.includes(dataDir + '/')) {
+        input.value = input.value.split(dataDir + '/').join('/opt/vtsearch/data/');
+      }
       if (input.value.includes(repo + '/')) {
         input.value = input.value.split(repo + '/').join('/opt/vtsearch/');
       }
     });
-  }, REPO);
+  }, [REPO, APP_DATA_DIR]);
 }
 
 function makeHelpers(page: Page): Helpers {
@@ -163,6 +183,54 @@ function makeHelpers(page: Page): Helpers {
     }
     if (!found) throw new Error(`no ${cardTag} row named ${name}`);
     await wait(400);
+  };
+  // The label view's sorts, as the page runs them: counted when the request
+  // goes out, settled when the answer does. A learned sort may answer
+  // `running` and be polled to its end, so its poll settles it. What the view
+  // serves, and the floor line it shows, follow the sort that settled last,
+  // and a fixed wait photographed whichever side of it the clock landed on
+  // (#4299).
+  const sorts = { started: 0, settled: 0, running: new Set<string>() };
+  const isSort = (url: string, method: string) =>
+    method === 'POST' && /\/api\/(learned-sort|sort)(\?|$)/.test(url);
+  page.on('request', (req) => {
+    if (isSort(req.url(), req.method())) sorts.started += 1;
+  });
+  page.on('response', async (res) => {
+    const url = res.url();
+    const method = res.request().method();
+    const polled = method === 'GET' && url.includes('/api/learned-sort/result');
+    if (!isSort(url, method) && !polled) return;
+    const body = await res.json().catch(() => ({}));
+    const job: string | undefined = body?.job_id;
+    if (body?.status === 'running' && job) {
+      if (!polled) sorts.running.add(job);
+      return;
+    }
+    if (polled) {
+      if (job && sorts.running.delete(job)) sorts.settled += 1;
+    } else {
+      sorts.settled += 1;
+    }
+  });
+  /**
+   * Wait for any sort started since *mark* (given *startWindow* ms to begin)
+   * to settle, then for the view to draw what it served. A sort the view
+   * abandons never answers, so an overlay that has stayed gone for a few
+   * seconds also counts as settled.
+   */
+  const settleSorts = async (mark: number, startWindow: number) => {
+    const overlay = page.locator('vt-progress-indicators .sort-overlay');
+    const t0 = Date.now();
+    while (sorts.started === mark && Date.now() - t0 < startWindow) await wait(250);
+    const until = Date.now() + 180000;
+    let quietSince = Date.now();
+    while (sorts.settled < sorts.started && Date.now() < until) {
+      if (await overlay.count()) quietSince = Date.now();
+      else if (Date.now() - quietSince >= 5000) break;
+      await wait(250);
+    }
+    await wait(1500);
   };
   const h: Helpers = {
     page,
@@ -228,10 +296,16 @@ function makeHelpers(page: Page): Helpers {
       await h.dashboard();
       await h.selectDatasetRow(dataset);
       await h.selectDetectorRow(detector);
+      const mark = sorts.started;
       await page.getByRole('button', { name: 'Train', exact: true }).click();
       // label view: wait for the three panels
       await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 60000 });
-      await wait(2000);
+      // The view only sorts once the detector's votes have loaded, which can
+      // take several seconds on a cold page; give it that long to start.
+      await settleSorts(mark, 15000);
+    },
+    async sortsSettled() {
+      await settleSorts(sorts.started, 3000);
     },
     async leftTab(name) {
       // The tab strip is hidden while the left panel is collapsed to its rail,
@@ -240,8 +314,9 @@ function makeHelpers(page: Page): Helpers {
         await page.locator('.collapse-toggle').first().click();
         await wait(1200);
       }
+      const mark = sorts.started;
       await page.locator('.left-tab', { hasText: name }).first().click();
-      await wait(800);
+      await settleSorts(mark, 5000);
     },
     async serveItem(filename) {
       // Clicking a thumbnail selects the item; the centre viewer + Good/Bad
