@@ -98,6 +98,9 @@ does only when `VTSEARCH_PROJECTION_SEED` is set
 (`PROJECTION_SEED` in [`vtscore.config`](config.md)), which
 `resolve_projection_params` hands every fit; the user-docs screenshot
 harness sets it so the Browse shots frame the same map on every refresh.
+The signposts' own clustering UMAP (`signpost_build._clusterable_vectors`)
+is fit under the seed stamped on the layout it labels, so a seeded map gets
+the same signs too.
 
 Small datasets can't support a neighbour graph (UMAP needs
 `n_neighbors < N`), so `n_neighbors` is clamped to `N - 1`, and below

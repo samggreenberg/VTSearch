@@ -203,7 +203,7 @@ when one is in scope). Tests rely on this: they override
 | `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` | `15` / `0.1` | - | Global UMAP defaults for the browse projection (see [`projection.md`](projection.md)). |
 | `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
 | `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |
-| `PROJECTION_SEED`        | `None`  | `VTSEARCH_PROJECTION_SEED`    | Seed for the browse projection's UMAP fit. Unset is an unseeded, parallel fit; an integer gives the same layout every time, fit single-threaded. |
+| `PROJECTION_SEED`        | `None`  | `VTSEARCH_PROJECTION_SEED`    | Seed for the browse projection's UMAP fit. Unset is an unseeded, parallel fit; an integer gives the same layout (and signposts) every time, fit single-threaded. |
 
 ### `allocated_cpus()` / `resolve_decode_workers()`
 
