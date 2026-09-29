@@ -247,8 +247,9 @@ class TestMinPrecisionContract:
 
     def test_the_inclusion_endpoint_is_gone(self, client):
         """Inclusion is retired as a user preference (#4269)."""
+        # 405 for the POST: the SPA fallback answers GET on any path.
         assert client.get("/api/inclusion").status_code == 404
-        assert client.post("/api/inclusion", json={"inclusion": 3}).status_code == 404
+        assert client.post("/api/inclusion", json={"inclusion": 3}).status_code in (404, 405)
 
 
 class TestLabelsExportContract:

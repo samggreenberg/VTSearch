@@ -73,8 +73,10 @@ def test_a_floor_change_recuts_and_resplits(client):
     promised = ctx.precision_floor_cache.cut(0.5)
     assert promised.threshold is not None and promised.status.value == "promised"
 
-    # Poison the stored cutoff so a skipped recompute is observable no matter
-    # where the floor's cut lands.
+    # Start from another floor, so the move to 0.5 is a change, then poison the
+    # stored cutoff so a skipped recompute is observable no matter where the
+    # floor's cut lands.
+    client.post("/api/min-precision", json={"min_precision": 0.9})
     ctx.threshold = -999.0
 
     # Change the floor WITHOUT re-running find-label (the pure re-cut path).

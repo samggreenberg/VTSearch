@@ -73,8 +73,11 @@ class TestARecutReadsTheAnchoredEstimator:
         """Nested inclusion sets: the re-cut threshold never rises with k."""
         det_ctx, results, _threshold = _trained(9, range(600, 620), detector_id="det-recut-monotone")
 
-        seen = [recut_detector_threshold(det_ctx, k) for k in range(-10, 11)]
-        assert all(t is not None for t in seen)
+        seen: list[float] = []
+        for k in range(-10, 11):
+            recut = recut_detector_threshold(det_ctx, k)
+            assert recut is not None, k
+            seen.append(recut)
         assert all(b <= a + 1e-12 for a, b in zip(seen, seen[1:], strict=False)), seen
         # The cut actually moves, not merely fails to rise: a constant satisfies
         # monotonicity, which is how the inclusion-blind midpoint cut slipped
