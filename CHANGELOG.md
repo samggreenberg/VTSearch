@@ -152,7 +152,12 @@ not list every commit. Use `git log` for the full history.
   advance switches sides of the cutoff), so it landed on an item you had not
   seen. `↑` now goes back to where the first `↓` started, and only takes the
   usual advance once you have voted or picked something else in between.
-
+- **Voting in Train no longer flashes the item you just voted on** (issue
+  #4307). In the New select mode, and in Autopilot's Explore Diversity phase,
+  the next item is fetched from the server after each vote. While that
+  request was out, the item you had just swiped away slid back into view,
+  then snapped to the next one. It now stays off-screen until the next item
+  arrives.
 - **The Inclusion stepper no longer jumps the line early in a session.** With
   too few votes for the calibration splits, the first change of the stepper
   replaced the trained cutoff with a fixed 0.5, so the matches could change in

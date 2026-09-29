@@ -80,6 +80,13 @@ export class CenterPanelComponent implements OnDestroy {
   readonly placeholderHint = input(
     'Pick one from the list on the left, or run a sort to rank them.',
   );
+  /**
+   * The host has asked for the item after the one just voted on and is still
+   * waiting for it — Train's `new` Select mode, whose pick is a server
+   * round-trip. While this is true the vote-swipe stays parked off-screen;
+   * see {@link swipeParked}. Hosts whose advance is synchronous leave it false.
+   */
+  readonly advancePending = input(false);
   readonly mediaVoted = output<{
     id: number;
     vote: 'good' | 'bad';
@@ -110,6 +117,14 @@ export class CenterPanelComponent implements OnDestroy {
   readonly showMetadata = signal(false);
   readonly swipeClass = signal('');
   readonly spinningVote = signal<'good' | 'bad' | null>(null);
+
+  /**
+   * The swipe has finished and the vote has been handed to the host, but the
+   * item it flung off-screen is still the one selected. The un-pin effect in
+   * the constructor clears the swipe from here once the host is not waiting on
+   * a next item ({@link advancePending}).
+   */
+  private readonly swipeParked = signal(false);
 
   /** Persisted dismissal of the zero-votes first-vote hint. Initialised
    *  to ``true`` so the hint never flashes before settings load resolves;
@@ -176,6 +191,7 @@ export class CenterPanelComponent implements OnDestroy {
     effect(() => {
       this.media();
       this.swipeClass.set('');
+      this.swipeParked.set(false);
       // Navigating to another item clears the armed bad-vote-confirm state.
       // ImageViewer also clears its own regionBox on media change and will emit null;
       // resetting eagerly here keeps state coherent across the swap.
@@ -185,6 +201,24 @@ export class CenterPanelComponent implements OnDestroy {
       // question, and leaving it latched would silently show the next item's
       // pre-clean bytes (or nothing, for an item with no snapshot).
       this.payloadVariant.set('');
+    });
+
+    // Un-pin a parked swipe once no next item is on its way. The animation
+    // ends `forwards`, so the node stays off-screen until something clears the
+    // class. When the host advances, the media-change effect above does, in
+    // the same tick the new item arrives. When the host has nowhere to advance
+    // (no ranking loaded, so every vote takes the pick rule's `none` branch)
+    // that change never comes, and the pane would go blank mid-dataset with the
+    // item still selected (#4028) — so the item slides back into view with its
+    // vote registered, which is what the animations-off path has always done.
+    //
+    // Not while the host is still fetching the next item, though: un-pinning
+    // then brings the voted item back for the whole round-trip, and it flickers
+    // on screen before its successor replaces it (#4307).
+    effect(() => {
+      if (!this.swipeParked() || this.advancePending()) return;
+      this.swipeClass.set('');
+      this.swipeParked.set(false);
     });
   }
 
@@ -455,6 +489,7 @@ export class CenterPanelComponent implements OnDestroy {
         next: () => {
           const animate = this.showAnimations() && !!this.media() && !prefersReducedMotion();
           if (animate) {
+            this.swipeParked.set(false);
             this.swipeClass.set(vote === 'good' ? 'swipe-right' : 'swipe-left');
             this.spinningVote.set(vote);
             if (this.spinTimer) clearTimeout(this.spinTimer);
@@ -462,22 +497,11 @@ export class CenterPanelComponent implements OnDestroy {
             setTimeout(() => {
               this.mediaVoted.emit({ id: votedId, vote });
               this.isVoting.set(false);
-              // Un-pin the swipe. The animation ends `forwards`, so the node
-              // stays parked off-screen until something clears the class —
-              // and the only thing that does is the media-change effect
-              // above. When the host has nowhere to advance (no ranking
-              // loaded, so every vote takes the pick rule's `none` branch)
-              // that change never comes, and the pane goes blank mid-dataset
-              // with the item still selected: #3887's symptom, from a cause
-              // its `exhausted` flag does not cover (#4028).
-              //
-              // Unconditional, and it has to run after the emit rather than
-              // instead of it: if the host *did* advance, the media-change
-              // effect clears the class to the same '' a beat later, so this
-              // is a no-op; if it did not, the item slides back into view
-              // with its vote registered — which is exactly what the
-              // animations-off path has always done.
-              this.swipeClass.set('');
+              // Park rather than clear: the un-pin effect in the constructor
+              // decides when the node comes back. This has to follow the emit,
+              // because the host's handler is what starts (or skips) the
+              // advance that effect waits on.
+              this.swipeParked.set(true);
             }, 180);
           } else {
             this.mediaVoted.emit({ id: votedId, vote });
