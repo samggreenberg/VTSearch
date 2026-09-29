@@ -274,15 +274,14 @@ def _active_cache() -> _ProgressCache:
 def clear_progress_cache() -> None:
     """Drop every cached pair's progress data.
 
-    Must be called whenever votes are cleared, medias change, or inclusion
-    is altered so that stale models are not reused.
+    Must be called whenever votes are cleared or medias change so that stale
+    models are not reused.
 
     Deliberately global rather than scoped to the active pair: the callers
-    (``clear_votes``, ``clear_medias``, ``set_inclusion``,
-    ``register_detector_context`` / ``unregister_detector_context``) each
-    invalidate *at least* the active pair, and some - a dataset's medias
-    changing, the global inclusion knob moving - invalidate every pair over
-    that dataset or every pair outright.  Clearing everything is the
+    (``clear_votes``, ``clear_medias``, ``register_detector_context`` /
+    ``unregister_detector_context``) each invalidate *at least* the active
+    pair, and some - a dataset's medias changing - invalidate every pair over
+    that dataset.  Clearing everything is the
     conservative reading and costs only a rebuild.  What the per-pair keying
     buys is the path that does *not* come through here: switching between two
     already-loaded detectors, which no longer throws either one's work away.
@@ -1329,7 +1328,7 @@ def _cache_covers_history(
     return len(cache.steps) >= len(label_history)
 
 
-def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion_value: int) -> bool:
+def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion_value: int = 0) -> bool:
     """Return ``True`` when the per-step cache already covers *label_history*.
 
     A fresh cache means ``compute_labeling_status`` will not advance a step, and

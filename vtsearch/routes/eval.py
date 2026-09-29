@@ -33,7 +33,6 @@ from vtsearch.schemas.eval import (
 from vtsearch.state import (
     bad_votes,
     get_coverage_atlas,
-    get_inclusion,
     good_votes,
     label_history,
     snapshot_medias,
@@ -57,7 +56,7 @@ eval_bp = Blueprint(
 
 # Failures of *context resolution* are not this blueprint's 500s.  Every route
 # below reads the request-scoped proxies (``label_history``, ``good_votes``,
-# ``snapshot_medias()``, ``get_inclusion()``), and each of those raises when
+# ``snapshot_medias()``), and each of those raises when
 # the client named a dataset / detector the backend has not finished loading -
 # which ``vtsearch/errors.py`` maps to the app-wide 409 ``dataset_not_loaded``
 # / ``detector_not_loaded`` (or a 400 for the request-missing sentinel).  A
@@ -85,7 +84,7 @@ def labeling_progress():
         abort(400, message="no label history available")
 
     try:
-        return analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes, get_inclusion())
+        return analyze_labeling_progress(snapshot_medias(), label_history, good_votes, bad_votes)
     except _CONTEXT_ERRORS:
         raise
     except Exception:
@@ -109,7 +108,6 @@ def _schedule_status_refresh(span_info) -> None:
     from vtscore.state.core import get_active_context, get_active_detector_context
 
     clips = snapshot_medias()
-    inclusion = get_inclusion()
     history = list(label_history)
     good_snap = dict(good_votes)
     bad_snap = dict(bad_votes)
@@ -117,14 +115,14 @@ def _schedule_status_refresh(span_info) -> None:
     ds_ctx = get_active_context()
     det_ctx = get_active_detector_context()
 
-    signature = (ds_ctx.dataset_id, det_ctx.detector_id, len(history), inclusion)
+    signature = (ds_ctx.dataset_id, det_ctx.detector_id, len(history))
 
     def _run(job):
         # ``compute_labeling_status`` advances the per-step cache under
         # ``_progress_lock`` and refreshes ``_status_snapshot``; the return
         # value is unused - the next poll reads the snapshot.  The lock is
         # taken only inside the worker, never across the HTTP response.
-        compute_labeling_status(clips, history, good_snap, bad_snap, inclusion, span_info=span_info)
+        compute_labeling_status(clips, history, good_snap, bad_snap, span_info=span_info)
 
     labeling_status_jobs.start(
         signature,
@@ -156,12 +154,9 @@ def labeling_status_indicator():
     try:
         tree = get_coverage_atlas()
         span = tree.span_info() if tree is not None else None
-        inclusion = get_inclusion()
 
-        if is_status_cache_fresh(label_history, inclusion):
-            status = compute_labeling_status(
-                snapshot_medias(), label_history, good_votes, bad_votes, inclusion, span_info=span
-            )
+        if is_status_cache_fresh(label_history):
+            status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, span_info=span)
             status["stale"] = False
             return status
 
@@ -218,10 +213,9 @@ def indicator_score_history(query: dict):
     metric = query["metric"]
 
     clips = snapshot_medias()
-    inclusion = get_inclusion()
 
     try:
-        data, complete = cached_indicator_history(metric, clips, label_history, good_votes, bad_votes, inclusion)
+        data, complete = cached_indicator_history(metric, clips, label_history, good_votes, bad_votes)
         return {"metric": metric, "history": data, "complete": complete}
     except _CONTEXT_ERRORS:
         raise
@@ -262,8 +256,8 @@ def eval_train_and_score(body: dict):
     metric data; the ``eval`` SSE channel on ``/api/events`` carries
     live progress.
 
-    A signature cache keyed by ``(metric, history, votes, inclusion,
-    dataset, detector)`` short-circuits identical re-runs.
+    A signature cache keyed by ``(metric, history, votes, dataset,
+    detector)`` short-circuits identical re-runs.
 
     Tests can pass ``{"wait": true}`` to block until the job completes.
     """
@@ -279,7 +273,6 @@ def eval_train_and_score(body: dict):
     wait = body["wait"]
 
     clips = snapshot_medias()
-    inclusion = get_inclusion()
     history = list(label_history)
     good_snap = dict(good_votes)
     bad_snap = dict(bad_votes)
@@ -295,7 +288,6 @@ def eval_train_and_score(body: dict):
         tuple(history),
         tuple(sorted(good_snap)),
         tuple(sorted(bad_snap)),
-        inclusion,
     )
 
     cached = eval_jobs.cached_for(signature)
@@ -315,11 +307,11 @@ def eval_train_and_score(body: dict):
             update_eval_progress("running", f"Computing {metric}...", 0, n_total)
             try:
                 if metric == "smart":
-                    data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion)
+                    data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap)
                 elif metric == "stable":
-                    data = calculate_prediction_stability_over_time(clips, history, inclusion)
+                    data = calculate_prediction_stability_over_time(clips, history)
                 else:
-                    data = calculate_diversity_level_over_time(clips, history, inclusion)
+                    data = calculate_diversity_level_over_time(clips, history)
                 job.result = {"metric": metric, "data": data}
                 job.update_progress(n_total, n_total, "Done")
                 update_eval_progress("idle", "Done", n_total, n_total)

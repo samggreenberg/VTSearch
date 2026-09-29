@@ -113,9 +113,11 @@ PRECISION_COORDINATES = ("percentile", "tail")
 PRECISION_FITS = ("logistic", "isotonic")
 
 
-#: The inclusion a floor's line falls back to when it promises nothing (owner,
-#: 2026-09-28; #4247).  A floor that cannot be met never empties the results:
-#: the line stays where Inclusion 0 would draw it, labelled as unpromised.
+#: The inclusion a line is drawn at whenever no floor promises one: a floor
+#: that promises nothing (owner, 2026-09-28; #4247), or no floor at all, now
+#: that Inclusion is no longer a user preference (#4269).  A floor that cannot
+#: be met never empties the results: the line stays where Inclusion 0 would
+#: draw it, labelled as unpromised.
 PRECISION_FLOOR_FALLBACK_INCLUSION = 0
 
 #: A 1-D run of scores or labels: a list, or the numpy array a caller already holds.
@@ -687,10 +689,13 @@ def reporting_line(
     re-cut (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
     harness's default arm, so the three cannot drift apart.
 
-    * *min_precision* ``None``: the Inclusion knob governs, and the line is
-      ``cut.threshold_at(inclusion_value)`` - exactly the pre-floor behaviour.
+    * *min_precision* ``None``: no floor, and the line is
+      ``cut.threshold_at(inclusion_value)``.  *inclusion_value* is the internal
+      unit, not a user preference (#4269): the app passes
+      :data:`PRECISION_FLOOR_FALLBACK_INCLUSION` for its own line, and a re-cut
+      passes another inclusion for the acquisition cut or Smart's pricing.
     * A floor that is **promised**: the floor's own threshold.  *inclusion_value*
-      is ignored - a set floor wins over the knob (owner, 2026-09-28).
+      is ignored (owner, 2026-09-28).
     * A floor that promises nothing (``unreachable`` or
       ``insufficient_evidence``, or no *estimate* at all): the line falls back
       to :data:`PRECISION_FLOOR_FALLBACK_INCLUSION` and the verdict says why

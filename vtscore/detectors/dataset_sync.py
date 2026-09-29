@@ -416,7 +416,7 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
         det_ctx.last_learned_scores.clear()
         det_ctx.training_medias.clear()
         # Every estimator fitted on the old space's scores goes with its model:
-        # a re-cut (an Inclusion slide, a floor change) must not read them.
+        # a re-cut (a floor change, the acquisition cut) must not read them.
         det_ctx.calibration_cache = None
         det_ctx.anchored_cut_cache = None
         det_ctx.precision_floor_cache = None

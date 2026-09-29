@@ -260,12 +260,12 @@ class FoldAnchoredCut:
     haystack sample (to realize the combined quantile on the scale the
     threshold is applied on).
 
-    Splitting the fit from the cut is what makes the Inclusion knob cheap
-    *and* faithful under this estimator: re-cutting at another inclusion is
+    Splitting the fit from the cut is what makes a re-cut cheap *and*
+    faithful under this estimator: re-cutting at another inclusion is
     arithmetic on the fitted Gaussians plus two array lookups - no EM, no
-    scoring pass - so an Inclusion slide reproduces exactly what a fresh
-    retrain at that inclusion would have stored (see
-    :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+    scoring pass - so the acquisition cut and Smart's pricing reproduce
+    exactly what a fresh retrain at that inclusion would have stored (see
+    :func:`vtscore.state.core.recut_detector_threshold`).
 
     Under the shipped :data:`FOLD_ANCHOR_CUT_RULE` (``"mid_tilt"``) a re-cut
     answers the knob: inclusion 0 reproduces the measured midpoint cut

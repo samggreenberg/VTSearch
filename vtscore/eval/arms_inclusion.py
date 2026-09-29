@@ -96,10 +96,10 @@ def _cut_inclusion_rows(
     :meth:`~vtscore.training.thresholds.FoldAnchoredCut.threshold_at`.  That is
     not merely cheaper than calling
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` per point,
-    it is exactly what production does when the user drags the slider
-    (:func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`
-    re-cuts a cached estimator with no refit), so the sweep measures the object
-    the app actually re-cuts rather than a chain of independent retrains.
+    it is exactly what production does when it re-cuts at another inclusion
+    (:func:`vtscore.state.core.recut_detector_threshold` re-cuts a cached
+    estimator with no refit), so the sweep measures the object the app
+    actually re-cuts rather than a chain of independent retrains.
 
     A weight whose fit fails outright contributes no rows.  The terminal
     fallbacks :func:`fold_anchored_gmm_threshold` applies in that case

@@ -69,9 +69,9 @@ class AppSettingsSchema(Schema):
 
     # Per-user, scalar
     volume = fields.Float()
-    inclusion = fields.Integer()
-    # ``null`` = no precision floor; the Inclusion knob draws the line (#4245).
-    min_precision = fields.Float(allow_none=True)
+    # The precision floor (#4245).  Never ``null``: every detector has a floor
+    # (#4269), and a stored ``null`` reads as the default.
+    min_precision = fields.Float()
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -259,9 +259,9 @@ class SettingsUpdateSchema(Schema):
     """
 
     volume = fields.Float()
-    inclusion = fields.Integer()
-    # ``null`` = no precision floor; the Inclusion knob draws the line (#4245).
-    min_precision = fields.Float(allow_none=True)
+    # The precision floor (#4245).  Never ``null``: every detector has a floor
+    # (#4269), and a stored ``null`` reads as the default.
+    min_precision = fields.Float()
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()

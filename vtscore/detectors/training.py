@@ -183,7 +183,6 @@ def _fused_threshold(
     folds: Any,
     rows: "ScoringRows | None",
     final_scores: list[float],
-    inclusion_value: int,
     blend_ctx: Any,
     schedule: str,
     det_ctx: Any = None,
@@ -250,12 +249,12 @@ def _fused_threshold(
     pure-GMM branch fed it.
 
     When *det_ctx* is given, the fitted estimator is parked on
-    ``det_ctx.anchored_cut_cache`` so an Inclusion slide can re-cut it without
+    ``det_ctx.anchored_cut_cache`` so a floor change can re-cut it without
     refitting or re-scoring anything (see
-    :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+    :func:`vtscore.state.core.recompute_detector_thresholds`).
 
     **The line is drawn at an operating point** (#4245): the precision floor
-    *min_precision* when one is set, else *inclusion_value*, through
+    *min_precision* when one is set, else the Inclusion 0 cut (#4269), through
     :func:`~vtscore.training.thresholds.reporting_line` - the rule the re-cut
     and the eval harness's default arm share.  The floor reads a
     :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` built here
@@ -298,6 +297,7 @@ def _fused_threshold(
         calculate_safe_threshold,
         drop_voted,
         eligible_fold_orderings,
+        PRECISION_FLOOR_FALLBACK_INCLUSION,
         fit_fold_anchored_cut,
         reporting_line,
     )
@@ -362,7 +362,9 @@ def _fused_threshold(
             ",".join(str(i) for i in cut.fold_iterations),
         )
 
-    line = reporting_line(cut, estimate, inclusion_value=inclusion_value, min_precision=min_precision)
+    line = reporting_line(
+        cut, estimate, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=min_precision
+    )
     if line.threshold is not None:
         return line.threshold
     xcal = NO_GOOD_THRESHOLD if folds.fallback is not None else xcal_threshold
@@ -500,8 +502,8 @@ def train_and_threshold(
     1. K-fold calibration (respects ``calibrate_count`` /
        ``calibration_fraction`` settings), giving both the cross-calibration
        cut and the fold models.
-    2. Full-data model training.  Inclusion never reaches the model; only the
-       cut in step 3 reads it.
+    2. Full-data model training.  The operating point never reaches the model;
+       only the cut in step 3 reads it.
     3. The fold-anchored population threshold whenever *snap* is provided -
        see :func:`_safe_threshold`.  It is fitted on the per-media scores
        :func:`_score_all_media` produces - region max-pooled on a patch
@@ -509,12 +511,12 @@ def train_and_threshold(
        Without a *snap* there is no haystack to fuse and the cross-calibration
        cut ships alone.
 
-    ``inclusion`` is read from ``get_inclusion()``, which resolves to the
-    *active detector context's* inclusion (seeded from the user's settings
-    default the first time it's read for a detector). Both Train and Find
-    therefore train at the same per-detector inclusion within a session.  The
-    precision floor is read the same way (``get_min_precision()``), and a set
-    floor draws the line instead of the inclusion (see :func:`_fused_threshold`).
+    The precision floor is read from ``get_min_precision()``, which resolves to
+    the *active detector context's* floor (seeded from the user's settings the
+    first time it's read for a detector).  Both Train and Find therefore cut at
+    the same per-detector floor within a session.  With no floor, or one that
+    promises nothing, the line is the Inclusion 0 cut (see
+    :func:`_fused_threshold`).
 
     Args:
         X_list: Embedding vectors (list of numpy arrays).
@@ -527,12 +529,12 @@ def train_and_threshold(
             haystack scoring pass reads vectors from the same space the
             ``X_list`` were built in.  ``None`` falls back to the dataset score
             precedence for *snap* (the pre-per-detector behaviour).
-        det_ctx: When provided, the inclusion-independent K fold orderings are
-            cached on ``det_ctx.calibration_cache`` (and the fold models are
-            sized to match the final model).  This is what lets a later
-            Inclusion slide re-derive the threshold over the cached orderings
-            instead of being a no-op — see
-            :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`.
+        det_ctx: When provided, the operating-point-independent K fold
+            orderings are cached on ``det_ctx.calibration_cache`` (and the fold
+            models are sized to match the final model).  This is what lets a
+            later re-cut derive the threshold over the cached orderings instead
+            of being a no-op — see
+            :func:`vtscore.state.core.recut_detector_threshold`.
             ``None`` keeps the
             legacy (uncached) behaviour for callers that don't own a context.
         groups: Per-row bag ids (one voted image per bag); see
@@ -588,7 +590,6 @@ def train_and_threshold(
     from vtscore.state import (
         get_calibrate_count,
         get_calibration_fraction,
-        get_inclusion,
         get_min_precision,
     )
     from vtscore.training import (
@@ -597,6 +598,7 @@ def train_and_threshold(
         threshold_from_folds,
         train_model,
     )
+    from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
     from vtscore.training.blend_schedules import BlendContext
     from vtscore.training.mlp import LINEAR_SVM_HEAD
 
@@ -620,7 +622,6 @@ def train_and_threshold(
     # actually has.
     hidden_dim = LINEAR_SVM_HEAD
 
-    inclusion = get_inclusion()
     min_precision = get_min_precision()
     # The user's persisted split wins; unset resolves to the per-space
     # production default for this detector's embedder (issue #3287).
@@ -636,9 +637,9 @@ def train_and_threshold(
     # to their votes to keep only the learned sort's draws as evidence.
     holdouts: list[list[int]] = []
     if det_ctx is not None:
-        # Cache the K folds on the context so an Inclusion slide can re-derive
-        # the cutoff without a no-op (the find-label / detector-load paths land
-        # here; without the cache the slide can't move the line).
+        # Cache the K folds on the context so a re-cut can re-derive the cutoff
+        # without a no-op (the find-label / detector-load paths land here;
+        # without the cache a floor change can't move the line).
         folds = calibration_folds_cached(
             X_list,
             y_list,
@@ -663,7 +664,7 @@ def train_and_threshold(
             score_rows_by_group=cal_score_rows,
             holdout_sink=holdouts,
         )
-    threshold = threshold_from_folds(folds, inclusion)
+    threshold = threshold_from_folds(folds, PRECISION_FLOOR_FALLBACK_INCLUSION)
 
     if sample_weights is not None:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
@@ -714,7 +715,6 @@ def train_and_threshold(
             folds,
             rows,
             all_scores,
-            inclusion,
             blend_ctx,
             _blend_schedule_for_snap(hay),
             det_ctx=det_ctx,
@@ -1259,7 +1259,6 @@ def _train_and_score_xy(
     y_list: list[float],
     clips_dict: dict[int, dict[str, Any]],
     *,
-    inclusion_value: int,
     calibrate_count: int,
     calibration_fraction: float | None,
     det_ctx: Any,
@@ -1305,8 +1304,8 @@ def _train_and_score_xy(
     (its cache is keyed to the *active* dataset context).  Without it each
     detector would restack the corpus.
 
-    *min_precision* is the operating point's floor (``None``: the Inclusion knob
-    draws the line) and *calibrating_groups* the bags whose vote may calibrate
+    *min_precision* is the operating point's floor (``None``: the line is the
+    Inclusion 0 cut) and *calibrating_groups* the bags whose vote may calibrate
     it; see :func:`_fused_threshold` and :func:`calibration_rows_for`.
     """
     import torch  # noqa: PLC0415
@@ -1314,6 +1313,7 @@ def _train_and_score_xy(
     from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model  # noqa: PLC0415
     from vtscore.training.blend_schedules import BlendContext  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
+        PRECISION_FLOOR_FALLBACK_INCLUSION,
         calibration_folds_cached,
         threshold_from_folds,
     )
@@ -1368,7 +1368,7 @@ def _train_and_score_xy(
         score_rows_by_group=cal_score_rows,
         holdout_sink=holdouts,
     )
-    threshold = threshold_from_folds(folds, inclusion_value)
+    threshold = threshold_from_folds(folds, PRECISION_FLOOR_FALLBACK_INCLUSION)
     clock.mark("calibration_folds")
 
     # A Good vote trains on one row (the raw patch nearest the drawn box); a
@@ -1401,7 +1401,6 @@ def _train_and_score_xy(
         folds,
         rows,
         scores,
-        inclusion_value,
         blend_ctx,
         _blend_schedule_for_snap(clips_dict),
         det_ctx=det_ctx,
@@ -1422,7 +1421,7 @@ def train_and_score(
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
-    inclusion_value: int = 0,
+    inclusion_value: int | None = None,
     calibrate_count: int = 2,
     calibration_fraction: float | None = None,
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
@@ -1441,8 +1440,10 @@ def train_and_score(
             dict store (read via ``media_embedding``).
         good_votes: Dict whose keys are media IDs labelled as good (values are ``None``).
         bad_votes: Dict whose keys are media IDs labelled as bad (values are ``None``).
-        inclusion_value: Integer in ``[-10, 10]`` passed to the training and
-            threshold-finding functions to control the inclusion/exclusion bias.
+        inclusion_value: Deprecated (#4269): Inclusion is no longer a user
+            preference.  Leave it unset; ``0`` is accepted with a
+            ``DeprecationWarning`` and any other value raises ``ValueError``.
+            Set *min_precision* to choose where the line goes.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for calibration
@@ -1462,8 +1463,9 @@ def train_and_score(
             votes may calibrate a precision floor; without a context every vote
             may.
         min_precision: The precision floor to cut at, in ``(0, 1]``, or
-            ``None`` (the default) to cut at *inclusion_value*.  A floor that
-            promises nothing cuts at inclusion 0 (see :func:`_fused_threshold`).
+            ``None`` (the default) for no floor: the Inclusion 0 cut.  A floor
+            that promises nothing also cuts at Inclusion 0 (see
+            :func:`_fused_threshold`).
 
     Returns:
         A tuple ``(results, threshold, model)`` where:
@@ -1476,6 +1478,9 @@ def train_and_score(
         - ``model`` is the trained ``nn.Sequential`` model (``None`` when
           training was not possible).
     """
+    from vtscore.config.core_config import _retired_inclusion  # noqa: PLC0415
+
+    _retired_inclusion("train_and_score(inclusion_value=...)", inclusion_value)
     region_boxes = vote_region_boxes or {}
     X_list, y_list, groups, score_rows = _build_vote_xy(
         clips_dict, good_votes, bad_votes, region_boxes, detector_score_embedder(det_ctx, clips_dict)
@@ -1484,7 +1489,6 @@ def train_and_score(
         X_list,
         y_list,
         clips_dict,
-        inclusion_value=inclusion_value,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
