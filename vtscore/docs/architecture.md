@@ -153,7 +153,8 @@ library actually reads:
 - Lifecycle knobs: `autofind_detectors`, `dataset_max_age_days`.
 - Optional, defaulted fields: `autofind_exporter`,
   `autofind_exporter_field_values`, `projection_n_neighbors`,
-  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`.
+  `projection_min_dist`, `signpost_captioner`, `signpost_vocab`,
+  `hide_ingest_eta`.
 
 Every field without a default is required, so constructing one by hand
 means passing all twelve (as below).

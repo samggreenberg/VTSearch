@@ -448,16 +448,18 @@ the result inline (used by tests; the frontend leaves it `false`):
 
 The `done` payload — whether returned inline (`wait=true`) or via the result
 poll — is that same windowed envelope: `results`, `threshold`,
-`acq_threshold`, `sort_token`, `total`, `above_threshold`, `has_more_below`.
-This is the only sort with a detector behind it, so the only one whose
-`acq_threshold` is non-`null`.
+`acq_threshold`, `floor`, `sort_token`, `total`, `above_threshold`,
+`has_more_below`. This is the only sort with a detector behind it, so the only
+one whose `acq_threshold` and `floor` are non-`null`; `floor` is the
+[floor state](labeling.md#the-floor-state) of `threshold`, saying whether the
+line is a precision promise or the unpromised Inclusion 0 cut.
 
 `threshold` is the **decision line**: the cutoff shown to the user, what
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`
 is the **acquisition cut**, and it is a different number — Autopilot's Hard and
 New picks read a threshold as a *rank position* rather than a boundary, so they
-sample around a cut taken three inclusion steps below the reporting one, which
-places it higher in the ranking. Nothing shown to the user reads it. It is
+sample around a cut taken four inclusion steps below the reporting one
+(`ACQUISITION_INCLUSION_OFFSET`), which places it higher in the ranking. Nothing shown to the user reads it. It is
 `null` on sorts with no detector behind them (`/api/sort`, `/api/example-sort`,
 `/api/label-file-sort`), where a client should fall back to `threshold`. See
 [`docs/ML.md`](../ML.md#threshold-calibration) for the mechanism and the

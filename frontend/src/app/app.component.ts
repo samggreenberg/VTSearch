@@ -26,6 +26,7 @@ import { IncompatiblePairExplainerComponent } from './components/context-pulldow
 // together push the initial bundle over budget when eagerly loaded).
 import { DatasetImporterModalComponent } from './components/dashboard/dataset-importer-modal/dataset-importer-modal.component';
 import { NewDetectorModalComponent } from './components/dashboard/new-detector-modal/new-detector-modal.component';
+import { AutoDetectResultsModalComponent } from './components/modals/autodetect-results-modal/autodetect-results-modal.component';
 import { MediaStateService } from './services/media-state.service';
 import { DatasetStateService } from './services/dataset-state.service';
 import { ActiveDatasetService } from './services/active-dataset.service';
@@ -39,6 +40,7 @@ import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
 import { BuildSkewService } from './services/build-skew.service';
+import { AutoRunService } from './services/autorun.service';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -66,6 +68,7 @@ import { isPairCompatible } from './utils/context-compat';
     IncompatiblePairExplainerComponent,
     DatasetImporterModalComponent,
     NewDetectorModalComponent,
+    AutoDetectResultsModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
@@ -84,6 +87,9 @@ export class AppComponent {
   private newThingFlows = inject(NewThingFlowsService);
   private hfAuth = inject(HuggingFaceAuthService);
   private toast = inject(ToastService);
+  // Constructed here so it watches for finished AutoRun runs from app start,
+  // whichever view the user is on; the template mounts its results dialog.
+  autorun = inject(AutoRunService);
 
   title = 'VTSearch';
   menuOpen = false;

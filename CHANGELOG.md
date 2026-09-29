@@ -15,7 +15,126 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **AutoRun detectors really run on what you import, and on demand** (issue
+  #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
+  detectors run on every imported dataset, but only the CLI's `--autodetect`
+  ever ran them. Now a web import runs the importing user's AutoRun detectors
+  on the new dataset once it is saved: the run shows on the dataset's row
+  (cancellable), its results go to the Auto-Find exporter if one is set, and a
+  notice with **View results** opens them. The Add Dataset dialog has a **Run
+  AutoRun detectors on this dataset** checkbox (shown once you have an AutoRun
+  detector) that remembers how you left it, as the new `autorun_on_import`
+  setting. A dataset's ⋯ menu gains **Run AutoRun**, which runs them on an
+  existing dataset right away and opens the results when done. The **AutoRun
+  Results** dialog (the old Auto-Detect Results dialog, which nothing opened)
+  now has a working **Export** button that sends the rows it lists.
+
+- **Detectors draw their line at a precision floor: "show me what's at least
+  half right"** (issue #4245, the backend of #4224). A detector's line is now
+  the cut that returns as much as it can while at least a set share of it is
+  estimated right. Every detector starts at **50%**, taken from your new
+  `min_precision` setting, and each keeps its own. The estimate is cautious: it
+  only promises once it has seen about ten positives among the votes it holds
+  back to check itself, and it only counts votes you made off the learned sort
+  (Autopilot's Hard picks, or working down a list sorted by the detector). Until
+  then, or when no cut can reach the floor, the line stays exactly where
+  Inclusion 0 puts it, so nothing you see empties or jumps. A set floor wins
+  over Inclusion: while the Inclusion stepper is still on screen it does not
+  move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
+  or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
+  on-screen control that replaces the stepper arrives in #4246. New endpoint:
+  `GET|POST /api/min-precision`; see
+  [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
+
+- **An unpromised line says so** (issue #4247). When a detector can't yet
+  promise its precision floor - too little evidence, or no cut on the
+  dataset reaches it - its line stays at the Inclusion 0 cut and is now
+  labelled: the threshold line in the Find and Label lists is dashed and
+  reads *unpromised*, the minimap marker is dashed too, and hovering says
+  why. Nothing stops working on it: the Unverified Good count, the Find
+  review walk, To Dataset, Export and Browse all act on the items above the
+  line as before. AutoRun and command-line runs export the same set and
+  record that it was unpromised, in the log and as a `floor` entry beside
+  each detector's `threshold`. Every response that carries a detector's
+  line (`/api/inclusion`, the learned sort, `/api/find-label`,
+  `/api/auto-detect`) now carries that `floor` too; see
+  [the floor state](docs/api/labeling.md#the-floor-state).
+
+- **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
+  pages under `docs/user/howto/` each walk through one task click by click,
+  in the style of the user guide's *Step by step*, on the same Synthetic
+  Media drawings and `Yellow Smileys` detector: checking and correcting Find's
+  calls, borderline matches and Inclusion, how far to trust a detector,
+  exporting matches, starting from an example picture, region voting,
+  getting Autopilot unstuck, Manual mode, moving a detector, importing
+  labels, AutoRun from the command line, combining, Browse, dataset and
+  detector stats, import options, demo datasets, and saving settings. The
+  guide lists them under **How-to guides**, and the in-app Help panel now
+  opens a linked page in place, with **← Back** to return.
+
+- **Synthetic Media draws cartoon smiley faces, and takes a Seed** (issue
+  #4240). The **Demo → Synthetic Media** image generator used to draw one
+  smiley or a few flat shapes on a plain background. It now draws round
+  cartoon faces in seven colours and seven expressions, piles of shapes and
+  busy little scenes, on plain, polka-dot, striped, checked or gradient
+  backgrounds, with enough near-misses (a frowning yellow face, a smiling
+  orange one, a yellow disc) that "find the yellow smiley faces" is a real
+  search. A new **Seed** field picks which set is made: the same seed always
+  makes the same media, and two seeds make two sets with nothing in common.
+  A synthetic dataset imported before this keeps its old pictures; import
+  Synthetic Media again for the new ones.
+
+- **`--create-detector` makes the detector `--import-labels-into` names**
+  (issue #4238). A label file and a dataset are now enough for a headless run:
+  `--autodetect --import-labels-into NAME --create-detector --label-importer-file …`
+  creates NAME from the imported labels when it doesn't exist, then scores the
+  dataset with it. The detector is registered like one made with **New
+  Detector**, so it shows up on the Dashboard's Drafts tab for the user the run
+  ran as. Its media type comes from the source (a pickle's recorded type, or the
+  importer's `--media-type`), or from `--detector-media-type`. Without the flag
+  a missing detector still fails, now saying which flag would create it.
+  Pipeline files take `import_labels.create: true` and
+  `import_labels.media_type`.
+
 ### Fixed
+
+- **The Inclusion stepper no longer jumps the line early in a session.** With
+  too few votes for the calibration splits, the first change of the stepper
+  replaced the trained cutoff with a fixed 0.5, so the matches could change in
+  either direction, even shrinking on a step toward lenient. The line now stays
+  put until there are enough votes for the stepper to move it.
+- **Find with a detector that isn't loaded now uses your Inclusion and
+  calibration settings.** It always cut at Inclusion 0 with two calibration
+  splits, so the same detector could return different matches depending on
+  whether it happened to be loaded.
+- **Changing Inclusion on one detector no longer moves another detector's
+  line.** Switching to a detector afterwards showed its own Inclusion value
+  over a line cut at the value you'd set elsewhere.
+
+- **Combined detectors appear on the Dashboard.** **Combine selected
+  detectors** wrote the new detector but never registered it, so it showed up
+  nowhere, and trying the same name again failed as taken. It now lands on the
+  Drafts tab like any new detector.
+
+- **"Dropped N item(s) whose embedding failed" now says which items, and why**
+  (issue #4232). The warning ended with "See the server log for which embedder
+  declined", which a GUI user has no way to do. It now names the embedder and
+  what went wrong (it returned no vector for those items, crashed on the batch,
+  returned the wrong number of vectors, or none is installed for the media
+  type), and its new **Details** button lists every dropped item by file name,
+  with **Copy list** to put the list on your clipboard, one item per line.
+
+- **Find no longer runs a detector hidden on the other Dashboard tab**
+  (issue #4228). With a single detector on the AutoRun tab and none in
+  Drafts, the Dashboard selected that detector even while Drafts was
+  showing, and reselected it on every registry refresh after you switched
+  away from AutoRun, so Find stayed enabled with nothing visible selected.
+  Moving your only draft to AutoRun did the same. The detector selection
+  now only ever holds rows on the visible tab: Drafts stays empty, Find is
+  disabled until you select a detector you can see, and picking a detector
+  from the top bar switches to its tab.
 
 - **The folder importer's Browse opens at the folder you typed** (issue
   #4207). In **Add Dataset → Files → Folder**, clicking **Browse** after
@@ -94,6 +213,74 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Inclusion stepper is gone: pick a precision floor instead** (issue
+  #4246). Where the Manual tab and Find's left pane had the -10..10
+  Inclusion box, they now read **At least [50%] right**, with **25%**,
+  **50%**, **75%** and **90%** to pick from. A note under it says what the
+  floor is doing to the line: *At least 50% right* with how many items it
+  returns, *Can't reach 50% on this dataset*, or *Not enough evidence yet*
+  with the Good votes it has - the last two showing the default cut, as the
+  dashed *unpromised* line already said. The floor is the detector's own,
+  seeded from the last one you picked. In Find, **Stats** draws the floor
+  across its precision chart and says whether the line keeps it; the chart's
+  "Current cut (incl N)" legend is gone, and so are the unused `sweep` and
+  `inclusion` fields of `GET /api/find/stats`, which gains the line's
+  `floor`. Inclusion itself stays settable through `POST /api/inclusion` and
+  `PUT /api/settings`, and draws the line only for a detector whose floor is
+  cleared. The how-to *Catch the borderline matches* now covers the floor.
+
+- **Find Stats charts precision against how many items are returned** (issue
+  #4242). The chart that plotted wrong and missed matches at each Inclusion
+  stop now reads down the ranked list: for the top N items, on a log-scale
+  count axis, it draws the precision VTSearch estimates (a cautious lower
+  bound from the detector's own held-out votes, shown once they include 10
+  Good ones) and the precision of the items you have checked. A dashed line
+  marks the current cut, the line under the chart reads both numbers there,
+  and hovering reads them at any count. **Kept rate** now counts only the
+  matches you checked, with the count beside it ("7 of 10 checked"); it used
+  to count every unchecked match as right, so it read close to 100% however
+  the checks went.
+
+- **The Smart indicator measures every detector at Inclusion 0** (issue
+  #4243). Smart asks whether the detector is still getting better, by
+  re-scoring the recent detectors against your current votes. It used to
+  price their mistakes at your Inclusion and measure each at the line it
+  showed you. It now counts a false alarm and a miss equally, at the line
+  each detector would draw at Inclusion 0, whatever Inclusion you have set.
+  Nothing changes at the default Inclusion. This keeps the light steady once
+  a precision floor, rather than Inclusion, sets the line (#4224).
+
+- **The User Guide is illustrated with the yellow smiley example** (issue
+  #4240). Every screenshot in [the guide](docs/user/USER_GUIDE.md) now follows
+  a detector learning to find the yellow smiley faces among Synthetic Media's
+  drawings, instead of books in COCO photographs, and *Step by step* says which
+  Size and Seed make the very same pictures, so you can follow along without
+  any data of your own.
+
+- **`--import-labels-into` runs the detector it imports into, and only that
+  one** (issue #4235). Importing labels from the command line used to merge
+  them into the detector and then score with whatever was on the settings
+  file's Auto-Find list, so the detector you had just labelled only ran if you
+  had first opened the UI and moved it to **AutoRun**. Now
+  `--autodetect --import-labels-into NAME --label-importer-file …` scores with
+  NAME alone, whether or not it is on AutoRun, and nothing else on AutoRun
+  runs with it. A pipeline file's `import_labels:` block does the same unless
+  the file also lists `detectors:`. `--dry-run` shows the detector under
+  `Detectors (1; overrides the settings' Auto-Find list)`.
+
+- **`--autodetect` saves the dataset it imports to the dashboard** (issue
+  #4226). A CLI run used to import a dataset, score it, and throw it away. It
+  now imports through the same pipeline as **Add dataset**, saves the result,
+  and scores that saved copy, so the next time the UI is opened the dataset is
+  there (owned by `--user`, or the default user). With no Auto-Find detector
+  for the dataset, the import still succeeds and the run exits 0 with a
+  `Detection skipped` note, which makes `--autodetect` a plain headless import
+  too. **Add `--tempimport` to keep the old import-and-discard behaviour** —
+  cron jobs that should not grow the dashboard need it. `--tempimport` implies
+  `--autodetect`. `--stream-results` now requires `--tempimport`, since a
+  streamed source is never held whole and so cannot be saved. Pipeline files
+  follow the same default and take a `tempimport: true` key.
+
 - **The Autopilot "Update Sort Example?" prompt says what it is asking**
   (issue #4200). It used to show the current example and ask whether to keep
   it. It now reports how the sort has gone ("You've clicked 10 times and only
@@ -116,6 +303,32 @@ not list every commit. Use `git log` for the full history.
   GPU when there is one.
 
 ### Added
+
+- **Operators can hide the ETA on import progress bars** (issue #4233). On
+  some servers an import's speed is too erratic to predict, and its
+  remaining-time estimate could climb from "About 10 sec left" to "About
+  45 min left" in a single import. Setting `--hide-ingest-eta`,
+  `VTSEARCH_HIDE_INGEST_ETA=1` or `"hide_ingest_eta": true` in the server
+  settings file removes the estimate from dataset imports, staging imports
+  and labelset missing-media fetches. Those bars still fill and show their
+  counts, and every other progress bar keeps its estimate. Settings ▸ Server
+  shows whether the switch is on.
+
+- **A friendlier first run on the Dashboard** (issue #4227). An empty
+  Datasets or Detectors panel now shows a working **+** inside its "Click + to
+  add one." message, with an arrow to the real **+** in the panel header so
+  you know where it lives next time. While there are no detectors, the
+  **Drafts** / **AutoRun** tabs are dimmed and locked to Drafts, and the
+  disabled Combine and Delete icons beside **+** are fainter. Once a new
+  detector with no labels is selected next to a matching dataset, a
+  "Click Train to teach your new detector." hint points at **Train**. The
+  RAM / Disk bars now stay hidden until you have a detector; **Settings →
+  Appearance → RAM / Disk bars** switches them to always (**View**) or never
+  (**Hide**). In the New Detector dialog the examples no longer assume sound
+  ("e.g. large books", "e.g. Large Book Detector"), the hint under the example
+  tabs names only what that tab takes, a typed description becomes a
+  title-cased "… Detector" name, and Enter in the name field creates the
+  detector.
 
 - **A click-by-click walkthrough in the user guide** (#4202). The guide opens
   with *Step by step: your first search* — load a folder of photos, make a

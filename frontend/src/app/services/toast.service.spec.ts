@@ -131,6 +131,13 @@ describe('ToastService', () => {
     expect(service.toasts[0].detail).toBe('MyData: disk full');
   });
 
+  it('names a failed background AutoRun as such, not as a dataset load', () => {
+    const autorun = { run_id: 'ar', owner: 'u', trigger: 'import' as const, dataset_id: 'd', dataset_name: 'MyData' };
+    loadingTasks$.next([task({ task_id: 'ar', status: 'idle', error: 'boom', name: 'AutoRun: MyData', autorun })]);
+    expect(service.toasts[0].message).toBe('AutoRun failed');
+    expect(service.toasts[0].detail).toBe('AutoRun: MyData: boom');
+  });
+
   it('routes an SSE detector-load failure with the detector wording', () => {
     detectorLoadingTasks$.next([task({ task_id: 'y', status: 'idle', error: 'oom', name: 'Det' })]);
     expect(service.toasts.length).toBe(1);
@@ -256,6 +263,17 @@ describe('ToastService', () => {
   it('leaves the detail unset when neither source nor detail is given', () => {
     notifications$.next(notification());
     expect(service.toasts[0].detail).toBeUndefined();
+  });
+
+  it('carries the item list onto the toast', () => {
+    notifications$.next(notification({ items: ['page_2.pdf', 'notes.pdf'] }));
+    expect(service.toasts[0].items).toEqual(['page_2.pdf', 'notes.pdf']);
+  });
+
+  it('leaves items unset for a null or empty list, so no Details button appears', () => {
+    notifications$.next(notification({ id: 'note_ab_1', items: null }));
+    notifications$.next(notification({ id: 'note_ab_2', items: [] }));
+    expect(service.toasts.map((t) => t.items)).toEqual([undefined, undefined]);
   });
 
   it('dedups on the backend notification id, so a redelivered frame does not stack', () => {

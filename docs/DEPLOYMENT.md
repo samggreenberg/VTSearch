@@ -129,6 +129,7 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_RUNDIR` | system temp dir | Directory for the single-instance port lockfiles. Set it when several users run VTSearch on one host and a shared `/tmp` lockfile would collide. |
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
 | `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
+| `VTSEARCH_HIDE_INGEST_ETA` | unset | Set to `1`/`true`/`yes`/`on` to hide the remaining-time estimate on **ingest** progress bars (dataset imports, staging imports, and a labelset's missing-media fetch), for a deployment where those jobs are too erratic for any timing profile to predict. The bars still fill and show their counts; opening a dataset, sorts, Find and training keep their ETA. Env-var equivalent of `--hide-ingest-eta`, for the gunicorn images; an explicit flag wins, and either beats the persisted `hide_ingest_eta` server setting. See [When ingest ETAs can't be trusted](#when-ingest-etas-cant-be-trusted). |
 | `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
 | `VTSEARCH_SOLO_MEDIA_TYPE` | unset | Lock the whole instance to one mediaType: the importer and new-detector flows hide their mediaType pickers, converter offerings are filtered to converters that output this type, and that type's default embedder is preloaded at startup. Must be a registered media-type id (`audio`, `image`, `video`, `text`, `document`). Env-var equivalent of `--solo-media-type`, for the gunicorn images; an explicit flag wins, and either beats the persisted `solo_media_type` server setting. |
 | `VTSEARCH_SOLO_EMBEDDERS` | unset | Comma-separated `TYPE=EMBEDDER` pairs (e.g. `image=siglip,audio=clap`) locking the embedder for those mediaTypes, so the importer modal hides its embedder picker for each. A per-process *fallback*: any user who picks their own embedder in the settings UI overrides it for themselves. Env-var equivalent of the repeatable `--solo-embedder`; an explicit flag wins. |
@@ -612,6 +613,7 @@ working.
   "dataset_max_age_days": null,
   "support_email": "ops@example.org",
   "semantic_only": false,
+  "hide_ingest_eta": false,
   "solo_media_type": null,
   "projection_n_neighbors": 15,
   "projection_min_dist": 0.1,
@@ -659,6 +661,12 @@ working.
   prototype Patch Semantic and Structural types from every picker and rejecting
   them at the dataset-load / detector-create routes. Also settable with
   `--semantic-only` / `VTSEARCH_SEMANTIC_ONLY`.
+- `hide_ingest_eta`: withholds the remaining-time estimate from ingest progress
+  bars (dataset imports, staging imports, a labelset's missing-media fetch)
+  while leaving the bars and their counts in place. Other progress bars keep
+  their ETA. Also settable with `--hide-ingest-eta` /
+  `VTSEARCH_HIDE_INGEST_ETA`. See
+  [When ingest ETAs can't be trusted](#when-ingest-etas-cant-be-trusted).
 - `solo_media_type`: narrows the whole instance to one media type. The importer
   and new-detector flows hide their media-type pickers and lock to it, the
   converter picker filters to converters that output it, and media-type steps
@@ -700,6 +708,7 @@ An abridged example; the full field list is `UserSettings` in
   "calibration_fraction": null,
   "audio_playing": true,
   "show_animations": "show",
+  "show_usage_bars": "default",
   "show_metadata": false,
   "label_hint_dismissed": false,
   "enable_achievements": true,
@@ -712,6 +721,7 @@ An abridged example; the full field list is `UserSettings` in
   "autofind_detectors": [],
   "autofind_exporter": "",
   "autofind_exporter_field_values": {},
+  "autorun_on_import": true,
   "focus_mode_left": {},
   "focus_mode_right": {},
   "grid_icon_size_left": {},
@@ -729,14 +739,18 @@ An abridged example; the full field list is `UserSettings` in
 
 - `theme`: `"system"` (the default — follows the OS `prefers-color-scheme`),
   `"dark"`, `"light"`, or `"highviz"`.
-- `autofind_detectors`: detector names to run during `/api/auto-detect` and the
-  CLI `--autodetect` flow, each mapping to a JSON file under `data/detectors/`.
+- `autofind_detectors`: detector names to run on each web import, from a
+  dataset's **Run AutoRun**, during `/api/auto-detect`, and in the CLI
+  `--autodetect` flow, each mapping to a JSON file under `data/detectors/`.
   Every user curates their own list on the Dashboard's AutoRun detector tab
   (`PUT /api/detectors/registry/<id>/autofind`). `autofind_exporter` names the
   results exporter run afterwards (`""` = no auto-export; the CLI then falls
   back to the `gui` exporter), and `autofind_exporter_field_values` keeps each
   exporter's configuration around when the picker switches between them. This is
   the trio that reads through to `data/settings.json` for the `default` user.
+  `autorun_on_import` (default `true`) is whether a web import runs them: the
+  Add Dataset dialog's **Run AutoRun** checkbox starts from it and each import
+  writes it back.
 - `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
   per-media-type UI preferences, keyed by media-type id, so a user can tune
   audio and image datasets independently. Empty entries fall back to the
@@ -925,6 +939,29 @@ the underlying estimate moves decisively, which is why the UI says
 "About 10 min left" and keeps saying it rather than counting through every
 revision. A genuinely slowing job still reports the increase; what it no longer
 does is twitch.
+
+### When ingest ETAs can't be trusted
+
+Some deployments ingest from sources nobody can predict: a shared network
+filesystem whose throughput depends on who else is on it, remote archives that
+stall and resume, collections whose files range from kilobytes to gigabytes. On
+those, an import's rate changes too much for any profile to fix, and the ETA
+can climb from "About 10 sec left" to "About 45 min left" in one job. An
+estimate that far off is worse than none.
+
+For that case, switch the estimate off on ingest bars:
+
+```bash
+VTSEARCH_HIDE_INGEST_ETA=1     # or --hide-ingest-eta, or "hide_ingest_eta": true in data/settings.json
+```
+
+The dataset-import, staging-import and labelset missing-media bars then publish
+no remaining-time estimate (`eta_seconds` is always `null` on their progress
+events), but they still fill, count and name their step, so users can see the
+import is moving. Every other bar (opening a dataset, loading a detector,
+sorts, Find, train-and-score, promote) keeps its ETA. The switch only affects
+display: a profile and the recorders keep working with it on, and the
+Settings ▸ Server tab reports whether it is on.
 
 ---
 

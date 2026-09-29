@@ -39,6 +39,8 @@ from vtsearch.schemas.sorting import (
     LearnedSortRequestSchema,
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
+    MinPrecisionRequestSchema,
+    MinPrecisionResponseSchema,
     OkResponseSchema,
     SortPageQuerySchema,
     SortPageResponseSchema,
@@ -66,10 +68,12 @@ from vtsearch.state import (
     get_coverage_atlas,
     get_inclusion,
     get_learned_scores,
+    get_min_precision,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
     set_inclusion,
+    set_min_precision,
     snapshot_medias,
     vote_region_boxes,
 )
@@ -78,7 +82,7 @@ from vtscore.concurrency.progress import sort_progress, update_sort_progress
 sorting_bp = Blueprint(
     "sorting",
     __name__,
-    description="Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
+    description="Text / example / learned sort, votes, inclusion, precision floor, safe-thresholds, coverage atlas.",
 )
 
 # Text-sort proceeds in three phases: load the embedding model, embed the text
@@ -298,6 +302,7 @@ def _learned_sort_done_payload(job) -> dict:
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
         "acq_threshold": result.get("acq_threshold"),
+        "floor": result.get("floor"),
         "sort_token": result.get("sort_token"),
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
@@ -345,6 +350,8 @@ def learned_sort(body: dict):
     )
     from vtscore.state.core import (
         detector_acquisition_threshold,
+        detector_floor_state,
+        detector_line_inclusion,
         get_active_context,
         get_active_detector_context,
     )
@@ -369,6 +376,7 @@ def learned_sort(body: dict):
     _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
     inclusion_value = get_inclusion()
+    min_precision_value = get_min_precision()
     calibrate_count_value = get_calibrate_count()
     calibration_fraction_value = get_calibration_fraction()
     region_boxes_snapshot = dict(vote_region_boxes)
@@ -384,6 +392,7 @@ def learned_sort(body: dict):
         inclusion_value=inclusion_value,
         calibrate_count_value=calibrate_count_value,
         calibration_fraction_value=calibration_fraction_value,
+        min_precision_value=min_precision_value,
     )
 
     cached = learned_sort_jobs.cached_for(signature)
@@ -406,13 +415,19 @@ def learned_sort(body: dict):
             inclusion_value=inclusion_value,
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
+            min_precision_value=min_precision_value,
         )
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
-        # carries one.
-        acq = detector_acquisition_threshold(det_ctx, inclusion_value)
-        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4))
+        # carries one.  It sits four inclusion steps stricter than the line:
+        # under a promised floor no inclusion drew that line, so none is passed
+        # and it is derived from the line itself (#4245).
+        line_incl = detector_line_inclusion(det_ctx, inclusion_value, min_precision_value)
+        acq = detector_acquisition_threshold(det_ctx, line_incl)
+        # Whether the line is a promise rides with it (#4247).
+        floor = detector_floor_state(det_ctx, min_precision_value)
+        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), floor=floor)
 
     job = learned_sort_jobs.start(
         signature,
@@ -563,7 +578,7 @@ def add_textsort_suggestion_route(body: dict):
 @sorting_bp.response(200, InclusionResponseSchema)
 def get_inclusion_route():
     """Get the current Inclusion setting and the cutoff it resolves to."""
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold(), "floor": _active_floor_state()}
 
 
 @sorting_bp.route("/api/inclusion", methods=["POST"])
@@ -595,7 +610,61 @@ def set_inclusion_route(body: dict):
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
     set_inclusion(new_inclusion)
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold(), "floor": _active_floor_state()}
+
+
+@sorting_bp.route("/api/min-precision", methods=["GET"])
+@sorting_bp.response(200, MinPrecisionResponseSchema)
+def get_min_precision_route():
+    """Get the active detector's precision floor, what it can promise, and the line it draws."""
+    return _min_precision_payload()
+
+
+@sorting_bp.route("/api/min-precision", methods=["POST"])
+@sorting_bp.arguments(MinPrecisionRequestSchema)
+@sorting_bp.response(200, MinPrecisionResponseSchema)
+def set_min_precision_route(body: dict):
+    """Set the precision floor (a fraction clamped to ``[0.01, 1]``), or clear it with ``null``.
+
+    The counterpart of ``POST /api/inclusion``: a pure cutoff knob.  The active
+    detector re-cuts its cached estimators at the new floor (no retrain) and,
+    in Find mode, re-splits the unverified items over the frozen scores.  The
+    new line comes back in the same round trip.  A set floor draws the line
+    whatever Inclusion says; ``null`` hands it back to Inclusion.  A floor that
+    can promise nothing draws the Inclusion 0 line and says why in ``status``.
+    """
+    # As ``set_inclusion_route``: the clamp is the one declared on
+    # ``UserSettings.min_precision``, reached through the autogenerated
+    # ``settings.validate_min_precision``, so this endpoint and
+    # ``PUT /api/settings`` cannot disagree about the range.
+    from vtsearch import settings  # noqa: PLC0415
+
+    raw = body["min_precision"]
+    try:
+        value = None if raw is None else settings.validate_min_precision(float(raw))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
+    set_min_precision(value)
+    return _min_precision_payload()
+
+
+def _min_precision_payload() -> dict:
+    """The ``/api/min-precision`` response for the active detector."""
+    from vtscore.state.core import _empty_detector_context, detector_floor_state, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    threshold = _active_detector_threshold()
+    state = detector_floor_state(det_ctx, get_min_precision())
+    estimate = None if det_ctx is _empty_detector_context else det_ctx.precision_floor_cache
+    n_returned = estimate.count_at(threshold) if estimate is not None and threshold is not None else None
+    return {**state, "threshold": threshold, "n_returned": n_returned}
+
+
+def _active_floor_state() -> dict:
+    """What the precision floor says about the active detector's line (#4247)."""
+    from vtscore.state.core import detector_floor_state, get_active_detector_context
+
+    return detector_floor_state(get_active_detector_context(), get_min_precision())
 
 
 def _active_detector_threshold() -> float | None:

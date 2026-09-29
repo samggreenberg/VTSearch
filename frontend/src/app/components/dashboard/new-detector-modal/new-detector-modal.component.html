@@ -121,7 +121,7 @@
                   [ngModel]="pendingText()"
                   (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
-                  placeholder="e.g. dog barking sounds"
+                  placeholder="e.g. large books"
                   title="A text description of what this detector should find"
                   (keydown.enter)="$event.preventDefault(); submit()"
                 />
@@ -150,9 +150,7 @@
           }
 
           @if (!hasExample) {
-            <p class="info-text example-empty-hint">
-              Provide a text or {{ exampleMediaTabLabel.toLowerCase() }} example to create the detector.
-            </p>
+            <p class="info-text example-empty-hint">{{ exampleHint }}</p>
           }
         </div>
       }
@@ -341,8 +339,9 @@
           [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"
-          placeholder="e.g. Dog Barks"
+          placeholder="e.g. Large Book Detector"
           title="A short name to identify this detector"
+          (keydown.enter)="onNameEnter($event)"
         />
       </div>
 

@@ -193,12 +193,26 @@ name — see the note on `SortStateService` in `PairScopeService`'s header.
 
 The three panels are shared with the Find view:
 
-- **Left** — media list (virtual scroller), sort bar, inclusion slider, stripe
+- **Left** — media list (virtual scroller), sort bar, precision floor, stripe
   overview, select mode, and the **Autopilot panel** that drives the automated
   vote → train → re-sort loop.
 - **Center** — the media viewer, one child per media type (image, text, video,
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
+
+**The precision floor** (`vt-precision-floor`, in the Manual tab and Find's
+top row) is the one knob on the detector's line. Two values back it, and they
+travel separately: `SortStateService.minPrecision` is the floor the picker
+shows, seeded per pair by `PairScopeService.seedMinPrecision`; `floor` is the
+verdict on the line on screen, and only ever arrives *with* that line (a sort,
+a Find pass, or the floor POST's own response). Each view has one write path,
+both `switchMap`-ed and pair-scoped so a floor the user moved past can never
+land last. Find's (`minPrecisionRequests$`, debounced) installs the returned
+line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
+the learned sort, but only from the POST's response: the learned sort reads
+the floor server-side and caches by it, so a re-sort that beat the POST would
+come back at the old floor. When the floor promised nothing before and after,
+both lines are the default cut, and only the verdict is swapped.
 
 ### Find view (`components/find-view/`)
 
@@ -282,6 +296,7 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
+| `AutoRunService` | The end of a background AutoRun: opens the results of a run this tab started from a dataset's ⋯ **Run AutoRun**, toasts any other run of the user's (an import's) with a **View results** action, and holds the run the app-root AutoRun Results dialog shows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
@@ -714,7 +729,7 @@ without the stack one keypress closed them all and lost the outer form.
   including the canonical markup and the persistent-tab exception, is in
   [`CLAUDE.md`](../CLAUDE.md) under "Nested-modal back buttons".
 - **Plugin-field forms preview their template variables.** A modal that builds
-  a form from a plugin's `fields` (Export, Auto-Detect results) seeds each
+  a form from a plugin's `fields` (Export, AutoRun Results) seeds each
   value through `PluginTemplateVarsService`, which resolves the *declared*
   `template_vars` — `{detector_name}`, `{username}`, the date parts — so the
   user sees and can edit the value the server would substitute rather than a
@@ -757,7 +772,9 @@ bundle's *static* imports from `main.js` and fails if the package reappears.
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` are the small
-shared widgets. `directives/no-focus-steal.directive.ts` stops toolbar buttons
+shared widgets. `pointer-arrow/` draws a measured "look here" arrow from one
+element to another (the Dashboard's first-run hints); drop it under any
+positioned container that encloses both ends. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when

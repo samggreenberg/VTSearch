@@ -16,7 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vtscore.config.runtime import PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config.runtime import DEFAULT_MIN_PRECISION, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
 
 # ---------------------------------------------------------------------------
 # CoreConfig: runtime config bundle the (future) ``vtscore`` library consumes
@@ -133,6 +133,22 @@ class CoreConfig:
     # library-only ``CoreConfig(...)`` constructions without the app shim keep
     # working unchanged.
     signpost_vocab: dict[str, list[str]] = field(default_factory=dict)
+
+    # Operator switch: ingest progress bars (dataset imports, staging imports,
+    # a labelset's missing-media fetch) publish no remaining-time estimate,
+    # for deployments where no timing profile makes one trustworthy (issue
+    # #4233).  The app populates it from the ``hide_ingest_eta`` admin
+    # setting.  Read by :func:`vtscore.concurrency.progress.ingest_eta_hidden`.
+    # Defaulted here so library-only ``CoreConfig(...)`` constructions
+    # without the app shim keep working unchanged.
+    hide_ingest_eta: bool = False
+
+    # The user's precision floor (#4245): the fraction of what a detector's cut
+    # returns that should be right, or ``None`` for no floor - the Inclusion
+    # knob then draws the line.  Seeds each detector's own floor on first read
+    # (``vtscore.state.get_min_precision``), as ``inclusion`` does.  Defaulted
+    # here so library-only ``CoreConfig(...)`` constructions keep working.
+    min_precision: float | None = DEFAULT_MIN_PRECISION
 
     @classmethod
     def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:

@@ -191,6 +191,9 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "autorun_on_import": {
+            "type": "boolean"
+          },
           "bin_details_docked": {
             "additionalProperties": {
               "type": "boolean"
@@ -332,6 +335,10 @@
           "hide_autopilot": {
             "type": "boolean"
           },
+          "hide_ingest_eta": {
+            "readOnly": true,
+            "type": "boolean"
+          },
           "import_defaults_by_media_type": {
             "additionalProperties": {},
             "type": "object"
@@ -355,6 +362,10 @@
           "max_concurrent_dataset_embeddings": {
             "readOnly": true,
             "type": "integer"
+          },
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
           },
           "panel_pct_left": {
             "additionalProperties": {
@@ -398,6 +409,14 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "show_usage_bars": {
+            "enum": [
+              "hide",
+              "default",
+              "view"
+            ],
+            "type": "string"
           },
           "solo_embedder_per_media_type": {
             "additionalProperties": {
@@ -541,6 +560,65 @@
           "localizers_run",
           "media_type",
           "results"
+        ],
+        "type": "object"
+      },
+      "AutoRunRunResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_export": {
+            "$ref": "#/components/schemas/_AutoFindExportStatus"
+          },
+          "created_at": {
+            "description": "Unix seconds the run finished.",
+            "type": "number"
+          },
+          "dataset_id": {
+            "type": "string"
+          },
+          "dataset_name": {
+            "type": "string"
+          },
+          "detectors_run": {
+            "type": "integer"
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "missing_detectors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "results": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/_AutoDetectResult"
+            },
+            "type": "object"
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "trigger": {
+            "description": "``import`` when a finished web import started the run, ``manual`` when the dataset's Run AutoRun action did.",
+            "enum": [
+              "import",
+              "manual"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "dataset_id",
+          "dataset_name",
+          "detectors_run",
+          "media_type",
+          "missing_detectors",
+          "results",
+          "run_id",
+          "trigger"
         ],
         "type": "object"
       },
@@ -1367,6 +1445,12 @@
       "DatasetLoadDemoRequest": {
         "additionalProperties": false,
         "properties": {
+          "autorun": {
+            "default": null,
+            "description": "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides.",
+            "nullable": true,
+            "type": "string"
+          },
           "build_projection": {
             "default": "false",
             "description": "When 'true', compute + persist the 2-D Browse projection at ingest.",
@@ -3626,6 +3710,9 @@
           "detector_name": {
             "type": "string"
           },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState"
+          },
           "good_count": {
             "type": "integer"
           },
@@ -3645,6 +3732,7 @@
         "required": [
           "bad_count",
           "detector_name",
+          "floor",
           "good_count",
           "ok",
           "results",
@@ -3741,6 +3829,40 @@
         ],
         "type": "object"
       },
+      "FindStatsPrecisionPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "checked": {
+            "type": "integer"
+          },
+          "checked_good": {
+            "type": "integer"
+          },
+          "estimated_precision": {
+            "nullable": true,
+            "type": "number"
+          },
+          "n_returned": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "verified_precision": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "checked",
+          "checked_good",
+          "estimated_precision",
+          "n_returned",
+          "threshold",
+          "verified_precision"
+        ],
+        "type": "object"
+      },
       "FindStatsResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3748,6 +3870,9 @@
             "type": "number"
           },
           "agreements": {
+            "type": "integer"
+          },
+          "calibration_positives": {
             "type": "integer"
           },
           "confirmed_bad": {
@@ -3762,23 +3887,37 @@
           "culled_false_pos": {
             "type": "integer"
           },
-          "inclusion": {
+          "estimate_status": {
+            "enum": [
+              "estimated",
+              "insufficient_evidence",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState"
+          },
+          "min_calibration_positives": {
             "type": "integer"
           },
-          "precision": {
-            "type": "number"
+          "n_returned": {
+            "type": "integer"
+          },
+          "n_scored": {
+            "type": "integer"
+          },
+          "precision_curve": {
+            "items": {
+              "$ref": "#/components/schemas/FindStatsPrecisionPoint"
+            },
+            "type": "array"
           },
           "rescued_false_neg": {
             "type": "integer"
           },
           "stale": {
             "type": "boolean"
-          },
-          "sweep": {
-            "items": {
-              "$ref": "#/components/schemas/FindStatsSweepPoint"
-            },
-            "type": "array"
           },
           "threshold": {
             "type": "number"
@@ -3789,50 +3928,75 @@
           "total_good": {
             "type": "integer"
           },
+          "verified_called_good": {
+            "type": "integer"
+          },
           "verified_count": {
             "type": "integer"
+          },
+          "verified_kept_good": {
+            "type": "integer"
+          },
+          "verified_precision": {
+            "nullable": true,
+            "type": "number"
           }
         },
         "required": [
           "agreement_rate",
           "agreements",
+          "calibration_positives",
           "confirmed_bad",
           "confirmed_good",
           "corrections",
           "culled_false_pos",
-          "inclusion",
-          "precision",
+          "estimate_status",
+          "floor",
+          "min_calibration_positives",
+          "n_returned",
+          "n_scored",
+          "precision_curve",
           "rescued_false_neg",
           "stale",
-          "sweep",
           "threshold",
           "total_bad",
           "total_good",
-          "verified_count"
+          "verified_called_good",
+          "verified_count",
+          "verified_kept_good",
+          "verified_precision"
         ],
         "type": "object"
       },
-      "FindStatsSweepPoint": {
+      "FloorState": {
         "additionalProperties": false,
         "properties": {
-          "false_neg": {
+          "calibration_positives": {
             "type": "integer"
           },
-          "false_pos": {
+          "min_calibration_positives": {
             "type": "integer"
           },
-          "inclusion": {
-            "type": "integer"
-          },
-          "threshold": {
+          "min_precision": {
+            "nullable": true,
             "type": "number"
+          },
+          "status": {
+            "enum": [
+              "promised",
+              "unreachable",
+              "insufficient_evidence",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
           }
         },
         "required": [
-          "false_neg",
-          "false_pos",
-          "inclusion",
-          "threshold"
+          "calibration_positives",
+          "min_calibration_positives",
+          "min_precision",
+          "status"
         ],
         "type": "object"
       },
@@ -4140,6 +4304,10 @@
       "InclusionResponse": {
         "additionalProperties": false,
         "properties": {
+          "floor": {
+            "$ref": "#/components/schemas/FloorState",
+            "nullable": true
+          },
           "inclusion": {
             "type": "integer"
           },
@@ -4531,6 +4699,10 @@
           },
           "error": {
             "type": "string"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState",
+            "nullable": true
           },
           "has_more_below": {
             "type": "boolean"
@@ -4973,6 +5145,60 @@
           "click_time",
           "ok",
           "state"
+        ],
+        "type": "object"
+      },
+      "MinPrecisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "min_precision": {
+            "nullable": true
+          }
+        },
+        "required": [
+          "min_precision"
+        ],
+        "type": "object"
+      },
+      "MinPrecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_positives": {
+            "type": "integer"
+          },
+          "min_calibration_positives": {
+            "type": "integer"
+          },
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
+          },
+          "n_returned": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "promised",
+              "unreachable",
+              "insufficient_evidence",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "calibration_positives",
+          "min_calibration_positives",
+          "min_precision",
+          "n_returned",
+          "status",
+          "threshold"
         ],
         "type": "object"
       },
@@ -5738,6 +5964,9 @@
           "autopilot_top_greens": {
             "type": "integer"
           },
+          "autorun_on_import": {
+            "type": "boolean"
+          },
           "bin_details_docked": {},
           "browse_colormap": {},
           "browse_details_metadata_width": {
@@ -5794,6 +6023,10 @@
             "type": "boolean"
           },
           "last_embedder_per_media_type": {},
+          "min_precision": {
+            "nullable": true,
+            "type": "number"
+          },
           "panel_pct_left": {},
           "panel_pct_right": {},
           "popup_metadata_shown": {},
@@ -5811,6 +6044,14 @@
           },
           "show_metadata": {
             "type": "boolean"
+          },
+          "show_usage_bars": {
+            "enum": [
+              "hide",
+              "default",
+              "view"
+            ],
+            "type": "string"
           },
           "solo_embedder_per_media_type": {
             "nullable": true
@@ -6324,6 +6565,10 @@
         "properties": {
           "detector_name": {
             "type": "string"
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState",
+            "nullable": true
           },
           "hits": {
             "items": {
@@ -7359,7 +7604,7 @@
     },
     "/api/auto-detect": {
       "post": {
-        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single Auto-Find detector.",
+        "description": "Iterates :func:`~vtsearch.settings.get_autofind_detectors` and trains each\none's MLP on demand from its on-disk labelset.  Returns one result column\nper detector. Pass ``detector_name`` to run a single AutoRun detector.\n\nThe synchronous, scripted sibling of the Dashboard's background AutoRun\n(``POST /api/datasets/registry/<dataset_id>/autorun``); both run through\n:mod:`vtsearch.autorun_detectors`.  This one reports on the shared Find\ntracker and is cancelled by ``/api/find/cancel``.",
         "operationId": "auto_detect",
         "requestBody": {
           "content": {
@@ -7383,10 +7628,10 @@
             "description": "OK"
           },
           "400": {
-            "description": "No medias loaded, or no Auto-Find detectors match the active media type."
+            "description": "No medias loaded, or no AutoRun detectors match the active media type."
           },
           "404": {
-            "description": "Named detector is not flagged for Auto-Find."
+            "description": "Named detector is not on the caller's AutoRun list."
           },
           "409": {
             "description": "Find was cancelled via /api/find/cancel."
@@ -7398,7 +7643,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Score the active dataset with every detector flagged for Auto-Find.",
+        "summary": "Score the active dataset with every detector on the caller's AutoRun list.",
         "tags": [
           "detector_scoring"
         ]
@@ -7759,6 +8004,45 @@
           "processors_crud"
         ]
       }
+    },
+    "/api/autorun/runs/{run_id}": {
+      "get": {
+        "description": "``run_id`` is the ``task_id`` of the AutoRun task (``autorun.run_id`` on\nits ``loading-tasks`` row).  Runs are kept in memory only, and only the\nmost recent few, so an old or pre-restart run answers 404 like one that\nnever existed.",
+        "operationId": "get_autorun_run",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoRunRunResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "No such run for the caller: unknown, another user's, or aged out of the kept window."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Results of a finished background AutoRun, for the user who started it.",
+        "tags": [
+          "detector_scoring"
+        ]
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ]
     },
     "/api/browse": {
       "get": {
@@ -9147,6 +9431,54 @@
           }
         }
       ]
+    },
+    "/api/datasets/registry/{dataset_id}/autorun": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "dataset_id",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "The Dashboard's dataset \u22ef **Run AutoRun**.  Scores the dataset with every\ndetector on the caller's AutoRun list that applies to it, sends the results\nto their Auto-Find exporter when one is set, and keeps them for the AutoRun\nResults dialog (``GET /api/autorun/runs/<task_id>``).  Progress is reported\non the ``loading-tasks`` channel of ``GET /api/events`` under the returned\n``task_id``, on a task keyed to this dataset; its ``autorun`` block carries\nthe summary once it finishes.  Cancellable like any loading task.",
+        "operationId": "run_dataset_autorun",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetRegistryLoadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "None of the caller's AutoRun detectors applies to this dataset (its media or embedder types)."
+          },
+          "403": {
+            "description": "Access denied for the current user."
+          },
+          "404": {
+            "description": "Dataset not found."
+          },
+          "409": {
+            "description": "Dataset is not currently loaded."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Run the caller's AutoRun detectors on a loaded dataset, in the background.",
+        "tags": [
+          "datasets_registry"
+        ]
+      }
     },
     "/api/datasets/registry/{dataset_id}/coverage-atlas": {
       "parameters": [
@@ -11839,7 +12171,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\nPure read; no new state.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and reports what the\nprecision floor says about the current line (``floor``), so the chart can\nmark the floor and say whether the line keeps it.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items and the\nprecision floor's lower-bound estimate - at log-spaced return counts (see\n:mod:`vtsearch.routes.detectors._find_precision`).\nPure read; no new state.",
         "operationId": "find_stats",
         "responses": {
           "200": {
@@ -13205,6 +13537,66 @@
         "summary": "Set a single media's vote to an **absolute target state**.",
         "tags": [
           "medias"
+        ]
+      }
+    },
+    "/api/min-precision": {
+      "get": {
+        "operationId": "get_min_precision_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinPrecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Get the active detector's precision floor, what it can promise, and the line it draws.",
+        "tags": [
+          "sorting"
+        ]
+      },
+      "post": {
+        "description": "The counterpart of ``POST /api/inclusion``: a pure cutoff knob.  The active\ndetector re-cuts its cached estimators at the new floor (no retrain) and,\nin Find mode, re-splits the unverified items over the frozen scores.  The\nnew line comes back in the same round trip.  A set floor draws the line\nwhatever Inclusion says; ``null`` hands it back to Inclusion.  A floor that\ncan promise nothing draws the Inclusion 0 line and says why in ``status``.",
+        "operationId": "set_min_precision_route",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MinPrecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinPrecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Set the precision floor (a fraction clamped to ``[0.01, 1]``), or clear it with ``null``.",
+        "tags": [
+          "sorting"
         ]
       }
     },
@@ -14655,7 +15047,7 @@
       "name": "medias"
     },
     {
-      "description": "Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
+      "description": "Text / example / learned sort, votes, inclusion, precision floor, safe-thresholds, coverage atlas.",
       "name": "sorting"
     },
     {
@@ -14727,7 +15119,7 @@
       "name": "detectors_registry"
     },
     {
-      "description": "Run a detector against the active dataset (find-label) or run every Auto-Find detector at once (auto-detect).",
+      "description": "Run a detector against the active dataset (find-label) or run every AutoRun detector at once (auto-detect).",
       "name": "detector_scoring"
     },
     {

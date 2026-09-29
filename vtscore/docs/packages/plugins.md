@@ -230,7 +230,7 @@ frontend handles its result-display directly.
 | `add_cli_arguments(parser)` | Adds one `argparse` flag per field (`key` with `_` → `-`). `"checkbox"` → `BooleanOptionalAction` (`--<key>` / `--no-<key>`); static `"select"` (not `allow_free_text` / `dynamic_options`) → `choices`; `"number"` → `type=int` or `float` per `is_integer_number()`. |
 | `validate_cli_field_values(field_values)` | Raises `ValueError("Missing required argument: --<flag>")` for a required, default-less, non-checkbox field that is empty, then runs [`normalize_field_values`](#field-value-normalization). |
 | `to_dict()` | Returns the JSON-serialisable plugin metadata used by listing endpoints: `{name, display_name, description, icon, fields, ui_mode, hidden_from_picker}`. |
-| `notify(message, *, level="info", detail=None) -> Notification` | Shows the user a one-off message (a toast in the app, a printed line under the CLI) with `display_name` as the source, and keeps going. For the recoverable problem that shouldn't fail the run - see [`concurrency.md`](concurrency.md#user-notifications). Never raises. |
+| `notify(message, *, level="info", detail=None, items=None) -> Notification` | Shows the user a one-off message (a toast in the app, a printed line under the CLI) with `display_name` as the source, and keeps going. For the recoverable problem that shouldn't fail the run - see [`concurrency.md`](concurrency.md#user-notifications). Never raises. |
 
 Subclasses normally only override `to_dict()` if they need to attach
 family-specific metadata (e.g. converters expose `source_type` /

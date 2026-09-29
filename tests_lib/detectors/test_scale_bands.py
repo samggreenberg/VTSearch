@@ -320,7 +320,7 @@ class TestPairedMix:
     same images as theirs.
     """
 
-    EQUAL = {"small": 1, "medium": 1, "large": 1}
+    EQUAL: dict[str, float] = {"small": 1.0, "medium": 1.0, "large": 1.0}
 
     def _mix(self, medias=None, mix=None, seed=5, label="mix-equal"):
         medias = medias if medias is not None else _medias(per_band=(30, 30, 30), n_neg=60)

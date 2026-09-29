@@ -7,8 +7,9 @@
  * "What shipped"): the box is RAM-tight (~3.7 GB), so the harness connects to a
  * SINGLE already-running app (started by refresh.sh) rather than booting its own
  * per run — two app instances would load the image embedder twice and risk OOM.
- * Determinism still holds because the fixtures are the Book example's COCO
- * corpora (`book-example.mjs`), a pure function of the COCO download.
+ * Determinism still holds because the fixtures are the Smiley example's
+ * generated drawings (`smiley-example.mjs`), a pure function of the generator
+ * and its seeds.
  *
  * Usage:
  *   tsx capture.ts                 # capture every shot, both themes
@@ -21,8 +22,8 @@ import { type Browser, type BrowserContext, type Page } from 'playwright';
 import { launchChromium } from './launch.mjs';
 // @ts-expect-error - plain .mjs helper, shared with the slide shooter
 import { drawCallouts, resolveBox } from './callouts.mjs';
-// @ts-expect-error - plain .mjs helper, shared with the slide shooter
-import { BOOK_DETECTOR, REGION_DATASET, TRAIN_DATASET } from './book-example.mjs';
+// @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
+import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smiley-example.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
@@ -52,24 +53,31 @@ function ramFreeMB(): number {
 
 /**
  * Injected before every capture: kill animations so frames are stable, and hide
- * the toast stack.
+ * the toast stack, the Settings footer's stale-bundle chip, and the trophy's
+ * unseen-achievement dot.
  *
  * The toasts are an artefact of the harness rather than of the product: it
  * drives a dev checkout, where `static/` is a build artefact that goes stale the
  * moment anything is committed, so `BuildSkewService` puts a large
  * non-dismissing "this page is running an out-of-date build" banner across the
- * top of every frame. The slide shooter hides it for the same reason.
+ * top of every frame, and the Settings footer grows a `⚠ bundle v …` chip for
+ * the same reason. The slide shooter hides the banner too.
+ *
+ * The dot on the trophy says the machine's user has achievements they have not
+ * looked at yet, which depends on everything that data dir has ever done: a
+ * fresh one lights it with the fixtures' own imports and votes. It is volatile
+ * state in every top bar, like the gauges `maskVolatile` blanks.
  */
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
-  `vt-toast-container,.toast-stack{display:none!important}`;
+  `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot{display:none!important}`;
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp
  * version) with fixed strings so pixel-diffs are stable across runs.
  */
 async function maskVolatile(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate((repo) => {
     const fixedDate = '2026-01-01 00:00';
     const walk = (re: RegExp, replace: (m: string) => string) => {
       const it = document.createNodeIterator(document.body, NodeFilter.SHOW_TEXT);
@@ -94,19 +102,26 @@ async function maskVolatile(page: Page): Promise<void> {
       el.textContent = (el.textContent || '').replace(/[\d.]+\s*[GM]B\s+free\s+of/i, '— free of');
     });
     // version stamp "v 2026-..." already covered by the date rule.
-    // The fixture corpora live under `<checkout>/data/slide-fixtures/`, which is
+    // The fixture corpora live under `<checkout>/data/doc-fixtures/`, which is
     // a different path on every machine. Show it as `/data/<corpus>` — in text
     // and in the importer's path field, whose value is set without an input
     // event, so the form keeps the real path it validated against.
-    const fixtureRe = /\S*\/data\/slide-fixtures\//g;
+    const fixtureRe = /\S*\/data\/doc-fixtures\//g;
     walk(fixtureRe, () => '/data/');
+    // Any other path under the checkout (a default file path a form fills
+    // in, say) is shown as under a generic install folder.
+    const checkoutRe = new RegExp(repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/', 'g');
+    walk(checkoutRe, () => '/opt/vtsearch/');
     document.querySelectorAll('input').forEach((el) => {
       const input = el as HTMLInputElement;
-      if (input.value.includes('/data/slide-fixtures/')) {
+      if (input.value.includes('/data/doc-fixtures/')) {
         input.value = input.value.replace(fixtureRe, '/data/');
       }
+      if (input.value.includes(repo + '/')) {
+        input.value = input.value.split(repo + '/').join('/opt/vtsearch/');
+      }
     });
-  });
+  }, REPO);
 }
 
 function makeHelpers(page: Page): Helpers {
@@ -117,10 +132,10 @@ function makeHelpers(page: Page): Helpers {
   // ensure the desired state idempotently rather than toggling.
   //
   // Tick exactly the named row and untick the rest: the fixtures include
-  // `photos` and `photos-prod`, and two datasets ticked at once is a combined
-  // selection (Train and Find then mean something else). Match the name cell
-  // exactly — `photos` is a prefix of `photos-prod`, so a substring match would
-  // tick both.
+  // `drawings` and `drawings-new`, and two datasets ticked at once is a
+  // combined selection (Train and Find then mean something else). Match the
+  // name cell exactly — `drawings` is a prefix of `drawings-new`, so a
+  // substring match would tick both.
   const selectOnly = async (cardTag: string, name: string) => {
     const rows = page.locator(cardTag);
     await rows.first().waitFor({ timeout: 20000 });
@@ -142,6 +157,7 @@ function makeHelpers(page: Page): Helpers {
   };
   const h: Helpers = {
     page,
+    app: appClient(APP),
     wait,
     click,
     async clickText(text) {
@@ -199,7 +215,7 @@ function makeHelpers(page: Page): Helpers {
     async selectDetectorRow(name) {
       await selectOnly('tr[vt-detector-card]', name);
     },
-    async enterLabelView(dataset = TRAIN_DATASET, detector = BOOK_DETECTOR) {
+    async enterLabelView(dataset = TRAIN_DATASET, detector = DETECTOR) {
       await h.dashboard();
       await h.selectDatasetRow(dataset);
       await h.selectDetectorRow(detector);
@@ -288,14 +304,14 @@ async function clipBox(page: Page, clip: NonNullable<Shot['clip']>) {
 /**
  * Write a Playwright PNG capture out as WebP.
  *
- * The shots are real photographs behind UI chrome (the Book example), which is
- * the one thing PNG is bad at: a full-window shot is 2.4–3.4 MB lossless, near
- * the repo's 4 MB large-file cap and ~100 MB of history per full refresh, and
- * the 256-colour quantizing that used to hold them under a cap bands the photos
- * and still left 1.4 MB. WebP at quality 90 is 0.35–0.5 MB and indistinguishable
- * at the size the guide shows them — the same trade `slides/README.md` records
- * for the deck's screenshots. Pillow (a project dependency) does the encode,
- * because Playwright writes only PNG and JPEG; the encoder is deterministic, so
+ * WebP came in with the photographs the guide was shot on for a while (#4202),
+ * which PNG is bad at: a full-window shot was 2.4–3.4 MB lossless, near the
+ * repo's 4 MB large-file cap and ~100 MB of history per full refresh. The
+ * drawings that replaced them (#4240) are gentler on PNG, but WebP at quality
+ * 90 is still a fraction of the size and indistinguishable at the size the
+ * guide shows them — the same trade `slides/README.md` records for the deck's
+ * screenshots. Pillow (a project dependency) does the encode, because
+ * Playwright writes only PNG and JPEG; the encoder is deterministic, so
  * `check.sh` can still compare bytes.
  */
 function encodeWebp(png: Buffer, out: string): void {
@@ -359,6 +375,10 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     encodeWebp(png, out);
     return out;
   } finally {
+    // A recipe that had to change the app to reach its frame (a verified
+    // item, a moved Inclusion) puts it back, pass or fail, so no later shot
+    // inherits the change.
+    if (shot.after) await shot.after(page, makeHelpers(page)).catch((e) => console.log(`[${shot.id}] after: ${e}`));
     await ctx.close();
   }
 }

@@ -33,7 +33,7 @@ one.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -44,9 +44,10 @@ if TYPE_CHECKING:
 
     from vtscore.training.thresholds import FoldAnchoredCut
 
+from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
-from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector, pick_provenance
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -93,6 +94,8 @@ from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,
     acquisition_inclusion,
     calculate_safe_threshold,
+    line_inclusion,
+    resolve_min_precision,
     threshold_from_fold_orderings,
 )
 
@@ -202,6 +205,41 @@ def _downsample_to_prevalence(
     return {cid: clips_dict[cid] for cid in clips_dict if cid in keep}
 
 
+def thin_haystack(
+    clips_dict: dict[int, dict[str, Any]],
+    sim_ids: list[int],
+    target_category: str,
+    prevalence: float,
+    seed: int,
+) -> list[int]:
+    """*sim_ids* with its negatives thinned so positives are ~*prevalence* of it (#4184).
+
+    The **haystack** arm: what the cut rules see changes, what they are graded
+    on does not.  Only the simulation half is touched - after the split, from
+    its own RNG - so the held-out test set, every band's cohort and the run's
+    own ``RandomState(seed)`` stream are exactly the natural run's, and a cell
+    pairs with its natural twin.  Cost is FPR + FNR, which does not depend on
+    prevalence, so the pairing is a like-for-like comparison of cut rules.
+
+    All positives are kept.  A pool already at or above *prevalence* comes back
+    unchanged.  ``text_baseline.py`` calls this too, so the click-0 notch is cut
+    over the same thinned pool the rungs vote in.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not 0.0 < prevalence < 1.0:
+        raise ValueError(f"haystack_prevalence must be in (0, 1), got {prevalence!r}")
+    pos = [cid for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)]
+    neg = [cid for cid in sim_ids if not media_is_positive(clips_dict[cid], target_category)]
+    keep_neg = int(round(len(pos) * (1.0 - prevalence) / prevalence))
+    if not pos or keep_neg >= len(neg):
+        return list(sim_ids)
+    # A stream of its own, so thinning draws nothing from the run's RNG.
+    rng = np.random.RandomState([seed, 4184])
+    kept = set(int(c) for c in rng.choice(np.array(sorted(neg), dtype=np.int64), size=keep_neg, replace=False))
+    return [cid for cid in sim_ids if cid in kept or media_is_positive(clips_dict[cid], target_category)]
+
+
 def _split_media_ids(
     clips_dict: dict[int, dict[str, Any]],
     sim_fraction: float,
@@ -230,6 +268,20 @@ def _pool_uncertainty(
     embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
     spread = np.asarray(step.predict_std(embs), dtype=np.float64).ravel()
     return {cid: float(s) for cid, s in zip(pool_ids, spread)}
+
+
+def _no_recut(_inclusion: float) -> None:
+    """The re-cut of a step with no fold-anchored fit: there is none to re-derive.
+
+    Handed to :func:`~vtscore.detectors.cost_trend.smart_cut`, which then keeps
+    the step's reporting line: the schedule blend, a retired rung's cut, or the
+    conformal cut of an arm with safe thresholds off.  Only an arm reporting at
+    an inclusion other than :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`
+    ever asks, and for the conformal case the app's seam
+    (``recut_detector_threshold``) would re-cut the fold orderings instead - a
+    difference ``progress.smart_status`` declares, off the default arm.
+    """
+    return None
 
 
 def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
@@ -293,6 +345,44 @@ def _blend_xcal_input(threshold: float, details: dict[str, Any]) -> float:
     return NO_GOOD_THRESHOLD if details.get("fold_fallback") is not None else threshold
 
 
+def _calibration_rows(details: dict[str, Any], vote_provenance: "dict[int, Any] | None") -> "list[bool] | None":
+    """Per training row, whether its vote may calibrate a precision-floor promise, decided as the app decides it.
+
+    *vote_provenance* is what the app would have recorded for each simulated
+    click (:func:`~vtscore.eval.autopilot_flow.pick_provenance`), and the
+    verdict is the app's own
+    :func:`~vtscore.datasets.vote_provenance.calibrates_precision`.  ``None``
+    keeps every vote: a run with no phase machine has no app counterpart to
+    take provenance from.  A trainer that reported no ``row_votes`` cannot map
+    a held-out row back to its vote, so none calibrates.
+    """
+    from vtscore.datasets.vote_provenance import calibrates_precision  # noqa: PLC0415
+
+    if vote_provenance is None:
+        return None
+    row_votes = details.get("row_votes")
+    if row_votes is None:
+        return []
+    return [calibrates_precision(vote_provenance.get(v)) for v in row_votes]
+
+
+def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, Any]:
+    """The precision-floor columns of a step's row: the floor, its verdict, and the evidence behind it.
+
+    ``floor_status`` is empty and ``calibration_positives`` -1 on a step with
+    no floor estimate - safe thresholds off, a standalone trainer with no
+    folds, or no usable folds yet.
+    """
+    line = details.get("reporting_line")
+    estimate = details.get("precision_floor_estimate")
+    verdict = line.floor if line is not None else None
+    return {
+        "min_precision": floor if floor is not None else float("nan"),
+        "floor_status": verdict.status.value if verdict is not None else "",
+        "calibration_positives": estimate.calibration_positives if estimate is not None else -1,
+    }
+
+
 def _safe_threshold_for_step(
     threshold: float,
     step: StepModel,
@@ -308,6 +398,8 @@ def _safe_threshold_for_step(
     voted_ids: "set[int] | None" = None,
     exclusion_min_remainder: float | None = None,
     cut_rule: str | None = None,
+    min_precision: float | None = None,
+    calibration_rows: "list[bool] | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -362,13 +454,28 @@ def _safe_threshold_for_step(
     *cut_rule* is the #3557 run-level arm knob, on the same terms: ``None``
     resolves to the app's :data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`
     inside this function, so the default arm is production by construction.
+
+    **The line is drawn where the app draws it** (#4245): *min_precision* is the
+    resolved floor (``None`` for the Inclusion arm) and *calibration_rows* marks
+    the training rows whose vote may calibrate it.  The floor's estimate is
+    built from this step's own populations, exactly as
+    :func:`vtscore.detectors.training._fused_threshold` builds it - the
+    remainder as the corpus, the whole sim set (votes included) as the
+    reference pool, the excluded fold haystacks as the evidence's scale - and the line
+    comes from the shared :func:`~vtscore.training.thresholds.reporting_line` -
+    delegation, not a copy.  The line and the floor's verdict ride out in
+    ``details["reporting_line"]`` so the acquisition cut can take its origin
+    from the line.
     """
     import numpy as np  # noqa: PLC0415
 
     from vtscore.training.thresholds import (  # noqa: PLC0415
         FOLD_ANCHOR_CUT_RULE,
+        PrecisionFloorEstimate,
         drop_voted,
+        eligible_fold_orderings,
         fit_fold_anchored_cut,
+        reporting_line,
     )
 
     final_model = step.torch_model
@@ -460,10 +567,23 @@ def _safe_threshold_for_step(
         if fold_haystacks
         else None
     )
-    if cut is not None:
-        anchored = cut.threshold_at(inclusion)
-        if np.isfinite(anchored):
-            return anchored, all_scores, ids, fold_haystacks, cut.provenance, cut
+    estimate = (
+        PrecisionFloorEstimate(
+            fit_final,
+            eligible_fold_orderings(fold_orderings[:n_folds], details.get("fold_holdout_rows") or (), calibration_rows),
+            fold_haystacks,
+            # The whole sim set, voted items included, as the app ranks it
+            # (see ``vtscore.detectors.training._fused_threshold``).
+            pool_scores=all_scores,
+        )
+        if fold_haystacks
+        else None
+    )
+    line = reporting_line(cut, estimate, inclusion_value=inclusion, min_precision=min_precision)
+    details["reporting_line"] = line
+    details["precision_floor_estimate"] = estimate
+    if cut is not None and line.threshold is not None:
+        return line.threshold, all_scores, ids, fold_haystacks, cut.provenance, cut
     blended = calculate_safe_threshold(_blend_xcal_input(threshold, details), all_scores, ctx, schedule=schedule)
     return blended, all_scores, ids, fold_haystacks, "gmm_blend", None
 
@@ -703,6 +823,64 @@ def _band_metrics(
             labels = np.concatenate([np.ones(n), np.zeros(len(neg_scores))])
             out[f"auroc_{band}"] = round(_auroc(np.concatenate([scores, neg_scores]), labels), 6)
     return out
+
+
+def _precision_frame(
+    t: int,
+    threshold: float,
+    test_scores: Any,
+    test_labels: Any,
+    pool_scores: "list[float] | None",
+    pool_ids: "list[int] | None",
+    voted: "dict[int, float]",
+    fold_orderings: list[Any],
+    fold_haystacks: list[Any],
+    cal_phase: "list[str] | None" = None,
+    cal_vote: "list[int] | None" = None,
+) -> dict[str, Any]:
+    """Everything a live precision estimate could read at step *t*, plus the truth (#4220).
+
+    The truth is the test half: its final-model scores and labels.  The
+    evidence is what the app has: its own pool scores, each voted item's
+    in-sample final-model score and label, and every calibration fold's
+    held-out vote scores with that fold model's own haystack - the fold scores
+    live on their model's scale, so an estimator that transfers them to the
+    final model needs the haystack to rank them against.  Folds are stored flat
+    with an index array because they differ in length.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    f32 = lambda a: np.asarray(a, dtype=np.float32)  # noqa: E731
+    frame: dict[str, Any] = {
+        "t": np.int32(t),
+        "threshold": np.float32(threshold),
+        "test_scores": f32(test_scores),
+        "test_labels": np.asarray(test_labels, dtype=np.uint8),
+        "pool_scores": f32(pool_scores if pool_scores is not None else []),
+    }
+    by_id = dict(zip(pool_ids or [], pool_scores or [], strict=False))
+    vids = [v for v in voted if v in by_id]
+    frame["vote_scores"] = f32([by_id[v] for v in vids])
+    frame["vote_labels"] = np.asarray([voted[v] for v in vids], dtype=np.uint8)
+    cal_s, cal_y, cal_f, hay_s, hay_f = [], [], [], [], []
+    for k, (sc, lb) in enumerate(fold_orderings):
+        cal_s.extend(sc)
+        cal_y.extend(lb)
+        cal_f.extend([k] * len(sc))
+    for k, hay in enumerate(fold_haystacks):
+        hay = np.asarray(hay).ravel()
+        hay_s.extend(hay.tolist())
+        hay_f.extend([k] * len(hay))
+    frame["fold_cal_scores"] = f32(cal_s)
+    frame["fold_cal_labels"] = np.asarray(cal_y, dtype=np.uint8)
+    frame["fold_cal_fold"] = np.asarray(cal_f, dtype=np.uint8)
+    # The phase that surfaced each calibration vote, aligned with the scores
+    # (#4224); empty when the trainer could not say (e.g. the grouped path).
+    frame["fold_cal_phase"] = np.asarray(cal_phase if cal_phase and len(cal_phase) == len(cal_s) else [], dtype="U12")
+    frame["fold_cal_vote"] = np.asarray(cal_vote if cal_vote and len(cal_vote) == len(cal_s) else [], dtype=np.int64)
+    frame["fold_hay_scores"] = f32(hay_s)
+    frame["fold_hay_fold"] = np.asarray(hay_f, dtype=np.uint8)
+    return frame
 
 
 def _evaluate_on_test(
@@ -1508,6 +1686,7 @@ def simulate_voting_iterations(  # noqa: C901
     trainer: str = APP_TRAINER,
     head: Optional[str] = None,
     target_prevalence: Optional[float] = None,
+    haystack_prevalence: Optional[float] = None,
     style: Optional[str] = None,
     emit_calibration_metrics: bool = False,
     repool_variants: Optional[list[str]] = None,
@@ -1533,6 +1712,8 @@ def simulate_voting_iterations(  # noqa: C901
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
+    precision_frame_sink: Optional[list[dict[str, Any]]] = None,
+    precision_frame_steps: Optional[Sequence[int]] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
     live_threshold: Optional[str] = None,
@@ -1542,6 +1723,7 @@ def simulate_voting_iterations(  # noqa: C901
     test_bands: Optional[list[str] | str] = None,
     train_mix: "Optional[str | dict[str, float]]" = None,
     test_band_auroc: bool = False,
+    min_precision: "Optional[float | str]" = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1598,6 +1780,11 @@ def simulate_voting_iterations(  # noqa: C901
             harness.  The arm is skipped (returns ``[]``) if it would leave
             fewer than :data:`_MIN_PREVALENCE_POSITIVES` positives, to keep the
             test-set FNR estimable.
+        haystack_prevalence: When set (e.g. ``0.05``), the *simulation* half's
+            negatives are thinned after the split so its positives are that
+            fraction of it - see :func:`thin_haystack`.  Unlike
+            ``target_prevalence`` the test set is untouched, so it combines with
+            ``test_bands`` and each cell pairs with its natural twin (#4184).
         sim_fraction: Fraction of medias used for simulated voting.
         safe_thresholds: The shipped threshold path - fuse the haystack score
             distribution into the trained cut (the fold-anchored estimator, see
@@ -1699,6 +1886,11 @@ def simulate_voting_iterations(  # noqa: C901
         pick_sink: List the per-click :data:`PICK_COLUMNS` rows are appended
             to - one per vote, including the opening's, which emit no main row
             because no model exists yet.  ``None`` (default) = off.
+        precision_frame_sink: List one :func:`_precision_frame` dict is
+            appended to at each step in *precision_frame_steps* - the per-image
+            evidence and truth a precision-floor estimator is priced on (#4220).
+            Only the calibration-metrics path fills it.  ``None`` (default) = off.
+        precision_frame_steps: The steps (``t``) to record; ignored without a sink.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -1837,6 +2029,18 @@ def simulate_voting_iterations(  # noqa: C901
         test_band_auroc: Under ``test_bands``, also rank each band's cohort
             against the held-out negatives (``auroc_<band>``, #4160).  Off by
             default because it scores the negatives a second time each step.
+        min_precision: The precision floor the reporting line is drawn at
+            (#4245), resolved by
+            :func:`~vtscore.training.thresholds.resolve_min_precision`.
+            ``None`` (the default) is the app's own default floor, so the
+            default arm reports the line a live detector draws: the floor's cut
+            when it can promise it, else the Inclusion 0 cut.  ``"off"`` is the
+            **Inclusion arm** - the line at *inclusion* - which is what every
+            study before #4245 measured; an arm that sweeps *inclusion* has to
+            pass it, because a set floor wins over the knob.  A number pins a
+            floor.  Evidence is filtered as the app filters it: under the
+            phase machine only the votes Autopilot drew off the learned sort
+            (``hard`` picks) calibrate the promise; without one every vote does.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -1858,6 +2062,8 @@ def simulate_voting_iterations(  # noqa: C901
     # SLURM array slot spent to learn nothing (#4044).
     _check_test_bands(test_bands, target_category, target_prevalence)
     _check_train_mix(train_mix, target_category, target_prevalence)
+    if target_prevalence is not None and haystack_prevalence is not None:
+        raise ValueError("target_prevalence and haystack_prevalence are two different arms; set one")
     check_live_threshold(live_threshold, safe_thresholds=safe_thresholds, live_cut_rule=live_cut_rule)
 
     # Cross-band cohorts are built from the images the filter below REMOVES, so
@@ -1910,6 +2116,11 @@ def simulate_voting_iterations(  # noqa: C901
     # Normalised once, at the top: the retired ``"mlp"`` spelling never reaches
     # the dispatch, the guards, or the result rows (issue #3764).
     trainer = knobs.trainer
+    # The precision floor the reporting line is drawn at: ``None`` resolves to
+    # the app's default floor, so the default arm cuts where a live detector
+    # does (#4245); ``"off"`` is the Inclusion arm.  Resolved - and so
+    # validated - before anything expensive runs.
+    floor = resolve_min_precision(min_precision)
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -1938,6 +2149,14 @@ def simulate_voting_iterations(  # noqa: C901
         sim_ids, test_ids, all_cohorts = mix_split
         wanted = None if test_bands in (None, "auto") else set(test_bands)
         band_cohorts = {b: ids for b, ids in all_cohorts.items() if wanted is None or b in wanted}
+
+    # After the split and the cohorts, so neither moves (#4184).
+    if haystack_prevalence is not None:
+        sim_ids = thin_haystack(clips_dict, sim_ids, target_category, haystack_prevalence, seed)
+        prevalence_arm = f"haystack_{haystack_prevalence:g}"
+        realized_prevalence = round(
+            sum(1 for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)) / len(sim_ids), 6
+        )
 
     # Ensure the test set has both positive and negative medias.  Routes through
     # ``media_is_positive`` so multi-label (Visual Genome) images - where the
@@ -2112,9 +2331,15 @@ def simulate_voting_iterations(  # noqa: C901
         X_sim_image = np.stack([sim_embeddings[cid] for cid in sorted(sim_ids)])
 
     good_votes: dict[int, None] = {}
+    #: The phase that surfaced each vote (#4224: which votes calibrated the cut).
+    vote_phase: dict[int, str] = {}
     bad_votes: dict[int, None] = {}
     labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
+    # Per vote, the surfacing provenance the app would have recorded (see
+    # ``pick_provenance``).  Only read under the phase machine: a run without
+    # one has no app counterpart to take provenance from.
+    vote_provenance: dict[int, dict[str, str] | None] = {}
 
     # Voting proceeds one item at a time: the autopilot selector picks the next
     # pool item using the *current* detector (trained at the previous step), the
@@ -2191,6 +2416,10 @@ def simulate_voting_iterations(  # noqa: C901
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
+        vote_phase[cid] = phase or ""
+        # What the app would record for this click - the precision floor
+        # calibrates only on votes the learned sort chose (#4245).
+        vote_provenance[cid] = pick_provenance(phase)
         is_positive = media_is_positive(clips_dict[cid], target_category)
         if is_positive:
             good_votes[cid] = None
@@ -2254,6 +2483,7 @@ def simulate_voting_iterations(  # noqa: C901
                     len(bad_votes),
                     remaining_unlabeled=len(pool),
                     span=atlas.span_info() if atlas is not None else None,
+                    last_vote_good=is_positive,
                 )
             continue
 
@@ -2286,6 +2516,7 @@ def simulate_voting_iterations(  # noqa: C901
         sim_pooled_scores: list[float] | None = None
         sim_pooled_ids: list[int] = []
         sim_fold_haystacks: list[Any] = []
+        safe_cut = None
         if safe_thresholds:
             # What the fold computation returned before any fusion: a retired
             # live rule (#4184) falls back to it where it has nothing to cut on.
@@ -2316,6 +2547,8 @@ def simulate_voting_iterations(  # noqa: C901
                     voted_ids=set(good_votes) | set(bad_votes),
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
+                    min_precision=floor,
+                    calibration_rows=_calibration_rows(details, vote_provenance if flow is not None else None),
                 )
             )
             if live_threshold is not None:
@@ -2335,6 +2568,8 @@ def simulate_voting_iterations(  # noqa: C901
                     inclusion=inclusion,
                 )
                 safe_cut = None
+                # The retired rung drew this line, not the operating point.
+                details.pop("reporting_line", None)
             if emit_calibration_metrics:
                 details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = safe_provenance
@@ -2361,7 +2596,14 @@ def simulate_voting_iterations(  # noqa: C901
                 # exactly.  ``safe_cut is None`` is the schedule-blend fallback
                 # (~5% of steps, concentrated in the cold start): the blend has
                 # no inclusion-aware form, so there is nothing honest to re-cut.
-                cand = safe_cut.threshold_at(acquisition_inclusion(inclusion, acq_inclusion_offset))
+                # The offset's origin is the inclusion the line sits at: the
+                # knob's under the Inclusion arm, and under a floor the
+                # fallback's or the one a promised line derives to (#4245).
+                line = details.get("reporting_line")
+                origin = line_inclusion(line, safe_cut) if line is not None else inclusion
+                cand = safe_cut.threshold_at(
+                    acquisition_inclusion(origin if origin is not None else inclusion, acq_inclusion_offset)
+                )
                 if np.isfinite(cand):
                     acq_threshold = float(cand)
 
@@ -2444,7 +2686,17 @@ def simulate_voting_iterations(  # noqa: C901
         # indicator needs the labelset error cost, Stable the prediction flips
         # over the still-unlabeled pool, Span the atlas's coverage.
         if flow is not None:
-            recent_steps.append((step, threshold))
+            # Scored at the model's own Inclusion 0 cut and priced at that
+            # inclusion, as the app's Smart is, whatever this arm reports at
+            # (issue #4243).  A step with no fitted cut to re-derive keeps its
+            # reporting line, which is then inclusion-blind.
+            # The line was served at the operating point's inclusion - none at
+            # all when a precision floor promised its own cut (#4245).
+            _line = details.get("reporting_line")
+            _served = _line.inclusion if _line is not None else inclusion
+            recent_steps.append(
+                (step, smart_cut(threshold, _served, safe_cut.threshold_at if safe_cut is not None else _no_recut))
+            )
             # The app regresses over its last SMART_WINDOW *models*; here every
             # step trains one, so the last SMART_WINDOW steps are the same set.
             del recent_steps[:-SMART_WINDOW]
@@ -2454,7 +2706,7 @@ def simulate_voting_iterations(  # noqa: C901
                     good_votes,
                     bad_votes,
                     clips_dict,
-                    inclusion,
+                    SMART_INCLUSION,
                     region_aware=region_aware,
                     style_obj=style_obj,
                 ),
@@ -2469,6 +2721,7 @@ def simulate_voting_iterations(  # noqa: C901
                 len(bad_votes),
                 remaining_unlabeled=len(pool),
                 span=atlas.span_info() if atlas is not None else None,
+                last_vote_good=is_positive,
             )
 
         # Identifying columns shared by every row this step emits.
@@ -2521,6 +2774,7 @@ def simulate_voting_iterations(  # noqa: C901
             # the pair answers "how much did the sampling position move".
             "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
             "report_pool_percentile": _pool_percentile(pool_scores, threshold),
+            **_floor_columns(floor, details),
         }
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
@@ -2545,6 +2799,30 @@ def simulate_voting_iterations(  # noqa: C901
 
         if calibration is not None:
             metric_rows, base_scores, base_labels = calibration
+            if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
+                # The trainer builds its rows Goods first, then Bads, in vote order.
+                vote_order = list(good_votes) + list(bad_votes)
+                cal_votes = [
+                    vote_order[i]
+                    for fold in (details.get("fold_holdout_rows") or [])
+                    for i in fold
+                    if i < len(vote_order)
+                ]
+                precision_frame_sink.append(
+                    _precision_frame(
+                        t,
+                        threshold,
+                        base_scores,
+                        base_labels,
+                        sim_pooled_scores,
+                        sim_pooled_ids,
+                        {**{g: 1.0 for g in good_votes}, **{b: 0.0 for b in bad_votes}},
+                        details.get("fold_orderings") or [],
+                        sim_fold_haystacks,
+                        cal_phase=[vote_phase.get(v, "") for v in cal_votes],
+                        cal_vote=cal_votes,
+                    )
+                )
             # The final model's haystack under the #3308 population convention:
             # the voted items dropped, exactly as `_safe_threshold_for_step`
             # dropped them from the fold haystacks - so every fold-anchored
@@ -2758,6 +3036,8 @@ def simulate_voting_iterations(  # noqa: C901
             "acq_threshold": float("nan"),
             "acq_pool_percentile": float("nan"),
             "report_pool_percentile": float("nan"),
+            # The run's floor; a skyline belongs to no step, so none was cut on it.
+            **_floor_columns(floor, {}),
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
@@ -2790,6 +3070,7 @@ def run_voting_iterations_eval(
     startup_schedule: Optional[str] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
+    min_precision: "Optional[float | str]" = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -2802,7 +3083,8 @@ def run_voting_iterations_eval(
         categories: Optional mapping of dataset name to list of target
             categories.  If ``None`` or a dataset is missing from the dict,
             all unique categories in that dataset are used.
-        inclusion: Inclusion setting in ``[-10, 10]``.
+        inclusion: Inclusion setting in ``[-10, 10]``.  It draws the line only
+            on the Inclusion arm (``min_precision="off"``): a set floor wins.
         sim_fraction: Fraction of medias reserved for simulated voting.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -2833,7 +3115,7 @@ def run_voting_iterations_eval(
             ``["app"]``; pass e.g. ``["app", "svm_linear", "svm_rbf"]`` for the
             head-to-head comparison.  Recorded in the ``trainer`` column.
         prevalence_arms: Which prevalence arms to run per (dataset, category).
-            ``None`` (default) runs ``[None]`` (natural prevalence only); pass
+            ``None`` (default) runs ``[None]`` (the dataset's own prevalence only); pass
             e.g. ``[None, 0.01]`` to add the 1%-prevalence rare arm.  Recorded
             in the ``prevalence_arm`` / ``realized_prevalence`` columns.
         styles: Which detection styles to run per cell (see
@@ -2912,6 +3194,7 @@ def run_voting_iterations_eval(
                                     startup_schedule=startup_schedule,
                                     calibration_seed=calibration_seed,
                                     standalone_cut=standalone_cut,
+                                    min_precision=min_precision,
                                 )
                                 all_rows.extend(rows)
 
@@ -2937,6 +3220,7 @@ def run_voting_iterations_eval_from_pickles(
     styles: Optional[list[Optional[str]]] = None,
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
+    min_precision: "Optional[float | str]" = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -2965,6 +3249,8 @@ def run_voting_iterations_eval_from_pickles(
         seed_scores: Optional text-sort rankings keyed
             ``{dataset: {category: {media_id: similarity}}}`` (see
             :func:`run_voting_iterations_eval`).
+        min_precision: The precision floor the line is drawn at (see
+            :func:`simulate_voting_iterations`); ``"off"`` for the Inclusion arm.
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -2998,4 +3284,5 @@ def run_voting_iterations_eval_from_pickles(
         styles=styles,
         autopilot_fidelity=autopilot_fidelity,
         startup_schedule=startup_schedule,
+        min_precision=min_precision,
     )

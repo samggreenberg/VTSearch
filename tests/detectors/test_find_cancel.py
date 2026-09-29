@@ -54,7 +54,7 @@ class TestCancelPrimitives:
         import numpy as np
 
         from vtscore.detectors.training import ScoringRows
-        from vtsearch.routes.detectors.scoring import _score_detector_for_auto_detect
+        from vtsearch.autorun_detectors import score_detector
 
         empty = ScoringRows(
             [],
@@ -64,7 +64,7 @@ class TestCancelPrimitives:
         )
         find_progress.cancel()
         with pytest.raises(CancelledError):
-            _score_detector_for_auto_detect("x", {}, None, "audio", {}, empty)
+            score_detector("x", {}, None, "audio", {}, empty)
 
 
 class TestFindLabelCancel:

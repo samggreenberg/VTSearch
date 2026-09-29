@@ -708,6 +708,26 @@ else:
         raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
 
 
+#: The precision floor the reporting line is drawn at (#4245).  Unset is the
+#: app's own default floor - a live detector's line - resolved by
+#: ``vtscore.training.thresholds.resolve_min_precision``; ``off`` is the
+#: Inclusion arm every study before #4245 ran, and the one an Inclusion sweep
+#: needs, because a set floor wins over the knob; a number pins a floor.
+_MIN_PRECISION_ENV = os.environ.get("CALIB_MIN_PRECISION", "").strip().lower()
+MIN_PRECISION: float | str | None
+if _MIN_PRECISION_ENV in ("", "default", "app"):
+    MIN_PRECISION = None
+elif _MIN_PRECISION_ENV == "off":
+    MIN_PRECISION = "off"
+else:
+    try:
+        MIN_PRECISION = float(_MIN_PRECISION_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_MIN_PRECISION={_MIN_PRECISION_ENV!r} is not 'off', a floor in (0, 1], or unset (= the app's default)"
+        ) from None
+
+
 def exclusion_arm_name() -> str:
     """Short label for this run's exclusion arm, for logs and the cell column."""
     if EXCLUSION_MIN_REMAINDER is None:
@@ -997,6 +1017,35 @@ STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 #: only frame that records the **opening**, which emits no main row because no
 #: detector exists yet, so an arm's mining behaviour is invisible without it.
 EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
+
+#: Thin POSITIVES across the whole cell, before the split, to this prevalence
+#: (issue #4222): the low-prevalence world below a dataset's natural rate, e.g.
+#: ``0.001`` for about 1 in 1,000.  Unset = natural.  The simulator's
+#: ``target_prevalence``: test and pool both sit at the target, a cell left
+#: with fewer than 15 positives is skipped, and it refuses ``CALIB_TEST_BANDS``.
+TARGET_PREVALENCE = float(os.environ["CALIB_TARGET_PREVALENCE"]) if os.environ.get("CALIB_TARGET_PREVALENCE") else None
+
+#: Thin the simulation half's negatives so positives are this fraction of the
+#: pool the cut rules read (issue #4184/#4201).  Unset = natural prevalence.
+#: The test set and band cohorts are untouched, so a cell pairs with its
+#: natural twin; see ``vtscore.eval.voting_iterations.thin_haystack``.
+HAYSTACK_PREVALENCE = (
+    float(os.environ["CALIB_HAYSTACK_PREVALENCE"]) if os.environ.get("CALIB_HAYSTACK_PREVALENCE") else None
+)
+
+#: Record a precision frame (``task_NNNN__pframes.npz``) at these steps
+#: (issue #4220), e.g. ``25,50,100,150``: the test half's scores and labels, the
+#: app's pool scores, the votes' in-sample scores, and every calibration fold's
+#: held-out vote scores with its own haystack - what a precision-floor
+#: estimator reads, and the truth it is graded on.  Unset = off.
+PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").replace(",", " ").split())
+
+#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
+#: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
+#: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
+#: ``_cells_paths`` reads both spellings, so every analyzer that goes through
+#: it is unaffected.
+CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "0") == "1"
 
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)

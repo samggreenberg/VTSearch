@@ -1,0 +1,6 @@
+@if (geometry(); as g) {
+  <svg class="pointer-arrow" focusable="false">
+    <path class="pointer-arrow__shaft" [attr.d]="g.shaft" />
+    <path class="pointer-arrow__head" [attr.d]="g.head" />
+  </svg>
+}

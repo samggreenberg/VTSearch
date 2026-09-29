@@ -107,6 +107,12 @@ class ProgressTracker:
             rest between operations; a tracker created *for* an operation
             that is already starting passes a working status instead, since
             ``"idle"`` is what readers take to mean "finished".
+        publish_eta: When ``False`` the tracker never publishes a
+            remaining-time estimate: ``eta_seconds`` stays ``None`` on every
+            snapshot, which every consumer already renders as "no ETA". The
+            bar itself (``current``/``total``, ``overall``) is unaffected. For
+            deployments whose jobs are too erratic to predict, where a wrong
+            estimate is worse than none (issue #4233).
     """
 
     #: Minimum elapsed time (seconds) before an ETA is computed. Below this we
@@ -118,9 +124,16 @@ class ProgressTracker:
     #: sample lightly enough to dampen noise while still tracking real slowdowns.
     _ETA_SMOOTHING_ALPHA = 0.3
 
-    def __init__(self, extra_fields: Optional[dict[str, Any]] = None, *, initial_status: str = "idle") -> None:
+    def __init__(
+        self,
+        extra_fields: Optional[dict[str, Any]] = None,
+        *,
+        initial_status: str = "idle",
+        publish_eta: bool = True,
+    ) -> None:
         self._lock = threading.Lock()
         self._extra_defaults = dict(extra_fields) if extra_fields else {}
+        self._publish_eta = publish_eta
         self._cancel_event = threading.Event()
         self._data: dict[str, Any] = {
             "status": initial_status,
@@ -408,8 +421,9 @@ class ProgressTracker:
                 raw_eta = overall_eta if overall is not None else self._compute_eta(status, current, total)
                 # Published coarse and sticky — see :meth:`_humble_eta`. Every
                 # consumer (SSE, the CLI bars, the frontend chips) reads this
-                # one field, so humility applied here applies everywhere.
-                self._data["eta_seconds"] = self._humble_eta(raw_eta)
+                # one field, so humility applied here applies everywhere —
+                # including the last resort of publishing no estimate at all.
+                self._data["eta_seconds"] = self._humble_eta(raw_eta) if self._publish_eta else None
             snapshot = dict(self._data)
         self._notify(snapshot)
 
@@ -581,6 +595,29 @@ PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
 }
 
 
+def ingest_eta_hidden() -> bool:
+    """Whether this deployment withholds the ETA from ingest progress bars.
+
+    An *ingest* is work that brings new media in — a dataset import, a
+    staging import, a labelset's missing-media fetch. Its cost is set by the
+    network, the source's disks and the files themselves, so on some
+    deployments no timing profile can predict it and the published estimate
+    swings wildly (issue #4233). An operator switches it off with the
+    ``hide_ingest_eta`` admin setting, which reaches the library as
+    :attr:`vtscore.config.CoreConfig.hide_ingest_eta`; the ingest paths pass
+    ``publish_eta=not ingest_eta_hidden()`` when they create their tracker.
+
+    Reads as ``False`` (ETAs shown) when no :class:`~vtscore.config.CoreConfig`
+    builder is installed, so library-only callers keep the default behaviour.
+    """
+    try:
+        from vtscore.config import CoreConfig  # noqa: PLC0415
+
+        return bool(CoreConfig.from_settings().hide_ingest_eta)
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Loading tasks tracker - manages multiple concurrent loading operations
 # ---------------------------------------------------------------------------
@@ -637,15 +674,18 @@ class LoadingTasksTracker:
         embedder: str = "",
         step_weights: list[float] | None = None,
         extra_fields: dict[str, Any] | None = None,
+        publish_eta: bool = True,
     ) -> ProgressTracker:
         """Create and register a new loading task.
 
         *step_weights* (one weight per step) tunes how the whole-job ``overall``
         bar paces across phases; omit for equal weighting. *extra_fields* adds
         task-specific tracked keys (e.g. ``staging_result``) on top of the
-        shared progress extras. Returns the per-task :class:`ProgressTracker`
-        instance, already reporting ``status="loading"``: the task is running
-        from the moment it exists, until an ``update("idle", ...)`` ends it.
+        shared progress extras. *publish_eta* ``False`` keeps the task's
+        ``eta_seconds`` at ``None`` (see :class:`ProgressTracker`). Returns the
+        per-task :class:`ProgressTracker` instance, already reporting
+        ``status="loading"``: the task is running from the moment it exists,
+        until an ``update("idle", ...)`` ends it.
         """
         fields = dict(PROGRESS_COMMON_EXTRAS)
         if extra_fields:
@@ -656,7 +696,7 @@ class LoadingTasksTracker:
         # client that caught that first frame took a load that had not started
         # for one that had finished — the Find route guard then opened an
         # unloaded detector to a stream of 409s (issue #4187).
-        tracker = ProgressTracker(extra_fields=fields, initial_status="loading")
+        tracker = ProgressTracker(extra_fields=fields, initial_status="loading", publish_eta=publish_eta)
         if step_weights is not None:
             tracker.set_step_weights(step_weights)
         tracker.subscribe(lambda _snapshot: self._notify())

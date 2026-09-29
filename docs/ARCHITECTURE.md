@@ -418,6 +418,8 @@ VTSearch/
 │   ├── achievements.py             Achievement state management
 │   ├── achievements_catalog.py     Static achievement declarations (no state machine)
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
+│   ├── autorun_detectors.py        Runs a user's AutoRun detectors on a dataset: /api/auto-detect's core,
+│   │                               the background run after an import / from Run AutoRun, kept results
 │   ├── logging_config.py           Logging setup
 │   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
 │   ├── torch_threads.py            Native-math thread count for the server process
@@ -889,7 +891,8 @@ protected by `_state_lock` (a `threading.RLock`):
 | `textsort_suggestions` | `list[str]` | `DetectorContext` | Text queries that received a Good vote (most recent last) |
 
 Other per-context values are reached through accessor functions rather than
-proxies: `get_inclusion()` / `set_inclusion()` (per detector),
+proxies: `get_inclusion()` / `set_inclusion()` and `get_min_precision()` /
+`set_min_precision()` (per detector),
 `get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
 only truly global (cross-dataset) state is `autorun_extractors` /
 `autorun_localizers` in `vtsearch/autorun_processors.py`.
@@ -901,22 +904,24 @@ field lists — this document names the tiers and the shape, not every key.
 - **Server tier** (`ServerSettings`, shared, `data/settings.json`): the
   deployment-level knobs an operator sets — `saved_datasets_dir`,
   `detectors_dir`, `max_concurrent_*`, `hidden_plugins`,
-  `dataset_max_age_days`, `support_email`, `semantic_only`, `solo_media_type`,
-  `projection_n_neighbors`, `projection_min_dist`, `browse_signpost_vocab`,
-  `default_settings_source`.
+  `dataset_max_age_days`, `support_email`, `semantic_only`, `hide_ingest_eta`,
+  `solo_media_type`, `projection_n_neighbors`, `projection_min_dist`,
+  `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,
-  `inclusion`, `enrich_descriptions`, `calibrate_count`,
-  `calibration_fraction`, `audio_playing`, `show_animations`, `show_metadata`,
+  `inclusion`, `min_precision`, `enrich_descriptions`, `calibrate_count`,
+  `calibration_fraction`, `audio_playing`, `show_animations`, `show_usage_bars`,
+  `show_metadata`,
   the `browse_*` canvas preferences, `grid_icon_size_*`, `focus_mode_*`,
   `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
   `settings_source`, `achievement_state`, and the
   **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`.
+  `autofind_exporter_field_values`, and `autorun_on_import` (whether a web
+  import runs the AutoRun detectors; the Add Dataset checkbox's memory).
 
-Six settings double as **admin overrides**: an operator can pin the
+Seven settings double as **admin overrides**: an operator can pin the
 server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
-`support_email` and `semantic_only`, plus the per-user
+`support_email`, `semantic_only` and `hide_ingest_eta`, plus the per-user
 `solo_embedder_per_media_type`, at startup, for every user and for the life
 of the process, without the settings file. Each is
 declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI
@@ -976,7 +981,7 @@ per-detector state in `DetectorContext` objects:
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
-| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `inclusion`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut caches, the cached labelset, and `labelset_source` |
+| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `inclusion`, `min_precision`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut / precision-floor caches, the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
 "No Persisted Vectors or MLPs" rule in `CLAUDE.md`.  Origins are the persisted

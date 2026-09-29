@@ -3,6 +3,7 @@ import { Subscription } from 'rxjs';
 import { ProgressEventsService } from './progress-events.service';
 import { formatProgressMessage } from '../utils/format-progress';
 import type { ProgressEvent } from '../models/api.models';
+import { DEFAULT_MIN_PRECISION, isUnpromised, type LineFloor } from '../utils/line-floor';
 
 export type SortMode = 'text' | 'learned' | 'load';
 export type SelectMode = 'top' | 'hard' | 'new';
@@ -64,6 +65,11 @@ export class SortStateService {
   // carries one; every other sort leaves it null and the picks fall back to
   // `_threshold`, which is what they always used.
   private readonly _acqThreshold = signal<number | null>(null);
+  // What the precision floor says about `_threshold` (#4247). Set with the
+  // threshold, from the same response, so the two never disagree. When the
+  // floor promises nothing the threshold is still a real cut (Inclusion 0) and
+  // every consumer keeps using it; this only lets the line say so.
+  private readonly _floor = signal<LineFloor | null>(null);
   private readonly _sortBusy = signal(false);
   private readonly _sortStatus = signal('');
   private readonly _sortProgress = signal(0);
@@ -78,7 +84,11 @@ export class SortStateService {
   // pair bounds the pulsing zone. See ProgressEvent.overall_step_end.
   private readonly _sortStepEnd = signal<number | null>(null);
   private readonly _sortEtaSeconds = signal<number | null>(null);
-  private readonly _inclusion = signal(0);
+  // The active detector's precision floor (#4246), the value the floor control
+  // shows. Seeded per detector from `GET /api/min-precision` on a pair switch;
+  // `null` is a detector with no floor. Distinct from `_floor`, which is the
+  // verdict on the line the list is drawing and arrives with that line.
+  private readonly _minPrecision = signal<number | null>(DEFAULT_MIN_PRECISION);
   private readonly _loadSortLabel = signal('');
   private readonly _loadSortSource = signal<LoadSortSource | null>(null);
   private readonly _textQuery = signal('');
@@ -119,6 +129,16 @@ export class SortStateService {
     return this._acqThreshold() ?? this._threshold();
   }
 
+  /** The floor's verdict on `threshold`; null when the sort has no detector behind it. */
+  get floor(): LineFloor | null {
+    return this._floor();
+  }
+
+  /** True when `threshold` is the unpromised Inclusion 0 fallback (#4247). */
+  get unpromised(): boolean {
+    return isUnpromised(this._floor());
+  }
+
   get sortBusy(): boolean {
     return this._sortBusy();
   }
@@ -147,8 +167,9 @@ export class SortStateService {
     return this._sortEtaSeconds();
   }
 
-  get inclusion(): number {
-    return this._inclusion();
+  /** The active detector's precision floor; null when it has none. */
+  get minPrecision(): number | null {
+    return this._minPrecision();
   }
 
   get loadSortLabel(): string {
@@ -192,9 +213,10 @@ export class SortStateService {
     this._selectMode.set(mode);
   }
 
-  setSortResults(order: SortedItem[], threshold: number): void {
+  setSortResults(order: SortedItem[], threshold: number, floor: LineFloor | null = null): void {
     this._sortOrder.set(order);
     this._threshold.set(threshold);
+    this._floor.set(floor);
     // No acquisition cut on this path (load-sort restore, tests): the getter
     // falls back to the reporting threshold.
     this._acqThreshold.set(null);
@@ -217,6 +239,7 @@ export class SortStateService {
     items: SortedItem[];
     threshold: number;
     acqThreshold?: number | null;
+    floor?: LineFloor | null;
     total: number;
     hasMore: boolean;
     token: string | null;
@@ -225,6 +248,7 @@ export class SortStateService {
     this._sortOrder.set(win.items);
     this._threshold.set(win.threshold);
     this._acqThreshold.set(win.acqThreshold ?? null);
+    this._floor.set(win.floor ?? null);
     this._sortTotal.set(win.total);
     this._sortHasMore.set(win.hasMore);
     this._sortToken.set(win.token);
@@ -311,8 +335,17 @@ export class SortStateService {
     this.findProgressSub = null;
   }
 
-  setInclusion(value: number): void {
-    this._inclusion.set(value);
+  setMinPrecision(value: number | null): void {
+    this._minPrecision.set(value);
+  }
+
+  /**
+   * Replace the floor's verdict without moving the line: for a floor change
+   * that leaves the line where it was, because the floor promised nothing
+   * either side of it and both lines are the default cut (#4246).
+   */
+  setFloor(floor: LineFloor | null): void {
+    this._floor.set(floor);
   }
 
   setLoadSortLabel(label: string): void {
@@ -333,6 +366,7 @@ export class SortStateService {
     this._sortOrder.set(null);
     this._threshold.set(null);
     this._acqThreshold.set(null);
+    this._floor.set(null);
     this._sortBusy.set(false);
     this._sortStatus.set('');
     this._sortProgress.set(0);
@@ -340,7 +374,7 @@ export class SortStateService {
     this._sortOverall.set(null);
     this._sortStepEnd.set(null);
     this._sortEtaSeconds.set(null);
-    this._inclusion.set(0);
+    this._minPrecision.set(DEFAULT_MIN_PRECISION);
     this._loadSortLabel.set('');
     this._loadSortSource.set(null);
     this._textQuery.set('');

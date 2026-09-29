@@ -151,13 +151,16 @@ everywhere except those held votes.
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
+  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks"
 }
 ```
 
-On patch-region-aware datasets each result additionally carries `best_region`.
+`floor` is the [floor state](labeling.md#the-floor-state) of `threshold`:
+whether the Good/Bad split is a precision promise or the unpromised Inclusion 0
+cut. On patch-region-aware datasets each result additionally carries `best_region`.
 Errors: **400** (no medias loaded, or detector has no labels), **404**
 (detector not found), **409** (active dataset can't supply the detector's
 embedder type, or the run was cancelled).
@@ -183,6 +186,7 @@ demand, and returns one result column per detector.
     "Dog Barks": {
       "detector_name": "Dog Barks",
       "threshold": 0.5,
+      "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -192,11 +196,36 @@ demand, and returns one result column per detector.
 }
 ```
 
+Each detector's `floor` is the [floor state](labeling.md#the-floor-state) of
+its `threshold` (`null` only when there was no trained context to ask). A
+detector whose floor promised nothing is still exported at its Inclusion 0
+cut, and the server logs that the set is unpromised.
+
 When an exporter is configured for Auto-Find, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
 extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
-Auto-Find detectors for the media type), **404** (named detector not flagged
-for Auto-Find), **409** (cancelled).
+AutoRun detectors for the media type), **404** (named detector not on the
+caller's AutoRun list), **409** (cancelled).
+
+This is the synchronous, scripted form. The Dashboard runs the same detectors
+in the **background** instead - after a web import (see the `autorun` flag
+under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
+⋯ **Run AutoRun**
+([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)) -
+and keeps each run's results for the user who started it:
+
+### AutoRun results
+
+```
+GET /api/autorun/runs/{run_id}
+```
+
+`run_id` is the background run's `task_id`. Returns the body above
+(`auto_export` included when an exporter ran) plus `run_id`, `dataset_id`,
+`dataset_name`, `trigger` (`"import"` or `"manual"`) and `created_at`.
+Runs live in memory only, and only the most recent few, so **404** covers an
+unknown run, another user's, one that has aged out, and any from before a
+restart alike.
 
 ### Find stats (detector evaluation)
 
@@ -205,8 +234,9 @@ GET /api/find/stats
 ```
 
 Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
-confusion of the adopted label vs. the detector's original call, plus an FP/FN
-threshold sweep.
+confusion of the adopted label vs. the detector's original call, the Kept rate,
+what the precision floor says about the line, and the precision curve the Stats
+chart draws.
 
 →
 ```json
@@ -216,14 +246,40 @@ threshold sweep.
   "confirmed_good": 25, "confirmed_bad": 3,
   "culled_false_pos": 3, "rescued_false_neg": 2,
   "agreements": 28, "corrections": 2,
-  "agreement_rate": 0.93, "precision": 0.89,
-  "inclusion": 0, "threshold": 0.5, "stale": false,
-  "sweep": [{"inclusion": -10, "threshold": 0.7, "false_pos": 1, "false_neg": 9}, ...]
+  "agreement_rate": 0.93,
+  "verified_precision": 0.82, "verified_called_good": 17, "verified_kept_good": 14,
+  "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
+  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
+  "precision_curve": [
+    {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
+     "verified_precision": 1.0, "estimated_precision": 0.91}, ...
+  ],
+  "estimate_status": "estimated", "calibration_positives": 14, "min_calibration_positives": 10
 }
 ```
 
-`sweep` covers inclusion −10..10. `stale` is `true` once corrections have been
-folded into the detector since this Find run scored.
+- `verified_precision` (the Stats **Kept rate**) is taken over the checked items
+  the detector called Good only: `verified_kept_good / verified_called_good`,
+  `null` when none is checked. Unchecked matches are not counted as right.
+- `precision_curve` reads down the ranking (score descending): each point is the
+  top `n_returned` items, sampled at about 40 log-spaced counts plus the current
+  cut's (`n_returned` at the top level). `verified_precision` is
+  `checked_good / checked` over the items in it the user verified (`null` when
+  none). `estimated_precision` is the precision floor's own lower-bound estimate
+  (the detector's `precision_floor_cache`, applied to this Find run's scores as
+  the corpus, sampled to 50,000 above that): the held-out calibration votes the
+  learned sort chose, and the whole haystack the detector trained against,
+  voted items included, as the reference pool. It is the curve the floor cuts
+  (see [labeling.md](labeling.md#get--set-the-precision-floor)).
+- `estimate_status` says whether the curve carries an estimate: `estimated`;
+  `insufficient_evidence` when those votes hold fewer than
+  `min_calibration_positives` Good ones (the precision floor's own gate); or
+  `unavailable` when the detector has no calibration folds.
+- `floor` is the [floor state](labeling.md#the-floor-state) of the line at
+  `threshold`: the floor it was cut at (the chart draws it across at that
+  precision), and whether the line keeps it or is the unpromised default cut.
+- `stale` is `true` once corrections have been folded into the detector since
+  this Find run scored.
 
 ### Find work queues
 

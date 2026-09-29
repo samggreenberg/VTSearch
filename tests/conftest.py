@@ -169,9 +169,11 @@ def reset_state():
     :func:`tests_shared.state_reset.reset_shared_state`, which the library
     suite calls too.  Only the app-tier extras are spelled out here.
     """
+    from vtsearch.autorun_detectors import clear_autorun_runs
     from vtsearch.autorun_processors import clear_all_autorun
 
     clear_all_autorun()
+    clear_autorun_runs()
 
     reset_shared_state(_test_medias_snapshot)
 
@@ -185,6 +187,20 @@ def reset_state():
     from vtsearch.shim import register_app_config_builder
 
     register_app_config_builder()
+
+
+@pytest.fixture
+def no_precision_floor(isolated_settings):
+    """The user has cleared the precision floor, so the Inclusion knob draws every line (#4245).
+
+    For tests of the Inclusion knob's own mechanics.  Under the default floor a
+    set floor wins and an Inclusion slide does not move the line; clearing it
+    is how a user gets the knob back.  The settings file is per test, so
+    nothing needs undoing.
+    """
+    from vtsearch import settings as settings_mod
+
+    settings_mod.set_min_precision(None)
 
 
 class _MergedSettingsPath:

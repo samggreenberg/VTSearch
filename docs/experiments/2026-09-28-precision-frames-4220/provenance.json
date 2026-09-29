@@ -1,0 +1,8 @@
+{
+  "cells": 1440,
+  "starved_skipped": 18,
+  "arms": [
+    "natural=/expscratch/sgreenberg/pframes-4220/natural/r7_acq4/results",
+    "h0.05=/expscratch/sgreenberg/pframes-4220/h0.05/r7_acq4/results"
+  ]
+}

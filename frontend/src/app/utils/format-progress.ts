@@ -211,8 +211,10 @@ export interface ProgressHeader {
   eta: string;
 }
 
-/** Which load flow this progress event belongs to. */
-export type ProgressKind = 'dataset' | 'detector' | 'projection';
+/** Which flow this progress event belongs to. ``autorun`` is a background
+ *  AutoRun of the user's AutoRun detectors on a dataset (#4252), which reports
+ *  on the dataset channel but is not a load. */
+export type ProgressKind = 'dataset' | 'detector' | 'projection' | 'autorun';
 
 /**
  * Strip a leading action verb (a gerund like "Embedding"/"Converting"/"Loading",
@@ -252,12 +254,30 @@ export function formatProgressHeader(
       ? 'Loading detector'
       : kind === 'projection'
         ? 'Building the map'
-        : 'Loading dataset';
+        : kind === 'autorun'
+          ? 'Running AutoRun'
+          : 'Loading dataset';
 
   let phase = '';
   let subtitle = '';
 
-  if (kind === 'projection') {
+  if (kind === 'autorun') {
+    // The slow part of a run is each detector's cold train, which narrates
+    // itself (see ``resolve_or_train_detector``); the rest is scoring.
+    if (/label origins/i.test(message)) {
+      phase = 'resolving labels';
+      subtitle = "Fetching each detector's labeled examples so it can be trained.";
+    } else if (/calibrat/i.test(message)) {
+      phase = 'calibrating';
+      subtitle = 'Choosing where each detector draws its line between a match and not.';
+    } else if (/training/i.test(message)) {
+      phase = 'training detectors';
+      subtitle = 'Training each AutoRun detector from its labels.';
+    } else {
+      phase = 'scoring';
+      subtitle = 'Scoring every item with your AutoRun detectors.';
+    }
+  } else if (kind === 'projection') {
     if (/pyramid|tiling|binning/i.test(message)) {
       phase = 'tiling layout';
       subtitle = 'Grouping the items into map tiles.';
@@ -345,7 +365,8 @@ export function formatProgressHeader(
   const total = prog.total;
   const counts =
     current != null && total != null && total > 0 ? formatProgressFraction(current, total) : '';
-  const item = stripActionVerb(message);
+  // An AutoRun's counts are detectors, and its message is already the phase.
+  const item = kind === 'autorun' ? (counts ? 'detectors done' : '') : stripActionVerb(message);
   const detail = [counts, item].filter(Boolean).join(' ');
   const eta = formatEta(prog.eta_seconds);
   return { header, subtitle, detail, eta };

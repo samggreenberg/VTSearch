@@ -340,6 +340,36 @@ class TestMaybeStructuralRerank:
         assert out[0]["id"] == 2
         assert out[0]["score"] >= STRUCTURAL_DECISION_THRESHOLD
 
+    def test_it_drops_the_mlp_scale_estimators_from_the_detector(self, monkeypatch):
+        """The boundary it returns is not on the retrieval MLP's scale, so nothing may re-cut it.
+
+        Stage 1 parks the MLP's fold-anchored estimator and calibration folds on
+        the detector.  Left there, the next re-cut - a floor or Inclusion change,
+        the acquisition cut - replaced the classifier's boundary
+        with an MLP-scale threshold and applied it to verification scores.
+        """
+        from vtscore.state.core import DetectorContext, recut_detector_threshold
+
+        m = SiftMatcher()
+        base = _textured_image(55)
+        snap = {
+            1: {"local_features": _feats(base, matcher=m), "embedder": "sift_vlad"},
+            2: {"local_features": _feats(_warp(base, 9.0, 1.05, 5.0, -3.0), matcher=m), "embedder": "sift_vlad"},
+            3: {"local_features": _feats(_textured_image(66), matcher=m), "embedder": "sift_vlad"},
+        }
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: m)
+        det_ctx = DetectorContext(detector_id="det-structural", media_type="image")
+        det_ctx.anchored_cut_cache = object()  # stand-ins for Stage 1's MLP-scale caches
+        det_ctx.calibration_cache = ("key", object())
+
+        results = [{"id": 3, "score": 0.95}, {"id": 2, "score": 0.40}, {"id": 1, "score": 0.30}]
+        _out, thresh = maybe_structural_rerank(results, 0.77, snap, {1: None}, {3: None}, {}, det_ctx)
+
+        assert thresh == STRUCTURAL_DECISION_THRESHOLD
+        assert det_ctx.anchored_cut_cache is None
+        assert det_ctx.calibration_cache is None
+        assert recut_detector_threshold(det_ctx, 4) is None, "nothing left that could re-cut the boundary"
+
     def test_feature_snap_sources_templates_from_a_separate_snapshot(self, monkeypatch):
         """The labelset path supplies templates/classifier features from a
         synthetic ``feature_snap`` (re-derived cross-dataset features) while the

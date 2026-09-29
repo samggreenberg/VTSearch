@@ -26,7 +26,13 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config import (
+    DATA_DIR,
+    DEFAULT_CALIBRATE_COUNT,
+    DEFAULT_MIN_PRECISION,
+    PROJECTION_MIN_DIST,
+    PROJECTION_N_NEIGHBORS,
+)
 
 __all__ = [
     "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
@@ -40,6 +46,7 @@ __all__ = [
     "GridIconSize",
     "ServerSettings",
     "Theme",
+    "UsageBarsMode",
     "UserSettings",
     "VALID_ANIMATION_MODES",
     "VALID_BROWSE_COLORMAPS",
@@ -49,6 +56,7 @@ __all__ = [
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
     "VALID_THEMES",
+    "VALID_USAGE_BARS_MODES",
 ]
 
 
@@ -59,6 +67,11 @@ Theme = Literal["dark", "light", "highviz", "system"]
 # OS asks for reduced motion; ``"hide"`` always suppresses them; ``"os"`` defers
 # to the platform ``prefers-reduced-motion`` preference.
 AnimationMode = Literal["show", "hide", "os"]
+# Visibility of the Dashboard's RAM / Disk usage bars. ``"view"`` always shows
+# them, ``"hide"`` never does, and ``"default"`` shows them only once the user
+# has at least one detector, so a first-time visitor's empty Dashboard isn't
+# cluttered with server gauges before there's anything to run (issue #4227).
+UsageBarsMode = Literal["hide", "default", "view"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 # VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
@@ -82,6 +95,7 @@ BrowseGraphics = Literal["auto", "full", "reduced"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_ANIMATION_MODES: tuple[str, ...] = ("show", "hide", "os")
+VALID_USAGE_BARS_MODES: tuple[str, ...] = ("hide", "default", "view")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
@@ -252,6 +266,18 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
 
+    # Withhold the remaining-time estimate from **ingest** progress bars
+    # (dataset imports, staging imports, a labelset's missing-media fetch).
+    # On a deployment where those jobs are too erratic for any timing profile
+    # to predict, the ETA swings from seconds to most of an hour and misleads
+    # more than it helps (issue #4233); the bar and its counts still show.
+    # Other long-running bars (open, sort, Find, train) keep their ETA.  Set
+    # with the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA``
+    # env var (process-wide, wins for the process lifetime) or by editing this
+    # key in the settings file.  See
+    # :func:`vtsearch.settings.get_effective_hide_ingest_eta`.
+    hide_ingest_eta: bool = False
+
     # Solo-mediaType streamlining. An admin-set restriction: when set, the
     # importer and new-detector flows hide their mediaType pickers and lock to
     # this type, the converter picker filters to converters whose output is
@@ -311,6 +337,14 @@ class UserSettings(BaseModel):
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
     inclusion: Annotated[int, _clamp(-10, 10)] = 0
+    # The precision floor (#4245): the fraction of what a detector's cut
+    # returns that should be right.  Each detector keeps its own, seeded from
+    # this value the first time it reads one (as ``inclusion`` is).  ``None`` is
+    # an explicit "no floor": the Inclusion knob draws the line.  A set floor
+    # wins over ``inclusion``; one that can promise nothing falls back to the
+    # Inclusion 0 cut.  Clamped to ``[0.01, 1]``: a floor of zero promises
+    # nothing and would read as a floor that is always met.
+    min_precision: Annotated[float | None, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a
     # concrete theme to opt out and return to "system" to opt back in.
@@ -331,6 +365,10 @@ class UserSettings(BaseModel):
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
     show_animations: AnimationMode = "show"
+    # Dashboard RAM / Disk usage bars: ``"hide"``, ``"view"``, or ``"default"``
+    # (shown only once a detector exists). See the "RAM / Disk bars" pulldown
+    # in the appearance settings.
+    show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
@@ -370,6 +408,13 @@ class UserSettings(BaseModel):
     autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # Whether a web import runs the user's AutoRun detectors on the new dataset
+    # once it is saved. Not a Settings-modal widget: the Add Dataset dialog's
+    # "Run AutoRun" checkbox starts from it and each import that sends the
+    # checkbox writes the choice back, so the box comes up the way the user
+    # left it last time. Defaults on - moving a detector to AutoRun is the
+    # user saying they want it run on what they import.
+    autorun_on_import: bool = True
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

@@ -10,6 +10,204 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`resolve_or_train_detector(..., on_progress=, use_loaded_context=)`**
+  (issue #4252). Both keyword-only and optional, so every existing call
+  behaves as before. `on_progress` receives the cold train's progress (the
+  `update_find_progress` signature) instead of the shared Find tracker, for a
+  caller scoring off to the side of Find; `use_loaded_context=False` trains on
+  a throwaway context even when the detector is loaded, leaving the live
+  context's head and caches alone.
+
+- **`post_load` on the background dataset load** (issue #4252).
+  `vtscore.datasets.load_pipeline`'s load workers take an optional
+  `post_load(ctx)` hook, called once after a load that succeeded - with the new
+  dataset pinned as the thread's dataset context, after the load's own task has
+  parked and its timing recorders have finished - and never after a failure or
+  cancel. A hook that raises is logged; the dataset stays saved. The app uses it
+  to start AutoRun on an imported dataset.
+
+- **A precision floor for detectors** (issue #4245), all additive:
+  - `PrecisionFloorCurve` / `fit_precision_floor_curve`: the lower-bound curve
+    fitted once and cut at any floor. `precision_floor_cut` is now that fit
+    plus one cut, with unchanged results.
+  - `PrecisionFloorEstimate`: one detector's inputs, with the curve fitted the
+    first time a floor is asked for, and `n_returned` counted on the whole
+    corpus above the 50k sample. `curve_for(corpus)` applies the same evidence
+    and reference pool to another corpus (the Find Stats chart, #4242). The
+    reference pool is the whole haystack with the voted items included, while
+    the corpus is the unvoted remainder: the configuration #4220 measured,
+    which #4221 found the promise's safety rests on.
+  - `eligible_fold_orderings`: the held-out votes that may serve as evidence.
+  - `reporting_line` / `ReportingLine` / `line_inclusion` / `unpromised`: which
+    line an operating point draws (the floor's when promised, the Inclusion 0
+    cut when not, Inclusion's when no floor is set) and where acquisition's
+    offset starts from.
+  - `resolve_min_precision`, `NO_PRECISION_FLOOR`, `DEFAULT_MIN_PRECISION`
+    (0.5, also in `vtscore.config`) and `PRECISION_FLOOR_FALLBACK_INCLUSION`.
+  - `vtscore.datasets.vote_provenance.calibrates_precision`: whether a vote's
+    surfacing provenance lets it calibrate a promise (drawn off the learned
+    sort's own ranking: flow `autopilot` / `list_review`, sort `learned`,
+    select mode `top` / `hard`).
+  - A `holdout_sink` on `compute_fold_orderings`,
+    `compute_grouped_fold_node_scores`, `calibration_folds` and
+    `calibration_folds_cached`: per fold, the training row behind each held-out
+    score. It is read-only and moves no split. `CalibrationFolds` keeps its
+    three fields.
+  - `vtscore.state.get_min_precision` / `set_min_precision`, the
+    `"min_precision"` setting-persister key, `CoreConfig.min_precision`
+    (defaulted), and `DetectorContext.min_precision` / `precision_floor_cache`.
+  - `recut_detector_threshold(ctx, inclusion_value=None, *, min_precision=None)`
+    takes a floor as its operating point. The positional inclusion call is
+    unchanged.
+  - `recompute_detector_thresholds`, `detector_precision_floor` and
+    `detector_line_inclusion` in `vtscore.state.core`.
+  - A `min_precision` keyword on `train_and_score`, `labelset_train_and_score`
+    and `run_learned_sort` (default `None`: no floor, the pre-#4245 behaviour).
+    `train_and_threshold` reads the active detector's floor itself, as it
+    reads its inclusion.
+
+- **Whether a line is a promise travels with it** (issue #4247), all additive:
+  - `vtscore.state.core.detector_floor_state(ctx, min_precision)`: the
+    floor's verdict on a detector's current line, as
+    `{min_precision, status, calibration_positives, min_calibration_positives}`. `status` is `promised`,
+    `unreachable` or `insufficient_evidence` (the last two: the line is the
+    unpromised Inclusion 0 cut), or `None` when no floor is set.
+  - `resolve_or_train_detector(..., ctx_sink=None)`: a list that receives the
+    detector context whose head and threshold are returned, so a caller can
+    ask that context for its verdict.
+  - CLI autodetect: each detector's result, and each entry of the streaming
+    header's `detectors`, carries a `floor` beside `threshold`. A detector
+    whose floor promises nothing is still scored at its Inclusion 0 cut, and a
+    new `detector_unpromised` progress event says so. `threshold` is unchanged:
+    one float, the cut the hits were taken at. Exporters that write the
+    payload verbatim (`server_json_file`, `webhook`) carry `floor` along.
+
+- **Eval: the default arm draws the app's line** (issue #4245).
+  `simulate_voting_iterations` and both `run_voting_iterations_eval` drivers
+  take `min_precision` (`None` = the app's default floor, `"off"` = the
+  Inclusion arm every earlier study ran). The frame gains `min_precision`,
+  `floor_status` and `calibration_positives` columns. **A study that sweeps
+  `inclusion` must now pass `min_precision="off"`**, because a set floor wins
+  over the knob.
+
+- **`vtscore.detectors.cost_trend.SMART_INCLUSION` and `smart_cut`, and
+  `inject_live_model(..., smart_threshold=None)`** (issue #4243). The Smart
+  indicator prices every model's error at `SMART_INCLUSION` (0, so FPR + FNR),
+  at the model's own cut for that inclusion rather than at the line it was
+  served with. `smart_cut(served_threshold, served_inclusion, recut)` picks
+  that cut: the served line when the model was served at `SMART_INCLUSION`,
+  else `recut(SMART_INCLUSION)`, else the served line again when there is
+  nothing inclusion-aware to re-cut. `inject_live_model` takes the chosen cut
+  as an optional keyword and falls back to `threshold` without it, so existing
+  callers keep working. The eval harness's Smart window reads the same two
+  names.
+
+- **A dry stop in the Autopilot opening grammar: `+dry<m>/<w>`** (issue
+  #4222). `vtscore.eval.startup_schedule` rounds can now end early when the
+  round's last `w` picks held fewer than `m` goods, so `g20+dry1/8@top,b4@mid`
+  walks the text sort until 20 goods or until 8 picks in a row come back empty.
+  Allowed on `g` and `n` rounds, refused on `b`. `StartupRound` gains
+  `dry_goods` / `dry_window` (both `0` when there is no dry stop, so existing
+  rounds compare equal), `StartupState` gains `ran_dry()`, and
+  `StartupState.on_click` / `AutopilotFlow.update` take the vote's outcome
+  (`good` / keyword `last_vote_good`), which a dry round requires.
+
+- **`FoldAnchoredCut.fold_orderings`** (issue #4242). Each kept fold's
+  held-out `(scores, labels)`, index-aligned with `fits` and `fold_haystacks`,
+  with unscored items dropped. `fit_fold_anchored_cut` drops a fold that fails
+  both fits, so the calibration cache's orderings don't line up with a cut's
+  haystacks; these do. That is the evidence
+  `precision_lower_bound_curve` / `precision_floor_cut` need from a live
+  detector: `precision_lower_bound_curve(corpus, cut.final_haystack,
+  cut.fold_orderings, cut.fold_haystacks)`. Additive, defaulting to `()` for a
+  cut built by hand.
+
+- **`vtscore.utils.synthetic.describe_image_dataset()` and
+  `SMILING_EXPRESSIONS`** (issue #4240). What `generate_image_dataset(count,
+  seed)` draws, without drawing it: one dict per picture with its `filename`,
+  `kind`, `background` and `objects` (each a shape, a colour name and a box; a
+  face also its `expression` and whether it is `smiling`). The ground truth of
+  a generated set - which pictures are the yellow smileys, and where.
+
+- **`vtscore.training.thresholds.precision_floor`** (preparation for #4224).
+  `precision_floor_cut` returns the largest top-*k* of a corpus whose
+  lower-bound estimated precision clears a floor, in one of three
+  `PrecisionFloorStatus` states (`promised`, `unreachable`,
+  `insufficient_evidence`), as a `PrecisionFloorCut`.
+  `precision_lower_bound_curve` exposes the whole curve; `fold_rank_evidence`,
+  `fit_posterior`, `em_prior_shift` and `percentile_in` are its pieces. This is
+  the estimator #4220 measured (fold-rank, logistic, 10th-percentile bootstrap
+  bound, EM prior re-estimate, gated on `MIN_CALIBRATION_POSITIVES = 10`) and it
+  reproduces that study's cuts exactly; the coordinate, bound level and refit
+  count are parameters for #4221. Not yet read by any detector.
+
+- **`FoldAnchoredCut.inclusion_for_threshold`, `INCLUSION_SEARCH_SPAN`, and
+  `vtscore.state.core.recut_detector_threshold`** (preparation for #4224). The
+  inverse of `threshold_at` recovers the inclusion a cut sits at when the cut was
+  set by another rule - a precision floor - so the acquisition cut can still sit
+  `ACQUISITION_INCLUSION_OFFSET` steps stricter than it. It returns the strictest
+  such inclusion, round-trips any realized threshold exactly, and searches
+  `[-INCLUSION_SEARCH_SPAN, INCLUSION_SEARCH_SPAN]` (32 steps). `recut_detector_threshold`
+  is the one place a loaded detector's cut is re-derived without a retrain
+  (the Inclusion slide, the Find Stats sweep, and the acquisition cut read it).
+  `detector_acquisition_threshold`'s `inclusion_value` is now optional: `None`
+  reads the offset's origin off `ctx.threshold` through the inverse. Additive:
+  every existing call passes an inclusion and behaves as before.
+
+- **`create_media_type=` on `vtscore.cli.import_labels_into_detector`, and
+  `vtscore.cli.DetectorNotFoundError`** (issue #4238). With a registered media
+  type, a missing detector is created from the imported labels - the JSON the
+  Dashboard's New Detector writes, plus a `vtscore.detectors.registry` entry
+  owned by `get_current_user()` - instead of failing; nothing is written when
+  the import yields no `good`/`bad` label. A missing detector without it raises
+  `DetectorNotFoundError`, a `ValueError` subclass carrying `det_name`, so
+  existing `except ValueError` callers are unaffected. Additive: the keyword
+  defaults to `""`, which keeps the old behaviour.
+
+- **`override_detectors=` on the four `vtscore.cli.autodetect_*_main` entry
+  points** (issue #4235). A list of detector names to train and score in
+  place of the settings file's `autofind_detectors`, which the run then does
+  not consult (the file is never modified) - the same override the pipeline
+  YAML's `detectors:` already drove through the private `_run_source`. The
+  `dry_run_plan` event gains a `detectors_source` field (`"autofind"` or
+  `"override"`), and its `autofind_detectors` lists the override when one is
+  given. Additive: the keyword defaults to `None`, which reads the settings
+  list as before.
+
+- **ETA-less progress trackers and `CoreConfig.hide_ingest_eta`** (issue
+  #4233). `ProgressTracker(..., publish_eta=False)` and
+  `LoadingTasksTracker.create_task(..., publish_eta=False)` build a tracker
+  whose `eta_seconds` stays `None` while the bar itself updates as usual.
+  The new `CoreConfig.hide_ingest_eta` field (default `False`) and
+  `vtscore.concurrency.progress.ingest_eta_hidden()` let a deployment turn
+  the estimate off for dataset imports, staging imports and labelset
+  missing-media fetches. Both keywords default to `True`, so existing
+  callers and hand-built `CoreConfig(...)` instances are unaffected.
+
+- **`items=` on `notify()` and `PluginBase.notify()`** (issue #4232). A
+  notification can carry the list of specific things it is about - every
+  skipped file, every dropped row - as `items`, one entry each. The app shows
+  them behind the toast's *Details* toggle with a *Copy list* button, where a
+  comma-joined `detail` was cut off at 2000 characters; the CLI prints one per
+  line (text mode) or an `items` array (JSON mode), and the log records them.
+  Capped at `MAX_ITEMS` (1000) entries of `MAX_ITEM_CHARS` (300) characters,
+  the last slot saying how many were cut. `Notification` gains an `items`
+  field (a tuple, `None` when absent) and `to_dict()` an `"items"` key.
+  `embed_missing()` also takes an optional `failures=` dict, which it fills
+  with a user-facing reason per item it left without a vector. Additive: both
+  keywords default to `None`.
+
+- **`save_dataset=` on the four `vtscore.cli.autodetect_*_main` entry points**
+  (issue #4226). With `save_dataset=True` the source is imported through the
+  GUI load pipeline (`_run_importer_in_background`) and registered in the
+  dataset registry before detection, which then scores the saved pickle; no
+  applicable detector ends the run with a `detection_skipped` event instead of
+  an error, and combining it with `stream_results=True` is refused. The
+  keyword defaults to `False`, so existing callers keep the temporary
+  behaviour. New `cli_progress` events: `dataset_saved`, `detection_skipped`.
+  Pipeline files gain a `tempimport` key; a file without it now saves its
+  dataset, and `stream_results: true` requires `tempimport: true`.
+
 - **`vtscore.cli.import_labels_into_detector(det_name, importer_name,
   field_values)`** (issue #4174). Runs a label importer with an arbitrary
   field mapping and merges its labels into a detector, so importers that read
@@ -305,6 +503,30 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Smart no longer prices at the caller's inclusion** (issue #4243).
+  `calculate_error_cost_over_time`, `compute_labeling_status`,
+  `analyze_labeling_progress` and `cached_indicator_history` still take
+  `inclusion_value`, which picks the progress cache to read, but every cost
+  they report is FPR + FNR at each model's `smart_threshold`. Before, it was
+  priced at `inclusion_value` at the served threshold. Identical at inclusion 0.
+
+- **`generate_image_dataset` draws a small world of cartoon smiley faces**
+  (issue #4240). The two ideas (a smiley, or shapes, on a plain background at
+  256x256) become three kinds at 512x512: a `face` in one of seven colours
+  with one of seven expressions, `shapes` (stars added), and a `scene` of
+  several small faces and shapes; backgrounds gain polka dots, stripes, checks
+  and gradients. File names are `face_` / `shapes_` / `scene_` plus the index
+  (were `smiley_` / `shapes_`). Each picture is now seeded on `(seed, index)`
+  rather than `seed + index`, which had made two seeds share nearly every
+  picture - so a `(count, seed)` still always gives the same files, but not
+  the files it gave before. The signature is unchanged.
+
+- **The `synthetic` importer takes a `seed`** (issue #4240): a third,
+  optional field (default `1`; the seed used to be a fixed `42`), recorded in
+  the origin. Its cache folder is now `<media_type>_<size>_seed<seed>`, plus a
+  `_v<n>` for a generator whose drawing has changed, so no cache written
+  before this is reused.
+
 - **Context-registry lookups no longer take `_state_lock`** (issue #3869).
   `get_context`, `get_detector_context` and `list_loaded_*_ids` now hold only
   `_context_registry_lock` - a plain `Lock` guarding the two registry dicts'
@@ -568,6 +790,22 @@ instead, since every commit on `dev` is effectively a new app release.)
   before recording each tick.
 
 ### Fixed
+
+- **An Inclusion slide no longer overwrites a cut the knob cannot move.** Below
+  the calibration-fold floor (too few votes, or one class) training stores the
+  schedule blend, but `recompute_detector_thresholds_for_inclusion` wrote the
+  folds' bare fallback sentinel over it, moving the line on the first touch of
+  the stepper, sometimes toward fewer items on a lenient step. It now leaves
+  such a detector's threshold alone.
+- **`recompute_detector_thresholds_for_inclusion` re-cuts each detector at its
+  own inclusion.** It re-cut every loaded detector at the new value while
+  `set_inclusion` updated only the active detector's `DetectorContext.inclusion`,
+  so another detector's line and its reported inclusion disagreed. A detector
+  already holding a value keeps its cut; an unseeded one takes the new value.
+- **A structural re-rank drops the retrieval MLP's cached estimators**
+  (`anchored_cut_cache`, `calibration_cache`). The threshold it returns is the
+  verification classifier's boundary, and a later re-cut replaced it with an
+  MLP-scale cut applied to verification scores.
 
 - **`resolve_or_train_detector` no longer returns a head trained on stale
   labels** (issue #4204). It returned `DetectorContext.model` whenever that was

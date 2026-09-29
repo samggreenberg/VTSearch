@@ -64,12 +64,24 @@
               {{ t.action.label }}
             </button>
           }
-          @if (t.errorContext) {
-            <button type="button" class="toast__btn" (click)="toggleDetails(t)" [attr.aria-expanded]="expandedId === t.id" title="Show full error details">
+          @if (t.errorContext || t.items?.length) {
+            <button
+              type="button"
+              class="toast__btn"
+              (click)="toggleDetails(t)"
+              [attr.aria-expanded]="expandedId === t.id"
+              [title]="t.errorContext ? 'Show full error details' : 'Show all ' + t.items?.length + ' item(s)'"
+            >
               {{ expandedId === t.id ? 'Hide details' : 'Details' }}
             </button>
+          }
+          @if (t.errorContext) {
             <button type="button" class="toast__btn" (click)="copyDebugInfo(t)" title="Copy a debug bundle to your clipboard">
               {{ copiedId() === t.id ? 'Copied!' : 'Copy debug info' }}
+            </button>
+          } @else if (t.items?.length) {
+            <button type="button" class="toast__btn" (click)="copyItems(t)" title="Copy the list to your clipboard, one item per line">
+              {{ copiedId() === t.id ? 'Copied!' : 'Copy list' }}
             </button>
           }
           <button type="button" class="toast__close" (click)="dismiss(t)" aria-label="Dismiss" title="Dismiss">
@@ -111,6 +123,14 @@
               <pre>{{ t.errorContext.rawBody }}</pre>
             </details>
           }
+        </div>
+      } @else if (expandedId === t.id && t.items?.length) {
+        <div class="toast__details">
+          <ul class="toast__items">
+            @for (item of t.items; track $index) {
+              <li>{{ item }}</li>
+            }
+          </ul>
         </div>
       }
     </div>

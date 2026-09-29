@@ -59,6 +59,7 @@ def main() -> int:
     from vtscore.eval.labels import evaluable_pool, media_is_positive
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
+    from vtscore.eval.voting_iterations import thin_haystack
     from vtscore.eval.calibration_metrics import detection_metrics
     from vtscore.training.thresholds import inclusion_cost_weights, text_sort_threshold
 
@@ -140,7 +141,16 @@ def main() -> int:
                 gmm_cut = float(text_sort_threshold([float(s) for s in scores]))
 
                 for seed in cfg.SEEDS:
-                    _, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
+                    sim_ids, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
+                    if cfg.HAYSTACK_PREVALENCE is not None:
+                        # The thinned arm (#4184/#4201): the text route cuts a pool at
+                        # the arm's prevalence, so both halves are thinned for the
+                        # cut's view.  It is still graded on the whole test half,
+                        # exactly as the rungs are.
+                        p = cfg.HAYSTACK_PREVALENCE
+                        seen = set(thin_haystack(medias_cat, sim_ids, cat, p, seed))
+                        seen |= set(thin_haystack(medias_cat, test_ids, cat, p, seed))
+                        gmm_cut = float(text_sort_threshold([float(s) for i, s in zip(ids, scores) if i in seen]))
                     tset = set(test_ids)
                     mask = np.asarray([i in tset for i in ids])
                     y, s = labels[mask], scores[mask]

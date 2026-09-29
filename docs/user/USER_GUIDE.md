@@ -10,21 +10,22 @@
 
 1. [What VTSearch does](#what-vtsearch-does)
 2. [Step by step: your first search](#step-by-step-your-first-search) *(start here)*
-3. [Loading a dataset](#loading-a-dataset)
-4. [The three-panel layout](#the-three-panel-layout)
-5. [Autopilot: the guided workflow](#autopilot-the-guided-workflow)
-6. [Manual mode: for power users](#manual-mode-for-power-users)
-7. [Region voting on images](#region-voting-on-images)
-8. [Creating a detector](#creating-a-detector)
-9. [Find: scoring and verifying](#find-scoring-and-verifying)
-10. [View options](#view-options)
-11. [Settings tabs](#settings-tabs)
-12. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
-13. [Browse: exploring a dataset spatially](#browse-exploring-a-dataset-spatially)
-14. [Exporting your work](#exporting-your-work)
-15. [Importing pre-trained detectors](#importing-pre-trained-detectors)
-16. [Achievements](#achievements)
-17. [Tips and shortcuts](#tips-and-shortcuts)
+3. [How-to guides: one task at a time](#how-to-guides-one-task-at-a-time)
+4. [Loading a dataset](#loading-a-dataset)
+5. [The three-panel layout](#the-three-panel-layout)
+6. [Autopilot: the guided workflow](#autopilot-the-guided-workflow)
+7. [Manual mode: for power users](#manual-mode-for-power-users)
+8. [Region voting on images](#region-voting-on-images)
+9. [Creating a detector](#creating-a-detector)
+10. [Find: scoring and verifying](#find-scoring-and-verifying)
+11. [View options](#view-options)
+12. [Settings tabs](#settings-tabs)
+13. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
+14. [Browse: exploring a dataset spatially](#browse-exploring-a-dataset-spatially)
+15. [Exporting your work](#exporting-your-work)
+16. [Importing pre-trained detectors](#importing-pre-trained-detectors)
+17. [Achievements](#achievements)
+18. [Tips and shortcuts](#tips-and-shortcuts)
 
 ---
 
@@ -62,16 +63,84 @@ need to think about sort modes or selection strategies directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-loaded.dark.webp" />
-  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
+  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them" width="720" />
 </picture>
 
-> Every screenshot in this guide follows one example: a few hundred
-> everyday photographs, and a detector that learns to find the ones with
-> **books** in them. The photos come from the public COCO dataset, and the
-> same example runs through the VTSearch slide deck. Screenshots come in light
+> Every screenshot in this guide follows one example: a few hundred cartoon
+> drawings - faces in every colour and mood, piles of shapes, busy little
+> scenes - and a detector that learns to find the **yellow smiley faces**
+> among them. VTSearch draws the pictures itself, so you can make the very
+> same ones and follow along (see
+> [Step by step](#step-by-step-your-first-search)). Screenshots come in light
 > and dark variants and follow your theme automatically - the in-app Help
 > panel shows the one matching your current theme, and on GitHub/GitLab the
 > `<picture>` element above picks the variant matching your site appearance.
+
+### Matches, the line, precision and recall
+
+A trained detector gives every item a **score** and ranks the dataset by
+it, best match first. It also draws a **line** through that ranking (the
+*threshold*): items at or above the line are its **matches**, and items
+below it are not. Everything that acts on "the matches" acts on exactly the
+items above the line: the *Unverified Good* count in Find, **To Dataset**,
+**Export**, **Browse**, and the exports an AutoRun detector sends.
+
+Two numbers describe how good a set of matches is:
+
+- **Precision** - of the items the detector returns, the share that really
+  are what you are looking for. At 80% precision, 8 in every 10 returned
+  items are right.
+- **Recall** - of all the items in the dataset that really are what you are
+  looking for, the share the detector returns. At 80% recall it found 8 in
+  every 10 of them.
+
+The two trade off against each other. Moving the line down the ranking
+returns more items, so recall goes up, but the extra items are the ones the
+detector is least sure of, so precision usually goes down. Moving the line
+up does the reverse. Moving the line never changes the ranking itself: the
+same items stay in the same order. Which way to lean depends on what you
+will do with the results. If you will read every match, lean toward
+precision; if missing one is the costly mistake, lean toward recall.
+
+In the Find view's **Stats**, *Kept rate* is the precision of the
+detector's matches among the items you have checked. Matches you haven't
+checked don't count, so it measures the detector rather than assuming it
+was right.
+
+#### When the line is unpromised
+
+A detector draws its line at a **precision floor**: the line returns as
+many items as it can while at least that share of them is estimated right.
+You pick the floor at the top of the left panel, where it reads **At least
+50% right** (see [Precision floor](#3-precision-floor)). Every detector
+starts at **50%**. The estimate is cautious, so it only makes that promise
+once it has enough evidence: about ten Good votes among the ones it holds
+back to check itself, counting only votes you made off the detector's own
+ranking (Autopilot's Hard picks, or working down a learned sort).
+
+When it can't promise the floor, the line doesn't disappear. It stays at
+the **default cut** - where the line sat before there was a floor - and is
+labelled **unpromised**: the note under the floor says so, the threshold
+line in the media list is dashed, with *UNPROMISED* under its *THRESHOLD*
+label, and its marker on the minimap beside the list is dashed too. The
+note, or a hover over the line, says which of the two reasons applies:
+
+- **Not enough evidence yet** - the detector has fewer than ten held-back
+  Good votes to check itself on. This is the usual state for a new
+  detector. Keep voting on Autopilot's Hard picks, and the promise arrives
+  once the evidence does.
+- **No cut reaches the floor** - there is enough evidence, and no line on
+  this dataset gets to the floor: the detector can't yet tell enough of the
+  matches from the look-alikes.
+
+Everything that uses the matches keeps working on an unpromised line: the
+*Unverified Good* count, the Find review walk, **To Dataset**, **Export**
+and **Browse** all act on the items above it, exactly as they would above a
+promised one. The label only tells you the share of right answers among
+them is not guaranteed. An AutoRun or command-line run exports the same
+set, and records that it was unpromised: a line in the run's log, and a
+`floor` entry beside the threshold in exports that carry the full results
+(see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
 
 ---
 
@@ -79,18 +148,23 @@ need to think about sort modes or selection strategies directly.
 
 This walkthrough assumes VTSearch is already running and open in your
 browser; if it isn't, see [SETUP.md](../SETUP.md) (or ask whoever runs
-your server for its address). No data of your own? Load demo datasets in
-Steps 1 and 3 instead (the **Demo** tab of the same dialog; see
-[Loading a dataset](#loading-a-dataset)); everything else is the same.
+your server for its address).
 
-Four steps take you from a folder of photos to a detector that finds what
-you are looking for in photos it has never seen. The red numbers in each
-picture show where to click, in order.
+Four steps take you from a folder of pictures to a detector that finds what
+you are looking for in pictures it has never seen. The red numbers in each
+screenshot show where to click, in order.
 
-The example uses two folders of photographs: `photos` to train the
-detector on, and `photos-prod`, a second set that shares no photo with the
-first, to run the finished detector over. Any two folders of your own work
-the same way, whether they hold photos, audio, text, video or documents.
+The example uses two folders of drawings: `drawings` to train the detector
+on, and `drawings-new`, a second set that shares no drawing with the first,
+to run the finished detector over. Any two folders of your own work the same
+way, whether they hold photos, audio, text, video or documents.
+
+**No data of your own?** The drawings come from VTSearch's own
+**Synthetic Media** demo, so you can make the very same ones. In Steps 1
+and 3, use the **Demo** tab of the same dialog instead of **Files**: pick
+**Synthetic Media**, set **Size** to 240, and set **Seed** to 1 for the
+training set (Step 1) and to 2 for the new one (Step 3). Name them `drawings`
+and `drawings-new` to match the screenshots. Everything else is the same.
 
 ### Step 1: Load a training dataset
 
@@ -106,12 +180,12 @@ On the dashboard, click the **+** <picture><source media="(prefers-color-scheme:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-train.dark.webp" />
-  <img src="assets/step-import-train.light.webp" alt="Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of photos on the server, (4) Import" width="720" />
+  <img src="assets/step-import-train.light.webp" alt="Step 1: in Add Dataset, (1) the Files tab, (2) the Folder importer, (3) the path of the folder of pictures on the server, (4) Import" width="720" />
 </picture>
 
 The dataset appears on the **Datasets** card. VTSearch works out a
 fingerprint for every item as it imports them, which takes a minute or two
-for a few hundred photos on an ordinary computer. For the other ways to
+for a few hundred pictures on an ordinary computer. For the other ways to
 bring data in, including ready-made demo datasets that need no data of your
 own, see [Loading a dataset](#loading-a-dataset).
 
@@ -120,8 +194,9 @@ own, see [Loading a dataset](#loading-a-dataset).
 Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-new-detector.dark.webp" /><img src="assets/icon-new-detector.light.webp" alt="The + button on the Detectors card" height="24" /></picture> at the top right of the **Detectors** card. In
 the **New Detector** dialog:
 
-1. Describe what you are looking for, in a word or a phrase: `book`.
-2. Give the detector a name: `Books`.
+1. Describe what you are looking for, in a word or a phrase:
+   `yellow smiley face`.
+2. Give the detector a name: `Yellow Smileys`.
 3. Click **Create**.
 
 <picture>
@@ -129,11 +204,13 @@ the **New Detector** dialog:
   <img src="assets/step-new-detector.light.webp" alt="Step 2: in the New Detector dialog, (1) describe what you are looking for, (2) name the detector, (3) Create" width="720" />
 </picture>
 
-The description only gives the detector somewhere to start; from here on,
-your answers teach it. Back on the dashboard:
+The description only gives the detector somewhere to start:
+`yellow smiley face` puts the yellow faces first, but it is not sure which
+of them are smiling. From here on, your answers teach it. Back on the
+dashboard:
 
-1. Tick the training dataset (`photos`).
-2. Tick the new detector (`Books`).
+1. Tick the training dataset (`drawings`).
+2. Tick the new detector (`Yellow Smileys`).
 3. Click **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture>.
 
 <picture>
@@ -141,42 +218,43 @@ your answers teach it. Back on the dashboard:
   <img src="assets/step-train.light.webp" alt="Step 2: tick (1) the training dataset and (2) the new detector, then (3) Train" width="720" />
 </picture>
 
-VTSearch opens the labeling view, and Autopilot shows you one photo at a
+VTSearch opens the labeling view, and Autopilot shows you one picture at a
 time. For each one:
 
 1. Click **Good** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-good.dark.webp" /><img src="assets/icon-good.light.webp" alt="The Good vote button" height="24" /></picture> (or press `→`) if it is what you are looking for.
 2. Click **Bad** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-bad.dark.webp" /><img src="assets/icon-bad.light.webp" alt="The Bad vote button" height="24" /></picture> (or press `←`) if it is not.
 3. Your answers collect on the right. The detector retrains after every
-   one, and Autopilot picks the next photo from what it has just learned.
+   one, and Autopilot picks the next picture from what it has just learned.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-vote.dark.webp" />
-  <img src="assets/step-vote.light.webp" alt="Step 2: Autopilot shows one photo at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right" width="720" />
+  <img src="assets/step-vote.light.webp" alt="Step 2: Autopilot shows one picture at a time. Answer (1) Good if it is what you are looking for, (2) Bad if it is not; (3) your answers collect on the right" width="720" />
 </picture>
 
-Answer the hard cases too. A shelf of DVD box sets is exactly the kind of
-photo Autopilot will ask about, and whether it counts as a book is your
-call: the detector learns where *you* draw the line. Twenty or thirty
+Answer the hard cases too. A yellow face that is frowning, or an orange one
+that is smiling, is exactly the kind of picture Autopilot will ask about, and
+whether it counts as a yellow smiley is your call: the detector learns where
+*you* draw the line. Twenty or thirty
 answers is usually enough, and the phase list on the left shows how far
 along you are (see [Autopilot](#autopilot-the-guided-workflow)).
 
 ### Step 3: Load a test dataset
 
-Load the photos you want to search the same way as in Step 1, but point
-the **Folder** importer at the second folder (`photos-prod` here). The
-detector never saw any of these photos while you were training it.
+Load the pictures you want to search the same way as in Step 1, but point
+the **Folder** importer at the second folder (`drawings-new` here). The
+detector never saw any of these pictures while you were training it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-import-test.dark.webp" />
-  <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of photos the detector has never seen, then (4) Import" width="720" />
+  <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of pictures the detector has never seen, then (4) Import" width="720" />
 </picture>
 
 ### Step 4: Run the detector on the new dataset
 
 Back on the dashboard:
 
-1. Tick the new dataset (`photos-prod`).
-2. Tick the trained detector (`Books`).
+1. Tick the new dataset (`drawings-new`).
+2. Tick the trained detector (`Yellow Smileys`).
 3. Click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Find button" height="24" /></picture>.
 
 <picture>
@@ -184,25 +262,81 @@ Back on the dashboard:
   <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Find" width="720" />
 </picture>
 
-Find scores every photo in the dataset and opens the results:
+Find scores every picture in the dataset and opens the results:
 
-1. The photos, best match first. How many the detector calls a match, and
-   how many it doesn't, is counted on the right as *Unverified Good* and
-   *Unverified Bad*.
-2. Click any photo to look at it, and confirm or correct the detector
+1. The pictures, best match first. How many the detector calls a match (the
+   pictures above its line), and how many it doesn't, is counted on the right
+   as *Unverified Good* and *Unverified Bad*.
+2. Click any picture to look at it, and confirm or correct the detector
    with **Good** or **Bad**. Checking is optional.
-3. The photos you check collect in **Verified Good** and **Verified Bad**.
+3. The pictures you check collect in **Verified Good** and **Verified Bad**.
 4. **Export** sends the matches - checked or not - to a file, the
    clipboard, an email and more (see
    [Exporting your work](#exporting-your-work)).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-find-results.dark.webp" />
-  <img src="assets/step-find-results.light.webp" alt="Step 4: Find ranks the new photos, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
+  <img src="assets/step-find-results.light.webp" alt="Step 4: Find ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
 </picture>
 
-That is the whole loop. The rest of this guide covers each part in more
-depth.
+That is the whole loop. The [how-to guides](#how-to-guides-one-task-at-a-time)
+below take each next step the same way, one task at a time; the rest of this
+guide covers each part of VTSearch in more depth.
+
+---
+
+## How-to guides: one task at a time
+
+Each of these pages walks through one more job, click by click, on the same
+drawings and the same `Yellow Smileys` detector as
+[Step by step](#step-by-step-your-first-search). Do that first: every page
+picks up where it leaves off.
+
+**Check and use what Find found**
+
+- [Check and correct a detector's calls](howto/check-and-correct.md): verify
+  the pictures near the line and hand your corrections back to the detector.
+- [Catch the borderline matches](howto/borderline-matches.md): review the
+  pictures either side of the line, and lower the **precision floor** to let
+  more in.
+- [Decide how far to trust a detector](howto/trust-a-detector.md): read the
+  **Stats** that say which calls it is qualified to make.
+- [Send your matches somewhere](howto/export-matches.md): export to the
+  clipboard, a file or another website, or keep them as a dataset.
+
+**Other ways to build a detector**
+
+- [Start a detector from an example picture](howto/start-from-an-example.md):
+  show it what you want instead of describing it.
+- [Point at the part of the picture that matters](howto/vote-on-a-region.md):
+  vote on a region of an image.
+- [Get Autopilot unstuck](howto/unstick-autopilot.md): when it can't find
+  matches to start from.
+- [Label in Manual mode](howto/label-in-manual-mode.md): choose the sort and
+  the next picture yourself.
+
+**Reuse and automate detectors**
+
+- [Move a detector to another VTSearch](howto/move-a-detector.md): export its
+  answers and rebuild it elsewhere.
+- [Add labels you already have](howto/import-labels.md): import answers from a
+  CSV file.
+- [Run your detectors on new pictures from the command line](howto/autorun-from-the-command-line.md):
+  **AutoRun** and `--autodetect`.
+- [Combine datasets or detectors](howto/combine.md): merge several into one.
+
+**Explore and manage your data**
+
+- [Explore a dataset with Browse](howto/explore-with-browse.md): the whole
+  dataset as a map, and Find's matches on it.
+- [Check what's in a dataset or a detector](howto/check-a-dataset.md): their
+  **Stats**.
+- [Choose how a dataset is imported](howto/advanced-import.md): the
+  **Advanced** import options, and watching an import run.
+- [Load a ready-made demo dataset](howto/load-a-demo.md): the **Downloaded
+  Media** catalogue.
+- [Save and restore your settings](howto/save-your-settings.md): export them to
+  a file and load them again.
 
 ---
 
@@ -232,7 +366,11 @@ VTSearch ships two populated categories, which boil down to two choices:
     are instant.
   - **🏭 Synthetic Media** - fabricates images, audio, or video on the
     fly. This is the quickest way to try VTSearch, since nothing is
-    downloaded at all.
+    downloaded at all. Its images are the cartoon faces, shapes and scenes
+    this guide's screenshots are taken on. **Seed** picks which set it
+    makes: the same seed always makes the same media, and two seeds make two
+    sets with nothing in common - one to train a detector on and one it has
+    never seen.
 - **Import your own** (the **Files** tab) - two importers, both reading
   from the **server's** filesystem (VTSearch has no browser-side upload
   importer; media must already be somewhere the server can see):
@@ -254,8 +392,10 @@ importers in this category."* See `docs/EXTENDING-plugins.md` if you want to
 add one.
 
 The **Downloaded Media** catalogue is a table: pick a media type from the
-dropdown, then click the dataset you want. Each row carries a readiness
-badge telling you whether it is already cached or still needs downloading.
+dropdown, click the dataset you want to choose it, then click **Import**.
+Each row carries a readiness badge: **Ready** (cached and analysed),
+**Needs setup** (cached, but still to be analysed with the embedder you
+chose) or **Needs Download**. See [Load a ready-made demo dataset](howto/load-a-demo.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.webp" />
@@ -269,7 +409,7 @@ folder instead of typing it:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-form.dark.webp" />
-  <img src="assets/importer-form.light.webp" alt="The Folder importer with its server file browser open on a folder of photographs, one subfolder per subject" width="720" />
+  <img src="assets/importer-form.light.webp" alt="The Folder importer with its server file browser open on the folder of drawings" width="720" />
 </picture>
 
 ### Advanced import options
@@ -277,7 +417,7 @@ folder instead of typing it:
 Every importer exposes a collapsible **Advanced** section. It starts
 collapsed and *nothing* inside it renders until you open it - not even a
 control whose value differs from the default; hover the **Advanced** toggle
-and its tooltip names any non-default choice in effect. The most important
+and its tooltip names a non-default embedder, clipper or cleanup in effect. The most important
 control there is the embedder picker, which is actually a three-role picker:
 
 - **Embedder** - the main model that powers search and matching for the
@@ -298,7 +438,10 @@ form:
   into page images, say). The equivalent choice on the other importers is
   *Include media* above.
 - **Clipper** - a pre-processing pass applied before each item is
-  analyzed, e.g. cutting long audio into shorter segments.
+  analyzed, e.g. cutting long audio into shorter segments. On most importers
+  it is the **Details ▸** button beside each media type under *Include
+  media*; **Downloaded Media**, which has no *Include media*, shows it as its
+  own control.
 - **Cleanup** - optional passes that strip content-free regions from each
   item just before it's analyzed, so the analysis isn't spent on them.
   They're independent; tick any combination.
@@ -319,11 +462,41 @@ form:
 Loading a dataset does three things: downloads or reads the media,
 analyzes every item with the embedder so it can be searched, and groups
 similar items together so VTSearch can later suggest a broad mix.
-Progress is shown in a modal while it runs.
+The dialog closes when you click **Import**, and progress is shown in a row
+at the top of the **Datasets** card, with a **Cancel** button, while it runs
+(see [Choose how a dataset is imported](howto/advanced-import.md)).
 
 If the model for your media type isn't downloaded yet, the first dataset
 of that type triggers a one-time download (around 1 GB). Subsequent
 datasets of the same type reuse the downloaded model.
+
+### Running AutoRun on a new dataset
+
+Once you have a detector on the Dashboard's **AutoRun** tab, every
+importer shows a **Run AutoRun detectors on this dataset** checkbox
+(outside **Advanced**). Ticked, VTSearch runs your AutoRun detectors on
+the dataset as soon as it is saved - the ones for the dataset's media
+type, provided the dataset has the kind of embedder each one scores
+with. The dialog remembers the box the way you left it at your last
+import.
+
+The run shows on the new dataset's Dashboard row while it works, and its
+**Cancel** stops it. When it finishes, a notice tells you how many hits
+it found; its **View results** button opens the **AutoRun Results**
+dialog, which lists every item each detector called Good (switch to
+**Bad** or **Both** to see the rest), copies the list to the clipboard,
+and **Export**s the listed rows to any exporter. If you picked a results
+exporter on the Settings **Auto-Find** tab, the run has already sent the
+results there too. If none of your AutoRun detectors can run on the new
+dataset - they are all for another media type, or were built with a kind
+of embedder the dataset doesn't have - a notice says so instead.
+
+To run AutoRun on a dataset you already have - to try a detector you
+just moved to AutoRun, say - pick **Run AutoRun** from the dataset's
+**⋯** menu. It loads the dataset if it isn't loaded, runs the same
+detectors, and opens the AutoRun Results dialog when it is done. The
+item is greyed out when none of your AutoRun detectors are for that
+dataset's media type.
 
 ### Pre-computed embeddings (.npz)
 
@@ -418,7 +591,7 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 </picture>
 
 - **Left panel** - the sort bar, your selection-strategy controls,
-  the inclusion stepper, and the **media list** (ranked by the current
+  the precision floor, and the **media list** (ranked by the current
   sort). This is where you pick what to look at next.
 - **Centre panel** - the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
@@ -457,8 +630,10 @@ The phase panel labels them, in order:
 1. **Find Initial Goods.** - Vote some **good** items (default: 3).
    The detector needs good examples before it can learn anything.
    Autopilot offers strong candidates first, using the same text
-   ranking the Text sort uses. If you don't see anything good, type
-   a text query into the sort bar to jump-start the ranking.
+   ranking the Text sort uses. If you don't see anything good,
+   Autopilot eventually offers to change what it sorts by; you can also
+   find a few matches yourself on the **Manual** tab (see
+   [Get Autopilot unstuck](howto/unstick-autopilot.md)).
 2. **Find Initial Bads.** - Vote some **bad** items (default: 4). Now
    the detector has examples of both what you want and what you don't.
    Autopilot flips to items ranked low, so finding clear bad examples
@@ -502,8 +677,9 @@ modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="as
 
 - **# Good to start** - how many good votes phase 1 requires (default 3).
 - **# Bad to start** - how many bad votes phase 2 requires (default 4).
-- **# Start to re-sort** - how many new votes to collect before the
-  detector re-learns and re-ranks during phases 3 and 4 (default 10).
+- **# Start to re-sort** - how many answers Autopilot takes in phase 1
+  without enough matches before it asks whether to sort by something else
+  (default 10; see [Get Autopilot unstuck](howto/unstick-autopilot.md)).
 - **Goal diversity** - how much of your collection phase 4 must cover
   before finishing (default 40).
 
@@ -525,7 +701,7 @@ The Manual tab shows three control rows above the media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/manual-controls.dark.webp" />
-  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion stepper" width="720" />
+  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the precision floor" width="720" />
 </picture>
 
 ### 1. Sort mode
@@ -536,10 +712,10 @@ modes, in order: **Text**, **Load**, **Learned**.
 - **Text** - Type a natural-language query (e.g. "dog barking",
   "aerial photo of farmland"). Items are ranked by how well they
   match your query.
-- **Load** - Apply a previously saved detector. Opens a modal where
-  you can **Sort by Detector** (pick a saved detector from the
-  registry) or **Sort by Examples** (sort by similarity to one or
-  more example media items).
+- **Load** - Apply a previously saved detector. Click the **+** beside
+  *No sort loaded* to open the **Load Sort** window, where you can
+  **Sort by Detector** (pick a saved detector with answers) or **Sort by
+  Examples** (sort by similarity to one or more example media items).
 - **Learned** - Trains the detector on your current good/bad
   votes and ranks items by its scores. Needs at least one
   good vote and one bad vote before it works.
@@ -561,47 +737,68 @@ Picks *which unlabeled item* the app highlights next.
 Autopilot cycles through these automatically in its four phases,
 but in Manual mode you choose directly.
 
-### 3. Inclusion stepper
+### 3. Precision floor
 
-A numeric stepper from **-10** (strict) to **+10** (lenient),
-default 0.
+Reads **At least 50% right**: pick how much of what the detector returns
+should be right - **25%**, **50%** (the default), **75%** or **90%**.
+The line (see
+[Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
+then returns as many items as it can while at least that share of them is
+estimated right. A higher floor returns fewer items, more of them right; a
+lower one returns more, and more of them may be wrong. Changing it moves
+the line over the scores the detector already has; the ranking itself does
+not change.
 
-Moves the detector's good/bad cutoff. Negative values mean "only
-call it good if you're very sure" - fewer matches, but the ones you
-get are more likely right. Positive values mean "include borderline
-items" - more matches, but more of them may be wrong. Changing it
-**re-runs the ranking** so the new cutoff takes effect.
+Once the list is ranked by the detector (a **Learned** sort, or Find), the
+note under the picker says what the floor is doing to the line, in one of
+three states:
 
-Each step **up** roughly halves the share of real matches the cutoff
-is allowed to miss, and the steps *nest*: everything included at
-Inclusion 1 is still included at Inclusion 4, plus a band of extra
-borderline items. That makes a two-pass workflow natural: work at a
-strict setting first, then raise inclusion a few steps and review just
-the newly admitted band to be confident you've seen "all the potential
-items". The same knob position means the same miss-tolerance on any
-detector or dataset.
+- **At least 50% right**, with how many items the line returns - the
+  detector can promise the floor, and the line keeps it.
+- **Can't reach 50% on this dataset** - there is enough evidence, but no
+  line on this dataset gets there. The line stays at the default cut.
+- **Not enough evidence yet**, with how many Good votes the detector has
+  of the ten it needs - the usual state for a new detector. The line stays
+  at the default cut.
 
-Leave at 0 unless you want to deliberately lean toward catching
-everything or toward only the surest matches.
+In the last two the line is *unpromised*, and moving the floor doesn't
+move it (see [When the line is unpromised](#when-the-line-is-unpromised)).
+The **?** beside the note explains the floor.
+
+While the floor is promised, lower floors *nest*: everything the line
+returns at 75% it still returns at 50%, plus a band of borderline items.
+That makes a two-pass workflow natural: work at a strict floor first, then
+lower it and review the newly admitted band - the items just above the
+moved line (see [Catch the borderline matches](howto/borderline-matches.md)).
+
+Each detector keeps its own floor while VTSearch runs, and one you haven't
+set yet starts from the last floor you picked. Leave it at 50% unless you
+want to lean toward catching everything or toward only the surest matches.
 
 ---
 
 ## Region voting on images
 
-When the dataset's embedder supports regions - a region-aware or
-pattern-matching embedder, set when the dataset was created - you can
-vote **good** on a *region* of the image instead of the whole image. This
+When the dataset was imported with a **Region embedder** (or its main
+embedder is region-aware) and the detector is a **Patch Semantic** one, you
+can vote **good** on a *region* of the image instead of the whole image. This
 tells the detector "this specific part is what I like", and the learned
 sort uses that hint to find similar regions elsewhere in the dataset.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/region-voting.dark.webp" />
-  <img src="assets/region-voting.light.webp" alt="A photo with a region drawn round the one book in it (8 resize handles), ready to submit a good vote" width="720" />
+  <img src="assets/region-voting.light.webp" alt="A drawing with a region drawn round the one yellow smiley face in it (8 resize handles), ready to submit a good vote" width="720" />
 </picture>
 
 The binary vote experience is **unchanged**: `→` is good, `←` is
 bad.  Region voting is opt-in via a modifier key and never gets in
 the way of fast keyboard voting.
+
+On a dataset that also has a whole-picture embedder, a new detector is
+**Semantic** unless you set **Detector Embedder Type** to **Patch Semantic**
+under **Advanced** in the New Detector dialog; a Semantic detector stores the
+boxes you draw but learns nothing from them. The steps are in
+[Point at the part of the picture that matters](howto/vote-on-a-region.md).
 
 ### Drawing a region
 
@@ -696,21 +893,28 @@ It has two tabs:
   label. Pick its **Media type** (locked to the active dataset's type
   when you have one selected; hidden entirely on a solo-media-type
   server), give it a **Detector name**, and seed it under **Example**
-  one of two ways: the **Text** tab takes a short description ("e.g. dog
-  barking sounds"), and the media tab next to it (named for the media
-  type, e.g. **Image**) takes one or more **media examples**. The
-  quickest way to supply one is the drop zone
+  one of two ways: the **Text** tab takes a short description ("e.g.
+  large books"), and the media tab next to it (named for the media
+  type, e.g. **Image**) takes one or more **media examples**. A typed
+  description also fills in the name, title-cased with "Detector" on the
+  end ("large books" becomes **Large Books Detector**) until you type a
+  name of your own; pressing Enter in the name field clicks **Create**. The
+  quickest way to supply the first one is the drop zone
   right there on the tab - drag a file from your computer onto it, or
-  click it to browse. For anything else, the **Browse Images…** button
+  click it to browse; it asks **Use This Example?** and offers to crop it
+  first. For anything else, the **Browse Images…** button
   (it's named for the dataset's media type) opens a picker with the same
   two-row tab bar as the Add Dataset dialog, offering three sources out of
-  the box: **Downloaded Media** (browse a demo dataset's files), **Server
-  File** (the path of one file on the server), and **URL** (VTSearch
-  downloads the file for you). The last two are *datasource importers* -
+  the box: **Downloaded Media** (the path of a file inside a downloaded demo
+  dataset), **Server File** (the path of one file on the server), and
+  **URL** (VTSearch downloads the file for you). The last two are *datasource importers* -
   single-item fetchers that render as a small form, and the extension
   point where a plugin can add another place to fetch one example from.
   Picked examples stack vertically, each with its own **Remove**
-  button; use **+ Add** below the stack to append another. With several
+  button; use **+ Add** below the stack to append another (from the picker's
+  sources; only the first example can come from your own computer). An
+  example picture also names the detector after its file until you type a
+  name. With several
   examples, Autopilot's first sort ranks the dataset against their
   *average* - it surfaces items resembling what the examples have in
   common, and each example is seeded as a Good vote when the detector
@@ -726,11 +930,16 @@ It has two tabs:
   from**); a stock install offers a JSON or CSV label file on the server
   (**Server JSON File** / **Server CSV File**), and plugins can add other
   sources. Pick one, fill its form, and VTSearch trains the detector on
-  the imported labels (the button reads **Create & Import**).
+  the imported labels (the button reads **Create & Import**). It takes files
+  exported from VTSearch, which record where each item came from (see
+  [Move a detector to another VTSearch](howto/move-a-detector.md)); to add
+  labels made elsewhere, use **Import Labels** on an existing detector
+  ([Add labels you already have](howto/import-labels.md)).
 
 You can also reach the Blank flow with an item pre-selected as the
 example via the right-click media context menu's **Use as detector
-seed** option (see [Tips and shortcuts](#tips-and-shortcuts)).
+seed** option (see [Tips and shortcuts](#tips-and-shortcuts)). The steps are
+in [Start a detector from an example picture](howto/start-from-an-example.md).
 
 ---
 
@@ -749,8 +958,11 @@ runs).
 </picture>
 
 - **Left pane** - the **work queue** of items the detector hasn't been
-  confirmed on yet, ranked by score, with the same inclusion stepper
-  you use while labeling.
+  confirmed on yet, ranked by score, under the same
+  [precision floor](#3-precision-floor) you use while labeling. The line
+  through it is dashed and marked *unpromised* while the detector can't
+  yet promise its floor; see
+  [When the line is unpromised](#when-the-line-is-unpromised).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.
 - **Right pane** - the **Verified Good** and **Verified Bad** piles,
@@ -761,15 +973,29 @@ The verification view's action buttons let you act on the result:
 - **To Dataset** - promote the full good set (verified + unverified)
   into its own new dataset.
 - **Add Corrections to Detector** - fold the items you changed from the
-  detector's call back into the detector's examples and retrain it, so
-  the detector gets better at the cases it got wrong. Running Find again
-  re-scores the dataset with the improved detector; every item you have
-  already verified keeps the call *you* made, so re-scoring never undoes
-  your work.
+  detector's call back into the detector's examples, so the detector gets
+  better at the cases it got wrong. Nothing is re-scored straight away (the
+  Stats are marked out of date); running Find again retrains the detector and
+  re-scores the dataset with it, and every item you have already verified
+  keeps the call *you* made, so re-scoring never undoes your work. See
+  [Check and correct a detector's calls](howto/check-and-correct.md).
 - **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-stats.dark.webp" /><img src="assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture> - open the results modal: a breakdown of the detector's
-  calls plus a chart of how wrong matches and missed matches change as
-  you adjust inclusion - the clearest way to see the trade-off the
-  inclusion stepper controls.
+  calls plus a chart of precision against how many items are returned,
+  reading down the ranked list - the clearest way to see how much you
+  give up in precision for each extra match. It draws two lines:
+  - **Estimated (at least)** - the precision VTSearch estimates for the
+    top N items: a cautious lower bound worked out from the detector's
+    own held-out votes. It appears once those votes include at least 10
+    Good ones; below that, the chart says how many it has.
+  - **Checked by you** - of the items in the top N that you have
+    verified, the share you kept Good. It counts only what you checked,
+    and the items you check tend to sit near the line, where the detector
+    is least sure, so it can read lower than the matches as a whole.
+
+  The dashed line marks the current cut, and the line under the chart
+  reads both numbers there; hover the chart to read them at any count.
+  The count axis is logarithmic, so the top of the ranking, where
+  precision changes fastest, gets as much room as the long tail.
 - **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
   or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
@@ -777,7 +1003,7 @@ The verification view's action buttons let you act on the result:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal: detector-vs-verified counts, how much of this dataset looks unlike the one the detector was trained on, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes" width="720" />
+  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of estimated and checked precision against how many items are returned" width="720" />
 </picture>
 
 ### How far to trust the score
@@ -802,8 +1028,8 @@ a one-line verdict and a line of supporting numbers:
   handed-over detector is least reliable.
 
 If either share is large, the fastest fix is usually to label a few items
-from the flagged region and retrain, rather than to nudge the inclusion
-stepper.
+from the flagged region and retrain, rather than to move the precision
+floor.
 
 ---
 
@@ -821,7 +1047,9 @@ controls, remembered per media type:
 - **Thumbnail size** - the two image icons shrink or grow the
   thumbnails. Larger thumbnails = fewer per screen but more readable.
   After training, the list ranks the thumbnails by the detector's score,
-  with a threshold line marking the good/bad cut:
+  with a threshold line marking the good/bad cut (dashed and marked
+  *unpromised* when the detector can't yet promise its precision floor; see
+  [When the line is unpromised](#when-the-line-is-unpromised)):
 
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.webp" />
@@ -865,11 +1093,14 @@ per-user override.
 The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-settings.dark.webp" /><img src="assets/icon-settings.light.webp" alt="The Settings (gear) button" height="24" /></picture> at the top right) is organised into
 eight tabs:
 
-- **Appearance** - theme, animations, the metadata panel, the
+- **Appearance** - theme, animations, the Dashboard's **RAM / Disk
+  bars** (**Default** shows them once you have a detector; **View** and
+  **Hide** show them always or never), the metadata panel, the
   **Enable achievements** toggle, and per-media-type Scroll Style
   (focus mode and thumbnail size).
-- **Auto-Find** - what exporter to send auto-run results to. (Which
-  detectors auto-run is chosen on the Dashboard's **AutoRun** tab.)
+- **Auto-Find** - what exporter to send AutoRun results to. (Which
+  detectors run is chosen on the Dashboard's **AutoRun** tab; see
+  [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset).)
 - **Autopilot** - the guided-workflow knobs described under
   [Configuring Autopilot](#configuring-autopilot).
 - **Browser** - per-media-type look of the spatial Browse view
@@ -909,8 +1140,8 @@ with bulk-action and per-card controls.
   **Readers**. A row that isn't in memory shows an inline **Load**
   button, which disappears once the dataset is loaded. The name has a
   pencil for **Rename**, **Delete** is an inline button, and the
-  remaining actions (**Browse**, **Stats**, and - on multi-user
-  deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.webp" /><img src="assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> overflow
+  remaining actions (**Browse dataset**, **Run AutoRun**, **Stats**, and -
+  on multi-user deployments - access controls) live behind a **⋯** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-overflow.dark.webp" /><img src="assets/icon-overflow.light.webp" alt="The ⋯ row menu" height="24" /></picture> overflow
   menu.
 - **Detectors** - every saved detector, split across two tabs:
   - **Drafts** holds detectors you're still building or evaluating.
@@ -920,30 +1151,40 @@ with bulk-action and per-card controls.
     labels** (see [Exporting your work](#exporting-your-work)), and
     **Move to AutoRun**.
   - **AutoRun** holds finalized detectors. They run automatically
-    against every dataset as it is imported (and during CLI
-    autodetect), and they are *frozen*: no rename, delete, retrain, or
-    label import until you pick **Move to Drafts** from the **⋯** menu
-    to unfreeze them. Read-only actions (**Load**, **Browse
+    against every dataset you import (see
+    [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset))
+    and during CLI autodetect, and they are *frozen*: no rename, delete,
+    retrain, or label import until you pick **Move to Drafts** from the
+    **⋯** menu to unfreeze them. Read-only actions (**Load**, **Browse
     positives**, **Stats**, **Export labels**) stay available, and
     **Find** works as usual.
 
   A detector lives on exactly one tab at a time, and every user
   curates their own AutoRun list. The typical loop: build and test a
   detector in **Drafts**, move it to **AutoRun** once you trust it,
-  and move it back to Drafts later if it needs more tuning.
+  and move it back to Drafts later if it needs more tuning. Until you
+  have a detector at all, both tabs are dimmed and the grid stays on
+  Drafts, where a new detector lands.
+
+  Only detectors on the tab you're looking at can be selected, so
+  **Train** and **Find** always act on rows you can see. Switching
+  tabs clears the detector selection, and picking a detector from the
+  top bar switches to its tab.
 
 The **+** button on each card creates a new dataset (the Add Dataset
 dialog) or a new detector (the [New Detector](#creating-a-detector)
 modal).
 
-**Bulk actions.** Each table has a header **select-all** checkbox and,
-once you've selected rows, **Combine selected datasets** / **Combine
-selected detectors** and **Delete selected** buttons - so you can merge
-or clean up several at once. See
+**Bulk actions.** Each table has a header **select-all** checkbox, and the
+**Combine selected datasets** / **Combine selected detectors** and **Delete
+selected** buttons at the top of each card act on the ticked rows (they stay
+greyed out until the selection suits them) - so you can merge or clean up
+several at once. See
 [Combining datasets and detectors](#combining-datasets-and-detectors).
 
 **Starting a labeling session:** click a dataset row and a detector
-row to select them, then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
+row to select them (a detector you just made, with no labels yet, gets a
+"Click Train to teach your new detector." hint), then click the **Train** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-train.dark.webp" /><img src="assets/icon-train.light.webp" alt="The Train button" height="24" /></picture> button in the action
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
@@ -957,10 +1198,13 @@ on whichever rows you currently have selected.
 
 ### Combining datasets and detectors
 
-Selecting two or more rows and clicking **Combine selected datasets**
-merges them into a single new dataset; **Combine selected detectors**
-likewise merges detectors (pooling their votes). This is handy for
-stitching together work that started out split across several imports.
+Selecting two or more rows of the same media type and clicking **Combine
+selected datasets** merges them into a single new dataset, keeping one copy
+of any item that is in more than one; **Combine selected detectors**
+likewise merges detectors (pooling their votes, and dropping any item they
+disagree about). The originals are kept. This is handy for stitching
+together work that started out split across several imports; see
+[Combine datasets or detectors](howto/combine.md).
 
 ---
 
@@ -973,7 +1217,7 @@ each other - and renders it as a pannable, zoomable density map.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/browse-view.dark.webp" />
-  <img src="assets/browse-view.light.webp" alt="The Browse map: a pannable square-tile map of a dataset of photographs, with the legend and minimap on the right" width="720" />
+  <img src="assets/browse-view.light.webp" alt="The Browse map: a pannable square-tile map of a dataset of drawings, with the legend and minimap on the right" width="720" />
 </picture>
 
 Browse is a way to *see
@@ -997,8 +1241,8 @@ Hovering a tile previews a representative item from that region:
 
 - **Audio** clips play on a loop while you hover (browsers need one
   click anywhere on the page first to unlock audio playback).
-- **Images, text, video, and documents** show a thumbnail or snippet in
-  a popup anchored to your cursor.
+- **Images, video, and documents** enlarge the tile's thumbnail on the map.
+- **Text** shows a snippet in a popup anchored to your cursor.
 
 ### Signposts: named regions
 
@@ -1018,8 +1262,8 @@ steering by; the `~` is there so you read it as a direction rather than a
 label. Names at the finer bands, and names lettered from a dataset's own
 category paths, never carry it.
 
-The signpost toggle sits in the bottom-left control cluster next to Region
-select, and is greyed out on a map that has no names to show. Naming
+The signpost toggle sits in the control cluster at the top right of the map,
+next to Region select, and is greyed out on a map that has no names to show. Naming
 happens when the map is built, so a freshly built map may letter itself a
 moment after it appears; if the naming settings change, VTSearch re-runs
 the naming in the background the next time you browse rather than making
@@ -1046,7 +1290,7 @@ install without the optional naming dependency.
 
 ### Navigating
 
-The control cluster at the bottom-left of the canvas gives you:
+The control cluster at the top right of the canvas gives you:
 
 - **Zoom in / Zoom to fit / Zoom out** - or drag to pan and scroll to
   zoom directly on the canvas.
@@ -1069,8 +1313,8 @@ inventory, use the **Dashboard** button in the top bar.
 ### Looking inside a tile
 
 Hovering shows you one representative item; **right-click a tile** to see
-everything in it. That opens the **bin details** popup, a small window
-anchored where you clicked:
+everything in it. That fills the **bin details** panel, docked on the left
+of the map:
 
 - A **grid of every item in the tile**, with a running count at the top.
   It scrolls, so a dense tile holding thousands of items is fine, and its
@@ -1085,32 +1329,40 @@ anchored where you clicked:
   selects that item, and a **select-all** checkbox takes the whole tile at
   once. These feed the same Selection panel described below.
 
-The popup can be dragged around by its header, and the **dock** button in
-its top-left corner turns it into a permanent side panel instead of a
-floating window - useful when you're working through many tiles in a row.
-Docked, the pop-out button hands it back to a floating window, and the
-dividers inside it resize the metadata column and the panel itself.
-VTSearch remembers docked-or-floating per media type.
+The panel's pop-out button turns it into a floating window anchored where
+you clicked, which can be dragged around by its header; the window's **dock**
+button in its top-left corner puts it back at the side - the better place when
+you're working through many tiles in a row. Docked, the dividers inside it
+resize the metadata column and the panel itself. VTSearch remembers
+docked-or-floating per media type.
 
 ### Selecting items
 
-Click a tile (or drag a region) to add its items to the **Selection**
-panel on the right. The panel lists what you've picked - sortable by
-recency, name, or ID - and clicking any entry drops it from the
-selection. **Clear** empties the whole selection. This is how you carve
-a region of interest out of a large collection by eye.
+Click a tile to add its items to the **Selection** panel on the right, and
+click it again to take them out; dragging a region adds every tile inside it.
+The panel lists what you've picked - sortable by recency, name, or ID - and
+clicking any entry drops it from the selection. The checkbox at the top of
+the panel selects everything in view, or clears the whole selection. This is
+how you carve a region of interest out of a large collection by eye; on a
+whole dataset the selection is for looking, and is gone when you leave
+Browse.
 
 Browse can also open **scoped to a Find result**: after scoring a dataset
 you can map just the matched items and use **Verified Good** /
 **Verified Bad** to lasso and prune wrong matches before exporting.
-(See [Find](#find-scoring-and-verifying).)
+(See [Find](#find-scoring-and-verifying), and
+[Explore a dataset with Browse](howto/explore-with-browse.md).)
 
 ---
 
 ## Exporting your work
 
-From the Labeling or Find view, the right panel's **Export** button
-saves your current labels. Formats (by their display names):
+In the labeling view, the right panel's **Export** button saves your current
+labels. In Find, the **Export** icons at the top of the **Verified Good** and
+**Verified Bad** piles send each set (checked or not), and the one beside
+the precision floor sends only the matches you haven't checked (see
+[Send your matches somewhere](howto/export-matches.md)). Formats (by their
+display names):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/export-picker.dark.webp" />
@@ -1136,9 +1388,13 @@ saves your current labels. Formats (by their display names):
 
 The exporter also offers a **Clipboard** copy. It copies a
 column-selected, delimited table (a header row plus one line per item),
-not a raw JSON list - the default columns are **Label**, **MD5**,
-**Filename**, and **Category**, and you can pick which columns and which
-delimiter to use.
+not a raw JSON list. Every column starts ticked - **Label**, **MD5**,
+**Filename** and **Category** first, then any the dataset's items carry -
+and you can pick which columns and which delimiter to use.
+
+The **Categories** filter at the top of the window picks which items go:
+**All**, **Good**, **Bad**, or **Corrections** (only the items whose label
+was changed from the detector's call; greyed out when there are none).
 
 ### Exporting a detector
 
@@ -1146,8 +1402,9 @@ The Detectors dashboard's **⋯** overflow menu offers **Export labels**:
 the same exporter modal described above, scoped to that detector. This
 is how you move a detector to another VTSearch instance. A detector *is*
 its labels - VTSearch re-derives the trained ranker from them every time
-it loads - so exporting the labels and importing them there with
-**Import Labels** reconstructs it.
+it loads - so exporting the labels and making a detector from them there
+(New Detector's **Trained** tab) reconstructs it; see
+[Move a detector to another VTSearch](howto/move-a-detector.md).
 
 Opened this way the modal's **Categories** filter starts on **All**,
 which is what you want: the negatives are half of what the ranker learns
@@ -1202,12 +1459,15 @@ Two ways to bring in existing work:
   <img src="assets/import-detector.light.webp" alt="The Load-sort detector picker: choose a saved detector to score a fresh dataset" width="720" />
 </picture>
 
-- **Labels** - the right panel's **Import Labels** button (also the
-  detector card's **Import Labels** overflow item) opens a label-importer
-  picker - a server-driven list of import sources, each with its own
-  small form - that populates your vote piles from the chosen source.
-  Useful for continuing labelling across sessions or merging work from
-  multiple labellers.
+- **Labels** - the right panel's **Import Labels** button opens a
+  label-importer picker - a server-driven list of import sources, each with
+  its own small form - that populates your vote piles from the chosen
+  source. The detector card's **Import Labels** overflow item uses the same
+  sources but adds the labels to that detector directly, whether or not it
+  is open. Useful for continuing labelling across sessions or merging work
+  from multiple labellers; see [Add labels you already have](howto/import-labels.md).
+  New Detector's **Trained** tab makes a new detector from a file of labels
+  exported from VTSearch.
 - **Detectors** - the **Load** sort mode's **Sort by Detector** option
   lists the saved detectors already in the registry, so you can score a
   fresh dataset with one without retraining. (There is no separate
@@ -1275,11 +1535,12 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   left, **Keep clicking** carries on with the same sort for a set number
   of labels (the interval grows each time you keep it); on the right,
   **Supply a different sort** swaps in a new example. A new example
-  can be typed as text, picked from the loaded media (**Browse Media…**),
-  uploaded from your computer (**Upload File…**), or fetched by any of
-  the same single-item sources the New Detector modal offers - a path on
-  the server, a URL, or whatever a plugin adds (see
-  [Creating a detector](#creating-a-detector)).
+  can be typed as text, uploaded from your computer (**Upload File…**), or
+  picked with **Browse Media…**, which offers the same single-item sources
+  as the New Detector modal - a path on the server, a URL, a file inside a
+  demo dataset, or whatever a plugin adds (see
+  [Creating a detector](#creating-a-detector) and
+  [Get Autopilot unstuck](howto/unstick-autopilot.md)).
 - **Drag-and-drop upload.** The New Detector modal's media-example field
   is a drop zone - drag a file from your computer onto it instead of
   clicking to browse.

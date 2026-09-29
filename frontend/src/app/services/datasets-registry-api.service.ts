@@ -24,6 +24,7 @@ import { getDatasetStats } from '../generated/api-client/fn/datasets-registry/ge
 import { listRegisteredDatasets } from '../generated/api-client/fn/datasets-registry/list-registered-datasets';
 import { loadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/load-registered-dataset';
 import { renameRegisteredDataset } from '../generated/api-client/fn/datasets-registry/rename-registered-dataset';
+import { runDatasetAutorun } from '../generated/api-client/fn/datasets-registry/run-dataset-autorun';
 import { unloadRegisteredDataset } from '../generated/api-client/fn/datasets-registry/unload-registered-dataset';
 import { updateDatasetReaders } from '../generated/api-client/fn/datasets-registry/update-dataset-readers';
 
@@ -57,6 +58,16 @@ export class DatasetsRegistryApiService {
     return loadRegisteredDataset(this.http, this.config.rootUrl, {
       dataset_id: datasetId,
     }).pipe(map((r) => r.body));
+  }
+
+  /** Start a background run of the caller's AutoRun detectors on a loaded
+   *  dataset (the dataset ⋯ **Run AutoRun**). Resolves with the ``task_id``;
+   *  progress arrives on the ``loading-tasks`` channel on a row keyed to the
+   *  dataset, and the finished row's ``autorun`` block names the results. */
+  runAutorun(datasetId: string): Observable<DatasetRegistryLoadResponse> {
+    return runDatasetAutorun(this.http, this.config.rootUrl, { dataset_id: datasetId }).pipe(
+      map((r) => r.body),
+    );
   }
 
   unloadRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {

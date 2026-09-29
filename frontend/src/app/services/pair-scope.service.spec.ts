@@ -9,6 +9,7 @@ import { SortStateService } from './sort-state.service';
 import { VoteStateService } from './vote-state.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
+import { lineFloor, wireFloor } from '../testing/line-floor';
 
 @Component({ selector: 'vt-pair-scope-host', standalone: true, template: '', providers: [PairScopeService] })
 class HostComponent {
@@ -110,7 +111,7 @@ describe('PairScopeService', () => {
     expect(clearSpy).toHaveBeenCalledOnce();
     // Reloads for the new pair went out.
     expect(httpMock.match('/api/dataset/status').length).toBe(1);
-    expect(httpMock.match('/api/inclusion').length).toBe(1);
+    expect(httpMock.match('/api/min-precision').length).toBe(1);
   });
 
   it('clears the selection too, so the centre viewer cannot outlive the pair', () => {
@@ -141,10 +142,24 @@ describe('PairScopeService', () => {
     expect(mediaState.selectedId()).toBeNull();
   });
 
-  it('seedInclusion pushes the per-detector value into SortStateService', () => {
-    service.seedInclusion();
-    httpMock.expectOne('/api/inclusion').flush({ inclusion: -4, threshold: 0.3 });
-    expect(sortState.inclusion).toBe(-4);
+  it('seedMinPrecision pushes the per-detector floor into SortStateService', () => {
+    service.seedMinPrecision();
+    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('promised', { minPrecision: 0.75 }), threshold: 0.3, n_returned: 12 });
+    expect(sortState.minPrecision).toBe(0.75);
+  });
+
+  it('seedMinPrecision seeds a detector with no floor as null', () => {
+    service.seedMinPrecision();
+    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor(null), threshold: 0.3, n_returned: null });
+    expect(sortState.minPrecision).toBeNull();
+  });
+
+  it('seedMinPrecision seeds only the value; the verdict arrives with the line', () => {
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineFloor('promised'));
+    service.seedMinPrecision();
+    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('unreachable'), threshold: 0.3, n_returned: 1 });
+    expect(sortState.floor?.status).toBe('promised');
+    expect(sortState.threshold).toBe(0.5);
   });
 
   it('fires the scope when the host component is destroyed, with no manual teardown', () => {

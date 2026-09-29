@@ -77,7 +77,13 @@ from typing import TYPE_CHECKING, Any, Optional
 import numpy as np
 
 from vtscore.concurrency.async_jobs import check_job_cancelled
-from vtscore.detectors.cost_trend import MIN_PER_CLASS, SMART_MIN_POINTS, SMART_WINDOW, smart_status_from_costs
+from vtscore.detectors.cost_trend import (
+    MIN_PER_CLASS,
+    SMART_INCLUSION,
+    SMART_MIN_POINTS,
+    SMART_WINDOW,
+    smart_status_from_costs,
+)
 from vtscore.detectors.stability import ScoredSnapshot, stability_entry, stable_status_from_entries
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.training.thresholds import inclusion_cost_weights, weighted_error_cost
@@ -116,7 +122,9 @@ class _ProgressCache:
     key: tuple[str, str]
 
     #: Inclusion value every cached step was trained under.  A different value
-    #: rebuilds the cache in place (see :func:`_ensure_cache`).
+    #: rebuilds the cache in place (see :func:`_ensure_cache`): the served
+    #: thresholds, and the Stable entries measured at them, depend on it.  The
+    #: Smart costs do not, being priced at a fixed inclusion (issue #4243).
     inclusion: Optional[int] = None
 
     steps: list[dict[str, Any]] = field(default_factory=list)
@@ -144,7 +152,11 @@ class _ProgressCache:
     #: This is the **only** source of models in this module: a step whose label
     #: set never had a sort run against it stays modelless rather than being
     #: filled with a locally-trained stand-in (see the module docstring).
-    live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = field(default_factory=dict)
+    #:
+    #: Each value is ``(model, threshold, smart_threshold)``: the line the model
+    #: was served with, and the cut the Smart indicator scores it at
+    #: (:func:`vtscore.detectors.cost_trend.smart_cut`, issue #4243).
+    live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float, float]] = field(default_factory=dict)
 
     #: Memoised Smart status, as ``(key, status)``.  ``_compute_smart_status``
     #: re-scores the whole recent-model window against the current labelset -
@@ -369,12 +381,21 @@ def inject_live_model(
     bad_votes: dict[int, None],
     model: nn.Sequential,
     threshold: float,
+    *,
+    smart_threshold: Optional[float] = None,
 ) -> None:
     """Register a live model from ``train_and_score`` for progress-cache reuse.
 
     Called by the learned-sort route after each live training run.  The model
     is stored on the active pair's cache, keyed by its label set, so
     ``_ensure_cache`` can look it up instead of retraining from scratch.
+
+    *threshold* is the line the model was served with.  *smart_threshold* is
+    the cut the Smart indicator scores it at: the model's own cut at
+    :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`, chosen by
+    :func:`~vtscore.detectors.cost_trend.smart_cut` (issue #4243).  ``None``
+    means the two are the same line, which they are whenever the model was
+    served at that inclusion.
     """
     from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
 
@@ -382,7 +403,8 @@ def inject_live_model(
     # The learned-sort thread parks its model here; if the labeling-status
     # worker is mid-replay the sort result waits on it (issue #3853).
     with timed_lock(_progress_lock, "_progress_lock/inject_live_model"):
-        _active_cache().live_models[key] = (model, threshold)
+        smart = threshold if smart_threshold is None else smart_threshold
+        _active_cache().live_models[key] = (model, threshold, smart)
 
 
 def _active_context_atlas() -> Any:
@@ -659,13 +681,14 @@ def _resolve_step_model(
     good_ids: list[int],
     bad_ids: list[int],
     prev: Optional[dict[str, Any]],
-) -> tuple[Optional[nn.Sequential], Optional[float], Optional[dict[str, Any]]]:
-    """Resolve the model, threshold, and stability for one cache step.
+) -> tuple[Optional[nn.Sequential], Optional[float], Optional[float], Optional[dict[str, Any]]]:
+    """Resolve the model, its two thresholds, and stability for one cache step.
 
     Reuses the previous step's model when the training data is unchanged;
     otherwise takes the model ``train_and_score`` injected for this exact label
     set, and **leaves the step modelless when there isn't one**.  Returns
-    ``(model, threshold, stability)``.
+    ``(model, threshold, smart_threshold, stability)``: the served line, and
+    the cut Smart scores the model at (see :func:`inject_live_model`).
 
     There is deliberately no fallback that trains something here.  A model this
     module fitted for itself is not the detector the user is building - on a
@@ -684,9 +707,9 @@ def _resolve_step_model(
 
     if not training_data_changed:
         # Reuse previous model - no new stability entry.
-        model = prev["model"] if prev else None
-        threshold = prev["threshold"] if prev else None
-        return model, threshold, None
+        if prev is None:
+            return None, None, None, None
+        return prev["model"], prev["threshold"], prev["smart_threshold"], None
 
     live = cache.live_models.get((frozenset(cache.good_ids), frozenset(cache.bad_ids)))
     if live is None:
@@ -698,11 +721,11 @@ def _resolve_step_model(
         # issue #3757 - never has two adjacent model-bearing steps, produces no
         # stability entries at all, and leaves the indicator stuck on "not
         # enough history" forever, which also stops Autopilot ever finishing.
-        return None, None, None
+        return None, None, None, None
 
-    model, threshold = live
+    model, threshold, smart_threshold = live
     stability = _compute_step_stability(cache, model, threshold, pool, t, num_labels)
-    return model, threshold, stability
+    return model, threshold, smart_threshold, stability
 
 
 def _ensure_cache(
@@ -767,12 +790,15 @@ def _ensure_cache(
         num_labels = len(good_ids) + len(bad_ids)
 
         prev = cache.steps[-1] if cache.steps else None
-        model, threshold, stability = _resolve_step_model(cache, pool, t, num_labels, good_ids, bad_ids, prev)
+        model, threshold, smart_threshold, stability = _resolve_step_model(
+            cache, pool, t, num_labels, good_ids, bad_ids, prev
+        )
 
         cache.steps.append(
             {
                 "model": model,
                 "threshold": threshold,
+                "smart_threshold": smart_threshold,
                 "good_ids": good_ids,
                 "bad_ids": bad_ids,
                 "stability": stability,
@@ -849,6 +875,11 @@ def _score_step(
     Returns an error-cost dict for the step.  The caller guarantees
     ``step["model"]`` is not ``None``.
 
+    The cut is ``step["smart_threshold"]``, the model's own cut at
+    :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`, not the line it was
+    served with (issue #4243): every model in a window is then scored under one
+    cut rule, whatever rule the served lines came from.
+
     Scoring goes through :func:`~vtscore.detectors.training.score_rows_with_model`,
     the same call the sort path makes, so a media's score here is the max over
     the rows the detector is actually served on.  The weighted FPR/FNR
@@ -861,7 +892,7 @@ def _score_step(
 
     scores, _best_rows = score_rows_with_model(step["model"], eval_rows)
 
-    error_cost, fpr, fnr = weighted_error_cost(scores, eval_labels, step["threshold"], fpr_weight, fnr_weight)
+    error_cost, fpr, fnr = weighted_error_cost(scores, eval_labels, step["smart_threshold"], fpr_weight, fnr_weight)
 
     return {
         "time_index": t,
@@ -880,7 +911,6 @@ def _model_step_indices(cache: _ProgressCache) -> list[int]:
 def _eval_cached_models(
     cache: _ProgressCache,
     eval_set: Optional[tuple["ScoringRows", list[float]]],
-    inclusion_value: int,
     indices: Optional[list[int]] = None,
 ) -> list[dict[str, Any]]:
     """Score *cache*'s models against the current labelset (forward passes only).
@@ -890,10 +920,12 @@ def _eval_cached_models(
     the app never had a detector at that label count, so there is no accuracy to
     report there - see the module docstring.
 
-    The Inclusion weights come from the shipped
-    :func:`~vtscore.training.thresholds.inclusion_cost_weights`, so the
-    indicator prices a miss exactly as the threshold rule that produced the cut
-    does.  *eval_set* comes from :func:`_build_eval_rows`, built by the caller
+    Every model is priced at
+    :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION` through the shipped
+    :func:`~vtscore.training.thresholds.inclusion_cost_weights`, whatever
+    Inclusion the user has set, and at its own cut for that inclusion (see
+    :func:`_score_step`).  So the weight and the cut agree with each other, and
+    neither moves when the user's line does (issue #4243).  *eval_set* comes from :func:`_build_eval_rows`, built by the caller
     outside ``_progress_lock``; ``None`` means there is nothing to measure
     against and the series is empty.
     """
@@ -901,7 +933,7 @@ def _eval_cached_models(
         return []
     eval_rows, eval_labels = eval_set
 
-    fpr_weight, fnr_weight = inclusion_cost_weights(inclusion_value)
+    fpr_weight, fnr_weight = inclusion_cost_weights(SMART_INCLUSION)
 
     if indices is None:
         indices = _model_step_indices(cache)
@@ -956,11 +988,16 @@ def calculate_error_cost_over_time(
     Uses cached models - nothing is trained here.  Steps the app never trained a
     model for are absent from the series, so it is shorter than the label
     history and its ``num_labels`` values are not contiguous.
+
+    The cost is the one the Smart indicator regresses: priced at
+    :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION` at each model's own
+    cut for it, so *inclusion_value* only picks which cache is read, never how
+    a model is priced (issue #4243).
     """
     cache = _advance_cache(clips_dict, label_history, inclusion_value)
     eval_set = _build_eval_rows(clips_dict, current_good_votes, current_bad_votes)
     with _progress_lock:
-        return _eval_cached_models(cache, eval_set, inclusion_value)
+        return _eval_cached_models(cache, eval_set)
 
 
 def calculate_prediction_stability_over_time(
@@ -974,21 +1011,22 @@ def calculate_prediction_stability_over_time(
         return [step["stability"] for step in cache.steps if step["stability"] is not None]
 
 
-def _smart_memo_key(cache: _ProgressCache, model_steps: list[int], good: int, bad: int, inclusion_value: int) -> Any:
+def _smart_memo_key(cache: _ProgressCache, model_steps: list[int], good: int, bad: int) -> Any:
     """Everything :func:`_compute_smart_status` reads, as a comparable key.
 
     Steps are append-only between resets (a polarity flip truncates *and* drops
     the memo), so a matching step count and model count mean the same models;
     a matching vote count means the same eval set, because the only ways to
     change the labelset without changing its size - a polarity flip - reset the
-    memo too.
+    memo too.  The user's Inclusion is not in it: Smart prices at a fixed one
+    (:data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`), and an Inclusion
+    change clears the whole cache anyway.
     """
-    return (len(cache.steps), tuple(model_steps[-_SMART_WINDOW_MODELS:]), good, bad, inclusion_value)
+    return (len(cache.steps), tuple(model_steps[-_SMART_WINDOW_MODELS:]), good, bad)
 
 
 def _smart_status_memoized(
     cache: _ProgressCache,
-    inclusion_value: int,
     good: int,
     bad: int,
 ) -> Optional[dict[str, Any]]:
@@ -1003,7 +1041,7 @@ def _smart_status_memoized(
     """
     if cache.smart_memo is None:
         return None
-    key = _smart_memo_key(cache, _model_step_indices(cache), good, bad, inclusion_value)
+    key = _smart_memo_key(cache, _model_step_indices(cache), good, bad)
     if cache.smart_memo[0] != key:
         return None
     return dict(cache.smart_memo[1])
@@ -1012,7 +1050,6 @@ def _smart_status_memoized(
 def _compute_smart_status(
     cache: _ProgressCache,
     eval_set: Optional[tuple["ScoringRows", list[float]]],
-    inclusion_value: int,
     good: int,
     bad: int,
 ) -> dict[str, Any]:
@@ -1027,11 +1064,11 @@ def _compute_smart_status(
     the answer cannot have changed.
     """
     model_steps = _model_step_indices(cache)
-    memo_key = _smart_memo_key(cache, model_steps, good, bad, inclusion_value)
+    memo_key = _smart_memo_key(cache, model_steps, good, bad)
     if cache.smart_memo is not None and cache.smart_memo[0] == memo_key:
         return dict(cache.smart_memo[1])
 
-    status = _smart_status_uncached(cache, model_steps, eval_set, inclusion_value, good, bad)
+    status = _smart_status_uncached(cache, model_steps, eval_set, good, bad)
     cache.smart_memo = (memo_key, dict(status))
     return status
 
@@ -1040,7 +1077,6 @@ def _smart_status_uncached(
     cache: _ProgressCache,
     model_steps: list[int],
     eval_set: Optional[tuple["ScoringRows", list[float]]],
-    inclusion_value: int,
     good: int,
     bad: int,
 ) -> dict[str, Any]:
@@ -1060,7 +1096,7 @@ def _smart_status_uncached(
             "reason": "Not enough trained detectors yet to assess trend. Sort to train one.",
         }
 
-    recent_entries = _eval_cached_models(cache, eval_set, inclusion_value, model_steps[-_SMART_WINDOW_MODELS:])
+    recent_entries = _eval_cached_models(cache, eval_set, model_steps[-_SMART_WINDOW_MODELS:])
     return smart_status_from_costs([e["error_cost"] for e in recent_entries], good, bad)
 
 
@@ -1163,12 +1199,12 @@ def compute_labeling_status(
     # order of magnitude - nor below the 5g/5b quorum, where the status is red
     # without looking at a model.
     with _progress_lock:
-        memo = _smart_status_memoized(cache, inclusion_value, good, bad)
+        memo = _smart_status_memoized(cache, good, bad)
     needs_eval = memo is None and good >= 5 and bad >= 5
     eval_set = _build_eval_rows(clips_dict, current_good_votes, current_bad_votes) if needs_eval else None
 
     with _progress_lock:
-        smart = memo if memo is not None else _compute_smart_status(cache, eval_set, inclusion_value, good, bad)
+        smart = memo if memo is not None else _compute_smart_status(cache, eval_set, good, bad)
         stable = _compute_stable_status(cache, good, bad, total)
 
     # Span status from coverage atlas info (passed in from the route).
@@ -1264,7 +1300,7 @@ def cached_indicator_history(
             return [], False
 
         if metric == "smart":
-            data = _eval_cached_models(cache, eval_set, inclusion_value)
+            data = _eval_cached_models(cache, eval_set)
         elif metric == "stable":
             data = [step["stability"] for step in cache.steps if step["stability"] is not None]
         else:
@@ -1401,7 +1437,7 @@ def analyze_labeling_progress(
     eval_set = _build_eval_rows(clips_dict, current_good_votes, current_bad_votes)
 
     with _progress_lock:
-        error_cost = _eval_cached_models(cache, eval_set, inclusion_value)
+        error_cost = _eval_cached_models(cache, eval_set)
 
         stability = [step["stability"] for step in cache.steps if step["stability"] is not None]
 

@@ -13,8 +13,8 @@ pixel-diff tolerance) are the remaining work.
   already-running app against the real `data/` dir (a RAM-driven choice — a
   second instance would load the image embedder twice and OOM the ~3.7 GB box).
   The plan's original intent was a temp data dir per run. Revisit if pixel-diff
-  drift from shared state becomes a problem; the deterministic COCO selection
-  and the fixed vote baseline already cover content stability.
+  drift from shared state becomes a problem; the seeded drawings and the fixed
+  vote baseline already cover content stability.
 
 <!-- item-sep -->
 
@@ -25,7 +25,7 @@ pixel-diff tolerance) are the remaining work.
 <!-- item-sep -->
 
 - **`autopilot-progress` phase.** Captured with phase 3 (Refine Boundary) active
-  thanks to the 27-vote `Books` fixture (`BOOK_VOTES` in `ensure-fixtures.mjs`);
+  thanks to the 27-vote `Yellow Smileys` fixture (`VOTES` in `smiley-example.mjs`);
   if the fixture vote count changes, the active phase in this shot moves with
   it.
 
@@ -45,11 +45,6 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **Optional `browse-bin-popup` shot.** Not yet added — it has no USER_GUIDE
-  anchor/placeholder, so it stayed out of scope. Recipe for when a Browse-detail
-  section is written to home it: within `openBrowse()`, hover/click a tile so
-  `vt-browse-bin-popup` appears, then `clip` the popup.
-
 <!-- item-sep -->
 
 ---
@@ -65,20 +60,33 @@ throwaway bug-hunt captures, which are working artifacts and belong nowhere near
 the manifest.
 
 **Locked decisions (2026-06-07).** Capture engine = checked-in automated
-Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md + README.md +
-demos.md only (dev/ops docs get none). Themes = both light + dark (each logical
+Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md, the how-to
+pages under `docs/user/howto/`, README.md and demos.md (dev/ops docs get none). Themes = both light + dark (each logical
 shot yields a `{light,dark}` pair). Annotations = declared in the manifest,
 drawn by the harness as a pre-capture DOM overlay — never hand-edited.
 
-**Fixture = the Book example.** Every shot is taken against the same worked
-example the slide deck uses: a few hundred COCO val2017 photographs filed by
-subject, and a `Books` detector trained on them (#4202). The shared definition
-lives in `scripts/screenshots/book-example.mjs`; `slides/figs/src/coco_fixture.py`
-builds the corpora (a one-off ~1 GB download, then a directory check). The
-selection is a pure function of the download, so the shots are as
-reproducible as the synthetic fixture they replaced — which made flat coloured
-shapes, and a user guide taught on a problem nobody has. Shots that must show
-the *demo picker itself* screenshot the picker UI, not a downloaded dataset.
+**Fixture = the Smiley example.** Every shot is taken against one worked
+example: a few hundred cartoon drawings from the Synthetic Media generator
+(`vtscore/utils/synthetic/images.py`), and a `Yellow Smileys` detector trained
+on them (#4240). The definition lives in `scripts/screenshots/smiley-example.mjs`;
+`scripts/screenshots/smiley_fixture.py` draws the corpora (a few seconds, with
+the Synthetic Media importer's own sizes and seeds, so a reader can make the
+same pictures) and writes the generator's account of every picture beside
+them, which is how the harness knows which ones are yellow smileys. The
+drawings are a pure function of the generator and its seed, so the shots are
+reproducible, and making them needs no download beyond the embedding models.
+
+The guide was shot on the slide deck's Book example (COCO photographs,
+`scripts/screenshots/book-example.mjs`) before this (#4202), and on flat
+triangles and circles with arbitrary votes before that. The photographs were
+the real job but a ~1 GB download per refresh; the triangles were free but a
+user guide taught on a problem nobody has. The smileys keep what each bought:
+a concept a person would actually hunt for, with real near-misses (yellow
+faces that are not smiling, smiling faces that are not yellow, yellow discs
+with no face), drawn for free anywhere. The deck's harness still shoots the
+Book example on the same app, so each harness clears the other's datasets and
+detectors before it shoots. Shots that must show the *demo picker itself*
+screenshot the picker UI, not a downloaded dataset.
 
 **Callouts.** A manifest `annotations` entry is a `box`, a `highlight`, or a
 numbered `step` marker (a red disc carrying 1, 2, 3 … beside the control); the
@@ -104,6 +112,7 @@ interface Shot {
   caption: string;             // alt text + (optional) figure caption
   themes: ("light"|"dark")[];  // each yields a separate file
   recipe: (page, helpers) => Promise<void>;  // steps to reach the frame
+  after?: (page, helpers) => Promise<void>;  // undo what the recipe changed
   clip?: { target: Target; pad?: number };   // what to frame; omit for full viewport
   annotations?: Annotation[];  // declarative callouts, drawn pre-capture
 }
@@ -119,20 +128,25 @@ interface Annotation {
 
 ### 2. The harness — `scripts/screenshots/capture.ts`
 
-For each shot × theme: boot the app once (Book-example fixtures), set
+For each shot × theme: boot the app once (Smiley-example fixtures), set
 deterministic knobs, run the recipe, apply the theme, inject declarative
 annotations as an absolutely-positioned DOM overlay computed from each `target`'s
 bounding rect, then capture (`clip` element if given, else viewport) → WebP.
+A recipe should *pose* the app (a form filled in, a menu open) rather than
+change it; one that has to change it to reach its frame (pictures verified in
+Find, a detector moved to AutoRun) puts it back in `after`, which runs once the
+shot is taken, pass or fail, so no later shot inherits the change.
 
-**WebP, not PNG** (#4202). The shots are photographs behind UI chrome, which PNG
-is bad at: a full-window shot is 2.4–3.4 MB lossless — close to the 4 MB
-large-file hook and ~100 MB of history per full refresh — and quantizing to 256
-colours bands the photos and still leaves 1.4 MB. WebP at quality 90 is
-0.35–0.5 MB. Playwright captures PNG; `capture.ts` re-encodes it with Pillow
+**WebP, not PNG** (#4202). It came in while the shots were photographs behind
+UI chrome, which PNG is bad at: a full-window shot was 2.4–3.4 MB lossless —
+close to the 4 MB large-file hook and ~100 MB of history per full refresh — and
+quantizing to 256 colours banded the photos and still left 1.4 MB. WebP at
+quality 90 was 0.35–0.5 MB, and stays well under PNG for the drawings too.
+Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 (deterministic, so `check.sh` can still compare bytes).
 
-**Determinism knobs (non-negotiable):** the Book example's corpora (a
-deterministic selection from COCO) and a fixed vote baseline;
+**Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
+drawings) and a fixed vote baseline;
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`); mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text);
@@ -188,8 +202,11 @@ One image is shown, always matching the **viewer's** theme. The embed is a
   theme is a `data-theme` attribute). `keyboard-help-modal.component.ts`
   post-processes the rendered HTML — collapses each `<picture>` to its `<img>`,
   swaps the `*.light.*` / `*.dark.*` suffix to the app's current effective theme,
-  resolves the relative `assets/…` path against the served dir (`/assets/docs/`),
-  and re-renders live on theme switch.
+  resolves each relative path against the doc it is in and then the served dir
+  (`/assets/docs/`), and re-renders live on theme switch. A how-to page under
+  `docs/user/howto/` therefore writes its images `../assets/…`, which resolves
+  both on GitHub and in the app; the panel opens a link from the guide to such a
+  page in place, with Back (`tests_lib/meta/test_howto_docs.py` pins both).
 
 Images are served by an `angular.json` asset glob copying `docs/user/assets/**`
 → `/assets/docs/assets`. Each embed carries alt text (= the manifest `caption`).

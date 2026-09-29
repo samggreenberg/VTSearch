@@ -16,6 +16,9 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
 * ``GET  /api/inclusion``                     -> :class:`InclusionResponseSchema`
 * ``POST /api/inclusion``                     -> :class:`InclusionRequestSchema` ->
                                                 :class:`InclusionResponseSchema`
+* ``GET  /api/min-precision``                 -> :class:`MinPrecisionResponseSchema`
+* ``POST /api/min-precision``                 -> :class:`MinPrecisionRequestSchema` ->
+                                                :class:`MinPrecisionResponseSchema`
 * ``POST /api/example-sort``                  (multipart upload) ->
                                                 :class:`SortResponseSchema`
 * ``POST /api/label-file-sort``               (multipart upload) ->
@@ -44,6 +47,31 @@ class OkResponseSchema(Schema):
     """``{"ok": true}`` response used by clear / seed-style endpoints."""
 
     ok = fields.Boolean(required=True)
+
+
+#: The states a precision floor can report; mirrors
+#: :class:`vtscore.training.thresholds.PrecisionFloorStatus`.
+PRECISION_FLOOR_STATES = ("promised", "unreachable", "insufficient_evidence")
+
+
+class FloorStateSchema(Schema):
+    """What the precision floor says about the line a response carries (#4247).
+
+    Rides beside ``threshold`` on every response that draws a detector's line,
+    so a client can say whether that line is a promise.  Built by
+    :func:`vtscore.state.core.detector_floor_state`.
+    """
+
+    # The detector's floor, or ``null`` when none is set and Inclusion drew the line.
+    min_precision = fields.Float(required=True, allow_none=True)
+    # ``promised``: the line is the floor's own cut.  ``unreachable`` /
+    # ``insufficient_evidence``: the floor promised nothing and the line is the
+    # Inclusion 0 cut, unpromised.  ``null`` with no floor.
+    status = fields.String(required=True, allow_none=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
+    # Positives among the held-out votes that may calibrate the promise.
+    calibration_positives = fields.Integer(required=True)
+    # How many the floor needs before it promises anything.
+    min_calibration_positives = fields.Integer(required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -172,6 +200,8 @@ class LearnedSortResponseSchema(Schema):
     # The acquisition cut Autopilot samples around; this is the only sort with a
     # detector behind it, so the only one that carries one.
     acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
+    # What the precision floor says about ``threshold`` (#4247), on ``done``.
+    floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
 
 
 class LearnedSortCancelResponseSchema(Schema):
@@ -240,6 +270,9 @@ class InclusionResponseSchema(Schema):
     # green/red line over the frozen scores without re-scoring.  ``None`` when
     # no detector context has computed a threshold yet.
     threshold = fields.Float(required=False, allow_none=True)
+    # What the precision floor says about ``threshold`` (#4247): under a set
+    # floor the line is the floor's, and Inclusion does not move it.
+    floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
 
 
 def _validate_numeric(value):
@@ -259,6 +292,53 @@ class InclusionRequestSchema(Schema):
     """Body for ``POST /api/inclusion``."""
 
     inclusion = fields.Raw(required=True, validate=_validate_numeric)
+
+
+# ---------------------------------------------------------------------------
+# /api/min-precision
+# ---------------------------------------------------------------------------
+
+
+class MinPrecisionResponseSchema(Schema):
+    """Response for ``GET|POST /api/min-precision``."""
+
+    # The active detector's floor, or ``null`` when none is set and the
+    # Inclusion knob draws the line.
+    min_precision = fields.Float(required=True, allow_none=True)
+    # What the floor can say about the detector's corpus: ``promised`` (at
+    # least ``min_precision`` of what the line returns is estimated right),
+    # ``unreachable`` (enough evidence, but no cut gets there), or
+    # ``insufficient_evidence`` (too few calibration positives to promise
+    # anything).  ``null`` when no floor is set.
+    status = fields.String(required=True, allow_none=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
+    # The line the detector draws: the floor's cut when promised, the
+    # Inclusion 0 cut when the floor promises nothing, the Inclusion knob's
+    # cut when no floor is set.  ``null`` when no detector has a threshold.
+    threshold = fields.Float(required=True, allow_none=True)
+    # How many items the line returns in the corpus the cut decides (the
+    # dataset the detector last trained against, less its voted items when the
+    # #3308 exclusion applied).  ``null`` before a retrain has fitted one.
+    n_returned = fields.Integer(required=True, allow_none=True)
+    # Positives among the held-out votes the learned sort chose - the
+    # evidence a promise is calibrated on.
+    calibration_positives = fields.Integer(required=True)
+    # The gate: how many the floor needs before it promises anything.
+    min_calibration_positives = fields.Integer(required=True)
+
+
+def _validate_floor(value):
+    """Accept ``null`` (clear the floor) or a number; reject booleans."""
+    if value is None:
+        return
+    _validate_numeric(value)
+
+
+class MinPrecisionRequestSchema(Schema):
+    """Body for ``POST /api/min-precision``."""
+
+    # A fraction in ``(0, 1]`` (clamped to ``[0.01, 1]``), or ``null`` to clear
+    # the floor and hand the line back to the Inclusion knob.
+    min_precision = fields.Raw(required=True, allow_none=True, validate=_validate_floor)
 
 
 # ---------------------------------------------------------------------------

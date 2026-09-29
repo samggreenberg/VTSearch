@@ -1,45 +1,31 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
+import type { AutoRunRunResponse } from '../generated/api-client/models/auto-run-run-response';
 import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
 import type { FindEndSessionResponse } from '../generated/api-client/models/find-end-session-response';
-import type { FindCheckLabelsRequest } from '../generated/api-client/models/find-check-labels-request';
-import type { FindCheckLabelsResponse } from '../generated/api-client/models/find-check-labels-response';
 import type { FindLabelRequest } from '../generated/api-client/models/find-label-request';
 import type { FindLabelResponse } from '../generated/api-client/models/find-label-response';
-import type { FindRequest } from '../generated/api-client/models/find-request';
-import type { FindResponse } from '../generated/api-client/models/find-response';
 import type { FindStatsResponse } from '../generated/api-client/models/find-stats-response';
 import type { FindEvidenceCoverageResponse } from '../generated/api-client/models/find-evidence-coverage-response';
 import type { FindCorrectionsToDetectorResponse } from '../generated/api-client/models/find-corrections-to-detector-response';
 import { cancelFind } from '../generated/api-client/fn/detector-find/cancel-find';
 import { endFindSessionRoute } from '../generated/api-client/fn/detector-find/end-find-session-route';
-import { findCheckLabels } from '../generated/api-client/fn/detector-find/find-check-labels';
 import { findLabel } from '../generated/api-client/fn/detector-scoring/find-label';
 import { findStats } from '../generated/api-client/fn/detector-scoring/find-stats';
 import { findEvidenceCoverage } from '../generated/api-client/fn/detector-scoring/find-evidence-coverage';
 import { findCorrectionsToDetector } from '../generated/api-client/fn/detector-scoring/find-corrections-to-detector';
-import { multiFind } from '../generated/api-client/fn/detector-find/multi-find';
+import { getAutorunRun } from '../generated/api-client/fn/detector-scoring/get-autorun-run';
 
-/** Multi-dataset Find, single-label Find, the check-labels precheck, and
- *  Find cancellation. */
+/** Single-label Find, its session / stats / evidence reads, Find
+ *  cancellation, and the results of a background AutoRun. */
 @Injectable({ providedIn: 'root' })
 export class DetectorsFindApiService {
   private http = inject(HttpClient);
   private config = inject(ApiConfiguration);
-
-  findCheckLabels(params: FindCheckLabelsRequest): Observable<FindCheckLabelsResponse> {
-    return findCheckLabels(this.http, this.config.rootUrl, { body: params }).pipe(
-      map((r) => r.body),
-    );
-  }
-
-  find(params: FindRequest): Observable<FindResponse> {
-    return multiFind(this.http, this.config.rootUrl, { body: params }).pipe(map((r) => r.body));
-  }
 
   findLabel(params: FindLabelRequest): Observable<FindLabelResponse> {
     return findLabel(this.http, this.config.rootUrl, { body: params }).pipe(
@@ -61,8 +47,8 @@ export class DetectorsFindApiService {
     return endFindSessionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Detector-evaluation stats over the adopted Find label set (2x2 confusion
-   *  + the FP/FN-vs-inclusion sweep). Pure read. */
+  /** Detector-evaluation stats over the adopted Find label set (2x2 confusion,
+   *  Kept rate, and the precision-vs-returned curve). Pure read. */
   getFindStats(): Observable<FindStatsResponse> {
     return findStats(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
@@ -82,5 +68,12 @@ export class DetectorsFindApiService {
    *  no longer applies and the caller should re-score afterwards. */
   addCorrectionsToDetector(): Observable<FindCorrectionsToDetectorResponse> {
     return findCorrectionsToDetector(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Results of a finished background AutoRun, for the user who started it.
+   *  ``runId`` is the run's ``task_id``. 404 once it has aged out of the
+   *  server's small in-memory window. */
+  getAutorunRun(runId: string, context?: HttpContext): Observable<AutoRunRunResponse> {
+    return getAutorunRun(this.http, this.config.rootUrl, { run_id: runId }, context).pipe(map((r) => r.body));
   }
 }

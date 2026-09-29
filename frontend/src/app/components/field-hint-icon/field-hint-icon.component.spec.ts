@@ -25,6 +25,16 @@ describe('FieldHintIconComponent', () => {
     expect(tooltip()).toBeNull();
   });
 
+  it('opens above the icon by default', () => {
+    expect(iconSpan().classList).not.toContain('field-hint-icon--below-block');
+  });
+
+  it('can hang its tooltip below the enclosing block instead', async () => {
+    fixture.componentRef.setInput('placement', 'below-block');
+    await settleZoneless(fixture);
+    expect(iconSpan().classList).toContain('field-hint-icon--below-block');
+  });
+
   it('shows the tooltip immediately on click (no hover delay)', async () => {
     iconSpan().dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     await settleZoneless(fixture);

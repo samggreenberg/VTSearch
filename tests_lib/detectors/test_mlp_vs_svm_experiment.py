@@ -15,6 +15,7 @@ import pytest
 from vtscore.eval.timing_benchmark import run_timing_benchmark
 from vtscore.eval.sweep_trainers import _as_scores, _parse_trainer_spec, resolve_trainer
 from vtscore.eval.voting_iterations import (
+    thin_haystack,
     _downsample_to_prevalence,
     _prevalence,
     run_voting_iterations_eval,
@@ -232,6 +233,108 @@ class TestPrevalenceControl:
         with_none = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=15)
         with_natural = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=15, target_prevalence=None)
         assert_same_rows(drop_timing(with_none), drop_timing(with_natural))
+
+
+class TestPrecisionFrames:
+    """#4220: the per-image evidence and truth a precision-floor estimator is priced on."""
+
+    def _run(self, steps, sink):
+        clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
+        return simulate_voting_iterations(
+            clips,
+            "cat0",
+            seed=0,
+            max_steps=20,
+            style="whole_image",
+            safe_thresholds=True,
+            emit_calibration_metrics=True,
+            precision_frame_sink=sink,
+            precision_frame_steps=steps,
+        )
+
+    def test_one_frame_per_requested_step_with_consistent_shapes(self):
+        sink: list = []
+        self._run((12, 20), sink)
+        assert [int(f["t"]) for f in sink] == [12, 20]
+        for f in sink:
+            assert f["test_scores"].shape == f["test_labels"].shape
+            assert f["vote_scores"].shape == f["vote_labels"].shape == (int(f["t"]),)
+            assert f["fold_cal_scores"].shape == f["fold_cal_labels"].shape == f["fold_cal_fold"].shape
+            assert f["fold_hay_scores"].shape == f["fold_hay_fold"].shape
+            assert set(np.unique(f["fold_cal_fold"])) == set(np.unique(f["fold_hay_fold"])), (
+                "every fold has its haystack"
+            )
+            assert 0 < f["test_labels"].sum() < len(f["test_labels"])
+
+    def test_each_calibration_vote_is_named_with_its_phase(self):
+        """#4224: the frame says which vote (and which phase) each held-out score is.
+
+        The mapping runs through the trainer's row order (Goods, then Bads), so
+        a slip there would pair a score with the wrong vote; the labels catch it.
+        """
+        from vtscore.eval.labels import media_is_positive
+
+        clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
+        sink: list = []
+        simulate_voting_iterations(
+            clips,
+            "cat0",
+            seed=0,
+            max_steps=20,
+            style="whole_image",
+            safe_thresholds=True,
+            emit_calibration_metrics=True,
+            precision_frame_sink=sink,
+            precision_frame_steps=(12, 20),
+        )
+        for f in sink:
+            votes = f["fold_cal_vote"].tolist()
+            assert len(votes) == len(f["fold_cal_scores"]) == len(f["fold_cal_phase"]) > 0
+            truth = [1 if media_is_positive(clips[v], "cat0") else 0 for v in votes]
+            assert truth == f["fold_cal_labels"].astype(int).tolist()
+            assert set(f["fold_cal_phase"].tolist()) <= {"good", "bad", "hard", "new", "done"}
+
+    def test_recording_does_not_change_the_run(self):
+        """The sink only reads: rows with and without it are the same."""
+        plain = self._run(None, None)
+        recorded = self._run((12, 20), [])
+        assert_same_rows(drop_timing(plain), drop_timing(recorded))
+
+
+class TestHaystackPrevalence:
+    """The #4184/#4201 arm: thin the simulation half's negatives, touch nothing else."""
+
+    def test_thinning_hits_target_and_keeps_every_positive(self):
+        clips = _separable_clips(n_per_cat=200, n_cats=5, seed=0)  # cat0 = 20%
+        ids = sorted(clips)
+        pos = {c for c in ids if clips[c]["category"] == "cat0"}
+        out = thin_haystack(clips, ids, "cat0", 0.5, seed=0)
+        assert pos <= set(out)
+        assert _prevalence({c: clips[c] for c in out}, "cat0") == pytest.approx(0.5, abs=0.01)
+        assert out == thin_haystack(clips, ids, "cat0", 0.5, seed=0), "deterministic in the seed"
+
+    def test_a_pool_already_richer_is_left_alone(self):
+        clips = _separable_clips(n_per_cat=200, n_cats=5, seed=0)
+        ids = sorted(clips)
+        assert thin_haystack(clips, ids, "cat0", 0.05, seed=0) == ids
+
+    def test_test_set_is_the_natural_runs(self):
+        """Same held-out set, so a cell pairs with its natural twin; only the pool shrinks."""
+        clips = _separable_clips(n_per_cat=100, n_cats=5, seed=0)
+        natural = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=12)
+        thinned = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=12, haystack_prevalence=0.5)
+        assert thinned and thinned[0]["prevalence_arm"] == "haystack_0.5"
+        assert thinned[0]["realized_prevalence"] == pytest.approx(0.5, abs=0.02)
+        for a, b in zip(natural, thinned):
+            assert (a["n_test_pos"], a["n_test_neg"]) == (b["n_test_pos"], b["n_test_neg"])
+        assert thinned[-1]["n_haystack"] < natural[-1]["n_haystack"]
+
+    def test_refuses_both_prevalence_arms(self):
+        clips = _separable_clips(seed=1)
+        with pytest.raises(ValueError, match="two different arms"):
+            simulate_voting_iterations(
+                clips, "cat0", seed=0, max_steps=5, target_prevalence=0.05, haystack_prevalence=0.05
+            )
 
 
 # ---------------------------------------------------------------------------

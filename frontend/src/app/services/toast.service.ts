@@ -50,6 +50,12 @@ export interface Toast {
   level: ToastLevel;
   message: string;
   detail?: string;
+  /**
+   * The specific things the toast is about (skipped files, dropped items), one
+   * per entry. Enables the Details / Copy list actions, so a long list is one
+   * click away instead of swamping the toast.
+   */
+  items?: string[];
   /** Optional rich HTTP error context; enables the Details / Copy debug info actions. */
   errorContext?: ErrorContext;
   /** Optional follow-up action button (see :class:`ToastAction`). */
@@ -66,6 +72,7 @@ export interface Toast {
 interface ShowOptions {
   message: string;
   detail?: string;
+  items?: string[];
   errorContext?: ErrorContext;
   action?: ToastAction;
   /**
@@ -126,11 +133,10 @@ export class ToastService {
       const key = `sse:${kind}:${t.task_id}`;
       if (this.seenTaskKeys.has(key)) continue;
       this.seenTaskKeys.add(key);
-      this.error({
-        message: kind === 'dataset' ? 'Dataset load failed' : 'Detector load failed',
-        detail: `${t.name}: ${t.error}`,
-        dedupKey: key,
-      });
+      // A background AutoRun reports on the dataset channel too, but it is not
+      // a load: name what actually failed.
+      const message = t.autorun ? 'AutoRun failed' : kind === 'dataset' ? 'Dataset load failed' : 'Detector load failed';
+      this.error({ message, detail: `${t.name}: ${t.error}`, dedupKey: key });
     }
   }
 
@@ -145,7 +151,8 @@ export class ToastService {
    */
   private routeServerNotification(note: ServerNotification): void {
     const detail = [note.source, note.detail].filter(Boolean).join(' — ') || undefined;
-    this.show(note.level, { message: note.message, detail, dedupKey: `server:${note.id}` });
+    const items = note.items?.length ? note.items : undefined;
+    this.show(note.level, { message: note.message, detail, items, dedupKey: `server:${note.id}` });
   }
 
   error(opts: ShowOptions): number {
@@ -200,6 +207,7 @@ export class ToastService {
       level,
       message: opts.message,
       detail: opts.detail,
+      items: opts.items,
       errorContext: opts.errorContext,
       action: opts.action,
       dedupKey: opts.dedupKey,

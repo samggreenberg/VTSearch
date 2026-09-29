@@ -85,6 +85,7 @@ Canonical roles:
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
 - **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
+- **Chart series:** `--chart-estimate` (the app's estimate), `--chart-verified` (what the user checked by hand). A categorical pair, validated per theme for colorblind separation and 3:1 on `--bg-surface`; not status colors, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
 - **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). These flip per theme - never hardcode `#fff` on a fill.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
@@ -607,8 +608,9 @@ status messages, fallback labels).
 
 - **Sentence case**, no trailing ellipsis, no trailing period.
 - For "here's what to type" examples, prefix with `e.g. ` and match the casing
-  of the real value: a free-text query is lowercase (`e.g. dog barking
-  sounds`), a proper name is Title Case (`e.g. Dog Barks`).
+  of the real value: a free-text query is lowercase (`e.g. large books`), a
+  proper name is Title Case (`e.g. Large Book Detector`). Pick an example that
+  fits every media type the field can serve; don't assume audio.
 - For "leave blank to get a default" inputs, state that: `Leave blank to use a
   default name`.
 - For a server/file path, use the shared hint `path/to/file` (or

@@ -37,6 +37,14 @@ When the user's whole prompt is just a number — `#3421`, or bare `3421` — it
 
 **This applies on every surface.** Claude Code on the web, the desktop app, the laptop CLI — the convention is repo policy, not a per-session preference, so it holds wherever this file is loaded.
 
+### In a cloud session, retitle it after the issue or PR
+
+A session whose whole opening prompt is `#3421` gets an auto-title that says nothing, and the session list is where the user goes to find this work again. So **when the `set_session_title` tool is available** (the claude-code-remote MCP server, present in cloud sessions on claude.ai/code), rename the session to the item's GitHub title as soon as the number resolves — for an issue, right after step 1's assignment. The lookup that resolved the number already returned the title, so there is nothing extra to fetch; take the session id from `get_session` called with no arguments.
+
+- **Format:** `#3421: <title>`, with the GitHub title verbatim. The number leads so the list scans and searches by it, and it stays bare: a session title is plain text (see "Where `#N` stays bare" below).
+- **Cosmetic, never a gate.** Rename once, at the start. If the call fails, carry on without retrying; nothing in the workflow waits on it.
+- **Where the tool is absent** (the laptop CLI, a local desktop session), skip this silently. If it is listed only as a deferred tool name, load it with `ToolSearch` first.
+
 ### If `#N` is an issue
 
 1. **Assign `samggreenberg` immediately.** The moment the number resolves to an issue — before you read it, before you evaluate it, before any analysis — write `assignees: ["samggreenberg"]`. Evaluation is itself work on the issue, and it is exactly the window in which a second session picks up the same number. Do this even if you go on to disagree with the issue; if you end up walking away, clear the assignee then.
@@ -75,7 +83,7 @@ Four places, and the reason is the same each time: the link either doesn't rende
 - **Inside code fences and inline code spans.** A markdown link renders as literal brackets there. `git log --grep '#3421'` is a command, not a reference.
 - **Anything written to GitHub** — issue comments, PR titles and bodies, review replies. GitHub **autolinks `#N` natively** in those fields, so a markdown link adds a second URL to something that was already clickable. Write `Addressed in #3421`, as the sections below already say.
 - **Closing keywords, specifically.** `Closes #3421` — never `Closes [#3421](https://github.com/samggreenberg/VTSearch/issues/3421)`. That keyword is parsed by GitHub and by `scripts/reconcile-solved-labels.py`; both expect the bare form, and this is the one place where dressing up a reference can silently cost an issue its close. See "Linking a fix PR to its GitHub issue" below for what rides on that keyword.
-- **Commit messages and branch names.** No renderer, so a link is just noise in `git log`.
+- **Commit messages, branch names, and a cloud session's title.** No renderer, so a link is just noise in `git log` or the session list.
 
 Tracked markdown in the repo — this file, `docs/`, `docs/plans/` — is **out of scope** and keeps its bare `#N` convention (plan pointers like `- [ ] #2355 — …` stay exactly as documented below). This rule is about messages, not files.
 
@@ -200,6 +208,14 @@ GitHub Issues and plan files are **not two copies of the same list.** They hold 
 The pointer carries the issue number (the durable link) and a short human-readable title (so the umbrella is legible at a glance). It does **not** restate the issue's body, file pointers, or fix notes — those live in the issue, which is now the single source of truth. Check the box (or delete the line) when the issue closes.
 
 **Dismissing an issue as unwarranted:** close it as `not_planned` with a one-line comment explaining why. If any plan file points at it (grep `docs/plans/` for `#<number>`), prune that pointer line in the same motion. Because plans carry only pointers — not bodies — this is always a trivial one-line deletion, whether the issue was dismissed or merged. (The Dev2Main Routine reconciles this automatically when it sweeps issues; a manual close should do the same pointer-prune by hand.)
+
+## Work still owed goes in an issue, never in a closing paragraph (CRITICAL)
+
+When a session ends with something left to do — a re-run, a correction to an old comment, a check that needs the GRID, a failure you did not fix — **file a GitHub issue for it**, following the filing rules in this file (search for a duplicate, label it, recommend a model), and link that issue in your summary. Do **not** write it into the end-of-turn message as a task for the user ("once this merges, you can re-run X from your laptop"). A to-do in the last paragraph of a long summary is easy to miss, cannot be tracked or closed, and gives the user work they never agreed to.
+
+**Before filing, check that the work is still owed.** Search the tracker, and read the threads the work comes from. A follow-up has often been done already: the session that fixed #3884 ended by telling the user to re-summarize a GRID JSONL to correct a figure in #3853, but the correction was already on record in #3877's closing comment, the same comment that filed #3884. If nothing is owed, say so in one line and file nothing.
+
+The split: a **decision** for the user goes through `AskUserQuestion`, and **work** goes into an issue (or, when it is design narrative, a plan under `docs/plans/`). Neither goes into prose.
 
 ## Label every issue you file (CRITICAL)
 
@@ -483,7 +499,7 @@ This applies to:
 - Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters and snapshot checks run before pytest; pyright and pip-audit run alongside it). There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
-If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
+If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it, and file an issue for it unless one already exists (see "Work still owed goes in an issue" above). The default is **fix it**; skipping requires justification.
 
 ## Nested-modal back buttons (Back vs Cancel)
 
