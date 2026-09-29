@@ -14,8 +14,11 @@ each pool's control, today's app.  Reports, per arm:
 * **detector quality** - average precision and oracle cost per checkpoint,
   paired per cell against the pool's control, overall and per size band.  A
   session that found no positive has no detector; it scores AP 0 (oracle cost
-  is left out for it) and is counted in ``no_detector``, so an arm cannot gain
-  by failing more cells.
+  and cost are left out for it) and is counted in ``no_detector``, so an arm
+  cannot gain by failing more cells.  ``cost`` is the harness's weighted FNR/FPR
+  at the shipped threshold (#4197's metric);
+* **per class** at vote 150 (``class_paired.csv``): Goods found, and AP and cost
+  paired against the control.
 
 The decision rule is fixed on #4222 before the run: the arm with the largest
 mean paired AP gain over g3 at vote 150, averaged over the pools, among arms
@@ -192,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
             a = q if band == "all" else q[q["band"] == band]
             b = ctrl if band == "all" else ctrl[ctrl["band"] == band]
             for t in CHECKPOINTS:
-                for col in ("average_precision", "oracle_cost"):
+                for col in ("average_precision", "oracle_cost", "cost"):
                     m, se, n = paired(a[a["t"] == t], b[b["t"] == t], col, [*KEY, "t"])
                     qrows.append(
                         {
@@ -210,6 +213,22 @@ def main(argv: list[str] | None = None) -> int:
                     )
     qd = pd.DataFrame(qrows)
     qd.to_csv(args.out / "quality_paired.csv", index=False, float_format="%.4g")
+
+    # --- per class at vote 150 (#4197: the sibling-confused group against the best) -------
+    crows = []
+    for (pool, label), q in Q.items():
+        ctrl = Q[pool, CONTROL]
+        last = S[pool, label]
+        last = last[last["t"] == 150].assign(cls=lambda d: d["category"].str.split("@").str[0])
+        for cls in sorted(q["category"].str.split("@").str[0].unique()):
+            a = q[(q["t"] == 150) & q["category"].str.startswith(cls + "@")]
+            b = ctrl[(ctrl["t"] == 150) & ctrl["category"].str.startswith(cls + "@")]
+            row = {"pool": pool, "arm": label, "class": cls, "goods": float(last[last["cls"] == cls]["goods"].mean())}
+            for col in ("average_precision", "cost"):
+                m, se, n = paired(a, b, col, KEY)
+                row.update({f"{col}_level": float(a[col].mean()), f"{col}_delta": m, f"{col}_se": se, f"{col}_n": n})
+            crows.append(row)
+    pd.DataFrame(crows).to_csv(args.out / "class_paired.csv", index=False, float_format="%.4g")
 
     # --- the fixed decision rule -------------------------------------------------------------
     ap150 = qd[(qd["band"] == "all") & (qd["t"] == 150) & (qd["metric"] == "average_precision")]
