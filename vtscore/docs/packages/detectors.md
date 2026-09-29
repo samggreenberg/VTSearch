@@ -214,25 +214,27 @@ bags and a scoring population that differs from *snap*):
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.
 
-Returns `(model, threshold)`. The function reads `get_inclusion`,
-`get_min_precision`, `get_calibrate_count`, and `get_calibration_fraction` from
-`vtscore.state`; those getters resolve through `CoreConfig`, so library
-consumers running outside an app must register a
-`register_core_config_builder` provider. Passing `det_ctx` caches the
-fold orderings on it so a later Inclusion change can re-derive the
-threshold without retraining. It also parks the precision-floor estimate
-(`precision_floor_cache`), so moving the floor re-cuts too. When a floor is set
-the threshold is the floor's line, or the Inclusion 0 cut when the floor
-promises nothing. Pass `calibrating_groups` (the bags whose vote the learned
+Returns `(model, threshold)`. The function reads `get_min_precision`,
+`get_calibrate_count`, and `get_calibration_fraction` from `vtscore.state`;
+those getters resolve through `CoreConfig`, so library consumers running
+outside an app must register a `register_core_config_builder` provider.
+Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
+a later re-cut can re-derive the threshold without retraining. It also parks
+the precision-floor estimate (`precision_floor_cache`), so moving the floor
+re-cuts too. The threshold is the floor's line when the floor promises it, and
+the Inclusion 0 cut otherwise (a floor that promises nothing, or none set). Pass `calibrating_groups` (the bags whose vote the learned
 sort chose) to keep every other vote out of the floor's evidence.
 
 ### `train_and_score(...)`
 
 `vtscore/detectors/training.py`:
-`train_and_score(clips_dict, good_votes, bad_votes, inclusion_value=0,
+`train_and_score(clips_dict, good_votes, bad_votes, inclusion_value=None,
 calibrate_count=2, calibration_fraction=None, vote_region_boxes=None,
-det_ctx=None)`. Vote-aware online trainer; returns
-`(results, threshold, model)`:
+det_ctx=None, min_precision=None)`. Vote-aware online trainer; returns
+`(results, threshold, model)`. *min_precision* is the precision floor to cut
+at (`None`: the Inclusion 0 cut). *inclusion_value* is **deprecated**
+(#4269): leave it unset; `0` is accepted with a `DeprecationWarning` and any
+other value raises `ValueError`.
 
 - `results` - list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
   dicts, sorted by raw score descending.
@@ -267,7 +269,6 @@ results, threshold, model = train_and_score(
     clips_dict=snap,
     good_votes={1: None, 5: None},
     bad_votes={2: None, 7: None},
-    inclusion_value=0,
     calibrate_count=2,
     calibration_fraction=0.5,
 )
@@ -456,12 +457,12 @@ missing. `haystack_for(embedder_name)` may return a `Haystack` to
 calibrate the threshold on a different population than *snap* (the CLI
 uses it for converted / re-clipped scoring sets).
 
-### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=0, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None)`
+### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, min_precision=None)`
 
 `vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
-tuple.
+tuple. *inclusion_value* is deprecated the same way.
 
 ---
 
@@ -590,7 +591,7 @@ indicators. It is unrelated to `vtscore.concurrency.progress`
 
 All cache state lives in `_ProgressCache` instances held in `_caches`, an
 LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
-`inclusion` (rebuild trigger), `steps` (one entry per label-history step with
+`inclusion` (rebuild trigger; the app always passes 0), `steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
 `good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
 baseline), `coverage_atlas` (the per-step replay of coverage evidence),
@@ -634,7 +635,7 @@ Every entry point resolves its cache through the active
   average but noisy between retrains). The arithmetic lives in
   `vtscore.detectors.cost_trend`, which the eval harness calls too. Every cost
   is priced at `SMART_INCLUSION` (0: FPR + FNR), at the model's own cut for
-  that inclusion (`smart_cut`), whatever Inclusion the user has set, so one
+  that inclusion (`smart_cut`), whatever line the floor draws, so one
   window never mixes models cut under different rules (issue #4243).
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only

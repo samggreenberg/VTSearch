@@ -62,7 +62,9 @@ class TestTheFloorRoute:
 
 
 class TestFindLabel:
-    @pytest.mark.parametrize(("min_precision", "status"), [(0.5, "insufficient_evidence"), (1.0, "insufficient_evidence")])
+    @pytest.mark.parametrize(
+        ("min_precision", "status"), [(0.5, "insufficient_evidence"), (1.0, "insufficient_evidence")]
+    )
     def test_carries_the_verdict_on_its_threshold(self, client, min_precision, status):
         detector_id = _load_detector(client)
         set_min_precision(min_precision)
@@ -79,7 +81,9 @@ class TestFindLabel:
 
 
 class TestLearnedSort:
-    @pytest.mark.parametrize(("min_precision", "status"), [(0.5, "insufficient_evidence"), (1.0, "insufficient_evidence")])
+    @pytest.mark.parametrize(
+        ("min_precision", "status"), [(0.5, "insufficient_evidence"), (1.0, "insufficient_evidence")]
+    )
     def test_the_done_payload_carries_the_verdict(self, client, min_precision, status):
         set_min_precision(min_precision)
         good_votes.update({k: None for k in [1, 2, 3]})

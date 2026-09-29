@@ -642,8 +642,8 @@ class TestIntegrationHooks:
         from vtscore.state import register_setting_persister
 
         seen: dict[str, Any] = {}
-        register_setting_persister("inclusion", lambda v: seen.__setitem__("inclusion", v))
-        assert "inclusion" not in seen or seen["inclusion"] is not None
+        register_setting_persister("min_precision", lambda v: seen.__setitem__("min_precision", v))
+        assert "min_precision" not in seen or seen["min_precision"] is not None
 
     def test_thread_progress_helpers_are_where_documented(self):
         from vtscore.concurrency.progress import (

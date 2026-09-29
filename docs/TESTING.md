@@ -59,7 +59,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 
 | Group | Tier | Description |
 |-------|------|-------------|
-| `core` | both | Basic app functionality (audio, medias, votes, inclusion, settings, frontend, torch config) |
+| `core` | both | Basic app functionality (audio, medias, votes, settings, frontend, torch config) |
 | `api` | app only | API contracts, error handling, security, dashboard, embed |
 | `sorting` | both | Sort algorithms, diversity, safe thresholds, enriched text sort |
 | `datasets` | both | Dataset loading, splitting, dedup, parallel/chunked/thin loading, multi-dataset context |

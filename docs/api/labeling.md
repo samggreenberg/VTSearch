@@ -7,41 +7,7 @@
 
 ---
 
-## Inclusion & Thresholds
-
-### Get / set inclusion
-
-```
-GET /api/inclusion
-```
-
-→ `{"inclusion": 0, "threshold": 0.5123, "floor": {"min_precision": 0.5, "status": "insufficient_evidence", "calibration_positives": 3, "min_calibration_positives": 10}}`
-
-```
-POST /api/inclusion
-```
-
-**Body:** `{"inclusion": 3}`
-
-Any number is accepted: it is truncated toward zero, then clamped to −10..+10
-(a boolean or non-number is a 422). Inclusion is a pure cutoff knob — it
-re-derives the active detector's threshold from its cached fold orderings
-without retraining, and in Find mode re-splits the unverified items over the
-frozen scores. The same value is also settable as `inclusion` on
-`PUT /api/settings`.
-
-→ `{"inclusion": 3, "threshold": 0.4471, "floor": {"min_precision": null, "status": null, "calibration_positives": 3, "min_calibration_positives": 10}}`
-
-Both verbs return the cutoff the inclusion resolves to on the **active
-detector** (`X-Detector-Id`). `threshold` is `null` when no detector is active
-or none has computed a threshold yet.
-
-Inclusion draws the line only while the detector has **no precision floor**:
-a set floor wins (see below), and `threshold` is then the floor's line.
-`floor` says which: it is the [floor state](#the-floor-state) of the line
-`threshold` names. The app no longer writes Inclusion: its control is the
-precision floor below. Inclusion survives as a setting and as the unit the
-floor's fallback and Autopilot's acquisition cut are measured in.
+## The Precision Floor
 
 ### Get / set the precision floor
 
@@ -55,26 +21,30 @@ GET /api/min-precision
 POST /api/min-precision
 ```
 
-**Body:** `{"min_precision": 0.75}` — or `{"min_precision": null}` to clear it.
+**Body:** `{"min_precision": 0.75}`
 
 The precision floor is the fraction of what the detector returns that should
 be right: the line returns as much as it can while at least that share of it
 is estimated right (a bootstrap lower bound, not a point estimate). It is kept
 per detector and seeded from the user's `min_precision` setting, which is
-`0.5` until the user changes it. A number is clamped to `[0.01, 1]`; a boolean
-or non-number is a 422. Like Inclusion it is a pure cutoff knob — the active
-detector re-cuts without retraining and, in Find mode, re-splits the
-unverified items — and the same value is settable as `min_precision` on
-`PUT /api/settings`. Both verbs return the new line in the same round trip,
-so the app's floor control moves its line without re-scoring. The control
-offers 25%, 50%, 75% and 90%, the floors the estimator was measured at, and
-never sends `null`; the API takes any value in range.
+`0.5` until the user changes it. A number is clamped to `[0.01, 1]`; a boolean,
+non-number or `null` is a 422: every detector has a floor. It is a pure cutoff
+knob — the active detector re-cuts without retraining and, in Find mode,
+re-splits the unverified items — and the same value is settable as
+`min_precision` on `PUT /api/settings`. Both verbs return the new line in the
+same round trip, so the app's floor control moves its line without
+re-scoring. The control offers 25%, 50%, 75% and 90%, the floors the
+estimator was measured at; the API takes any value in range.
+
+The floor replaced the Inclusion knob, and `/api/inclusion` is gone. Inclusion
+survives only as the internal unit the floor's fallback, Autopilot's
+acquisition cut and the Smart indicator are measured in.
 
 | Field | Meaning |
 |---|---|
-| `min_precision` | The active detector's floor, or `null` when none is set and Inclusion draws the line. |
-| `status` | `promised` (the line keeps the floor), `unreachable` (enough evidence, but no cut reaches it), `insufficient_evidence` (fewer than 10 positives among the calibration votes), or `null` with no floor. |
-| `threshold` | The line: the floor's cut when promised, the **Inclusion 0** cut when the floor promises nothing, Inclusion's cut when no floor is set. |
+| `min_precision` | The active detector's floor. |
+| `status` | `promised` (the line keeps the floor), `unreachable` (enough evidence, but no cut reaches it), or `insufficient_evidence` (fewer than 10 positives among the calibration votes). |
+| `threshold` | The line: the floor's cut when promised, the **Inclusion 0** cut when the floor promises nothing. `null` when no detector is active or none has computed a threshold yet. |
 | `n_returned` | Items at or above `threshold` in the corpus the cut decides — the dataset the detector last trained against, less its voted items when those are excluded from the population estimate. `null` before a retrain has fitted one. |
 | `calibration_positives` | Positives among the held-out calibration votes that may serve as evidence. Only votes drawn off the learned sort's own ranking count (Autopilot's Hard picks, or the top / cutoff band of a learned-sorted list): votes from the text sort, the coverage atlas, Find verification or bulk actions train the detector but not the promise. |
 | `min_calibration_positives` | The gate: how many calibration positives the floor needs before it promises anything (10). |
@@ -82,8 +52,8 @@ never sends `null`; the API takes any value in range.
 ### The floor state
 
 Every response that carries a detector's line carries a `floor` object beside
-its `threshold`, so a client can say whether the line is a promise:
-`/api/inclusion`, the [learned sort](medias.md#learned-sort),
+its `threshold`, so a client can say whether the line is a promise: the
+[learned sort](medias.md#learned-sort),
 [`/api/find-label`](find.md#find-label-score--label-the-active-dataset), each
 detector of [`/api/auto-detect`](find.md#auto-detect), and the CLI's
 autodetect results.
@@ -115,7 +85,7 @@ long history. The error-cost and stability series cover only the steps a
 detector was trained for (see the note under
 [Indicator score history](#indicator-score-history)); diversity covers every
 step. Each `error_cost` is `fpr + fnr`, measured at the line that detector
-would draw at Inclusion 0, whatever the `inclusion` setting is.
+would draw at Inclusion 0, whatever the precision floor is.
 
 →
 ```json

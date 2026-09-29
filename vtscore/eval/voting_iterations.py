@@ -3083,8 +3083,10 @@ def run_voting_iterations_eval(
         categories: Optional mapping of dataset name to list of target
             categories.  If ``None`` or a dataset is missing from the dict,
             all unique categories in that dataset are used.
-        inclusion: Inclusion setting in ``[-10, 10]``.  It draws the line only
-            on the Inclusion arm (``min_precision="off"``): a set floor wins.
+        inclusion: The Inclusion arm's line, in ``[-10, 10]``.  It draws the
+            line only on the Inclusion arm (``min_precision="off"``): a set
+            floor wins.  The app has no such setting (#4269); the default 0 is
+            the cut its unpromised line falls back to.
         sim_fraction: Fraction of medias reserved for simulated voting.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.

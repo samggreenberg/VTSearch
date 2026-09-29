@@ -62,13 +62,13 @@ What follows is what the app still owes.
     reference pool they still break 83% (today's g3 opening). The promise's
     safety rests on the shipped pool's in-sample offset (#4221). The
     selection-free route is random verification (#4257).
-- **The default floor is 50%, and a set floor wins over Inclusion** (owner,
-  2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
+- **The default floor is 50%, and every detector has one** (owner,
+  2026-09-28; `null` refused since #4269, which retired Inclusion as a user
+  preference).
 - **The control offers four presets and no off switch** (owner, 2026-09-28,
   #4246): 25/50/75/90%, the floors #4220 priced, so every choice is a
-  measured one. The API still takes any value in `[0.01, 1]` and `null`; the
-  control shows a stored non-preset or `null` as it is, and never sends
-  `null`.
+  measured one. The API still takes any value in `[0.01, 1]`; the control
+  shows a stored non-preset as it is.
 - **What waits on the GRID, and what doesn't.**
   - #4222 answered how the opening moves the gate. A longer text walk opens it
     but breaks the promise (above). A moderate one (Good target 6) is the only
@@ -89,11 +89,6 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 - **Does the CLI get a flag for the floor?** Headless runs (AutoRun, CLI
   autodetect, the cold Find path) already cut at the user's floor.
-- **Retiring Inclusion from the extension surface** (#4269). `get_inclusion` /
-  `set_inclusion`, `CoreConfig.inclusion`, the `inclusion_value=` parameters on
-  `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
-  are public `vtscore` API. Per CLAUDE.md they are deprecated with an
-  `[Unreleased]` note, not deleted, and the break is raised before it is made.
 - **Verify the floor by audit?** #4257 priced random verification
   ([`REPORT.md`](../experiments/2026-09-28-random-verification/REPORT.md)). The
   user audits a uniform sample of the returned set. That keeps the promise at
@@ -144,7 +139,6 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
-- [ ] #4269 — Retire Inclusion as a user preference (Sonnet 5; Opus 4.8 for the `vtscore` deprecation)
 
 <!-- item-sep -->
 
@@ -176,26 +170,3 @@ These are the questions #4224 raised that no issue below can settle alone:
   estimator's haystack, not the objective, and stays live.
 
 <!-- item-sep -->
-
-## Where Inclusion is documented today
-
-This is a reference for the issues above. Each PR prunes what it replaces, and
-this list goes when the last one lands. It excludes the user guide and
-screenshots, which #4246 and #4242 own.
-
-- **App docs:**
-  - [`docs/ML.md`](../ML.md) § Threshold Calibration: how Inclusion reaches the
-    cut, and the conformal rule's budget semantics;
-  - [`docs/EVAL.md`](../EVAL.md): `acq_inclusion_offset`, the `@k` startup
-    rounds, and "inclusion-weighted" cost;
-  - [`docs/api/labeling.md`](../api/labeling.md) § Inclusion & Thresholds;
-  - [`docs/api/settings.md`](../api/settings.md), the `inclusion` rows;
-  - [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md), the settings example;
-  - [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), per-detector inclusion.
-- **Library docs:**
-  - [`vtscore/docs/faq.md`](../../vtscore/docs/faq.md);
-  - [`vtscore/docs/concepts.md`](../../vtscore/docs/concepts.md);
-  - `vtscore/docs/packages/` (`config`, `state`, `training`, `detectors`,
-    `eval`);
-  - the executed samples in `quickstart.md`, `tutorials/train-and-score.md` and
-    `integration.md`, which pass `inclusion`.
