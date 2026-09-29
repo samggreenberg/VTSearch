@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Required fields you haven't filled in are outlined in red** (issue
+  #4311). A form that stars a field as required now marks the box you answer
+  in as well: until it holds a value, it has a red border over a faint red
+  tint. It looks normal again while you type in it, and stays normal once
+  filled. This covers every plugin form (Add Dataset, Import Labels, Export,
+  AutoRun, and the Settings importer and exporter), the drop zones for a
+  required folder or file, **Combine Detectors**' name, and **New
+  Detector**'s example and name. Two fields that were always required but
+  never starred now say so: **Detector name** in New Detector and **Folder
+  to import** in Add Dataset.
 - **Check the line from the floor control, and see how close it got** (issue
   #4273, the app half of #4272). Beside the precision floor's note, **Check 5
   picks** (29 at Correct) opens the spot check: a random pick at a time
