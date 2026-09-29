@@ -31,6 +31,11 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
   let playSpy: ReturnType<typeof vi.spyOn>;
 
   // Mirrors the component's dwell constant; the waits below clear it with margin.
+  // The dwell is armed by the hover `effect`, i.e. only once CD runs, so a test
+  // must `settleZoneless` after setting the hover and *before* waiting: that
+  // registers the dwell's timer ahead of the wait's, so it always fires first.
+  // Waiting straight after `setInput` races the scheduler's CD tick, which
+  // under a loaded full-suite run can land late enough to eat the margin.
   const DWELL_MS = 200;
 
   function hoverEvent(mediaId: number): HexHoverEvent {
@@ -138,6 +143,7 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
 
     fixture.componentRef.setInput('hover', hoverEvent(9));
+    await settleZoneless(fixture);
     await wait(DWELL_MS + 60);
     await settleZoneless(fixture);
 
@@ -187,6 +193,7 @@ describe('BrowseHoverPreviewComponent (zoneless canary)', () => {
     fixture.componentInstance.nowPlaying.subscribe((e) => (emitted = e));
 
     fixture.componentRef.setInput('hover', hoverEvent(5));
+    await settleZoneless(fixture);
     await wait(DWELL_MS + 60);
     await settleZoneless(fixture);
     expect(emitted?.mediaId).toBe(5);

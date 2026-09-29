@@ -938,6 +938,11 @@ describe('ExportModalComponent', () => {
     // on the template the plugin author fixed.
     it('still seeds and submits the hidden default', async () => {
       await flushInit([...mockExporters, fixedUrlExporter]);
+      // An `opens_url` exporter claims its tab on submit; jsdom has no
+      // `window.open`, so stand one in rather than log "Not implemented".
+      const openSpy = vi
+        .spyOn(window, 'open')
+        .mockReturnValue({ closed: false, opener: {}, location: { href: '' }, close: vi.fn() } as never);
       component.selectExporterTab(fixedUrlExporter as never);
       component.submitExporterTab();
       const req = httpMock.expectOne('/api/exporters/export');
@@ -945,6 +950,7 @@ describe('ExportModalComponent', () => {
         'https://our-site/review?ids={ids}',
       );
       req.flush({ success: true });
+      openSpy.mockRestore();
     });
 
     it('collapses to a bare button when every field is hidden', async () => {
