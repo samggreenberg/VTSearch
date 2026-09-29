@@ -145,7 +145,7 @@ The **gap midpoint** is the cut's default anchor. When the classes separate clea
 
 The rule is **monotone in `k` by construction**: raising inclusion can only lower the threshold, so included sets are *nested* — everything included at Inclusion 1 stays included at Inclusion 4. That makes "cut off at Inclusion 1, then verify the extra band up to Inclusion 4" a well-defined workflow. (The previous min-cost argmin over observed cuts had exactly as many distinct optima as the calibration folds had ranking errors, so on well-separated votes the knob provably never moved; see `docs/experiments/2026-07-27-inclusion-knob/REPORT.md` and issue #2693.)
 
-Because the fold models are inclusion-independent, the pooled held-out scores can be cached once and re-thresholded at any inclusion (this powers the Find Stats sweep across all inclusion values).
+Because the fold models are inclusion-independent, the pooled held-out scores can be cached once and re-thresholded at any inclusion (this is what lets the line move with the precision floor, or with Inclusion, without a retrain).
 
 For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the cut is placed at the **midpoint between the two fitted component means**. The same cut is the GMM half of the safe-threshold blend, which is now only the fallback for label sets too small to form calibration folds.
 

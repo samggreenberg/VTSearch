@@ -3895,8 +3895,8 @@
             ],
             "type": "string"
           },
-          "inclusion": {
-            "type": "integer"
+          "floor": {
+            "$ref": "#/components/schemas/FloorState"
           },
           "min_calibration_positives": {
             "type": "integer"
@@ -3918,12 +3918,6 @@
           },
           "stale": {
             "type": "boolean"
-          },
-          "sweep": {
-            "items": {
-              "$ref": "#/components/schemas/FindStatsSweepPoint"
-            },
-            "type": "array"
           },
           "threshold": {
             "type": "number"
@@ -3957,14 +3951,13 @@
           "corrections",
           "culled_false_pos",
           "estimate_status",
-          "inclusion",
+          "floor",
           "min_calibration_positives",
           "n_returned",
           "n_scored",
           "precision_curve",
           "rescued_false_neg",
           "stale",
-          "sweep",
           "threshold",
           "total_bad",
           "total_good",
@@ -3972,30 +3965,6 @@
           "verified_count",
           "verified_kept_good",
           "verified_precision"
-        ],
-        "type": "object"
-      },
-      "FindStatsSweepPoint": {
-        "additionalProperties": false,
-        "properties": {
-          "false_neg": {
-            "type": "integer"
-          },
-          "false_pos": {
-            "type": "integer"
-          },
-          "inclusion": {
-            "type": "integer"
-          },
-          "threshold": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "false_neg",
-          "false_pos",
-          "inclusion",
-          "threshold"
         ],
         "type": "object"
       },
@@ -12202,7 +12171,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items and the\nprecision floor's lower-bound estimate - at log-spaced return counts (see\n:mod:`vtsearch.routes.detectors._find_precision`).\nPure read; no new state.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and reports what the\nprecision floor says about the current line (``floor``), so the chart can\nmark the floor and say whether the line keeps it.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items and the\nprecision floor's lower-bound estimate - at log-spaced return counts (see\n:mod:`vtsearch.routes.detectors._find_precision`).\nPure read; no new state.",
         "operationId": "find_stats",
         "responses": {
           "200": {

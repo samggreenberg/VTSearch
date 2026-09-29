@@ -93,6 +93,12 @@ What follows is what the app still owes.
     still earns its run is the owner's call.
 - **The default floor is 50%, and a set floor wins over Inclusion** (owner,
   2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
+- **The control offers four presets and no off switch** (owner, 2026-09-28,
+  #4246): 25/50/75/90%, the floors #4220 priced, so every choice is a
+  measured one. The API still takes any value in `[0.01, 1]` and `null`; the
+  control shows a stored non-preset or `null` as it is, and never sends
+  `null`.
+  Under #4267's growing check, the presets cost 5, 5, 11 and 29 picks.
 - **What waits on the GRID, and what doesn't.**
   - The spot check needs no GRID run: #4257's rank frames price it exactly.
   - #4222's opening now matters for detector quality only, since the promise no
@@ -106,10 +112,7 @@ What follows is what the app still owes.
 
 These are the questions #4224 raised that no issue below can settle alone:
 
-- **Whether X is free or a few presets** in the control (#4246). The backend
-  takes any value in `[0.01, 1]`. Since the check grows with X, any floor can be
-  promised. The price is m(X) picks: 5 up to 54.9%, 11 at 75%, 29 at 90%.
-- **Retiring Inclusion from the extension surface.** `get_inclusion` /
+- **Retiring Inclusion from the extension surface** (#4269). `get_inclusion` /
   `set_inclusion`, `CoreConfig.inclusion`, the `inclusion_value=` parameters on
   `train_and_score` and its siblings, and `register_setting_persister("inclusion")`
   are public `vtscore` API. Per CLAUDE.md they are deprecated with an
@@ -163,6 +166,10 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
+- [ ] #4269 — Retire Inclusion as a user preference (Sonnet 5; Opus 4.8 for the `vtscore` deprecation)
+
+<!-- item-sep -->
+
 - **Re-derive `provenance-partitioned-calibration.md` before running it.** That
   plan is motivated by the conformal miss budget. Top-of-list review votes bias
   calibration positives high, so the FNR budget over-promises. Its metrics are
@@ -206,7 +213,6 @@ screenshots, which #4246 and #4242 own.
     rounds, and "inclusion-weighted" cost;
   - [`docs/api/labeling.md`](../api/labeling.md) § Inclusion & Thresholds;
   - [`docs/api/settings.md`](../api/settings.md), the `inclusion` rows;
-  - [`docs/api/find.md`](../api/find.md), the Find Stats `sweep`;
   - [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md), the settings example;
   - [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), per-detector inclusion.
 - **Library docs:**

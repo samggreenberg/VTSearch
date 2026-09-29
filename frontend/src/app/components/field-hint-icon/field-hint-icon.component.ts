@@ -20,6 +20,7 @@ const HOVER_DELAY_MS = 500;
   template: `
     <span
       class="field-hint-icon"
+      [class.field-hint-icon--below-block]="placement() === 'below-block'"
       tabindex="0"
       role="img"
       [attr.aria-label]="ariaLabel() || hint()"
@@ -64,6 +65,12 @@ const HOVER_DELAY_MS = 500;
         color: var(--text-primary);
         outline: none;
       }
+      /* \`below-block\`: the icon stops being the tooltip's containing block,
+         so the tooltip hangs below the host's nearest positioned ancestor and
+         spans its width (see \`placement\`). */
+      .field-hint-icon--below-block {
+        position: static;
+      }
       .field-hint-tooltip {
         position: absolute;
         bottom: calc(100% + 4px);
@@ -86,6 +93,15 @@ const HOVER_DELAY_MS = 500;
         pointer-events: none;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
       }
+      .field-hint-icon--below-block .field-hint-tooltip {
+        top: calc(100% + 4px);
+        bottom: auto;
+        left: 0;
+        right: 0;
+        transform: none;
+        width: auto;
+        max-width: none;
+      }
     `,
   ],
 })
@@ -94,6 +110,16 @@ export class FieldHintIconComponent {
 
   readonly hint = input('');
   readonly ariaLabel = input('');
+  /**
+   * Where the tooltip opens. `above` (the default) centres it over the icon,
+   * which suits a form row in a modal. `below-block` hangs it under the
+   * host's nearest *positioned* ancestor, as wide as that ancestor: for an
+   * icon in a narrow, clipped column (the left panel, whose `overflow: hidden`
+   * cuts off a tooltip above the first row and one centred on an icon near
+   * its edge), give the column's block `position: relative` and the tooltip
+   * fits inside it.
+   */
+  readonly placement = input<'above' | 'below-block'>('above');
 
   /** Sticky state set by clicking the icon; stays open until dismissed. */
   private readonly pinned = signal(false);

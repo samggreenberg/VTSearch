@@ -145,9 +145,13 @@
           <text class="tick" [attr.x]="t.x" [attr.y]="axisBottom + 14" text-anchor="middle">{{ t.label }}</text>
         }
         <text class="axis-caption" [attr.x]="(axisLeft + axisRight) / 2" [attr.y]="axisBottom + 29" text-anchor="middle">Items returned (log scale)</text>
-        <!-- current cut -->
+        <!-- the floor: the precision the line is asked to keep -->
+        @if (floorY !== null) {
+          <line class="floor" [attr.x1]="axisLeft" [attr.y1]="floorY" [attr.x2]="axisRight" [attr.y2]="floorY" />
+        }
+        <!-- the line (current cut); dashed when it is the unpromised default cut -->
         @if (cutX !== null) {
-          <line class="current" [attr.x1]="cutX" [attr.y1]="axisTop" [attr.x2]="cutX" [attr.y2]="axisBottom" />
+          <line class="current" [class.unpromised]="lineUnpromised" [attr.x1]="cutX" [attr.y1]="axisTop" [attr.x2]="cutX" [attr.y2]="axisBottom" />
         }
         <!-- the two curves -->
         <polyline class="line-estimate" [attr.points]="estimatedPolyline" />
@@ -166,25 +170,41 @@
       <div class="chart-legend">
         <span class="legend-item"><span class="swatch swatch-estimate"></span>Estimated (at least)</span>
         <span class="legend-item"><span class="swatch swatch-verified"></span>Checked by you</span>
-        <span class="legend-item"><span class="swatch swatch-current"></span>Current cut (incl {{ stats.inclusion }})</span>
+        @if (floorY !== null) {
+          <span class="legend-item"><span class="swatch swatch-floor"></span>Floor: at least {{ pct(stats.floor.min_precision) }}</span>
+        }
+        <span class="legend-item"><span class="swatch swatch-current" [class.unpromised]="lineUnpromised"></span>{{ lineLegend }}</span>
       </div>
       <p class="chart-readout" aria-live="polite">
         @if (hoverPoint; as hp) {
           Top {{ hp.n_returned | number }}: {{ readout(hp).main }}
           <span class="muted">{{ readout(hp).detail }}</span>
         } @else if (cutPoint; as cp) {
-          At the current cut ({{ cp.n_returned | number }} returned): {{ readout(cp).main }}
+          At the line ({{ cp.n_returned | number }} returned): {{ readout(cp).main }}
           <span class="muted">{{ readout(cp).detail }}</span>
         } @else {
-          Nothing clears the current cut.
+          Nothing clears the line.
         }
       </p>
       @if (stats.estimate_status === 'insufficient_evidence') {
         <p class="chart-note" role="note">
           No estimate yet: it needs {{ stats.min_calibration_positives }} Good votes among the detector's held-out calibration votes, and has {{ stats.calibration_positives }}.
+          @if (floorWaiting) {
+            Until then the line is the default cut, and makes no promise.
+          }
         </p>
       } @else if (stats.estimate_status === 'unavailable') {
-        <p class="chart-note" role="note">No estimate: the detector has too few votes to hold any out for calibration.</p>
+        <p class="chart-note" role="note">
+          No estimate: the detector has too few votes to hold any out for calibration.
+          @if (floorWaiting) {
+            The line is the default cut, and makes no promise.
+          }
+        </p>
+      }
+      @if (stats.floor.status === 'unreachable') {
+        <p class="chart-note" role="note">
+          No cut reaches the {{ pct(stats.floor.min_precision) }} floor on this dataset, so the line is the default cut, and makes no promise.
+        </p>
       }
       @if (!hasVerified) {
         <p class="chart-note" role="note">Nothing checked yet. Vote on items in the list to measure precision by hand.</p>

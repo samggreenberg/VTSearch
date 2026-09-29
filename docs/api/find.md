@@ -235,7 +235,8 @@ GET /api/find/stats
 
 Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
 confusion of the adopted label vs. the detector's original call, the Kept rate,
-an FP/FN threshold sweep, and the precision curve the Stats chart draws.
+what the precision floor says about the line, and the precision curve the Stats
+chart draws.
 
 →
 ```json
@@ -247,8 +248,8 @@ an FP/FN threshold sweep, and the precision curve the Stats chart draws.
   "agreements": 28, "corrections": 2,
   "agreement_rate": 0.93,
   "verified_precision": 0.82, "verified_called_good": 17, "verified_kept_good": 14,
-  "inclusion": 0, "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
-  "sweep": [{"inclusion": -10, "threshold": 0.7, "false_pos": 1, "false_neg": 9}, ...],
+  "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
+  "floor": {"min_precision": 0.5, "status": "promised", "calibration_positives": 14, "min_calibration_positives": 10},
   "precision_curve": [
     {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
      "verified_precision": 1.0, "estimated_precision": 0.91}, ...
@@ -274,8 +275,9 @@ an FP/FN threshold sweep, and the precision curve the Stats chart draws.
   `insufficient_evidence` when those votes hold fewer than
   `min_calibration_positives` Good ones (the precision floor's own gate); or
   `unavailable` when the detector has no calibration folds.
-- `sweep` covers inclusion −10..10. It is no longer charted and goes with the
-  Inclusion stepper.
+- `floor` is the [floor state](labeling.md#the-floor-state) of the line at
+  `threshold`: the floor it was cut at (the chart draws it across at that
+  precision), and whether the line keeps it or is the unpromised default cut.
 - `stale` is `true` once corrections have been folded into the detector since
   this Find run scored.
 

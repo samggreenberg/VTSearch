@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
-import { catchError, filter, take, tap } from 'rxjs/operators';
+import { EMPTY, Subject, of, throwError } from 'rxjs';
+import { catchError, filter, switchMap, take, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
 import { ActiveContextService } from './active-context.service';
@@ -18,7 +18,7 @@ import { allItemsLabeled } from '../utils/all-labeled';
 import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 import type { FloorState } from '../generated/api-client/models/floor-state';
-import { lineFloorFrom } from '../utils/line-floor';
+import { isUnpromised, lineFloorFrom, type LineFloor } from '../utils/line-floor';
 
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
@@ -30,7 +30,7 @@ import { lineFloorFrom } from '../utils/line-floor';
  * {@link SortStateService} (as issue #3428 originally proposed) would mean
  * either reinventing pair-scoped cancellation inside a singleton or passing a
  * component's scope subject into one; `PairScopeService`'s header records the
- * same trap being declined for `seedInclusion` (#3448).
+ * same trap being declined for `seedMinPrecision` (#3448).
  *
  * ## Why these two things are one service
  *
@@ -159,6 +159,35 @@ export class SortRunnerService {
     this.sortState.stopFindProgressTracking();
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
+  }
+
+  /**
+   * Precision floors awaiting their `POST /api/min-precision`, one at a time.
+   *
+   * `switchMap`, so a floor the user moved past (arrowing through the picker
+   * fires one change per key) can never land after the newer one. And the
+   * re-sort that follows a floor change is started from the response rather
+   * than beside the request: the learned sort reads the floor at request time
+   * and caches its result by it, so a re-sort that beat the POST to the server
+   * would hand back the old floor's line from that cache.
+   */
+  private readonly minPrecisionRequests$ = new Subject<number>();
+
+  constructor() {
+    this.minPrecisionRequests$
+      .pipe(
+        switchMap((value) =>
+          this.sortingApi.setMinPrecision(value).pipe(
+            // Pair-scoped like every threshold write (see `PairScopeService`).
+            this.pairScope.scoped(),
+            // A failed POST leaves the line where it was; swallowed inside so
+            // it cannot end the long-lived pipeline and silence later picks.
+            catchError(() => EMPTY),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((resp) => this.afterFloorChange(lineFloorFrom(resp)));
   }
 
   // --- Sort handlers ---
@@ -617,18 +646,37 @@ export class SortRunnerService {
       });
   }
 
-  // --- Inclusion ---
+  // --- Precision floor ---
 
-  onInclusionChange(value: number): void {
-    this.sortState.setInclusion(value);
-    this.sortingApi.setInclusion(value).pipe(this.pairScope.scoped()).subscribe();
-    this.autoSelectNext();
-    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
-      this.scheduleLearnedSort(false);
+  onMinPrecisionChange(value: number): void {
+    this.sortState.setMinPrecision(value);
+    this.minPrecisionRequests$.next(value);
+  }
+
+  /**
+   * The server has the new floor. Only a learned ranking draws the detector's
+   * line, so only it can move: every other sort ranks by something else and
+   * keeps its own threshold.
+   *
+   * When the floor promised nothing before and still promises nothing, both
+   * lines are the default cut, so the line stays put and only its verdict
+   * changes (the Good votes it has, or unreachable becoming too little
+   * evidence). Otherwise the learned sort re-runs at the new floor, which
+   * brings the line, its verdict, the count above it and Autopilot's
+   * acquisition cut back together, and lands on the next pick from them.
+   */
+  private afterFloorChange(floor: LineFloor | null): void {
+    if (this.sortState.sortMode !== 'learned') return;
+    if (isUnpromised(this.sortState.floor) && isUnpromised(floor)) {
+      this.sortState.setFloor(floor);
+      return;
+    }
+    if (this.voteState.learnedSortAvailable) {
+      this.scheduleLearnedSort();
     }
   }
 
-  /** Coalesce a flurry of re-rank triggers (a vote, an inclusion drag) into one
+  /** Coalesce a flurry of re-rank triggers (a vote, a floor change) into one
    *  learned sort 300ms after the last of them. */
   scheduleLearnedSort(autoSelect = true): void {
     if (this.learnedSortPending) return;
