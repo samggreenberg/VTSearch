@@ -22,10 +22,6 @@
 // margin to space it from the form below; the parent `.importer-form`
 // already provides `gap: var(--space-lg)` (12px) which is plenty.
 
-.required {
-  color: var(--color-bad);
-}
-
 .form-actions {
   display: flex;
   justify-content: flex-end;

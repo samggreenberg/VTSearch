@@ -24,6 +24,16 @@ not list every commit. Use `git log` for the full history.
   (replacing its two dots), and Explore Diversity is paced against its
   coverage goal, now shown as *Diversity: 13/40*. The labeling-status span
   indicator reports that goal as `target`.
+- **Required fields you haven't filled in are outlined in red** (issue
+  #4311). A form that stars a field as required now marks the box you answer
+  in as well: until it holds a value, it has a red border over a faint red
+  tint. It looks normal again while you type in it, and stays normal once
+  filled. This covers every plugin form (Add Dataset, Import Labels, Export,
+  AutoRun, and the Settings importer and exporter), the drop zones for a
+  required folder or file, **Combine Detectors**' name, and **New
+  Detector**'s example. Add Dataset's **Folder to import**, always required
+  but never starred, now says so. New Detector's **Detector name** stays
+  unmarked: the app fills it in from the example.
 - **Check the line from the floor control, and see how close it got** (issue
   #4273, the app half of #4272). Beside the precision floor's note, **Check 5
   picks** (29 at Correct) opens the spot check: a random pick at a time

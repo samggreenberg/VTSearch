@@ -1,11 +1,12 @@
 <div class="importer-form">
   <div class="form-group">
-    <label class="form-label" for="sf-path-input" title="Absolute path of the folder (or archive file) on the server to import from.">Folder to import</label>
+    <label class="form-label" for="sf-path-input" title="Absolute path of the folder (or archive file) on the server to import from.">Folder to import <span class="required">*</span></label>
     <div class="browse-row">
       <input
         id="sf-path-input"
         type="text"
         class="form-input"
+        required
         placeholder="/absolute/server/path/to/folder"
         [ngModel]="pathInputValue()"
         (ngModelChange)="onPathInput($event)"

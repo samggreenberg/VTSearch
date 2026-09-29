@@ -118,6 +118,7 @@
               <div class="text-input-row">
                 <input
                   class="form-input"
+                  [required]="!hasMediaExample"
                   [ngModel]="pendingText()"
                   (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
@@ -143,6 +144,7 @@
                 <vt-drop-zone
                   [label]="dropMediaLabel"
                   sublabel="or click to upload from this computer"
+                  [missing]="!hasExample"
                   (filesSelected)="onLocalFileDropped($event)"
                 ></vt-drop-zone>
               }
@@ -213,6 +215,7 @@
                       [id]="'nmm-' + field.key"
                       type="text"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                     />
@@ -221,6 +224,7 @@
                       [id]="'nmm-' + field.key"
                       type="file"
                       class="form-input"
+                      [required]="!!field.required"
                       [accept]="field.accept || ''"
                       [title]="field.description || field.label || field.key"
                       (change)="onLabelImporterFileSelected($event, field.key)"
@@ -230,6 +234,7 @@
                       [id]="'nmm-' + field.key"
                       type="password"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -240,6 +245,7 @@
                       [id]="'nmm-' + field.key"
                       type="email"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -250,6 +256,7 @@
                       [id]="'nmm-' + field.key"
                       type="url"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -260,6 +267,7 @@
                       [id]="'nmm-' + field.key"
                       type="text"
                       class="form-input"
+                      [required]="!!field.required"
                       [attr.list]="'nmm-' + field.key + '-list'"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
@@ -280,6 +288,7 @@
                     <select
                       [id]="'nmm-' + field.key"
                       class="form-select"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [title]="field.description || field.label || field.key"
@@ -303,6 +312,7 @@
                       [id]="'nmm-' + field.key"
                       type="number"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -316,6 +326,7 @@
                       [id]="'nmm-' + field.key"
                       type="text"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -404,7 +415,7 @@
     <button
       modal-footer-start
       type="button"
-      class="advanced-toggle"
+      class="link-btn advanced-toggle"
       (click)="toggleAdvanced()"
       [attr.aria-expanded]="advancedOpen()"
       [attr.aria-controls]="advancedOpen() ? 'new-detector-advanced' : null"

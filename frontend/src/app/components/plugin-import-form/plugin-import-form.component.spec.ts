@@ -96,6 +96,34 @@ describe('PluginImportFormComponent (datasource-importer default binding)', () =
     expect(component.canSubmit).toBe(true);
   });
 
+  it('marks the control of a required field, not only its label (#4311)', async () => {
+    setImporter({
+      name: 'imp',
+      fields: [
+        { key: 'title', field_type: 'text', required: true },
+        { key: 'note', field_type: 'text' },
+        { key: 'kind', field_type: 'select', options: ['a', 'b'], required: true },
+        { key: 'data', field_type: 'file', required: true },
+        { key: 'path', field_type: 'server_path', required: true },
+      ],
+    });
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const control = (id: string) => el.querySelector(`#pif-${id}`) as HTMLInputElement;
+    expect(control('title').required).toBe(true);
+    expect(control('note').required).toBe(false);
+    expect(control('kind').required).toBe(true);
+    expect(control('data').required).toBe(true);
+    // The server-path browser forwards it to the path input it wraps.
+    expect((el.querySelector('vt-file-browser input') as HTMLInputElement).required).toBe(true);
+
+    // `.form-input:required:invalid` keys off the browser's own verdict: an
+    // empty required field is missing its value, a defaulted one is not.
+    expect(control('title').validity.valueMissing).toBe(true);
+    expect(control('kind').validity.valueMissing).toBe(false);
+  });
+
   it('posts the values and emits the fetched item on success', () => {
     vi.spyOn(component.imported, 'emit');
     setImporter({
