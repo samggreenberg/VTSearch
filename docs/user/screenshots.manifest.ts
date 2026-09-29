@@ -16,9 +16,11 @@
  * reach every frame.
  */
 
+import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
+import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, REPO, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -321,8 +323,33 @@ async function newDetectorImageTab(page: Page, h: Helpers): Promise<void> {
   await h.wait(500);
 }
 
+/**
+ * Where the app keeps detector example media: the `example_media/` of its data
+ * dir (refresh.sh's fresh one, else the checkout's).
+ */
+const EXAMPLE_MEDIA = join(process.env.SHOTS_APP_DATA_DIR || join(REPO, 'data'), 'example_media');
+
+/** The example media there before a shot dropped one in (`dropExample`). */
+let examplesBefore: Set<string> | null = null;
+
+const exampleMediaFiles = () => new Set(existsSync(EXAMPLE_MEDIA) ? readdirSync(EXAMPLE_MEDIA) : []);
+
+/**
+ * Delete the example media a shot dropped in, and only those. Every drop is
+ * saved under a random name, and the Load sort lists them, so they would pile
+ * up in later shots (#4299); there is no route that deletes one.
+ */
+function removeDroppedExamples(): void {
+  if (!examplesBefore) return;
+  for (const name of exampleMediaFiles()) {
+    if (!examplesBefore.has(name)) rmSync(join(EXAMPLE_MEDIA, name), { force: true });
+  }
+  examplesBefore = null;
+}
+
 /** ...then hand it a yellow smiley from the training pile, as if dropped from the desktop. */
 async function dropExample(page: Page, h: Helpers): Promise<void> {
+  examplesBefore = exampleMediaFiles();
   await newDetectorImageTab(page, h);
   await page.locator('.example-panel .drop-zone-input').setInputFiles(trainingPicture('yellow-smiley').path);
   await page.waitForSelector('[role=dialog][aria-label="Use This Example?"]', { timeout: 20000 });
@@ -1290,6 +1317,7 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await dropExample(page, h);
     },
+    after: async () => removeDroppedExamples(),
   },
   {
     id: 'example-stack',
@@ -1310,6 +1338,7 @@ export const SHOTS: Shot[] = [
       await page.locator('#detector-name').fill('Smileys by example');
       await h.wait(700);
     },
+    after: async () => removeDroppedExamples(),
   },
   {
     id: 'example-seed-menu',
