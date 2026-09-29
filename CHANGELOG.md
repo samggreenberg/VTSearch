@@ -163,6 +163,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Opening Train shows the same first item every time** (issue #4318).
+  Entering Train with a detector that already had labels could show one of
+  several items, depending on which of the sorts it starts on entry answered
+  first. Autopilot's text-hint sort could even land after the detector's own
+  ranking and replace it. A newer sort now always wins over an older one
+  still running, and until you click, vote or step, the first item follows
+  the ranking the window settles on.
 - **`↓` then `↑` returns you to the item you were on** (issue #4306). `↑`
   re-ran the advance instead, and the ranking has often moved since the item
   was picked (in Train the re-sort a vote triggers lands after it; in Find each

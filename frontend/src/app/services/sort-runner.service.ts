@@ -322,7 +322,7 @@ export class SortRunnerService {
   /**
    * @param autoSelect Whether the finished ranking may move the centre viewer.
    *                   False on the pair-switch path, where the selection is the
-   *                   view's pair-change seed effect to place (#3510).
+   *                   view's centre effect to place (#3510, #4318).
    */
   onTextSort(text: string, autoSelect = true): void {
     this.sortState.setTextQuery(text);

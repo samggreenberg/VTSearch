@@ -276,8 +276,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private autopilotTextSortPending = false;
   private autopilotMediaSortPending = false;
   /** `autoSelect` for whichever of the two pending seed sorts above is armed:
-   *  a seeded re-rank defers its selection to the seed effect below, and the
-   *  deferral must survive the wait for medias. */
+   *  a seeded re-rank defers its selection to the centre effect below, and
+   *  the deferral must survive the wait for medias. */
   private pendingSeedAutoSelect = true;
   /** Armed on entry and on each pair reload; consumed once medias first render
    *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
