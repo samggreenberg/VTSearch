@@ -170,11 +170,11 @@ These are the questions #4224 raised that no issue below can settle alone:
 
 <!-- item-sep -->
 
-- [ ] #4272 — Backend: earn the promise with a spot check, not the estimator (Opus 4.8)
+- [ ] #4272 — Backend: a spot check, not the estimator, decides the line and how close it got (Opus 4.8)
 
 <!-- item-sep -->
 
-- [ ] #4273 — Frontend: the spot-check step that earns the promise (Sonnet 5; Opus 4.8 for its state and write paths)
+- [ ] #4273 — Frontend: the spot-check step, and how close the line got (Sonnet 5; Opus 4.8 for its state and write paths)
 
 <!-- item-sep -->
 
