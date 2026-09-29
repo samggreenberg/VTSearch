@@ -171,3 +171,32 @@ including a no-detector session scored AP 0). The floor readout is
 Files here:
 - `opening.csv`, `harvest.csv`, `starved.csv`, `quality_paired.csv`, `verdict.json`: the tables above.
 - `floor_summary.csv`: the floor readout.
+- `order_quality_paired.csv`, `order_opening.csv`: the addendum's arms against g3.
+
+## Addendum: today's two rounds first (#4282, run 2026-09-29)
+
+Does the long walk's early cost come from training without the midpoint negatives
+that `b4@mid` supplies, now that it runs last? The same opening with today's two rounds
+first, `g3@top,b4@mid,g20+dry1/16@top`, was run in both pools (720 cells each, same
+controls). The rule was fixed on #4282 before the run. Prefer the reordered opening if,
+in both pools:
+- (a) its vote-25 loss against g3 is at most half of `g3, g20+dry1/16`'s; and
+- (b) its vote-150 AP is not below `g3, g20+dry1/16`'s by more than 2 paired SE.
+
+Paired cell by cell against `g3, g20+dry1/16` (`order_quality_paired.csv` holds the
+per-arm tables against g3):
+
+| pool | vote 25 | vote 150 | vote-25 loss vs g3: floored → reordered |
+|---|---|---|---|
+| 0.44% | +0.038 ± 0.004 | −0.0011 ± 0.0007 | −0.074 → −0.036 (49% of the loss) |
+| 0.1% | +0.037 ± 0.003 | −0.0015 ± 0.0007 | −0.10 → −0.067 (64%) |
+
+**By the rule, keep `g3@top,g20+dry1/16@top,b4@mid`.** At 0.1%, (a) fails (64% > 50%)
+and (b) fails narrowly (2.1 SE). The hypothesis is only half right: the early
+negatives recover about half the early loss, not all of it.
+
+**The trade is still the owner's to weigh.** The reordered opening gives back about
++0.04 AP at vote 25 for about −0.001 at vote 150. The two arms walk the same length
+(median 40 and 51 votes), find the same Goods (15 and 5.3), and leave the same
+sessions without a detector. If users often stop within the first 50 votes, the
+reordered opening is the better product. The vote-150 rule doesn't see that. See #4282.
