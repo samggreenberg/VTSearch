@@ -138,6 +138,13 @@ export class KeyboardHelpModalComponent implements OnInit {
     return `mailto:${encodeURIComponent(email)}?subject=VTSearch%20Issue%3A`;
   });
 
+  /** This deployment's own documentation (the server's ``docs_links``
+   *  setting), in the operator's order, listed in the footer so it shows
+   *  whichever tab is open. Empty (and the block hidden) until settings load,
+   *  or on a server that configured none. The server has already dropped any
+   *  entry without a label or a usable URL. */
+  readonly docsLinks = computed(() => this.settingsState.settingsSignal()?.docs_links ?? []);
+
   readonly activeTab = signal<Tab>('shortcuts');
   /** Which shortcut context's panel is shown under the "Keyboard shortcuts" tab. */
   readonly activeContext = signal<string>('find');

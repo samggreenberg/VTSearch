@@ -1554,7 +1554,9 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
 - **Keyboard shortcuts and the in-app guide.** Press **`?`** any time, or
   click the **?** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-help.dark.webp" /><img src="assets/icon-help.light.webp" alt="The Help (?) button" height="24" /></picture> at the top right, to open the help sheet. It has two tabs: a **Keyboard shortcuts**
   reference and a **User guide** that renders this document inside the
-  app (matching your theme).
+  app (matching your theme). If whoever runs your server has written docs of
+  their own (for the plugins they added, say), they are listed at the bottom
+  under **Docs for this server**, and each opens in a new tab.
 - **Step back and forward through the queue.** `→` and `←` cast the
   vote; `↓` and `↑` move you around it without casting one. **`↓`**
   returns you to the item you just voted on - press it again to step

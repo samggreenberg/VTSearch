@@ -1,9 +1,12 @@
+import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { KeyboardHelpModalComponent, headingSlug, resolveDocPath } from './keyboard-help-modal.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { SettingsStateService } from '../../../services/settings-state.service';
+import type { AppSettings } from '../../../generated/api-client/models/app-settings';
 
 /**
  * The guide's table of contents is written against GitHub's heading anchors,
@@ -221,6 +224,72 @@ describe('KeyboardHelpModalComponent — how-to pages in the guide pane', () => 
   it('leaves a link out of docs/user/ to the browser', async () => {
     await openGuide('[Setup](../SETUP.md)');
     expect(clickLink('../SETUP.md')).toBe(false);
+  });
+});
+
+/**
+ * A deployment can list its own docs (plugin guides, a lab wiki) through the
+ * server's ``docs_links`` setting (#4310). They sit in the footer, so they
+ * show on every tab, and each opens in a new tab.
+ */
+describe('KeyboardHelpModalComponent — server doc links', () => {
+  let fixture: ComponentFixture<KeyboardHelpModalComponent>;
+  let settingsSignal: WritableSignal<AppSettings | null>;
+
+  beforeEach(async () => {
+    settingsSignal = signal<AppSettings | null>(null);
+    await configureZoneless({
+      imports: [KeyboardHelpModalComponent],
+      providers: [...provideHttpTesting(), { provide: SettingsStateService, useValue: { settingsSignal } }],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(KeyboardHelpModalComponent);
+  });
+
+  function docLinks(): HTMLAnchorElement[] {
+    return Array.from(fixture.nativeElement.querySelectorAll('.help-docs a'));
+  }
+
+  it('shows no docs block when the server lists none', async () => {
+    settingsSignal.set({ docs_links: [] });
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.help-docs')).toBeNull();
+    // The "Email us" line is unaffected.
+    expect(fixture.nativeElement.querySelector('.help-footer__contact a')?.getAttribute('href')).toMatch(/^mailto:/);
+  });
+
+  it('shows no docs block before settings load', async () => {
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.help-docs')).toBeNull();
+  });
+
+  it("lists the server's links in its order, each opening in a new tab", async () => {
+    settingsSignal.set({
+      docs_links: [
+        { label: 'Acme plugin guide', url: 'https://acme.example/docs' },
+        { label: 'Lab wiki', url: '/wiki/vtsearch' },
+      ],
+    });
+    await fixture.whenStable();
+
+    const links = docLinks();
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['https://acme.example/docs', '/wiki/vtsearch']);
+    expect(links[0].textContent).toContain('Acme plugin guide');
+    expect(links[1].textContent).toContain('Lab wiki');
+    for (const a of links) {
+      expect(a.getAttribute('target')).toBe('_blank');
+      expect(a.getAttribute('rel')).toBe('noopener noreferrer');
+    }
+  });
+
+  it('keeps the links on the User guide tab too', async () => {
+    settingsSignal.set({ docs_links: [{ label: 'Acme plugin guide', url: 'https://acme.example/docs' }] });
+    fixture.componentInstance.selectTab('guide');
+    TestBed.inject(HttpTestingController).expectOne('assets/docs/USER_GUIDE.md').flush('# Guide');
+    await fixture.whenStable();
+
+    expect(docLinks().length).toBe(1);
   });
 });
 

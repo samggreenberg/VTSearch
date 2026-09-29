@@ -117,8 +117,12 @@
   font-size: var(--font-sm);
 }
 
+// Below every tab: the server's own doc links (when it configured any), then
+// the "Email us" line.
 .help-footer {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
   padding-top: var(--space-md);
   border-top: 1px solid var(--border);
   color: var(--text-muted);
@@ -126,6 +130,31 @@
 
   a {
     color: var(--accent, var(--text-primary));
+  }
+}
+
+.help-footer__contact {
+  margin: 0;
+}
+
+.help-docs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+// Links run inline, middot-separated, and wrap as the list grows.
+.help-docs__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li + li::before {
+    content: '·';
+    margin-right: var(--space-sm);
   }
 }
 
