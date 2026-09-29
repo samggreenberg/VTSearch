@@ -1924,7 +1924,9 @@ export const SHOTS: Shot[] = [
       await page.locator('vt-modal .btn--primary', { hasText: 'Import' }).first().click();
       const row = page.locator('tr.loading-task-row vt-job-progress').first();
       await row.locator('.jp__header', { hasText: 'Step 3 of 4' }).waitFor({ timeout: 180000 });
-      await row.locator('.jp__detail', { hasText: /^\d+\/\d+/ }).waitFor({ timeout: 60000 });
+      // Past the step's `0/240 Embedding 240 item(s)…` preamble, to the first
+      // batch, where the line names the embedder as it counts.
+      await row.locator('.jp__detail', { hasText: /^[1-9]\d*\/\d+/ }).waitFor({ timeout: 120000 });
       await page.mouse.move(700, 60);
       // Replacing each element's text detaches the text node the app updates,
       // so the pin holds; the bar's width is an inline style it re-binds, so
