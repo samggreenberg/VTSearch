@@ -234,10 +234,6 @@ build on.
   - #4219, the production head decision, read partly through Inclusion.
 
   Their acquisition-side findings may survive, because acquisition still
-  re-cuts `mid_tilt`. Their reporting-side ones do not. #4121 (the fused cut
-  drifting into the negatives once positives are exhausted) is live only while
-  an unpromised floor falls back to the Inclusion 0 cut. Close it as not
-  planned when #4272 merges: the line then reads the ranking, which past
-  exhaustion is unharmed.
+  re-cuts `mid_tilt`. Their reporting-side ones do not.
 
 <!-- item-sep -->
