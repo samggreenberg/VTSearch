@@ -144,8 +144,12 @@ What follows is what the app still owes.
     10% floor runs unmeasured.
 - **What waits on the GRID, and what doesn't.**
   - The spot check needs no GRID run: #4257's rank frames price it exactly.
-  - #4222's opening now matters for detector quality only, since the promise no
-    longer depends on the calibration gate. A moderate text walk (Good target 6)
+  - #4222's opening no longer decides whether a promise can be made, since the
+    promise no longer depends on the calibration gate. It still moves what the
+    check returns: at 0.44% and vote 150 the shipped opening (#4282) confirms a 50%
+    floor in 34% of sessions against 28%, with the top 32 58% right against 53%.
+    At 0.1% it changes nothing
+    ([`REPORT.md`](../experiments/2026-09-29-floor-opening-4287/REPORT.md), #4287). A moderate text walk (Good target 6)
     is the only tested change that helps the detector at both 0.44% and 0.1%.
     Its dry stop has since landed (`g3@top,g20+dry1/16@top,b4@mid`,
     [`REPORT.md`](../experiments/2026-09-29-drystop-4222/REPORT.md)). It raises
