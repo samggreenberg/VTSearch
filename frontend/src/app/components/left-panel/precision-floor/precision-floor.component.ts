@@ -3,6 +3,8 @@ import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.co
 import {
   FLOOR_PRESETS,
   DEFAULT_MIN_PRECISION,
+  checkLabel,
+  checkTitle,
   floorExplanation,
   floorSummary,
   isFloorPreset,
@@ -36,7 +38,13 @@ type Dot = 'green' | 'yellow' | 'red' | 'none';
  * check's likely range and the count kept, the range a short check found, or
  * the top N kept unchecked. The floor goes by its name; the range a check
  * measured stays a number (#4298). There is no "off": every detector has a
- * floor (#4269). The check step itself is #4273's.
+ * floor (#4269).
+ *
+ * Beside it sits the check affordance, "Check 5 picks" (#4273), in every
+ * state: it opens the spot check (`vt-floor-check-modal`, hosted by the view),
+ * and after a finished check it runs a fresh one - there is no separate
+ * re-check button. A range that later votes have left stale reads exactly as
+ * before; only its tooltip says so.
  *
  * Content marked `floorActions` is projected onto the picker's line, so a host
  * can seat controls beside the picker (Find's work-queue actions) while the
@@ -59,15 +67,19 @@ export class PrecisionFloorComponent {
   readonly returned = input<number | null>(null);
   /** True while a sort or Find pass runs; a snap to a preset waits for it. */
   readonly busy = input(false);
+  /** False while the host can't run a check (a sort or a scoring pass in flight, or the panel disabled). */
+  readonly checkable = input(true);
 
   /** A floor the user picked, as a fraction. */
   readonly valueChange = output<number>();
+  /** The user asked for a spot check of the line. */
+  readonly check = output<void>();
 
   readonly hint =
     'Lean the line toward Complete, to return as much as it can at the cost of more wrong ones, or toward ' +
     'Correct, to return less with little of it wrong; Centered sits between them. The line keeps the top of ' +
     'the ranking, more of it the further it leans toward Complete. A check of a few random picks from that ' +
-    'set measures how much of it is right; until one runs the set is unchecked, and a check that falls ' +
+    'set - "Check" - measures how much of it is right; until one runs the set is unchecked, and a check that falls ' +
     'short keeps the top 32 it ended on and says how close it got.';
 
   readonly options = FLOOR_PRESETS.map((p) => ({ value: String(p.value), label: p.name }));
@@ -77,6 +89,8 @@ export class PrecisionFloorComponent {
 
   readonly summary = computed(() => floorSummary(this.floor()));
   readonly explanation = computed(() => floorExplanation(this.floor()));
+  readonly checkText = computed(() => checkLabel(this.floor()));
+  readonly checkHint = computed(() => checkTitle(this.floor()));
 
   readonly dot = computed<Dot>(() => {
     switch (this.floor()?.status) {

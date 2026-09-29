@@ -74,7 +74,8 @@ autodetect results.
 
 The fields mean what they do on `/api/min-precision` above. The line keeps a
 set in every state: every match, count and action keeps working on it, and
-the app labels an `unchecked` or `short` line *unpromised*. It is never
+the app draws it the same in all three, with the state and its range in the
+floor control and on the Find Stats chart. It is never
 `null` for want of a check. A headless run (AutoRun, the CLI) has nobody to
 vote, so it exports the `unchecked` starting candidate and records it as such.
 

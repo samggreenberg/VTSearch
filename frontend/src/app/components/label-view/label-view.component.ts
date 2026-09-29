@@ -35,6 +35,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
+import { FloorCheckModalComponent, type FloorCheckVoted } from '../modals/floor-check-modal/floor-check-modal.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
@@ -59,6 +60,7 @@ type SeedTrigger = 'entry' | 'pair' | 'retrain';
     RightPanelComponent,
     ProgressModalComponent,
     ResortPromptModalComponent,
+    FloorCheckModalComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
     PanelResizeDirective
@@ -197,6 +199,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get gridGoalWidthLeft(): number { return this.panelState.gridGoalWidthLeft; }
   get focusModeLeft(): 'click' | 'hover' { return this.panelState.focusModeLeft; }
   get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
+
+  /** The precision floor's spot check is open (#4273). */
+  readonly showFloorCheck = signal(false);
 
   // Re-sort prompt state
   readonly showResortPrompt = signal(false);
@@ -892,6 +897,32 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortRunner.onMinPrecisionChange(value);
   }
 
+  /** The floor control's "Check N picks": open the spot check (#4273). */
+  onFloorCheck(): void {
+    if (this.sortState.sortBusy) return;
+    this.showFloorCheck.set(true);
+  }
+
+  /**
+   * A round of the check landed. Its votes are ordinary votes, so the piles
+   * catch up; a finished check has moved the line to the set it ended on.
+   * No re-sort here: the owner's model is that *later* votes retrain and move
+   * the list under a result, and the next ordinary vote does that as usual.
+   */
+  onFloorCheckVoted(event: FloorCheckVoted): void {
+    this.voteState.loadVotes();
+    this.labelsetState.refresh();
+    if (event.finished) this.sortRunner.refreshLine();
+  }
+
+  /** The check closed, however it ended: catch up on anything it left behind. */
+  onFloorCheckClosed(): void {
+    this.showFloorCheck.set(false);
+    this.voteState.loadVotes();
+    this.labelsetState.refresh();
+    this.sortRunner.refreshLine();
+  }
+
   // --- Media selection ---
 
   onMediaSelect(id: number): void {
@@ -904,14 +935,25 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *
    * `back` walks the trail of items already voted on, one press per step, and
    * counts as an explicit pick (so the "nothing left" pane gets out of the
-   * way, exactly as clicking the item in a pile would). `forward` is the same
-   * advance a vote makes — the top unlabeled item of the ranking — and is the
-   * user saying they are done looking back, so it releases that pick.
+   * way, exactly as clicking the item in a pile would). `forward` is the user
+   * saying they are done looking back: it returns them to the item the walk
+   * started from (#4306), or — with no walk to end — takes the same advance a
+   * vote makes and releases that pick.
+   *
+   * While the "nothing left" pane is up the user is standing on no item, even
+   * though the selection still names the last one shown, so the walk records
+   * `null` as its start and `forward` from it lands back on the pane.
    */
   onNavigate(direction: NavDirection): void {
+    const here = this.centreExhausted() ? null : this.mediaState.selectedId();
     if (direction === 'back') {
-      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      const id = this.voteHistory.stepBack(here);
       if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    const origin = this.voteHistory.stepForward(here);
+    if (origin !== null) {
+      this.onMediaSelect(origin);
       return;
     }
     this.pickedWhileDone.set(null);

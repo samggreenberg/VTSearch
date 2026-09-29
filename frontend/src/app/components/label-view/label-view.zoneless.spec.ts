@@ -7,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import { LabelViewComponent } from './label-view.component';
 import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
@@ -406,6 +407,85 @@ describe('LabelViewComponent', () => {
       expect(fixture.nativeElement.querySelector('vt-center-panel')).toBeTruthy();
       expect(component.exhaustedHeading()).toBe('Nothing left to label');
       expect(component.exhaustedDetail()).toContain('Every item in this dataset is labeled');
+    });
+  });
+
+  /**
+   * #4306: `↑` used to re-run the advance, which picks off the *current*
+   * ranking — and the item on screen was picked off the one before the re-sort
+   * a vote schedules. So `↓` then `↑` routinely landed somewhere new.
+   */
+  describe('↓ then ↑ (#4306)', () => {
+    const allLabeled = { good: [1], bad: [2], click_times: {}, learned_scores: {} };
+    const history = () => TestBed.inject(VoteHistoryService);
+
+    it('returns to the item the walk started from, not the re-ranked pick', async () => {
+      flushInitialRequests(
+        { good: [1], bad: [], click_times: {}, learned_scores: {} },
+        [1, 2, 3].map((id) => ({ id, media_type: 'audio' })),
+      );
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(
+        [{ id: 1, score: 0.9 }, { id: 2, score: 0.8 }, { id: 3, score: 0.7 }],
+        0.5,
+      );
+      // The vote on 1 advanced to 2 ...
+      history().record(1);
+      component.mediaState.selectMedia(2);
+      // ... and the re-sort it scheduled then landed without moving the selection.
+      component.sortState.setSortResults(
+        [{ id: 1, score: 0.9 }, { id: 3, score: 0.85 }, { id: 2, score: 0.6 }],
+        0.5,
+      );
+      TestBed.tick();
+
+      component.onNavigate('back');
+      expect(component.mediaState.selectedId()).toBe(1);
+      component.onNavigate('forward');
+      expect(component.mediaState.selectedId()).toBe(2);
+
+      // With no walk left to end, `↑` is the advance again.
+      component.onNavigate('forward');
+      expect(component.mediaState.selectedId()).toBe(3);
+    });
+
+    it('lands back on the "nothing left" pane when the walk started there', async () => {
+      flushInitialRequests(allLabeled);
+      await settleResource();
+      history().record(1);
+      history().record(2);
+      // The last item voted on is still the selection behind the pane.
+      component.mediaState.selectMedia(2);
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(true);
+
+      component.onNavigate('back');
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(2);
+      expect(component.centreExhausted()).toBe(false);
+
+      component.onNavigate('forward');
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(true);
+    });
+
+    it('returns to an item picked while the pane was up', async () => {
+      flushInitialRequests(allLabeled);
+      await settleResource();
+      history().record(1);
+      history().record(2);
+      component.onMediaSelect(1);
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(false);
+
+      component.onNavigate('back');
+      expect(component.mediaState.selectedId()).toBe(2);
+
+      component.onNavigate('forward');
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(1);
+      expect(component.centreExhausted()).toBe(false);
     });
   });
 

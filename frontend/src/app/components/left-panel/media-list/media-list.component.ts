@@ -10,7 +10,7 @@ import { MediaStateService } from '../../../services/media-state.service';
 import { SkeletonComponent } from '../../skeleton/skeleton.component';
 import { SortedItem } from '../left-panel.component';
 import { prefersReducedMotion } from '../../../utils/reduced-motion';
-import { isUnpromised, unpromisedReason, type LineFloor } from '../../../utils/line-floor';
+import { floorExplanation, type LineFloor } from '../../../utils/line-floor';
 
 /**
  * Item count above which the thumbnail grid switches to CDK virtual scrolling.
@@ -67,9 +67,8 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
   /**
-   * What the precision floor says about `threshold` (#4247, #4272). An
-   * unchecked line, or one a check fell short on, still draws and is
-   * labelled unpromised; null (a sort with no detector) draws the plain line.
+   * What the precision floor says about `threshold` (#4272, #4273). The line
+   * draws the same in every state; its tooltip says which state it is in.
    */
   readonly floor = input<LineFloor | null>(null);
   readonly selectedId = input<number | null>(null);
@@ -89,13 +88,11 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   /** True while a page fetch is in flight (disables the Load-more trigger). */
   readonly loadingMore = input(false);
 
-  /** True when the set the line keeps is not a confirmed one. */
-  readonly unpromised = computed(() => isUnpromised(this.floor()));
-  /** The line's tooltip: what it is, and why it is unpromised when it is. */
+  /** The line's tooltip: what it is, and what the precision floor says about it. */
   readonly thresholdTitle = computed(() => {
-    const why = unpromisedReason(this.floor());
+    const state = floorExplanation(this.floor());
     const what = "The line between the detector's good and bad matches";
-    return why ? `${what}. Unpromised: ${why}` : what;
+    return state ? `${what}. ${state}` : what;
   });
 
   readonly mediaSelect = output<number>();

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PrecisionFloorComponent } from './precision-floor.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
-import { NO_PROMISE_STATES, lineFloor } from '../../../testing/line-floor';
+import { FLOOR_STATES, lineFloor } from '../../../testing/line-floor';
 import type { LineFloor } from '../../../utils/line-floor';
 
 describe('PrecisionFloorComponent (#4246)', () => {
@@ -140,26 +140,35 @@ describe('PrecisionFloorComponent (#4246)', () => {
       await show(0.9, lineFloor('short', { minPrecision: 0.9 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('red');
       expect(stateText()!.textContent).toContain('Aimed at Correct: likely 11–73% right (checked 5) · top 32 kept');
-      expect(stateText()!.getAttribute('title')).toContain('fell short');
-      expect(stateText()!.getAttribute('title')).not.toMatch(/sparse|weak|evidence/);
+      expect(stateText()!.getAttribute('title')).toContain('short of Correct');
+      expect(stateText()!.getAttribute('title')).not.toMatch(/sparse|weak|evidence|too few/i);
     });
 
     it('says an unchecked line keeps the starting candidate', async () => {
       await show(0.1, lineFloor('unchecked', { minPrecision: 0.1, count: 128 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('yellow');
       expect(stateText()!.textContent).toContain('Top 128 kept, unchecked · aiming at Complete');
-      expect(stateText()!.getAttribute('title')).toContain('Run a check');
+      expect(stateText()!.getAttribute('title')).toContain('nothing has measured how much of it is right');
+      expect(stateText()!.textContent).not.toMatch(/likely|%\s*right/);
     });
 
-    it('notes a stale range only in the tooltip', async () => {
-      const stale = { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true };
-      await show(0.5, lineFloor('short', { range: stale }), 300);
-      expect(stateText()!.textContent).toContain('likely 11–73% right (checked 5)');
-      expect(stateText()!.textContent).not.toContain('later votes');
+    it('prices an unchecked check off the schedule, rounds and all', async () => {
+      await show(0.1, lineFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }));
+      expect(stateText()!.getAttribute('title')).toContain('5 random picks a round, in up to 3 rounds');
+    });
+
+    it.each(['short', 'confirmed'] as const)('notes a stale %s range only in the tooltip', async (status) => {
+      const fresh = lineFloor(status);
+      await show(0.5, fresh, 300);
+      const freshText = stateText()!.textContent;
+      const freshMarkup = state()!.outerHTML.replace(/title="[^"]*"/g, '');
+      await show(0.5, lineFloor(status, { range: { ...fresh.range!, stale: true } }), 300);
+      expect(stateText()!.textContent).toBe(freshText);
+      expect(state()!.outerHTML.replace(/title="[^"]*"/g, '')).toBe(freshMarkup);
       expect(stateText()!.getAttribute('title')).toContain('Measured before your later votes');
     });
 
-    it.each(NO_PROMISE_STATES)('never shows an estimate from the model (%s)', async (status) => {
+    it.each(FLOOR_STATES)('never shows an estimate from the model (%s)', async (status) => {
       await show(0.5, lineFloor(status), 300);
       expect(stateText()!.textContent).not.toMatch(/about|estimated/i);
     });
@@ -168,6 +177,34 @@ describe('PrecisionFloorComponent (#4246)', () => {
       await show(0.9, lineFloor('short', { minPrecision: 0.5 }), 40);
       expect(select().value).toBe('0.9');
       expect(stateText()!.textContent).toContain('Aimed at Centered');
+    });
+  });
+
+  describe('the check affordance (#4273)', () => {
+    const checkBtn = () => (fixture.nativeElement as HTMLElement).querySelector('.floor-check-btn') as HTMLButtonElement | null;
+
+    it('is absent with no line to check', async () => {
+      await show(0.5, null);
+      expect(checkBtn()).toBeNull();
+    });
+
+    it.each(FLOOR_STATES)('offers a check in the %s state, and runs it on click', async (status) => {
+      await show(0.5, lineFloor(status), 32);
+      const emitted = vi.spyOn(component.check, 'emit');
+      expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
+      checkBtn()!.click();
+      expect(emitted).toHaveBeenCalledOnce();
+    });
+
+    it('reads the pick count off the schedule: 29 at Correct', async () => {
+      await show(0.9, lineFloor('confirmed', { minPrecision: 0.9, schedule: { candidate: 32, rounds: 1, picks: 29 } }));
+      expect(checkBtn()!.textContent!.trim()).toBe('Check 29 picks');
+    });
+
+    it('is held while the host cannot run a check', async () => {
+      fixture.componentRef.setInput('checkable', false);
+      await show(0.5, lineFloor('unchecked'));
+      expect(checkBtn()!.disabled).toBe(true);
     });
   });
 

@@ -17,6 +17,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Check the line from the floor control, and see how close it got** (issue
+  #4273, the app half of #4272). Beside the precision floor's note, **Check 5
+  picks** (29 at Correct) opens the spot check: a random pick at a time
+  from the set the line keeps, in the order it was drawn, with no rank or
+  score. Vote each one with → / ← or the Good / Bad buttons (↓ goes back to
+  change one); the last vote sends the round. A round that falls short says
+  *Not there yet: checking a shorter list* and draws a fresh one, and the
+  check ends on the result. The note then reads *Confirmed · likely 55–100%
+  right (checked 5) · 32 kept*, or *Aimed at Centered: likely 19–92% right
+  (checked 5) · top 32 kept*, naming no cause. The Find **Stats** chart stands
+  the same likely range at the line where it meets the floor. A range that
+  later votes have left stale looks the same everywhere; only its tooltip says
+  it was measured before them. The threshold line in the list and on the
+  minimap is no longer dashed or marked *unpromised*: it keeps a set in every
+  state. Cancelling a check leaves the floor as it was. A Find pass that
+  reuses the detector's cached head (re-entering Find, or Find straight after
+  training) now draws the floor's set too, rather than the head's old score
+  cut, and can be checked.
 - **A spot check, not an estimate, decides a detector's line and says how
   close it got** (issue #4272, the backend of #4267; the check's step in the
   app is #4273). Under a precision floor the line now always keeps a set: the
@@ -136,6 +154,13 @@ not list every commit. Use `git log` for the full history.
   `import_labels.media_type`.
 
 ### Fixed
+
+- **`↓` then `↑` returns you to the item you were on** (issue #4306). `↑`
+  re-ran the advance instead, and the ranking has often moved since the item
+  was picked (in Train the re-sort a vote triggers lands after it; in Find each
+  advance switches sides of the cutoff), so it landed on an item you had not
+  seen. `↑` now goes back to where the first `↓` started, and only takes the
+  usual advance once you have voted or picked something else in between.
 
 - **The Inclusion stepper no longer jumps the line early in a session.** With
   too few votes for the calibration splits, the first change of the stepper
