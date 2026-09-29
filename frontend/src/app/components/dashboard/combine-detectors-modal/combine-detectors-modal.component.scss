@@ -6,11 +6,7 @@
   max-width: 100%;
 }
 
-// `.form-group`, `.info-text`, `.error-text` come from `_components.scss`.
-
-.required {
-  color: var(--color-bad);
-}
+// `.form-group`, `.info-text`, `.error-text`, `.required` come from `_components.scss`.
 
 .source-list {
   list-style: none;

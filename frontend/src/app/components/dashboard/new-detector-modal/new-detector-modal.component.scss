@@ -50,8 +50,7 @@
   width: 100%;
 }
 
-// `.form-group`, `.info-text`, `.error-text` come from `_components.scss`.
-.required { color: var(--color-bad); }
+// `.form-group`, `.info-text`, `.error-text`, `.required` come from `_components.scss`.
 
 // Inline caution copy (no shared `--text-warning` utility class yet; mirrors
 // the local `.warn-text` in the combine-datasets modal).
@@ -333,21 +332,6 @@
   color: var(--text-warning);
   font-size: var(--font-sm);
   line-height: 1.35;
-}
-
-// Toggle for the collapsible "Advanced" section holding the Detector Embedder
-// Type picker. It sits at the left end of the footer row (`[modal-footer-start]`,
-// #4305), and mirrors the Add Dataset one (transparent, muted, link-like).
-.advanced-toggle {
-  background: transparent;
-  border: none;
-  padding: var(--space-2xs) 0;
-  font-size: var(--font-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover { color: var(--text-primary); text-decoration: underline; }
-  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 
 // Progress readout for the background media ingest that Create & Import waits

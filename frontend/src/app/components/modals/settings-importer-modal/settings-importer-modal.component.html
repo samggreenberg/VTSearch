@@ -56,6 +56,7 @@
                 [id]="'sif-' + field.key"
                 type="text"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
@@ -64,6 +65,7 @@
                 [id]="'sif-' + field.key"
                 type="file"
                 class="form-input"
+                [required]="!!field.required"
                 [accept]="field.accept || ''"
                 (change)="onFileSelected($event, field.key)"
               />
@@ -72,6 +74,7 @@
                 [id]="'sif-' + field.key"
                 type="text"
                 class="form-input"
+                [required]="!!field.required"
                 [attr.list]="'sif-' + field.key + '-list'"
                 [(ngModel)]="formValues[field.key]"
                 [disabled]="!!fieldOptions.loading()[field.key]"
@@ -90,6 +93,7 @@
               <select
                 [id]="'sif-' + field.key"
                 class="form-select"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 (ngModelChange)="onFormFieldChanged(field.key)"
                 [disabled]="!!fieldOptions.loading()[field.key] || (!!field.dynamic_options && fieldOptions.optionsFor(field).length === 0)"
@@ -111,6 +115,7 @@
                 [id]="'sif-' + field.key"
                 type="number"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
                 [attr.min]="field.min || null"
@@ -122,6 +127,7 @@
                 [id]="'sif-' + field.key"
                 [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />

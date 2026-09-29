@@ -407,6 +407,7 @@ SHARED_CLASSES = [
     "modal-close",
     "modal-backdrop",
     "back-btn",
+    "link-btn",
     "subhead",
 ]
 

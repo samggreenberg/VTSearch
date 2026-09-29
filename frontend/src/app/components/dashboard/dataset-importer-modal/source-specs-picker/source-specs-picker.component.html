@@ -22,7 +22,7 @@
     @if (hasNativeDetails()) {
       <button
         type="button"
-        class="advanced-toggle ssp-details-toggle"
+        class="link-btn ssp-details-toggle"
         (click)="onNativeDetailsClick()"
         title="Choose how to pre-process media before it's analyzed (e.g. clip into shorter segments)."
       >
@@ -53,7 +53,7 @@
       @if (hasDetails(st)) {
         <button
           type="button"
-          class="advanced-toggle ssp-details-toggle"
+          class="link-btn ssp-details-toggle"
           (click)="toggleDetails(st)"
           [attr.aria-expanded]="isDetailsOpen(st)"
           [title]="convertersFor(st).length > 1 ? 'Choose a converter and tune its options.' : 'Tune converter options.'"
