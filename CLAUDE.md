@@ -209,6 +209,14 @@ The pointer carries the issue number (the durable link) and a short human-readab
 
 **Dismissing an issue as unwarranted:** close it as `not_planned` with a one-line comment explaining why. If any plan file points at it (grep `docs/plans/` for `#<number>`), prune that pointer line in the same motion. Because plans carry only pointers — not bodies — this is always a trivial one-line deletion, whether the issue was dismissed or merged. (The Dev2Main Routine reconciles this automatically when it sweeps issues; a manual close should do the same pointer-prune by hand.)
 
+## Work still owed goes in an issue, never in a closing paragraph (CRITICAL)
+
+When a session ends with something left to do — a re-run, a correction to an old comment, a check that needs the GRID, a failure you did not fix — **file a GitHub issue for it**, following the filing rules in this file (search for a duplicate, label it, recommend a model), and link that issue in your summary. Do **not** write it into the end-of-turn message as a task for the user ("once this merges, you can re-run X from your laptop"). A to-do in the last paragraph of a long summary is easy to miss, cannot be tracked or closed, and gives the user work they never agreed to.
+
+**Before filing, check that the work is still owed.** Search the tracker, and read the threads the work comes from. A follow-up has often been done already: the session that fixed #3884 ended by telling the user to re-summarize a GRID JSONL to correct a figure in #3853, but the correction was already on record in #3877's closing comment, the same comment that filed #3884. If nothing is owed, say so in one line and file nothing.
+
+The split: a **decision** for the user goes through `AskUserQuestion`, and **work** goes into an issue (or, when it is design narrative, a plan under `docs/plans/`). Neither goes into prose.
+
 ## Label every issue you file (CRITICAL)
 
 **Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time — `labels: ["claude", …]` through the MCP tool, or `--label claude,experiment` through the `gh` CLI — not as a follow-up edit. If a label is missing from the repo, applying it creates it automatically — do not skip a label because it doesn't exist yet.
@@ -491,7 +499,7 @@ This applies to:
 - Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters and snapshot checks run before pytest; pyright and pip-audit run alongside it). There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
-If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
+If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it, and file an issue for it unless one already exists (see "Work still owed goes in an issue" above). The default is **fix it**; skipping requires justification.
 
 ## Nested-modal back buttons (Back vs Cancel)
 
