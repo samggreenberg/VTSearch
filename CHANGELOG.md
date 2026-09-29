@@ -63,6 +63,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A deployment can list its own docs in the Help modal** (issue #4310). An
+  operator who adds plugins or extensions points users at the docs for them
+  with a new `docs_links` key in `data/settings.json`: an ordered list of
+  `{"label": ..., "url": ...}` objects. The Help modal lists them under **Docs
+  for this server**, above the *Email us* line, on every tab; each opens in a
+  new browser tab. A URL must be an absolute `http(s)` URL or a `/path` on the
+  same host; an entry that isn't, or has no label, is left out, and the startup
+  log names it. Read-only over the API, like the other operator settings.
 - **AutoRun detectors really run on what you import, and on demand** (issue
   #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
   detectors run on every imported dataset, but only the CLI's `--autodetect`

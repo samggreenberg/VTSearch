@@ -59,6 +59,13 @@ class _PerMediaTypeStringListDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.List(fields.String()), **kwargs)
 
 
+class DocsLinkSchema(Schema):
+    """One entry of the server's ``docs_links`` list (a Help-modal link)."""
+
+    label = fields.String(required=True)
+    url = fields.String(required=True)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -169,6 +176,12 @@ class AppSettingsSchema(Schema):
     # can build a pre-addressed ``mailto:`` link. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     support_email = fields.String(dump_only=True)
+    # Server-tier list of this deployment's own documentation, rendered in the
+    # Help modal as links that open in a new tab. Set by editing the persisted
+    # settings file; surfaced read-only here, already normalized (entries
+    # without a label or a usable URL are dropped). Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    docs_links = fields.List(fields.Nested(DocsLinkSchema), dump_only=True)
     # Server-tier "Semantic embedders only" lock. Set via the
     # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
     # (process-wide, all users) or the persisted settings file; surfaced
@@ -325,6 +338,9 @@ class SettingsUpdateSchema(Schema):
     # NB: dataset_max_age_days is intentionally absent - it is a server-tier
     # retention policy set via --dataset-max-age-days (or the settings file),
     # not editable via PUT /api/settings. It is dump_only in AppSettingsSchema.
+    # NB: docs_links is intentionally absent too - it is the operator's list of
+    # Help-modal doc links, set in the settings file. It is dump_only in
+    # AppSettingsSchema.
 
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()
