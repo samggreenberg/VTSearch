@@ -25,7 +25,7 @@ export type { AutopilotPhase, AutopilotState };
  * A step's one light (#4319). It climbs red -> yellow -> green as the step
  * nears its end, and the step hands over to the next one at green.
  */
-export type LightColor = 'red' | 'yellow' | 'green';
+type LightColor = 'red' | 'yellow' | 'green';
 
 interface StepLight {
   color: LightColor;
