@@ -16,7 +16,7 @@ import { VoteStateService } from './vote-state.service';
  * ## Why this is a service and not two copies of a comment
  *
  * Every request whose response writes *pair-scoped* state — the ranking, the
- * threshold, the inclusion slider, the dataset name, the vote cache — must be
+ * threshold, the precision floor, the dataset name, the vote cache — must be
  * piped through {@link scoped} rather than component teardown, so the work
  * started for the pair we are leaving is torn down the instant the pair
  * switches.
@@ -79,11 +79,13 @@ export class PairScopeService implements OnDestroy {
   }
 
   /**
-   * Seed the inclusion slider from the active detector's per-detector value.
+   * Seed the precision-floor control from the active detector's own floor.
    *
-   * `GET /api/inclusion` resolves per-detector, falling back to the
-   * user-settings default the first time it is read, so this keeps the slider
-   * tracking the detector rather than a stale global.
+   * `GET /api/min-precision` resolves per-detector, falling back to the user's
+   * last floor the first time it is read, so this keeps the control tracking
+   * the detector rather than a stale global. Only the value is seeded: the
+   * verdict on the line arrives with the line itself, from the sort or Find
+   * run that draws it.
    *
    * This lives here rather than on `SortStateService` (as #3448 first proposed)
    * because `SortStateService` is a `providedIn: 'root'` signal store that
@@ -91,11 +93,11 @@ export class PairScopeService implements OnDestroy {
    * reinventing pair-scoped cancellation inside a singleton or passing a
    * component's scope subject *into* the singleton. #3428 flags the same trap.
    */
-  seedInclusion(): void {
+  seedMinPrecision(): void {
     this.sortingApi
-      .getInclusion()
+      .getMinPrecision()
       .pipe(this.scoped())
-      .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
+      .subscribe({ next: (resp) => this.sortState.setMinPrecision(resp.min_precision) });
   }
 
   /**
@@ -151,7 +153,7 @@ export class PairScopeService implements OnDestroy {
     this.clearPairState();
     this.mediaState.loadMedias();
     this.loadDatasetName();
-    this.seedInclusion();
+    this.seedMinPrecision();
   }
 
   ngOnDestroy(): void {

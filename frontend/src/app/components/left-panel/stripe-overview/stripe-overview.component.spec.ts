@@ -147,7 +147,7 @@ describe('StripeOverviewComponent', () => {
       expect(component.cachedThresholdPosition()).toBe(50);
       const title = el.querySelector('.stripe-overview')!.getAttribute('title')!;
       expect(title).toContain('The dashed line is unpromised');
-      expect(title).toContain('Inclusion 0');
+      expect(title).toContain('default cut');
     });
 
     it.each([lineFloor('promised'), lineFloor(null), null])('draws a plain line otherwise (%o)', async (floor) => {

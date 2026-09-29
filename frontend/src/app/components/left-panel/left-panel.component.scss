@@ -16,7 +16,7 @@
     .media-list-container,
     vt-sort-bar,
     vt-select-mode,
-    vt-inclusion-slider,
+    vt-precision-floor,
     .label-divider,
     vt-autopilot-panel {
       opacity: 0.45;
@@ -159,25 +159,33 @@
   margin-left: var(--space-xs);
 }
 
-// Find mode: the Inclusion cutoff and the unverified-positives work-queue
+// Find mode: the precision floor and the unverified-positives work-queue
 // actions share one row, with the action cluster pushed to the right edge.
-.find-inclusion-row {
+// Top-aligned, so the actions sit beside the floor's picker while its state
+// line wraps underneath; in a panel too narrow for both, the actions wrap.
+.find-floor-row {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-xs) var(--space-sm);
   padding: 0 var(--space-xs);
   flex-shrink: 0;
+
+  vt-precision-floor {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 
 // Icon-only action cluster (Browse / To Dataset / Export) sitting next to the
-// Inclusion control. Mirrors the right panel's ``.goods-actions``: compact,
+// precision floor. Mirrors the right panel's ``.goods-actions``: compact,
 // borderless, tooltip-labelled.
 .find-queue-actions {
   margin-left: auto;
 }
 
 // The buttons themselves are the shared `.card-icon-btn` primitive (see
-// `_components.scss`); this cluster just lays them out in the inclusion row.
+// `_components.scss`); this cluster just lays them out in the floor row.
 .goods-actions {
   display: flex;
   align-items: center;

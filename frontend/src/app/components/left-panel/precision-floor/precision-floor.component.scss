@@ -1,0 +1,57 @@
+.precision-floor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+.floor-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.floor-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+// The state line under the picker: the Smart/Stable/Diverse indicators' dot,
+// in the muted small type of the left panel's `.all-labeled-note`.
+.floor-state {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  margin: 0;
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+  cursor: help;
+
+  .indicator-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--indicator-dot);
+    flex-shrink: 0;
+    // Sit the dot on the text's x-height rather than its baseline.
+    transform: translateY(-1px);
+  }
+
+  &[data-status="green"] .indicator-dot {
+    background: var(--status-green-dot);
+  }
+
+  &[data-status="yellow"] .indicator-dot {
+    background: var(--status-yellow-dot);
+  }
+
+  &[data-status="red"] .indicator-dot {
+    background: var(--status-red-dot);
+  }
+}
+
+.floor-state-text {
+  min-width: 0;
+}

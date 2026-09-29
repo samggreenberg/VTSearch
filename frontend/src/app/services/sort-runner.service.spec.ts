@@ -11,7 +11,7 @@ import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
-import { NO_PROMISE_STATES, wireFloor } from '../testing/line-floor';
+import { NO_PROMISE_STATES, lineFloor, wireFloor } from '../testing/line-floor';
 
 /**
  * `SortRunnerService` in isolation.
@@ -398,17 +398,139 @@ describe('SortRunnerService', () => {
     });
   });
 
-  // --- inclusion ------------------------------------------------------------
+  // --- precision floor (#4246) ------------------------------------------------
 
-  it('pushes the inclusion value and re-advances the selection', () => {
-    sortState.setSelectMode('top');
-    sortState.setSortResults([{ id: 5, score: 0.9 }], 0.5);
+  describe('a precision-floor change', () => {
+    const floorPost = (req: { url: string; method: string }) =>
+      req.url === '/api/min-precision' && req.method === 'POST';
 
-    runner.onInclusionChange(0.25);
+    /** A learned ranking on screen, with the floor's verdict on its line. */
+    function learnedRanking(status: Parameters<typeof lineFloor>[0]): void {
+      enableLearnedSort();
+      sortState.setSortMode('learned');
+      sortState.setSelectMode('top');
+      sortState.setSortResults(
+        [
+          { id: 5, score: 0.9 },
+          { id: 6, score: 0.2 },
+        ],
+        0.5,
+        lineFloor(status),
+      );
+    }
 
-    expect(sortState.inclusion).toBe(0.25);
-    httpMock.expectOne('/api/inclusion').flush({ inclusion: 0.25 });
-    expect(mediaState.selectedId()).toBe(5);
+    afterEach(() => vi.useRealTimers());
+
+    it('posts the floor and moves the picker at once', () => {
+      runner.onMinPrecisionChange(0.75);
+
+      expect(sortState.minPrecision).toBe(0.75);
+      expect(httpMock.expectOne(floorPost).request.body).toEqual({ min_precision: 0.75 });
+    });
+
+    it('leaves a ranking the detector did not draw alone', () => {
+      vi.useFakeTimers();
+      sortState.setSortMode('text');
+      sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
+
+      runner.onMinPrecisionChange(0.25);
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.1, n_returned: 9 });
+      vi.advanceTimersByTime(1000);
+
+      httpMock.expectNone('/api/learned-sort');
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.floor).toBeNull();
+    });
+
+    it.each(NO_PROMISE_STATES)(
+      'keeps the default cut and swaps only the verdict when the floor still promises nothing (%s)',
+      (status) => {
+        vi.useFakeTimers();
+        learnedRanking('insufficient_evidence');
+
+        runner.onMinPrecisionChange(0.9);
+        httpMock.expectOne(floorPost).flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
+        vi.advanceTimersByTime(1000);
+
+        // Both lines are the default cut: no retrain for a line that cannot move.
+        httpMock.expectNone('/api/learned-sort');
+        expect(sortState.threshold).toBe(0.5);
+        expect(sortState.floor?.status).toBe(status);
+        expect(sortState.floor?.minPrecision).toBe(0.9);
+      },
+    );
+
+    it('re-runs the learned sort only once the server has the new floor', () => {
+      vi.useFakeTimers();
+      learnedRanking('promised');
+
+      runner.onMinPrecisionChange(0.25);
+      const post = httpMock.expectOne(floorPost);
+      // A re-sort that beat the POST would read the old floor server-side.
+      vi.advanceTimersByTime(1000);
+      httpMock.expectNone('/api/learned-sort');
+
+      post.flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.15, n_returned: 2 });
+      vi.advanceTimersByTime(300);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [
+          { id: 6, score: 0.2 },
+          { id: 5, score: 0.1 },
+        ],
+        threshold: 0.15,
+        acq_threshold: 0.18,
+        floor: wireFloor('promised', { minPrecision: 0.25 }),
+        total: 2,
+        above_threshold: 1,
+        has_more_below: false,
+      });
+
+      // The re-sort brings the line, its verdict, the count and the acquisition cut back together...
+      expect(sortState.threshold).toBe(0.15);
+      expect(sortState.acqThreshold).toBe(0.18);
+      expect(sortState.aboveThreshold).toBe(1);
+      expect(sortState.floor?.minPrecision).toBe(0.25);
+      // ...and lands on the next pick from them.
+      expect(mediaState.selectedId()).toBe(6);
+    });
+
+    it('re-sorts when a floor becomes promised', () => {
+      vi.useFakeTimers();
+      learnedRanking('insufficient_evidence');
+
+      runner.onMinPrecisionChange(0.25);
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('promised', { minPrecision: 0.25 }), threshold: 0.15, n_returned: 2 });
+      vi.advanceTimersByTime(300);
+
+      httpMock.expectOne('/api/learned-sort');
+    });
+
+    it('drops a floor the user moved past', () => {
+      learnedRanking('insufficient_evidence');
+
+      runner.onMinPrecisionChange(0.75);
+      const stale = httpMock.expectOne(floorPost);
+      runner.onMinPrecisionChange(0.25);
+
+      expect(stale.cancelled).toBe(true);
+      const fresh = httpMock.expectOne(floorPost);
+      expect(fresh.request.body).toEqual({ min_precision: 0.25 });
+      fresh.flush({ ...wireFloor('unreachable', { minPrecision: 0.25 }), threshold: 0.5, n_returned: 1 });
+      expect(sortState.floor?.minPrecision).toBe(0.25);
+    });
+
+    it('keeps posting after a failed change', () => {
+      learnedRanking('insufficient_evidence');
+
+      runner.onMinPrecisionChange(0.75);
+      httpMock.expectOne(floorPost).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expect(sortState.floor?.minPrecision).toBe(0.5);
+
+      runner.onMinPrecisionChange(0.9);
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('unreachable', { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
+      expect(sortState.floor?.status).toBe('unreachable');
+    });
   });
 
   // --- exhausted queue (#3887) ---------------------------------------------

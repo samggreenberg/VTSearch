@@ -449,7 +449,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
-    this.pairScope.seedInclusion();
+    this.pairScope.seedMinPrecision();
 
     // Reload data when the active pair changes via the top-bar switcher.
     // Skip the first emission; `ngOnInit` above already triggered the
@@ -884,10 +884,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortRunner.onSelectModeChange(mode);
   }
 
-  // --- Inclusion ---
+  // --- Precision floor ---
 
-  onInclusionChange(value: number): void {
-    this.sortRunner.onInclusionChange(value);
+  onMinPrecisionChange(value: number): void {
+    this.sortRunner.onMinPrecisionChange(value);
   }
 
   // --- Media selection ---

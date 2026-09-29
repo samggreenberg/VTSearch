@@ -11,7 +11,7 @@ import type { EvalTrainAndScoreResponse } from '../generated/api-client/models/e
 import type { ExampleSortResponse } from '../generated/api-client/models/example-sort-response';
 import type { FillFromSortRequest } from '../generated/api-client/models/fill-from-sort-request';
 import type { FillFromSortResponse } from '../generated/api-client/models/fill-from-sort-response';
-import type { InclusionResponse } from '../generated/api-client/models/inclusion-response';
+import type { MinPrecisionResponse } from '../generated/api-client/models/min-precision-response';
 import type { IndicatorScoreHistoryResponse } from '../generated/api-client/models/indicator-score-history-response';
 import type { LabelFileSortResponse } from '../generated/api-client/models/label-file-sort-response';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
@@ -27,8 +27,8 @@ import type { SortResponse } from '../generated/api-client/models/sort-response'
 import type { TextsortSuggestionsResponse } from '../generated/api-client/models/textsort-suggestions-response';
 import type { VotesResponse } from '../generated/api-client/models/votes-response';
 import { coverageAtlasNextGet } from '../generated/api-client/fn/sorting/coverage-atlas-next-get';
-import { getInclusionRoute } from '../generated/api-client/fn/sorting/get-inclusion-route';
-import { setInclusionRoute } from '../generated/api-client/fn/sorting/set-inclusion-route';
+import { getMinPrecisionRoute } from '../generated/api-client/fn/sorting/get-min-precision-route';
+import { setMinPrecisionRoute } from '../generated/api-client/fn/sorting/set-min-precision-route';
 import { cancelLearnedSort } from '../generated/api-client/fn/sorting/cancel-learned-sort';
 import { learnedSort } from '../generated/api-client/fn/sorting/learned-sort';
 import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-sort-result';
@@ -125,12 +125,14 @@ export class SortingApiService {
     return clearVotesRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  getInclusion(): Observable<InclusionResponse> {
-    return getInclusionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  /** The active detector's precision floor, its verdict, and the line it draws. */
+  getMinPrecision(): Observable<MinPrecisionResponse> {
+    return getMinPrecisionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  setInclusion(value: number): Observable<InclusionResponse> {
-    return setInclusionRoute(this.http, this.config.rootUrl, { body: { inclusion: value } }).pipe(
+  /** Set the active detector's precision floor (a fraction); the new line comes back in the same round trip. */
+  setMinPrecision(value: number): Observable<MinPrecisionResponse> {
+    return setMinPrecisionRoute(this.http, this.config.rootUrl, { body: { min_precision: value } }).pipe(
       map((r) => r.body),
     );
   }

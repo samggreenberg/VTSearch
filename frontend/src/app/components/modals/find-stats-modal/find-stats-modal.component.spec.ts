@@ -8,6 +8,7 @@ import { provideHttpTesting } from '../../../testing/test-providers';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
+import { wireFloor } from '../../../testing/line-floor';
 
 describe('FindStatsModalComponent', () => {
   let component: FindStatsModalComponent;
@@ -29,15 +30,10 @@ describe('FindStatsModalComponent', () => {
     verified_precision: 0.7,
     verified_called_good: 10,
     verified_kept_good: 7,
-    inclusion: 0,
     threshold: 0.5,
+    floor: wireFloor('promised', { calibrationPositives: 14 }),
     n_scored: 1000,
     n_returned: 40,
-    sweep: [
-      { inclusion: -10, threshold: 0.9, false_pos: 1, false_neg: 9 },
-      { inclusion: 0, threshold: 0.5, false_pos: 5, false_neg: 5 },
-      { inclusion: 10, threshold: 0.1, false_pos: 9, false_neg: 1 },
-    ],
     precision_curve: [
       { n_returned: 1, threshold: 0.99, checked: 0, checked_good: 0, verified_precision: null, estimated_precision: 0.95 },
       { n_returned: 10, threshold: 0.9, checked: 2, checked_good: 2, verified_precision: 1, estimated_precision: 0.9 },
@@ -199,11 +195,11 @@ describe('FindStatsModalComponent', () => {
       expect(component.xTicks.map((t) => t.label)).toEqual(['1', '10', '100', '1k']);
     });
 
-    it('marks the current cut and reads both precisions off it', async () => {
+    it('marks the line and reads both precisions off it', async () => {
       const el = await load();
       expect(el.querySelector('.precision-chart .current')).toBeTruthy();
       const readout = el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ');
-      expect(readout).toContain('At the current cut (40 returned)');
+      expect(readout).toContain('At the line (40 returned)');
       expect(readout).toContain('estimated at least 62%');
       expect(readout).toContain('checked 70%');
       expect(readout).toContain('(7 of 10 Good)');
@@ -281,6 +277,59 @@ describe('FindStatsModalComponent', () => {
       expect(el.textContent).toContain('too few votes to hold any out');
     });
   });
+
+  describe('the precision floor on the chart (#4246)', () => {
+    async function load(overrides: Record<string, unknown> = {}) {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/find/stats').flush({ ...mockStats, ...overrides });
+      httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    const legend = (el: HTMLElement) => el.querySelector('.chart-legend')!.textContent!.replace(/\s+/g, ' ');
+
+    it('draws the floor across the chart at X, and a promised line keeps it', async () => {
+      const el = await load({ floor: wireFloor('promised', { minPrecision: 0.75 }) });
+      const floor = el.querySelector('.precision-chart .floor')!;
+      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.75));
+      expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
+      expect(el.querySelector('.precision-chart .current')!.classList).not.toContain('unpromised');
+      expect(legend(el)).toContain('Floor: at least 75%');
+      expect(legend(el)).toContain('Line: keeps the 75% floor');
+      // The Inclusion stepper's legend is gone.
+      expect(legend(el)).not.toContain('incl');
+    });
+
+    it('labels the line as the unpromised default cut when the floor is unreachable', async () => {
+      const el = await load({ floor: wireFloor('unreachable', { minPrecision: 0.9, calibrationPositives: 20 }) });
+      expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
+      expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
+      expect(el.querySelector('.swatch-current')!.classList).toContain('unpromised');
+      expect(legend(el)).toContain('Line: the default cut, unpromised');
+      expect(el.textContent).toContain('No cut reaches the 90% floor on this dataset');
+    });
+
+    it('says the line waits on evidence alongside the withheld estimate', async () => {
+      const el = await load({
+        estimate_status: 'insufficient_evidence',
+        calibration_positives: 3,
+        floor: wireFloor('insufficient_evidence'),
+      });
+      expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
+      const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
+      expect(notes.some((n) => n.includes('has 3') && n.includes('Until then the line is the default cut'))).toBe(
+        true,
+      );
+    });
+
+    it('draws no floor for a detector without one', async () => {
+      const el = await load({ floor: wireFloor(null) });
+      expect(el.querySelector('.precision-chart .floor')).toBeNull();
+      expect(legend(el)).not.toContain('Floor');
+      expect(legend(el)).toContain('Line');
+    });
+  });
 });
 
 describe('FindStatsModalComponent — training-domain overlap', () => {
@@ -302,11 +351,10 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
     verified_precision: 0.7,
     verified_called_good: 10,
     verified_kept_good: 7,
-    inclusion: 0,
     threshold: 0.5,
+    floor: wireFloor('insufficient_evidence', { calibrationPositives: 0 }),
     n_scored: 100,
     n_returned: 10,
-    sweep: [{ inclusion: 0, threshold: 0.5, false_pos: 5, false_neg: 5 }],
     precision_curve: [],
     estimate_status: 'unavailable',
     calibration_positives: 0,

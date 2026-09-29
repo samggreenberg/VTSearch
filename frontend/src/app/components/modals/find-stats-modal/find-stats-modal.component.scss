@@ -149,10 +149,21 @@
     font-size: var(--font-xs);
   }
 
+  // The line: solid, or dashed as the list draws it when it is the
+  // unpromised default cut.
   .current {
     stroke: var(--text-muted);
     stroke-width: 1;
-    stroke-dasharray: 3 2;
+
+    &.unpromised {
+      stroke-dasharray: 3 2;
+    }
+  }
+
+  .floor {
+    stroke: var(--text-secondary);
+    stroke-width: 1;
+    stroke-dasharray: 6 3;
   }
 
   .crosshair {
@@ -223,6 +234,14 @@
 
 .swatch-current {
   background: var(--text-muted);
+
+  &.unpromised {
+    background: repeating-linear-gradient(90deg, var(--text-muted) 0 3px, transparent 3px 5px);
+  }
+}
+
+.swatch-floor {
+  background: repeating-linear-gradient(90deg, var(--text-secondary) 0 6px, transparent 6px 9px);
 }
 
 .chart-readout {

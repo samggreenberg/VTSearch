@@ -12,6 +12,7 @@ import type { FindEvidenceCoverageResponse } from '../../../generated/api-client
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { floorPercent, isUnpromised, lineFloorFrom } from '../../../utils/line-floor';
 
 /** A tick on the precision chart's log-scale x axis. */
 interface XTick {
@@ -32,7 +33,8 @@ function compactCount(n: number): string {
  * kept rates, and the headline precision-vs-returned chart (#4242) rendered as
  * a dependency-free inline SVG line chart: the estimated (lower-bound)
  * precision of the top N and the verified precision of the checked items in
- * it, on a log-scale count axis with the current cut marked.
+ * it, on a log-scale count axis with the line (the current cut) marked, and
+ * the precision floor it was cut at drawn across it (#4246).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -276,7 +278,31 @@ export class FindStatsModalComponent implements OnInit {
     return this.stats()?.precision_curve.some((p) => p.verified_precision != null) ?? false;
   }
 
-  /** X position of the current-cut marker, or null when nothing clears the cut. */
+  /** Y position of the floor, or null when the detector has none. */
+  get floorY(): number | null {
+    const p = this.stats()?.floor.min_precision;
+    return p == null ? null : this.yFor(p);
+  }
+
+  /** True when the line is the unpromised default cut: the floor promised nothing (#4247). */
+  get lineUnpromised(): boolean {
+    return isUnpromised(lineFloorFrom(this.stats()?.floor));
+  }
+
+  /** True when the floor is waiting on evidence, which the estimate notes then explain. */
+  get floorWaiting(): boolean {
+    return lineFloorFrom(this.stats()?.floor)?.status === 'insufficient_evidence';
+  }
+
+  /** The line's legend entry: whether it keeps the floor, or is the unpromised default cut. */
+  get lineLegend(): string {
+    const floor = lineFloorFrom(this.stats()?.floor);
+    if (floor?.status === 'promised') return `Line: keeps the ${floorPercent(floor.minPrecision)} floor`;
+    if (isUnpromised(floor)) return 'Line: the default cut, unpromised';
+    return 'Line';
+  }
+
+  /** X position of the line's marker, or null when nothing clears it. */
   get cutX(): number | null {
     const s = this.stats();
     return s && s.n_returned > 0 ? this.xFor(s.n_returned) : null;
