@@ -14,20 +14,21 @@ where to click, in order.
 
 ## How the floor moves the line
 
-The floor sits at the top of the left-hand panel and reads **At least 50%
-right**. It offers **10%**, **25%**, **50%**, **75%** and **90%**: how much
-of what the detector returns should be right. The line keeps the top of the
-ranking, among the pictures you haven't checked, and a lower floor keeps a
-longer list: the top 32 at 50% and above, the top 64 at 25%, and the top 128
-at 10%. So lowering the floor from 50% to 25% moves the line down by a band
-of borderline pictures.
+The floor sits at the top of the left-hand panel and reads **Lean:
+Centered**. It offers three: **Correct** returns only the pictures most likely
+to be matches, **Complete** returns as many as it can while accepting more
+misses among them, and **Centered** sits between the two. The line keeps the
+top of the ranking, among the pictures you haven't checked: the top 32 at
+**Centered** and **Correct**, and the top 128 at **Complete**. So leaning
+toward **Complete** moves the line down by a band of borderline pictures, and
+everything the line kept before it still keeps.
 
 The note under the picker says what the line keeps, and how close it got:
 
-- **Top 64 kept, unchecked** - nothing has measured the list yet. A floor
-  that keeps a different count moves the line straight away.
-- **At least 25% right · likely 48–100% (checked 5) · 64 kept**, or **Aimed
-  at 25%: likely 15–95% right (checked 5) · top 32 kept** - a spot check has
+- **Top 32 kept, unchecked** - the floor's starting set. Nothing has measured
+  it yet. A floor that keeps a different count moves the line straight away.
+- **Confirmed · likely 55–100% right (checked 5) · 32 kept**, or **Aimed at
+  Centered: likely 19–92% right (checked 5) · top 32 kept** - a spot check has
   measured it. **Check 5 picks**, beside the note, runs one: see
   [How close the line got](../USER_GUIDE.md#how-close-the-line-got).
 
@@ -47,19 +48,22 @@ matches just under it come up whatever the floor says. Every one you mark
 
 At the top of the left-hand panel:
 
-1. Pick a lower floor, such as **25%**.
-2. Read the note under it. **Top 64 kept, unchecked** means the line has moved
-   down to keep the top 64, so more pictures sit above it and the count of
-   **Unverified Good** on the right grows by the pictures it has just let in.
-3. The line in the list has moved with it.
+1. Pick a lower floor: from **Centered**, that is **Complete**.
+2. Read the note under it. **Top 128 kept, unchecked** means the line has
+   moved down to keep the top 128, so more pictures sit above it and the count
+   of **Unverified Good** on the right grows by the pictures it has just let
+   in.
+3. Find the line in the list: the pictures just above it are the ones the
+   lower floor let in.
 
 To know how much of that longer list is right, click **Check 5 picks** and
-answer the random picks it shows you (see
+answer the random picks it shows you: at **Complete** a check can take up to
+three rounds (see
 [How close the line got](../USER_GUIDE.md#how-close-the-line-got)).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-floor.dark.webp" />
-  <img src="../assets/borderline-floor.light.webp" alt="Step 2: (1) the floor lowered to 25%, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list" width="720" />
+  <img src="../assets/borderline-floor.light.webp" alt="Step 2: (1) the floor lowered to Complete, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list" width="720" />
 </picture>
 
 ## Step 3: Review the pictures it let in

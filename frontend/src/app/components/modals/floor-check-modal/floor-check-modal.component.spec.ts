@@ -97,7 +97,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
     it('starts a check on open and shows its picks in the order they were drawn', async () => {
       expect(text()).toContain('Drawing picks');
       await start([17, 4, 29, 8, 11]);
-      expect(text()).toContain('Spot check: at least 50% right?');
+      expect(text()).toContain('Spot check: aiming at Centered');
       expect(text()).toContain('5 picks drawn at random from the top 32. Is each one a match?');
       expect(dots().length).toBe(5);
       expect(component.picks()).toEqual([17, 4, 29, 8, 11]);
@@ -232,7 +232,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
       });
       expect(voted.map((v) => v.finished)).toEqual([false, false, true]);
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Aimed at 10%: likely 4–67% right (checked 8).',
+        'Aimed at Complete: likely 4–67% right (checked 8).',
       );
       expect(text()).toContain('The line keeps the top 32 the check ended on.');
       // A short check names no cause: the copy is true of a sparse corpus and a weak model alike.
@@ -241,18 +241,21 @@ describe('FloorCheckModalComponent (#4273)', () => {
     });
 
     it('ends on a confirmed floor with the range and the count the check returned', async () => {
-      await start([17, 4, 29, 8, 11], 2, 64);
+      // Complete, confirmed in its first round: the line keeps all 128.
+      await start([17, 4, 29, 8, 11], 3, 128);
       for (let i = 0; i < 5; i++) await press('ArrowRight');
-      const range = { lo: 0.26, hi: 1, labelled: 5, right: 5 };
+      const range = { lo: 0.44, hi: 1, labelled: 5, right: 5 };
       await answer(votesReq(), {
-        floor: { ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), range },
-        check: { ...finished('confirmed', range), min_precision: 0.25, rounds: 2, candidate: 64 },
+        floor: { ...wireFloor('confirmed', { minPrecision: 0.1, count: 128 }), range },
+        check: { ...finished('confirmed', range), min_precision: 0.1, rounds: 3, candidate: 128 },
       });
       expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('confirmed');
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'At least 25% right: likely 26–100% (checked 5).',
+        'Confirmed: likely 44–100% right (checked 5).',
       );
-      expect(text()).toContain('The line keeps these 64.');
+      expect(text()).toContain('The line keeps these 128.');
+      // The floor by its name, never its number (#4298); the range stays a number.
+      expect(text()).not.toContain('10%');
       expect(voted.at(-1)!.finished).toBe(true);
     });
   });

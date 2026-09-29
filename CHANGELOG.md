@@ -19,13 +19,13 @@ not list every commit. Use `git log` for the full history.
 
 - **Check the line from the floor control, and see how close it got** (issue
   #4273, the app half of #4272). Beside the precision floor's note, **Check 5
-  picks** (11 at 75%, 29 at 90%) opens the spot check: a random pick at a time
+  picks** (29 at Correct) opens the spot check: a random pick at a time
   from the set the line keeps, in the order it was drawn, with no rank or
   score. Vote each one with → / ← or the Good / Bad buttons (↓ goes back to
   change one); the last vote sends the round. A round that falls short says
   *Not there yet: checking a shorter list* and draws a fresh one, and the
-  check ends on the result. The note then reads *At least 50% right · likely
-  55–100% (checked 5) · 32 kept*, or *Aimed at 50%: likely 19–92% right
+  check ends on the result. The note then reads *Confirmed · likely 55–100%
+  right (checked 5) · 32 kept*, or *Aimed at Centered: likely 19–92% right
   (checked 5) · top 32 kept*, naming no cause. The Find **Stats** chart stands
   the same likely range at the line where it meets the floor. A range that
   later votes have left stale looks the same everywhere; only its tooltip says
@@ -258,6 +258,21 @@ not list every commit. Use `git log` for the full history.
   A query you are still typing keeps focus, as before.
 
 ### Changed
+
+- **The precision floor offers three named floors: Lean: Complete, Centered or
+  Correct** (issue #4298). The picker read **At least [50%] right**, with five
+  percentages to pick from, which claimed a precision the cautious estimate
+  behind the line rarely delivers exactly. It now reads **Lean: [Centered]**,
+  with **Complete** (the old 10%), **Centered** (50%, still the default) and
+  **Correct** (90%). The number is gone everywhere the floor is named: the
+  note under the picker says *Confirmed*, *Aimed at Correct: likely 11–73%
+  right (checked 5)* or *Top 32 kept, unchecked · aiming at Centered*, and
+  Find's **Stats** legend reads *Floor: Correct*. What a check measured - its
+  likely range - and the chart's axis stay numbers. A floor
+  that is not one of the three - a 25% or 75% picked before, or one set from
+  the command line or `POST /api/min-precision` - shows as the nearest of
+  them, and the picker moves the detector to it once no sort is running. The
+  CLI's `--min-precision` and the API still take any value.
 
 - **The Export window says whether it is sending a detector's labels or
   Find's results** (issue #4079). The same window, with the same

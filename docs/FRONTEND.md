@@ -212,9 +212,14 @@ line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
 the learned sort, but only from the POST's response: the learned sort reads
 the floor server-side and caches by it, so a re-sort that beat the POST would
 come back at the old floor. When the floor keeps the same count of items
-before and after (any unchecked floor at 50% or above keeps the top 32), the
+before and after (an unchecked Centered and Correct both keep the top 32), the
 line stays put and only its state is swapped: the count, not the state,
-decides where the line sits.
+decides where the line sits. The picker offers three named floors
+(`FLOOR_PRESETS` in `utils/line-floor.ts`: Complete, Centered, Correct) and
+never shows the floor as a number; a stored floor off the list is shown as the
+nearest preset and snapped to it through the picker's own `valueChange`, once
+`busy` (the host's `sortBusy`) is false, because Find drops a floor change
+while a pass is running (#4298).
 
 **The spot check** (`vt-floor-check-modal`, #4273) measures that line. The
 floor control's "Check N picks" emits `check`; the left panel forwards it as

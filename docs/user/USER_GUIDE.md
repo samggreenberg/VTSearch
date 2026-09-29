@@ -109,14 +109,15 @@ was right.
 
 #### How close the line got
 
-A detector draws its line at a **precision floor**: how much of what it
-returns should be right. You pick the floor at the top of the left panel,
-where it reads **At least 50% right** (see
-[Precision floor](#3-precision-floor)). Every detector starts at **50%**.
+A detector draws its line at a **precision floor**: which way it leans
+between returning everything and returning only what is right. You pick the
+floor at the top of the left panel, where it reads **Lean: Centered** (see
+[Precision floor](#3-precision-floor)). Every detector starts at
+**Centered**.
 
 The line always keeps a set: the top of the ranking, among the items you
 haven't voted on. How many it keeps depends on the floor: the top 128 at
-10%, the top 64 at 25%, and the top 32 at 50% and above. Until you
+**Complete**, and the top 32 at **Centered** and **Correct**. Until you
 **check** that set, nothing has measured how much of it is right, and the
 note under the floor says so: **Top 32 kept, unchecked**.
 
@@ -132,25 +133,25 @@ and ↓ to go back and change one. The last vote of a round sends it.
 
 The picks come in the order they were drawn, which is random, with no rank
 and no score. They are a sample from the whole set, not the top of the list.
-A round is 5 picks at 10%, 25% and 50%, 11 at 75%, and 29 at 90%: a higher
-floor takes more evidence to reach.
+A round is 5 picks at **Complete** and **Centered**, and 29 at **Correct**:
+a floor that asks more takes more evidence to reach.
 
 When a round falls short and the set can still shrink, the check says **Not
 there yet: checking a shorter list**, halves the set and draws a fresh
-round. A check at 10% can take up to three rounds (the top 128, then 64,
-then 32), and one at 25% up to two. It ends on the result, which the note
+round. A check at **Complete** can take up to three rounds (the top 128,
+then 64, then 32). It ends on the result, which the note
 under the floor then shows:
 
-- **At least 50% right · likely 55–100% (checked 5) · 32 kept** - the check
+- **Confirmed · likely 55–100% right (checked 5) · 32 kept** - the check
   confirmed the floor for the set it ended on.
-- **Aimed at 50%: likely 19–92% right (checked 5) · top 32 kept** - the check
+- **Aimed at Centered: likely 19–92% right (checked 5) · top 32 kept** - the check
   fell short, and the line keeps the top 32 it ended on. The note names no
   cause: a dataset with very few matches and a detector that can't yet tell
   them apart look the same from here.
 
 **The likely range** says how much of the set the line keeps is probably
 right. It comes from your picks alone, never from the detector's own guess.
-With 5 picks it is wide, about 57 points on average at 50%; that width is the honest
+With 5 picks it is wide, about 57 points on average at **Centered**; that width is the honest
 answer to "how close did we get?". The range also stands on the Find view's
 **Stats** chart, at the line where it meets the floor.
 
@@ -328,8 +329,8 @@ picks up where it leaves off.
 - [Check and correct a detector's calls](howto/check-and-correct.md): verify
   the pictures near the line and hand your corrections back to the detector.
 - [Catch the borderline matches](howto/borderline-matches.md): review the
-  pictures either side of the line, and lower the **precision floor** to let
-  more in.
+  pictures either side of the line, and lower the **precision floor** toward
+  **Complete** to let more in.
 - [Decide how far to trust a detector](howto/trust-a-detector.md): read the
   **Stats** that say which calls it is qualified to make.
 - [Send your matches somewhere](howto/export-matches.md): export to the
@@ -776,39 +777,47 @@ but in Manual mode you choose directly.
 
 ### 3. Precision floor
 
-Reads **At least 50% right**: pick how much of what the detector returns
-should be right - **10%**, **25%**, **50%** (the default), **75%** or **90%**.
-The line (see
+Reads **Lean: Centered**: pick what the detector's line leans toward -
+**Complete**, **Centered** (the default) or **Correct**. The line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
 keeps the top of the ranking, among the items you haven't voted on: the top
-128 at 10%, 64 at 25%, and 32 at 50% and above. A lower floor keeps a longer
-list, and more of it may be wrong. Changing the floor moves the line over the
-scores the detector already has; the ranking itself does not change.
+128 at **Complete**, and the top 32 at **Centered** and **Correct**.
+**Complete** returns the most, and more of it may be wrong; **Correct** asks
+the most of what it returns; **Centered** sits between them. The floors are
+named rather than numbered because what the line keeps is measured, not
+promised: a check says how close it got. Changing the floor moves the line
+over the scores the detector already has; the ranking itself does not change.
 
 Once the list is ranked by the detector (a **Learned** sort, or Find), the
 note under the picker says what the floor is doing to the line, in one of
 three states:
 
-- **Top 32 kept, unchecked** - nothing has measured the set yet.
-- **At least 50% right · likely 55–100% (checked 5) · 32 kept** - a check
+- **Top 32 kept, unchecked · aiming at Centered** - nothing has measured the
+  set yet.
+- **Confirmed · likely 55–100% right (checked 5) · 32 kept** - a check
   confirmed the floor.
-- **Aimed at 50%: likely 19–92% right (checked 5) · top 32 kept** - a check
-  fell short, and says how close it got.
+- **Aimed at Centered: likely 19–92% right (checked 5) · top 32 kept** - a
+  check fell short, and says how close it got.
 
-Beside the note, **Check 5 picks** runs a spot check of the set: a few
-random picks you vote on, which measure how much of it is right. The pick
-count is the one a round takes at your floor. See
+The floor is named rather than numbered; the range a check measured is a
+number. Beside the note, **Check 5 picks** runs a spot check of the set: a
+few random picks you vote on, which measure how much of it is right. The pick
+count is the one a round takes at your floor (29 at **Correct**). See
 [How close the line got](#how-close-the-line-got) for the check and its
 likely range. The **?** beside the note explains the floor.
 
-A lower floor keeps a longer list, which makes a two-pass workflow natural:
-work at a strict floor first, then lower it and review the newly admitted
-band - the items just above the moved line (see
+A lower floor keeps a longer list, and the lists nest: everything the line
+keeps at **Correct** it still keeps at **Complete**, plus a band of
+borderline items. That makes a two-pass workflow natural: work at a strict
+floor first, then lower it and review the newly admitted band - the items
+just above the moved line (see
 [Catch the borderline matches](howto/borderline-matches.md)).
 
 Each detector keeps its own floor while VTSearch runs, and one you haven't
-set yet starts from the last floor you picked. Leave it at 50% unless you
-want to lean toward catching everything or toward only the surest matches.
+set yet starts from the last floor you picked. Leave it at **Centered**
+unless you want to lean toward catching everything (**Complete**) or toward
+only the surest matches (**Correct**). A floor set some other way, such as
+from the command line, shows as the nearest of the three, and moves to it.
 
 ---
 

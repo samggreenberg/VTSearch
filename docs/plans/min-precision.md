@@ -138,13 +138,14 @@ What follows is the design the remaining slices build on.
 - **The default floor is 50%, and every detector has one** (owner,
   2026-09-28; `null` refused since #4269, which retired Inclusion as a user
   preference).
-- **The control offers five presets and no off switch** (owner, #4246 on
-  2026-09-28, with 10% added on 2026-09-29): 10/25/50/75/90%, symmetric about
-  the 50% default. The 10% preset is for a user willing to dig through a long
-  list. The API still takes any value in `[0.01, 1]`; the control shows a
-  stored non-preset as it is.
+- **The control offers three named presets and no off switch** (owner,
+  #4298 on 2026-09-29): **Lean: Complete / Centered / Correct**, for 10, 50
+  and 90%, symmetric about the 50% default. The control never shows the
+  number, since the check rarely delivers a floor exactly. The API still takes
+  any value in `[0.01, 1]`; the control snaps a stored non-preset to the
+  nearest preset.
   - Under the spot check, the presets cost at most 15 picks at 10% (3 rounds
-    of 5), 10 at 25% (2 rounds of 5), 5 at 50%, 11 at 75% and 29 at 90%.
+    of 5), 5 at 50% and 29 at 90%.
   - #4220 never priced the estimator at 10%; the spot check (#4272) measures
     that floor in its three rounds instead.
 - **What waits on the GRID, and what doesn't.**

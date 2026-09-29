@@ -12,7 +12,7 @@ import type { FindEvidenceCoverageResponse } from '../../../generated/api-client
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { checkLabel, floorPercent, lineFloorFrom, rangePercent, rangeTitle, type LikelyRange } from '../../../utils/line-floor';
+import { checkLabel, floorName, lineFloorFrom, rangePercent, rangeTitle, type LikelyRange } from '../../../utils/line-floor';
 
 /** A tick on the precision chart's log-scale x axis. */
 interface XTick {
@@ -286,6 +286,12 @@ export class FindStatsModalComponent implements OnInit {
     return p == null ? null : this.yFor(p);
   }
 
+  /** The floor's name ("Correct"), never its number (#4298); null before the stats arrive. */
+  get floorLabel(): string | null {
+    const p = this.stats()?.floor.min_precision;
+    return p == null ? null : floorName(p);
+  }
+
   /** The floor's state as the sort state would hold it; null before the stats arrive. */
   get lineFloor() {
     return lineFloorFrom(this.stats()?.floor);
@@ -325,7 +331,7 @@ export class FindStatsModalComponent implements OnInit {
   get lineLegend(): string {
     const floor = this.lineFloor;
     if (!floor) return 'Line';
-    const target = floorPercent(floor.minPrecision);
+    const target = floorName(floor.minPrecision);
     const kept = floor.count.toLocaleString();
     if (floor.status === 'confirmed') return `Line: keeps the ${target} floor (${kept} kept)`;
     if (floor.status === 'short') return `Line: the top ${kept}, aimed at ${target}`;

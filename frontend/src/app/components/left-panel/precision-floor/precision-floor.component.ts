@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, untracked } from '@angular/core';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import {
   FLOOR_PRESETS,
@@ -6,8 +6,9 @@ import {
   checkLabel,
   checkTitle,
   floorExplanation,
-  floorPercent,
   floorSummary,
+  isFloorPreset,
+  nearestFloorPreset,
   type LineFloor,
 } from '../../../utils/line-floor';
 
@@ -18,19 +19,26 @@ type Dot = 'green' | 'yellow' | 'red' | 'none';
  * The precision floor: "show me what's at least X% right" (#4246). Replaced the
  * Inclusion stepper; mounted in the Find row and the Manual tab.
  *
- * A `<select>` of five preset floors (`FLOOR_PRESETS`), rather than a free
- * number (owner, 2026-09-28; 10% added 2026-09-29). It is also not a range
- * slider on purpose: `KeyboardService.isTyping()` lets ArrowLeft/Right through
- * from a focused `type="range"` input and casts a vote with them, while a
- * focused `<select>` keeps its keys to itself - and gives focus back once a
- * floor is picked (see {@link onChange}).
+ * A `<select>` of three named floors (`FLOOR_PRESETS`): "Lean: Complete /
+ * Centered / Correct" (#4298), rather than a free number or a percentage (the
+ * spot check rarely delivers a floor exactly, so the control promises only a
+ * direction). A stored floor off the list (a pick from before #4298, or one set
+ * through the CLI or the API) is snapped to the nearest preset, through the
+ * same `valueChange` a pick goes out on, once no sort is running (see the
+ * constructor).
+ *
+ * It is also not a range slider on purpose: `KeyboardService.isTyping()` lets
+ * ArrowLeft/Right through from a focused `type="range"` input and casts a vote
+ * with them, while a focused `<select>` keeps its keys to itself - and gives
+ * focus back once a floor is picked (see {@link onChange}).
  *
  * Under the picker, one line says what the floor does to the current line -
  * the floor, the set the line keeps and how close the spot check got, never
- * an estimate from the model (owner, 2026-09-29, #4272): at least X% right
- * with the check's likely range and the count kept, the range a short check
- * found, or the top N kept unchecked. There is no "off": every detector has
- * a floor (#4269).
+ * an estimate from the model (owner, 2026-09-29, #4272): confirmed with the
+ * check's likely range and the count kept, the range a short check found, or
+ * the top N kept unchecked. The floor goes by its name; the range a check
+ * measured stays a number (#4298). There is no "off": every detector has a
+ * floor (#4269).
  *
  * Beside it sits the check affordance, "Check 5 picks" (#4273), in every
  * state: it opens the spot check (`vt-floor-check-modal`, hosted by the view),
@@ -57,8 +65,9 @@ export class PrecisionFloorComponent {
   readonly floor = input<LineFloor | null>(null);
   /** How many items the line returns; the state line reads the kept count off the floor instead. */
   readonly returned = input<number | null>(null);
-
-  /** False while the host can't run a check (a sort or a scoring pass in flight). */
+  /** True while a sort or Find pass runs; a snap to a preset waits for it. */
+  readonly busy = input(false);
+  /** False while the host can't run a check (a sort or a scoring pass in flight, or the panel disabled). */
   readonly checkable = input(true);
 
   /** A floor the user picked, as a fraction. */
@@ -67,20 +76,16 @@ export class PrecisionFloorComponent {
   readonly check = output<void>();
 
   readonly hint =
-    'Pick how much of what the detector returns should be right. The line keeps the top of the ranking: ' +
-    'the top 128 unvoted items at 10%, 64 at 25%, 32 at 50% and above. "Check" votes on a few random picks ' +
-    'from that set to measure how much of it is right; until then the set is unchecked. A check that falls ' +
+    'Lean the line toward Complete, to return as much as it can at the cost of more wrong ones, or toward ' +
+    'Correct, to return less with little of it wrong; Centered sits between them. The line keeps the top of ' +
+    'the ranking, more of it the further it leans toward Complete. A check of a few random picks from that ' +
+    'set - "Check" - measures how much of it is right; until one runs the set is unchecked, and a check that falls ' +
     'short keeps the top 32 it ended on and says how close it got.';
 
-  /** The presets, plus the current value when it is not one of them, in order. */
-  readonly options = computed(() => {
-    const v = this.value();
-    const all = FLOOR_PRESETS.includes(v) ? [...FLOOR_PRESETS] : [...FLOOR_PRESETS, v];
-    return all.sort((a, b) => a - b).map((p) => ({ value: String(p), label: floorPercent(p) }));
-  });
+  readonly options = FLOOR_PRESETS.map((p) => ({ value: String(p.value), label: p.name }));
 
-  /** The `<select>`'s current value. */
-  readonly selected = computed(() => String(this.value()));
+  /** The `<select>`'s current value: a floor off the list shows as the preset it will snap to. */
+  readonly selected = computed(() => String(nearestFloorPreset(this.value()).value));
 
   readonly summary = computed(() => floorSummary(this.floor()));
   readonly explanation = computed(() => floorExplanation(this.floor()));
@@ -99,6 +104,19 @@ export class PrecisionFloorComponent {
         return 'none';
     }
   });
+
+  constructor() {
+    // Snap a stored floor off the list to the nearest preset, so the line is
+    // cut at the floor the picker names. It goes out as a pick would, and waits
+    // for any running sort: Find drops a floor change mid-pass, since the POST
+    // would re-cut a line the pass is still drawing.
+    effect(() => {
+      const v = this.value();
+      if (this.busy() || isFloorPreset(v)) return;
+      const snapped = nearestFloorPreset(v).value;
+      untracked(() => this.valueChange.emit(snapped));
+    });
+  }
 
   /**
    * Emit the picked floor, and hand focus back to the document.

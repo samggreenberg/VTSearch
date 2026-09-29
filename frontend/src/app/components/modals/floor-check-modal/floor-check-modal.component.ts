@@ -15,7 +15,7 @@ import type { Media } from '../../../models/api.models';
 import type { PrecisionCheckResponse } from '../../../generated/api-client/models/precision-check-response';
 import type { PrecisionCheckState } from '../../../generated/api-client/models/precision-check-state';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { floorPercent, lineFloorFrom, rangePercent, type LineFloor } from '../../../utils/line-floor';
+import { floorName, lineFloorFrom, rangePercent, type LineFloor } from '../../../utils/line-floor';
 
 /** Where the step is: drawing the first round, voting on a round, sending it, on the result, or refused. */
 type Phase = 'starting' | 'voting' | 'sending' | 'done' | 'error';
@@ -108,8 +108,9 @@ export class FloorCheckModalComponent implements OnInit {
   });
   readonly mediaType = computed(() => this.currentMedia()?.media_type ?? '');
 
-  readonly target = computed(() => floorPercent(this.check()?.min_precision ?? this.floor()?.minPrecision ?? 0.5));
-  readonly title = computed(() => `Spot check: at least ${this.target()} right?`);
+  /** The floor by its name, never its number (#4298). */
+  readonly target = computed(() => floorName(this.check()?.min_precision ?? this.floor()?.minPrecision ?? 0.5));
+  readonly title = computed(() => `Spot check: aiming at ${this.target()}`);
 
   /** "Round 2 of up to 3: 5 picks drawn at random from the top 64." */
   readonly brief = computed(() => {
@@ -124,10 +125,10 @@ export class FloorCheckModalComponent implements OnInit {
   readonly resultHeadline = computed(() => {
     const f = this.floor();
     if (!f) return '';
-    const target = floorPercent(f.minPrecision);
+    const target = floorName(f.minPrecision);
     const r = f.range;
     if (f.status === 'confirmed') {
-      return r ? `At least ${target} right: likely ${rangePercent(r)} (checked ${r.labelled}).` : `At least ${target} right.`;
+      return r ? `Confirmed: likely ${rangePercent(r)} right (checked ${r.labelled}).` : `Confirmed at ${target}.`;
     }
     return r ? `Aimed at ${target}: likely ${rangePercent(r)} right (checked ${r.labelled}).` : `Aimed at ${target}: fell short.`;
   });
