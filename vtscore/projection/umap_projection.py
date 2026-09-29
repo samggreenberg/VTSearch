@@ -12,7 +12,9 @@ default** (``random_state=None``), which keeps UMAP's numba parallelism on.
 That is safe only because the projection is computed exactly once per dataset
 and then frozen/persisted — it never re-runs, so its non-reproducibility never
 surfaces.  Callers (e.g. tests) may pass a ``random_state`` for a reproducible
-fit at the cost of parallelism.
+fit at the cost of parallelism; the app does so only when
+``VTSEARCH_PROJECTION_SEED`` is set (:data:`~vtscore.config.PROJECTION_SEED`),
+which the user-docs screenshot harness uses to get the same map every run.
 
 Tiny datasets can't support a neighbor graph (UMAP needs ``n_neighbors < N``),
 so below ``min_n_for_umap`` this falls back to a deterministic PCA-2 layout —
@@ -71,6 +73,12 @@ class Projection:
     #: recompute.  ``None`` on the PCA / trivial fallbacks (never compacted) and
     #: on legacy containers, which predate the stamp and were compacted.
     compact: bool | None = None
+    #: The seed the UMAP fit ran under, or ``None`` for an unseeded fit (the
+    #: shipped default), a PCA / trivial fallback, or a legacy container.
+    #: Stamped so a process that asks for a seeded layout
+    #: (:data:`~vtscore.config.PROJECTION_SEED`) refits one persisted under any
+    #: other seed rather than serving it.
+    random_state: int | None = None
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
@@ -110,6 +118,7 @@ def remove_ids(projection: Projection, remove: Iterable[int]) -> Projection:
         projection.n_neighbors,
         projection.min_dist,
         projection.compact,
+        projection.random_state,
     )
 
 
@@ -214,7 +223,8 @@ def fit_projection(
     ``min_n_for_umap`` points the layout falls back to PCA-2 (deterministic).
 
     ``random_state`` defaults to ``None`` (unseeded, parallel — the production
-    path); pass an int for a reproducible fit.  ``on_progress`` receives coarse
+    path); pass an int for a reproducible fit.  It is stamped on a UMAP layout
+    alongside the other knobs.  ``on_progress`` receives coarse
     ``(status, message, current, total)`` milestones if provided.
 
     ``compact`` post-processes the UMAP layout with
@@ -289,4 +299,4 @@ def fit_projection(
         _progress("projecting", "compacting layout", 0, 0)
         coords = compact_layout(coords)
 
-    return Projection(projection_id, list(ids), coords, "umap", n_neighbors, min_dist, compact)
+    return Projection(projection_id, list(ids), coords, "umap", n_neighbors, min_dist, compact, random_state)

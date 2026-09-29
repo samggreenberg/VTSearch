@@ -78,10 +78,19 @@ export class SortRunnerService {
   /** True while a windowed-sort "Load more" page fetch is in flight. */
   readonly loadingMoreSort = signal(false);
 
-  /** Last coverage-atlas probe came back empty. Only meaningful under the `new`
-   *  Select mode, whose pick is a server round-trip rather than a rule over the
-   *  loaded window — see {@link fetchDiversityNext}. */
-  private readonly diversityExhausted = signal(false);
+  /**
+   * The labeled ids the last coverage-atlas probe came back empty for, or
+   * `null` when it found an item (or none has answered). Only meaningful under
+   * the `new` Select mode, whose pick is a server round-trip rather than a rule
+   * over the loaded window — see {@link fetchDiversityNext}.
+   *
+   * The labels rather than a flag, because an empty answer only holds for the
+   * labels it was given (#4312). The atlas runs dry when every node carries a
+   * label, so labeling more cannot bring an unseen node back and the answer
+   * still holds for any superset; un-voting one of them can, so the answer
+   * lapses. {@link queueExhausted} makes that check.
+   */
+  private readonly diversityEmptyFor = signal<ReadonlySet<number> | null>(null);
 
   /** Coverage-atlas probes still in the air. A count rather than a flag, so an
    *  older probe finishing cannot clear {@link advancePending} under a newer one. */
@@ -116,16 +125,25 @@ export class SortRunnerService {
    *
    * Derived rather than latched so an undo puts the user straight back to work:
    * un-voting a row makes it unlabeled again, which makes this false again with
-   * nothing having to notice. Deliberately false before any sort has landed —
-   * an unranked pair is the placeholder state, not an exhausted one.
+   * nothing having to notice. That holds under `new` too, where the answer
+   * comes from the server: the probe's empty answer is kept with the labels it
+   * was given ({@link diversityEmptyFor}) and lapses once one of them is
+   * un-voted, with no fresh probe (#4312). The undone item, still selected,
+   * comes straight back as it does under `top` / `hard`, and the next vote
+   * probes again. Deliberately false before any sort has landed — an unranked
+   * pair is the placeholder state, not an exhausted one.
    */
   readonly queueExhausted = computed(() => {
     const sortOrder = this.sortState.sortOrder;
     if (!sortOrder || sortOrder.length === 0) return false;
-    if (this.sortState.selectMode === 'new') return this.diversityExhausted();
     const good = this.voteState.goodVotes;
     const bad = this.voteState.badVotes;
-    return !sortOrder.some((s) => !good.has(s.id) && !bad.has(s.id));
+    const labeled = (id: number) => good.has(id) || bad.has(id);
+    if (this.sortState.selectMode === 'new') {
+      const emptyFor = this.diversityEmptyFor();
+      return emptyFor !== null && [...emptyFor].every(labeled);
+    }
+    return sortOrder.every((s) => labeled(s.id));
   });
 
   /**
@@ -701,6 +719,10 @@ export class SortRunnerService {
     const scores = sortOrder
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
+    // What an empty answer is about. Taken when the probe goes out rather than
+    // when it answers: an undo while it is in the air is one the server may not
+    // have seen yet, and the empty answer must lapse on it all the same.
+    const askedWith: ReadonlySet<number> = new Set([...this.voteState.goodVotes, ...this.voteState.badVotes]);
     this.diversityProbesInFlight.update((n) => n + 1);
     this.sortingApi
       // The New pick reads the threshold as a sampling position too (it steers
@@ -716,7 +738,7 @@ export class SortRunnerService {
       )
       .subscribe({
         next: (response) => {
-          this.diversityExhausted.set(response.id === null);
+          this.diversityEmptyFor.set(response.id === null ? askedWith : null);
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
@@ -860,12 +882,13 @@ export class SortRunnerService {
     const pick = this.peekNextMedia(excludeId);
     if (pick.kind === 'media') {
       this.mediaState.selectMedia(pick.id);
-      this.diversityExhausted.set(false);
+      this.diversityEmptyFor.set(null);
     } else if (pick.kind === 'diversity') {
-      // The probe below is the only thing that can answer for the `new` mode, so
-      // clear the previous answer rather than letting a stale "empty" latch
-      // across the round-trip.
-      this.diversityExhausted.set(false);
+      // The previous answer is not cleared for the round-trip. If it went stale,
+      // `queueExhausted` has already dropped it. If it still holds, no vote since
+      // has freed a node, so the probe will say "empty" again, and the pane stays
+      // up rather than blinking off until it does. That is the re-vote after an
+      // undo (#4312). An answer that does come back with an item replaces it.
       this.fetchDiversityNext();
     }
   }

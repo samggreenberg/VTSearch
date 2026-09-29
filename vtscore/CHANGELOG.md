@@ -43,6 +43,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **A seed for the Browse projection** (issue #4296), all additive:
+  `vtscore.config.PROJECTION_SEED` (from `VTSEARCH_PROJECTION_SEED`, default
+  `None`), `ProjectionParams.random_state`, and a `Projection.random_state`
+  stamp that the dataset container persists. With no seed set nothing changes:
+  the fit stays unseeded and any persisted layout still serves. With one set,
+  every fit runs under it and a layout persisted under another seed is refit;
+  the signposts' clustering UMAP is fit under the layout's stamped seed.
+
 - **`vtscore.training.thresholds.spot_check`** (issue #4272): the precision
   floor's spot check. `check_schedule` / `CheckSchedule` / `rounds_for`
   (the candidate, rounds and picks a floor costs, at `CHECK_ALPHA`,

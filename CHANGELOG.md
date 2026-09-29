@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Required fields you haven't filled in are outlined in red** (issue
+  #4311). A form that stars a field as required now marks the box you answer
+  in as well: until it holds a value, it has a red border over a faint red
+  tint. It looks normal again while you type in it, and stays normal once
+  filled. This covers every plugin form (Add Dataset, Import Labels, Export,
+  AutoRun, and the Settings importer and exporter), the drop zones for a
+  required folder or file, **Combine Detectors**' name, and **New
+  Detector**'s example. Add Dataset's **Folder to import**, always required
+  but never starred, now says so. New Detector's **Detector name** stays
+  unmarked: the app fills it in from the example.
 - **Check the line from the floor control, and see how close it got** (issue
   #4273, the app half of #4272). Beside the precision floor's note, **Check 5
   picks** (29 at Correct) opens the spot check: a random pick at a time
@@ -170,6 +180,11 @@ not list every commit. Use `git log` for the full history.
   ranking and replace it. A newer sort now always wins over an older one
   still running, and until you click, vote or step, the first item follows
   the ranking the window settles on.
+- **Undo gets you out of "Nothing left in this ranking" in the New select
+  mode** (issue #4312). Once New had no unseen items left to offer, Cmd/Ctrl-Z
+  undid the vote but left the message on screen. The undone item now comes
+  straight back, as it already did under Top and Hard, and your next vote
+  checks for unseen items again.
 - **`↓` then `↑` returns you to the item you were on** (issue #4306). `↑`
   re-ran the advance instead, and the ranking has often moved since the item
   was picked (in Train the re-sort a vote triggers lands after it; in Find each
