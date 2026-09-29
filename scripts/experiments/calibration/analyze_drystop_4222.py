@@ -47,9 +47,10 @@ KEY = T.KEY
 LEARNED = T.LEARNED
 CONTROL = "g3"
 STARVED = 3  # fewer positives than this in 150 votes is a starved hunt (#4216)
-#: ``g<G>``, ``g<G>d<W>`` (the dry stop) or ``g<M>g<G>d<W>`` (walk to M Goods as
-#: the app does, then on toward G unless the walk runs dry).
-ARM_RE = re.compile(r"^(?:g(\d+))?g(\d+)(?:d(\d+))?$")
+#: ``g<G>``, ``g<G>d<W>`` (the dry stop), ``g<M>g<G>d<W>`` (walk to M Goods as
+#: the app does, then on toward G unless the walk runs dry) or ``g<M>b<B>g<G>d<W>``
+#: (today's Good and Bad rounds first, then the walk).
+ARM_RE = re.compile(r"^(?:g(\d+)(?:b\d+)?)?g(\d+)(?:d(\d+))?$")
 
 
 def parse_arm(spec: str) -> tuple[str, str, int, int, Path]:
