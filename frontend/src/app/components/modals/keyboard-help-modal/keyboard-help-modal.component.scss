@@ -117,9 +117,13 @@
   font-size: var(--font-sm);
 }
 
-// Below every tab: the server's own doc links (when it configured any), then
-// the "Email us" line.
+// Below every tab, in vt-modal's pinned footer row: the server's own doc links
+// (when it configured any), then the "Email us" line. Spans the row, and is
+// capped like `.help` so a long link list wraps instead of widening the modal.
 .help-footer {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: var(--modal-w-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);

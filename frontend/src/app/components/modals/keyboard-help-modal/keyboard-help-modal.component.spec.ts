@@ -283,6 +283,15 @@ describe('KeyboardHelpModalComponent — server doc links', () => {
     }
   });
 
+  it("sits in the modal's pinned footer, outside the scrolling body", async () => {
+    settingsSignal.set({ docs_links: [{ label: 'Acme plugin guide', url: 'https://acme.example/docs' }] });
+    await fixture.whenStable();
+
+    const block = fixture.nativeElement.querySelector('.help-docs') as HTMLElement;
+    expect(block.closest('.modal-footer')).not.toBeNull();
+    expect(block.closest('.modal-body')).toBeNull();
+  });
+
   it('keeps the links on the User guide tab too', async () => {
     settingsSignal.set({ docs_links: [{ label: 'Acme plugin guide', url: 'https://acme.example/docs' }] });
     fixture.componentInstance.selectTab('guide');

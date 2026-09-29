@@ -77,26 +77,28 @@
         }
       </div>
     }
-
-    <footer class="help-footer">
-      @if (docsLinks().length > 0) {
-        <nav class="help-docs" aria-label="Docs for this server">
-          <span>Docs for this server:</span>
-          <ul class="help-docs__list">
-            @for (link of docsLinks(); track $index) {
-              <li>
-                <a [href]="link.url" [title]="link.url" target="_blank" rel="noopener noreferrer"
-                  >{{ link.label }}<span aria-hidden="true"> ↗</span><span class="sr-only"> (opens in a new tab)</span></a
-                >
-              </li>
-            }
-          </ul>
-        </nav>
-      }
-      <p class="help-footer__contact">
-        Comments, concerns, or suggestions?
-        <a [href]="mailtoHref()">Email us</a>.
-      </p>
-    </footer>
   </div>
+
+  <!-- In vt-modal's pinned footer slot, outside the scrolling body, so it
+       stays in view on every tab however long the tab's content runs. -->
+  <footer class="help-footer" modal-footer>
+    @if (docsLinks().length > 0) {
+      <nav class="help-docs" aria-label="Docs for this server">
+        <span>Docs for this server:</span>
+        <ul class="help-docs__list">
+          @for (link of docsLinks(); track $index) {
+            <li>
+              <a [href]="link.url" [title]="link.url" target="_blank" rel="noopener noreferrer"
+                >{{ link.label }}<span aria-hidden="true"> ↗</span><span class="sr-only"> (opens in a new tab)</span></a
+              >
+            </li>
+          }
+        </ul>
+      </nav>
+    }
+    <p class="help-footer__contact">
+      Comments, concerns, or suggestions?
+      <a [href]="mailtoHref()">Email us</a>.
+    </p>
+  </footer>
 </vt-modal>
