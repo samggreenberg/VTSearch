@@ -14,7 +14,7 @@ stall"); this directory holds what drives and reads them.
 | `serve_synthetic.py` | Run the real app over an in-memory synthetic patch dataset (N images, `dinov3_patch` CLS + `14x14x768` grids), for reproducing offline. Patch grids are never pickled, so a VG slate cannot be loaded without the DINOv3 weights and a GPU; this builds the post-load shape directly. |
 | `drive_labeling.py` | Replay the SPA's per-vote request chain against any running VTSearch (a tunnel to the GRID included), timing each request client-side and reporting keypress→panel, sort wait, per-endpoint percentiles, and head-of-line clusters. Stdlib only. |
 | `analyze_app_log.py` | Read the app's JSON log and print the ±15 s window around every `stall:` line, with the `faulthandler` thread dump that fired during it, the per-vote budget, and the thresholds the log was written at. |
-| `sample_host.py` | Sample what the app cannot see, every N seconds, to JSONL: per-op NFS RTT/queue/exec for the mounts the data dir and venv live on (differenced per interval, never a lifetime counter), plus `majflt`/RSS for the app process. `--summarize` prints the tables. Stdlib only, so it runs in a bare shell on a node with no venv. |
+| `sample_host.py` | Sample what the app cannot see, every N seconds, to JSONL: per-op NFS RTT/queue/exec for the mounts the data dir and venv live on (differenced per interval, never a lifetime counter), plus `majflt`/RSS for the app process. `--summarize` prints the tables, weighted by op count so a quiet interval cannot outvote a burst. Stdlib only, so it runs in a bare shell on a node with no venv. |
 
 ## What the instruments say
 
