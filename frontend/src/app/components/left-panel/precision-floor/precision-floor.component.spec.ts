@@ -51,10 +51,10 @@ describe('PrecisionFloorComponent (#4246)', () => {
       expect((fixture.nativeElement as HTMLElement).querySelector('input[type="range"]')).toBeNull();
     });
 
-    it('reads as "Lean: [name]", with no number anywhere on the control (#4298)', async () => {
+    it('reads as "Lean: [name]", with no number on the picker (#4298)', async () => {
       const el = await show(0.9);
       expect(el.querySelector('.floor-picker')!.textContent!.replace(/\s+/g, ' ')).toContain('Lean:');
-      expect(el.querySelector('.precision-floor')!.textContent).not.toMatch(/\d/);
+      expect(el.querySelector('.floor-picker')!.textContent).not.toMatch(/\d/);
       expect(select().value).toBe('0.9');
       expect(select().selectedOptions[0].textContent!.trim()).toBe('Correct');
     });
@@ -124,41 +124,50 @@ describe('PrecisionFloorComponent (#4246)', () => {
       expect(state()).toBeNull();
     });
 
-    it('says a promised floor holds, with the count', async () => {
-      await show(0.9, lineFloor('promised', { minPrecision: 0.9 }), 1234);
+    it('says a confirmed floor holds, with the range the check found and the count kept', async () => {
+      await show(0.9, lineFloor('confirmed', { minPrecision: 0.9 }), 1234);
       expect(state()!.getAttribute('data-status')).toBe('green');
-      expect(stateText()!.textContent).toContain('Promise kept · 1,234 returned');
-      expect(stateText()!.getAttribute('title')).toContain('keeps its Correct promise on the 1,234 items it returns');
+      expect(stateText()!.textContent).toContain('Confirmed · likely 55–100% right (checked 5) · 32 kept');
+      expect(stateText()!.getAttribute('title')).toContain('5 random picks from the 32 items the line keeps');
     });
 
-    it('omits the count when it is unknown', async () => {
-      await show(0.5, lineFloor('promised'));
-      expect(stateText()!.textContent!.trim()).toBe('Promise kept');
+    it('reads the count off the result, never the preset', async () => {
+      await show(0.1, lineFloor('confirmed', { minPrecision: 0.1, count: 64 }));
+      expect(stateText()!.textContent).toContain('64 kept');
     });
 
-    it('says an unreachable floor shows the default cut', async () => {
-      await show(0.9, lineFloor('unreachable', { minPrecision: 0.9, calibrationPositives: 20 }), 300);
+    it('says how close a short check got, naming no cause, with the top 32 kept', async () => {
+      await show(0.9, lineFloor('short', { minPrecision: 0.9 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('red');
-      expect(stateText()!.textContent).toContain("Can't reach Correct on this dataset · showing the default cut");
-      expect(stateText()!.getAttribute('title')).toContain('No cut on this dataset reaches Correct');
+      expect(stateText()!.textContent).toContain('Aimed at Correct: likely 11–73% right (checked 5) · top 32 kept');
+      expect(stateText()!.getAttribute('title')).toContain('fell short');
+      expect(stateText()!.getAttribute('title')).not.toMatch(/sparse|weak|evidence/);
     });
 
-    it('says a floor short of evidence shows the default cut, with the Good votes it has', async () => {
-      await show(0.5, lineFloor('insufficient_evidence'), 300);
+    it('says an unchecked line keeps the starting candidate', async () => {
+      await show(0.1, lineFloor('unchecked', { minPrecision: 0.1, count: 128 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('yellow');
-      expect(stateText()!.textContent).toContain('Not enough evidence yet (3 of 10 Good votes) · showing the default cut');
-      expect(stateText()!.getAttribute('title')).toContain('Hard picks');
+      expect(stateText()!.textContent).toContain('Top 128 kept, unchecked · aiming at Complete');
+      expect(stateText()!.getAttribute('title')).toContain('Run a check');
     });
 
-    it.each(NO_PROMISE_STATES)('never shows the estimate behind the verdict (%s)', async (status) => {
+    it('notes a stale range only in the tooltip', async () => {
+      const stale = { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true };
+      await show(0.5, lineFloor('short', { range: stale }), 300);
+      expect(stateText()!.textContent).toContain('likely 11–73% right (checked 5)');
+      expect(stateText()!.textContent).not.toContain('later votes');
+      expect(stateText()!.getAttribute('title')).toContain('Measured before your later votes');
+    });
+
+    it.each(NO_PROMISE_STATES)('never shows an estimate from the model (%s)', async (status) => {
       await show(0.5, lineFloor(status), 300);
       expect(stateText()!.textContent).not.toMatch(/about|estimated/i);
     });
 
     it('describes the line it was cut at, not a pick still on its way to the server', async () => {
-      await show(0.9, lineFloor('unreachable', { minPrecision: 0.5 }), 40);
+      await show(0.9, lineFloor('short', { minPrecision: 0.5 }), 40);
       expect(select().value).toBe('0.9');
-      expect(stateText()!.textContent).toContain("Can't reach Centered");
+      expect(stateText()!.textContent).toContain('Aimed at Centered');
     });
   });
 
@@ -172,7 +181,7 @@ describe('PrecisionFloorComponent (#4246)', () => {
     });
 
     it('moves to the end of the state line, leaving the picker line to projected controls', async () => {
-      await show(0.5, lineFloor('insufficient_evidence'), 10);
+      await show(0.5, lineFloor('unchecked'), 10);
       expect(hints().length).toBe(1);
       expect(hints()[0].closest('.floor-state')).not.toBeNull();
     });

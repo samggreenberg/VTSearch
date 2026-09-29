@@ -171,6 +171,7 @@ class TestVocabulary:
             "import",
             "bulk",
             "undo",
+            "check",
             "unknown",
         }
 

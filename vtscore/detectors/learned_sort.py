@@ -143,8 +143,10 @@ def build_learned_sort_signature(
 
     Two runs with equal signatures produce identical results, so the route's
     job manager can return the cached result instead of retraining.  The
-    precision floor is part of the key: the threshold a run returns is the
-    floor's line whenever one is set.  *inclusion_value* is deprecated (#4269):
+    precision floor and the count its line keeps are part of the key: the
+    threshold a run returns is the floor's line whenever one is set, and a
+    finished spot check moves that line without changing a vote (#4272).
+    *inclusion_value* is deprecated (#4269):
     leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and any
     other value raises ``ValueError``.
     """
@@ -169,7 +171,17 @@ def build_learned_sort_signature(
         calibrate_count_value,
         calibration_fraction_value,
         min_precision_value,
+        _floor_count_key(det_ctx, min_precision_value),
     )
+
+
+def _floor_count_key(det_ctx, min_precision_value) -> int | None:
+    """The count the floor's line keeps, so a check result re-keys the sort it moves."""
+    from vtscore.training.thresholds import floor_count
+
+    if min_precision_value is None:
+        return None
+    return floor_count(min_precision_value, getattr(det_ctx, "precision_check", None))
 
 
 def run_learned_sort(
@@ -195,8 +207,8 @@ def run_learned_sort(
     *labelset* is set, otherwise the raw-vote pipeline; injects the live model
     into the progress cache when it maps cleanly onto current-dataset votes;
     and stores the model + training set on *det_ctx*.  Returns
-    ``(results, threshold)``: the threshold is the precision floor's line when
-    *min_precision_value* is set and promised, else the Inclusion 0 cut.
+    ``(results, threshold)``: the threshold is the line the precision floor
+    keeps when *min_precision_value* is set (#4272), else the Inclusion 0 cut.
     *inclusion_value* is deprecated (#4269): leave it unset; ``0`` is accepted
     with a ``DeprecationWarning`` and any other value raises ``ValueError``.
     """

@@ -106,7 +106,7 @@ class TestSuiteRunsAtTheLibraryDefault:
                     and isinstance(call.args[0].value, str)
                 ):
                     pinned.add(call.args[0].value)
-        missing = set(self._PINNED) - pinned
+        missing = {name for name in self._PINNED if name not in pinned}
         assert not missing, f"tests/conftest.py must setdefault {sorted(missing)} before importing anything but os"
 
     def test_no_native_threadpool_is_wider_than_the_library_setting(self):

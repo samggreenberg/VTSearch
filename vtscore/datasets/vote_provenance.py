@@ -81,6 +81,10 @@ SCHEMA_VERSION = 1
 #:                       fill-from-sort).
 #: ``undo``            - replayed from the undo/redo stack; not a fresh
 #:                       surfacing event.
+#: ``check``           - a pick of the precision floor's spot check (#4272):
+#:                       drawn uniformly from the top of the ranking, never by
+#:                       a model.  Ordinary training labels, tagged so the
+#:                       check's own votes can be told from the rest.
 #: ``unknown``         - unattributed; the default for legacy votes.
 FLOWS = frozenset(
     {
@@ -92,6 +96,7 @@ FLOWS = frozenset(
         "import",
         "bulk",
         "undo",
+        "check",
         "unknown",
     }
 )

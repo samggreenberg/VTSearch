@@ -31,10 +31,12 @@ type Dot = 'green' | 'yellow' | 'red' | 'none';
  * focus back once a floor is picked (see {@link onChange}).
  *
  * Under the picker, one line says what the floor does to the current line -
- * the floor and its state, never the estimate behind it (owner, 2026-09-28):
- * the promise kept with the count, can't reach the floor (showing the default
- * cut), or not enough evidence yet (showing the default cut, with the Good
- * votes it has). There is no "off": every detector has a floor (#4269).
+ * the floor, the set the line keeps and how close the spot check got, never
+ * an estimate from the model (owner, 2026-09-29, #4272): confirmed with the
+ * check's likely range and the count kept, the range a short check found, or
+ * the top N kept unchecked. The floor goes by its name; the range a check
+ * measured stays a number (#4298). There is no "off": every detector has a
+ * floor (#4269). The check step itself is #4273's.
  *
  * Content marked `floorActions` is projected onto the picker's line, so a host
  * can seat controls beside the picker (Find's work-queue actions) while the
@@ -53,7 +55,7 @@ export class PrecisionFloorComponent {
   readonly value = input<number>(DEFAULT_MIN_PRECISION);
   /** The floor's verdict on the line the list draws; null when there is no line from the detector. */
   readonly floor = input<LineFloor | null>(null);
-  /** How many items the line returns; null when unknown. */
+  /** How many items the line returns; the state line reads the kept count off the floor instead. */
   readonly returned = input<number | null>(null);
   /** True while a sort or Find pass runs; a snap to a preset waits for it. */
   readonly busy = input(false);
@@ -63,25 +65,26 @@ export class PrecisionFloorComponent {
 
   readonly hint =
     'Lean the line toward Complete, to return as much as it can at the cost of more wrong ones, or toward ' +
-    'Correct, to return less with little of it wrong; Centered sits between them. The line can only promise ' +
-    'its lean once it has enough evidence. Until then, or when no line on this dataset gets there, it stays ' +
-    'at the default cut and is marked unpromised.';
+    'Correct, to return less with little of it wrong; Centered sits between them. The line keeps the top of ' +
+    'the ranking, more of it the further it leans toward Complete. A check of a few random picks from that ' +
+    'set measures how much of it is right; until one runs the set is unchecked, and a check that falls ' +
+    'short keeps the top 32 it ended on and says how close it got.';
 
   readonly options = FLOOR_PRESETS.map((p) => ({ value: String(p.value), label: p.name }));
 
   /** The `<select>`'s current value: a floor off the list shows as the preset it will snap to. */
   readonly selected = computed(() => String(nearestFloorPreset(this.value()).value));
 
-  readonly summary = computed(() => floorSummary(this.floor(), this.returned()));
-  readonly explanation = computed(() => floorExplanation(this.floor(), this.returned()));
+  readonly summary = computed(() => floorSummary(this.floor()));
+  readonly explanation = computed(() => floorExplanation(this.floor()));
 
   readonly dot = computed<Dot>(() => {
     switch (this.floor()?.status) {
-      case 'promised':
+      case 'confirmed':
         return 'green';
-      case 'insufficient_evidence':
+      case 'unchecked':
         return 'yellow';
-      case 'unreachable':
+      case 'short':
         return 'red';
       default:
         return 'none';

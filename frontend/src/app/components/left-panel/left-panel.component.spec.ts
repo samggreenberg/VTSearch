@@ -342,7 +342,7 @@ describe('LeftPanelComponent', () => {
     });
 
     it('counts the same positives under a promised line, unlabelled', () => {
-      const el = show('find', lineFloor('promised'));
+      const el = show('find', lineFloor('confirmed'));
       expect(component.unverifiedGoodCount).toBe(2);
       expect(el.querySelector('.media-threshold-line')).not.toBeNull();
       expect(el.querySelector('.media-threshold-line--unpromised')).toBeNull();
@@ -421,12 +421,12 @@ describe('LeftPanelComponent', () => {
 
     it('shows the floor, its state and the count the line returns', () => {
       fixture.componentRef.setInput('minPrecision', 0.9);
-      fixture.componentRef.setInput('floor', lineFloor('promised', { minPrecision: 0.9 }));
+      fixture.componentRef.setInput('floor', lineFloor('confirmed', { minPrecision: 0.9 }));
       fixture.componentRef.setInput('returned', 212);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const select = el.querySelector('.find-floor-row select') as HTMLSelectElement;
       expect(select.value).toBe('0.9');
-      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('Promise kept · 212 returned');
+      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('Confirmed · likely 55–100% right (checked 5) · 32 kept');
     });
 
     it('forwards a picked floor as minPrecisionChange', () => {

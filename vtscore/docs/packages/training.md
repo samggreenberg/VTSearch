@@ -252,8 +252,10 @@ are summarised in
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
-| `precision_floor_cut`                     | The largest set whose estimated precision clears a floor (#4224); a detector's line when its floor is set |
-| `reporting_line`                          | Which line an operating point draws: the floor's, its Inclusion 0 fallback, or the given inclusion's with no floor |
+| `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, read by the Find Stats curve |
+| `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `floor_line`) |
+| `check_schedule` / `SpotCheck` / `likely_range` | The precision floor's spot check (#4272): the candidate, rounds and picks a floor costs, the check itself, and the likely range a checked set carries |
+| `LineRanking` / `floor_line` / `floor_state` | The ranking a detector's line keeps a set of, the line the floor draws over it, and the state every response carries |
 
 ### `text_sort_threshold(scores, rule=None)`
 
@@ -486,17 +488,62 @@ score-only selection.
 
 ### `reporting_line(cut, estimate, *, inclusion_value, min_precision)`
 
-Which line a detector draws at an operating point, shared by training, the
-no-refit re-cut (`vtscore.state.core.recut_detector_threshold`) and the eval
-harness's default arm. `min_precision=None` is no floor:
-`cut.threshold_at(inclusion_value)`, where *inclusion_value* is the internal
-unit, not a user preference (#4269) - the app passes
+The estimator's own line at an operating point. `min_precision=None` is no
+floor: `cut.threshold_at(inclusion_value)`, where *inclusion_value* is the
+internal unit, not a user preference (#4269) - the app passes
 `PRECISION_FLOOR_FALLBACK_INCLUSION`, and a re-cut passes the acquisition or
-Smart inclusion. A floor that is `promised` draws its own
-threshold, whatever the inclusion. One that promises nothing draws the
-`PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut, so an unmet floor never empties the
-results. The returned `ReportingLine` carries the verdict, and `line_inclusion`
-gives the inclusion Autopilot's acquisition offset starts from.
+Smart inclusion. With a floor it says what the #4220 estimate says: a floor
+that is `promised` draws the estimate's own threshold, one that promises
+nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **The app no
+longer draws its line here under a floor** (#4272): it hands `reporting_line`
+no estimate, and draws the floor's line with `floor_line` below. The returned
+`ReportingLine` carries the verdict, and `line_inclusion` gives the inclusion
+Autopilot's acquisition offset starts from - derived from the line itself when
+no inclusion drew it.
+
+### The spot check: `check_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `floor_line`, `floor_state`
+
+`vtscore/training/thresholds/spot_check.py` (#4272; the #4267 ruling, priced in
+[`docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md`](../../../docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md)).
+Under a precision floor *X* the line keeps a **set**, and a spot check of
+uniform random picks from it measures how much of it is right; the check's
+range comes only from those picks, never from a model.
+
+- `check_schedule(X)` is what a check costs: the starting candidate
+  `K = 32 * 2**max(0, floor(log2(0.5 / X)))` (128 at 10%, 64 at 25%, 32 at
+  50% and above), the rounds `R = log2(K / 32) + 1`, and the picks a round
+  `m = max(5, ceil(ln(alpha / R) / ln X))` (5 at 10-50%, 11 at 75%, 29 at
+  90%) at `CHECK_ALPHA = 0.05`. `rounds_for(k)` sizes the rounds to a
+  candidate a small corpus truncated.
+- `LineRanking.from_scores(ids, scores, voted)` is the ranking the line is
+  drawn over: sorted, unscorable items dropped, the trainer's voted items
+  marked. `candidate(count, also_voted)` is the top *count* unvoted ids,
+  `threshold_for(count, also_voted)` the line that keeps them (the last
+  item's score, floored to the four decimals responses carry - `line_under` -
+  so the item clears its own line however it is compared), `above(threshold)`
+  the count at or above it, and `fingerprint(count, also_voted)` the set's
+  identity for the `stale` flag.
+- `SpotCheck.start(candidate_ids, X)` fixes the candidate and deals round one
+  (`draw`); `record({id: right})` takes a round's labels and, once the round is
+  complete, confirms the floor (`FLOOR_CONFIRMED`), halves the candidate into
+  the next round keeping the labels inside it, or ends `FLOOR_SHORT` at 32.
+  `range()` is the current candidate's likely range; `as_dict()` the state a
+  client sees; `is_stale(ranking, also_voted)` whether the set moved since the
+  check. `CHECK_PROVENANCE` is the provenance its votes are recorded with.
+- `likely_range(right, labelled, candidate, tail)` is a Clopper-Pearson
+  interval with each tail at `range_tail(rounds)` = alpha / R, exact once the
+  labels cover the candidate; `clopper_pearson_lower` / `_upper` are the
+  bounds.
+- `floor_count(X, result)`, `floor_line(ranking, X, result, also_voted)` and
+  `floor_state(X, result, ranking, also_voted)` are the rule the app's retrain,
+  re-cut and the eval harness's default arm share: the set the finished check
+  ended on (`applicable_result`: a result belongs to the floor it was run at),
+  else the starting candidate, and the `FloorState` every response carries
+  (`status` in `FLOOR_STATES`: `unchecked` / `confirmed` / `short`, `count`,
+  `range`, `stale`, `schedule`).
+
+`scripts/check-eval-app-sync.py` pins `check_schedule`, `likely_range` and
+`SpotCheck` against the analysis scripts that priced them.
 
 ---
 

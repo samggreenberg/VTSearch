@@ -61,6 +61,9 @@ def _run_safe_uncached(style, seed=0, max_steps=16, diag_sink=None, **kw):
         style=style,
         emit_calibration_metrics=True,
         cut_diag_sink=diag_sink,
+        # The Inclusion arm: the production arm reproduces the estimator's cut
+        # at `inclusion`, which a floor's set would replace (#4272).
+        min_precision=kw.pop("min_precision", "off"),
         **kw,
     )
 

@@ -9,12 +9,7 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **Self-booting / temp-data-dir determinism.** The harness currently drives an
-  already-running app against the real `data/` dir (a RAM-driven choice — a
-  second instance would load the image embedder twice and OOM the ~3.7 GB box).
-  The plan's original intent was a temp data dir per run. Revisit if pixel-diff
-  drift from shared state becomes a problem; the seeded drawings and the fixed
-  vote baseline already cover content stability.
+- [ ] #4299 — Shared data-dir state piles up between refreshes (temp-data-dir determinism)
 
 <!-- item-sep -->
 
@@ -24,7 +19,7 @@ pixel-diff tolerance) are the remaining work.
 
 <!-- item-sep -->
 
-- **`autopilot-progress` phase.** Captured with phase 3 (Refine Boundary) active
+- **`autopilot-progress` phase.** Captured with phase 4 (Refine Boundary) active
   thanks to the 27-vote `Yellow Smileys` fixture (`VOTES` in `smiley-example.mjs`);
   if the fixture vote count changes, the active phase in this shot moves with
   it.
@@ -149,7 +144,8 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 drawings) and a fixed vote baseline;
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`); mask volatile
-text (app version — a git timestamp — and any wall-clock/elapsed/gauge text);
+text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)
+and pin the RAM / disk gauges' fill bar at a fixed fraction;
 stub randomness the UI exposes (never rely on unseeded draws).
 
 ### 3. Driver scripts — `scripts/screenshots/`

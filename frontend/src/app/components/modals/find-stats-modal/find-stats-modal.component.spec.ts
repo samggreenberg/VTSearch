@@ -31,7 +31,7 @@ describe('FindStatsModalComponent', () => {
     verified_called_good: 10,
     verified_kept_good: 7,
     threshold: 0.5,
-    floor: wireFloor('promised', { calibrationPositives: 14 }),
+    floor: wireFloor('confirmed'),
     n_scored: 1000,
     n_returned: 40,
     precision_curve: [
@@ -289,40 +289,42 @@ describe('FindStatsModalComponent', () => {
 
     const legend = (el: HTMLElement) => el.querySelector('.chart-legend')!.textContent!.replace(/\s+/g, ' ');
 
-    it('draws the floor across the chart at X, and a promised line keeps it', async () => {
-      const el = await load({ floor: wireFloor('promised', { minPrecision: 0.9 }) });
+    it('draws the floor across the chart at X, and a confirmed line keeps it with its range', async () => {
+      const el = await load({ floor: wireFloor('confirmed', { minPrecision: 0.9 }) });
       const floor = el.querySelector('.precision-chart .floor')!;
       expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
       expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
       expect(el.querySelector('.precision-chart .current')!.classList).not.toContain('unpromised');
-      // The floor by name, never by number (#4298); the chart's axis keeps its percentages.
+      // The floor by name, never by number (#4298); the check's range and the axis stay numbers.
       expect(legend(el)).toContain('Floor: Correct');
-      expect(legend(el)).toContain('Line: keeps the Correct floor');
+      expect(legend(el)).toContain('Line: keeps the Correct floor, likely 55–100%');
       expect(legend(el)).not.toContain('90%');
       // The Inclusion stepper's legend is gone.
       expect(legend(el)).not.toContain('incl');
     });
 
-    it('labels the line as the unpromised default cut when the floor is unreachable', async () => {
-      const el = await load({ floor: wireFloor('unreachable', { minPrecision: 0.9, calibrationPositives: 20 }) });
+    it('labels the line unpromised when the check fell short, and says how close it got', async () => {
+      const el = await load({ floor: wireFloor('short', { minPrecision: 0.9 }) });
       expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
       expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
       expect(el.querySelector('.swatch-current')!.classList).toContain('unpromised');
-      expect(legend(el)).toContain('Line: the default cut, unpromised');
-      expect(el.textContent).toContain('No cut reaches the Correct floor on this dataset');
+      expect(legend(el)).toContain('Line: fell short of Correct, likely 11–73%');
+      expect(el.textContent).toContain('A check of 5 random picks fell short of the Correct floor');
+      expect(el.textContent).toContain('the top 32 the line keeps is likely 11–73% right');
     });
 
-    it('says the line waits on evidence alongside the withheld estimate', async () => {
+    it('says an unchecked line keeps its starting candidate, beside a withheld estimate', async () => {
       const el = await load({
         estimate_status: 'insufficient_evidence',
         calibration_positives: 3,
-        floor: wireFloor('insufficient_evidence'),
+        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128 }),
       });
       expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
+      expect(legend(el)).toContain('Line: the top 128, unchecked');
       const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
-      expect(notes.some((n) => n.includes('has 3') && n.includes('Until then the line is the default cut'))).toBe(
-        true,
-      );
+      expect(notes.some((n) => n.includes('has 3'))).toBe(true);
+      expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked'))).toBe(true);
+      expect(el.textContent).not.toContain('default cut');
     });
   });
 });
@@ -347,7 +349,7 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
     verified_called_good: 10,
     verified_kept_good: 7,
     threshold: 0.5,
-    floor: wireFloor('insufficient_evidence', { calibrationPositives: 0 }),
+    floor: wireFloor('unchecked'),
     n_scored: 100,
     n_returned: 10,
     precision_curve: [],

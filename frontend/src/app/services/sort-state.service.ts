@@ -65,10 +65,10 @@ export class SortStateService {
   // carries one; every other sort leaves it null and the picks fall back to
   // `_threshold`, which is what they always used.
   private readonly _acqThreshold = signal<number | null>(null);
-  // What the precision floor says about `_threshold` (#4247). Set with the
-  // threshold, from the same response, so the two never disagree. When the
-  // floor promises nothing the threshold is still a real cut (Inclusion 0) and
-  // every consumer keeps using it; this only lets the line say so.
+  // What the precision floor says about `_threshold` (#4247, #4272). Set with
+  // the threshold, from the same response, so the two never disagree. The
+  // line always keeps a set - unchecked, confirmed or short of the floor - and
+  // every consumer keeps using it; this only lets the line say which.
   private readonly _floor = signal<LineFloor | null>(null);
   private readonly _sortBusy = signal(false);
   private readonly _sortStatus = signal('');
@@ -134,7 +134,7 @@ export class SortStateService {
     return this._floor();
   }
 
-  /** True when `threshold` is the unpromised Inclusion 0 fallback (#4247). */
+  /** True when the set `threshold` keeps is not a confirmed one: unchecked, or a check that fell short (#4247, #4272). */
   get unpromised(): boolean {
     return isUnpromised(this._floor());
   }

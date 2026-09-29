@@ -490,6 +490,7 @@ def maybe_structural_rerank(
             det_ctx.anchored_cut_cache = None
             det_ctx.calibration_cache = None
             det_ctx.precision_floor_cache = None
+            det_ctx.line_ranking = None
         except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
             pass
 

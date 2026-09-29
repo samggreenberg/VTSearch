@@ -189,22 +189,22 @@
       @if (stats.estimate_status === 'insufficient_evidence') {
         <p class="chart-note" role="note">
           No estimate yet: it needs {{ stats.min_calibration_positives }} Good votes among the detector's held-out calibration votes, and has {{ stats.calibration_positives }}.
-          @if (floorWaiting) {
-            Until then the line is the default cut, and makes no promise.
-          }
         </p>
       } @else if (stats.estimate_status === 'unavailable') {
         <p class="chart-note" role="note">
           No estimate: the detector has too few votes to hold any out for calibration.
-          @if (floorWaiting) {
-            The line is the default cut, and makes no promise.
-          }
         </p>
       }
-      @if (stats.floor.status === 'unreachable') {
-        <p class="chart-note" role="note">
-          No cut reaches the {{ floorLabel }} floor on this dataset, so the line is the default cut, and makes no promise.
-        </p>
+      @if (lineFloor; as floor) {
+        @if (floor.status === 'unchecked') {
+          <p class="chart-note" role="note">
+            The line keeps the top {{ floor.count | number }}, unchecked: no check has measured how much of it is right.
+          </p>
+        } @else if (floor.status === 'short' && floor.range) {
+          <p class="chart-note" role="note">
+            A check of {{ floor.range.labelled }} random picks fell short of the {{ floorLabel }} floor: the top {{ floor.count | number }} the line keeps is likely {{ rangeText(floor.range) }} right.
+          </p>
+        }
       }
       @if (!hasVerified) {
         <p class="chart-note" role="note">Nothing checked yet. Vote on items in the list to measure precision by hand.</p>

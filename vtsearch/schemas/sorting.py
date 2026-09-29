@@ -16,6 +16,15 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
 * ``GET  /api/min-precision``                 -> :class:`MinPrecisionResponseSchema`
 * ``POST /api/min-precision``                 -> :class:`MinPrecisionRequestSchema` ->
                                                 :class:`MinPrecisionResponseSchema`
+
+and the precision floor's spot check in ``vtsearch/routes/precision_check.py``
+(#4272):
+
+* ``GET  /api/precision-check``                -> :class:`PrecisionCheckResponseSchema`
+* ``POST /api/precision-check/start``          -> :class:`PrecisionCheckResponseSchema`
+* ``POST /api/precision-check/votes``          -> :class:`PrecisionCheckVotesRequestSchema` ->
+                                                :class:`PrecisionCheckResponseSchema`
+* ``POST /api/precision-check/cancel``         -> :class:`PrecisionCheckResponseSchema`
 * ``POST /api/example-sort``                  (multipart upload) ->
                                                 :class:`SortResponseSchema`
 * ``POST /api/label-file-sort``               (multipart upload) ->
@@ -46,29 +55,65 @@ class OkResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
-#: The states a precision floor can report; mirrors
-#: :class:`vtscore.training.thresholds.PrecisionFloorStatus`.
-PRECISION_FLOOR_STATES = ("promised", "unreachable", "insufficient_evidence")
+from vtscore.training.thresholds.spot_check import CHECK_CANCELLED, CHECK_RUNNING, FLOOR_STATES
+
+#: The states a precision floor can report (#4272); mirrors
+#: :data:`vtscore.training.thresholds.FLOOR_STATES`.
+PRECISION_FLOOR_STATES = FLOOR_STATES
+
+#: The states a spot check can be in: its rounds still being voted on, ended
+#: on one of the floor's two checked states, or abandoned.
+PRECISION_CHECK_STATES = (CHECK_RUNNING, *FLOOR_STATES[1:], CHECK_CANCELLED)
+
+
+class LikelyRangeSchema(Schema):
+    """How much of the set the line keeps is likely right, from a spot check's picks (#4272).
+
+    A Clopper-Pearson interval from the check's labels inside the set, each
+    tail at the level the check's rounds were tested at; exact when the labels
+    cover the set.
+    """
+
+    lo = fields.Float(required=True)
+    hi = fields.Float(required=True)
+    # How many of the set's items the check labelled, and how many were right.
+    labelled = fields.Integer(required=True)
+    right = fields.Integer(required=True)
+    # True once the ranking under the result has moved since the check (later
+    # votes retrained the model): the range describes the list as it was.
+    stale = fields.Boolean(required=False)
+
+
+class CheckScheduleSchema(Schema):
+    """What a spot check at this floor costs: its starting candidate, rounds and picks a round."""
+
+    candidate = fields.Integer(required=True)
+    rounds = fields.Integer(required=True)
+    picks = fields.Integer(required=True)
 
 
 class FloorStateSchema(Schema):
-    """What the precision floor says about the line a response carries (#4247).
+    """What the precision floor says about the line a response carries (#4247, #4272).
 
-    Rides beside ``threshold`` on every response that draws a detector's line,
-    so a client can say whether that line is a promise.  Built by
-    :func:`vtscore.state.core.detector_floor_state`.
+    Rides beside ``threshold`` on every response that draws a detector's line.
+    Built by :func:`vtscore.state.core.detector_floor_state`.
     """
 
     # The detector's floor.  Every detector has one (#4269).
     min_precision = fields.Float(required=True)
-    # ``promised``: the line is the floor's own cut.  ``unreachable`` /
-    # ``insufficient_evidence``: the floor promised nothing and the line is the
-    # Inclusion 0 cut, unpromised.
+    # ``unchecked``: no spot check has run at this floor, and the line keeps
+    # the floor's starting candidate.  ``confirmed``: the last check's range
+    # clears the floor.  ``short``: it ended below the floor, and the line
+    # keeps the top 32 it ended on.  The line always keeps a set.
     status = fields.String(required=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
-    # Positives among the held-out votes that may calibrate the promise.
-    calibration_positives = fields.Integer(required=True)
-    # How many the floor needs before it promises anything.
-    min_calibration_positives = fields.Integer(required=True)
+    # How many unvoted items the line keeps: the check's confirmed set, the
+    # top 32 after a short check, or the starting candidate (128 at 10%, 64 at
+    # 25%, 32 at 50% and above), capped by the corpus.
+    count = fields.Integer(required=True)
+    # The check's likely range for the kept set; ``null`` while unchecked.
+    range = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
+    # What a check at this floor would cost.
+    schedule = fields.Nested(CheckScheduleSchema, required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -268,30 +313,72 @@ def _validate_numeric(value):
 # ---------------------------------------------------------------------------
 
 
-class MinPrecisionResponseSchema(Schema):
-    """Response for ``GET|POST /api/min-precision``."""
+class MinPrecisionResponseSchema(FloorStateSchema):
+    """Response for ``GET|POST /api/min-precision``: the floor state, plus the line it draws."""
 
-    # The active detector's floor.  Every detector has one (#4269).
-    min_precision = fields.Float(required=True)
-    # What the floor can say about the detector's corpus: ``promised`` (at
-    # least ``min_precision`` of what the line returns is estimated right),
-    # ``unreachable`` (enough evidence, but no cut gets there), or
-    # ``insufficient_evidence`` (too few calibration positives to promise
-    # anything).
-    status = fields.String(required=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
-    # The line the detector draws: the floor's cut when promised, the
-    # Inclusion 0 cut when the floor promises nothing.  ``null`` when no
-    # detector has a threshold.
+    # The line the detector draws: the last item of the set the floor keeps.
+    # ``null`` when no detector has a threshold.
     threshold = fields.Float(required=True, allow_none=True)
-    # How many items the line returns in the corpus the cut decides (the
-    # dataset the detector last trained against, less its voted items when the
-    # #3308 exclusion applied).  ``null`` before a retrain has fitted one.
+    # How many items of the ranking the detector last scored - voted items
+    # included - sit at or above ``threshold``.  ``null`` before a retrain has
+    # scored one.
     n_returned = fields.Integer(required=True, allow_none=True)
-    # Positives among the held-out votes the learned sort chose - the
-    # evidence a promise is calibrated on.
-    calibration_positives = fields.Integer(required=True)
-    # The gate: how many the floor needs before it promises anything.
-    min_calibration_positives = fields.Integer(required=True)
+
+
+# ---------------------------------------------------------------------------
+# /api/precision-check
+# ---------------------------------------------------------------------------
+
+
+class PrecisionCheckStateSchema(Schema):
+    """A spot check of the active detector's floor: its round, picks, labels and range (#4272)."""
+
+    status = fields.String(required=True, validate=validate.OneOf(PRECISION_CHECK_STATES))
+    # The floor the check is (or was) measuring.
+    min_precision = fields.Float(required=True)
+    # The round being voted on (1-based) and how many the check can run.
+    round = fields.Integer(required=True)
+    rounds = fields.Integer(required=True)
+    # How many fresh picks each round draws.
+    picks_per_round = fields.Integer(required=True)
+    # The current candidate's size, and the size it started at (halved on a
+    # failed round, down to 32).
+    candidate = fields.Integer(required=True)
+    start_candidate = fields.Integer(required=True)
+    # The picks awaiting the user's vote this round, in draw order (random).
+    # They are a check, not the ranking: a client must not show them as the
+    # top of the sort.
+    picks = fields.List(fields.Integer(), required=True)
+    # Labels inside the current candidate so far, and how many were right.
+    labelled = fields.Integer(required=True)
+    right = fields.Integer(required=True)
+    # The candidate's likely range from those labels; ``null`` before any.
+    range = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
+
+
+class PrecisionCheckResponseSchema(Schema):
+    """Response for every ``/api/precision-check`` verb: the floor's state and the check, if any."""
+
+    # The floor's state for the line, exactly as every other carrier reports it.
+    floor = fields.Nested(FloorStateSchema, required=True)
+    # The running check, or the last finished one; ``null`` when there is
+    # neither.
+    check = fields.Nested(PrecisionCheckStateSchema, required=True, allow_none=True)
+
+
+class PrecisionCheckVoteSchema(Schema):
+    """One vote on a pick: the media id and whether it is Good (right) or Bad."""
+
+    id = fields.Integer(required=True)
+    label = fields.String(required=True, validate=validate.OneOf(["good", "bad"]))
+
+
+class PrecisionCheckVotesRequestSchema(Schema):
+    """Body for ``POST /api/precision-check/votes``."""
+
+    # Votes on this round's picks.  A partial round is accepted and waits for
+    # the rest; an id that is not one of the round's picks is a 400.
+    votes = fields.List(fields.Nested(PrecisionCheckVoteSchema), required=True)
 
 
 class MinPrecisionRequestSchema(Schema):

@@ -614,7 +614,7 @@ remembers your layout per media type.
 Most users should never need Manual mode.
 
 Click the **Autopilot** tab in the left panel. Autopilot breaks
-labeling into four phases and tells you what to do at each step.
+labeling into five phases and tells you what to do at each step.
 You still click **Good** or **Bad** on each item shown - Autopilot
 just picks *which* items to show you and *when* each phase ends.
 
@@ -673,7 +673,7 @@ media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/autopilot-progress.dark.webp" />
-  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the four phases (Find Initial Goods, Find Initial Bads, Refine Boundary, Explore Diversity) tracked in order" width="320" />
+  <img src="assets/autopilot-progress.light.webp" alt="The Autopilot phase panel: the five phases (Find Initial Goods, Find Initial Bads, Find More Goods, Refine Boundary, Explore Diversity) tracked in order" width="320" />
 </picture>
 
 ### Configuring Autopilot
@@ -740,7 +740,7 @@ Picks *which unlabeled item* the app highlights next.
 - **New** - Pick an item from a part of the dataset you haven't
   covered yet. Ensures a broad mix.
 
-Autopilot cycles through these automatically in its four phases,
+Autopilot cycles through these automatically in its five phases,
 but in Manual mode you choose directly.
 
 ### 3. Precision floor
@@ -760,17 +760,21 @@ Once the list is ranked by the detector (a **Learned** sort, or Find), the
 note under the picker says what the floor is doing to the line, in one of
 three states:
 
-- **Promise kept**, with how many items the line returns - the detector
-  can promise the floor, and the line keeps it.
-- **Can't reach Centered on this dataset** - there is enough evidence, but no
-  line on this dataset gets there. The line stays at the default cut.
-- **Not enough evidence yet**, with how many Good votes the detector has
-  of the ten it needs - the usual state for a new detector. The line stays
-  at the default cut.
+- **Top 32 kept, unchecked · aiming at Centered** - the line keeps the
+  floor's starting set, the top unvoted items of the ranking: the top 128
+  at **Complete**, the top 32 at **Centered** and **Correct**. Nothing has
+  measured how much of it is right yet.
+- **Confirmed**, with a likely range and how many items the line keeps - a
+  check of a few random picks from the set found enough of it right for the
+  floor.
+- **Aimed at Centered: likely 11–73% right**, with how many picks were
+  checked - a check fell short. The line keeps the top 32 it ended on, and
+  the range says how close it got.
 
-In the last two the line is *unpromised*, and moving the floor doesn't
-move it (see [When the line is unpromised](#when-the-line-is-unpromised)).
-The **?** beside the note explains the floor.
+In the first and last the line is *unpromised* (see
+[When the line is unpromised](#when-the-line-is-unpromised)). The floor is
+named rather than numbered; the range a check measured is a number. The
+**?** beside the note explains the floor.
 
 While the floor is promised, lower floors *nest*: everything the line
 returns at **Correct** it still returns at **Centered**, plus a band of

@@ -22,16 +22,15 @@ floor, the more the line returns. While the floor is promised, lower floors
 *nest*: everything the line returns at **Correct** it still returns at
 **Centered**, along with a band of extra borderline pictures.
 
-The line only follows the floor once the detector can promise it. The note
-under the picker says whether it can:
+The note under the picker says what the line keeps:
 
-- **Promise kept**, with a count - the line keeps the floor, and moving the
-  floor moves the line.
-- **Not enough evidence yet** or **Can't reach Centered on this dataset** - the line
-  stays at the default cut whatever floor you pick, and is marked
-  *unpromised*. A new detector starts here: see
-  [When the line is unpromised](../USER_GUIDE.md#when-the-line-is-unpromised)
-  for what brings the promise.
+- **Top 32 kept, unchecked** - the floor's starting set, the top unvoted
+  pictures of the ranking: the top 128 at **Complete**, the top 32 at
+  **Centered** and **Correct**. Nothing has measured it yet, so the line is
+  marked *unpromised*. A new detector starts here: see
+  [When the line is unpromised](../USER_GUIDE.md#when-the-line-is-unpromised).
+- **Confirmed**, or **Aimed at Centered: likely 11–73% right** - how much of
+  the set a check of a few random picks found right.
 
 Moving the floor never re-scores anything and never changes the order of the
 pictures. Only the line moves. The user guide explains the line itself in
@@ -50,12 +49,12 @@ matches just under it come up whatever the floor says. Every one you mark
 At the top of the left-hand panel:
 
 1. Pick a lower floor: from **Centered**, that is **Complete**.
-2. Read the note under it. **Promise kept** means the line has moved
-   down, so more pictures sit above it and the count of **Unverified Good**
-   on the right grows by the pictures it has just let in.
-3. **Not enough evidence yet**, as here, means the line in the list has
-   stayed where it was: keep checking pictures as in Step 1, which is also
-   what earns the promise.
+2. Read the note under it. **Top 128 kept** means the line has moved down
+   to keep the top 128, so more pictures sit above it and the count of
+   **Unverified Good** on the right grows by the pictures it has just let
+   in.
+3. Find the line in the list: the pictures just above it are the ones the
+   lower floor let in.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-floor.dark.webp" />

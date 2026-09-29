@@ -999,6 +999,26 @@
         ],
         "type": "object"
       },
+      "CheckSchedule": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "type": "integer"
+          },
+          "picks": {
+            "type": "integer"
+          },
+          "rounds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate",
+          "picks",
+          "rounds"
+        ],
+        "type": "object"
+      },
       "CleanerInfo": {
         "additionalProperties": true,
         "properties": {
@@ -3967,28 +3987,33 @@
       "FloorState": {
         "additionalProperties": false,
         "properties": {
-          "calibration_positives": {
-            "type": "integer"
-          },
-          "min_calibration_positives": {
+          "count": {
             "type": "integer"
           },
           "min_precision": {
             "type": "number"
           },
+          "range": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/CheckSchedule"
+          },
           "status": {
             "enum": [
-              "promised",
-              "unreachable",
-              "insufficient_evidence"
+              "unchecked",
+              "confirmed",
+              "short"
             ],
             "type": "string"
           }
         },
         "required": [
-          "calibration_positives",
-          "min_calibration_positives",
+          "count",
           "min_precision",
+          "range",
+          "schedule",
           "status"
         ],
         "type": "object"
@@ -4726,6 +4751,33 @@
         ],
         "type": "object"
       },
+      "LikelyRange": {
+        "additionalProperties": false,
+        "properties": {
+          "hi": {
+            "type": "number"
+          },
+          "labelled": {
+            "type": "integer"
+          },
+          "lo": {
+            "type": "number"
+          },
+          "right": {
+            "type": "integer"
+          },
+          "stale": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hi",
+          "labelled",
+          "lo",
+          "right"
+        ],
+        "type": "object"
+      },
       "LocalizeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5124,10 +5176,7 @@
       "MinPrecisionResponse": {
         "additionalProperties": false,
         "properties": {
-          "calibration_positives": {
-            "type": "integer"
-          },
-          "min_calibration_positives": {
+          "count": {
             "type": "integer"
           },
           "min_precision": {
@@ -5137,11 +5186,18 @@
             "nullable": true,
             "type": "integer"
           },
+          "range": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/CheckSchedule"
+          },
           "status": {
             "enum": [
-              "promised",
-              "unreachable",
-              "insufficient_evidence"
+              "unchecked",
+              "confirmed",
+              "short"
             ],
             "type": "string"
           },
@@ -5151,10 +5207,11 @@
           }
         },
         "required": [
-          "calibration_positives",
-          "min_calibration_positives",
+          "count",
           "min_precision",
           "n_returned",
+          "range",
+          "schedule",
           "status",
           "threshold"
         ],
@@ -5252,6 +5309,120 @@
         "required": [
           "new_path",
           "old_path"
+        ],
+        "type": "object"
+      },
+      "PrecisionCheckResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "$ref": "#/components/schemas/PrecisionCheckState",
+            "nullable": true
+          },
+          "floor": {
+            "$ref": "#/components/schemas/FloorState"
+          }
+        },
+        "required": [
+          "check",
+          "floor"
+        ],
+        "type": "object"
+      },
+      "PrecisionCheckState": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "type": "integer"
+          },
+          "labelled": {
+            "type": "integer"
+          },
+          "min_precision": {
+            "type": "number"
+          },
+          "picks": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "picks_per_round": {
+            "type": "integer"
+          },
+          "range": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "right": {
+            "type": "integer"
+          },
+          "round": {
+            "type": "integer"
+          },
+          "rounds": {
+            "type": "integer"
+          },
+          "start_candidate": {
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "confirmed",
+              "short",
+              "cancelled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate",
+          "labelled",
+          "min_precision",
+          "picks",
+          "picks_per_round",
+          "range",
+          "right",
+          "round",
+          "rounds",
+          "start_candidate",
+          "status"
+        ],
+        "type": "object"
+      },
+      "PrecisionCheckVote": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "label": {
+            "enum": [
+              "good",
+              "bad"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "PrecisionCheckVotesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "votes": {
+            "items": {
+              "$ref": "#/components/schemas/PrecisionCheckVote"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "votes"
         ],
         "type": "object"
       },
@@ -6347,6 +6518,7 @@
             "enum": [
               "autopilot",
               "bulk",
+              "check",
               "find_verify",
               "import",
               "labelset_review",
@@ -13453,13 +13625,13 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Get the active detector's precision floor, what it can promise, and the line it draws.",
+        "summary": "Get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws.",
         "tags": [
           "sorting"
         ]
       },
       "post": {
-        "description": "A pure cutoff knob: the active detector re-cuts its cached estimators at\nthe new floor (no retrain) and, in Find mode, re-splits the unverified\nitems over the frozen scores.  The new line comes back in the same round\ntrip.  A floor that can promise nothing draws the Inclusion 0 line and says\nwhy in ``status``.  Every detector has a floor, so ``null`` is refused.",
+        "description": "A pure cutoff knob: the active detector's line moves to the set the new\nfloor keeps (no retrain) and, in Find mode, the unverified items re-split\nover the frozen scores.  The new line comes back in the same round trip,\nwith the floor's state: ``unchecked`` until a spot check runs at this\nfloor (``/api/precision-check``), then ``confirmed`` or ``short`` with the\ncheck's likely range.  Every detector has a floor, so ``null`` is refused.",
         "operationId": "set_min_precision_route",
         "requestBody": {
           "content": {
@@ -13492,6 +13664,126 @@
         "summary": "Set the precision floor, a fraction clamped to ``[0.01, 1]``.",
         "tags": [
           "sorting"
+        ]
+      }
+    },
+    "/api/precision-check": {
+      "get": {
+        "operationId": "get_precision_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrecisionCheckResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "The active detector's spot check (running, else the last finished) and the floor's state.",
+        "tags": [
+          "precision_check"
+        ]
+      }
+    },
+    "/api/precision-check/cancel": {
+      "post": {
+        "operationId": "cancel_precision_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrecisionCheckResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Abandon the running check.  Its votes so far stay ordinary votes; the floor's state is as it was.",
+        "tags": [
+          "precision_check"
+        ]
+      }
+    },
+    "/api/precision-check/start": {
+      "post": {
+        "description": "The candidate is the top *K* unvoted items of the ranking the detector\nlast scored (*K* from the floor's schedule: 128 at 10%, 64 at 25%, 32 at\n50% and above), fixed for the whole check.  Deals the first round's picks.\nA check already running is replaced.  The last finished result stays in\nforce until this check ends.",
+        "operationId": "start_precision_check",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrecisionCheckResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "No ranking to draw from, nothing unvoted in it, or the same candidate as the last check."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Start a spot check of the active detector's floor over its current ranking.",
+        "tags": [
+          "precision_check"
+        ]
+      }
+    },
+    "/api/precision-check/votes": {
+      "post": {
+        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the round is labelled the round is decided: the\nfloor is confirmed, the candidate halves into the next round and its picks\nare dealt, or the check ends short.  The response carries the check's new\nstate and the floor's, whose line moves to the set a finished check ended\non.",
+        "operationId": "vote_precision_check",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrecisionCheckVotesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrecisionCheckResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "A vote on an item that is not one of this round's picks."
+          },
+          "409": {
+            "description": "No check is running."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Record votes on the running check's picks.",
+        "tags": [
+          "precision_check"
         ]
       }
     },
@@ -14944,6 +15236,10 @@
     {
       "description": "Text / example / learned sort, votes, precision floor, safe-thresholds, coverage atlas.",
       "name": "sorting"
+    },
+    {
+      "description": "The precision floor's spot check: draw picks, take the votes, report how close the line got.",
+      "name": "precision_check"
     },
     {
       "description": "Recent (dataset, detector) labelling sessions per user.",
