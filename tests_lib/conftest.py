@@ -4,12 +4,13 @@ These tests exercise the ``vtscore`` candidate subpackages without booting
 Flask and without importing ``vtsearch`` at all — see ``tests_lib/__init__.py``
 for the two gates that hold that line.  Everything the two suites
 share — the group-marker hook, the fake embedders, the tmp-path widener, the
-embedder stub fixture, the bulk of the reset fixture and the end-of-run summary
-printer — lives in ``tests_shared`` and is imported by both conftests, so the
-two can no longer drift (issue #3424).  What stays here is library-tier only:
-the Flask blocker, the native-thread caps, and the library-only ``CoreConfig``
-builder.  The app-tier fixtures (``client``, ``isolated_settings``,
-``_set_login_provider``, autorun-processor reset) are deliberately absent.
+example-media redirect, the embedder stub fixture, the bulk of the reset fixture
+and the end-of-run summary printer — lives in ``tests_shared`` and is imported
+by both conftests, so the two can no longer drift (issue #3424).  What stays
+here is library-tier only: the Flask blocker, the native-thread caps, and the
+library-only ``CoreConfig`` builder.  The app-tier fixtures (``client``,
+``isolated_settings``, ``_set_login_provider``, autorun-processor reset) are
+deliberately absent.
 
 Phase 7 of ``../vtscore/docs/architecture.md``.
 """
@@ -60,6 +61,7 @@ from tests_shared.pytest_plumbing import add_group_markers, print_summary_and_ex
 from tests_shared.state_reset import (  # noqa: E402
     TEST_TRAIN_EPOCHS,  # noqa: F401  (re-exported: tests_lib/core/test_training_budget_isolation.py)
     allow_test_tmp_paths as _allow_test_tmp_paths,  # noqa: F401  (autouse fixture)
+    isolated_example_media_dir as _isolated_example_media_dir,  # noqa: F401  (autouse fixture)
     capture_startup_host_seams,
     freeze_collected_heap,
     freeze_startup_heap,
