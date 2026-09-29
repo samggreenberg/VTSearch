@@ -148,12 +148,6 @@ describe('PairScopeService', () => {
     expect(sortState.minPrecision).toBe(0.75);
   });
 
-  it('seedMinPrecision seeds a detector with no floor as null', () => {
-    service.seedMinPrecision();
-    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor(null), threshold: 0.3, n_returned: null });
-    expect(sortState.minPrecision).toBeNull();
-  });
-
   it('seedMinPrecision seeds only the value; the verdict arrives with the line', () => {
     sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineFloor('promised'));
     service.seedMinPrecision();

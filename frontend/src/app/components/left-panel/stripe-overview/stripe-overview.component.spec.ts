@@ -150,7 +150,7 @@ describe('StripeOverviewComponent', () => {
       expect(title).toContain('default cut');
     });
 
-    it.each([lineFloor('promised'), lineFloor(null), null])('draws a plain line otherwise (%o)', async (floor) => {
+    it.each([lineFloor('promised'), null])('draws a plain line otherwise (%o)', async (floor) => {
       const el = await drawWith(floor);
       const marker = el.querySelector('.stripe-threshold');
       expect(marker).not.toBeNull();

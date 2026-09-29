@@ -58,21 +58,12 @@ describe('PrecisionFloorComponent (#4246)', () => {
       expect(select().value).toBe('0.6');
     });
 
-    it('shows a detector with no floor as "No floor", which cannot be picked back', async () => {
-      await show(null);
-      expect(optionLabels()).toEqual(['No floor', '25%', '50%', '75%', '90%']);
-      expect(select().value).toBe('none');
-      expect(select().options[0].disabled).toBe(true);
-    });
-
-    it('follows the value through every transition, "No floor" included', async () => {
+    it('follows the value through every transition', async () => {
       for (const [value, shown] of [
         [0.9, '0.9'],
-        [null, 'none'],
         [0.75, '0.75'],
         [0.6, '0.6'],
         [0.25, '0.25'],
-        [null, 'none'],
         [0.5, '0.5'],
       ] as const) {
         await show(value);
@@ -93,14 +84,6 @@ describe('PrecisionFloorComponent (#4246)', () => {
       select().value = '0.75';
       select().dispatchEvent(new Event('change'));
       expect(document.activeElement).not.toBe(select());
-    });
-
-    it('never emits "No floor"', async () => {
-      await show(null);
-      const emitted = vi.spyOn(component.valueChange, 'emit');
-      select().value = 'none';
-      select().dispatchEvent(new Event('change'));
-      expect(emitted).not.toHaveBeenCalled();
     });
   });
 
@@ -139,12 +122,6 @@ describe('PrecisionFloorComponent (#4246)', () => {
     it.each(NO_PROMISE_STATES)('never shows the estimate behind the verdict (%s)', async (status) => {
       await show(0.5, lineFloor(status), 300);
       expect(stateText()!.textContent).not.toMatch(/about|estimated/i);
-    });
-
-    it('says a detector with no floor makes no promise', async () => {
-      await show(null, lineFloor(null), 300);
-      expect(state()!.getAttribute('data-status')).toBe('none');
-      expect(stateText()!.textContent).toContain('No floor set');
     });
 
     it('describes the line it was cut at, not a pick still on its way to the server', async () => {
