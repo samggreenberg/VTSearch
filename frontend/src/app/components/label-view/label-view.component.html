@@ -131,7 +131,7 @@
 }
 
 @if (showFloorCheck()) {
-  <vt-floor-check-modal (closed)="showFloorCheck.set(false)" (voted)="onFloorCheckVoted($event)" />
+  <vt-floor-check-modal (closed)="onFloorCheckClosed()" (voted)="onFloorCheckVoted($event)" />
 }
 
 @if (showResortPrompt()) {

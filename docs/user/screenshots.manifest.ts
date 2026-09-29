@@ -454,30 +454,32 @@ async function checkStepKeys(page: Page): Promise<void> {
   try {
     const dots = page.locator('.pick-dot');
     if ((await dots.count()) < 2) throw new Error('floor-check: the round has fewer than two picks');
-    const state = () =>
-      dots.evaluateAll((ds) => ({
-        votes: ds.map((d) => d.getAttribute('data-vote')),
-        current: ds.findIndex((d) => d.classList.contains('current')),
-      }));
-    await page.evaluate(() => {
-      (window as any).__trace = [];
-      document.addEventListener('keydown', (e) => (window as any).__trace.push(['doc', e.key, e.defaultPrevented, (document.activeElement as HTMLElement)?.className]), true);
-    });
-    console.log('ACTIVE', await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120)));
+    /** Wait for the dots to show *votes* with pick *current* on screen; the view repaints a frame after the key. */
+    const expect = async (what: string, votes: (string | null)[], current: number) => {
+      const want = JSON.stringify({ votes, current });
+      const read = () =>
+        page.evaluate(() => {
+          const ds = Array.from(document.querySelectorAll('.pick-dot'));
+          return JSON.stringify({
+            votes: ds.map((d) => d.getAttribute('data-vote')),
+            current: ds.findIndex((d) => d.classList.contains('current')),
+          });
+        });
+      const deadline = Date.now() + 5000;
+      let got = await read();
+      while (got !== want && Date.now() < deadline) {
+        await page.waitForTimeout(50);
+        got = await read();
+      }
+      if (got !== want) throw new Error(`floor-check: ${what}: expected ${want}, got ${got}`);
+    };
+    const rest = Array((await dots.count()) - 1).fill(null) as null[];
     await page.keyboard.press('ArrowRight');
-    console.log('AFTER→', JSON.stringify(await state()), await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120)));
+    await expect('→ votes the pick Good and moves on', ['good', ...rest], 1);
     await page.keyboard.press('ArrowDown');
-    console.log('AFTER↓', JSON.stringify(await state()), JSON.stringify(await page.evaluate(() => (window as any).__trace)));
-    let s = await state();
-    if (s.votes[0] !== 'good' || s.current !== 1) throw new Error(`floor-check: → did not vote pick 1 Good (${JSON.stringify(s)})`);
-    await page.keyboard.press('ArrowDown');
-    s = await state();
-    if (s.current !== 0) throw new Error(`floor-check: ↓ did not go back a pick (${JSON.stringify(s)})`);
+    await expect('↓ goes back a pick', ['good', ...rest], 0);
     await page.keyboard.press('ArrowLeft');
-    s = await state();
-    if (s.votes[0] !== 'bad' || s.votes.slice(1).some((v) => v !== null) || s.current !== 1) {
-      throw new Error(`floor-check: ← did not change pick 1 to Bad (${JSON.stringify(s)})`);
-    }
+    await expect('← changes it to Bad and moves on', ['bad', ...rest], 1);
     const inDialog = await page.evaluate(() => !!document.activeElement?.closest('.modal-backdrop'));
     if (!inDialog) throw new Error('floor-check: focus left the dialog');
     await page.waitForTimeout(300);
@@ -1085,9 +1087,6 @@ export const SHOTS: Shot[] = [
       'The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it',
     themes: BOTH,
     clip: { target: '.modal-content' },
-    annotations: [
-      { target: '.pick-dots', kind: 'box', label: 'One dot per pick, in random order', at: 'right' },
-    ],
     // Opens the check from the Find row's "Check 5 picks" and answers the
     // first pick with the keys, which is the step's chromium check
     // (`checkStepKeys`). The server draws the picks at random, by design, so

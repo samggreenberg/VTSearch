@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ModalComponent } from '../../modal/modal.component';
 import { AudioPlayerComponent } from '../../center-panel/audio-player/audio-player.component';
 import { DocumentViewerComponent } from '../../center-panel/document-viewer/document-viewer.component';
@@ -47,7 +48,8 @@ export interface FloorCheckVoted {
  *   round. The server records them as ordinary votes (provenance `check`).
  * - **Closing leaves the state as it was.** Cancel, Escape or × on a running
  *   check cancels it server-side; the rounds already sent stay votes, and the
- *   floor keeps its last result.
+ *   floor keeps its last result. The host re-reads the votes and the line on
+ *   `closed`, so nothing the step saw is left half-applied.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -149,7 +151,7 @@ export class FloorCheckModalComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.sortingApi.startPrecisionCheck().subscribe({
+    this.sortingApi.startPrecisionCheck().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => this.apply(resp),
       error: (err) => {
         this.error.set(apiErrorMessage(err, 'Could not start the check.'));
@@ -197,12 +199,13 @@ export class FloorCheckModalComponent implements OnInit {
 
   /**
    * Close the step. A running check is cancelled so the floor keeps its last
-   * result; the rounds already sent stay votes either way.
+   * result; the rounds already sent stay votes either way. The cancel outlives
+   * the step on purpose, and the host re-reads the votes and the line on
+   * `closed`, which covers a round that lands after the step has gone.
    */
   close(): void {
-    const c = this.check();
     const phase = this.phase();
-    if (c?.status === 'running' && (phase === 'voting' || phase === 'sending')) {
+    if (phase === 'starting' || phase === 'voting' || phase === 'sending') {
       this.sortingApi.cancelPrecisionCheck().subscribe({ error: () => undefined });
     }
     this.closed.emit();
@@ -214,7 +217,9 @@ export class FloorCheckModalComponent implements OnInit {
       .map((id) => ({ id, label: this.votes().get(id)! }));
     this.phase.set('sending');
     this.error.set('');
-    this.sortingApi.votePrecisionCheck(votes).subscribe({
+    // Tied to the step's life: a round still in flight when it closes is the
+    // host's to catch up on, which it does on `closed`.
+    this.sortingApi.votePrecisionCheck(votes).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
         const before = this.check()?.round ?? 1;
         this.apply(resp);

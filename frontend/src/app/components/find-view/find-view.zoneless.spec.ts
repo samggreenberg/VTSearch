@@ -793,6 +793,11 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       await settleZoneless(fixture);
       httpMock.expectOne((req) => req.url === '/api/precision-check/cancel').flush({ floor: wireFloor('unchecked'), check: null });
       expect(el.querySelector('vt-floor-check-modal')).toBeNull();
+      // The view re-reads the line on close, and it is where it was.
+      httpMock
+        .expectOne((req) => req.url === '/api/min-precision' && req.method === 'GET')
+        .flush({ ...wireFloor('unchecked'), threshold: 0.5, n_returned: 2 });
+      await settleZoneless(fixture);
       expect(sortState.threshold).toBe(0.5);
       expect(sortState.floor?.status).toBe('unchecked');
     });

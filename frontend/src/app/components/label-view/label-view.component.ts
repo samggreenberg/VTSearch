@@ -915,6 +915,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (event.finished) this.sortRunner.refreshLine();
   }
 
+  /** The check closed, however it ended: catch up on anything it left behind. */
+  onFloorCheckClosed(): void {
+    this.showFloorCheck.set(false);
+    this.voteState.loadVotes();
+    this.labelsetState.refresh();
+    this.sortRunner.refreshLine();
+  }
+
   // --- Media selection ---
 
   onMediaSelect(id: number): void {

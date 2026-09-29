@@ -269,6 +269,13 @@ describe('FloorCheckModalComponent (#4273)', () => {
       expect(voted).toEqual([]);
     });
 
+    it('cancels a check still drawing its first picks', async () => {
+      (el().querySelector('.modal-footer .btn') as HTMLButtonElement).click();
+      await settleZoneless(fixture);
+      httpMock.expectOne((req) => req.url === '/api/precision-check/cancel');
+      expect(closed).toBe(1);
+    });
+
     it('closes a finished check without cancelling anything', async () => {
       await start([17]);
       await press('ArrowRight');

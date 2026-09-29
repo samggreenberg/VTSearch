@@ -751,7 +751,17 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   onFloorCheckVoted(event: FloorCheckVoted): void {
     this.voteState.loadVotes();
-    if (!event.finished) return;
+    if (event.finished) this.refreshFloorLine();
+  }
+
+  /** The check closed, however it ended: catch up on anything it left behind. */
+  onFloorCheckClosed(): void {
+    this.showFloorCheck.set(false);
+    this.refreshFloorLine();
+  }
+
+  /** Install the line the server now draws, with its verdict, over the ranking on screen. */
+  private refreshFloorLine(): void {
     this.sortingApi
       .getMinPrecision()
       .pipe(this.pairScope.scoped())
