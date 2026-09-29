@@ -15,7 +15,9 @@
           [floor]="floor()"
           [returned]="returned()"
           [busy]="sortBusy()"
+          [checkable]="!disabled() && !sortBusy()"
           (valueChange)="minPrecisionChange.emit($event)"
+          (check)="floorCheck.emit()"
         >
           <div class="goods-actions find-queue-actions" floorActions>
             <button
@@ -170,7 +172,9 @@
           [floor]="floor()"
           [returned]="returned()"
           [busy]="sortBusy()"
+          [checkable]="!disabled() && !sortBusy()"
           (valueChange)="minPrecisionChange.emit($event)"
+          (check)="floorCheck.emit()"
         />
 
         <div class="label-divider"></div>

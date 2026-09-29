@@ -23,18 +23,8 @@
       [style.grid-template-columns]="row.kind === 'threshold' ? null : 'repeat(' + gridColumns + ', var(--grid-goal-width, 80px))'"
     >
       @if (row.kind === 'threshold') {
-        <div
-          class="media-threshold-line"
-          [class.media-threshold-line--unpromised]="unpromised()"
-          [title]="thresholdTitle()"
-          [attr.aria-label]="unpromised() ? 'Good/Bad threshold, unpromised' : 'Good/Bad threshold'"
-        >
-          <span class="threshold-labels">
-            <span class="threshold-label">threshold</span>
-            @if (unpromised()) {
-              <span class="threshold-label threshold-label--unpromised">unpromised</span>
-            }
-          </span>
+        <div class="media-threshold-line" [title]="thresholdTitle()" aria-label="Good/Bad threshold">
+          <span class="threshold-label">threshold</span>
         </div>
       } @else if (row.kind === 'loadmore') {
         <div class="media-load-more">
@@ -63,18 +53,8 @@
   <div class="media-list grid-layout" [style.--grid-goal-width]="gridGoalWidth() + 'px'" role="listbox" aria-label="Media items" #listContainer>
     @for (item of cachedOrderedItems; track trackByMediaId($index, item)) {
       @if (item.showThreshold) {
-        <div
-          class="media-threshold-line"
-          [class.media-threshold-line--unpromised]="unpromised()"
-          [title]="thresholdTitle()"
-          [attr.aria-label]="unpromised() ? 'Good/Bad threshold, unpromised' : 'Good/Bad threshold'"
-        >
-          <span class="threshold-labels">
-            <span class="threshold-label">threshold</span>
-            @if (unpromised()) {
-              <span class="threshold-label threshold-label--unpromised">unpromised</span>
-            }
-          </span>
+        <div class="media-threshold-line" [title]="thresholdTitle()" aria-label="Good/Bad threshold">
+          <span class="threshold-label">threshold</span>
         </div>
       }
       <vt-media-item

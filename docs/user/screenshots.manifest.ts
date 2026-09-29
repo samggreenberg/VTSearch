@@ -437,6 +437,59 @@ async function openFind(page: Page, h: Helpers): Promise<void> {
 }
 
 /**
+ * The chromium check of the spot check's keys (#4273), run by the `floor-check`
+ * shot on every capture: jsdom is not a browser, and focus traps and key
+ * routing are browser semantics (CLAUDE.md). In the open step, → votes the pick
+ * on screen Good and moves on, ↓ goes back, ← votes it Bad; none of it may
+ * reach the ranked list behind the modal (a `POST /api/medias/<id>/vote`), and
+ * focus stays inside the dialog. Votes are held in the step until a round is
+ * whole, so this sends nothing: the recipe's `after` cancels the check.
+ */
+async function checkStepKeys(page: Page): Promise<void> {
+  const listVotes: string[] = [];
+  const onRequest = (req: { url(): string; method(): string }) => {
+    if (req.method() === 'POST' && /\/api\/medias\/\d+\/vote$/.test(new URL(req.url()).pathname)) listVotes.push(req.url());
+  };
+  page.on('request', onRequest);
+  try {
+    const dots = page.locator('.pick-dot');
+    if ((await dots.count()) < 2) throw new Error('floor-check: the round has fewer than two picks');
+    /** Wait for the dots to show *votes* with pick *current* on screen; the view repaints a frame after the key. */
+    const expect = async (what: string, votes: (string | null)[], current: number) => {
+      const want = JSON.stringify({ votes, current });
+      const read = () =>
+        page.evaluate(() => {
+          const ds = Array.from(document.querySelectorAll('.pick-dot'));
+          return JSON.stringify({
+            votes: ds.map((d) => d.getAttribute('data-vote')),
+            current: ds.findIndex((d) => d.classList.contains('current')),
+          });
+        });
+      const deadline = Date.now() + 5000;
+      let got = await read();
+      while (got !== want && Date.now() < deadline) {
+        await page.waitForTimeout(50);
+        got = await read();
+      }
+      if (got !== want) throw new Error(`floor-check: ${what}: expected ${want}, got ${got}`);
+    };
+    const rest = Array((await dots.count()) - 1).fill(null) as null[];
+    await page.keyboard.press('ArrowRight');
+    await expect('→ votes the pick Good and moves on', ['good', ...rest], 1);
+    await page.keyboard.press('ArrowDown');
+    await expect('↓ goes back a pick', ['good', ...rest], 0);
+    await page.keyboard.press('ArrowLeft');
+    await expect('← changes it to Bad and moves on', ['bad', ...rest], 1);
+    const inDialog = await page.evaluate(() => !!document.activeElement?.closest('.modal-backdrop'));
+    if (!inDialog) throw new Error('floor-check: focus left the dialog');
+    await page.waitForTimeout(300);
+    if (listVotes.length) throw new Error(`floor-check: the ranked list took a vote: ${listVotes.join(', ')}`);
+  } finally {
+    page.off('request', onRequest);
+  }
+}
+
+/**
  * Check a fixed handful of Find's pictures by hand, each with its true label -
  * five yellow smileys and three of the near-misses that rank beside them - so
  * Detector Stats has a "Checked by you" line to draw. Votes go through the API
@@ -1028,6 +1081,31 @@ export const SHOTS: Shot[] = [
     },
   },
   {
+    id: 'floor-check',
+    embeddedIn: `${GUIDE}#how-close-the-line-got`,
+    caption:
+      'The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it',
+    themes: BOTH,
+    clip: { target: '.modal-content' },
+    // Opens the check from the Find row's "Check 5 picks" and answers the
+    // first pick with the keys, which is the step's chromium check
+    // (`checkStepKeys`). The server draws the picks at random, by design, so
+    // the pictures differ on every capture.
+    async recipe(page, h) {
+      await openFind(page, h);
+      await page.locator('.find-floor-row .floor-check-btn').first().click();
+      await page.locator('.pick-dot').first().waitFor({ timeout: 20000 });
+      await page.locator('vt-floor-check-modal img.image-element').first().waitFor({ timeout: 20000 });
+      await checkStepKeys(page);
+      await page.mouse.move(5, 5);
+      await h.wait(1200);
+    },
+    after: async (_page, h) => {
+      await h.app.api('/api/precision-check/cancel', { method: 'POST', ...(await findPair(h)) });
+      await resetFind(h);
+    },
+  },
+  {
     id: 'achievements',
     embeddedIn: `${GUIDE}#achievements`,
     caption:
@@ -1092,16 +1170,15 @@ export const SHOTS: Shot[] = [
   {
     id: 'borderline-floor',
     embeddedIn: `${HOWTO}/borderline-matches.md#step-2-lower-the-floor`,
-    caption: 'Step 2: (1) the floor lowered to Complete, (2) the note under it, which says whether the line has moved, (3) the line in the list',
+    caption: 'Step 2: (1) the floor lowered to Complete, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list',
     themes: BOTH,
     annotations: [
       { target: '#precision-floor-select', kind: 'step', step: 1, at: 'top' },
       { target: '.find-floor-row .floor-state-text', kind: 'step', step: 2, at: 'right' },
       { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
-    // The fixture detector has no promise to keep (its votes were not drawn
-    // off a learned sort), so the line stays at the default cut and the note
-    // says why: the state most readers meet first, as the page explains.
+    // Unchecked, as a reader meets it first: Complete keeps the top 128, so the line
+    // moves down and the note says how many it keeps now.
     async recipe(page, h) {
       await openFind(page, h);
       await page.locator('#precision-floor-select').selectOption('0.1');

@@ -294,37 +294,67 @@ describe('FindStatsModalComponent', () => {
       const floor = el.querySelector('.precision-chart .floor')!;
       expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
       expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
-      expect(el.querySelector('.precision-chart .current')!.classList).not.toContain('unpromised');
+      expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
       // The floor by name, never by number (#4298); the check's range and the axis stay numbers.
       expect(legend(el)).toContain('Floor: Correct');
-      expect(legend(el)).toContain('Line: keeps the Correct floor, likely 55–100%');
+      expect(legend(el)).toContain('Line: keeps the Correct floor (32 kept)');
+      expect(legend(el)).toContain('Likely 55–100% right (checked 5)');
       expect(legend(el)).not.toContain('90%');
       // The Inclusion stepper's legend is gone.
       expect(legend(el)).not.toContain('incl');
     });
 
-    it('labels the line unpromised when the check fell short, and says how close it got', async () => {
-      const el = await load({ floor: wireFloor('short', { minPrecision: 0.9 }) });
-      expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
-      expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
-      expect(el.querySelector('.swatch-current')!.classList).toContain('unpromised');
-      expect(legend(el)).toContain('Line: fell short of Correct, likely 11–73%');
-      expect(el.textContent).toContain('A check of 5 random picks fell short of the Correct floor');
-      expect(el.textContent).toContain('the top 32 the line keeps is likely 11–73% right');
+    it('stands the range at the line, from its low end to its high end (#4273)', async () => {
+      const el = await load({ floor: wireFloor('short') });
+      const bar = el.querySelector('.precision-chart .likely-range .range-bar')!;
+      expect(Number(bar.getAttribute('y'))).toBeCloseTo(component.yFor(0.73));
+      expect(Number(bar.getAttribute('height'))).toBeCloseTo(component.yFor(0.11) - component.yFor(0.73));
+      const cut = el.querySelector('.precision-chart .current')!;
+      expect(Number(bar.getAttribute('x')) + 4).toBeCloseTo(Number(cut.getAttribute('x1')));
+      expect(el.querySelector('.precision-chart .likely-range title')!.textContent).toBe(
+        'Likely 11–73% right, from 5 random picks (2 right).',
+      );
     });
 
-    it('says an unchecked line keeps its starting candidate, beside a withheld estimate', async () => {
+    it('draws a stale range exactly as a current one; only its tooltip differs', async () => {
+      const markup = (el: HTMLElement) =>
+        el.querySelector('.likely-range')!.outerHTML.replace(/<title[^>]*>[^<]*<\/title>/, '').replace(/aria-label="[^"]*"/, '');
+      const fresh = await load({ floor: wireFloor('short') });
+      const freshMarkup = markup(fresh);
+      const freshLegend = legend(fresh);
+      component.stats.set({ ...component.stats()!, floor: wireFloor('short', { range: { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true } }) } as never);
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(markup(el)).toBe(freshMarkup);
+      expect(legend(el)).toBe(freshLegend);
+      expect(el.querySelector('.likely-range title')!.textContent).toContain('Measured before your later votes');
+    });
+
+    it('says how close a short check got, naming no cause, with a plain line', async () => {
+      const el = await load({ floor: wireFloor('short', { minPrecision: 0.9 }) });
+      expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
+      expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
+      expect(legend(el)).toContain('Line: the top 32, aimed at Correct');
+      const text = el.textContent!.replace(/\s+/g, ' ');
+      expect(text).toContain('Aimed at Correct: a check of 5 random picks found the top 32 the line keeps likely 11–73% right');
+      expect(text).not.toMatch(/sparse|weak model|unpromised/i);
+    });
+
+    it('says an unchecked line keeps its starting candidate, with no range, beside a withheld estimate', async () => {
       const el = await load({
         estimate_status: 'insufficient_evidence',
         calibration_positives: 3,
-        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128 }),
+        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }),
       });
-      expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
+      expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
+      expect(el.querySelector('.likely-range')).toBeNull();
       expect(legend(el)).toContain('Line: the top 128, unchecked');
+      expect(legend(el)).not.toContain('Likely');
       const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
       expect(notes.some((n) => n.includes('has 3'))).toBe(true);
-      expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked'))).toBe(true);
+      expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked') && n.includes('Check 5 picks'))).toBe(true);
       expect(el.textContent).not.toContain('default cut');
+      expect(el.textContent).not.toContain('unpromised');
     });
   });
 });

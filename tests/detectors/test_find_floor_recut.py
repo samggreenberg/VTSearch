@@ -93,3 +93,36 @@ def test_a_floor_change_recuts_and_resplits(client):
     assert resp["status"] == "confirmed" and resp["count"] == 8
     # Browse (votes) and Export (partition) never diverge.
     assert _export_good(client) == _votes_good(client)
+
+
+def test_a_find_pass_on_a_reused_head_keeps_the_floors_set(client):
+    """A Find pass that reuses the cached head draws the floor's set, and can be checked (#4273).
+
+    Ending a Find session drops the ranking the line kept a set of; the next
+    pass reuses the head as it was (no retrain), so before the fix it came back
+    with the stored score cut and no ranking, and a spot check refused to start
+    ("No ranking to check") straight after a Find pass.
+    """
+    detector_id = _run_find(client)
+    ctx = get_active_detector_context()
+    client.post("/api/min-precision", json={"min_precision": 0.5})
+    head = ctx.model
+    assert client.post("/api/find/end-session").status_code == 200
+    assert ctx.line_ranking is None, "ending the session drops the ranking"
+    ctx.threshold = -999.0
+
+    resp = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+
+    assert ctx.model is head, "the pass reused the cached head rather than retraining"
+    assert ctx.line_ranking is not None
+    # The fixture's 8 unlabelled items are the whole unvoted remainder, so the
+    # 50% floor's starting candidate is all of them.
+    assert resp["floor"]["status"] == "unchecked" and resp["floor"]["count"] == 8
+    assert sorted(ctx.line_ranking.candidate(32, human_voted_ids(ctx))) == list(range(13, 21))
+    assert resp["threshold"] == ctx.threshold == ctx.line_ranking.threshold_for(8, human_voted_ids(ctx))
+    above = {r["id"] for r in resp["results"] if r["score"] >= resp["threshold"]}
+    assert set(range(13, 21)) <= above
+
+    start = client.post("/api/precision-check/start", json={})
+    assert start.status_code == 200, start.get_json()
+    assert set(start.get_json()["check"]["picks"]) <= set(range(13, 21))

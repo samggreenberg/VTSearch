@@ -6,7 +6,7 @@ import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
-import { NO_PROMISE_STATES, lineFloor } from '../../testing/line-floor';
+import { FLOOR_STATES, lineFloor } from '../../testing/line-floor';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -302,12 +302,12 @@ describe('LeftPanelComponent', () => {
   });
 
   /**
-   * With no precision promise the line is the default (Inclusion 0) cut, and it is still
-   * the line: the Find work-queue actions (Browse / To Dataset / Export) gate
-   * on the positives above it exactly as they would above a promised one
-   * (#4247). A null cut used to disable them silently.
+   * The line always keeps a set, checked or not (#4272): the Find work-queue
+   * actions (Browse / To Dataset / Export) gate on the positives above it in
+   * every state, and the line draws the same in each (#4273). A null cut used
+   * to disable them silently (#4247).
    */
-  describe('with no precision promise (#4247)', () => {
+  describe('in every floor state (#4272)', () => {
     const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
     const ranking = [
       { id: 1, score: 0.9 },
@@ -326,26 +326,33 @@ describe('LeftPanelComponent', () => {
       return fixture.nativeElement as HTMLElement;
     }
 
-    it.each(NO_PROMISE_STATES)('counts the unverified positives above the fallback cut when %s', (status) => {
+    it.each(FLOOR_STATES)('counts the unverified positives above the line when %s', (status) => {
       show('find', lineFloor(status));
       expect(component.unverifiedGoodCount).toBe(2);
     });
 
-    it.each(NO_PROMISE_STATES)('labels the line unpromised in Find when %s', (status) => {
-      const el = show('find', lineFloor(status));
-      expect(el.querySelector('.media-threshold-line--unpromised')).not.toBeNull();
+    it.each(FLOOR_STATES)('draws the plain line in Find and Label when %s', (status) => {
+      for (const mode of ['find', 'label'] as const) {
+        const line = show(mode, lineFloor(status)).querySelector('.media-threshold-line')!;
+        expect(line.className).toBe('media-threshold-line');
+        expect(line.textContent!.trim().toLowerCase()).toBe('threshold');
+      }
     });
 
-    it.each(NO_PROMISE_STATES)('labels the line unpromised in Label when %s', (status) => {
-      const el = show('label', lineFloor(status));
-      expect(el.querySelector('.media-threshold-line--unpromised')).not.toBeNull();
+    it.each(FLOOR_STATES)('offers the check in both places the floor control lives when %s', (status) => {
+      const emitted = vi.spyOn(component.floorCheck, 'emit');
+      for (const mode of ['find', 'label'] as const) {
+        const btn = show(mode, lineFloor(status)).querySelector('.floor-check-btn') as HTMLButtonElement;
+        expect(btn.textContent!.trim()).toBe('Check 5 picks');
+        btn.click();
+      }
+      expect(emitted).toHaveBeenCalledTimes(2);
     });
 
-    it('counts the same positives under a promised line, unlabelled', () => {
-      const el = show('find', lineFloor('confirmed'));
-      expect(component.unverifiedGoodCount).toBe(2);
-      expect(el.querySelector('.media-threshold-line')).not.toBeNull();
-      expect(el.querySelector('.media-threshold-line--unpromised')).toBeNull();
+    it('holds the check while a sort is running', () => {
+      fixture.componentRef.setInput('sortBusy', true);
+      const btn = show('find', lineFloor('unchecked')).querySelector('.floor-check-btn') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
     });
   });
 

@@ -1,10 +1,13 @@
-import type { FloorStatus, LikelyRange, LineFloor } from '../utils/line-floor';
+import type { CheckSchedule, FloorStatus, LikelyRange, LineFloor } from '../utils/line-floor';
 
-/** The two states in which the line is not a confirmed set and reads unpromised (#4247, #4272). */
-export const NO_PROMISE_STATES: FloorStatus[] = ['unchecked', 'short'];
+/** The three states the floor reports (#4272). */
+export const FLOOR_STATES: FloorStatus[] = ['unchecked', 'confirmed', 'short'];
 
 /** The range a five-pick check at 50% typically leaves: 2 of 5 right. */
 export const SAMPLE_RANGE: LikelyRange = { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: false };
+
+/** The schedule at 50%: the top 32, one round of 5 picks. */
+export const SCHEDULE_50: CheckSchedule = { candidate: 32, rounds: 1, picks: 5 };
 
 /** A floor verdict as the sort state holds it: a 50% floor keeping the top 32, with a check's range unless unchecked. */
 export function lineFloor(status: FloorStatus, overrides: Partial<LineFloor> = {}): LineFloor {
@@ -15,6 +18,7 @@ export function lineFloor(status: FloorStatus, overrides: Partial<LineFloor> = {
     status,
     count: 32,
     range,
+    schedule: SCHEDULE_50,
     ...overrides,
   };
 }
@@ -27,6 +31,6 @@ export function wireFloor(status: FloorStatus, overrides: Partial<LineFloor> = {
     status: f.status,
     count: f.count,
     range: f.range,
-    schedule: { candidate: 32, rounds: 1, picks: 5 },
+    schedule: f.schedule ?? SCHEDULE_50,
   };
 }

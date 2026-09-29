@@ -18,7 +18,7 @@ import { allItemsLabeled } from '../utils/all-labeled';
 import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 import type { FloorState } from '../generated/api-client/models/floor-state';
-import { isUnpromised, lineFloorFrom, type LineFloor } from '../utils/line-floor';
+import { lineFloorFrom, type LineFloor } from '../utils/line-floor';
 
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
@@ -658,9 +658,10 @@ export class SortRunnerService {
    * line, so only it can move: every other sort ranks by something else and
    * keeps its own threshold.
    *
-   * When the line was unpromised before and still is, and keeps the same
-   * count of items (a floor at 50% or above keeps the top 32 either way,
-   * #4272), the line stays put and only its state changes. Otherwise the
+   * When the line keeps the same count of items before and after (an
+   * unchecked floor at 50% or above keeps the top 32 either way, #4272), it
+   * is the same line - the count, not the state, decides where it sits - so
+   * it stays put and only its state changes. Otherwise the
    * learned sort re-runs at the new floor, which brings the line, its state,
    * the count above it and Autopilot's acquisition cut back together, and
    * lands on the next pick from them.
@@ -668,13 +669,32 @@ export class SortRunnerService {
   private afterFloorChange(floor: LineFloor | null): void {
     if (this.sortState.sortMode !== 'learned') return;
     const before = this.sortState.floor;
-    if (isUnpromised(before) && isUnpromised(floor) && before?.count === floor?.count) {
+    if (before && floor && before.count === floor.count) {
       this.sortState.setFloor(floor);
       return;
     }
     if (this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort();
     }
+  }
+
+  /**
+   * Re-read the line after a spot check ends (#4273). The server has moved it
+   * to the set the check ended on, a new count over the ranking already on
+   * screen, so this moves the line without a re-sort. Only a learned ranking
+   * draws the detector's line.
+   */
+  refreshLine(): void {
+    this.sortingApi
+      .getMinPrecision()
+      .pipe(
+        this.pairScope.scoped(),
+        catchError(() => EMPTY),
+      )
+      .subscribe((resp) => {
+        if (this.sortState.sortMode !== 'learned' || resp.threshold == null) return;
+        this.sortState.setLine(resp.threshold, lineFloorFrom(resp), resp.n_returned ?? null);
+      });
   }
 
   /** Coalesce a flurry of re-rank triggers (a vote, a floor change) into one

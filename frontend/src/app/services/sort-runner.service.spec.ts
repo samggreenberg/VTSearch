@@ -11,7 +11,7 @@ import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
-import { NO_PROMISE_STATES, lineFloor, wireFloor } from '../testing/line-floor';
+import { FLOOR_STATES, lineFloor, wireFloor } from '../testing/line-floor';
 
 /**
  * `SortRunnerService` in isolation.
@@ -181,10 +181,10 @@ describe('SortRunnerService', () => {
       .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
   }
 
-  // --- the floor on the line (#4247) ------------------------------------------
+  // --- the floor on the line (#4247, #4272) ------------------------------------
 
-  it.each(NO_PROMISE_STATES)(
-    'installs a learned sort with no precision promise at its fallback cut, labelled, when %s',
+  it.each(FLOOR_STATES)(
+    'installs a learned sort\'s line with its verdict when %s',
     (status) => {
       enableLearnedSort();
       runner.onLearnedSort(false);
@@ -207,7 +207,6 @@ describe('SortRunnerService', () => {
       expect(sortState.aboveThreshold).toBe(1);
       expect(sortState.acqThreshold).toBe(0.7);
       expect(sortState.floor?.status).toBe(status);
-      expect(sortState.unpromised).toBe(true);
     },
   );
 
@@ -215,7 +214,6 @@ describe('SortRunnerService', () => {
     runner.onTextSort('birds');
     httpMock.expectOne('/api/sort').flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 });
     expect(sortState.floor).toBeNull();
-    expect(sortState.unpromised).toBe(false);
   });
 
   it('cancels the learned-sort job by id, and only once', () => {
@@ -400,6 +398,47 @@ describe('SortRunnerService', () => {
 
   // --- precision floor (#4246) ------------------------------------------------
 
+  describe('the line after a spot check (#4273)', () => {
+    const floorGet = (req: { url: string; method: string }) =>
+      req.url === '/api/min-precision' && req.method === 'GET';
+
+    it('moves a learned line to the set the check ended on, without a re-sort', () => {
+      vi.useFakeTimers();
+      enableLearnedSort();
+      sortState.setSortMode('learned');
+      sortState.setSortResults(
+        [
+          { id: 5, score: 0.9 },
+          { id: 6, score: 0.2 },
+        ],
+        0.5,
+        lineFloor('unchecked', { count: 64 }),
+      );
+
+      runner.refreshLine();
+      httpMock.expectOne(floorGet).flush({ ...wireFloor('short'), threshold: 0.8, n_returned: 7 });
+      vi.advanceTimersByTime(1000);
+
+      expect(sortState.threshold).toBe(0.8);
+      expect(sortState.floor?.status).toBe('short');
+      expect(sortState.floor?.range?.labelled).toBe(5);
+      // The server's count over the whole ranking, not the loaded head's.
+      expect(sortState.aboveThreshold).toBe(7);
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([5, 6]);
+      httpMock.expectNone('/api/learned-sort');
+      vi.useRealTimers();
+    });
+
+    it('leaves a ranking the detector did not draw alone', () => {
+      sortState.setSortMode('text');
+      sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
+      runner.refreshLine();
+      httpMock.expectOne(floorGet).flush({ ...wireFloor('confirmed'), threshold: 0.8, n_returned: 1 });
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.floor).toBeNull();
+    });
+  });
+
   describe('a precision-floor change', () => {
     const floorPost = (req: { url: string; method: string }) =>
       req.url === '/api/min-precision' && req.method === 'POST';
@@ -442,8 +481,8 @@ describe('SortRunnerService', () => {
       expect(sortState.floor).toBeNull();
     });
 
-    it.each(NO_PROMISE_STATES)(
-      'keeps the default cut and swaps only the verdict when the floor still promises nothing (%s)',
+    it.each(FLOOR_STATES)(
+      'keeps the line and swaps only the verdict when the new floor keeps the same count (%s)',
       (status) => {
         vi.useFakeTimers();
         learnedRanking('unchecked');
@@ -452,7 +491,7 @@ describe('SortRunnerService', () => {
         httpMock.expectOne(floorPost).flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
         vi.advanceTimersByTime(1000);
 
-        // Both lines are the default cut: no retrain for a line that cannot move.
+        // Both floors keep the top 32: the count decides the line, so it cannot move.
         httpMock.expectNone('/api/learned-sort');
         expect(sortState.threshold).toBe(0.5);
         expect(sortState.floor?.status).toBe(status);
@@ -495,7 +534,7 @@ describe('SortRunnerService', () => {
       expect(mediaState.selectedId()).toBe(6);
     });
 
-    it('re-sorts when a check confirms the floor', () => {
+    it('re-sorts when the new floor keeps a different count', () => {
       vi.useFakeTimers();
       learnedRanking('unchecked');
 

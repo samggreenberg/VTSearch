@@ -12,6 +12,8 @@ import type { ExampleSortResponse } from '../generated/api-client/models/example
 import type { FillFromSortRequest } from '../generated/api-client/models/fill-from-sort-request';
 import type { FillFromSortResponse } from '../generated/api-client/models/fill-from-sort-response';
 import type { MinPrecisionResponse } from '../generated/api-client/models/min-precision-response';
+import type { PrecisionCheckResponse } from '../generated/api-client/models/precision-check-response';
+import type { PrecisionCheckVote } from '../generated/api-client/models/precision-check-vote';
 import type { IndicatorScoreHistoryResponse } from '../generated/api-client/models/indicator-score-history-response';
 import type { LabelFileSortResponse } from '../generated/api-client/models/label-file-sort-response';
 import type { LabelingStatusResponse } from '../generated/api-client/models/labeling-status-response';
@@ -29,6 +31,10 @@ import type { VotesResponse } from '../generated/api-client/models/votes-respons
 import { coverageAtlasNextGet } from '../generated/api-client/fn/sorting/coverage-atlas-next-get';
 import { getMinPrecisionRoute } from '../generated/api-client/fn/sorting/get-min-precision-route';
 import { setMinPrecisionRoute } from '../generated/api-client/fn/sorting/set-min-precision-route';
+import { cancelPrecisionCheck } from '../generated/api-client/fn/precision-check/cancel-precision-check';
+import { getPrecisionCheck } from '../generated/api-client/fn/precision-check/get-precision-check';
+import { startPrecisionCheck } from '../generated/api-client/fn/precision-check/start-precision-check';
+import { votePrecisionCheck } from '../generated/api-client/fn/precision-check/vote-precision-check';
 import { cancelLearnedSort } from '../generated/api-client/fn/sorting/cancel-learned-sort';
 import { learnedSort } from '../generated/api-client/fn/sorting/learned-sort';
 import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-sort-result';
@@ -135,6 +141,40 @@ export class SortingApiService {
     return setMinPrecisionRoute(this.http, this.config.rootUrl, { body: { min_precision: value } }).pipe(
       map((r) => r.body),
     );
+  }
+
+  /** The active detector's spot check (running, else the last finished one) and the floor's state (#4272). */
+  getPrecisionCheck(): Observable<PrecisionCheckResponse> {
+    return getPrecisionCheck(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /**
+   * Start a spot check of the active detector's floor, which deals its first
+   * round of picks. The caller shows a refusal (a 409: nothing to check, or
+   * the candidate already checked) in its own step, so no global toast.
+   */
+  startPrecisionCheck(): Observable<PrecisionCheckResponse> {
+    return startPrecisionCheck(
+      this.http,
+      this.config.rootUrl,
+      undefined,
+      new HttpContext().set(SKIP_ERROR_TOAST, true),
+    ).pipe(map((r) => r.body));
+  }
+
+  /** Record votes on the running check's picks: the next round, or the result. Shown in the step on failure. */
+  votePrecisionCheck(votes: PrecisionCheckVote[]): Observable<PrecisionCheckResponse> {
+    return votePrecisionCheck(
+      this.http,
+      this.config.rootUrl,
+      { body: { votes } },
+      new HttpContext().set(SKIP_ERROR_TOAST, true),
+    ).pipe(map((r) => r.body));
+  }
+
+  /** Abandon the running check; the votes already sent stay votes, and the floor's state is as it was. */
+  cancelPrecisionCheck(): Observable<PrecisionCheckResponse> {
+    return cancelPrecisionCheck(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Fetch labels for export.
