@@ -457,7 +457,9 @@ Analyzer: `analyze_exclusion.py`. Design and pre-registered decision rules:
 Getting enough Goods looks like what separates a VTSearch run that works from
 one that fails, and the *opening* is where Goods come from. Today it is fixed:
 the top of the seed sort until 3 positives, that sort's cutoff until 4
-negatives, then the learned Hard sort ever after.
+negatives, then the learned Hard sort ever after. (Since #4282 it adds a third
+round, the top of the sort again until 20 positives or 16 misses in a row;
+this section describes the study as it ran.)
 
 Both of those phases are the **same operation** — a rank-space `hard` select
 against a cut drawn on the seed sort — at two different cuts. The Good phase's
@@ -494,8 +496,9 @@ stays until 3 goods exist, `b4` until 4 bads, `n8` for 8 clicks; `+dry1/8` also
 ends a `g` or `n` round once its last 8 picks held fewer than 1 good (#4222's
 adaptive stop, e.g. `g20+dry1/8@top`); `@top` cuts above every score,
 `@mid` at the shipped GMM midpoint, `@k-3` at that GMM split under inclusion −3,
-`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid` is today's opening
-and is *required* to reproduce a default run click for click.
+`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid,g20+dry1/16@top` is today's
+opening (#4282; `g3@top,b4@mid` before it) and is *required* to reproduce a
+default run click for click.
 
 **Two arms are load-bearing.**
 

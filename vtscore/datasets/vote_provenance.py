@@ -99,7 +99,7 @@ FLOWS = frozenset(
 #: Autopilot phase at click time; ``None`` outside autopilot.  Mirrors the
 #: frontend's ``AutopilotPhase`` minus its non-labeling states (``idle``,
 #: ``done``, ``exhausted`` never surface an item to vote on).
-PHASES = frozenset({"good", "bad", "hard", "new"})
+PHASES = frozenset({"good", "bad", "more", "hard", "new"})
 
 #: How the item was drawn off the ranking.  Mirrors the frontend's
 #: ``SelectMode``: ``top`` is the head of the sort, ``hard`` is margin

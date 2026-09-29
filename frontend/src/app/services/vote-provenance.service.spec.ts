@@ -32,12 +32,22 @@ describe('VoteProvenanceService', () => {
 
   it('records the autopilot phase while autopilot is surfacing items', () => {
     autopilot.activate();
-    autopilot.checkPhaseTransition(3, 4, 100);
+    autopilot.checkPhaseTransition(20, 4, 100);
     expect(autopilot.state.phase).toBe('hard');
 
     const p = service.forVote(1);
     expect(p.flow).toBe('autopilot');
     expect(p.phase).toBe('hard');
+  });
+
+  it('records the more walk, a top-of-list draw on the seed sort (#4282)', () => {
+    autopilot.activate();
+    autopilot.checkPhaseTransition(3, 4, 100);
+    expect(autopilot.state.phase).toBe('more');
+
+    const p = service.forVote(1);
+    expect(p.flow).toBe('autopilot');
+    expect(p.phase).toBe('more');
   });
 
   it('records the initial good phase, which is a top-of-list draw', () => {

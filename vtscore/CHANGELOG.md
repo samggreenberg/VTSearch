@@ -503,6 +503,20 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Autopilot's opening walks for more goods** (issue #4282, measured by #4222).
+  After the 3-good / 4-bad quorum a new phase, `more`, goes back to the top of
+  the seed sort until the labelset holds `MORE_TARGET` (20) positives or
+  `MORE_DRY_RUN` (16) walk picks in a row held none, then hands over to `hard`.
+  `vtscore.eval.startup_schedule.PRODUCTION_STARTUP` is now
+  `"g3@top,b4@mid,g20+dry1/16@top"` (was `"g3@top,b4@mid"`), and the harness's
+  default arm runs it natively: `vtscore.eval.autopilot_flow` gains the `more`
+  phase, `MORE_TARGET` / `MORE_DRY_RUN`, `next_phase(..., more_target=,
+  more_done=)` and `AutopilotFlow(more_target=, more_dry_run=)`, all keyword
+  arguments with defaults. `vtscore.datasets.vote_provenance.PHASES` accepts
+  `"more"`. A study's default arm now differs from runs before this change:
+  on COCO Better at vote 150, +0.051 AP at the 0.44% pool and +0.030 at 0.1%,
+  with −0.036 / −0.067 at vote 25 while the walk runs.
+
 - **Smart no longer prices at the caller's inclusion** (issue #4243).
   `calculate_error_cost_over_time`, `compute_labeling_status`,
   `analyze_labeling_progress` and `cached_indicator_history` still take

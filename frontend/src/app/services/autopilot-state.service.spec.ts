@@ -141,17 +141,107 @@ describe('AutopilotStateService', () => {
     expect(service.state.phase).toBe('bad');
   });
 
-  it('should transition from bad to hard when enough bad votes', () => {
+  it('should walk for more goods once the good and bad quorum is met', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4); // badToStart default is 4
+    expect(service.state.phase).toBe('more');
+  });
+
+  it('should transition from more to hard when the walk reaches its good target', () => {
+    service.activate();
+    service.checkPhaseTransition(3, 0);
+    service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // moreToStart default is 20
     expect(service.state.phase).toBe('hard');
+    expect(service.state.moreDone).toBe(true);
+  });
+
+  describe('the more walk (#4282)', () => {
+    function enterWalk(): void {
+      service.activate();
+      service.checkPhaseTransition(3, 0);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('more');
+    }
+
+    it('runs dry after moreDryRun misses in a row', () => {
+      enterWalk();
+      let bad = 4;
+      for (let i = 0; i < 15; i++) {
+        service.checkPhaseTransition(3, ++bad);
+        expect(service.state.phase).toBe('more');
+      }
+      service.checkPhaseTransition(3, ++bad); // the 16th miss in a row
+      expect(service.state.phase).toBe('hard');
+      expect(service.state.moreDone).toBe(true);
+    });
+
+    it('restarts the run of misses on a hit', () => {
+      enterWalk();
+      let bad = 4;
+      for (let i = 0; i < 15; i++) service.checkPhaseTransition(3, ++bad);
+      service.checkPhaseTransition(4, bad); // a good
+      expect(service.state.moreMisses).toBe(0);
+      for (let i = 0; i < 15; i++) service.checkPhaseTransition(4, ++bad);
+      expect(service.state.phase).toBe('more');
+    });
+
+    it('does not count the bad phase\'s own votes as walk misses', () => {
+      enterWalk();
+      expect(service.state.moreMisses).toBe(0);
+    });
+
+    it('ignores repeated checks with unchanged counts', () => {
+      enterWalk();
+      service.checkPhaseTransition(3, 5);
+      service.checkPhaseTransition(3, 5);
+      service.checkPhaseTransition(3, 5);
+      expect(service.state.moreMisses).toBe(1);
+    });
+
+    it('never resumes once it has ended', () => {
+      enterWalk();
+      service.checkPhaseTransition(20, 4);
+      service.checkPhaseTransition(19, 4); // a positive un-voted
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('is skipped in retrain mode, where there is no seed sort to walk', () => {
+      service.activate(true);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('is skipped when the first labelset reading turns retrain mode on', () => {
+      service.activate();
+      service.noteInitialLabelset(3, 4);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('hard');
+    });
+
+    it('caps its target at what a small dataset can still supply', () => {
+      service.activate();
+      service.checkPhaseTransition(3, 4, 9); // two unlabeled items left
+      expect(service.state.phase).toBe('more');
+      service.checkPhaseTransition(5, 4, 9); // both were goods: nothing left
+      expect(service.state.phase).not.toBe('more');
+    });
+
+    it('starts afresh on a new run', () => {
+      enterWalk();
+      service.checkPhaseTransition(20, 4);
+      service.clear();
+      enterWalk();
+      expect(service.state.moreDone).toBe(false);
+    });
   });
 
   it('should transition from hard to new when smart and stable are green', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // the walk meets its target
 
     const status: LabelingStatusResponse = makeStatus(
       { status: 'green' },
@@ -167,6 +257,7 @@ describe('AutopilotStateService', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // the walk meets its target
 
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
@@ -184,6 +275,7 @@ describe('AutopilotStateService', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // the walk meets its target
 
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
@@ -203,6 +295,7 @@ describe('AutopilotStateService', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // the walk meets its target
 
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
@@ -222,6 +315,7 @@ describe('AutopilotStateService', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // the walk meets its target
 
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
@@ -248,6 +342,7 @@ describe('AutopilotStateService', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);
     service.checkPhaseTransition(3, 4);
+    service.checkPhaseTransition(20, 4); // the walk meets its target
 
     service.updateFromLabelingStatus(
       makeStatus({ status: 'green' }, { status: 'green' }, { status: 'yellow' }),
@@ -263,10 +358,16 @@ describe('AutopilotStateService', () => {
     expect(service.state.phase).toBe('new');
   });
 
-  it('should cascade good→bad→hard in a single checkPhaseTransition call', () => {
+  it('should cascade good→bad→more in a single checkPhaseTransition call', () => {
     service.activate();
     // Both thresholds met at once (user labeled in Manual before switching to Autopilot)
     service.checkPhaseTransition(10, 10);
+    expect(service.state.phase).toBe('more');
+  });
+
+  it('should cascade all the way to hard when the walk\'s target is already met', () => {
+    service.activate();
+    service.checkPhaseTransition(25, 10);
     expect(service.state.phase).toBe('hard');
   });
 

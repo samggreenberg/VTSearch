@@ -39,6 +39,10 @@ The phase ordering the app implements, and the harness therefore reproduces:
    sort**, taking the item nearest that sort's cutoff.  No detector is trained
    in this phase, which is why the app never computes a threshold from a
    1-vs-1 fit (see issue #2788).
+2b. ``more`` — back to the top of the same sort until ``more_target`` positives
+   exist **or** the walk runs dry: :data:`MORE_DRY_RUN` of its picks in a row
+   held no positive (issue #4282, from the #4222 dry-stop study).  Once the walk
+   ends it never resumes.
 3. ``hard`` — the first learned sort.  Refine the boundary until the detector
    is both *smart* (error cost has levelled off) and *stable* (predictions have
    stopped flipping).
@@ -71,7 +75,7 @@ from vtscore.detectors.stability import (
 )
 from vtscore.eval.startup_schedule import StartupState, is_startup_phase
 
-Phase = Literal["idle", "good", "bad", "hard", "new", "done", "exhausted"]
+Phase = Literal["idle", "good", "bad", "more", "hard", "new", "done", "exhausted"]
 Status = Literal["red", "yellow", "green"]
 
 # Autopilot's initial-phase vote targets (``INITIAL_STATE.goodToStart`` /
@@ -79,6 +83,14 @@ Status = Literal["red", "yellow", "green"]
 # which always clears the calibrator's >=2-per-class fold-split guard.
 GOOD_TARGET = 3
 BAD_TARGET = 4
+
+# The ``more`` walk (``INITIAL_STATE.moreToStart`` / ``moreDryRun``, issue #4282):
+# after the Good and Bad quorum, keep taking the top of the seed sort until this
+# many positives exist in total, or until this many walk picks in a row held no
+# positive.  #4222 measured the opening `g3@top,b4@mid,g20+dry1/16@top` (+0.051
+# AP at vote 150 on COCO Better's 0.44% pool, +0.030 at 0.1%).
+MORE_TARGET = 20
+MORE_DRY_RUN = 16
 
 # ``_compute_smart_status`` / ``_compute_stable_status``: both indicators stay
 # red until the labelset has at least this many of each class.  ``MIN_PER_CLASS``
@@ -216,6 +228,8 @@ def next_phase(
     span: Status,
     good_target: int = GOOD_TARGET,
     bad_target: int = BAD_TARGET,
+    more_target: int = MORE_TARGET,
+    more_done: bool = False,
 ) -> Phase:
     """Port of ``AutopilotStateService.checkPhaseTransition``.
 
@@ -225,7 +239,9 @@ def next_phase(
 
     The phase is derived from counts and indicator statuses rather than
     accumulated, so it can move backwards — un-toggling votes regresses the
-    phase, exactly as it does in the app.
+    phase, exactly as it does in the app.  The one exception is the ``more``
+    walk: whether it has run dry is history, not a count, so the caller holds
+    it and passes *more_done* (see :class:`AutopilotFlow`).
     """
     # Cap each target at the most votes of that class the collection could still
     # yield, so a tiny dataset can still advance past the initial phases instead
@@ -237,6 +253,8 @@ def next_phase(
         return "good"
     if bad_count < eff_bad_target:
         return "bad"
+    if not more_done and good_count < min(more_target, good_count + remaining_unlabeled):
+        return "more"
     if smart == "green" and stable == "green" and span == "green":
         return "done"
     if remaining_unlabeled == 0:
@@ -276,6 +294,7 @@ STOPPING_PHASE: str = "done"
 _PHASE_PICKS: dict[str, tuple[str, str]] = {
     "good": ("text", "top"),
     "bad": ("text", "hard"),
+    "more": ("text", "top"),
     "hard": ("learned", "hard"),
     "new": ("learned", "new"),
 }
@@ -287,7 +306,7 @@ def pick_provenance(phase: Optional[str]) -> Optional[dict[str, str]]:
     The shape :mod:`vtscore.datasets.vote_provenance` stores, so the harness
     decides which votes may calibrate a precision-floor promise with the app's
     own :func:`~vtscore.datasets.vote_provenance.calibrates_precision` rather
-    than a copy of it (#4245).  ``None`` outside the four labelling phases.
+    than a copy of it (#4245).  ``None`` outside the labelling phases.
     """
     if phase not in _PHASE_PICKS:
         return None
@@ -361,11 +380,22 @@ class AutopilotFlow:
         *,
         good_target: int = GOOD_TARGET,
         bad_target: int = BAD_TARGET,
+        more_target: int = MORE_TARGET,
+        more_dry_run: int = MORE_DRY_RUN,
         span_green: int | None = None,
         startup: Optional[StartupState] = None,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
+        self.more_target = more_target
+        self.more_dry_run = more_dry_run
+        #: The ``more`` walk's history, as the app keeps it: consecutive walk
+        #: picks without a positive, and whether the walk has ended (met its
+        #: target or ran dry).  A vote's outcome is read the way the app reads
+        #: it, from which count rose since the last update.
+        self.more_misses = 0
+        self.more_done = False
+        self._counts: tuple[int, int] = (0, 0)
         self.span_green = SPAN_GREEN_DEFAULT if span_green is None else span_green
         #: A parameterised opening (issue #3267).  ``None`` - the default - is
         #: the app's own: the Good/Bad targets above, resolved by
@@ -496,6 +526,8 @@ class AutopilotFlow:
             if not self.startup.done:
                 self.phase = self.startup.phase_name()  # type: ignore[assignment]
                 return self.phase
+        else:
+            self._note_more_vote(good_count, bad_count)
         smart_d = smart_detail(self.recent_error_costs, good_count, bad_count)
         stable_d = stable_detail(self.stability, good_count, bad_count)
         smart: Status = smart_d["status"]
@@ -524,5 +556,30 @@ class AutopilotFlow:
             span=sp,
             good_target=0 if self.startup is not None else self.good_target,
             bad_target=0 if self.startup is not None else self.bad_target,
+            more_target=0 if self.startup is not None else self.more_target,
+            more_done=self.more_done,
         )
+        if self.phase not in ("good", "bad", "more"):
+            # The walk ends once the machine has moved past it - its target met
+            # or its run of misses complete - and never resumes, as a schedule
+            # round never does.
+            self.more_done = True
         return self.phase
+
+    def _note_more_vote(self, good_count: int, bad_count: int) -> None:
+        """Fold the vote just cast into the ``more`` walk's run of misses.
+
+        The app's phase check sees only vote counts, so it reads the outcome off
+        them: a rise in the Good count is a hit, a rise in the Bad count alone is
+        a miss.  Only votes cast *in* the walk count.
+        """
+        prev_good, prev_bad = self._counts
+        self._counts = (good_count, bad_count)
+        if self.phase != "more" or self.more_done:
+            return
+        if good_count > prev_good:
+            self.more_misses = 0
+        elif bad_count > prev_bad:
+            self.more_misses += 1
+            if self.more_misses >= self.more_dry_run:
+                self.more_done = True

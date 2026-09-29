@@ -387,7 +387,9 @@ def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
 
     if is_startup_phase(phase):
         return _pick_startup_round(ctx)
-    if phase == "good":
+    if phase in ("good", "more"):
+        # The ``more`` walk (#4282) is the Good phase's draw resumed: the top of
+        # the same seed sort.
         return _pick_good_phase(ctx)
     if phase == "bad":
         return _pick_bad_phase(ctx)
@@ -529,7 +531,7 @@ def _select_autopilot_with_pick(ctx: ALContext, *, straddle: bool) -> int:
             "the uncertainty strategies need a trainer that reports per-item uncertainty "
             "(a gp_* trainer); this step's model reports none"
         )
-    if is_startup_phase(phase) or phase in ("good", "bad"):
+    if is_startup_phase(phase) or phase in ("good", "bad", "more"):
         return _select_phase_faithful(ctx, phase)
     if phase == "new":
         pick = _atlas_next(ctx)
