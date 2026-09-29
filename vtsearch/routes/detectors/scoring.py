@@ -81,6 +81,37 @@ def _abort_if_find_cancelled() -> None:
         abort(409, message="Find cancelled")
 
 
+def _keep_line_ranking(results: list[dict], threshold: float) -> float:
+    """Give a Find pass that reused a cached head the ranking its line keeps a set of (#4272, #4273).
+
+    Training stores the ranking the line is drawn over (``line_ranking``).  A
+    head reused as it was (:func:`~vtscore.detectors.model_loading.cached_head_is_current`)
+    brings none when the last one was dropped - by a dataset switch, or by
+    ending a Find session - and then the pass drew the stored score cut rather
+    than the set the floor keeps, and a spot check had nothing to draw from.
+    So a pass with no ranking builds one from the scores it just computed, with
+    the votes a person had cast before it marked voted, as training marks the
+    labelset's items, and draws the line at the set the floor keeps.  A
+    ranking training has just stored is left alone.  Returns the threshold to
+    use: *threshold* unchanged when there was a ranking already, or no set to
+    keep.
+    """
+    from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
+    from vtscore.training.thresholds import LineRanking, floor_line  # noqa: PLC0415
+    from vtsearch.state import get_min_precision  # noqa: PLC0415
+
+    det_ctx = get_active_detector_context()
+    if det_ctx.line_ranking is not None or not results:
+        return threshold
+    voted = human_voted_ids(det_ctx)
+    det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
+    floor = get_min_precision()
+    if floor is None:
+        return threshold
+    kept = floor_line(det_ctx.line_ranking, floor, det_ctx.precision_check, voted)
+    return threshold if kept is None else kept
+
+
 @detector_scoring_bp.route("/api/find-label", methods=["POST"])
 @detector_scoring_bp.arguments(FindLabelRequestSchema)
 @detector_scoring_bp.response(200, FindLabelResponseSchema)
@@ -266,6 +297,7 @@ def find_label(body: dict):
         results, threshold = maybe_labelset_structural_rerank(
             get_active_detector_context(), labelset, results, threshold, snap
         )
+        threshold = _keep_line_ranking(results, threshold)
         # Store the final (post-rerank) cutoff on the context so server-side reads of
         # the Find cutoff — the work-queue / boundary-walk endpoints, floor
         # re-thresholding — agree with the labels this pass just applied. A no-op for

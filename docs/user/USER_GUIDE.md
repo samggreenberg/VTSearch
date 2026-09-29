@@ -107,38 +107,69 @@ detector's matches among the items you have checked. Matches you haven't
 checked don't count, so it measures the detector rather than assuming it
 was right.
 
-#### When the line is unpromised
+#### How close the line got
 
-A detector draws its line at a **precision floor**: the line returns as
-many items as it can while at least that share of them is estimated right.
-You pick the floor at the top of the left panel, where it reads **At least
-50% right** (see [Precision floor](#3-precision-floor)). Every detector
-starts at **50%**. The estimate is cautious, so it only makes that promise
-once it has enough evidence: about ten Good votes among the ones it holds
-back to check itself, counting only votes you made off the detector's own
-ranking (Autopilot's Hard picks, or working down a learned sort).
+A detector draws its line at a **precision floor**: how much of what it
+returns should be right. You pick the floor at the top of the left panel,
+where it reads **At least 50% right** (see
+[Precision floor](#3-precision-floor)). Every detector starts at **50%**.
 
-When it can't promise the floor, the line doesn't disappear. It stays at
-the **default cut** - where the line sat before there was a floor - and is
-labelled **unpromised**: the note under the floor says so, the threshold
-line in the media list is dashed, with *UNPROMISED* under its *THRESHOLD*
-label, and its marker on the minimap beside the list is dashed too. The
-note, or a hover over the line, says which of the two reasons applies:
+The line always keeps a set: the top of the ranking, among the items you
+haven't voted on. How many it keeps depends on the floor: the top 128 at
+10%, the top 64 at 25%, and the top 32 at 50% and above. Until you
+**check** that set, nothing has measured how much of it is right, and the
+note under the floor says so: **Top 32 kept, unchecked**.
 
-- **Not enough evidence yet** - the detector has fewer than ten held-back
-  Good votes to check itself on. This is the usual state for a new
-  detector. Keep voting on Autopilot's Hard picks, and the promise arrives
-  once the evidence does.
-- **No cut reaches the floor** - there is enough evidence, and no line on
-  this dataset gets to the floor: the detector can't yet tell enough of the
-  matches from the look-alikes.
+**The spot check.** Click **Check 5 picks** beside the note. VTSearch draws
+a few items at random from the set the line keeps and shows them one at a
+time. Vote each one Good or Bad with the usual keys: → for Good, ← for Bad,
+and ↓ to go back and change one. The last vote of a round sends it.
 
-Everything that uses the matches keeps working on an unpromised line: the
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
+  <img src="assets/floor-check.light.webp" alt="The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />
+</picture>
+
+The picks come in the order they were drawn, which is random, with no rank
+and no score. They are a sample from the whole set, not the top of the list.
+A round is 5 picks at 10%, 25% and 50%, 11 at 75%, and 29 at 90%: a higher
+floor takes more evidence to reach.
+
+When a round falls short and the set can still shrink, the check says **Not
+there yet: checking a shorter list**, halves the set and draws a fresh
+round. A check at 10% can take up to three rounds (the top 128, then 64,
+then 32), and one at 25% up to two. It ends on the result, which the note
+under the floor then shows:
+
+- **At least 50% right · likely 55–100% (checked 5) · 32 kept** - the check
+  confirmed the floor for the set it ended on.
+- **Aimed at 50%: likely 19–92% right (checked 5) · top 32 kept** - the check
+  fell short, and the line keeps the top 32 it ended on. The note names no
+  cause: a dataset with very few matches and a detector that can't yet tell
+  them apart look the same from here.
+
+**The likely range** says how much of the set the line keeps is probably
+right. It comes from your picks alone, never from the detector's own guess.
+With 5 picks it is wide, about 57 points on average at 50%; that width is the honest
+answer to "how close did we get?". The range also stands on the Find view's
+**Stats** chart, at the line where it meets the floor.
+
+**A range measures the list as it was when you checked it.** Your check
+votes are ordinary votes, so they train the detector like any other. Later
+votes retrain it, and the line then follows the new ranking at the same
+count, so the items at the line change. The range stays on screen as it
+was, and hovering it says it was measured before your later votes. **Check**
+again for a fresh one: a check needs something to have changed since the
+last, and any vote does that.
+
+Cancelling or closing the check leaves the floor as it was. The rounds you
+finished stay as votes.
+
+Everything that uses the matches works on the line in every state: the
 *Unverified Good* count, the Find review walk, **To Dataset**, **Export**
-and **Browse** all act on the items above it, exactly as they would above a
-promised one. The label only tells you the share of right answers among
-them is not guaranteed. An AutoRun or command-line run exports the same
-set, and records that it was unpromised: a line in the run's log, and a
+and **Browse** all act on the items above it. An AutoRun or command-line run
+has nobody to vote, so it can't be checked: it exports the unchecked
+starting set and records it as unchecked, with a line in the run's log and a
 `floor` entry beside the threshold in exports that carry the full results
 (see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
 
@@ -749,33 +780,31 @@ Reads **At least 50% right**: pick how much of what the detector returns
 should be right - **10%**, **25%**, **50%** (the default), **75%** or **90%**.
 The line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
-then returns as many items as it can while at least that share of them is
-estimated right. A higher floor returns fewer items, more of them right; a
-lower one returns more, and more of them may be wrong. Changing it moves
-the line over the scores the detector already has; the ranking itself does
-not change.
+keeps the top of the ranking, among the items you haven't voted on: the top
+128 at 10%, 64 at 25%, and 32 at 50% and above. A lower floor keeps a longer
+list, and more of it may be wrong. Changing the floor moves the line over the
+scores the detector already has; the ranking itself does not change.
 
 Once the list is ranked by the detector (a **Learned** sort, or Find), the
 note under the picker says what the floor is doing to the line, in one of
 three states:
 
-- **At least 50% right**, with how many items the line returns - the
-  detector can promise the floor, and the line keeps it.
-- **Can't reach 50% on this dataset** - there is enough evidence, but no
-  line on this dataset gets there. The line stays at the default cut.
-- **Not enough evidence yet**, with how many Good votes the detector has
-  of the ten it needs - the usual state for a new detector. The line stays
-  at the default cut.
+- **Top 32 kept, unchecked** - nothing has measured the set yet.
+- **At least 50% right · likely 55–100% (checked 5) · 32 kept** - a check
+  confirmed the floor.
+- **Aimed at 50%: likely 19–92% right (checked 5) · top 32 kept** - a check
+  fell short, and says how close it got.
 
-In the last two the line is *unpromised*, and moving the floor doesn't
-move it (see [When the line is unpromised](#when-the-line-is-unpromised)).
-The **?** beside the note explains the floor.
+Beside the note, **Check 5 picks** runs a spot check of the set: a few
+random picks you vote on, which measure how much of it is right. The pick
+count is the one a round takes at your floor. See
+[How close the line got](#how-close-the-line-got) for the check and its
+likely range. The **?** beside the note explains the floor.
 
-While the floor is promised, lower floors *nest*: everything the line
-returns at 75% it still returns at 50%, plus a band of borderline items.
-That makes a two-pass workflow natural: work at a strict floor first, then
-lower it and review the newly admitted band - the items just above the
-moved line (see [Catch the borderline matches](howto/borderline-matches.md)).
+A lower floor keeps a longer list, which makes a two-pass workflow natural:
+work at a strict floor first, then lower it and review the newly admitted
+band - the items just above the moved line (see
+[Catch the borderline matches](howto/borderline-matches.md)).
 
 Each detector keeps its own floor while VTSearch runs, and one you haven't
 set yet starts from the last floor you picked. Leave it at 50% unless you
@@ -966,9 +995,9 @@ runs).
 - **Left pane** - the **work queue** of items the detector hasn't been
   confirmed on yet, ranked by score, under the same
   [precision floor](#3-precision-floor) you use while labeling. The line
-  through it is dashed and marked *unpromised* while the detector can't
-  yet promise its floor; see
-  [When the line is unpromised](#when-the-line-is-unpromised).
+  through it keeps the set the floor keeps, and the note under the floor
+  says how close it got; see
+  [How close the line got](#how-close-the-line-got).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.
 - **Right pane** - the **Verified Good** and **Verified Bad** piles,
@@ -1053,9 +1082,9 @@ controls, remembered per media type:
 - **Thumbnail size** - the two image icons shrink or grow the
   thumbnails. Larger thumbnails = fewer per screen but more readable.
   After training, the list ranks the thumbnails by the detector's score,
-  with a threshold line marking the good/bad cut (dashed and marked
-  *unpromised* when the detector can't yet promise its precision floor; see
-  [When the line is unpromised](#when-the-line-is-unpromised)):
+  with a threshold line marking the good/bad cut (where it sits, and how
+  close it got to the precision floor, is in
+  [How close the line got](#how-close-the-line-got)):
 
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/results-grid.dark.webp" />

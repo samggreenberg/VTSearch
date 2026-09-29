@@ -316,7 +316,7 @@ describe('FindStatsModalComponent', () => {
 
     it('draws a stale range exactly as a current one; only its tooltip differs', async () => {
       const markup = (el: HTMLElement) =>
-        el.querySelector('.likely-range')!.outerHTML.replace(/<title>[^<]*<\/title>/, '').replace(/aria-label="[^"]*"/, '');
+        el.querySelector('.likely-range')!.outerHTML.replace(/<title[^>]*>[^<]*<\/title>/, '').replace(/aria-label="[^"]*"/, '');
       const fresh = await load({ floor: wireFloor('short') });
       const freshMarkup = markup(fresh);
       const freshLegend = legend(fresh);

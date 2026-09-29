@@ -88,7 +88,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
     await settleZoneless(fixture);
   }
 
-  async function answer(req: TestRequest, body: unknown): Promise<void> {
+  async function answer(req: TestRequest, body: object): Promise<void> {
     req.flush(body);
     await settleZoneless(fixture);
   }
@@ -186,7 +186,10 @@ describe('FloorCheckModalComponent (#4273)', () => {
       const actions: KeyboardAction[] = [];
       keyboard.action$.subscribe((a) => actions.push(a));
       await start([17]);
+      const host = el();
       fixture.destroy();
+      // The fixture's host outlives the component in jsdom; the app's `@if` removes it.
+      host.remove();
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
       expect(actions.map((a) => a.type)).toEqual(['vote']);
     });

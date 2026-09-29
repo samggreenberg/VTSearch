@@ -211,9 +211,27 @@ land last. Find's (`minPrecisionRequests$`, debounced) installs the returned
 line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
 the learned sort, but only from the POST's response: the learned sort reads
 the floor server-side and caches by it, so a re-sort that beat the POST would
-come back at the old floor. When the line was unpromised before and after and
-keeps the same count of items (any floor at 50% or above keeps the top 32),
-the line stays put and only its state is swapped.
+come back at the old floor. When the floor keeps the same count of items
+before and after (any unchecked floor at 50% or above keeps the top 32), the
+line stays put and only its state is swapped: the count, not the state,
+decides where the line sits.
+
+**The spot check** (`vt-floor-check-modal`, #4273) measures that line. The
+floor control's "Check N picks" emits `check`; the left panel forwards it as
+`floorCheck`, and each view hosts the modal behind a `showFloorCheck` signal.
+The modal owns the check's lifecycle against `/api/precision-check` and holds a
+round's votes locally until every pick has one, then sends the round whole. It
+takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
+routes ←/→ and ↓/↑ to its holder even with a modal open and sends nothing to
+`action$`, so the ranked list behind it never votes. Each round's `voted` event
+refreshes the piles; a finished check has moved the line server-side, so the
+view re-reads it with `GET /api/min-precision` and installs it with
+`SortStateService.setLine` over the ranking on screen (Label goes through
+`SortRunnerService.refreshLine`). No re-sort follows: a retrain moves the list
+under the result, which is what reports it `stale`, and the owner's model is
+that *later* votes do that. The line draws the same in every state; the state
+and its likely range live in the floor control and on the Stats chart, and a
+stale range differs only in its tooltip.
 
 ### Find view (`components/find-view/`)
 

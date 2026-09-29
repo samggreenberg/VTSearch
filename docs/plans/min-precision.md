@@ -12,15 +12,16 @@ votes. The owner's ruling on #4267 (2026-09-29) moved the promise off that
 estimator and onto a **spot check** (below). The backend of the check landed
 with #4272: `vtscore.training.thresholds.spot_check` holds the rule, the line
 keeps the set the check ended on, `/api/precision-check` runs it, and the eval
-default arm runs the same check. The library also holds:
+default arm runs the same check. Its frontend, the check step and the likely
+range in the floor control and on the Stats chart, landed with #4273. The
+library also holds:
 - the estimator, `vtscore.training.thresholds.precision_floor_cut`, which is
   public API and stays, off the promise path (the Find Stats curve reads it);
 - one re-cut seam, `vtscore.state.core.recut_detector_threshold`;
 - the inverse that lets acquisition find its origin off any line,
   `FoldAnchoredCut.inclusion_for_threshold`.
 
-What follows is the design the remaining slices (the frontend, #4273, first)
-build on.
+What follows is the design the remaining slices build on.
 
 ## Design
 
