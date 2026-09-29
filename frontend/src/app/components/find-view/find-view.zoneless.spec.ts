@@ -13,7 +13,7 @@ import { VoteStateService } from '../../services/vote-state.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
-import { NO_PROMISE_STATES, lineFloor, wireFloor } from '../../testing/line-floor';
+import { FLOOR_STATES, lineFloor, wireFloor } from '../../testing/line-floor';
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -623,7 +623,7 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
   describe('a scoring pass', () => {
     beforeEach(() => setUp(true));
 
-    it.each(NO_PROMISE_STATES)('installs the fallback cut with its verdict and labels the line when %s', async (status) => {
+    it.each(FLOOR_STATES)('installs the line of the kept set with its verdict when %s', async (status) => {
       await flushInit([1]);
       httpMock.expectOne('/api/find-label').flush({
         ok: true,
@@ -639,7 +639,6 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
 
       expect(sortState.threshold).toBe(0.5);
       expect(sortState.floor?.status).toBe(status);
-      expect(sortState.unpromised).toBe(true);
       // The walk still seeds on the marginal positive. (One result draws no
       // line - nothing falls below it - so the label is pinned further down.)
       expect(TestBed.inject(MediaStateService).selectedId()).toBe(1);
@@ -653,7 +652,7 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       await settleZoneless(fixture);
     });
 
-    it.each(NO_PROMISE_STATES)('walk the boundary of the fallback cut when %s', (status) => {
+    it.each(FLOOR_STATES)('walk the boundary of the line when %s', (status) => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       const mediaState = TestBed.inject(MediaStateService);
       view().nextFindSide = 'above';
@@ -663,7 +662,7 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       expect(mediaState.selectedId()).toBe(3);
     });
 
-    it.each(NO_PROMISE_STATES)('empty the queue only once every item is verified, when %s', (status) => {
+    it.each(FLOOR_STATES)('empty the queue only once every item is verified, when %s', (status) => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       expect(fixture.componentInstance.queueEmpty()).toBe(false);
       const voteState = TestBed.inject(VoteStateService);
@@ -671,27 +670,29 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       expect(fixture.componentInstance.queueEmpty()).toBe(true);
     });
 
-    it.each(NO_PROMISE_STATES)('hand Browse / To Dataset / Export the positives above the fallback cut when %s', (status) => {
+    it.each(FLOOR_STATES)('hand Browse / To Dataset / Export the positives above the line when %s', (status) => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       expect(view().unverifiedGoodIds()).toEqual([1, 2]);
       expect(view().goodIds()).toEqual([1, 2]);
     });
 
-    it.each(NO_PROMISE_STATES)('label the line in the work queue when %s', async (status) => {
+    it.each(FLOOR_STATES)('draw the line the same in the work queue when %s, naming the state only in its tooltip', async (status) => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       await settleZoneless(fixture);
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.media-threshold-line--unpromised')).not.toBeNull();
-      expect(el.querySelector('.stripe-threshold--unpromised')).not.toBeNull();
+      const line = el.querySelector('.media-threshold-line') as HTMLElement;
+      expect(line).not.toBeNull();
+      expect(line.className).toBe('media-threshold-line');
+      expect(el.querySelector('.stripe-threshold')!.className).toBe('stripe-threshold');
+      expect(line.textContent!.trim().toLowerCase()).toBe('threshold');
+      expect(line.title).toContain(status === 'unchecked' ? 'Unchecked' : 'random picks');
     });
 
-    it.each(NO_PROMISE_STATES)('keep the default cut through a floor change when %s', (status) => {
+    it.each(FLOOR_STATES)('install the line and verdict a floor change returns when %s', (status) => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       vi.useFakeTimers();
       fixture.componentInstance.onMinPrecisionChange(0.9);
       vi.advanceTimersByTime(200);
-      // A floor that promises nothing draws the default cut whatever X is; the
-      // new verdict rides along with it.
       httpMock
         .expectOne((req) => req.url === '/api/min-precision' && req.method === 'POST')
         .flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 2 });
@@ -700,36 +701,100 @@ describe('FindViewComponent with no precision promise (#4247)', () => {
       expect(sortState.floor?.minPrecision).toBe(0.9);
     });
 
-    it('move the line to the floor\'s own cut once a check confirms it', () => {
+    it('move the line when a floor change keeps a larger set', () => {
       sortState.setSortResults(ranking, 0.5, lineFloor('unchecked'));
       vi.useFakeTimers();
       fixture.componentInstance.onMinPrecisionChange(0.25);
       vi.advanceTimersByTime(200);
       httpMock
         .expectOne((req) => req.url === '/api/min-precision' && req.method === 'POST')
-        .flush({ ...wireFloor('confirmed', { minPrecision: 0.25 }), threshold: 0.3, n_returned: 3 });
+        .flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.3, n_returned: 3 });
       expect(sortState.threshold).toBe(0.3);
-      expect(sortState.unpromised).toBe(false);
+      expect(sortState.floor?.status).toBe('confirmed');
       expect(view().unverifiedGoodIds()).toEqual([1, 2, 3]);
     });
 
-    it.each(NO_PROMISE_STATES)('show the floor and its state in the Find row when %s', async (status) => {
+    it.each(FLOOR_STATES)('show the floor, its state and the check affordance in the Find row when %s', async (status) => {
       sortState.setSortResults(ranking, 0.5, lineFloor(status));
       await settleZoneless(fixture);
-      const state = (fixture.nativeElement as HTMLElement).querySelector('.find-floor-row .floor-state')!;
-      expect(state.textContent).toMatch(/unchecked|Aimed at/);
+      const row = (fixture.nativeElement as HTMLElement).querySelector('.find-floor-row')!;
+      const text = row.querySelector('.floor-state')!.textContent!;
+      expect(text).toContain(
+        status === 'unchecked' ? 'unchecked' : status === 'confirmed' ? 'likely 55–100% (checked 5)' : 'Aimed at 50%: likely 11–73% right',
+      );
+      expect(row.querySelector('.floor-check-btn')!.textContent!.trim()).toBe('Check 5 picks');
+    });
+  });
+
+  describe('the spot check (#4273)', () => {
+    beforeEach(async () => {
+      await setUp(false);
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+      sortState.setSortResults(ranking, 0.5, lineFloor('unchecked'));
+      await settleZoneless(fixture);
     });
 
-    it('treat a promised line the same, unlabelled', async () => {
-      sortState.setSortResults(ranking, 0.5, lineFloor('confirmed'));
-      await settleZoneless(fixture);
-      view().nextFindSide = 'above';
-      view().advanceToBoundary();
-      expect(TestBed.inject(MediaStateService).selectedId()).toBe(2);
-      expect(view().unverifiedGoodIds()).toEqual([1, 2]);
+    const running = (picks: number[]) => ({
+      status: 'running',
+      min_precision: 0.5,
+      round: 1,
+      rounds: 1,
+      picks_per_round: picks.length,
+      candidate: 32,
+      start_candidate: 32,
+      picks,
+      labelled: 0,
+      right: 0,
+      range: null,
+    });
+
+    it('opens from the floor control, takes the vote keys, and installs the line the check ends on', async () => {
       const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('.media-threshold-line')).not.toBeNull();
-      expect(el.querySelector('.media-threshold-line--unpromised')).toBeNull();
+      (el.querySelector('.find-floor-row .floor-check-btn') as HTMLButtonElement).click();
+      await settleZoneless(fixture);
+      httpMock
+        .expectOne((req) => req.url === '/api/precision-check/start')
+        .flush({ floor: wireFloor('unchecked'), check: running([3]) });
+      await settleZoneless(fixture);
+      expect(el.querySelector('vt-floor-check-modal')).not.toBeNull();
+
+      // → votes the pick in the step; the list behind it gets nothing.
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      await settleZoneless(fixture);
+      expect(httpMock.match((req) => req.url.startsWith('/api/medias/') && req.url.endsWith('/vote'))).toEqual([]);
+      const votes = httpMock.expectOne((req) => req.url === '/api/precision-check/votes');
+      expect(votes.request.body).toEqual({ votes: [{ id: 3, label: 'good' }] });
+      votes.flush({
+        floor: wireFloor('confirmed'),
+        check: { ...running([]), status: 'confirmed', labelled: 1, right: 1, range: { lo: 0.55, hi: 1, labelled: 1, right: 1 } },
+      });
+      await settleZoneless(fixture);
+
+      // The finished check moved the line server-side; the view installs it.
+      httpMock
+        .expectOne((req) => req.url === '/api/min-precision' && req.method === 'GET')
+        .flush({ ...wireFloor('confirmed'), threshold: 0.3, n_returned: 3 });
+      await settleZoneless(fixture);
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.floor?.status).toBe('confirmed');
+      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('At least 50% right');
+    });
+
+    it('closing a running check cancels it and leaves the line as it was', async () => {
+      const el = fixture.nativeElement as HTMLElement;
+      (el.querySelector('.find-floor-row .floor-check-btn') as HTMLButtonElement).click();
+      await settleZoneless(fixture);
+      httpMock
+        .expectOne((req) => req.url === '/api/precision-check/start')
+        .flush({ floor: wireFloor('unchecked'), check: running([3, 1]) });
+      await settleZoneless(fixture);
+      (el.querySelector('vt-floor-check-modal .modal-footer .btn') as HTMLButtonElement).click();
+      await settleZoneless(fixture);
+      httpMock.expectOne((req) => req.url === '/api/precision-check/cancel').flush({ floor: wireFloor('unchecked'), check: null });
+      expect(el.querySelector('vt-floor-check-modal')).toBeNull();
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.floor?.status).toBe('unchecked');
     });
   });
 });

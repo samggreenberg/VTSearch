@@ -119,6 +119,8 @@ export class LeftPanelComponent implements OnInit {
   readonly selectModeChange = output<SelectMode>();
   /** The user picked a precision floor (a fraction). */
   readonly minPrecisionChange = output<number>();
+  /** The floor control's "Check N picks": the host opens the spot check (#4273). */
+  readonly floorCheck = output<void>();
   readonly textSort = output<string>();
   readonly learnedSort = output<void>();
   readonly loadSort = output<void>();

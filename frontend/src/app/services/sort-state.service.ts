@@ -3,7 +3,7 @@ import { Subscription } from 'rxjs';
 import { ProgressEventsService } from './progress-events.service';
 import { formatProgressMessage } from '../utils/format-progress';
 import type { ProgressEvent } from '../models/api.models';
-import { DEFAULT_MIN_PRECISION, isUnpromised, type LineFloor } from '../utils/line-floor';
+import { DEFAULT_MIN_PRECISION, type LineFloor } from '../utils/line-floor';
 
 export type SortMode = 'text' | 'learned' | 'load';
 export type SelectMode = 'top' | 'hard' | 'new';
@@ -132,11 +132,6 @@ export class SortStateService {
   /** The floor's verdict on `threshold`; null when the sort has no detector behind it. */
   get floor(): LineFloor | null {
     return this._floor();
-  }
-
-  /** True when the set `threshold` keeps is not a confirmed one: unchecked, or a check that fell short (#4247, #4272). */
-  get unpromised(): boolean {
-    return isUnpromised(this._floor());
   }
 
   get sortBusy(): boolean {
@@ -341,11 +336,25 @@ export class SortStateService {
 
   /**
    * Replace the floor's verdict without moving the line: for a floor change
-   * that leaves the line where it was, because the floor promised nothing
-   * either side of it and both lines are the default cut (#4246).
+   * that leaves the line where it was, because both floors keep the same
+   * count of items (#4246, #4272).
    */
   setFloor(floor: LineFloor | null): void {
     this._floor.set(floor);
+  }
+
+  /**
+   * Move the line over the ranking already on screen, with the floor's new
+   * verdict: after a spot check ends (#4273), the server keeps the set it
+   * ended on, which is a new count over the same ranking. `aboveThreshold` is
+   * the server's count over the whole ranking when it sent one, since a
+   * windowed ranking holds only its head here.
+   */
+  setLine(threshold: number, floor: LineFloor | null, aboveThreshold: number | null = null): void {
+    const order = this._sortOrder() ?? [];
+    this._threshold.set(threshold);
+    this._floor.set(floor);
+    this._aboveThreshold.set(aboveThreshold ?? order.filter((i) => i.score >= threshold).length);
   }
 
   setLoadSortLabel(label: string): void {

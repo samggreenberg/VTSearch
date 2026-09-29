@@ -33,6 +33,7 @@
       (sortModeChange)="onSortModeChange($event)"
       (selectModeChange)="onSelectModeChange($event)"
       (minPrecisionChange)="onMinPrecisionChange($event)"
+      (floorCheck)="onFloorCheck()"
       (textSort)="onTextSort($event)"
       (learnedSort)="onLearnedSort(false)"
       (loadSort)="onLoadSort()"
@@ -127,6 +128,10 @@
     (confirmed)="onCropConfirmed($event)"
     (cancelled)="onCropCancelled()"
   />
+}
+
+@if (showFloorCheck()) {
+  <vt-floor-check-modal (closed)="showFloorCheck.set(false)" (voted)="onFloorCheckVoted($event)" />
 }
 
 @if (showResortPrompt()) {

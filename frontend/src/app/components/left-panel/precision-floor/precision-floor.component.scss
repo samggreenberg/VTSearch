@@ -64,3 +64,12 @@
   min-width: 0;
   cursor: help;
 }
+
+// The check affordance rides the state line it measures, in the line's small
+// type rather than the toolbar's, so it reads as part of the sentence.
+.floor-check-btn {
+  flex-shrink: 0;
+  padding: 0 var(--space-sm);
+  font-size: var(--font-2xs);
+  letter-spacing: normal;
+}

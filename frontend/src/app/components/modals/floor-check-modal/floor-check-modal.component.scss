@@ -1,0 +1,113 @@
+// One pick at a time wants room for the media, but the step is a short task,
+// not a page: the medium modal width, with a stage of fixed height so the
+// dialog does not jump as picks of different shapes come and go.
+:host ::ng-deep .modal-content {
+  width: var(--modal-w-md);
+}
+
+.floor-check {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 0;
+}
+
+.check-note,
+.check-brief,
+.check-keys,
+.check-shorter {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.check-keys {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+// "Not there yet": the one line that says a round fell short and a shorter
+// list is next. It names no cause (owner, 2026-09-29).
+.check-shorter {
+  color: var(--text-warning);
+}
+
+// Progress, not rank: one dot per pick in draw order, filled with its vote.
+.pick-dots {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.pick-dot {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+
+  &.current {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  &[data-vote="good"] {
+    border-color: var(--color-good);
+    background: var(--color-good);
+  }
+
+  &[data-vote="bad"] {
+    border-color: var(--color-bad);
+    background: var(--color-bad);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+// The viewers fill a flex column (`flex: 1; min-height: 0`), as they do in the
+// centre panel; this gives them one of a fixed height to fill.
+.pick-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 45vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.check-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+
+  .indicator-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: var(--space-xs);
+    border-radius: 50%;
+    background: var(--indicator-dot);
+    vertical-align: middle;
+  }
+
+  &[data-status="confirmed"] .indicator-dot {
+    background: var(--status-green-dot);
+  }
+
+  &[data-status="short"] .indicator-dot {
+    background: var(--status-red-dot);
+  }
+}
+
+.check-result-headline {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}

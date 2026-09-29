@@ -7,7 +7,7 @@ import { Media } from '../../../models/api.models';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../../testing/test-providers';
-import { NO_PROMISE_STATES, lineFloor } from '../../../testing/line-floor';
+import { FLOOR_STATES, lineFloor } from '../../../testing/line-floor';
 
 describe('MediaListComponent', () => {
   let component: MediaListComponent;
@@ -202,7 +202,7 @@ describe('MediaListComponent', () => {
     expect(ids).toEqual([1, 2, 3]);
   });
 
-  describe('the unpromised line (#4247)', () => {
+  describe('the line in every floor state (#4272, #4273)', () => {
     function drawWith(floor: ReturnType<typeof lineFloor> | null): HTMLElement {
       fixture.componentRef.setInput('sortOrder', [
         { id: 1, score: 0.8 },
@@ -215,29 +215,33 @@ describe('MediaListComponent', () => {
       return fixture.nativeElement.querySelector('.media-threshold-line') as HTMLElement;
     }
 
-    it.each(NO_PROMISE_STATES)('draws the fallback line where the cut puts it, labelled, when %s', (status) => {
+    it.each(FLOOR_STATES)('draws the same plain line where the cut puts it when %s', (status) => {
       const line = drawWith(lineFloor(status));
       expect(line).not.toBeNull();
-      // Still a working line: it sits between the last match and the first non-match.
+      // A working line: it sits between the last match and the first non-match.
       expect(component.cachedOrderedItems.find((i) => i.showThreshold)?.media.id).toBe(3);
-      expect(line.classList).toContain('media-threshold-line--unpromised');
-      expect(line.querySelector('.threshold-label--unpromised')?.textContent?.trim()).toBe('unpromised');
-      expect(line.getAttribute('title')).toContain('Unpromised:');
-      expect(line.getAttribute('aria-label')).toBe('Good/Bad threshold, unpromised');
+      expect(line.className).toBe('media-threshold-line');
+      expect(line.textContent!.trim().toLowerCase()).toBe('threshold');
+      expect(line.getAttribute('aria-label')).toBe('Good/Bad threshold');
     });
 
-    it.each([lineFloor('confirmed'), null])('draws the plain line otherwise (%o)', (floor) => {
-      const line = drawWith(floor);
-      expect(line).not.toBeNull();
-      expect(line.classList).not.toContain('media-threshold-line--unpromised');
-      expect(line.querySelector('.threshold-label--unpromised')).toBeNull();
+    it('names the floor\'s state in the tooltip only', () => {
+      expect(drawWith(lineFloor('unchecked')).getAttribute('title')).toContain('Unchecked: the line keeps the top 32');
+      expect(drawWith(lineFloor('short')).getAttribute('title')).toContain('Aimed at 50%');
+      expect(drawWith(lineFloor('confirmed')).getAttribute('title')).toContain('at least 50%');
+    });
+
+    it('says a stale range is stale in the tooltip, and nowhere else', () => {
+      const fresh = drawWith(lineFloor('short'));
+      const freshHtml = fresh.outerHTML.replace(/title="[^"]*"/, '');
+      const stale = drawWith(lineFloor('short', { range: { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true } }));
+      expect(stale.getAttribute('title')).toContain('Measured before your later votes');
+      expect(stale.outerHTML.replace(/title="[^"]*"/, '')).toBe(freshHtml);
+    });
+
+    it('draws the plain line with no detector behind the sort', () => {
+      const line = drawWith(null);
       expect(line.getAttribute('title')).toBe("The line between the detector's good and bad matches");
-    });
-
-    it('drops the label once a promise is made', () => {
-      drawWith(lineFloor('unchecked'));
-      const line = drawWith(lineFloor('confirmed'));
-      expect(line.classList).not.toContain('media-threshold-line--unpromised');
     });
   });
 });

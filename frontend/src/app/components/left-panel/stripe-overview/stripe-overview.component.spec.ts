@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { StripeOverviewComponent, STRIPE_MAX_ITEMS } from './stripe-overview.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
-import { NO_PROMISE_STATES, lineFloor } from '../../../testing/line-floor';
+import { FLOOR_STATES, lineFloor } from '../../../testing/line-floor';
 
 describe('StripeOverviewComponent', () => {
   let component: StripeOverviewComponent;
@@ -127,7 +127,7 @@ describe('StripeOverviewComponent', () => {
     expect(emitted).toBe(false);
   });
 
-  describe('the unpromised marker (#4247)', () => {
+  describe('the line marker in every floor state (#4272, #4273)', () => {
     async function drawWith(floor: ReturnType<typeof lineFloor> | null): Promise<HTMLElement> {
       fixture.componentRef.setInput('sortOrder', [
         { id: 1, score: 0.9 },
@@ -139,23 +139,21 @@ describe('StripeOverviewComponent', () => {
       return fixture.nativeElement as HTMLElement;
     }
 
-    it.each(NO_PROMISE_STATES)('draws the fallback line, dashed, when %s', async (status) => {
+    it.each(FLOOR_STATES)('draws the same plain marker when %s, and names the state in the strip tooltip', async (status) => {
       const el = await drawWith(lineFloor(status));
       const marker = el.querySelector('.stripe-threshold');
       expect(marker).not.toBeNull();
-      expect(marker!.classList).toContain('stripe-threshold--unpromised');
+      expect(marker!.className).toBe('stripe-threshold');
       expect(component.cachedThresholdPosition()).toBe(50);
       const title = el.querySelector('.stripe-overview')!.getAttribute('title')!;
-      expect(title).toContain('The dashed line is unpromised');
-      expect(title).toContain('the line keeps');
+      expect(title).toContain('The line: ');
+      expect(title).not.toMatch(/dashed|unpromised/);
     });
 
-    it.each([lineFloor('confirmed'), null])('draws a plain line otherwise (%o)', async (floor) => {
-      const el = await drawWith(floor);
-      const marker = el.querySelector('.stripe-threshold');
-      expect(marker).not.toBeNull();
-      expect(marker!.classList).not.toContain('stripe-threshold--unpromised');
-      expect(el.querySelector('.stripe-overview')!.getAttribute('title')).not.toContain('unpromised');
+    it('draws a plain marker with no detector behind the sort', async () => {
+      const el = await drawWith(null);
+      expect(el.querySelector('.stripe-threshold')!.className).toBe('stripe-threshold');
+      expect(el.querySelector('.stripe-overview')!.getAttribute('title')).not.toContain('The line: ');
     });
   });
 });
