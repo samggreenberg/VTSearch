@@ -136,6 +136,17 @@ class TestBuildLayoutFits:
         assert ctx._pyramids.get("hex") is not None
         assert svc.layout_meta(ctx, "hex", subset=False)["status"] == "ready"
 
+    def test_the_fit_runs_under_the_configured_seed(self, monkeypatch):
+        """``VTSEARCH_PROJECTION_SEED`` reaches the fit, full and subset alike (#4296)."""
+        monkeypatch.setattr("vtscore.projection.params.PROJECTION_SEED", 7)
+        ctx = _ctx("svc-seed")
+        with _faked_fit() as fit:
+            svc.build_layout(ctx)
+            _await_build()
+            svc.build_layout(ctx, ids=[1, 2, 3])
+            _await_build()
+        assert [c.kwargs["random_state"] for c in fit.call_args_list] == [7, 7]
+
     def test_the_other_shape_re_bins_the_frozen_layout_without_re_fitting(self):
         """The hex/square toggle costs a re-bin, never a second UMAP fit."""
         ctx = _ctx("svc-rebin")

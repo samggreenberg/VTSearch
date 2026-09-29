@@ -22,10 +22,10 @@ from vtscore.projection.umap_projection import Projection
 from vtscore.utils.hashing import content_md5
 
 
-def _proj(n: int, projection_id: str = "proj-1") -> Projection:
+def _proj(n: int, projection_id: str = "proj-1", random_state: int | None = None) -> Projection:
     rng = np.random.default_rng(42)
     coords = rng.standard_normal((n, 2)).astype(np.float32)
-    return Projection(projection_id, list(range(1, n + 1)), coords, "pca")
+    return Projection(projection_id, list(range(1, n + 1)), coords, "pca", random_state=random_state)
 
 
 class FakeEmbedder:
@@ -45,8 +45,9 @@ def stub_fit(monkeypatch):
     """Stub the clusterable UMAP + the toponymy fit; capture the fit inputs."""
     captured: dict = {}
 
-    def fake_clusterable(matrix, on_progress=None):
+    def fake_clusterable(matrix, on_progress=None, *, random_state=None):
         captured["clusterable_input"] = matrix
+        captured["clusterable_seed"] = random_state
         return np.asarray(matrix[:, :2], dtype=np.float32)
 
     def fake_fit(texts, embedding_vectors, clusterable_vectors, text_encoder, **kwargs):
@@ -60,8 +61,8 @@ def stub_fit(monkeypatch):
     return captured
 
 
-def _build(n=60, layers=None, projection_id="proj-1", captured=None, **kwargs):
-    proj = _proj(n, projection_id)
+def _build(n=60, layers=None, projection_id="proj-1", captured=None, random_state=None, **kwargs):
+    proj = _proj(n, projection_id, random_state)
     matrix = np.tile(np.eye(4, dtype=np.float32), (n // 4 + 1, 2))[:n]
     texts = [f"text {i}" for i in range(n)]
     if captured is not None:
@@ -105,6 +106,14 @@ class TestBuildRegionLabels:
         assert (by_text["a"].x, by_text["a"].y) == (pytest.approx(expected[0]), pytest.approx(expected[1]))
         assert by_text["a"].score == 20.0
         assert by_text["b"].score == 40.0
+
+    def test_the_clusters_are_fit_under_the_layouts_seed(self, stub_fit):
+        """A seeded map gets seeded signs: the clusters they name follow its seed (#4296)."""
+        layers = [(["a"], np.zeros(60, dtype=int))]
+        _build(layers=layers, captured=stub_fit)
+        assert stub_fit["clusterable_seed"] is None
+        _build(layers=layers, captured=stub_fit, random_state=7)
+        assert stub_fit["clusterable_seed"] == 7
 
     def test_noise_and_empty_names_are_skipped(self, stub_fit):
         n = 60

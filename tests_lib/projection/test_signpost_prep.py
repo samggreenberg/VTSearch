@@ -69,7 +69,9 @@ def ctx(monkeypatch):
 def stub_pipeline(monkeypatch):
     """Fast deterministic stand-ins for the UMAP + toponymy stages."""
     monkeypatch.setattr(st, "_load_vocab", lambda asset: ["dog", "rain", "car"])
-    monkeypatch.setattr(sb, "_clusterable_vectors", lambda m, p=None: np.asarray(m[:, :2], np.float32))
+    monkeypatch.setattr(
+        sb, "_clusterable_vectors", lambda m, p=None, *, random_state=None: np.asarray(m[:, :2], np.float32)
+    )
 
     def fake_fit(texts, embedding_vectors, clusterable_vectors, text_encoder, **kwargs):
         n = len(texts)

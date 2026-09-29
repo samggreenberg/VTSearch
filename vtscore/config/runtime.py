@@ -193,3 +193,17 @@ PROJECTION_DEFAULTS_BY_EMBEDDER: dict[str, tuple[int, float]] = {
 # exposed as a user-facing setting; the ``compact`` param on ``fit_projection``
 # remains for future experimentation.
 PROJECTION_COMPACT_DEFAULT = False
+
+# Seed for the Browse projection's UMAP fit.  Unset (``None``, the default) is
+# the shipped behaviour: an unseeded fit keeps UMAP's numba parallelism on, and
+# the layout is frozen and persisted after its one fit, so its randomness never
+# shows.  Set ``VTSEARCH_PROJECTION_SEED`` to an integer for a reproducible
+# layout (and the same signposts over it, whose clustering UMAP is seeded from
+# the layout), at the cost of a single-threaded fit.  The user-docs screenshot
+# harness (``scripts/screenshots/refresh.sh``) sets it so the Browse shots
+# frame the same map on every refresh.  The seed is stamped on each layout, so
+# a persisted one fit under a different seed (or none) is refit once a seed
+# is set.
+_seed = os.environ.get("VTSEARCH_PROJECTION_SEED", "").strip()
+PROJECTION_SEED: int | None = int(_seed) if _seed else None
+del _seed

@@ -162,6 +162,7 @@ def build_positives_browse_context(
         n_neighbors=params.n_neighbors,
         min_dist=params.min_dist,
         compact=params.compact,
+        random_state=params.random_state,
     )
     pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
     install_layout(ctx, proj, pyr)
