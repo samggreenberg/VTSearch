@@ -16,9 +16,11 @@
  * reach every frame.
  */
 
+import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Page } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
-import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
+import { corpus, corpusPath, DETECTOR, DETECTOR_TEXT, framesOf, HERO_REGION, REGION_DATASET, REGION_DETECTOR, regionBox, REPO, TEST_DATASET, TRAIN_DATASET } from '../../scripts/screenshots/smiley-example.mjs';
 
 export type Theme = 'light' | 'dark';
 
@@ -100,6 +102,14 @@ export interface Helpers {
    * `Yellow Smileys`) and click Train → label view.
    */
   enterLabelView(dataset?: string, detector?: string): Promise<void>;
+  /**
+   * Wait for the sorts the label view is running, or is about to start, to
+   * settle. The view re-sorts on entry (once its votes load) and on a tab
+   * switch, and what it serves and the floor line it shows follow that sort,
+   * so a fixed wait photographs whichever side of it the clock lands on
+   * (#4299). `enterLabelView` and `leftTab` already do this.
+   */
+  sortsSettled(): Promise<void>;
   /** In the label view, switch the left-panel tab (Autopilot / Manual). */
   leftTab(name: 'Autopilot' | 'Manual'): Promise<void>;
   /**
@@ -321,8 +331,33 @@ async function newDetectorImageTab(page: Page, h: Helpers): Promise<void> {
   await h.wait(500);
 }
 
+/**
+ * Where the app keeps detector example media: the `example_media/` of its data
+ * dir (refresh.sh's fresh one, else the checkout's).
+ */
+const EXAMPLE_MEDIA = join(process.env.SHOTS_APP_DATA_DIR || join(REPO, 'data'), 'example_media');
+
+/** The example media there before a shot dropped one in (`dropExample`). */
+let examplesBefore: Set<string> | null = null;
+
+const exampleMediaFiles = () => new Set(existsSync(EXAMPLE_MEDIA) ? readdirSync(EXAMPLE_MEDIA) : []);
+
+/**
+ * Delete the example media a shot dropped in, and only those. Every drop is
+ * saved under a random name, and the Load sort lists them, so they would pile
+ * up in later shots (#4299); there is no route that deletes one.
+ */
+function removeDroppedExamples(): void {
+  if (!examplesBefore) return;
+  for (const name of exampleMediaFiles()) {
+    if (!examplesBefore.has(name)) rmSync(join(EXAMPLE_MEDIA, name), { force: true });
+  }
+  examplesBefore = null;
+}
+
 /** ...then hand it a yellow smiley from the training pile, as if dropped from the desktop. */
 async function dropExample(page: Page, h: Helpers): Promise<void> {
+  examplesBefore = exampleMediaFiles();
   await newDetectorImageTab(page, h);
   await page.locator('.example-panel .drop-zone-input').setInputFiles(trainingPicture('yellow-smiley').path);
   await page.waitForSelector('[role=dialog][aria-label="Use This Example?"]', { timeout: 20000 });
@@ -373,23 +408,55 @@ async function setAutoRun(h: Helpers, on: boolean): Promise<void> {
   await h.app.api(`/api/detectors/registry/${det.id}/autofind`, { method: 'PUT', body: { autofind: on } });
 }
 
+/** How far apart, in CSS px, `clickTile` tries points on the Browse canvas. */
+const TILE_PROBE_STEP = 20;
+
 /**
- * Click the Browse canvas, *button* 'left' or 'right', at the first point
- * (working out from the centre) where it lands on a tile, judged by *hit*.
- * Tiles leave gaps between clusters, and a right-click on empty space soon
- * after another zooms out, so the tries are spaced out.
+ * Every point of a *step*-spaced grid within *reach* of the origin, nearest
+ * first. The order among equally near points is fixed, so the same map always
+ * gets the same tile.
+ */
+function outFromMiddle(reach: number, step: number): [number, number][] {
+  const n = Math.floor(reach / step);
+  const points: [number, number][] = [];
+  for (let i = -n; i <= n; i++) {
+    for (let j = -n; j <= n; j++) {
+      if (i * i + j * j <= n * n) points.push([i * step, j * step]);
+    }
+  }
+  return points.sort((a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2));
+}
+
+/**
+ * Click the Browse canvas, *button* 'left' or 'right', on the tile nearest its
+ * middle, and check with *hit* that the click took.
+ *
+ * Where the tiles fall is up to the UMAP layout, and they leave gaps between
+ * clusters, so any fixed point can land on empty space (#4296). The pointer
+ * instead sweeps out from the middle until it is over a tile, and clicks there.
+ * An image tile says so only on the canvas: the hovered thumbnail lifts, and no
+ * DOM changes. So a point is over a tile when the pixels around it change as
+ * the pointer arrives. Hovering changes nothing else, where a stray right-click
+ * on empty space soon after another zooms the map out.
  */
 async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: () => Promise<boolean>): Promise<void> {
   const box = await page.locator('vt-browse-canvas').first().boundingBox();
   if (!box) throw new Error('no Browse canvas');
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  for (const [dx, dy] of [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40], [80, 40], [-80, -40], [120, 0], [-120, 0], [0, 120]]) {
-    await page.mouse.click(cx + dx, cy + dy, { button });
+  const r = TILE_PROBE_STEP;
+  const around = (x: number, y: number) => page.screenshot({ clip: { x: x - r, y: y - r, width: 2 * r, height: 2 * r } });
+  for (const [dx, dy] of outFromMiddle(Math.min(box.width, box.height) / 2 - 2 * r, r)) {
+    const [x, y] = [cx + dx, cy + dy];
+    const before = await around(x, y);
+    await page.mouse.move(x, y);
+    await h.wait(150);
+    if (before.equals(await around(x, y))) continue;
+    await page.mouse.click(x, y, { button });
     await h.wait(1200);
     if (await hit()) return;
   }
-  throw new Error('no tile found near the middle of the Browse canvas');
+  throw new Error('no tile found on the Browse canvas');
 }
 
 /** How far the manual-text-sort shot widens the left panel, in CSS px. */
@@ -529,7 +596,8 @@ async function autopilotServing(page: Page, h: Helpers): Promise<void> {
   await h.leftTab('Autopilot');
   await page.waitForSelector('.btn-good', { timeout: 120000 });
   // Autopilot re-sorts on entry and then serves; let it settle.
-  await h.wait(6000);
+  await h.sortsSettled();
+  await h.wait(1500);
 }
 
 export const SHOTS: Shot[] = [
@@ -1074,7 +1142,27 @@ export const SHOTS: Shot[] = [
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.stats-table', { timeout: 20000 });
       // The chart is the section this shot is for; it sits below the fold.
+      // Sections above it are still loading when the table appears, so wait
+      // for the modal's height to hold still, then scroll to its very end;
+      // scrolling any sooner leaves the frame wherever their arrival pushed it.
+      await page.waitForFunction(
+        () => {
+          const w = window as unknown as { __statsH?: number; __statsT?: number };
+          const h = document.querySelector('.modal-content')?.scrollHeight ?? 0;
+          if (h !== w.__statsH) {
+            w.__statsH = h;
+            w.__statsT = Date.now();
+          }
+          return Date.now() - (w.__statsT ?? Date.now()) > 1500;
+        },
+        undefined,
+        { timeout: 60000, polling: 250 },
+      );
       await page.locator('.chart-wrap').scrollIntoViewIfNeeded();
+      await page.evaluate(() => {
+        const modal = document.querySelector('.modal-content');
+        if (modal) modal.scrollTop = modal.scrollHeight;
+      });
       // Park the pointer off the chart, so the readout shows the current cut.
       await page.mouse.move(5, 5);
       await h.wait(1200);
@@ -1335,6 +1423,7 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await dropExample(page, h);
     },
+    after: async () => removeDroppedExamples(),
   },
   {
     id: 'example-stack',
@@ -1355,6 +1444,7 @@ export const SHOTS: Shot[] = [
       await page.locator('#detector-name').fill('Smileys by example');
       await h.wait(700);
     },
+    after: async () => removeDroppedExamples(),
   },
   {
     id: 'example-seed-menu',
@@ -1953,6 +2043,10 @@ export const SHOTS: Shot[] = [
       { target: 'button[title="Cancel this dataset load"]', kind: 'step', step: 2, at: 'right' },
     ],
     // A real import, cancelled once photographed and cleared away.
+    //
+    // Posed at one moment, or the frame is whatever the clock gives (#4299):
+    // the recipe waits for the embedding step, the longest by far, then pins
+    // the count, the bar and the time left, which move every second.
     async recipe(page, h) {
       await h.app.dropDatasets('drawings-more');
       await h.dashboard();
@@ -1963,13 +2057,29 @@ export const SHOTS: Shot[] = [
       await page.locator('#field-seed').fill('4');
       await page.locator('#field-dataset_name').fill('drawings-more');
       await page.locator('vt-modal .btn--primary', { hasText: 'Import' }).first().click();
-      await page.waitForSelector('tr.loading-task-row vt-job-progress', { timeout: 30000 });
+      const row = page.locator('tr.loading-task-row vt-job-progress').first();
+      await row.locator('.jp__header', { hasText: 'Step 3 of 4' }).waitFor({ timeout: 180000 });
+      // Past the step's `0/240 Embedding 240 item(s)…` preamble, to the first
+      // batch, where the line names the embedder as it counts.
+      await row.locator('.jp__detail', { hasText: /^[1-9]\d*\/\d+/ }).waitFor({ timeout: 120000 });
       await page.mouse.move(700, 60);
-      await h.wait(2500);
+      // Replacing each element's text detaches the text node the app updates,
+      // so the pin holds; the bar's width is an inline style it re-binds, so
+      // a rule that outranks it holds that.
+      await page.evaluate(() => {
+        const jp = document.querySelector('tr.loading-task-row vt-job-progress')!;
+        const detail = jp.querySelector('.jp__detail')!;
+        detail.textContent = (detail.textContent || '').replace(/^\d+\//, '60/');
+        jp.querySelector('.jp__eta')!.textContent = '';
+      });
+      await page.addStyleTag({ content: 'tr.loading-task-row vt-job-progress .progress-fill{width:45%!important}' });
+      await h.wait(500);
     },
+    // The next shot is the Add Dataset dialog over this same dashboard, so the
+    // cancelled import has to be gone, not just cancelling.
     after: async (page, h) => {
       await page.locator('button[title="Cancel this dataset load"]').first().click().catch(() => {});
-      await page.waitForTimeout(3000);
+      await page.waitForSelector('tr.loading-task-row', { state: 'detached', timeout: 120000 }).catch(() => {});
       await h.app.dropDatasets('drawings-more');
     },
   },

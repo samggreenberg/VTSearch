@@ -58,7 +58,7 @@ class RegionLabelSet:
     """All signposts computed for one frozen projection layout.
 
     ``projection_id`` pins the set to the layout it was computed from: anchors
-    are coordinates in that specific (unseeded, non-reproducible) UMAP fit, so
+    are coordinates in that specific (by default unseeded) UMAP fit, so
     a set must never be served against any other layout.  Consumers compare it
     against the active pyramid's id and treat a mismatch as "no labels".
     """

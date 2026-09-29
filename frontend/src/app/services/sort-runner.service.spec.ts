@@ -700,6 +700,84 @@ describe('SortRunnerService', () => {
       expect(runner.queueExhausted()).toBe(false);
       expect(mediaState.selectedId()).toBe(7);
     });
+
+    /**
+     * #4312: under New the answer is the server's, so it cannot be derived from
+     * the vote sets the way Top / Hard's is. It is kept with the labels it was
+     * given, and lapses once one of those is un-voted.
+     */
+    describe('under the New select mode', () => {
+      const isAtlasProbe = (req: { url: string }) => req.url.startsWith('/api/coverage-atlas/next');
+
+      /** Vote item 1 good and let the advance come back empty. */
+      function exhaustOnItemOne(): void {
+        sortState.setSelectMode('new');
+        sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+        mediaState.selectMedia(1);
+        voteState.recordVote(1, 'good', 'one.png');
+        voteState.applyOptimisticState(1, 'good');
+        runner.autoSelectNext(1);
+        httpMock.expectOne(isAtlasProbe).flush({ id: null, coverage_level: 3 });
+        expect(runner.queueExhausted()).toBe(true);
+      }
+
+      it('goes back to false when an undo un-votes a label the empty answer was given', () => {
+        exhaustOnItemOne();
+
+        voteState.undo();
+
+        // Straight back to work, as under Top / Hard: the undone item is still
+        // the selection, and nothing waits on the server to say so.
+        expect(runner.queueExhausted()).toBe(false);
+        expect(mediaState.selectedId()).toBe(1);
+        httpMock.expectNone(isAtlasProbe);
+        httpMock.expectOne('/api/medias/1/vote').flush({ ok: true, state: 'none', click_time: null });
+        expect(runner.queueExhausted()).toBe(false);
+      });
+
+      it('holds through votes that only add labels or flip one', () => {
+        exhaustOnItemOne();
+
+        // The atlas runs dry when every node carries a label, so neither of
+        // these can bring an unseen node back.
+        voteState.applyOptimisticState(9, 'bad');
+        voteState.applyOptimisticState(1, 'bad');
+
+        expect(runner.queueExhausted()).toBe(true);
+      });
+
+      it('stays up across the probe a re-vote fires, rather than blinking off', () => {
+        exhaustOnItemOne();
+        voteState.applyOptimisticState(1, 'none');
+        expect(runner.queueExhausted()).toBe(false);
+
+        // Re-voting restores the labels the empty answer was given, so the
+        // answer holds again, and the probe the vote fires can only confirm it.
+        voteState.applyOptimisticState(1, 'good');
+        expect(runner.queueExhausted()).toBe(true);
+        runner.autoSelectNext(1);
+        expect(runner.advancePending()).toBe(true);
+        expect(runner.queueExhausted()).toBe(true);
+
+        httpMock.expectOne(isAtlasProbe).flush({ id: null, coverage_level: 3 });
+        expect(runner.queueExhausted()).toBe(true);
+      });
+
+      it('goes back to false for an undo that lands while the probe is in the air', () => {
+        sortState.setSelectMode('new');
+        sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+        voteState.applyOptimisticState(1, 'good');
+        runner.autoSelectNext(1);
+        const probe = httpMock.expectOne(isAtlasProbe);
+
+        // The server may well have answered before it saw the undo, so the
+        // answer is about the labels the probe went out with.
+        voteState.applyOptimisticState(1, 'none');
+        probe.flush({ id: null, coverage_level: 3 });
+
+        expect(runner.queueExhausted()).toBe(false);
+      });
+    });
   });
 
   // --- the dataset, and the advance, running out (#4028) -------------------

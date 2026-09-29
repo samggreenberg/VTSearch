@@ -190,10 +190,10 @@ def test_remove_projections_no_entries_is_noop(tmp_path):
 
 
 def test_umap_params_round_trip(tmp_path):
-    """A UMAP projection's stamped n_neighbors / min_dist / compact survive persistence."""
+    """A UMAP projection's stamped n_neighbors / min_dist / compact / seed survive persistence."""
     path = _make_container(tmp_path)
     base = _make_projection()
-    proj = Projection(base.projection_id, base.ids, base.coords, "umap", 30, 0.25, False)
+    proj = Projection(base.projection_id, base.ids, base.coords, "umap", 30, 0.25, False, 7)
     append_projection(path, proj, build_pyramid(proj, n_levels=3))
     loaded = read_projection(path)
     assert loaded is not None
@@ -202,6 +202,7 @@ def test_umap_params_round_trip(tmp_path):
     assert proj2.n_neighbors == 30
     assert proj2.min_dist == 0.25
     assert proj2.compact is False
+    assert proj2.random_state == 7
 
 
 def test_compact_true_round_trips_distinctly_from_unstamped(tmp_path):
@@ -230,3 +231,4 @@ def test_projection_without_params_reads_back_none(tmp_path):
     assert loaded[0].n_neighbors is None
     assert loaded[0].min_dist is None
     assert loaded[0].compact is None
+    assert loaded[0].random_state is None

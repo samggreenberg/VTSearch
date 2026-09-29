@@ -101,6 +101,11 @@ def projection_params_match(proj: Any, ctx: DatasetContext | None = None) -> boo
     reads as ``True``: compaction was on by default for every layout written
     before it was recorded, so those layouts correctly fail against today's
     ``compact=False`` and get refit.
+
+    The seed only matters one way.  With no seed asked for (the shipped
+    default), any layout serves: a seeded fit is as good an unseeded layout as
+    any other.  With a seed asked for, only a layout fit under that same seed
+    does, since reproducing the map is the whole point of asking.
     """
     if getattr(proj, "method", None) != "umap":
         return True
@@ -116,6 +121,7 @@ def projection_params_match(proj: Any, ctx: DatasetContext | None = None) -> boo
         stored_n == want.n_neighbors
         and math.isclose(stored_d, want.min_dist, abs_tol=1e-9)
         and stored_c == want.compact
+        and (want.random_state is None or getattr(proj, "random_state", None) == want.random_state)
     )
 
 
