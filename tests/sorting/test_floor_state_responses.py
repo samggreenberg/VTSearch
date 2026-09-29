@@ -124,6 +124,7 @@ class TestAutoRun:
                 trained: list = []
                 out = real(*args, ctx_sink=trained, **kwargs)
                 trained[0].precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=n_pos)
+                assert ctx_sink is not None, "score_detector asks for the trained context"
                 ctx_sink.extend(trained)
                 return out
 
