@@ -305,6 +305,8 @@ export class SortRunnerService {
         // A page of the ranking a newer sort replaced must not be appended to
         // the new one; `finalize` then clears the flag however the fetch ends.
         takeUntil(this.sortSuperseded$),
+        // A failed or expired token just stops paging (the user can re-sort).
+        catchError(() => EMPTY),
         finalize(() => this.loadingMoreSort.set(false)),
       )
       .subscribe((page) => {

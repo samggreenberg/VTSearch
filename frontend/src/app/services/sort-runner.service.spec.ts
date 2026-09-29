@@ -261,6 +261,84 @@ describe('SortRunnerService', () => {
     httpMock.expectOne('/api/find/cancel').flush({ ok: true });
   });
 
+  // --- a newer sort ends an older one (#4318) -----------------------------------
+
+  describe('a newer sort ends an older one (#4318)', () => {
+    it('drops the answer of a sort asked for before the one on its way', () => {
+      runner.onTextSort('first');
+      runner.onTextSort('second');
+      const [first, second] = httpMock.match('/api/sort');
+
+      expect(first.cancelled).toBe(true);
+      second.flush({ results: [{ id: 2, similarity: 0.9 }], threshold: 0.5 });
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([2]);
+      expect(sortState.sortBusy).toBe(false);
+    });
+
+    it('keeps the older sort from clearing the busy flag the newer one raised', () => {
+      enableLearnedSort();
+      runner.onTextSort('seed');
+      runner.onLearnedSort(false);
+
+      // The text request is gone, so nothing can land and report "not busy"
+      // while the model is still training.
+      expect(httpMock.expectOne('/api/sort').cancelled).toBe(true);
+      expect(sortState.sortBusy).toBe(true);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+      });
+      expect(sortState.sortBusy).toBe(false);
+    });
+
+    it('stops polling a learned-sort job a newer sort replaced, and leaves the job alone', () => {
+      enableLearnedSort();
+      runner.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({ status: 'running', job_id: 'job-3' });
+
+      runner.onTextSort('birds');
+      httpMock.expectOne('/api/sort').flush({ results: [{ id: 2, similarity: 0.9 }], threshold: 0.5 });
+
+      // The server coalesces a pair's learned sorts into one job, so cancelling
+      // it there could cancel a newer request's; the Cancel button cannot reach
+      // it either.
+      runner.onSortCancel();
+      httpMock.expectNone((req) => req.url.startsWith('/api/learned-sort/cancel'));
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([2]);
+    });
+
+    it('treats a ranking installed on the spot as the newest sort', () => {
+      runner.onTextSort('birds');
+      runner.onExampleSortStarted({ results: [{ id: 3, similarity: 0.8 }], threshold: 0.5 }, false);
+
+      expect(httpMock.expectOne('/api/sort').cancelled).toBe(true);
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([3]);
+    });
+
+    it('never appends a page of the ranking a newer sort replaced', () => {
+      seedWindow();
+      runner.onLoadMore();
+      const page = httpMock.expectOne((req) => req.url.startsWith('/api/sort/page'));
+
+      runner.onTextSort('fish');
+      expect(page.cancelled).toBe(true);
+      // Paging is free again, rather than stuck behind the fetch that never answered.
+      expect(runner.loadingMoreSort()).toBe(false);
+    });
+
+    it('stops a detector sort\'s progress feed and count when a newer sort starts', () => {
+      runner.onModelSelected('det-1');
+      sortState.setSortProgress(40, 100);
+
+      runner.onTextSort('birds');
+
+      expect(httpMock.expectOne('/api/find-label').cancelled).toBe(true);
+      expect(sortState.sortProgress).toBe(0);
+      expect(sortState.sortProgressTotal).toBe(0);
+    });
+  });
+
   // --- selection advance ----------------------------------------------------
 
   it('probes the coverage atlas in `new` mode and records the level it reports', () => {
