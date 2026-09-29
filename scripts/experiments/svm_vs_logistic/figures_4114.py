@@ -25,7 +25,7 @@ sys.path.insert(0, str(HERE.parent / "calibration"))
 KEYS = ["dataset", "embedder", "category", "seed"]
 METRICS = (("cost", "cost"), ("oracle_cost", "oracle cost (ranking)"), ("average_precision", "average precision"))
 BANDS = ("small", "medium", "large")
-COLORS = {"lrconv": "#d9730d", "linear": "#2e8b57"}
+COLORS = {"lrconv": "#d9730d", "linear": "#2e8b57", "svmc01": "#7b52ab"}
 
 
 def load(root: Path, arms: list[str]) -> pd.DataFrame:

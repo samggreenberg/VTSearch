@@ -21,6 +21,17 @@
 #            Linear(D, 1) (`LINEAR_LOGREG_HEAD`, vtscore/training/logreg.py)
 #   linear   the early-stopped logistic head the SVM replaced: the fidelity arm,
 #            so #3197's svm - linear gap can be checked on this bench
+#   svmc01   the SVM at C = 0.1 (#4219): at the same nominal C, logistic is the
+#            more heavily regularised fit, and #4115 found C = 0.1 ranks better
+#            for the SVM too, so this is the C-matched rival
+#
+# Voting mode (LOGREG_VOTING):
+#
+#   binary   (default) whole-image SigLIP, the #4114 bench
+#   region   `siglip+dinov3_patch` with max_patch (#4213): SigLIP opens on the
+#            typed query, DINOv3 learns from dragged boxes, and every Bad image
+#            floods ~200 region rows into the fit under per-bag weights.  The
+#            logistic loss counts all of them; the hinge ignores the easy ones.
 #
 # Environment: COCO Better (owner, 2026-09-27: current data, not vg_scale or the
 # #3197 pile), the #4184 bench - every class@band cell, SigLIP, binary voting,
@@ -33,9 +44,14 @@ MODE="${1:-}"
 export VTS_REPO="${VTS_REPO:-/expscratch/$USER/worktrees/vts-4114}"
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
-BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4114}"
+VOTING="${LOGREG_VOTING:-binary}"
+case "$VOTING" in
+  binary) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4114}"; TAG=logreg4114 ;;
+  region) BASE="${LOGREG_BASE:-/expscratch/$USER/logreg-4213}"; TAG=logreg4213 ;;
+  *) echo "LOGREG_VOTING must be binary or region, not '$VOTING'" >&2; exit 2 ;;
+esac
 
-ALL_ARMS="svm lrconv linear"
+ALL_ARMS="${LOGREG_ARMS:-svm lrconv linear}"
 
 # --- science knobs -------------------------------------------------------------
 # The shipped threshold path.  Everything but the head is unset and resolves to
@@ -49,14 +65,38 @@ export CALIB_REPOOL_VARIANTS=""
 export CALIB_FOLD_COUNTS=""
 export CALIB_ANCHORED=0
 export CALIB_CUT_INCL_KS=""
+# #4219: the head decision needs the cut at the Inclusion stops users reach, and
+# the cut was tuned on SVM scores.  LOGREG_CUT_INCL_KS re-cuts every step's own
+# trajectory with the SHIPPED rule (mid_tilt, kappa 0.3, qmean) at each stop,
+# into the `__cutincl` side frame; the trajectory itself is unchanged.
+if [[ -n "${LOGREG_CUT_INCL_KS:-}" ]]; then
+  export CALIB_CUT_INCL_KS="$LOGREG_CUT_INCL_KS"
+  export CALIB_ANCHORED=1
+  export CALIB_ANCHORED_RULES=mid_tilt
+  export CALIB_ANCHORED_WEIGHTS=0.3
+  export CALIB_ANCHORED_FOLD_ARMS=1
+  export CALIB_ANCHORED_FOLD_COMBINES=qmean
+fi
 
 # --- environment ---------------------------------------------------------------
 export CALIB_DATASETS=coco_better
-export CALIB_COCO_BETTER_EMBEDDERS=siglip
+if [[ "$VOTING" == region ]]; then
+  export CALIB_COCO_BETTER_EMBEDDERS=siglip+dinov3_patch
+else
+  export CALIB_COCO_BETTER_EMBEDDERS=siglip
+fi
 export CALIB_CATEGORY_MODE=all
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
+# #4213: a region cell costs ~2 h, so the region grid runs a committed subset
+# (the hardest and easiest quartiles) rather than all 144 cells.
+[[ -n "${LOGREG_CATEGORY_FILE:-}" ]] && export CALIB_CATEGORY_FILE="$LOGREG_CATEGORY_FILE"
+
+# Owner, 2026-09-28: this study yields to other sessions' jobs.  Every job it
+# submits carries this nice; `launch_cells.sh` takes no sbatch flags, so its
+# arrays are reniced right after submission.
+NICE="${LOGREG_NICE:-0}"
 
 # --- sizing --------------------------------------------------------------------
 # 144 cells x 5 seeds = 720 paired cells per arm: paired SE ~0.04/sqrt(720) ~
@@ -89,7 +129,7 @@ require_jobid() {
 set_exp() {
   export CALIB_EXP="$BASE/$1"
   export CALIB_RESULTS="$CALIB_EXP/results"
-  export CALIB_JOB_NAME="logreg4114-$1"
+  export CALIB_JOB_NAME="$TAG-$1"
   mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
   ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
 }
@@ -103,12 +143,13 @@ link_prepare() {
 }
 
 arm_env() {
-  unset CALIB_HEAD
+  unset CALIB_HEAD VTSEARCH_SVM_HEAD_C
   ARM_DIVERGES=""
   case "$1" in
     svm) ;;  # CALIB_HEAD left UNSET on purpose: resolves to PRODUCTION_HEAD
     lrconv) export CALIB_HEAD=linear_logreg; ARM_DIVERGES="head" ;;
     linear) export CALIB_HEAD=linear; ARM_DIVERGES="head" ;;
+    svmc01) export VTSEARCH_SVM_HEAD_C=0.1; ARM_DIVERGES="svm_head_c" ;;
     *) echo "unknown arm '$1'; expected one of: $ALL_ARMS" >&2; exit 2 ;;
   esac
   return 0
@@ -135,7 +176,7 @@ run_preflight() {
 case "$MODE" in
   prepare)
     set_exp prepare
-    P=$(sbatch --parsable --job-name=logreg4114-prep --mem=32G --cpus-per-task=2 \
+    P=$(sbatch --parsable --job-name=$TAG-prep --nice="$NICE" --mem=32G --cpus-per-task=2 \
       --time=1:30:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/prepare-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
@@ -145,7 +186,7 @@ case "$MODE" in
 
   baseline)
     set_exp prepare
-    T=$(sbatch --parsable --job-name=logreg4114-baseline --mem=32G --cpus-per-task=2 \
+    T=$(sbatch --parsable --job-name=$TAG-baseline --nice="$NICE" --mem=32G --cpus-per-task=2 \
       --time=1:00:00 --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/baseline-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $CALIB_RESULTS --out $BASE/text_baseline.csv")
@@ -159,7 +200,7 @@ case "$MODE" in
     arm_env "$ARM"
     set_exp "sizing-$ARM"
     link_prepare
-    S=$(sbatch --parsable --job-name="logreg4114-size-$ARM-$IDX" --mem="$CALIB_MEM" --cpus-per-task=1 \
+    S=$(sbatch --parsable --job-name="$TAG-size-$ARM-$IDX" --nice="$NICE" --mem="$CALIB_MEM" --cpus-per-task=1 \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$CALIB_EXP/logs/size-%j.out" \
       --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && /usr/bin/time -v python run_cells.py --index $IDX --outdir $CALIB_RESULTS/cells")
@@ -175,9 +216,15 @@ case "$MODE" in
         arm_env "$arm"
         set_exp "$arm"
         link_prepare
-        echo "=== $arm: head=${CALIB_HEAD:-<production>} -> $CALIB_EXP"
+        echo "=== $arm ($VOTING): head=${CALIB_HEAD:-<production>} C=${VTSEARCH_SVM_HEAD_C:-<shipped>} -> $CALIB_EXP"
         run_preflight
-        bash "$HERE/launch_cells.sh"
+        bash "$HERE/launch_cells.sh" || exit 1
+        id="$(cat "$CALIB_EXP/logs/.cells_jobid" 2>/dev/null || true)"
+        require_jobid "$id" "arm $arm's cells array"
+        if [[ "$NICE" != 0 ]]; then
+          scontrol update JobId="$id" Nice="$NICE" >/dev/null 2>&1 || true
+          echo "reniced $id to $NICE"
+        fi
       ) || exit 1
     done
     ;;
