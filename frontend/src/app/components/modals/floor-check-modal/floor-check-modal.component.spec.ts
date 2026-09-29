@@ -97,7 +97,9 @@ describe('FloorCheckModalComponent (#4273)', () => {
     it('starts a check on open and shows its picks in the order they were drawn', async () => {
       expect(text()).toContain('Drawing picks');
       await start([17, 4, 29, 8, 11]);
-      expect(text()).toContain('Spot check: aiming at Centered');
+      expect(text()).toContain('Spot check');
+      // The floor goes unnamed (#4317): the radio on the Threshold spectrum shows it.
+      expect(text()).not.toMatch(/Centered|Complete|Correct|aiming/);
       expect(text()).toContain('5 picks drawn at random from the top 32. Is each one a match?');
       expect(dots().length).toBe(5);
       expect(component.picks()).toEqual([17, 4, 29, 8, 11]);
@@ -232,7 +234,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
       });
       expect(voted.map((v) => v.finished)).toEqual([false, false, true]);
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Aimed at Complete: likely 4–67% right (checked 8).',
+        'Fell short: likely 4–67% right (checked 8).',
       );
       expect(text()).toContain('The line keeps the top 32 the check ended on.');
       // A short check names no cause: the copy is true of a sparse corpus and a weak model alike.
@@ -254,7 +256,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
         'Confirmed: likely 44–100% right (checked 5).',
       );
       expect(text()).toContain('The line keeps these 128.');
-      // The floor by its name, never its number (#4298); the range stays a number.
+      // The floor shows as no number (#4298, #4317); the range stays one.
       expect(text()).not.toContain('10%');
       expect(voted.at(-1)!.finished).toBe(true);
     });

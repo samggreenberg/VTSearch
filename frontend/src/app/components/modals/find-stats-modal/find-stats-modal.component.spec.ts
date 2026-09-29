@@ -295,9 +295,10 @@ describe('FindStatsModalComponent', () => {
       expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
       expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
       expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
-      // The floor by name, never by number (#4298); the check's range and the axis stay numbers.
-      expect(legend(el)).toContain('Floor: Correct');
-      expect(legend(el)).toContain('Line: keeps the Correct floor (32 kept)');
+      // The floor by neither name nor number (#4298, #4317); the check's range and the axis stay numbers.
+      expect(legend(el)).toContain('Threshold');
+      expect(legend(el)).not.toMatch(/Centered|Complete|Correct/);
+      expect(legend(el)).toContain('Line: confirmed (32 kept)');
       expect(legend(el)).toContain('Likely 55–100% right (checked 5)');
       expect(legend(el)).not.toContain('90%');
       // The Inclusion stepper's legend is gone.
@@ -334,9 +335,9 @@ describe('FindStatsModalComponent', () => {
       const el = await load({ floor: wireFloor('short', { minPrecision: 0.9 }) });
       expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
       expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
-      expect(legend(el)).toContain('Line: the top 32, aimed at Correct');
+      expect(legend(el)).toContain('Line: the top 32, fell short');
       const text = el.textContent!.replace(/\s+/g, ' ');
-      expect(text).toContain('Aimed at Correct: a check of 5 random picks found the top 32 the line keeps likely 11–73% right');
+      expect(text).toContain('Fell short: a check of 5 random picks found the top 32 the line keeps likely 11–73% right');
       expect(text).not.toMatch(/sparse|weak model|unpromised/i);
     });
 
@@ -352,7 +353,9 @@ describe('FindStatsModalComponent', () => {
       expect(legend(el)).not.toContain('Likely');
       const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
       expect(notes.some((n) => n.includes('has 3'))).toBe(true);
-      expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked') && n.includes('Check 5 picks'))).toBe(true);
+      expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked'))).toBe(true);
+      // Find tests the threshold it was given: nothing here points at a check (#4317).
+      expect(el.textContent).not.toMatch(/Check \d+ picks/);
       expect(el.textContent).not.toContain('default cut');
       expect(el.textContent).not.toContain('unpromised');
     });

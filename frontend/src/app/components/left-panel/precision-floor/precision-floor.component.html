@@ -1,28 +1,31 @@
 <div class="precision-floor">
-  <div class="floor-picker">
-    <!-- "Lean: [Centered]" reads as one phrase, so it sits tighter than the
-         controls projected after it. -->
-    <span class="floor-phrase">
-      <label class="floor-label" for="precision-floor-select" title="Toward returning everything, or only what is right">
-        Lean:
-      </label>
-      <select
-        id="precision-floor-select"
-        class="form-select form-select--compact"
-        aria-label="Precision floor"
-        title="Complete returns the most, Correct the fewest wrong ones, Centered sits between them"
-        (change)="onChange($event)"
-      >
-        @for (opt of options; track opt.value) {
-          <option [value]="opt.value" [selected]="opt.value === selected()">{{ opt.label }}</option>
-        }
-      </select>
-      @if (!summary()) {
-        <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
-      }
-    </span>
-    <!-- Controls that belong on the picker's line (Find's work-queue actions). -->
+  <div class="floor-head">
+    <span class="floor-label" [id]="labelId">Threshold</span>
+    <vt-field-hint-icon [hint]="hint" ariaLabel="What the threshold means" placement="below-block" />
+    <!-- Controls that belong on the heading's line (Find's work-queue actions). -->
     <ng-content select="[floorActions]" />
+  </div>
+  <div class="floor-spectrum" role="radiogroup" [attr.aria-labelledby]="labelId">
+    <!-- The spectrum's two ends; each radio's own label says where it sits. -->
+    <div class="spectrum-bar" aria-hidden="true">
+      <span>False Positives</span>
+      <span>False Negatives</span>
+    </div>
+    <!-- One radio under each third of the spectrum, with no word or number (#4317). -->
+    <div class="spectrum-radios">
+      @for (opt of options; track opt.value) {
+        <label class="spectrum-radio" [title]="opt.hint">
+          <input
+            type="radio"
+            [name]="groupName"
+            [value]="opt.value"
+            [checked]="opt.value === selected()"
+            [attr.aria-label]="opt.hint"
+            (click)="onPick($event, opt.value)"
+          />
+        </label>
+      }
+    </div>
   </div>
   @if (summary(); as text) {
     <!-- The dot rides inside the note, so a narrow panel wraps the check
@@ -42,7 +45,6 @@
           {{ label }}
         </button>
       }
-      <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
     </p>
   }
 </div>

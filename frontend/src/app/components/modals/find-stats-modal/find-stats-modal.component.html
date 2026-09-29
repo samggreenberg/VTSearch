@@ -181,7 +181,7 @@
         <span class="legend-item"><span class="swatch swatch-estimate"></span>Estimated (at least)</span>
         <span class="legend-item"><span class="swatch swatch-verified"></span>Checked by you</span>
         @if (floorY !== null) {
-          <span class="legend-item"><span class="swatch swatch-floor"></span>Floor: {{ floorLabel }}</span>
+          <span class="legend-item" title="The precision the Threshold asks of what the line keeps"><span class="swatch swatch-floor"></span>Threshold</span>
         }
         <span class="legend-item"><span class="swatch swatch-current"></span>{{ lineLegend }}</span>
         @if (lineRange) {
@@ -212,11 +212,10 @@
         @if (floor.status === 'unchecked') {
           <p class="chart-note" role="note">
             The line keeps the top {{ floor.count | number }}, unchecked: no check has measured how much of it is right.
-            <strong>{{ checkText }}</strong> beside the floor measures it.
           </p>
         } @else if (floor.status === 'short' && floor.range) {
           <p class="chart-note" role="note" [title]="rangeTooltip">
-            Aimed at {{ floorLabel }}: a check of {{ floor.range.labelled }} random picks found the top {{ floor.count | number }} the line keeps likely {{ rangeText(floor.range) }} right.
+            Fell short: a check of {{ floor.range.labelled }} random picks found the top {{ floor.count | number }} the line keeps likely {{ rangeText(floor.range) }} right.
           </p>
         }
       }

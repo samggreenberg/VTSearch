@@ -32,7 +32,6 @@
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
       (minPrecisionChange)="onMinPrecisionChange($event)"
-      (floorCheck)="onFloorCheck()"
       (browse)="onBrowseUnverified()"
       (toDataset)="onToDatasetUnverified()"
       (unverifiedExport)="onExportRequest('unverified_good')"
@@ -140,8 +139,4 @@
 
 @if (showStats) {
   <vt-find-stats-modal (closed)="showStats = false" />
-}
-
-@if (showFloorCheck()) {
-  <vt-floor-check-modal (closed)="onFloorCheckClosed()" (voted)="onFloorCheckVoted($event)" />
 }

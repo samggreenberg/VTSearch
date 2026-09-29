@@ -339,19 +339,19 @@ describe('LeftPanelComponent', () => {
       }
     });
 
-    it.each(FLOOR_STATES)('offers the check in both places the floor control lives when %s', (status) => {
+    it.each(FLOOR_STATES)('offers the check in Train and never in Find (#4317) when %s', (status) => {
       const emitted = vi.spyOn(component.floorCheck, 'emit');
-      for (const mode of ['find', 'label'] as const) {
-        const btn = show(mode, lineFloor(status)).querySelector('.floor-check-btn') as HTMLButtonElement;
-        expect(btn.textContent!.trim()).toBe('Check 5 picks');
-        btn.click();
-      }
-      expect(emitted).toHaveBeenCalledTimes(2);
+      // Find tests the threshold Train set: labelling more to set one is too late there.
+      expect(show('find', lineFloor(status)).querySelector('.floor-check-btn')).toBeNull();
+      const btn = show('label', lineFloor(status)).querySelector('.floor-check-btn') as HTMLButtonElement;
+      expect(btn.textContent!.trim()).toBe('Check 5 picks');
+      btn.click();
+      expect(emitted).toHaveBeenCalledOnce();
     });
 
     it('holds the check while a sort is running', () => {
       fixture.componentRef.setInput('sortBusy', true);
-      const btn = show('find', lineFloor('unchecked')).querySelector('.floor-check-btn') as HTMLButtonElement;
+      const btn = show('label', lineFloor('unchecked')).querySelector('.floor-check-btn') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
     });
   });

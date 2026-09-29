@@ -15,7 +15,7 @@ import type { Media } from '../../../models/api.models';
 import type { PrecisionCheckResponse } from '../../../generated/api-client/models/precision-check-response';
 import type { PrecisionCheckState } from '../../../generated/api-client/models/precision-check-state';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { floorName, lineFloorFrom, rangePercent, type LineFloor } from '../../../utils/line-floor';
+import { lineFloorFrom, rangePercent, type LineFloor } from '../../../utils/line-floor';
 
 /** Where the step is: drawing the first round, voting on a round, sending it, on the result, or refused. */
 type Phase = 'starting' | 'voting' | 'sending' | 'done' | 'error';
@@ -30,7 +30,8 @@ export interface FloorCheckVoted {
 /**
  * The precision floor's spot check (#4273; the rule is #4272's).
  *
- * Opens from the floor control's "Check 5 picks". The server draws each
+ * Opens from the Threshold control's "Check 5 picks", in Train only: Find
+ * tests the threshold it was given and offers no check (#4317). The server draws each
  * round's picks uniformly at random from a candidate of the top unvoted items,
  * and the user votes each one Good or Bad. A round that falls short halves the
  * candidate and draws a fresh round, so a check is one to three rounds; it
@@ -108,10 +109,6 @@ export class FloorCheckModalComponent implements OnInit {
   });
   readonly mediaType = computed(() => this.currentMedia()?.media_type ?? '');
 
-  /** The floor by its name, never its number (#4298). */
-  readonly target = computed(() => floorName(this.check()?.min_precision ?? this.floor()?.minPrecision ?? 0.5));
-  readonly title = computed(() => `Spot check: aiming at ${this.target()}`);
-
   /** "Round 2 of up to 3: 5 picks drawn at random from the top 64." */
   readonly brief = computed(() => {
     const c = this.check();
@@ -125,12 +122,11 @@ export class FloorCheckModalComponent implements OnInit {
   readonly resultHeadline = computed(() => {
     const f = this.floor();
     if (!f) return '';
-    const target = floorName(f.minPrecision);
     const r = f.range;
     if (f.status === 'confirmed') {
-      return r ? `Confirmed: likely ${rangePercent(r)} right (checked ${r.labelled}).` : `Confirmed at ${target}.`;
+      return r ? `Confirmed: likely ${rangePercent(r)} right (checked ${r.labelled}).` : 'Confirmed.';
     }
-    return r ? `Aimed at ${target}: likely ${rangePercent(r)} right (checked ${r.labelled}).` : `Aimed at ${target}: fell short.`;
+    return r ? `Fell short: likely ${rangePercent(r)} right (checked ${r.labelled}).` : 'Fell short.';
   });
 
   /** What the line keeps now. */

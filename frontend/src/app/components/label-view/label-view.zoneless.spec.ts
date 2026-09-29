@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
 
 import { LabelViewComponent } from './label-view.component';
 import { LabelSessionService } from '../../services/label-session.service';
@@ -17,6 +18,8 @@ import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { lineFloor, wireFloor } from '../../testing/line-floor';
+import { LeftPanelComponent } from '../left-panel/left-panel.component';
 
 /**
  * Zoneless staleness canary for the label view.
@@ -655,6 +658,78 @@ describe('LabelViewComponent', () => {
     const req = httpMock.expectOne((r) => r.url === '/api/min-precision' && r.method === 'POST');
     expect(req.request.body).toEqual({ min_precision: 0.75 });
     req.flush({ min_precision: 0.75 });
+  });
+
+  /**
+   * The spot check lives in Train alone (#4317): Find tests the threshold set
+   * here. Opened from the Threshold control, the step takes the vote keys, the
+   * list behind it gets none, and a finished check's line is installed.
+   */
+  it('runs the spot check from the Threshold control and installs the line it ends on (#4273, #4317)', async () => {
+    flushInitialRequests();
+    await settleResource();
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortMode('learned');
+    sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineFloor('unchecked'));
+    const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
+    left.setTab('manual');
+    await settleZoneless(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    (el.querySelector('vt-precision-floor .floor-check-btn') as HTMLButtonElement).click();
+    await settleZoneless(fixture);
+    httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
+      floor: wireFloor('unchecked'),
+      check: {
+        status: 'running',
+        min_precision: 0.5,
+        round: 1,
+        rounds: 1,
+        picks_per_round: 1,
+        candidate: 32,
+        start_candidate: 32,
+        picks: [2],
+        labelled: 0,
+        right: 0,
+        range: null,
+      },
+    });
+    await settleZoneless(fixture);
+    expect(el.querySelector('vt-floor-check-modal')).not.toBeNull();
+
+    // → votes the pick in the step; the list behind it gets nothing.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await settleZoneless(fixture);
+    expect(httpMock.match((req) => req.url.startsWith('/api/medias/') && req.url.endsWith('/vote'))).toEqual([]);
+    const votes = httpMock.expectOne((req) => req.url === '/api/precision-check/votes');
+    expect(votes.request.body).toEqual({ votes: [{ id: 2, label: 'good' }] });
+    const range = { lo: 0.55, hi: 1, labelled: 1, right: 1 };
+    votes.flush({
+      floor: { ...wireFloor('confirmed'), range },
+      check: {
+        status: 'confirmed',
+        min_precision: 0.5,
+        round: 1,
+        rounds: 1,
+        picks_per_round: 1,
+        candidate: 32,
+        start_candidate: 32,
+        picks: [],
+        labelled: 1,
+        right: 1,
+        range,
+      },
+    });
+    await settleZoneless(fixture);
+
+    // The finished check moved the line server-side; the view installs it.
+    httpMock
+      .expectOne((req) => req.url === '/api/min-precision' && req.method === 'GET')
+      .flush({ ...wireFloor('confirmed'), threshold: 0.3, n_returned: 2 });
+    await settleZoneless(fixture);
+    expect(sortState.threshold).toBe(0.3);
+    expect(sortState.floor?.status).toBe('confirmed');
+    expect(el.querySelector('vt-precision-floor .floor-state')!.textContent).toContain('Confirmed');
   });
 
   it('seeds the floor control from the detector on entry', () => {
