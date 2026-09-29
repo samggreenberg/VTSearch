@@ -227,8 +227,8 @@ describe('MediaListComponent', () => {
 
     it('names the floor\'s state in the tooltip only', () => {
       expect(drawWith(lineFloor('unchecked')).getAttribute('title')).toContain('Unchecked: the line keeps the top 32');
-      expect(drawWith(lineFloor('short')).getAttribute('title')).toContain('Aimed at Centered');
-      expect(drawWith(lineFloor('confirmed')).getAttribute('title')).toContain('enough for Centered');
+      expect(drawWith(lineFloor('short')).getAttribute('title')).toContain('short of the threshold');
+      expect(drawWith(lineFloor('confirmed')).getAttribute('title')).toContain('enough for the threshold');
     });
 
     it('says a stale range is stale in the tooltip, and nowhere else', () => {

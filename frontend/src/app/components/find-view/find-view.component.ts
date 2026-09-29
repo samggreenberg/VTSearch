@@ -10,7 +10,6 @@ import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
 import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-modal.component';
-import { FloorCheckModalComponent, type FloorCheckVoted } from '../modals/floor-check-modal/floor-check-modal.component';
 import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
@@ -73,7 +72,6 @@ const FLOOR_POST_DEBOUNCE_MS = 150;
     ProgressBarComponent,
     ExportModalComponent,
     FindStatsModalComponent,
-    FloorCheckModalComponent,
   ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
@@ -191,8 +189,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   exportFilter: LabelFilter = 'good';
   /** Detector-evaluation Stats modal visibility. */
   showStats = false;
-  /** The precision floor's spot check is open (#4273). */
-  readonly showFloorCheck = signal(false);
 
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
@@ -746,42 +742,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Open the detector-evaluation Stats modal. */
   onStats(): void {
     this.showStats = true;
-  }
-
-  /** The floor control's "Check N picks": open the spot check (#4273). */
-  onFloorCheck(): void {
-    if (this.sortState.sortBusy) return;
-    this.showFloorCheck.set(true);
-  }
-
-  /**
-   * A round of the check landed. Its votes verify their items, as any Find
-   * vote does, so the left/right split catches up. A finished check has moved
-   * the line to the set it ended on and re-split the unverified items over the
-   * frozen scores: install that line over the ranking on screen.
-   */
-  onFloorCheckVoted(event: FloorCheckVoted): void {
-    this.voteState.loadVotes();
-    if (event.finished) this.refreshFloorLine();
-  }
-
-  /** The check closed, however it ended: catch up on anything it left behind. */
-  onFloorCheckClosed(): void {
-    this.showFloorCheck.set(false);
-    this.refreshFloorLine();
-  }
-
-  /** Install the line the server now draws, with its verdict, over the ranking on screen. */
-  private refreshFloorLine(): void {
-    this.sortingApi
-      .getMinPrecision()
-      .pipe(this.pairScope.scoped())
-      .subscribe((resp) => {
-        if (resp.threshold != null && this.sortState.sortOrder) {
-          this.sortState.setLine(resp.threshold, lineFloorFrom(resp));
-        }
-        this.voteState.loadVotes();
-      });
   }
 
   /**

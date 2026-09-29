@@ -138,10 +138,12 @@ What follows is the design the remaining slices build on.
 - **The default floor is 50%, and every detector has one** (owner,
   2026-09-28; `null` refused since #4269, which retired Inclusion as a user
   preference).
-- **The control offers three named presets and no off switch** (owner,
-  #4298 on 2026-09-29): **Lean: Complete / Centered / Correct**, for 10, 50
-  and 90%, symmetric about the 50% default. The control never shows the
-  number, since the check rarely delivers a floor exactly. The API still takes
+- **The control offers three presets and no off switch** (owner, #4298 and
+  #4317 on 2026-09-29): a **Threshold** spectrum from False Positives to False
+  Negatives with a radio under each third, for 10, 50 and 90%, symmetric about
+  the 50% default. The control shows no word or number for a floor, since the
+  check rarely delivers a floor exactly. The spot check runs from Train only:
+  Find tests the threshold and offers none. The API still takes
   any value in `[0.01, 1]`; the control snaps a stored non-preset to the
   nearest preset.
   - Under the spot check, the presets cost at most 15 picks at 10% (3 rounds

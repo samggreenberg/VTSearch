@@ -714,6 +714,35 @@ class TestLearnedSortAsync:
 
         learned_sort_jobs.reset_for_tests()
 
+    def test_a_dropped_line_ranking_retrains_rather_than_reusing_the_cache(self, client):
+        """A cached sort must not outlive the ranking its line was drawn over (#4317).
+
+        A dataset switch drops ``line_ranking`` (media ids are per dataset), and
+        coming back with the same votes used to hit the signature cache: the
+        response drew a line and a floor state while the detector held no
+        ranking, so Train's spot check refused with "No ranking to check".
+        """
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.state.core import get_active_detector_context
+
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+
+        first = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert first["status"] == "done"
+        ctx = get_active_detector_context()
+        assert ctx.line_ranking is not None
+
+        # What a round trip through another dataset leaves behind.
+        ctx.line_ranking = None
+        second = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert second["status"] == "done"
+        assert second["job_id"] != first["job_id"]
+        assert ctx.line_ranking is not None
+        assert client.post("/api/precision-check/start", json={}).status_code == 200
+
+        learned_sort_jobs.reset_for_tests()
+
     def test_polling_unknown_job_returns_404(self, client):
         # 404s are intercepted by the app-level ``NotFound`` errorhandler
         # in ``app.py``, which renders the legacy

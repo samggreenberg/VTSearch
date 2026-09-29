@@ -3,21 +3,21 @@
     <div class="dataset-name" [title]="datasetName()">{{ datasetName() }}</div>
   }
   @if (panelMode() === 'find') {
-    <!-- Find mode: simplified view (precision floor, media list header, media items, and stripe). -->
+    <!-- Find mode: simplified view (Threshold, media list header, media items, and stripe). -->
     <div class="tab-panel-manual" role="region" aria-label="Find results">
-      <!-- The precision floor plus the unverified-positives work-queue actions
+      <!-- The Threshold plus the unverified-positives work-queue actions
            (Browse / To Dataset / Export). All three scope over the unverified
            items above the line — the above-threshold items the human hasn't
-           acted on yet. -->
+           acted on yet. Find tests the threshold Train set, so it offers no
+           spot check (#4317). -->
       <div class="find-floor-row">
         <vt-precision-floor
           [value]="minPrecision()"
           [floor]="floor()"
           [returned]="returned()"
           [busy]="sortBusy()"
-          [checkable]="!disabled() && !sortBusy()"
+          [offerCheck]="false"
           (valueChange)="minPrecisionChange.emit($event)"
-          (check)="floorCheck.emit()"
         >
           <div class="goods-actions find-queue-actions" floorActions>
             <button
@@ -117,7 +117,7 @@
           [class.active]="activeTab() === 'manual'"
           [attr.aria-selected]="activeTab() === 'manual'"
           (click)="setTab('manual')"
-          title="Browse and label items manually with full control over sort mode, selection strategy, and the precision floor."
+          title="Browse and label items manually with full control over sort mode, selection strategy, and the threshold."
         >Manual</button>
         <button
           class="left-tab"

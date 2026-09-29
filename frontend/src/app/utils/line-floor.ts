@@ -74,27 +74,32 @@ export function lineFloorFrom(wire: FloorState | null | undefined): LineFloor | 
   };
 }
 
-/** One floor the control offers, and the word the user sees for it. */
+/** One floor the control offers, and what its radio says when pointed at. */
 export interface FloorPreset {
   /** The floor, a fraction. */
   value: number;
-  /** Its name: the control never shows the floor as a number (#4298). */
-  name: string;
+  /**
+   * Its radio's tooltip. The control names no floor and shows no number
+   * (#4317): a floor is where its radio sits on the False Positives - False
+   * Negatives spectrum, and only this says it in words.
+   */
+  hint: string;
 }
 
 /**
- * The floors the control offers (owner, 2026-09-29, #4298): three, named
- * rather than numbered. The spot check rarely delivers a floor exactly, so
- * five percentages claimed a precision it could not keep; three words on one
- * Complete - Correct scale promise only a direction. The floor is a setting
- * and is named; what a check measures (its likely range) stays a number. The
- * backend takes any value in `[0.01, 1]`; the control snaps one outside this
- * list to the nearest (see {@link nearestFloorPreset}).
+ * The floors the control offers, left to right along its spectrum (#4298,
+ * #4317): three radios under the thirds of a False Positives - False Negatives
+ * bar, with no word or number on any of them. The spot check rarely delivers a
+ * floor exactly, so a percentage would claim a precision it could not keep; a
+ * place on the spectrum promises only a direction. What a check measures (its
+ * likely range) stays a number. The backend takes any value in `[0.01, 1]`;
+ * the control snaps one outside this list to the nearest (see
+ * {@link nearestFloorPreset}).
  */
 export const FLOOR_PRESETS: readonly FloorPreset[] = [
-  { value: 0.1, name: 'Complete' },
-  { value: 0.5, name: 'Centered' },
-  { value: 0.9, name: 'Correct' },
+  { value: 0.1, hint: 'Toward false positives: return the most, with more wrong ones in it' },
+  { value: 0.5, hint: 'Between the two' },
+  { value: 0.9, hint: 'Toward false negatives: return only the surest, and miss more' },
 ];
 
 /**
@@ -121,11 +126,6 @@ export function nearestFloorPreset(p: number): FloorPreset {
   );
 }
 
-/** "Centered" for 0.5; a floor off the list reads as the preset nearest it. */
-export function floorName(p: number): string {
-  return nearestFloorPreset(p).name;
-}
-
 /** "11–73%" for a range: what a check measured stays a number (#4298). */
 export function rangePercent(range: Pick<LikelyRange, 'lo' | 'hi'>): string {
   return `${Math.round(range.lo * 100)}–${Math.round(range.hi * 100)}%`;
@@ -148,16 +148,16 @@ function checkCost(schedule: CheckSchedule | null): string {
 }
 
 /**
- * The floor's state in one short line, for the control under the picker
+ * The floor's state in one short line, for the control under the spectrum
  * (#4246, #4273): what the line keeps, and how close the check got. The floor
- * goes by its name, never its number (#4298); the range comes only from the
- * check's picks, never from the model. Null when there is no verdict to report
- * (no line yet, or a sort with no detector behind it). A stale range reads
- * exactly as a current one: only {@link floorExplanation} says so.
+ * itself goes unnamed (#4317): the radio above the line already shows it. The
+ * range comes only from the check's picks, never from the model. Null when
+ * there is no verdict to report (no line yet, or a sort with no detector
+ * behind it). A stale range reads exactly as a current one: only
+ * {@link floorExplanation} says so.
  */
 export function floorSummary(floor: LineFloor | null): string | null {
   if (!floor) return null;
-  const target = floorName(floor.minPrecision);
   const kept = floor.count.toLocaleString();
   const r = floor.range;
   switch (floor.status) {
@@ -169,44 +169,41 @@ export function floorSummary(floor: LineFloor | null): string | null {
       // A short check names no cause (owner, 2026-09-29): the app can't tell a
       // sparse corpus from a weak model, so the words are true of both.
       return r
-        ? `Aimed at ${target}: likely ${rangePercent(r)} right (checked ${r.labelled}) · top ${kept} kept`
-        : `Aimed at ${target}: fell short · top ${kept} kept`;
+        ? `Fell short · likely ${rangePercent(r)} right (checked ${r.labelled}) · top ${kept} kept`
+        : `Fell short · top ${kept} kept`;
     case 'unchecked':
-      return `Top ${kept} kept, unchecked · aiming at ${target}`;
+      return `Top ${kept} kept, unchecked`;
   }
 }
 
 /**
  * The same state at tooltip length: what the short line means, how the range
  * was measured, and whether later votes have moved the list since. Null when
- * {@link floorSummary} is.
+ * {@link floorSummary} is. It points at no check: Find, where it also shows,
+ * offers none (#4317).
  */
 export function floorExplanation(floor: LineFloor | null): string | null {
   if (!floor) return null;
-  const target = floorName(floor.minPrecision);
   const kept = floor.count.toLocaleString();
   const r = floor.range;
   if (floor.status === 'unchecked') {
-    return (
-      `Unchecked: the line keeps the top ${kept}, and nothing has measured how much of it is right. ` +
-      `A check of ${checkCost(floor.schedule)} from it finds out.`
-    );
+    return `Unchecked: the line keeps the top ${kept}, and nothing has measured how much of it is right.`;
   }
   if (!r) {
     return floor.status === 'confirmed'
-      ? `A check confirmed the ${kept} items the line keeps at ${target}.`
-      : `Aimed at ${target}: the check fell short, and the line keeps the top ${kept} it ended on.`;
+      ? `A check confirmed the ${kept} items the line keeps.`
+      : `The check fell short, and the line keeps the top ${kept} it ended on.`;
   }
   if (floor.status === 'confirmed') {
     return (
       `A check of ${r.labelled} random picks from the ${kept} items the line keeps found ${r.right} right, ` +
-      `so likely ${rangePercent(r)} of them are: enough for ${target}.` +
+      `so likely ${rangePercent(r)} of them are: enough for the threshold.` +
       staleNote(r)
     );
   }
   return (
-    `Aimed at ${target}: a check of ${r.labelled} random picks from the top ${kept} the line keeps ` +
-    `found ${r.right} right, so likely ${rangePercent(r)} of them are, short of ${target}.` +
+    `A check of ${r.labelled} random picks from the top ${kept} the line keeps ` +
+    `found ${r.right} right, so likely ${rangePercent(r)} of them are: short of the threshold.` +
     staleNote(r)
   );
 }

@@ -13,7 +13,7 @@ where to click, in order.
 
 The *good set* is every picture you checked and marked **Good**, plus every
 picture you haven't checked that sits above the detector's line. Checking
-pictures is optional; if the line moves with the **precision floor**
+pictures is optional; if the line moves with the **Threshold**
 ([Catch the borderline matches](borderline-matches.md)), the good set moves
 with it.
 

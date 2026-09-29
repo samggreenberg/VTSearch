@@ -5,7 +5,6 @@ import {
   checkLabel,
   checkTitle,
   floorExplanation,
-  floorName,
   floorSummary,
   isFloorPreset,
   lineFloorFrom,
@@ -64,10 +63,11 @@ describe('line-floor (#4272, #4273)', () => {
     });
   });
 
-  describe('the floor presets (#4298)', () => {
-    it('offers three floors, named, symmetric about the Centered default', () => {
+  describe('the floor presets (#4298, #4317)', () => {
+    it('offers three floors, left to right from false positives to false negatives, symmetric about the middle', () => {
       expect(FLOOR_PRESETS.map((p) => p.value)).toEqual([0.1, 0.5, 0.9]);
-      expect(FLOOR_PRESETS.map((p) => p.name)).toEqual(['Complete', 'Centered', 'Correct']);
+      expect(FLOOR_PRESETS[0].hint).toMatch(/^Toward false positives/);
+      expect(FLOOR_PRESETS[2].hint).toMatch(/^Toward false negatives/);
     });
 
     it('knows a preset from a floor off the list', () => {
@@ -87,12 +87,6 @@ describe('line-floor (#4272, #4273)', () => {
     ])('snaps %s to the nearest preset, %s', (stored, snapped) => {
       expect(nearestFloorPreset(stored).value).toBe(snapped);
     });
-
-    it('names a floor off the list after the preset it snaps to', () => {
-      expect(floorName(0.5)).toBe('Centered');
-      expect(floorName(0.25)).toBe('Complete');
-      expect(floorName(0.75)).toBe('Correct');
-    });
   });
 
   describe('the floor control copy (#4246, #4273)', () => {
@@ -102,18 +96,20 @@ describe('line-floor (#4272, #4273)', () => {
 
     it.each<[FloorStatus, string]>([
       ['confirmed', 'Confirmed · likely 55–100% right (checked 5) · 32 kept'],
-      ['short', 'Aimed at Centered: likely 11–73% right (checked 5) · top 32 kept'],
-      ['unchecked', 'Top 32 kept, unchecked · aiming at Centered'],
+      ['short', 'Fell short · likely 11–73% right (checked 5) · top 32 kept'],
+      ['unchecked', 'Top 32 kept, unchecked'],
     ])('summarises %s', (status, expected) => {
       expect(floorSummary(lineFloor(status))).toBe(expected);
     });
 
-    it.each<FloorStatus>(['confirmed', 'short', 'unchecked'])('names the floor, never numbers it (%s, #4298)', (status) => {
+    it.each<FloorStatus>(['confirmed', 'short', 'unchecked'])('neither names nor numbers the floor (%s, #4298, #4317)', (status) => {
       for (const minPrecision of [0.1, 0.25, 0.5, 0.9]) {
         const floor = lineFloor(status, { minPrecision });
         const target = `${Math.round(minPrecision * 100)}%`;
         expect(floorSummary(floor)).not.toContain(target);
         expect(floorExplanation(floor)).not.toContain(target);
+        expect(floorSummary(floor)).not.toMatch(/Centered|Complete|Correct/);
+        expect(floorExplanation(floor)).not.toMatch(/Centered|Complete|Correct/);
       }
     });
 
@@ -121,7 +117,7 @@ describe('line-floor (#4272, #4273)', () => {
       expect(floorSummary(lineFloor('confirmed', { minPrecision: 0.1, count: 64 }))).toContain('64 kept');
       expect(floorSummary(lineFloor('confirmed', { minPrecision: 0.1, count: 128 }))).toContain('128 kept');
       expect(floorSummary(lineFloor('unchecked', { minPrecision: 0.1, count: 128 }))).toBe(
-        'Top 128 kept, unchecked · aiming at Complete',
+        'Top 128 kept, unchecked',
       );
     });
 
@@ -140,22 +136,20 @@ describe('line-floor (#4272, #4273)', () => {
     it('explains a confirmed line by its check, with the range from the picks alone', () => {
       const why = floorExplanation(lineFloor('confirmed'))!;
       expect(why).toContain('5 random picks from the 32 items the line keeps found 5 right');
-      expect(why).toContain('likely 55–100% of them are: enough for Centered');
+      expect(why).toContain('likely 55–100% of them are: enough for the threshold');
       expect(why).not.toMatch(/estimate/i);
     });
 
-    it('explains an unchecked line as unmeasured, and what a check costs', () => {
+    it('explains an unchecked line as unmeasured, pointing at no check (Find offers none, #4317)', () => {
       const why = floorExplanation(lineFloor('unchecked', { count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }))!;
       expect(why).toContain('Unchecked: the line keeps the top 128');
-      expect(why).toContain('5 random picks a round, in up to 3 rounds');
-      expect(why).not.toMatch(/likely/);
+      expect(why).not.toMatch(/likely|a check of/i);
     });
 
     it('explains a short check by how close it got, naming no cause', () => {
       const why = floorExplanation(lineFloor('short'))!;
-      expect(why).toContain('Aimed at Centered');
       expect(why).toContain('5 random picks from the top 32');
-      expect(why).toContain('likely 11–73% of them are, short of Centered');
+      expect(why).toContain('likely 11–73% of them are: short of the threshold');
       // The app can't tell a sparse corpus from a weak model (owner, 2026-09-29).
       expect(why).not.toMatch(/sparse|weak|evidence|too few|model/i);
     });

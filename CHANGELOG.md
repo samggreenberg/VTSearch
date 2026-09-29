@@ -17,6 +17,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The precision floor is now the Threshold, a spectrum with three radios**
+  (issue #4317). The **Lean: Complete / Centered / Correct** pulldown in Train
+  and Find is gone. In its place, **Threshold:** heads a spectrum from **False
+  Positives** to **False Negatives**, with a radio button under each third of
+  it; the radios carry no words or numbers, and hovering one says what it
+  does. The floors behind them are unchanged (10, 50 and 90%, the middle one
+  the default). The **?** beside it is two short sentences, not a paragraph,
+  and the note under it no longer names the floor: it reads *Top 32 kept,
+  unchecked*, *Confirmed · …* or *Fell short · …*. Find no longer offers
+  **Check 5 picks**: Find tests the threshold you set in Train, so the spot
+  check lives in Train only. The Find **Stats** chart calls its floor line
+  **Threshold**.
 - **Each Autopilot phase has one progress light** (issue #4319). The current
   phase's marker is now a single light: a red circle, a yellow one past
   halfway, then a green check once the phase finishes, lined up with the

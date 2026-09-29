@@ -77,7 +77,7 @@ once you have checked a few dozen pictures near the line.
   examples from this kind of picture. Check a few dozen pictures by hand, hand
   them to the detector with **Add Corrections to Detector**, and run Find
   again ([Check and correct a detector's calls](check-and-correct.md)). That
-  teaches it more than moving the precision floor would.
+  teaches it more than moving the Threshold would.
 
 There is no way to list just the flagged pictures: the figures are a count,
 not a selection. The pictures nearest the detector's line are the ones to

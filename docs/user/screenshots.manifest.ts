@@ -216,9 +216,17 @@ async function findPair(h: Helpers): Promise<{ dataset: string; detector: string
   return { dataset: ds.id, detector: det.id };
 }
 
+/** The dashboard rows of the example's training pile and detector: the pair Train works on. */
+async function trainPair(h: Helpers): Promise<{ dataset: string; detector: string }> {
+  const ds = h.app.named(await h.app.datasets(), TRAIN_DATASET);
+  const det = h.app.named(await h.app.detectors(), DETECTOR);
+  if (!ds || !det) throw new Error(`no ${TRAIN_DATASET} / ${DETECTOR} to train with`);
+  return { dataset: ds.id, detector: det.id };
+}
+
 /**
  * End the detector's live Find session (its verified pictures) and put its
- * precision floor back to the Centered default, so the next Find shot starts from a fresh scoring run
+ * precision floor back to the middle radio, so the next Find shot starts from a fresh scoring run
  * whatever an earlier recipe did. Find verifications live in server memory and
  * survive leaving Find, so without this one shot's checked pictures would show
  * up in the next.
@@ -959,14 +967,14 @@ export const SHOTS: Shot[] = [
   {
     id: 'manual-controls',
     embeddedIn: `${GUIDE}#manual-mode-for-power-users`,
-    caption: 'The three Manual-mode control rows: Sort mode, Selection strategy, and the precision floor',
+    caption: 'The three Manual-mode control rows: Sort mode, Selection strategy, and the Threshold',
     themes: BOTH,
     // Labels to the right: the three rows are stacked tight, so a label above
     // each box would sit on the row before it.
     annotations: [
       { target: '.sort-mode-group, vt-sort-bar', kind: 'box', label: 'Sort mode', at: 'right' },
       { target: '.select-mode-group, vt-select-mode', kind: 'box', label: 'Selection strategy', at: 'right' },
-      { target: 'vt-precision-floor', kind: 'box', label: 'Precision floor', at: 'right' },
+      { target: 'vt-precision-floor', kind: 'box', label: 'Threshold', at: 'right' },
     ],
     async recipe(_page, h) {
       await h.enterLabelView();
@@ -1175,13 +1183,15 @@ export const SHOTS: Shot[] = [
       'The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it',
     themes: BOTH,
     clip: { target: '.modal-content' },
-    // Opens the check from the Find row's "Check 5 picks" and answers the
-    // first pick with the keys, which is the step's chromium check
-    // (`checkStepKeys`). The server draws the picks at random, by design, so
-    // the pictures differ on every capture.
+    // Opens the check from Train's "Check 5 picks" (Find offers none, #4317)
+    // and answers the first pick with the keys, which is the step's chromium
+    // check (`checkStepKeys`). The server draws the picks at random, by
+    // design, so the pictures differ on every capture.
     async recipe(page, h) {
-      await openFind(page, h);
-      await page.locator('.find-floor-row .floor-check-btn').first().click();
+      await h.enterLabelView();
+      await h.leftTab('Manual');
+      await h.serveItem();
+      await page.locator('vt-precision-floor .floor-check-btn').first().click();
       await page.locator('.pick-dot').first().waitFor({ timeout: 20000 });
       await page.locator('vt-floor-check-modal img.image-element').first().waitFor({ timeout: 20000 });
       await checkStepKeys(page);
@@ -1189,8 +1199,7 @@ export const SHOTS: Shot[] = [
       await h.wait(1200);
     },
     after: async (_page, h) => {
-      await h.app.api('/api/precision-check/cancel', { method: 'POST', ...(await findPair(h)) });
-      await resetFind(h);
+      await h.app.api('/api/precision-check/cancel', { method: 'POST', ...(await trainPair(h)) });
     },
   },
   {
@@ -1257,19 +1266,19 @@ export const SHOTS: Shot[] = [
   // borderline-matches.md
   {
     id: 'borderline-floor',
-    embeddedIn: `${HOWTO}/borderline-matches.md#step-2-lower-the-floor`,
-    caption: 'Step 2: (1) the floor lowered to Complete, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list',
+    embeddedIn: `${HOWTO}/borderline-matches.md#step-2-move-the-threshold-toward-false-positives`,
+    caption: 'Step 2: (1) the Threshold moved toward False Positives, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list',
     themes: BOTH,
     annotations: [
-      { target: '#precision-floor-select', kind: 'step', step: 1, at: 'top' },
+      { target: '.find-floor-row .floor-spectrum', kind: 'step', step: 1, at: 'top' },
       { target: '.find-floor-row .floor-state-text', kind: 'step', step: 2, at: 'right' },
       { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
-    // Unchecked, as a reader meets it first: Complete keeps the top 128, so the line
+    // Unchecked, as a reader meets it first: the left radio keeps the top 128, so the line
     // moves down and the note says how many it keeps now.
     async recipe(page, h) {
       await openFind(page, h);
-      await page.locator('#precision-floor-select').selectOption('0.1');
+      await page.locator('.find-floor-row input[type="radio"][value="0.1"]').click();
       await h.wait(1500);
       // The list only draws the pictures near what it shows. Answer the next
       // picture, as Step 1 has the reader do: Find then serves from the line
@@ -1295,7 +1304,7 @@ export const SHOTS: Shot[] = [
     async recipe(page, h) {
       await openFind(page, h);
       await verifyServed(page, h, 12);
-      await page.locator('#precision-floor-select').selectOption('0.1');
+      await page.locator('.find-floor-row input[type="radio"][value="0.1"]').click();
       await h.wait(1500);
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.chart-wrap', { timeout: 20000 });
