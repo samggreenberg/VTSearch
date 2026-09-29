@@ -1095,7 +1095,7 @@ export const SHOTS: Shot[] = [
     caption: 'Step 2: (1) the floor lowered to 25%, (2) the note under it, which says whether the line has moved, (3) the line in the list',
     themes: BOTH,
     annotations: [
-      { target: '#precision-floor-select', kind: 'step', step: 1, at: 'right' },
+      { target: '#precision-floor-select', kind: 'step', step: 1, at: 'top' },
       { target: '.find-floor-row .floor-state-text', kind: 'step', step: 2, at: 'right' },
       { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
