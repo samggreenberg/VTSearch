@@ -16,6 +16,9 @@
 # its 3rd (92 of 720 cells at 0.44% then found no positive at all, against 18).
 # <world>-g3g20d16 keeps today's walk as a floor: `g3@top,g20+dry1/16@top,b4@mid`
 # walks to 3 Goods exactly as the app does, then on toward 20 unless it runs dry.
+# <world>-g3b4g20d16 runs today's two rounds first, then the walk:
+# `g3@top,b4@mid,g20+dry1/16@top` (#4282: does the Bad round's early negatives
+# remove the long walk's early-session cost?).
 #   bash launch_textgood_4222.sh status
 #
 # Today's app (the #4184 r7 rung: shipped cut, 70/30 split, acquisition offset)
@@ -70,11 +73,15 @@ source "$WT/scripts/experiments/pile/pile_env.sh"
 arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>]; see the header
   local world="${1%%-*}" g="${1#*-g}" dry="" first=""
   if [[ "$g" == *d* ]]; then dry="+dry1/${g##*d}"; g="${g%%d*}"; fi
-  if [[ "$g" == *g* ]]; then first="g${g%%g*}@top,"; g="${g##*g}"; fi
+  if [[ "$g" == *b*g* ]]; then  # g<M>b<B>g<G>: today's two rounds first, then the walk
+    first="g${g%%b*}@top,b$(sed -E 's/^[0-9]+b([0-9]+)g.*/\1/' <<<"$g")@mid,"; g="${g##*g}"
+  elif [[ "$g" == *g* ]]; then first="g${g%%g*}@top,"; g="${g##*g}"; fi
+  local tail=",b4@mid"
+  [[ "$first" == *@mid,* ]] && tail=""
   unset CALIB_STARTUP_SCHEDULE CALIB_TARGET_PREVALENCE
   DIVERGES=""
   if [[ "$g" != "3" || -n "$dry" || -n "$first" ]]; then
-    export CALIB_STARTUP_SCHEDULE="${first}g${g}${dry}@top,b4@mid"
+    export CALIB_STARTUP_SCHEDULE="${first}g${g}${dry}@top${tail}"
     DIVERGES="startup_schedule"
   fi
   case "$world" in
