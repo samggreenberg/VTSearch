@@ -159,6 +159,7 @@
           [sublabel]="lfFolderDropSublabel()"
           [directory]="true"
           [multiple]="true"
+          [missing]="lfFiles().length === 0"
           (filesSelected)="lfFilesDropped.emit($event)"
         ></vt-drop-zone>
       } @else {
@@ -166,6 +167,7 @@
           [label]="lfFilesDropLabel()"
           [sublabel]="lfFilesDropSublabel()"
           [accept]="lfFilesAcceptAttr()"
+          [missing]="lfFiles().length === 0"
           (filesSelected)="lfFilesDropped.emit($event)"
         ></vt-drop-zone>
       }

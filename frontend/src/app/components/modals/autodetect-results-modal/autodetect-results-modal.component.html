@@ -100,10 +100,13 @@
               [title]="field.description || field.label || field.key"
             ></vt-plugin-checkbox>
           }
-          {{ field.label || field.key }}{{ field.required ? ' *' : '' }}
+          {{ field.label || field.key }}
+          @if (field.required) {
+            <span class="required">*</span>
+          }
         </label>
         @if (field.field_type === 'select') {
-          <select class="form-select" [(ngModel)]="exportFieldValues[field.key]">
+          <select class="form-select" [required]="!!field.required" [(ngModel)]="exportFieldValues[field.key]">
             @for (opt of field.options || []; track opt) {
               <option [value]="opt">{{ opt }}</option>
             }
@@ -112,6 +115,7 @@
           <input
             type="number"
             class="form-input"
+            [required]="!!field.required"
             [(ngModel)]="exportFieldValues[field.key]"
             [placeholder]="field.placeholder || field.description || ''"
             [attr.min]="field.min || null"
@@ -119,7 +123,7 @@
             [attr.step]="field.step || null"
           />
         } @else if (field.field_type !== 'checkbox') {
-          <input [id]="'adr-' + field.key" [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'" class="form-input" [(ngModel)]="exportFieldValues[field.key]" [placeholder]="field.placeholder || field.description || ''" />
+          <input [id]="'adr-' + field.key" [type]="field.field_type === 'password' ? 'password' : field.field_type === 'email' ? 'email' : field.field_type === 'url' ? 'url' : 'text'" class="form-input" [required]="!!field.required" [(ngModel)]="exportFieldValues[field.key]" [placeholder]="field.placeholder || field.description || ''" />
         }
       </div>
     }

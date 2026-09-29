@@ -36,6 +36,10 @@ export class FileBrowserComponent {
   /** Placeholder text for the manual input. */
   readonly placeholder = input('');
 
+  /** Marks the path input ``required``, so it shows the shared
+   *  unanswered-required highlight until a path is entered or picked. */
+  readonly required = input(false);
+
   /** Emits the selected file path (relative to root). */
   readonly pathSelected = output<string>();
 
