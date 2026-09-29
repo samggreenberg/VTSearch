@@ -5183,16 +5183,27 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of one of the pair."""
     top = FLOOR_ASK_CANVAS_H if variant == "ask" else FLOOR_CHECK_CANVAS_H
     fig, ax = _incl_figure(top)
+    voted = dict(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True)) if variant == "check" and stage >= 3 else {}
+    rows = _floor_first_stage(ax, top, voted)
+    if variant == "ask":
+        _floor_ask_stages(ax, stage, rows)
+    else:
+        _floor_check_stages(ax, stage, rows)
+    return fig
+
+
+def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict:
+    """The sentence, the corpus, the candidate and the line: both figures' first page.
+
+    Returns the rows the later stages hang off. `voted` names strip cells drawn
+    as cast votes rather than unlabeled media — the check's picks, once voted.
+    """
     cell_w = FLOOR_STRIP_W / FLOOR_ITEMS
     strip_top = top - FLOOR_STRIP_DROP
     strip_y0 = strip_top - FLOOR_STRIP_H
-    row_label_y = top - FLOOR_ROW_LABEL_DROP
-    first = FLOOR_ITEMS - FLOOR_K
-    line_x = _floor_cell_x(first)
-    cand_x0, cand_x1 = line_x, FLOOR_STRIP_X0 + FLOOR_STRIP_W
-    cand_cx = (cand_x0 + cand_x1) / 2
+    line_x = _floor_cell_x(FLOOR_ITEMS - FLOOR_K)
+    cand_x1 = FLOOR_STRIP_X0 + FLOOR_STRIP_W
 
-    # ── stage 1: the sentence, the corpus, the candidate, the line ────────────
     # The statement is the one line of the section a user could say aloud, and
     # it is the only ink above the strip on the first page. It starts right of
     # the title notch; the strip below runs from the margin.
@@ -5205,29 +5216,26 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
         fontsize=18,
         color=INK,
     )
-    voted = {}
-    if variant == "check" and stage >= 3:
-        voted = dict(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True))
     for index in range(FLOOR_ITEMS):
-        kind = "unlabeled"
-        if index in voted:
-            kind = "good" if voted[index] else "bad"
+        kind = "unlabeled" if index not in voted else ("good" if voted[index] else "bad")
         _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, kind)
     # The axis, named the way every score axis in the deck is: best on the right.
     # Under the strip's left third, which nothing else uses; above it is where
     # the two figures draw their votes.
-    ax.text(FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT)
+    ax.text(
+        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
+    )
     # The candidate: a bracket under the top 32, named once.
     brace_y = strip_y0 - 0.42
     ax.plot(
-        [cand_x0, cand_x0, cand_x1, cand_x1],
+        [line_x, line_x, cand_x1, cand_x1],
         [brace_y + 0.12, brace_y, brace_y, brace_y + 0.12],
         color=INK,
         linewidth=1.6,
         zorder=5,
     )
     ax.text(
-        cand_cx,
+        (line_x + cand_x1) / 2,
         brace_y - LABEL_GAP,
         f"the candidate: the top {FLOOR_K} nobody has voted on",
         ha="center",
@@ -5240,50 +5248,69 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     line_bottom = strip_y0 - 1.15
     ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=BLUE, linewidth=2.6, zorder=6)
     ax.text(line_x - 0.14, line_bottom + 0.05, "the line", ha="right", va="bottom", fontsize=16, color=INK)
+    return {
+        "cell_w": cell_w,
+        "strip_top": strip_top,
+        "row_label_y": top - FLOOR_ROW_LABEL_DROP,
+        "brace_y": brace_y,
+        "line_x": line_x,
+        "cand_x1": cand_x1,
+    }
 
-    if variant == "ask":
-        # ── stage 2: the votes the session already holds ─────────────────────
-        if stage >= 2:
-            for index, good in FLOOR_MODEL_VOTES:
-                ax.text(
-                    _floor_cell_x(index) + cell_w / 2,
-                    strip_top + 0.10,
-                    "✓" if good else "✗",
-                    ha="center",
-                    va="bottom",
-                    fontsize=VOTE_PANEL_MARK_PT,
-                    color=GREEN if good else RED,
-                    fontweight="bold",
-                )
-            ax.text(
-                (line_x + cand_x1) / 2 - 1.0,
-                row_label_y,
-                "the session's own votes, at their scores: where the model chose to look",
-                ha="center",
-                va="bottom",
-                fontsize=15,
-                color=INK,
-            )
-        # ── stage 3: what they can and cannot say ────────────────────────────
-        if stage >= 3:
-            ax.text(
-                INCL_CANVAS_W / 2,
-                brace_y - 1.75,
-                "They say where the model looked, not how right the candidate is.",
-                ha="center",
-                va="center",
-                fontsize=17,
-                color=INK,
-            )
-        return fig
 
+def _floor_vote_marks(ax: plt.Axes, rows: dict, votes: tuple[tuple[int, bool], ...]) -> None:
+    """✓s and ✗s above the strip, each over the cell whose score it landed on."""
+    for index, good in votes:
+        ax.text(
+            _floor_cell_x(index) + rows["cell_w"] / 2,
+            rows["strip_top"] + 0.10,
+            "✓" if good else "✗",
+            ha="center",
+            va="bottom",
+            fontsize=VOTE_PANEL_MARK_PT,
+            color=GREEN if good else RED,
+            fontweight="bold",
+        )
+
+
+def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
+    """Stages 2–3 of `calib-floor-ask`: the session's votes, and what they can say."""
+    # ── stage 2: the votes the session already holds ─────────────────────────
+    if stage >= 2:
+        _floor_vote_marks(ax, rows, FLOOR_MODEL_VOTES)
+        ax.text(
+            (rows["line_x"] + rows["cand_x1"]) / 2 - 1.0,
+            rows["row_label_y"],
+            "the session's own votes, at their scores: where the model chose to look",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+    # ── stage 3: what they can and cannot say ────────────────────────────────
+    if stage >= 3:
+        ax.text(
+            INCL_CANVAS_W / 2,
+            rows["brace_y"] - 1.75,
+            "They say where the model looked, not how right the candidate is.",
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+
+
+def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
+    """Stages 2–5 of `calib-floor-check`: picks, votes, the range, the states."""
+    cell_w, strip_top = rows["cell_w"], rows["strip_top"]
+    cand_cx = (rows["line_x"] + rows["cand_x1"]) / 2
     # ── stage 2: five picks, uniform within the candidate ─────────────────────
     if stage >= 2:
         for index in FLOOR_PICKS:
-            _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
+            _acq_cell(ax, _floor_cell_x(index), strip_top - FLOOR_STRIP_H, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
         ax.text(
             cand_cx,
-            row_label_y,
+            rows["row_label_y"],
             f"{len(FLOOR_PICKS)} picks, drawn uniformly from the candidate",
             ha="center",
             va="bottom",
@@ -5293,20 +5320,10 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     # ── stage 3: the user's votes on them ─────────────────────────────────────
     right = sum(FLOOR_PICK_VOTES)
     if stage >= 3:
-        for index, good in zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True):
-            ax.text(
-                _floor_cell_x(index) + cell_w / 2,
-                strip_top + 0.10,
-                "✓" if good else "✗",
-                ha="center",
-                va="bottom",
-                fontsize=VOTE_PANEL_MARK_PT,
-                color=GREEN if good else RED,
-                fontweight="bold",
-            )
+        _floor_vote_marks(ax, rows, tuple(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True)))
         ax.text(
-            cand_x1,
-            row_label_y,
+            rows["cand_x1"],
+            rows["row_label_y"],
             f"{right} of {len(FLOOR_PICKS)} right",
             ha="right",
             va="bottom",
@@ -5315,36 +5332,9 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
         )
     # ── stage 4: the range those votes support, against the floor ─────────────
     lo, hi = clopper_pearson(right, len(FLOOR_PICKS), FLOOR_ALPHA)
-    gauge_x0, gauge_w = FLOOR_STRIP_X0 + 3.6, FLOOR_STRIP_W - 3.6
-    gauge_y = brace_y - 1.85
+    gauge_y = rows["brace_y"] - 1.85
     if stage >= 4:
-        _range_line(ax, gauge_x0, gauge_x0 + gauge_w, gauge_y, z=3)
-        ax.text(gauge_x0 - LABEL_GAP - 0.1, gauge_y, "likely right", ha="right", va="center", fontsize=16, color=INK)
-        for frac, name in ((0.0, "0%"), (1.0, "100%")):
-            ax.text(gauge_x0 + frac * gauge_w, gauge_y - RANGE_FOOT - LABEL_GAP, name, ha="center", va="top", fontsize=15, color=SOFT)
-        # The range: a bar on the axis, its ends named.
-        ax.plot([gauge_x0 + lo * gauge_w, gauge_x0 + hi * gauge_w], [gauge_y] * 2, color=INK, linewidth=9, solid_capstyle="butt", zorder=4)
-        # An end of the range that all but touches an end of the axis takes the
-        # axis's own label rather than printing "99%" over "100%".
-        for frac in (lo, hi):
-            if min(frac, 1.0 - frac) < 0.05:
-                continue
-            ax.text(
-                gauge_x0 + frac * gauge_w,
-                gauge_y - RANGE_FOOT - LABEL_GAP,
-                f"{round(100 * frac):d}%",
-                ha="center",
-                va="top",
-                fontsize=15,
-                color=INK,
-                fontweight="bold",
-            )
-        # The floor, marked above the axis the way every cut in the deck is: a
-        # notch and a name. It is the line's blue because it is what the line
-        # was asked for.
-        floor_x = gauge_x0 + FLOOR_X * gauge_w
-        ax.plot([floor_x] * 2, [gauge_y, gauge_y + 0.42], color=BLUE, linewidth=2.6, zorder=5)
-        ax.text(floor_x, gauge_y + 0.42 + LABEL_GAP, "the floor, 50%", ha="center", va="bottom", fontsize=15, color=INK)
+        _floor_gauge(ax, gauge_y, lo, hi)
         ax.text(
             INCL_CANVAS_W / 2,
             gauge_y - 1.15,
@@ -5366,7 +5356,53 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
             y = gauge_y - 2.25 - row * 0.62
             ax.text(name_x, y, name, ha="right", va="top", fontsize=15, color=INK, fontweight="bold")
             ax.text(name_x + 0.25, y, "— " + meaning, ha="left", va="top", fontsize=15, color=INK)
-    return fig
+
+
+def _floor_gauge(ax: plt.Axes, gauge_y: float, lo: float, hi: float) -> None:
+    """A 0–100% axis carrying the likely range as a bar, and the floor as a notch."""
+    gauge_x0, gauge_w = FLOOR_STRIP_X0 + 3.6, FLOOR_STRIP_W - 3.6
+    _range_line(ax, gauge_x0, gauge_x0 + gauge_w, gauge_y, z=3)
+    ax.text(gauge_x0 - LABEL_GAP - 0.1, gauge_y, "likely right", ha="right", va="center", fontsize=16, color=INK)
+    for frac, name in ((0.0, "0%"), (1.0, "100%")):
+        ax.text(
+            gauge_x0 + frac * gauge_w,
+            gauge_y - RANGE_FOOT - LABEL_GAP,
+            name,
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=SOFT,
+        )
+    # The range: a bar on the axis, its ends named — except an end that all but
+    # touches an end of the axis, which takes the axis's own label rather than
+    # printing "99%" over "100%".
+    ax.plot(
+        [gauge_x0 + lo * gauge_w, gauge_x0 + hi * gauge_w],
+        [gauge_y] * 2,
+        color=INK,
+        linewidth=9,
+        solid_capstyle="butt",
+        zorder=4,
+    )
+    for frac in (lo, hi):
+        if min(frac, 1.0 - frac) < 0.05:
+            continue
+        ax.text(
+            gauge_x0 + frac * gauge_w,
+            gauge_y - RANGE_FOOT - LABEL_GAP,
+            f"{round(100 * frac):d}%",
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=INK,
+            fontweight="bold",
+        )
+    # The floor, marked above the axis the way every cut in the deck is: a
+    # notch and a name. It is the line's blue because it is what the line was
+    # asked for.
+    floor_x = gauge_x0 + FLOOR_X * gauge_w
+    ax.plot([floor_x] * 2, [gauge_y, gauge_y + 0.42], color=BLUE, linewidth=2.6, zorder=5)
+    ax.text(floor_x, gauge_y + 0.42 + LABEL_GAP, "the floor, 50%", ha="center", va="bottom", fontsize=15, color=INK)
 
 
 if __name__ == "__main__":
