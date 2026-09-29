@@ -903,8 +903,9 @@ field lists — this document names the tiers and the shape, not every key.
 - **Server tier** (`ServerSettings`, shared, `data/settings.json`): the
   deployment-level knobs an operator sets — `saved_datasets_dir`,
   `detectors_dir`, `max_concurrent_*`, `hidden_plugins`,
-  `dataset_max_age_days`, `support_email`, `semantic_only`, `hide_ingest_eta`,
-  `solo_media_type`, `projection_n_neighbors`, `projection_min_dist`,
+  `dataset_max_age_days`, `support_email`, `docs_links`, `semantic_only`,
+  `hide_ingest_eta`, `solo_media_type`, `projection_n_neighbors`,
+  `projection_min_dist`,
   `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,

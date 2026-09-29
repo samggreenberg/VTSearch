@@ -72,6 +72,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A deployment can list its own docs in the Help modal** (issue #4310). An
+  operator who adds plugins or extensions points users at the docs for them
+  with a new `docs_links` key in `data/settings.json`: an ordered list of
+  `{"label": ..., "url": ...}` objects. The Help modal lists them under **Docs
+  for this server**, above the *Email us* line, on every tab; each opens in a
+  new browser tab. A URL must be an absolute `http(s)` URL or a `/path` on the
+  same host; an entry that isn't, or has no label, is left out, and the startup
+  log names it. Read-only over the API, like the other operator settings.
 - **AutoRun detectors really run on what you import, and on demand** (issue
   #4252). The Dashboard's AutoRun tab and the user guide promised that AutoRun
   detectors run on every imported dataset, but only the CLI's `--autodetect`
@@ -161,7 +169,12 @@ not list every commit. Use `git log` for the full history.
   advance switches sides of the cutoff), so it landed on an item you had not
   seen. `↑` now goes back to where the first `↓` started, and only takes the
   usual advance once you have voted or picked something else in between.
-
+- **Voting in Train no longer flashes the item you just voted on** (issue
+  #4307). In the New select mode, and in Autopilot's Explore Diversity phase,
+  the next item is fetched from the server after each vote. While that
+  request was out, the item you had just swiped away slid back into view,
+  then snapped to the next one. It now stays off-screen until the next item
+  arrives.
 - **The Inclusion stepper no longer jumps the line early in a session.** With
   too few votes for the calibration splits, the first change of the stepper
   replaced the trained cutoff with a fixed 0.5, so the matches could change in

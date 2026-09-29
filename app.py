@@ -333,6 +333,29 @@ _OVERRIDE_LABELS = {
 }
 
 
+def _report_docs_links() -> None:
+    """Log the Help-modal doc links this deployment configured, and any it drops.
+
+    ``docs_links`` is set only in the server settings file, so a typo there
+    (a missing label, a URL without ``https://``) would otherwise just leave a
+    link silently absent from the Help modal. Naming each dropped entry here
+    gives the operator the one place to find out why. An empty list, the
+    shipped default, prints nothing.
+    """
+    from vtsearch import settings as _settings
+
+    links = _settings.get_docs_links()
+    if links:
+        labels = ", ".join(link["label"] for link in links)
+        print(f"\U0001f4d6  Help-modal docs: {labels} (from the docs_links setting)", flush=True)
+    for entry in _settings.get_rejected_docs_links():
+        print(
+            f"\u26a0\ufe0f  Ignoring docs_links entry {entry!r}: it needs a non-empty label and a url "
+            "that is an absolute http(s) URL or a /path on this host",
+            flush=True,
+        )
+
+
 def _format_override(value) -> str:
     """Render an override value for the startup banner."""
     if isinstance(value, dict):
@@ -364,6 +387,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     # through the environment (they never parse argv). An explicit flag wins.
     admin_overrides.apply_env_overrides()
     _report_admin_overrides()
+    _report_docs_links()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat
     # watchdog that dumps every thread's frames when the interpreter freezes.
