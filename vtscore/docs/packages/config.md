@@ -203,6 +203,7 @@ when one is in scope). Tests rely on this: they override
 | `PROJECTION_N_NEIGHBORS` / `PROJECTION_MIN_DIST` | `15` / `0.1` | - | Global UMAP defaults for the browse projection (see [`projection.md`](projection.md)). |
 | `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
 | `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |
+| `PROJECTION_SEED`        | `None`  | `VTSEARCH_PROJECTION_SEED`    | Seed for the browse projection's UMAP fit. Unset is an unseeded, parallel fit; an integer gives the same layout every time, fit single-threaded. |
 
 ### `allocated_cpus()` / `resolve_decode_workers()`
 
@@ -336,6 +337,7 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_MAX_DECODE_PIXELS`| Set `MAX_DECODE_PIXELS`, the bitmap budget for a single image decode. `0` disables bounding.    |
 | `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` | Set `MAX_STRUCTURAL_DETECT_PIXELS` (default 2 MP), the resolution budget for structural local-feature detection. `0` detects at native size. |
 | `VTSEARCH_SVM_HEAD_C`       | Set `SVM_HEAD_C`, the production linear SVM head's inverse regularisation strength.             |
+| `VTSEARCH_PROJECTION_SEED`  | Set `PROJECTION_SEED`, the browse projection's UMAP seed. Unset or empty = unseeded.             |
 | `VTSEARCH_EMBED_PRECISION`  | Set `EMBED_PRECISION`: `fp32` (default), `fp16`, `bf16`, `autocast_fp16`, `autocast_bf16`, `auto`. Compute only - stored vectors stay fp32. |
 | `VTSEARCH_IMAGE_PROCESSOR_BACKEND` | Pin the `transformers` image-processor implementation: `torchvision` (default), `pil`, or `auto`. |
 | `VTSEARCH_IMAGE_PROCESSOR_DEVICE`  | Where the torchvision processor resizes/normalises: `auto` (default), `cpu`, `cuda`.      |

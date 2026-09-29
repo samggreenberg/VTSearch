@@ -93,7 +93,11 @@ distance.
 UMAP's numba parallelism on. That is only safe because a projection is
 computed exactly once per dataset and then frozen and persisted - it
 never re-runs, so its non-reproducibility never surfaces. Pass an int
-for a reproducible fit, at the cost of parallelism; tests do.
+for a reproducible fit, at the cost of parallelism; tests do. The app
+does only when `VTSEARCH_PROJECTION_SEED` is set
+(`PROJECTION_SEED` in [`vtscore.config`](config.md)), which
+`resolve_projection_params` hands every fit; the user-docs screenshot
+harness sets it so the Browse shots frame the same map on every refresh.
 
 Small datasets can't support a neighbour graph (UMAP needs
 `n_neighbors < N`), so `n_neighbors` is clamped to `N - 1`, and below
@@ -112,6 +116,7 @@ JIT until an actual fit runs.
 | `ids` / `coords` | `coords[i]` is the 2-D point for media id `ids[i]`; `(N, 2)` float32 |
 | `method` | `"umap"`, `"pca"`, or `"trivial"` |
 | `n_neighbors` / `min_dist` / `compact` | The knobs this layout was fit under, stamped so a persisted projection can be invalidated when the settings change (`vtscore/projection/store.py::projection_params_match`). `None` on the fallbacks and on legacy containers |
+| `random_state` | The seed the UMAP fit ran under; `None` when unseeded, on the fallbacks, and on legacy containers. Checked only when a seed is asked for: a seeded process refits a layout persisted under any other seed, while an unseeded one serves any layout |
 | `bounds` (property) | `(xmin, ymin, xmax, ymax)`, zeros when empty |
 
 `remove_ids(projection, remove)` returns a new `Projection` without

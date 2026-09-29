@@ -28,6 +28,12 @@ anyway so that "the params this layout was fit under" is a single value both
 paths thread into ``fit_projection`` and stamp onto the frozen
 :class:`~vtscore.projection.umap_projection.Projection`.
 
+``random_state`` is :data:`~vtscore.config.PROJECTION_SEED`, set by the
+``VTSEARCH_PROJECTION_SEED`` environment variable and ``None`` (an unseeded,
+parallel fit) when it is not.  Like ``compact`` it is not a setting: it exists
+so a process that needs the same map every time, such as the user-docs
+screenshot harness, can ask for one.
+
 Reading ``CoreConfig`` is best-effort: a library-only process with no app
 config builder installed falls back to the tuned/global defaults rather than
 failing a fit.
@@ -43,6 +49,7 @@ from vtscore.config import (
     PROJECTION_DEFAULTS_BY_EMBEDDER,
     PROJECTION_MIN_DIST,
     PROJECTION_N_NEIGHBORS,
+    PROJECTION_SEED,
 )
 
 if TYPE_CHECKING:
@@ -62,6 +69,8 @@ class ProjectionParams:
     n_neighbors: int
     min_dist: float
     compact: bool
+    #: The UMAP seed, or ``None`` for the shipped unseeded fit.
+    random_state: int | None = None
 
 
 def projection_embedder_for(ctx: DatasetContext | None) -> str | None:
@@ -127,6 +136,7 @@ def resolve_projection_params(ctx: DatasetContext | None = None) -> ProjectionPa
         n_neighbors=override_n if override_n is not None else tuned_n,
         min_dist=override_d if override_d is not None else tuned_d,
         compact=PROJECTION_COMPACT_DEFAULT,
+        random_state=PROJECTION_SEED,
     )
 
 
