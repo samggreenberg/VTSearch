@@ -158,7 +158,7 @@ describe('NewDetectorModalComponent', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('input[name="pendingText"]')?.getAttribute('placeholder')).toBe('e.g. large books');
-    expect(el.querySelector('#detector-name')?.getAttribute('placeholder')).toBe('e.g. Large Book Detector');
+    expect(el.querySelector('#detector-name')?.getAttribute('placeholder')).toBe('e.g. Large book detector');
   });
 
   it('should label the media tab from the detector media type', () => {
@@ -293,22 +293,26 @@ describe('NewDetectorModalComponent', () => {
     expect(component.mediaTypeLocked).toBe(false);
   });
 
-  it('pre-fills a title-cased "… Detector" name from the text seed while the name is untouched', () => {
+  it('pre-fills a sentence-case "… detector" name from the text seed while the name is untouched (#4305)', () => {
     component.onPendingTextInput('large books');
     expect(component.pendingText()).toBe('large books');
-    expect(component.name()).toBe('Large Books Detector');
+    expect(component.name()).toBe('Large books detector');
   });
 
   it('sanitises pasted whitespace when mirroring the seed into the name', () => {
     component.onPendingTextInput('   dog   barking\n  sounds   ');
     expect(component.pendingText()).toBe('   dog   barking\n  sounds   ');
-    expect(component.name()).toBe('Dog Barking Sounds Detector');
+    expect(component.name()).toBe('Dog barking sounds detector');
   });
 
-  it('keeps typed capitals and never doubles the Detector suffix', () => {
+  it('changes only the first letter of the typed text and never doubles the detector suffix', () => {
     component.onPendingTextInput('NASA rockets');
-    expect(component.name()).toBe('NASA Rockets Detector');
+    expect(component.name()).toBe('NASA rockets detector');
+    component.onPendingTextInput('red car on a McLaren poster');
+    expect(component.name()).toBe('Red car on a McLaren poster detector');
     component.onPendingTextInput('red car detector');
+    expect(component.name()).toBe('Red car detector');
+    component.onPendingTextInput('Red Car Detector');
     expect(component.name()).toBe('Red Car Detector');
     component.onPendingTextInput('   ');
     expect(component.name()).toBe('');
@@ -344,8 +348,8 @@ describe('NewDetectorModalComponent', () => {
     const input = (fixture.nativeElement as HTMLElement).querySelector('#detector-name') as HTMLInputElement;
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
     const req = httpMock.expectOne('/api/detectors/registry');
-    expect(req.request.body.name).toBe('Large Books Detector');
-    req.flush({ ok: true, detector: { id: '1', name: 'Large Books Detector' } });
+    expect(req.request.body.name).toBe('Large books detector');
+    req.flush({ ok: true, detector: { id: '1', name: 'Large books detector' } });
   });
 
   it('warns about no-text datasets only for a text-hint-only detector', () => {
@@ -379,7 +383,7 @@ describe('NewDetectorModalComponent', () => {
 
   it('stops mirroring once the user edits the name', () => {
     component.onPendingTextInput('dog');
-    expect(component.name()).toBe('Dog Detector');
+    expect(component.name()).toBe('Dog detector');
 
     component.onNameInput('Dog Barks');
     expect(component.name()).toBe('Dog Barks');
@@ -940,6 +944,26 @@ describe('NewDetectorModalComponent (semantic_only server)', () => {
     // Nothing else lives under Advanced for this dataset, so the toggle goes too.
     expect(component.primaryLicenseNotice).toBeNull();
     expect(component.showAdvancedToggle).toBe(false);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeNull();
+  });
+
+  it('puts the Advanced toggle on the Cancel / Create row, and opens the options in the form (#4305)', async () => {
+    await setup(false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const toggle = () => el.querySelector('.modal-footer > [modal-footer-start].advanced-toggle');
+
+    expect(toggle()?.textContent?.trim()).toBe('Advanced ▾');
+    expect(el.querySelector('.modal-body .advanced-toggle')).toBeNull();
+    expect(el.querySelector('#new-detector-advanced')).toBeNull();
+
+    (toggle() as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(toggle()?.textContent?.trim()).toBe('Advanced ▴');
+    expect(toggle()?.getAttribute('aria-controls')).toBe('new-detector-advanced');
+    expect(el.querySelector('.modal-body #new-detector-advanced #detector-embedder-type')).toBeTruthy();
   });
 
   it('pins the created detector to semantic when locked', async () => {

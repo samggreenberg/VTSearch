@@ -565,6 +565,52 @@ describe('DatasetImporterModalComponent', () => {
     expect(component.importStarted.emit).toHaveBeenCalled();
   });
 
+  describe('Advanced toggle in the footer row (#4305)', () => {
+    function openServerFolder(): void {
+      component.selectImporter(component.importers().find((i) => i.name === 'server_folder')!);
+      httpMock.expectOne(req => req.url === '/api/embedders').flush({ embedders: [] });
+      httpMock.expectOne(req => req.url === '/api/clippers').flush({ clippers: [] });
+      httpMock.expectOne(req => req.url === '/api/cleaners').flush({ cleaners: [] });
+    }
+
+    function footerToggle(): HTMLButtonElement | null {
+      return fixture.nativeElement.querySelector('.modal-footer > [modal-footer-start].advanced-toggle');
+    }
+
+    it('has no toggle before an importer is picked', async () => {
+      flushImporters();
+      await settleZoneless(fixture);
+      expect(component.activeImportAdvanced).toBeUndefined();
+      expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeNull();
+    });
+
+    it('shares the Cancel / Import row instead of sitting at the foot of the form', async () => {
+      flushImporters();
+      openServerFolder();
+      await settleZoneless(fixture);
+
+      expect(footerToggle()?.textContent?.trim()).toBe('Advanced ▾');
+      expect(fixture.nativeElement.querySelector('.modal-body .advanced-toggle')).toBeNull();
+      expect(component.activeImportAdvanced).toBe(component.serverFolderPicker().importAdvanced());
+    });
+
+    it("opens the showing picker's block, which stays in the form", async () => {
+      flushImporters();
+      openServerFolder();
+      await settleZoneless(fixture);
+      const block = fixture.nativeElement.querySelector('vt-server-folder-picker vt-import-advanced') as HTMLElement;
+      expect(block.classList.contains('is-open')).toBe(false);
+
+      footerToggle()!.click();
+      await settleZoneless(fixture);
+
+      expect(component.serverFolderPicker().importAdvanced()!.advancedOpen()).toBe(true);
+      expect(block.classList.contains('is-open')).toBe(true);
+      expect(footerToggle()?.textContent?.trim()).toBe('Advanced ▴');
+      expect(footerToggle()?.getAttribute('aria-expanded')).toBe('true');
+    });
+  });
+
   describe('Run AutoRun checkbox', () => {
     const autorunDetector = { id: 'd1', name: 'Barks', media_type: 'audio', autofind: true };
 

@@ -1392,7 +1392,7 @@ export const SHOTS: Shot[] = [
     caption: 'Step 1: in Add Dataset, (1) Advanced, (2) a Region embedder, then (3) Import',
     themes: BOTH,
     annotations: [
-      { target: 'vt-import-advanced > .advanced-toggle', kind: 'step', step: 1 },
+      { target: 'vt-modal .modal-footer .advanced-toggle', kind: 'step', step: 1 },
       { target: '#import-advanced-patch-embedder', kind: 'step', step: 2 },
       { target: { selector: 'vt-modal .btn--primary', hasText: 'Import' }, kind: 'step', step: 3, at: 'right' },
     ],
@@ -1405,7 +1405,7 @@ export const SHOTS: Shot[] = [
       await page.locator('#field-size').fill('40');
       await page.locator('#field-seed').fill('3');
       await page.locator('#field-dataset_name').fill(REGION_DATASET);
-      await page.locator('vt-import-advanced > .advanced-toggle').first().click();
+      await page.locator('vt-modal .modal-footer .advanced-toggle').first().click();
       await page.waitForSelector('#import-advanced-patch-embedder', { timeout: 10000 });
       await page.locator('#import-advanced-patch-embedder').selectOption({ label: 'DINOv2 patch (region-aware images)' });
       // Scroll the dialog the way a reader would, with the wheel: a scripted
@@ -1422,7 +1422,7 @@ export const SHOTS: Shot[] = [
     caption: 'Step 2: in New Detector, (1) Advanced, (2) Detector Embedder Type set to Patch Semantic, then (3) Create',
     themes: BOTH,
     annotations: [
-      { target: '.new-detector-form .advanced-toggle', kind: 'step', step: 1 },
+      { target: 'vt-modal .modal-footer .advanced-toggle', kind: 'step', step: 1 },
       { target: '#detector-embedder-type', kind: 'step', step: 2 },
       { target: { selector: 'vt-modal .btn--primary', hasText: 'Create' }, kind: 'step', step: 3, at: 'right' },
     ],
@@ -1433,7 +1433,7 @@ export const SHOTS: Shot[] = [
       await page.waitForSelector('.new-detector-form', { timeout: 20000 });
       await page.locator('.example-panel input.form-input').first().fill(DETECTOR_TEXT);
       await page.locator('#detector-name').fill('Smileys (regions)');
-      await page.locator('.new-detector-form .advanced-toggle').first().click();
+      await page.locator('vt-modal .modal-footer .advanced-toggle').first().click();
       await page.waitForSelector('#detector-embedder-type', { timeout: 10000 });
       await page.locator('#detector-embedder-type').selectOption({ label: 'Patch Semantic' });
       await h.wait(700);
@@ -1945,7 +1945,7 @@ export const SHOTS: Shot[] = [
       await page.locator('#field-size').fill('240');
       await page.locator('#field-seed').fill('4');
       await page.locator('#field-dataset_name').fill('drawings-more');
-      await page.locator('vt-import-advanced > .advanced-toggle').first().click();
+      await page.locator('vt-modal .modal-footer .advanced-toggle').first().click();
       await page.waitForSelector('#import-advanced-projection', { timeout: 10000 });
       await page.mouse.move(720, 500);
       await page.mouse.wheel(0, 400);

@@ -339,51 +339,41 @@
           [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"
-          placeholder="e.g. Large Book Detector"
+          placeholder="e.g. Large book detector"
           title="A short name to identify this detector"
           (keydown.enter)="onNameEnter($event)"
         />
       </div>
 
-      @if (showAdvancedToggle) {
-        <div class="form-group advanced-group">
-          <button
-            type="button"
-            class="advanced-toggle"
-            (click)="toggleAdvanced()"
-            [attr.aria-expanded]="advancedOpen()"
-            title="Advanced options: the kind of embedder this detector works with."
-          >
-            Advanced {{ advancedOpen() ? '▴' : '▾' }}
-          </button>
-
-          @if (advancedOpen()) {
-            @if (showEmbedderTypePicker) {
-              <label class="form-label" for="detector-embedder-type"
-                title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
-                Detector Embedder Type
-              </label>
-              <select
-                id="detector-embedder-type"
-                class="form-select"
-                name="detectorEmbedderType"
-                [ngModel]="effectiveEmbedderType"
-                (ngModelChange)="onEmbedderTypeChange($event)"
-              >
-                @for (type of embedderTypeOptions; track type) {
-                  <option [value]="type">{{ embedderTypeLabel(type) }}</option>
-                }
-              </select>
-              @if (embedderTypeUnavailable) {
-                <p class="info-text">
-                  The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
-                  this detector won't run here — it'll be available on datasets that bind one.
-                </p>
+      <!-- Opened from the footer's "Advanced" toggle (#4305), so the options
+           land at the foot of the form, just above the toggle. -->
+      @if (showAdvancedToggle && advancedOpen()) {
+        <div class="form-group" id="new-detector-advanced" #advancedFields>
+          @if (showEmbedderTypePicker) {
+            <label class="form-label" for="detector-embedder-type"
+              title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
+              Detector Embedder Type
+            </label>
+            <select
+              id="detector-embedder-type"
+              class="form-select"
+              name="detectorEmbedderType"
+              [ngModel]="effectiveEmbedderType"
+              (ngModelChange)="onEmbedderTypeChange($event)"
+            >
+              @for (type of embedderTypeOptions; track type) {
+                <option [value]="type">{{ embedderTypeLabel(type) }}</option>
               }
+            </select>
+            @if (embedderTypeUnavailable) {
+              <p class="info-text">
+                The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
+                this detector won't run here — it'll be available on datasets that bind one.
+              </p>
             }
-            @if (primaryLicenseNotice; as notice) {
-              <div class="license-warning" role="note">⚠ {{ notice }}</div>
-            }
+          }
+          @if (primaryLicenseNotice; as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
         </div>
       }
@@ -405,6 +395,23 @@
         <p class="error-text">{{ error() }}</p>
       }
     </form>
+  }
+
+  <!-- The collapsed toggle shares the Cancel / Create row instead of taking a
+       half-empty line of its own (#4305). Its own @if, so it projects into the
+       footer's start slot as a single root. -->
+  @if (view() === 'main' && showAdvancedToggle) {
+    <button
+      modal-footer-start
+      type="button"
+      class="advanced-toggle"
+      (click)="toggleAdvanced()"
+      [attr.aria-expanded]="advancedOpen()"
+      [attr.aria-controls]="advancedOpen() ? 'new-detector-advanced' : null"
+      title="Advanced options: the kind of embedder this detector works with."
+    >
+      Advanced {{ advancedOpen() ? '▴' : '▾' }}
+    </button>
   }
 
   @if (view() === 'main') {

@@ -335,10 +335,10 @@
   line-height: 1.35;
 }
 
-// Collapsible "Advanced" section holding the Detector Embedder Type picker.
-// Toggle mirrors the import-advanced affordance (transparent, muted, link-like).
+// Toggle for the collapsible "Advanced" section holding the Detector Embedder
+// Type picker. It sits at the left end of the footer row (`[modal-footer-start]`,
+// #4305), and mirrors the Add Dataset one (transparent, muted, link-like).
 .advanced-toggle {
-  align-self: flex-start;
   background: transparent;
   border: none;
   padding: var(--space-2xs) 0;

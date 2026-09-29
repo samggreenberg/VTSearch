@@ -1,11 +1,13 @@
 import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { By } from '@angular/platform-browser';
 
 import { LabelViewComponent } from './label-view.component';
+import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
@@ -611,6 +613,32 @@ describe('LabelViewComponent', () => {
     // With a sort order present the diversity fetch POSTs the scores.
     const req = httpMock.expectOne('/api/coverage-atlas/next');
     req.flush({ id: 1, coverage_level: 2.0, exhausted: false });
+    expect(component.mediaState.selectedId()).toBe(1);
+  });
+
+  /**
+   * #4307: the centre panel keeps the voted item swiped off-screen while this
+   * binding is true, so it has to reach the panel for exactly the round-trip.
+   */
+  it('tells the centre panel while the New-mode advance is in the air', () => {
+    flushInitialRequests();
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }],
+      0.5,
+    );
+    component.onSelectModeChange('new');
+    TestBed.tick();
+    const centre = fixture.debugElement.query(By.directive(CenterPanelComponent))
+      .componentInstance as CenterPanelComponent;
+    expect(centre.advancePending()).toBe(true);
+
+    // The tick also lets the view's own nothing-selected effect ask for an item,
+    // so a second probe is in the air: the wait ends when every one has answered.
+    const probes = httpMock.match('/api/coverage-atlas/next');
+    expect(probes.length).toBeGreaterThan(0);
+    probes.forEach((probe) => probe.flush({ id: 1, coverage_level: 2.0 }));
+    TestBed.tick();
+    expect(centre.advancePending()).toBe(false);
     expect(component.mediaState.selectedId()).toBe(1);
   });
 

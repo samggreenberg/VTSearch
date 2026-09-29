@@ -451,8 +451,9 @@ folder instead of typing it:
 
 ### Advanced import options
 
-Every importer exposes a collapsible **Advanced** section. It starts
-collapsed and *nothing* inside it renders until you open it - not even a
+Every importer exposes a collapsible **Advanced** section, opened by the
+**Advanced ▾** toggle at the bottom left of the dialog, beside **Cancel**. It
+starts collapsed and *nothing* inside it renders until you open it - not even a
 control whose value differs from the default; hover the **Advanced** toggle
 and its tooltip names a non-default embedder, clipper or cleanup in effect. The most important
 control there is the embedder picker, which is actually a three-role picker:
@@ -951,9 +952,10 @@ It has two tabs:
   one of two ways: the **Text** tab takes a short description ("e.g.
   large books"), and the media tab next to it (named for the media
   type, e.g. **Image**) takes one or more **media examples**. A typed
-  description also fills in the name, title-cased with "Detector" on the
-  end ("large books" becomes **Large Books Detector**) until you type a
-  name of your own; pressing Enter in the name field clicks **Create**. The
+  description also fills in the name: your words as typed, with the first
+  letter capitalised and "detector" on the end ("large books" becomes
+  **Large books detector**), until you type a name of your own; pressing
+  Enter in the name field clicks **Create**. The
   quickest way to supply the first one is the drop zone
   right there on the tab - drag a file from your computer onto it, or
   click it to browse; it asks **Use This Example?** and offers to crop it
@@ -974,9 +976,9 @@ It has two tabs:
   *average* - it surfaces items resembling what the examples have in
   common, and each example is seeded as a Good vote when the detector
   loads. When the active dataset offers more than one kind of embedder, a
-  **Detector Embedder Type** picker appears under the **Advanced ▾**
-  section (collapsed by default) so you can choose which one this
-  detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
+  **Detector Embedder Type** picker sits under **Advanced ▾** (the toggle at
+  the bottom left, beside **Cancel**; collapsed by default) so you can
+  choose which one this detector uses: **Semantic**, **Patch Semantic**, or **Structural**.
   That choice fixes what the detector is compatible with later. If the
   dataset's embedder can't search by text, you'll see a note that you can
   still create the detector but must label a few examples to train it.
@@ -1565,7 +1567,9 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
 - **Keyboard shortcuts and the in-app guide.** Press **`?`** any time, or
   click the **?** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-help.dark.webp" /><img src="assets/icon-help.light.webp" alt="The Help (?) button" height="24" /></picture> at the top right, to open the help sheet. It has two tabs: a **Keyboard shortcuts**
   reference and a **User guide** that renders this document inside the
-  app (matching your theme).
+  app (matching your theme). If whoever runs your server has written docs of
+  their own (for the plugins they added, say), they are listed at the bottom
+  under **Docs for this server**, and each opens in a new tab.
 - **Step back and forward through the queue.** `→` and `←` cast the
   vote; `↓` and `↑` move you around it without casting one. **`↓`**
   returns you to the item you just voted on - press it again to step

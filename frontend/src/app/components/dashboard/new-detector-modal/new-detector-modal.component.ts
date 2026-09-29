@@ -1,4 +1,17 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, input, OnInit, output, signal } from '@angular/core';
+import {
+  afterNextRender,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  HostListener,
+  inject,
+  Injector,
+  input,
+  OnInit,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 
 import { NgTemplateOutlet } from '@angular/common';
 
@@ -53,6 +66,7 @@ import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import { visibleFields } from '../../../utils/plugin-fields';
 import { sortRowsByColumn } from '../../../utils/sort-rows';
+import { revealInScrollParent } from '../../../utils/reveal-in-scroll-parent';
 import { demoSortValue } from '../dataset-importer-modal/pickers/shared/demo-sort';
 import { PluginCheckboxComponent } from '../../plugin-checkbox/plugin-checkbox.component';
 
@@ -173,6 +187,9 @@ export class NewDetectorModalComponent implements OnInit {
    *  picker) is expanded. Collapsed by default — the common single-embedder
    *  create needs no interaction; advanced users open it to lock a type. */
   readonly advancedOpen = signal(false);
+  /** The options the footer's Advanced toggle reveals, at the foot of the form. */
+  private readonly advancedFields = viewChild<ElementRef<HTMLElement>>('advancedFields');
+  private readonly injector = inject(Injector);
   mediaTypeDropdownOpen = false;
   /** True when the media-type field is locked to the active dataset's type.
    *  Set on init whenever `defaultMediaType` is provided; cleared when the
@@ -411,18 +428,16 @@ export class NewDetectorModalComponent implements OnInit {
     return text.trim().replace(/\s+/g, ' ');
   }
 
-  /** Default detector name for a typed text example (#4227): each word
-   *  capitalised like a title, then "Detector", so ``large books`` becomes
-   *  ``Large Books Detector``. Capitals already typed are kept (``NASA
-   *  rockets`` → ``NASA Rockets Detector``), and a phrase that already ends in
-   *  "detector" doesn't get a second one. */
+  /** Default detector name for a typed text example (#4305): the user's own
+   *  words in sentence case, then "detector", so ``large books`` becomes
+   *  ``Large books detector``. Only the first letter is raised; every other
+   *  character stays as typed (``NASA rockets`` → ``NASA rockets detector``),
+   *  and a phrase that already ends in "detector" doesn't get a second one. */
   private nameFromText(text: string): string {
-    const phrase = this.sanitizeName(text).replace(
-      /(^|\s)(\S)/g,
-      (_match, space: string, first: string) => space + first.toUpperCase(),
-    );
+    const phrase = this.sanitizeName(text);
     if (!phrase) return '';
-    return /\bdetector$/i.test(phrase) ? phrase : `${phrase} Detector`;
+    const sentence = phrase[0].toUpperCase() + phrase.slice(1);
+    return /\bdetector$/i.test(sentence) ? sentence : `${sentence} detector`;
   }
 
   /** Strip a trailing extension and the leading path so a filename like
@@ -586,8 +601,19 @@ export class NewDetectorModalComponent implements OnInit {
     return (this.embedderCaps.infos() ?? []).find((e) => e.name === concrete)?.license_notice ?? null;
   }
 
+  /** The toggle sits in the footer row (#4305), so what it opens lands at the
+   *  foot of the form, which may be scrolled out of view: bring it in once it
+   *  has rendered. */
   toggleAdvanced(): void {
     this.advancedOpen.update((open) => !open);
+    if (!this.advancedOpen()) return;
+    afterNextRender(
+      () => {
+        const fields = this.advancedFields()?.nativeElement;
+        if (fields) revealInScrollParent(fields);
+      },
+      { injector: this.injector },
+    );
   }
 
   onEmbedderTypeChange(type: EmbedderType | ''): void {
