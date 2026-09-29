@@ -2,7 +2,7 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { EMPTY, Subject, of, throwError } from 'rxjs';
-import { catchError, filter, switchMap, take, tap } from 'rxjs/operators';
+import { catchError, filter, finalize, switchMap, take, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
 import { ActiveContextService } from './active-context.service';
@@ -73,6 +73,24 @@ export class SortRunnerService {
    *  Select mode, whose pick is a server round-trip rather than a rule over the
    *  loaded window — see {@link fetchDiversityNext}. */
   private readonly diversityExhausted = signal(false);
+
+  /** Coverage-atlas probes still in the air. A count rather than a flag, so an
+   *  older probe finishing cannot clear {@link advancePending} under a newer one. */
+  private readonly diversityProbesInFlight = signal(0);
+
+  /**
+   * True while {@link autoSelectNext} has asked the server for the next item
+   * and not yet heard back — the `new` Select mode's pick, which is the only
+   * advance that is not a rule over the loaded window.
+   *
+   * The centre panel takes this as its `advancePending` input and keeps the
+   * voted item's swipe parked off-screen until it settles. Without it the
+   * panel cannot tell "the next item is on its way" from "there is no next
+   * item", un-pins the swipe either way, and the item just voted on slides
+   * back into view for the length of the round-trip before the next one
+   * replaces it (#4307).
+   */
+  readonly advancePending = computed(() => this.diversityProbesInFlight() > 0);
 
   /**
    * True when the current Sort + Select has nothing left to advance to: every
@@ -627,12 +645,19 @@ export class SortRunnerService {
     const scores = sortOrder
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
+    this.diversityProbesInFlight.update((n) => n + 1);
     this.sortingApi
       // The New pick reads the threshold as a sampling position too (it steers
       // the atlas probe by a node's median score), so it takes the acquisition
       // cut alongside the Hard pick.
       .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
-      .pipe(this.pairScope.scoped())
+      .pipe(
+        this.pairScope.scoped(),
+        // Every way out — an answer, an error, a pair switch superseding the
+        // probe — ends the wait. `finalize` runs after `next`, so an answer
+        // lands its selection before the centre panel is told to stop waiting.
+        finalize(() => this.diversityProbesInFlight.update((n) => n - 1)),
+      )
       .subscribe({
         next: (response) => {
           this.diversityExhausted.set(response.id === null);
