@@ -173,6 +173,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Undo gets you out of "Nothing left in this ranking" in the New select
+  mode** (issue #4312). Once New had no unseen items left to offer, Cmd/Ctrl-Z
+  undid the vote but left the message on screen. The undone item now comes
+  straight back, as it already did under Top and Hard, and your next vote
+  checks for unseen items again.
 - **`↓` then `↑` returns you to the item you were on** (issue #4306). `↑`
   re-ran the advance instead, and the ranking has often moved since the item
   was picked (in Train the re-sort a vote triggers lands after it; in Find each
