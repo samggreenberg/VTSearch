@@ -241,6 +241,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The precision floor offers three named floors: Lean: Complete, Centered or
+  Correct** (issue #4298). The picker read **At least [50%] right**, with five
+  percentages to pick from, which claimed a precision the cautious estimate
+  behind the line rarely delivers exactly. It now reads **Lean: [Centered]**,
+  with **Complete** (the old 10%), **Centered** (50%, still the default) and
+  **Correct** (90%). The number is gone everywhere the floor is named: the
+  note under the picker says *Confirmed*, *Aimed at Correct: likely 11–73%
+  right (checked 5)* or *Top 32 kept, unchecked · aiming at Centered*, and
+  Find's **Stats** legend reads *Floor: Correct*. What a check measured - its
+  likely range - and the chart's axis stay numbers. A floor
+  that is not one of the three - a 25% or 75% picked before, or one set from
+  the command line or `POST /api/min-precision` - shows as the nearest of
+  them, and the picker moves the detector to it once no sort is running. The
+  CLI's `--min-precision` and the API still take any value.
+
 - **The Export window says whether it is sending a detector's labels or
   Find's results** (issue #4079). The same window, with the same
   destinations, opens from the labeling view, the dashboard and Find, which

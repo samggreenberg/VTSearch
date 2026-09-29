@@ -420,13 +420,13 @@ describe('LeftPanelComponent', () => {
     });
 
     it('shows the floor, its state and the count the line returns', () => {
-      fixture.componentRef.setInput('minPrecision', 0.75);
-      fixture.componentRef.setInput('floor', lineFloor('confirmed', { minPrecision: 0.75 }));
+      fixture.componentRef.setInput('minPrecision', 0.9);
+      fixture.componentRef.setInput('floor', lineFloor('confirmed', { minPrecision: 0.9 }));
       fixture.componentRef.setInput('returned', 212);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const select = el.querySelector('.find-floor-row select') as HTMLSelectElement;
-      expect(select.value).toBe('0.75');
-      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('At least 75% right · likely 55–100% (checked 5) · 32 kept');
+      expect(select.value).toBe('0.9');
+      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('Confirmed · likely 55–100% right (checked 5) · 32 kept');
     });
 
     it('forwards a picked floor as minPrecisionChange', () => {

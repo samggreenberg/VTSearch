@@ -3,10 +3,12 @@ import { SAMPLE_RANGE, lineFloor } from '../testing/line-floor';
 import {
   FLOOR_PRESETS,
   floorExplanation,
-  floorPercent,
+  floorName,
   floorSummary,
+  isFloorPreset,
   isUnpromised,
   lineFloorFrom,
+  nearestFloorPreset,
   rangePercent,
   unpromisedReason,
   type FloorStatus,
@@ -70,7 +72,7 @@ describe('line-floor (#4247, #4272)', () => {
 
     it('says how close a short check got, naming no cause', () => {
       const why = unpromisedReason(lineFloor('short'))!;
-      expect(why).toContain('Aimed at 50%');
+      expect(why).toContain('Aimed at Centered');
       expect(why).toContain('5 random picks');
       expect(why).toContain('likely 11–73% right');
       expect(why).not.toMatch(/sparse|weak|evidence/);
@@ -90,25 +92,66 @@ describe('line-floor (#4247, #4272)', () => {
     });
   });
 
+  describe('the floor presets (#4298)', () => {
+    it('offers three floors, named, symmetric about the Centered default', () => {
+      expect(FLOOR_PRESETS.map((p) => p.value)).toEqual([0.1, 0.5, 0.9]);
+      expect(FLOOR_PRESETS.map((p) => p.name)).toEqual(['Complete', 'Centered', 'Correct']);
+    });
+
+    it('knows a preset from a floor off the list', () => {
+      expect(FLOOR_PRESETS.every((p) => isFloorPreset(p.value))).toBe(true);
+      expect(isFloorPreset(0.25)).toBe(false);
+      expect(isFloorPreset(0.75)).toBe(false);
+    });
+
+    it.each<[number, number]>([
+      [0.01, 0.1],
+      [0.25, 0.1],
+      [0.29, 0.1],
+      [0.31, 0.5],
+      [0.6, 0.5],
+      [0.75, 0.9],
+      [1, 0.9],
+    ])('snaps %s to the nearest preset, %s', (stored, snapped) => {
+      expect(nearestFloorPreset(stored).value).toBe(snapped);
+    });
+
+    it('names a floor off the list after the preset it snaps to', () => {
+      expect(floorName(0.5)).toBe('Centered');
+      expect(floorName(0.25)).toBe('Complete');
+      expect(floorName(0.75)).toBe('Correct');
+    });
+  });
+
   describe('the floor control copy (#4246, #4273)', () => {
-    it('offers five floors, symmetric about the 50% default', () => {
-      expect(FLOOR_PRESETS).toEqual([0.1, 0.25, 0.5, 0.75, 0.9]);
-      expect(FLOOR_PRESETS.map(floorPercent)).toEqual(['10%', '25%', '50%', '75%', '90%']);
+    it('shows a check\'s range as a number', () => {
       expect(rangePercent(SAMPLE_RANGE)).toBe('11–73%');
     });
 
     it.each<[FloorStatus, string]>([
-      ['confirmed', 'At least 50% right · likely 55–100% (checked 5) · 32 kept'],
-      ['short', 'Aimed at 50%: likely 11–73% right (checked 5) · top 32 kept'],
-      ['unchecked', 'Top 32 kept, unchecked · aiming at 50%'],
+      ['confirmed', 'Confirmed · likely 55–100% right (checked 5) · 32 kept'],
+      ['short', 'Aimed at Centered: likely 11–73% right (checked 5) · top 32 kept'],
+      ['unchecked', 'Top 32 kept, unchecked · aiming at Centered'],
     ])('summarises %s', (status, expected) => {
       expect(floorSummary(lineFloor(status))).toBe(expected);
     });
 
+    it.each<FloorStatus>(['confirmed', 'short', 'unchecked'])(
+      'names the floor, never numbers it (%s, #4298)',
+      (status) => {
+        for (const minPrecision of [0.1, 0.25, 0.5, 0.9]) {
+          const floor = lineFloor(status, { minPrecision });
+          const target = `${Math.round(minPrecision * 100)}%`;
+          expect(floorSummary(floor)).not.toContain(target);
+          expect(floorExplanation(floor)).not.toContain(target);
+        }
+      },
+    );
+
     it('reads the count from the result, never from the preset', () => {
       expect(floorSummary(lineFloor('confirmed', { minPrecision: 0.1, count: 64 }))).toContain('64 kept');
       expect(floorSummary(lineFloor('unchecked', { minPrecision: 0.1, count: 128 }))).toBe(
-        'Top 128 kept, unchecked · aiming at 10%',
+        'Top 128 kept, unchecked · aiming at Complete',
       );
     });
 
@@ -120,7 +163,7 @@ describe('line-floor (#4247, #4272)', () => {
     it('explains a confirmed line by its check, with the range from the picks alone', () => {
       const why = floorExplanation(lineFloor('confirmed'))!;
       expect(why).toContain('5 random picks from the 32 items the line keeps found 5 right');
-      expect(why).toContain('likely 55–100% of them are: at least 50%');
+      expect(why).toContain('likely 55–100% of them are: enough for Centered');
       expect(why).not.toMatch(/estimate/i);
     });
 

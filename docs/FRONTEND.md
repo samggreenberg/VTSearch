@@ -213,7 +213,12 @@ the learned sort, but only from the POST's response: the learned sort reads
 the floor server-side and caches by it, so a re-sort that beat the POST would
 come back at the old floor. When the line was unpromised before and after and
 keeps the same count of items (any floor at 50% or above keeps the top 32),
-the line stays put and only its state is swapped.
+the line stays put and only its state is swapped. The picker offers three
+named floors (`FLOOR_PRESETS` in `utils/line-floor.ts`: Complete, Centered,
+Correct) and never shows the floor as a number; a stored floor off the list is
+shown as the nearest preset and snapped to it through the picker's own
+`valueChange`, once `busy` (the host's `sortBusy`) is false, because Find
+drops a floor change while a pass is running (#4298).
 
 ### Find view (`components/find-view/`)
 

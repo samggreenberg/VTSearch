@@ -66,13 +66,28 @@ export function isUnpromised(floor: LineFloor | null): boolean {
   return floor?.status === 'unchecked' || floor?.status === 'short';
 }
 
+/** One floor the control offers, and the word the user sees for it. */
+export interface FloorPreset {
+  /** The floor, a fraction. */
+  value: number;
+  /** Its name: the control never shows the floor as a number (#4298). */
+  name: string;
+}
+
 /**
- * The floors the control offers (owner, 2026-09-29): symmetric about the 50%
- * default, with 10% for a user willing to dig through a long list. The backend
- * takes any value in `[0.01, 1]`; a stored value outside this list still shows,
- * as its own option.
+ * The floors the control offers (owner, 2026-09-29, #4298): three, named
+ * rather than numbered. The spot check rarely delivers a floor exactly, so
+ * five percentages claimed a precision it could not keep; three words on one
+ * Complete - Correct scale promise only a direction. The floor is a setting
+ * and is named; what a check measures (its likely range) stays a number. The
+ * backend takes any value in `[0.01, 1]`; the control snaps one outside this
+ * list to the nearest (see {@link nearestFloorPreset}).
  */
-export const FLOOR_PRESETS: readonly number[] = [0.1, 0.25, 0.5, 0.75, 0.9];
+export const FLOOR_PRESETS: readonly FloorPreset[] = [
+  { value: 0.1, name: 'Complete' },
+  { value: 0.5, name: 'Centered' },
+  { value: 0.9, name: 'Correct' },
+];
 
 /**
  * The floor the control shows before the detector's own value arrives from
@@ -82,9 +97,25 @@ export const FLOOR_PRESETS: readonly number[] = [0.1, 0.25, 0.5, 0.75, 0.9];
  */
 export const DEFAULT_MIN_PRECISION = 0.5;
 
-/** "50%" for 0.5. */
-export function floorPercent(p: number): string {
-  return `${Math.round(p * 100)}%`;
+/** True when `p` is one of the floors the control offers. */
+export function isFloorPreset(p: number): boolean {
+  return FLOOR_PRESETS.some((preset) => preset.value === p);
+}
+
+/**
+ * The preset closest to `p`, for a stored floor the control does not offer (a
+ * pick from before #4298, or one set through the CLI or the API). A tie goes
+ * to the lower preset.
+ */
+export function nearestFloorPreset(p: number): FloorPreset {
+  return FLOOR_PRESETS.reduce((best, preset) =>
+    Math.abs(preset.value - p) < Math.abs(best.value - p) ? preset : best,
+  );
+}
+
+/** "Centered" for 0.5; a floor off the list reads as the preset nearest it. */
+export function floorName(p: number): string {
+  return nearestFloorPreset(p).name;
 }
 
 /** "11–73%" for a range. */
@@ -104,7 +135,7 @@ function staleNote(range: LikelyRange | null): string {
  */
 export function unpromisedReason(floor: LineFloor | null): string | null {
   if (!floor || !isUnpromised(floor)) return null;
-  const target = floorPercent(floor.minPrecision);
+  const target = floorName(floor.minPrecision);
   const kept = floor.count.toLocaleString();
   if (floor.status === 'unchecked' || !floor.range) {
     return (
@@ -123,20 +154,20 @@ export function unpromisedReason(floor: LineFloor | null): string | null {
 /**
  * The floor's state in one short line, for the control under the picker
  * (#4246, #4273): the floor, what the line keeps, and how close the check got.
- * The range comes only from the check's picks, never from the model. Null
- * when there is no verdict to report (no line yet, or a sort with no detector
- * behind it).
+ * The floor goes by its name, never its number (#4298); the range comes only
+ * from the check's picks, never from the model. Null when there is no verdict
+ * to report (no line yet, or a sort with no detector behind it).
  */
 export function floorSummary(floor: LineFloor | null): string | null {
   if (!floor) return null;
-  const target = floorPercent(floor.minPrecision);
+  const target = floorName(floor.minPrecision);
   const kept = floor.count.toLocaleString();
   const r = floor.range;
   switch (floor.status) {
     case 'confirmed':
       return r
-        ? `At least ${target} right · likely ${rangePercent(r)} (checked ${r.labelled}) · ${kept} kept`
-        : `At least ${target} right · ${kept} kept`;
+        ? `Confirmed · likely ${rangePercent(r)} right (checked ${r.labelled}) · ${kept} kept`
+        : `Confirmed · ${kept} kept`;
     case 'short':
       return r
         ? `Aimed at ${target}: likely ${rangePercent(r)} right (checked ${r.labelled}) · top ${kept} kept`
@@ -153,13 +184,13 @@ export function floorSummary(floor: LineFloor | null): string | null {
 export function floorExplanation(floor: LineFloor | null): string | null {
   if (!floor) return null;
   if (floor.status !== 'confirmed') return unpromisedReason(floor);
-  const target = floorPercent(floor.minPrecision);
+  const target = floorName(floor.minPrecision);
   const kept = floor.count.toLocaleString();
   const r = floor.range;
-  if (!r) return `At least ${target} of the ${kept} items the line keeps is right.`;
+  if (!r) return `A check confirmed the ${kept} items the line keeps at ${target}.`;
   return (
     `A check of ${r.labelled} random picks from the ${kept} items the line keeps found ${r.right} right, ` +
-    `so likely ${rangePercent(r)} of them are: at least ${target}.` +
+    `so likely ${rangePercent(r)} of them are: enough for ${target}.` +
     staleNote(r)
   );
 }

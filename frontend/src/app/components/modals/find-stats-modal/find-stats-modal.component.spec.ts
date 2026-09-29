@@ -290,13 +290,15 @@ describe('FindStatsModalComponent', () => {
     const legend = (el: HTMLElement) => el.querySelector('.chart-legend')!.textContent!.replace(/\s+/g, ' ');
 
     it('draws the floor across the chart at X, and a confirmed line keeps it with its range', async () => {
-      const el = await load({ floor: wireFloor('confirmed', { minPrecision: 0.75 }) });
+      const el = await load({ floor: wireFloor('confirmed', { minPrecision: 0.9 }) });
       const floor = el.querySelector('.precision-chart .floor')!;
-      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.75));
+      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
       expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
       expect(el.querySelector('.precision-chart .current')!.classList).not.toContain('unpromised');
-      expect(legend(el)).toContain('Floor: at least 75%');
-      expect(legend(el)).toContain('Line: keeps the 75% floor, likely 55–100%');
+      // The floor by name, never by number (#4298); the check's range and the axis stay numbers.
+      expect(legend(el)).toContain('Floor: Correct');
+      expect(legend(el)).toContain('Line: keeps the Correct floor, likely 55–100%');
+      expect(legend(el)).not.toContain('90%');
       // The Inclusion stepper's legend is gone.
       expect(legend(el)).not.toContain('incl');
     });
@@ -306,8 +308,8 @@ describe('FindStatsModalComponent', () => {
       expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
       expect(el.querySelector('.precision-chart .current')!.classList).toContain('unpromised');
       expect(el.querySelector('.swatch-current')!.classList).toContain('unpromised');
-      expect(legend(el)).toContain('Line: fell short of 90%, likely 11–73%');
-      expect(el.textContent).toContain('A check of 5 random picks fell short of the 90% floor');
+      expect(legend(el)).toContain('Line: fell short of Correct, likely 11–73%');
+      expect(el.textContent).toContain('A check of 5 random picks fell short of the Correct floor');
       expect(el.textContent).toContain('the top 32 the line keeps is likely 11–73% right');
     });
 

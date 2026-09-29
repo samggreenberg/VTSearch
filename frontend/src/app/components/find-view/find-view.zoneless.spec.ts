@@ -376,22 +376,22 @@ describe('FindViewComponent (floor supersession)', () => {
 
     vi.useFakeTimers();
     // Three floors in quick succession: the picker tracks every one of them...
-    component.onMinPrecisionChange(0.25);
+    component.onMinPrecisionChange(0.1);
     vi.advanceTimersByTime(40);
     component.onMinPrecisionChange(0.5);
     vi.advanceTimersByTime(40);
-    component.onMinPrecisionChange(0.75);
-    expect(sortState.minPrecision).toBe(0.75);
+    component.onMinPrecisionChange(0.9);
+    expect(sortState.minPrecision).toBe(0.9);
     // ...but nothing is sent until the picker settles.
     httpMock.expectNone('/api/min-precision');
 
     vi.advanceTimersByTime(200);
     const req = httpMock.expectOne('/api/min-precision');
-    expect(req.request.body).toEqual({ min_precision: 0.75 });
-    req.flush({ ...wireFloor('confirmed', { minPrecision: 0.75 }), threshold: 0.7, n_returned: 1 });
+    expect(req.request.body).toEqual({ min_precision: 0.9 });
+    req.flush({ ...wireFloor('confirmed', { minPrecision: 0.9 }), threshold: 0.7, n_returned: 1 });
     expect(sortState.threshold).toBe(0.7);
     expect(sortState.floor?.status).toBe('confirmed');
-    expect(sortState.floor?.minPrecision).toBe(0.75);
+    expect(sortState.floor?.minPrecision).toBe(0.9);
   });
 
   it('cancels a superseded POST so its stale threshold can never land', async () => {
@@ -401,7 +401,7 @@ describe('FindViewComponent (floor supersession)', () => {
     const component = fixture.componentInstance;
 
     vi.useFakeTimers();
-    component.onMinPrecisionChange(0.75);
+    component.onMinPrecisionChange(0.1);
     vi.advanceTimersByTime(200);
     // The first POST is still in flight (a slow re-cut server-side) when the
     // user picks another floor.
@@ -434,11 +434,11 @@ describe('FindViewComponent (floor supersession)', () => {
       .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
 
     // The error is swallowed per-request, so the shared pipeline survives it.
-    component.onMinPrecisionChange(0.25);
+    component.onMinPrecisionChange(0.1);
     vi.advanceTimersByTime(200);
     const retry = httpMock.expectOne('/api/min-precision');
-    expect(retry.request.body).toEqual({ min_precision: 0.25 });
-    retry.flush({ ...wireFloor('confirmed', { minPrecision: 0.25 }), threshold: 0.6, n_returned: 1 });
+    expect(retry.request.body).toEqual({ min_precision: 0.1 });
+    retry.flush({ ...wireFloor('confirmed', { minPrecision: 0.1 }), threshold: 0.6, n_returned: 1 });
     expect(sortState.threshold).toBe(0.6);
   });
 
