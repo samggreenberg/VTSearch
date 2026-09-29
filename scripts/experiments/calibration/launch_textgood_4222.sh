@@ -3,8 +3,22 @@
 # positives a low-prevalence session starves for?
 #
 #   bash launch_textgood_4222.sh plan               # the arm table; submits nothing
-#   bash launch_textgood_4222.sh prepare            # link the #4184 prepare output (once)
+#   bash launch_textgood_4222.sh prepare [ARM..]    # link the #4184 prepare output (once per arm)
 #   bash launch_textgood_4222.sh arms [ARM..]       # submit; default: every arm
+#
+# An arm is <world>-g<G>, or <world>-g<G>d<W> for the adaptive stop the report
+# recommended (#4254's grammar): g20d8 opens `g20+dry1/8@top,b4@mid`, the text
+# sort until 20 Goods or until 8 picks in a row hold none.  `plan` lists the
+# fixed-G arms only; name a dry arm to run it.
+#
+# A bare dry stop can end the walk BEFORE today's opening would: g20d8 handed
+# over at the first 8 empty picks even with 0-1 Goods, where g3 keeps walking to
+# its 3rd (92 of 720 cells at 0.44% then found no positive at all, against 18).
+# <world>-g3g20d16 keeps today's walk as a floor: `g3@top,g20+dry1/16@top,b4@mid`
+# walks to 3 Goods exactly as the app does, then on toward 20 unless it runs dry.
+# <world>-g3b4g20d16 runs today's two rounds first, then the walk:
+# `g3@top,b4@mid,g20+dry1/16@top` (#4282: does the Bad round's early negatives
+# remove the long walk's early-session cost?).
 #   bash launch_textgood_4222.sh status
 #
 # Today's app (the #4184 r7 rung: shipped cut, 70/30 split, acquisition offset)
@@ -56,12 +70,18 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
-arm_env() {  # arm = <world>-g<G>
-  local world="${1%%-*}" g="${1##*-g}"
+arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>]; see the header
+  local world="${1%%-*}" g="${1#*-g}" dry="" first=""
+  if [[ "$g" == *d* ]]; then dry="+dry1/${g##*d}"; g="${g%%d*}"; fi
+  if [[ "$g" == *b*g* ]]; then  # g<M>b<B>g<G>: today's two rounds first, then the walk
+    first="g${g%%b*}@top,b$(sed -E 's/^[0-9]+b([0-9]+)g.*/\1/' <<<"$g")@mid,"; g="${g##*g}"
+  elif [[ "$g" == *g* ]]; then first="g${g%%g*}@top,"; g="${g##*g}"; fi
+  local tail=",b4@mid"
+  [[ "$first" == *@mid,* ]] && tail=""
   unset CALIB_STARTUP_SCHEDULE CALIB_TARGET_PREVALENCE
   DIVERGES=""
-  if [[ "$g" != "3" ]]; then
-    export CALIB_STARTUP_SCHEDULE="g${g}@top,b4@mid"
+  if [[ "$g" != "3" || -n "$dry" || -n "$first" ]]; then
+    export CALIB_STARTUP_SCHEDULE="${first}g${g}${dry}@top${tail}"
     DIVERGES="startup_schedule"
   fi
   case "$world" in
@@ -85,12 +105,13 @@ case "$MODE" in
     ;;
   prepare)
     [[ -f "$PREPARE_SRC/prepare_info.json" ]] || { echo "no prepare at $PREPARE_SRC" >&2; exit 1; }
-    for a in $(all_arms); do
+    shift
+    for a in ${*:-$(all_arms)}; do
       arm_env "$a"
       cp -n "$PREPARE_SRC/prepare_info.json" "$CALIB_RESULTS/"
       [[ -d "$PREPARE_SRC/crops" && ! -e "$CALIB_RESULTS/crops" ]] && cp -r "$PREPARE_SRC/crops" "$CALIB_RESULTS/crops"
     done
-    echo "prepare linked into $(all_arms | wc -l) arms under $BASE"
+    echo "prepare linked into ${*:-$(all_arms | wc -l) arms} under $BASE"
     ;;
   arms)
     shift

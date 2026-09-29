@@ -1,0 +1,22 @@
+{
+  "svm": {
+    "n_files": 144,
+    "n_read": 138,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 6,
+    "no_base_rows": 0,
+    "n_rows_all": 596437,
+    "n_rows": 18087
+  },
+  "lrconv": {
+    "n_files": 144,
+    "n_read": 138,
+    "unreadable": 0,
+    "zero_byte": 0,
+    "no_positive_found": 6,
+    "no_base_rows": 0,
+    "n_rows_all": 596601,
+    "n_rows": 18087
+  }
+}

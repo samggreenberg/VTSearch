@@ -43,6 +43,19 @@ out.
     returned (0 when nothing is promised).
   - `consistent_status_xNN`, `consistent_k_xNN`: the same call with the voted
     items removed from the reference pool, as the fold haystacks already do.
+- **Best effort** (#4267: what a floor returns if it never refuses), per X:
+  - `fallback_k`: the app's own line, the shipped cut at its Inclusion. It is
+    what a floor that promises nothing falls back to today (#4247). One column,
+    independent of X.
+  - `best_{med,lb}_{shipped,consistent}_k_xNN`: the same estimator's curve
+    (`precision_lower_bound_curve`), read **without the gate**. `med` reads
+    it at the median of the bootstrap refits, a point estimate; `lb` reads it
+    at the shipped 10th percentile. `k` is the largest top k the curve puts
+    at >= X. Where the curve never gets there, it is the k with the highest
+    estimate. Where no curve can be formed (no calibration positive), it is
+    `fallback_k`.
+  - `best_*_how_xNN`: which of those three it was: `reached`, `short` or
+    `none`.
 
 ## Sanity numbers (X = 50%)
 
@@ -54,6 +67,19 @@ precision of the returned top *k* is below X.
 | 0.44% | 126 | 116 / 6.0% | 125 / 88% |
 | 5% | 1,227 | 605 / 1.8% | 1,152 / 87% |
 | 0.1% | 0 | 0 / – | 0 / – |
+
+Best effort, scored on **every** frame by mean shortfall, max(0, X - precision
+of the returned top k), where returning nothing counts as X (0.6% of frames at
+0.44%, 3.2% at 0.1%):
+
+| file | today: promise, else `fallback_k` | `best_med_shipped` | `best_lb_consistent` | read the top 32 |
+|---|---|---|---|---|
+| 0.44% | 0.46 | 0.31 | 0.30 | 0.066 |
+| 5% | 0.17 | 0.069 | 0.15 | 0.004 |
+| 0.1% | 0.50 | 0.43 | 0.41 | 0.15 |
+
+"Read the top 32" returns the longest prefix of the top 32 at >= X, else the
+prefix with the highest precision.
 
 The shipped estimator's apparent safety is an artifact: its reference pool
 includes the voted items, scored by a model trained on them, which pushes

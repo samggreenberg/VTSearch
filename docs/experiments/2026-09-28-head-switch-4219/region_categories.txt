@@ -1,0 +1,79 @@
+# #4213 region-voting grid: the hardest and easiest quartiles of coco_better's 144 cells.
+# Difficulty = mean average precision over clicks 1-150 of the #4114 `linear` arm (the old
+# early-stopped logistic head) - a trajectory independent of both arms compared here, so the
+# strata carry no regression-to-the-mean bias toward either head.
+# q1 (hard, AP <= 0.082): 36 categories; q4 (easy, AP >= 0.741): 36 categories.
+# hard
+bag or luggage@medium
+bag or luggage@small
+bench@medium
+bench@small
+bicycle@small
+bird@small
+book@medium
+book@small
+bottle@medium
+bottle@small
+bowl@medium
+bowl@small
+bus@small
+cell phone@small
+chair@large
+chair@medium
+dining table@small
+dog@small
+enclosed road vehicle@medium
+enclosed road vehicle@small
+fire hydrant@small
+keyboard@small
+knife@medium
+knife@small
+laptop@small
+motorcycle@small
+parking meter@small
+scissors@small
+single serving drinking vessel@small
+spoon@medium
+spoon@small
+stop sign@small
+traffic light@small
+tv@small
+umbrella@small
+vase or potted plant@small
+# easy
+airplane@large
+airplane@medium
+airplane@small
+apple@large
+banana@large
+baseball bat@large
+baseball bat@medium
+baseball bat@small
+bicycle@large
+bird@large
+boat@large
+cell phone@large
+clock@large
+fire hydrant@large
+kite@large
+kite@medium
+motorcycle@large
+mouse@large
+orange@large
+parking meter@large
+scissors@large
+skateboard@large
+skateboard@medium
+skis@large
+skis@medium
+snowboard@large
+stop sign@large
+surfboard@large
+surfboard@medium
+surfboard@small
+tennis racket@large
+tennis racket@medium
+tennis racket@small
+tie@large
+toothbrush@large
+traffic light@large
