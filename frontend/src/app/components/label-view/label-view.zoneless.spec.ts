@@ -436,7 +436,8 @@ describe('LabelViewComponent', () => {
       );
       // The vote on 1 advanced to 2 ...
       history().record(1);
-      component.mediaState.selectMedia(2);
+      component.onMediaVoted({ id: 1, vote: 'good' });
+      expect(component.mediaState.selectedId()).toBe(2);
       // ... and the re-sort it scheduled then landed without moving the selection.
       component.sortState.setSortResults(
         [{ id: 1, score: 0.9 }, { id: 3, score: 0.85 }, { id: 2, score: 0.6 }],
@@ -843,6 +844,8 @@ describe('LabelViewComponent', () => {
       results: [{ id: 1, similarity: 0.9 }, { id: 2, similarity: 0.3 }],
       threshold: 0.5,
     });
+    // Nobody has acted on the centre yet, so the view places it (#4318).
+    TestBed.tick();
 
     expect(component.sortState.sortOrder).toBeTruthy();
     expect(component.mediaState.selectedId()).toBe(1);
@@ -864,6 +867,10 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([{ id: 1, media_type: 'audio' }]),
     );
+    httpMock.match('/api/find/end-session').forEach(req =>
+      req.flush({ ok: true, ended: false }),
+    );
+    TestBed.tick();
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
@@ -894,6 +901,8 @@ describe('LabelViewComponent', () => {
       results: [{ id: 1, similarity: 0.8 }],
       threshold: 0.5,
     });
+    // Nobody has acted on the centre yet, so the view places it (#4318).
+    TestBed.tick();
 
     expect(component.mediaState.selectedId()).toBe(1);
   });
@@ -1515,6 +1524,153 @@ describe('LabelViewComponent', () => {
       // does not add a second one on the carried query.
       const bodies = httpMock.match('/api/sort').map((r) => r.request.body);
       expect(bodies).not.toContainEqual({ text: 'aaa' });
+    });
+  });
+
+  /**
+   * #4318: a fresh entry fires more than one sort, and which one lands first
+   * varies from visit to visit. Autopilot activates before the votes load, so
+   * it guesses the detector is untrained and arms its text seed; the votes then
+   * reveal a trained detector, and the retrain correction moves the phase onto
+   * the learned sort. The centre used to be served from whichever ranking
+   * landed first, and the text seed could land last and replace the learned
+   * ranking outright. Every order below must end on the same item: the learned
+   * ranking's Boundary pick.
+   */
+  describe('entry serves from the ranking it settles on (#4318)', () => {
+    const medias = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    /** Three Goods and four Bads on this dataset, and a labelset holding both
+     *  classes: Autopilot lands in retrain mode, at the Boundary phase. */
+    const trainedVotes = {
+      good: [1, 2, 3],
+      bad: [4, 5, 6, 7],
+      click_times: {},
+      learned_scores: {},
+      labelset_good_count: 3,
+      labelset_bad_count: 4,
+    };
+    /** Top pick 9, Boundary pick 8. */
+    const textRanking = {
+      results: [9, 10, 8, 1, 2, 3, 4, 5, 6, 7].map((id, i) => ({ id, similarity: 0.9 - i * 0.1 })),
+      threshold: 0.75,
+    };
+    /** Boundary pick 10: the item the entry must settle on. */
+    const learnedRanking = {
+      status: 'done',
+      results: [1, 2, 3, 9, 10, 8, 4, 5, 6, 7].map((id, i) => ({
+        id,
+        score: [0.95, 0.9, 0.85, 0.7, 0.6, 0.4, 0.3, 0.2, 0.1, 0.05][i],
+      })),
+      threshold: 0.5,
+      acq_threshold: 0.65,
+    };
+
+    beforeEach(() => {
+      TestBed.inject(LabelSessionService).textQuery = 'the hint';
+    });
+
+    /** Answer the medias and the embedder registry: what the text seed waits on. */
+    async function landMedias(): Promise<void> {
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush(medias));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      await settleResource();
+      TestBed.tick();
+    }
+
+    /** Answer the Find hand-off and the votes it chains, then let the retrain
+     *  correction and the phase change it causes run. */
+    function landVotes(): void {
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) => req.flush(trainedVotes));
+      TestBed.tick();
+    }
+
+    function landLearnedSort(): void {
+      httpMock.expectOne('/api/learned-sort').flush(learnedRanking);
+      TestBed.tick();
+    }
+
+    it('drops a text seed still waiting on the medias once the votes show a trained detector', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      landVotes();
+      expect(TestBed.inject(AutopilotStateService).state.phase).toBe('hard');
+      await landMedias();
+
+      httpMock.expectNone('/api/sort');
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    it('lets the learned sort supersede a text seed already in flight', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      const textSeed = httpMock.expectOne('/api/sort');
+      landVotes();
+
+      // Asked for after the seed, so the seed's answer is no longer wanted.
+      expect(textSeed.cancelled).toBe(true);
+      landLearnedSort();
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(learnedRanking.results.map((r) => r.id));
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    it('waits for the votes, then follows the ranking that lands after the first', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      httpMock.expectOne('/api/sort').flush(textRanking);
+      TestBed.tick();
+      // With the votes unread every item looks unlabeled, and the top of this
+      // ranking is one the user labeled long ago: no pick yet.
+      expect(component.mediaState.selectedId()).toBeNull();
+
+      landVotes();
+      // The Boundary phase's pick over the ranking on screen, for now.
+      expect(component.mediaState.selectedId()).toBe(8);
+
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    it('leaves a clicked item where it is when a later ranking lands (#4092)', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      httpMock.expectOne('/api/sort').flush(textRanking);
+      landVotes();
+      expect(component.mediaState.selectedId()).toBe(8);
+
+      component.onMediaSelect(9);
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(9);
+    });
+
+    it('stops re-picking once the user votes', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      landVotes();
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(10);
+
+      component.onMediaVoted({ id: 10, vote: 'good' });
+      const next = component.mediaState.selectedId();
+      // The re-rank a vote schedules is the user's own labelling moving on,
+      // not the entry: it must not re-place the centre.
+      component.sortState.setSortWindow({
+        items: [{ id: 9, score: 0.9 }, { id: 8, score: 0.1 }],
+        threshold: 0.5,
+        acqThreshold: 0.5,
+        total: 2,
+        hasMore: false,
+        token: null,
+        aboveThreshold: 1,
+      });
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(next);
     });
   });
 

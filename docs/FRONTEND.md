@@ -191,6 +191,13 @@ re-sort prompt. Neither service is `providedIn: 'root'`: the requests in them
 are cancelled by the *component's* pair scope, which a singleton has no way to
 name — see the note on `SortStateService` in `PairScopeService`'s header.
 
+Two ordering rules keep what the view serves independent of which request
+answers first (#4318). Starting a sort ends whichever one is still in flight,
+so the ranking on screen is the answer to the sort asked for last. And on entry
+or after a pair switch the centre item is the view's own pick, made again
+against every ranking and Select mode that lands until the user clicks, votes
+or steps; from then on it is theirs, and no re-rank moves it.
+
 The three panels are shared with the Find view:
 
 - **Left** — media list (virtual scroller), sort bar, Threshold, stripe
