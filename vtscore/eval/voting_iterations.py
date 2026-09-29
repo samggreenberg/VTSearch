@@ -835,6 +835,8 @@ def _precision_frame(
     voted: "dict[int, float]",
     fold_orderings: list[Any],
     fold_haystacks: list[Any],
+    cal_phase: "list[str] | None" = None,
+    cal_vote: "list[int] | None" = None,
 ) -> dict[str, Any]:
     """Everything a live precision estimate could read at step *t*, plus the truth (#4220).
 
@@ -872,6 +874,10 @@ def _precision_frame(
     frame["fold_cal_scores"] = f32(cal_s)
     frame["fold_cal_labels"] = np.asarray(cal_y, dtype=np.uint8)
     frame["fold_cal_fold"] = np.asarray(cal_f, dtype=np.uint8)
+    # The phase that surfaced each calibration vote, aligned with the scores
+    # (#4224); empty when the trainer could not say (e.g. the grouped path).
+    frame["fold_cal_phase"] = np.asarray(cal_phase if cal_phase and len(cal_phase) == len(cal_s) else [], dtype="U12")
+    frame["fold_cal_vote"] = np.asarray(cal_vote if cal_vote and len(cal_vote) == len(cal_s) else [], dtype=np.int64)
     frame["fold_hay_scores"] = f32(hay_s)
     frame["fold_hay_fold"] = np.asarray(hay_f, dtype=np.uint8)
     return frame
@@ -2325,6 +2331,8 @@ def simulate_voting_iterations(  # noqa: C901
         X_sim_image = np.stack([sim_embeddings[cid] for cid in sorted(sim_ids)])
 
     good_votes: dict[int, None] = {}
+    #: The phase that surfaced each vote (#4224: which votes calibrated the cut).
+    vote_phase: dict[int, str] = {}
     bad_votes: dict[int, None] = {}
     labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
@@ -2408,6 +2416,7 @@ def simulate_voting_iterations(  # noqa: C901
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
+        vote_phase[cid] = phase or ""
         # What the app would record for this click - the precision floor
         # calibrates only on votes the learned sort chose (#4245).
         vote_provenance[cid] = pick_provenance(phase)
@@ -2791,6 +2800,14 @@ def simulate_voting_iterations(  # noqa: C901
         if calibration is not None:
             metric_rows, base_scores, base_labels = calibration
             if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
+                # The trainer builds its rows Goods first, then Bads, in vote order.
+                vote_order = list(good_votes) + list(bad_votes)
+                cal_votes = [
+                    vote_order[i]
+                    for fold in (details.get("fold_holdout_rows") or [])
+                    for i in fold
+                    if i < len(vote_order)
+                ]
                 precision_frame_sink.append(
                     _precision_frame(
                         t,
@@ -2802,6 +2819,8 @@ def simulate_voting_iterations(  # noqa: C901
                         {**{g: 1.0 for g in good_votes}, **{b: 0.0 for b in bad_votes}},
                         details.get("fold_orderings") or [],
                         sim_fold_haystacks,
+                        cal_phase=[vote_phase.get(v, "") for v in cal_votes],
+                        cal_vote=cal_votes,
                     )
                 )
             # The final model's haystack under the #3308 population convention:
@@ -3096,7 +3115,7 @@ def run_voting_iterations_eval(
             ``["app"]``; pass e.g. ``["app", "svm_linear", "svm_rbf"]`` for the
             head-to-head comparison.  Recorded in the ``trainer`` column.
         prevalence_arms: Which prevalence arms to run per (dataset, category).
-            ``None`` (default) runs ``[None]`` (natural prevalence only); pass
+            ``None`` (default) runs ``[None]`` (the dataset's own prevalence only); pass
             e.g. ``[None, 0.01]`` to add the 1%-prevalence rare arm.  Recorded
             in the ``prevalence_arm`` / ``realized_prevalence`` columns.
         styles: Which detection styles to run per cell (see

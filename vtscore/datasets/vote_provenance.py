@@ -218,14 +218,20 @@ PRECISION_CALIBRATION_SELECT_MODES = frozenset({"top", "hard"})
 def calibrates_precision(provenance: dict[str, Any] | None) -> bool:
     """Whether a vote with this provenance may calibrate a precision-floor promise.
 
-    The floor's posterior ``P(positive | score)`` is unbiased under
-    **score-only** selection: an item picked for its rank in the model's own
-    ranking tells the fit nothing about its label beyond that rank.  A vote
-    picked by any other ranker - the text sort of Autopilot's opening, an
-    example sort, a list sorted by anything but the current model - was chosen
-    on information the model's score lacks, which makes the positives it finds
-    the easy ones.  #4222 measured it: with the opening's text walk raised to
-    20 Goods, half the promises made at X = 50% broke.
+    A vote picked by any ranker but the learned sort - the text sort of
+    Autopilot's opening, an example sort, a list sorted by anything but the
+    current model - was chosen on information the model's score lacks, which
+    makes the positives it finds the easy ones.  #4222 measured it: with the
+    opening's text walk raised to 20 Goods, half the promises made at X = 50%
+    broke.  Leaving those votes out keeps the gate shut there (#4256: 0 of 19
+    promises broke, in 0.71% of frames).
+
+    This filter does **not** make the posterior unbiased.  The learned sort's
+    draws were chosen on an earlier model's score, and #4256 found them just as
+    optimistic: against a reference pool without the voted items they break 83%
+    of X = 50% promises.  The shipped promise holds through the reference pool's
+    in-sample offset (#4221); random verification (#4257) is the selection-free
+    route.
 
     So a vote calibrates only when its recorded flow draws off a ranking
     (:data:`PRECISION_CALIBRATION_FLOWS`), that ranking was the learned sort,

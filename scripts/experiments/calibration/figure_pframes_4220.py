@@ -6,7 +6,7 @@
   calibration folds hold, for
   the fold-rank and in-sample lower bounds with EM, per scenario;
 * ``calibration_positives.png`` - how many calibration positives today's app
-  has at each checkpoint, natural pool against the 5% pool, with the gate the
+  has at each checkpoint, 0.44% pool (COCO Better default) against the 5% pool, with the gate the
   report recommends.
 
     python figure_pframes_4220.py [--study DIR]
@@ -29,7 +29,7 @@ STUDY = REPO / "docs" / "experiments" / "2026-09-28-precision-frames-4220"
 INK, SOFT, GRID = "#14181f", "#5b6472", "#e3e6ea"
 #: Validated with the dataviz skill's checker (light surface): all checks pass.
 SERIES = {
-    ("natural", "same"): ("natural pool, same corpus", "#2F6DB5"),
+    ("natural", "same"): ("0.44% pool (COCO Better default), same corpus", "#2F6DB5"),
     ("h0.05", "same"): ("5% pool, same corpus", "#C26A1B"),
     ("h0.05", "shifted"): ("5% pool, 0.44% corpus (label shift)", "#7A5AB8"),
 }
@@ -93,7 +93,10 @@ def trust(study: Path) -> Path:
 def positives(study: Path) -> Path:
     rows = list(csv.DictReader((study / "fig_calpos.csv").open()))
     fig, ax = plt.subplots(figsize=(8, 4.2))
-    for arm, label, color in (("natural", "natural pool (0.44%)", "#2F6DB5"), ("h0.05", "5% pool", "#C26A1B")):
+    for arm, label, color in (
+        ("natural", "0.44% pool (COCO Better default)", "#2F6DB5"),
+        ("h0.05", "5% pool", "#C26A1B"),
+    ):
         ts = sorted({int(r["t"]) for r in rows})
         med, q1, q3 = [], [], []
         for t in ts:

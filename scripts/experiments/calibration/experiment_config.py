@@ -1017,6 +1017,13 @@ STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 #: detector exists yet, so an arm's mining behaviour is invisible without it.
 EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
 
+#: Thin POSITIVES across the whole cell, before the split, to this prevalence
+#: (issue #4222): the low-prevalence world below a dataset's natural rate, e.g.
+#: ``0.001`` for about 1 in 1,000.  Unset = natural.  The simulator's
+#: ``target_prevalence``: test and pool both sit at the target, a cell left
+#: with fewer than 15 positives is skipped, and it refuses ``CALIB_TEST_BANDS``.
+TARGET_PREVALENCE = float(os.environ["CALIB_TARGET_PREVALENCE"]) if os.environ.get("CALIB_TARGET_PREVALENCE") else None
+
 #: Thin the simulation half's negatives so positives are this fraction of the
 #: pool the cut rules read (issue #4184/#4201).  Unset = natural prevalence.
 #: The test set and band cohorts are untouched, so a cell pairs with its

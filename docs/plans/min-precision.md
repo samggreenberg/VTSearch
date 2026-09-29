@@ -51,19 +51,32 @@ What follows is what the app still owes.
 - **Only the learned sort's own draws calibrate the promise** (owner,
   2026-09-28, from #4222). Votes picked by another ranker (the text-sort
   opening, the coverage atlas's New picks, a list sorted by anything but the
-  model) train the model but stay out of the evidence and the gate, because the
-  posterior is unbiased only under score-only selection. Whether the atlas's
-  picks are fair enough to count is #4261.
+  model) train the model but stay out of the evidence and the gate. Whether the
+  atlas's picks are fair enough to count is #4261.
+  - **What the filter buys, and what it doesn't** (#4256, report on its PR). It keeps a long
+    text-walk opening from breaking promises by keeping the gate shut. With the
+    opening's Good round at 20, all votes break 69% of X = 50% promises at the
+    0.44% pool. Learned-sort votes break 0 of 19, but promise in only 0.71% of
+    frames. The filter does **not** make the posterior unbiased: learned-sort
+    draws were chosen on an earlier model's score too. With a consistent
+    reference pool they still break 83% (today's g3 opening). The promise's
+    safety rests on the shipped pool's in-sample offset (#4221). The
+    selection-free route is random verification (#4257).
 - **The default floor is 50%, and a set floor wins over Inclusion** (owner,
   2026-09-28). `null` is "no floor", which hands the line back to Inclusion.
 - **What waits on the GRID, and what doesn't.**
-  - #4222 decides how often the gate opens.
+  - #4222 answered how the opening moves the gate. A longer text walk opens it
+    but breaks the promise (above). A moderate one (Good target 6) is the only
+    tested change that helps the detector at both 0.44% and 0.1%. At 0.1% no
+    opening reaches the gate: a pool of ~11,000 holds ~11 positives. The
+    adaptive stop it recommends is still open there.
   - #4221 decides the estimator's remaining knobs: the transfer coordinate,
     pooling the folds' evidence, and the bound level. Those are already
     parameters of `precision_floor_cut`.
 
-  Neither blocks the plumbing, which can land on #4220's defaults and take
-  #4221's answer as a change of arguments.
+  The plumbing can land on #4220's defaults and take #4221's knobs as a change
+  of arguments. It can't take the provenance filter that way: that changes
+  which votes build the fold orderings, so it belongs in #4245 from the start.
 
 ## Open decisions (owner)
 
@@ -132,14 +145,14 @@ These are the questions #4224 raised that no issue below can settle alone:
   plan is motivated by the conformal miss budget. Top-of-list review votes bias
   calibration positives high, so the FNR budget over-promises. Its metrics are
   in Inclusion units (FNR excess at Inclusion 0–3). A posterior fitted on
-  score-picked votes is unbiased under *score-only* selection, which is what
-  reviewing the model's own sorted list is (#4224's feasibility note), so that
-  half of the problem does not transfer to the floor. The other half does:
-  votes selected by a *different* ranker break the promise (#4222: text-sort
-  selection broke 51% of the X = 50% promises at a 20-Good opening), which is
-  why the floor already calibrates only on the learned sort's draws. Before
-  it runs, restate its hypotheses as violation rate at X by provenance, or
-  retire it.
+  score-picked votes was thought unbiased under *score-only* selection, which
+  is what reviewing the model's own sorted list is (#4224's feasibility note).
+  #4256 measured it, and it does not hold: learned-sort draws alone, with a
+  consistent reference pool, break 83% of the X = 50% promises. So the problem
+  does transfer to the floor. Votes selected by a *different* ranker are worse
+  (#4222: text-sort selection broke 51% of the X = 50% promises at a 20-Good
+  opening). Before it runs, restate its hypotheses as violation rate at X, or
+  retire it in favour of random verification (#4257).
 
 <!-- item-sep -->
 
