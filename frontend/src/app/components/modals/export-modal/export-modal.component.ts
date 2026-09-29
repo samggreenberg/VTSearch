@@ -83,6 +83,11 @@ export class ExportModalComponent implements OnInit {
    * exporting a *slice of a scored run* — "the good hits" is the normal ask
    * there, not a trap, so it defaults to whatever slice the caller asked for
    * and the note stays off.
+   *
+   * It also decides the words: the title, the action button and the export
+   * messages call the rows *labels* for a detector and *results* for a Find
+   * run (see {@link itemNoun}), so the two exports read as different things
+   * even though they share one exporter list (issue #4079).
    */
   readonly scope = input<'detector' | 'results'>('detector');
   /**
@@ -699,8 +704,10 @@ export class ExportModalComponent implements OnInit {
     if (!exp) return 'Export';
     // A declared `opens_url` beats the name-sniffing below: the exporter has
     // told us the run ends in a new browser tab, so the button says so.
-    if (exp.opens_url)
-      return `Open Labelset in ${exp.display_name || exp.name}`;
+    if (exp.opens_url) {
+      const noun = this.scope() === 'detector' ? 'Labels' : 'Results';
+      return `Open ${noun} in ${exp.display_name || exp.name}`;
+    }
     const name = (exp.display_name || exp.name).toLowerCase();
     if (name.includes('email') || name.includes('smtp')) return 'Send';
     if (name.includes('csv') || name.includes('file') || name.includes('json'))
@@ -733,9 +740,8 @@ export class ExportModalComponent implements OnInit {
   ): void {
     const exporterLabel = exporter.display_name || exporter.name;
     const labelCount = this.filteredLabels.length;
-    this.status.set(
-      `Exporting ${labelCount.toLocaleString()} labels to ${exporterLabel}…`,
-    );
+    const counted = `${labelCount.toLocaleString()} ${this.itemNoun(labelCount)}`;
+    this.status.set(`Exporting ${counted} to ${exporterLabel}…`);
     this.actionError.set('');
     this.submitting.set(true);
 
@@ -761,7 +767,9 @@ export class ExportModalComponent implements OnInit {
       })
       .subscribe({
         next: (response) => {
-          this.status.set('Labels exported.');
+          this.status.set(
+            this.scope() === 'detector' ? 'Labels exported.' : 'Results exported.',
+          );
           this.submitting.set(false);
           this.selectedExporter = null;
           // An exporter can hand back a URL for the browser to open instead of
@@ -778,20 +786,18 @@ export class ExportModalComponent implements OnInit {
             // a blank tab sitting there.
             pendingTab?.close();
           }
-          const plural = labelCount === 1 ? '' : 's';
-
           // Three toast shapes: opened a tab, tried and got blocked, or a
           // plain delivery export. The blocked case survives the pre-opened
           // tab above (a blocker can refuse even a gesture-time popup), so say
           // why nothing happened rather than leaving the user staring at an
           // unchanged screen.
-          let message = `Exported ${labelCount.toLocaleString()} label${plural} to ${exporterLabel}`;
+          let message = `Exported ${counted} to ${exporterLabel}`;
           let detail = fieldValues['filepath']
             ? `Destination: ${fieldValues['filepath']}`
             : undefined;
           if (openUrl) {
             message = opened
-              ? `Opened ${labelCount.toLocaleString()} label${plural} in ${exporterLabel}`
+              ? `Opened ${counted} in ${exporterLabel}`
               : message;
             detail = opened ? undefined : 'Your browser blocked the new tab.';
           }
@@ -824,7 +830,9 @@ export class ExportModalComponent implements OnInit {
         error: () => {
           pendingTab?.close();
           this.status.set('');
-          this.actionError.set('Label export failed');
+          this.actionError.set(
+            this.scope() === 'detector' ? 'Label export failed' : 'Results export failed',
+          );
           this.submitting.set(false);
         },
       });
@@ -874,10 +882,19 @@ export class ExportModalComponent implements OnInit {
         : 'Export Unverified';
     }
     if (this.serverFilter === 'verified') return 'Export Verified';
-    // Name the payload in the detector-scoped case: the user arrived here
-    // from a *detector*, and what leaves is its labelset, not the detector
-    // as an artifact.
-    return this.scope() === 'detector' ? 'Export Labels' : 'Export';
+    // Name the payload. From a *detector*, what leaves is its labels (not the
+    // detector as an artifact, and not "labelset", which nobody outside the
+    // code calls it); from Find, it is the run's results (issue #4079).
+    return this.scope() === 'detector'
+      ? 'Export Detector Labels'
+      : 'Export Results';
+  }
+
+  /** What one exported row is called in user-facing text, pluralised for
+   *  *count*: a detector's *label*, or a Find run's *result*. */
+  itemNoun(count: number): string {
+    const noun = this.scope() === 'detector' ? 'label' : 'result';
+    return count === 1 ? noun : `${noun}s`;
   }
 
   close(): void {

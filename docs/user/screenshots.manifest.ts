@@ -1180,7 +1180,7 @@ export const SHOTS: Shot[] = [
   {
     id: 'export-choose',
     embeddedIn: `${HOWTO}/export-matches.md#step-1-choose-what-to-send`,
-    caption: 'Step 1: in Export, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows',
+    caption: 'Step 1: in Export Results, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows',
     themes: BOTH,
     annotations: [
       { target: 'vt-modal .delimiter-row', kind: 'step', step: 1 },

@@ -213,6 +213,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Export window says whether it is sending a detector's labels or
+  Find's results** (issue #4079). The same window, with the same
+  destinations, opens from the labeling view, the dashboard and Find, which
+  read as one list mixing two kinds of exporter. Its title is now **Export
+  Detector Labels** or **Export Results**, the button of a destination that
+  opens a website says **Open Labels in …** or **Open Results in …** (it said
+  **Open Labelset in …** everywhere), and the export messages count *labels*
+  or *results* to match.
+
 - **Inclusion is gone as a setting; every detector has a precision floor**
   (issue #4269). The floor replaced the Inclusion stepper in #4246, and nothing
   in the app wrote Inclusion after that, so the setting and its endpoint are

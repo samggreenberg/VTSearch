@@ -296,7 +296,7 @@
           >
             <vt-icon type="export" [size]="16" [class.icon-waggle]="submitting()"></vt-icon>
             @if (submitting()) {
-              Exporting {{ filteredLabels.length | number }} labels to {{ activeTabExporter.display_name || activeTabExporter.name }}…
+              Exporting {{ filteredLabels.length | number }} {{ itemNoun(filteredLabels.length) }} to {{ activeTabExporter.display_name || activeTabExporter.name }}…
             } @else {
               {{ activeTabAction }}
             }

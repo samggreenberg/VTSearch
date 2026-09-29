@@ -201,7 +201,7 @@ describe('ExportModalComponent', () => {
 
     it('names the payload in the title', async () => {
       await flushInit();
-      expect(component.modalTitle).toBe('Export Labels');
+      expect(component.modalTitle).toBe('Export Detector Labels');
     });
 
     it('flags a one-sided selection, and only a one-sided one', async () => {
@@ -226,7 +226,36 @@ describe('ExportModalComponent', () => {
       await flushInit();
       expect(component.labelFilter).toBe('good');
       expect(component.showPartialLabelsetNote).toBe(false);
-      expect(component.modalTitle).toBe('Export');
+      expect(component.modalTitle).toBe('Export Results');
+    });
+
+    // Both scopes share one exporter list, so the words are what tell a Find
+    // run's results from a detector's labels (issue #4079).
+    it('calls the rows results, not labels', async () => {
+      fixture.componentRef.setInput('scope', 'results');
+      fixture.componentRef.setInput('initialFilter', 'good');
+      await flushInit();
+      const successSpy = vi.spyOn(TestBed.inject(ToastService), 'success');
+      component.startExporter(mockExporters[0] as never);
+      httpMock.expectOne('/api/exporters/export').flush({ success: true });
+      expect(successSpy.mock.calls[0][0].message).toBe(
+        'Exported 2 results to Server JSON',
+      );
+      expect(component.itemNoun(1)).toBe('result');
+    });
+
+    it('labels an opens_url action button with Results', async () => {
+      const openUrlExporter = {
+        name: 'open_url',
+        display_name: 'Open in Website',
+        opens_url: true,
+        fields: [],
+        supported_payloads: ['find_results', 'labelset'],
+      };
+      fixture.componentRef.setInput('scope', 'results');
+      await flushInit([openUrlExporter]);
+      component.selectExporterTab(openUrlExporter as never);
+      expect(component.activeTabAction).toBe('Open Results in Open in Website');
     });
   });
 
@@ -454,7 +483,7 @@ describe('ExportModalComponent', () => {
       await flushInit([openUrlExporter]);
       component.selectExporterTab(openUrlExporter as never);
       expect(component.activeTabAction).toBe(
-        'Open Labelset in Open in Website',
+        'Open Labels in Open in Website',
       );
     });
   });
@@ -925,7 +954,7 @@ describe('ExportModalComponent', () => {
       expect(component.activeTabExporterFields).toEqual([]);
       const host = fixture.nativeElement as HTMLElement;
       expect(host.querySelectorAll('.tab-field').length).toBe(0);
-      expect(host.textContent).toContain('Open Labelset in Open in Our Site');
+      expect(host.textContent).toContain('Open Labels in Open in Our Site');
     });
 
     // `startExporter` short-circuits when there is nothing to ask the user.
