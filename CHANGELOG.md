@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Each Autopilot phase has one progress light** (issue #4319). The current
+  phase's marker is now a single light that goes red, then yellow past
+  halfway, then green as the phase finishes. The Find phases are paced by
+  their vote target, Refine Boundary shows the lower of Smart and Stable
+  (replacing its two dots), and Explore Diversity is paced against its
+  coverage goal, now shown as *Diversity: 13/40*. The labeling-status span
+  indicator reports that goal as `target`.
 - **Check the line from the floor control, and see how close it got** (issue
   #4273, the app half of #4272). Beside the precision floor's note, **Check 5
   picks** (29 at Correct) opens the spot check: a random pick at a time
