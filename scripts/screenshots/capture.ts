@@ -251,7 +251,21 @@ function makeHelpers(page: Page): Helpers {
       await page.getByRole('button', { name: 'Train', exact: true }).click();
       // label view: wait for the three panels
       await page.waitForSelector('.panel-center, vt-center-panel', { timeout: 60000 });
-      await wait(2000);
+      await h.sortsSettled();
+    },
+    async sortsSettled() {
+      // Settled means no sort overlay for QUIET ms in a row: a sort can start a
+      // beat after the view opens, so "none running right now" is not enough.
+      const QUIET = 3000;
+      const overlay = page.locator('vt-progress-indicators .sort-overlay');
+      const until = Date.now() + 180000;
+      let quietSince = Date.now();
+      while (Date.now() < until) {
+        if (await overlay.count()) quietSince = Date.now();
+        else if (Date.now() - quietSince >= QUIET) break;
+        await wait(250);
+      }
+      await wait(500);
     },
     async leftTab(name) {
       // The tab strip is hidden while the left panel is collapsed to its rail,
@@ -261,7 +275,7 @@ function makeHelpers(page: Page): Helpers {
         await wait(1200);
       }
       await page.locator('.left-tab', { hasText: name }).first().click();
-      await wait(800);
+      await h.sortsSettled();
     },
     async serveItem(filename) {
       // Clicking a thumbnail selects the item; the centre viewer + Good/Bad

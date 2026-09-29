@@ -102,6 +102,13 @@ export interface Helpers {
    * `Yellow Smileys`) and click Train → label view.
    */
   enterLabelView(dataset?: string, detector?: string): Promise<void>;
+  /**
+   * Wait until the label view has had no sort running for a few seconds. The
+   * view re-sorts on entry and on a tab switch, and what it serves and the
+   * floor line it shows follow that sort, so a fixed wait photographs
+   * whichever side of it the clock lands on (#4299).
+   */
+  sortsSettled(): Promise<void>;
   /** In the label view, switch the left-panel tab (Autopilot / Manual). */
   leftTab(name: 'Autopilot' | 'Manual'): Promise<void>;
   /**
@@ -535,7 +542,8 @@ async function autopilotServing(page: Page, h: Helpers): Promise<void> {
   await h.leftTab('Autopilot');
   await page.waitForSelector('.btn-good', { timeout: 120000 });
   // Autopilot re-sorts on entry and then serves; let it settle.
-  await h.wait(6000);
+  await h.sortsSettled();
+  await h.wait(1500);
 }
 
 export const SHOTS: Shot[] = [
@@ -1080,7 +1088,27 @@ export const SHOTS: Shot[] = [
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.stats-table', { timeout: 20000 });
       // The chart is the section this shot is for; it sits below the fold.
+      // Sections above it are still loading when the table appears, so wait
+      // for the modal's height to hold still, then scroll to its very end;
+      // scrolling any sooner leaves the frame wherever their arrival pushed it.
+      await page.waitForFunction(
+        () => {
+          const w = window as unknown as { __statsH?: number; __statsT?: number };
+          const h = document.querySelector('.modal-content')?.scrollHeight ?? 0;
+          if (h !== w.__statsH) {
+            w.__statsH = h;
+            w.__statsT = Date.now();
+          }
+          return Date.now() - (w.__statsT ?? Date.now()) > 1500;
+        },
+        undefined,
+        { timeout: 60000, polling: 250 },
+      );
       await page.locator('.chart-wrap').scrollIntoViewIfNeeded();
+      await page.evaluate(() => {
+        const modal = document.querySelector('.modal-content');
+        if (modal) modal.scrollTop = modal.scrollHeight;
+      });
       // Park the pointer off the chart, so the readout shows the current cut.
       await page.mouse.move(5, 5);
       await h.wait(1200);
