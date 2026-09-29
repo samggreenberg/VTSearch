@@ -1,4 +1,3 @@
-import pytest
 
 import vtscore.detectors.labeling_progress as labeling_progress
 from vtscore.detectors.labeling_progress import (
