@@ -74,9 +74,9 @@ describe('line-floor (#4247)', () => {
   });
 
   describe('the floor control copy (#4246)', () => {
-    it('offers the four priced floors', () => {
-      expect(FLOOR_PRESETS).toEqual([0.25, 0.5, 0.75, 0.9]);
-      expect(FLOOR_PRESETS.map(floorPercent)).toEqual(['25%', '50%', '75%', '90%']);
+    it('offers five floors, symmetric about the 50% default', () => {
+      expect(FLOOR_PRESETS).toEqual([0.1, 0.25, 0.5, 0.75, 0.9]);
+      expect(FLOOR_PRESETS.map(floorPercent)).toEqual(['10%', '25%', '50%', '75%', '90%']);
     });
 
     it.each<[FloorStatus, string]>([

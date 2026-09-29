@@ -16,8 +16,8 @@ type Dot = 'green' | 'yellow' | 'red' | 'none';
  * The precision floor: "show me what's at least X% right" (#4246). Replaced the
  * Inclusion stepper; mounted in the Find row and the Manual tab.
  *
- * A `<select>` of the four floors #4220 priced, rather than a free number:
- * every choice is a measured one (owner, 2026-09-28). It is also not a range
+ * A `<select>` of five preset floors (`FLOOR_PRESETS`), rather than a free
+ * number (owner, 2026-09-28; 10% added 2026-09-29). It is also not a range
  * slider on purpose: `KeyboardService.isTyping()` lets ArrowLeft/Right through
  * from a focused `type="range"` input and casts a vote with them, while a
  * focused `<select>` keeps its keys to itself - and gives focus back once a

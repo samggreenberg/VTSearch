@@ -33,8 +33,8 @@ knob — the active detector re-cuts without retraining and, in Find mode,
 re-splits the unverified items — and the same value is settable as
 `min_precision` on `PUT /api/settings`. Both verbs return the new line in the
 same round trip, so the app's floor control moves its line without
-re-scoring. The control offers 25%, 50%, 75% and 90%, the floors the
-estimator was measured at; the API takes any value in range.
+re-scoring. The control offers 10%, 25%, 50%, 75% and 90%; the API takes any
+value in range.
 
 The floor replaced the Inclusion knob, and `/api/inclusion` is gone. Inclusion
 survives only as the internal unit the floor's fallback, Autopilot's
