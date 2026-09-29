@@ -14,8 +14,9 @@ section. The red numbers in each screenshot show where to click, in order.
 
 Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-add-dataset.dark.webp" /><img src="../assets/icon-add-dataset.light.webp" alt="The + button on the Datasets card" height="24" /></picture> on the **Datasets** card, then **Demo** and **Synthetic Media**
 (or **Files** and **Folder** for pictures of your own), fill in the importer's
-form, and click **Advanced ▾**. Nothing in it shows until you open it;
-pointing at **Advanced** names a changed embedder, clipper or cleanup.
+form, and click **Advanced ▾**, at the bottom left beside **Cancel**; its
+options open at the foot of the form. Nothing in the section shows until you
+open it; pointing at **Advanced** names a changed embedder, clipper or cleanup.
 
 ## Step 2: Choose
 
