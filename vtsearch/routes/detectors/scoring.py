@@ -294,10 +294,13 @@ def find_label(body: dict):
         from vtscore.state.core import get_active_detector_context
 
         labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
+        # The floor's set is drawn on the Stage-1 scores.  A structural re-rank
+        # then replaces both the ranking and the cut with its classifier's
+        # boundary, as it does on every other path: it has no floor line.
+        threshold = _keep_line_ranking(results, threshold)
         results, threshold = maybe_labelset_structural_rerank(
             get_active_detector_context(), labelset, results, threshold, snap
         )
-        threshold = _keep_line_ranking(results, threshold)
         # Store the final (post-rerank) cutoff on the context so server-side reads of
         # the Find cutoff — the work-queue / boundary-walk endpoints, floor
         # re-thresholding — agree with the labels this pass just applied. A no-op for
