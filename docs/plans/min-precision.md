@@ -86,9 +86,17 @@ What follows is what the app still owes.
     candidate, marked unchecked and with no range (owner, 2026-09-29). At
     0.44% the top 128 is 22% right on average at 10%, and the top 32 is 53%
     right at 50%.
-  - **Not yet decided:** what a retrain does to a promise. Check votes train
-    the model and move the candidate, and repeated checks compound α. #4272 raises
-    this with the owner before building it.
+  - **A finished check's result is kept, and goes stale quietly** (owner,
+    2026-09-29).
+    - Check votes train the model, so the list at the line changes after a
+      check. The line follows the new ranking at the result's count.
+    - The last range stays on screen, and only its tooltip says it predates
+      later votes. There is no vote count and no separate re-check button
+      (#4273); the existing check affordance runs a fresh check.
+    - While a check runs, its candidate's ids are fixed, so every round samples
+      one list.
+    - Accepted limit: a user who re-checks until one confirms keeps the lucky
+      result.
 - **Three states, and a range.**
   - `unchecked`: no check has run on the current candidate. The line is the
     starting candidate, with no range.
@@ -142,8 +150,9 @@ What follows is what the app still owes.
     Its dry stop has since landed (`g3@top,g20+dry1/16@top,b4@mid`,
     [`REPORT.md`](../experiments/2026-09-29-drystop-4222/REPORT.md)). It raises
     AP at vote 150 by +0.052 at 0.44% and +0.032 at 0.1%.
-  - The closed loop is unmeasured: check votes training the model, and
-    re-checks after a retrain. Both feed #4272's lifecycle decision.
+  - The closed loop is unmeasured: check votes training the model, how far a
+    stale range drifts from the list it now sits beside, and re-checks after a
+    retrain.
 
 ## Open work
 
