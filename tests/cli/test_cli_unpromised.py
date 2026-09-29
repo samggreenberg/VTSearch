@@ -29,7 +29,6 @@ STATES = [
     pytest.param(1.0, 8, "unreachable", id="unreachable"),
     pytest.param(0.5, 3, "insufficient_evidence", id="insufficient_evidence"),
     pytest.param(0.5, None, "insufficient_evidence", id="no-estimate"),
-    pytest.param(None, 8, None, id="no-floor"),
 ]
 
 UNPROMISED = ("unreachable", "insufficient_evidence")

@@ -46,7 +46,7 @@ The library only requires explicit setup when you want to:
 
 - Read **configuration** (`CoreConfig.from_settings()`)
 - Resolve the **active context** from a request
-- **Persist** detector settings (`set_inclusion`, `set_calibrate_count`,
+- **Persist** detector settings (`set_min_precision`, `set_calibrate_count`,
   etc.) back to your settings store
 - Register **app-side plugins** alongside the library's built-ins
 
@@ -80,7 +80,6 @@ def _build_core_config(settings_path=None) -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 register_core_config_builder(_build_core_config)
@@ -136,31 +135,33 @@ save-and-restore context-manager forms, `thread_dataset_context()` /
 ### Hook 3: `register_setting_persister`
 
 The `vtscore.state` package exposes setter functions like
-`set_inclusion(value)` and `set_calibrate_count(value)`. By default,
+`set_min_precision(value)` and `set_calibrate_count(value)`. By default,
 those update only the in-memory cache. If you want them to persist to
 your settings store, install a persister per key:
 
 ```python
 from vtscore.state import register_setting_persister
 
-def _persist_inclusion(value: int) -> None:
-    my_settings_store["inclusion"] = value
+def _persist_min_precision(value: float | None) -> None:
+    my_settings_store["min_precision"] = value
 
 def _persist_calibrate_count(value: int) -> None:
     my_settings_store["calibrate_count"] = value
 
-register_setting_persister("inclusion", _persist_inclusion)
+register_setting_persister("min_precision", _persist_min_precision)
 register_setting_persister("calibrate_count", _persist_calibrate_count)
 ```
 
-The recognised keys are `inclusion`, `calibrate_count`, and
+The recognised keys are `min_precision`, `calibrate_count`, and
 `calibration_fraction` (`vtscore.state.KNOWN_SETTING_KEYS`); any other key
 raises `ValueError`. Only the setters listed above ever fire a persister, so
 an unrecognised key could only be a typo in your wiring - one that would
-otherwise sit there silently never firing.
+otherwise sit there silently never firing. The one exception is `inclusion`,
+retired as a user preference (#4269): registering it warns and the persister
+never fires.
 
 If you don't install persisters, library code can still call
-`set_inclusion(5)` - the value just won't survive a process restart.
+`set_min_precision(0.75)` - the value just won't survive a process restart.
 That's a fine choice for many apps.
 
 ### Putting the seams back in tests
@@ -213,7 +214,6 @@ register_core_config_builder(lambda _settings_path=None: CoreConfig(
     dataset_max_age_days=None,
     calibrate_count=2, calibration_fraction=0.5,
     enrich_descriptions=False, autopilot_goal_diversity=8,
-    inclusion=0,
 ))
 
 # That's it. Now use the library.
@@ -263,7 +263,6 @@ register_core_config_builder(lambda _settings_path=None: CoreConfig(
     calibration_fraction=settings.calibration_fraction,
     enrich_descriptions=settings.enrich_descriptions,
     autopilot_goal_diversity=settings.autopilot_goal_diversity,
-    inclusion=settings.inclusion,
 ))
 
 
@@ -277,7 +276,7 @@ register_detector_context_resolver(
 
 
 # Hook 3: per-key persisters
-register_setting_persister("inclusion", lambda v: settings.update("inclusion", v))
+register_setting_persister("min_precision", lambda v: settings.update("min_precision", v))
 register_setting_persister("calibrate_count", lambda v: settings.update("calibrate_count", v))
 
 

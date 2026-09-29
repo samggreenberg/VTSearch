@@ -111,12 +111,12 @@ def resolve_or_train_detector(
     embedder produces no patch grid every bag holds one row and the whole path
     collapses to the historical single-vector behaviour.
 
-    Inclusion is a pure cutoff knob now (find-verification-workflow.md): a slide
-    does **not** retrain or drop the MLP, it re-derives the threshold over the
-    cached fold orderings.  ``train_from_labelset`` passes the detector context
-    down to :func:`~vtscore.detectors.training.train_and_threshold`, which caches
-    those orderings on it — without that cache a later Inclusion slide can't move
-    the cutoff (it would silently no-op).
+    The precision floor is a pure cutoff knob: a change does **not** retrain or
+    drop the MLP, it re-derives the threshold from the cached estimators.
+    ``train_from_labelset`` passes the detector context down to
+    :func:`~vtscore.detectors.training.train_and_threshold`, which caches them
+    on it — without that cache a later floor change can't move the cutoff (it
+    would silently no-op).
 
     *on_progress* receives the training progress (the
     :func:`~vtscore.concurrency.progress.update_find_progress` signature:

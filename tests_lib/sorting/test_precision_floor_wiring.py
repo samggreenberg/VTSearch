@@ -229,7 +229,8 @@ def _fitted(seed: int = 6):
 
 
 class TestWhichLineAnOperatingPointDraws:
-    def test_no_floor_is_the_inclusion_knob(self):
+    def test_no_floor_cuts_at_the_inclusion_it_is_given(self):
+        """The internal unit: the app gives Inclusion 0, a re-cut another (#4269)."""
         cut, estimate = _fitted()
         line = reporting_line(cut, estimate, inclusion_value=3, min_precision=None)
         assert line.threshold == cut.threshold_at(3)
@@ -313,9 +314,9 @@ class TestTheDetectorsLine:
 
     def test_acquisition_origin_under_each_operating_point(self):
         ctx = self._ctx()
-        assert detector_line_inclusion(ctx, 3, None) == 3
-        assert detector_line_inclusion(ctx, 3, 1.0) == PRECISION_FLOOR_FALLBACK_INCLUSION
-        assert detector_line_inclusion(ctx, 3, 0.5) is None
+        assert detector_line_inclusion(ctx, None) == PRECISION_FLOOR_FALLBACK_INCLUSION
+        assert detector_line_inclusion(ctx, 1.0) == PRECISION_FLOOR_FALLBACK_INCLUSION
+        assert detector_line_inclusion(ctx, 0.5) is None
 
     @pytest.mark.parametrize(
         ("min_precision", "status"),
@@ -344,17 +345,17 @@ class TestTheDetectorsLine:
         assert detector_floor_state(bare, None)["status"] is None
 
     def test_each_detector_keeps_its_own_floor(self):
-        """As with Inclusion (#3416): a floor change moves only the detector that holds it and the unseeded."""
+        """The floor is per detector (#3416): a change moves only the detector that holds it and the unseeded."""
         mine = self._ctx("det-own-floor")
         mine.min_precision, mine.min_precision_seeded = None, True
-        mine.inclusion = 2
+        mine.threshold = -999.0
         register_detector_context(mine)
         unseeded = self._ctx("det-unseeded-floor")
         register_detector_context(unseeded)
 
-        recompute_detector_thresholds(0, 0.5)
+        recompute_detector_thresholds(0.5)
 
-        assert mine.threshold == mine.anchored_cut_cache.threshold_at(2), "no floor: its own inclusion"
+        assert mine.threshold == mine.anchored_cut_cache.threshold_at(0), "no floor: the Inclusion 0 cut"
         assert unseeded.threshold == unseeded.precision_floor_cache.cut(0.5).threshold
 
 
@@ -387,7 +388,7 @@ class TestTheSetting:
 
         set_min_precision(None)
         assert persisted == [0.5, None] and get_min_precision() is None
-        assert ctx.threshold == ctx.anchored_cut_cache.threshold_at(ctx.inclusion)
+        assert ctx.threshold == ctx.anchored_cut_cache.threshold_at(PRECISION_FLOOR_FALLBACK_INCLUSION)
 
     def test_a_floor_outside_the_unit_interval_is_refused(self):
         from vtscore.state import set_min_precision
@@ -398,7 +399,6 @@ class TestTheSetting:
 
     def _active_ctx(self) -> DetectorContext:
         ctx = TestTheDetectorsLine()._ctx("det-active-floor")
-        ctx.inclusion = 3
         register_detector_context(ctx)
         set_thread_detector_context(ctx)
         return ctx
@@ -456,7 +456,7 @@ class TestARetrainParksTheEstimate:
         assert ctx.precision_floor_cache.calibration_positives == 0
 
     def test_an_unmet_floor_cuts_where_inclusion_zero_does(self):
-        ctx, threshold = self._train(LEARNED_HARD, inclusion_value=6, min_precision=0.5)
+        ctx, threshold = self._train(LEARNED_HARD, min_precision=0.5)
         assert ctx.precision_floor_cache.cut(0.5).status is not PrecisionFloorStatus.PROMISED
         assert threshold == ctx.anchored_cut_cache.threshold_at(0)
 

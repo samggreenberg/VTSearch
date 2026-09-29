@@ -238,8 +238,7 @@ global RNG), and the BCE heads additionally isolate theirs via
 
 It moves the **decision threshold**, not the model. Inclusion never enters
 training: `train_model` is class-balanced regardless, so every item's score
-is identical at every inclusion setting, and only the cut moves. Range
-`[-10, +10]` at the API edge.
+is identical at every inclusion, and only the cut moves. Range `[-10, +10]`.
 
 Under the shipped cut (`FoldAnchoredCut.threshold_at`, see the next answer),
 `k` is a cost ratio: `inclusion_cost_weights(k)` prices a miss at `2**k`
@@ -262,11 +261,18 @@ Both rules are monotone non-increasing in `k`, so the included sets are
 nested: everything included at `k` is still included at `k + 1`. That is
 what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
 
-The Inclusion control is being replaced in the app by a **precision floor**
-(#4224): the user names the share of returns that must be right, and the cut
-returns as much as it can at that share
+Inclusion is no longer a user preference (#4269): the app's control is the
+**precision floor** (#4224), where the user names the share of returns that
+must be right and the cut returns as much as it can at that share
 (`vtscore.training.thresholds.precision_floor_cut`). `k` stays underneath,
-as the unit Autopilot's acquisition offset is measured in.
+as the unit the floor's fallback, Autopilot's acquisition offset and the
+Smart indicator's pricing are measured in. The entry points that used to take
+the user's Inclusion (`train_and_score(inclusion_value=...)` and its
+siblings, `vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are
+deprecated: they accept only `0`, with a `DeprecationWarning`. The
+lower-level functions that take `inclusion_value` as a cut position
+(`conformal_threshold`, `threshold_from_folds`, `train_svm`, ...) are
+unchanged.
 
 ### How is the decision threshold chosen?
 
@@ -275,8 +281,8 @@ than picking between them. Per calibration fold, a 2-component mixture
 is fitted to that fold model's scores over the whole collection with the
 fold's *held-out* votes clamped to their labeled component; each fold's
 midpoint cut is carried to the final model as a quantile, the folds are
-averaged in quantile space, and the Inclusion knob shifts that quantile
-by the rate-optimal cut's own displacement from Inclusion 0. See
+averaged in quantile space, and a cut at another inclusion shifts that
+quantile by the rate-optimal cut's own displacement from Inclusion 0. See
 `vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. It is
 unconditional - there used to be a `safe_thresholds` toggle, but the
 fused estimator measured better at every label count, so the toggle was

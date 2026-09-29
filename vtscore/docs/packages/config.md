@@ -78,7 +78,6 @@ after the table do have defaults, precisely so a library-only
 | `calibration_fraction`            | `float \| None` | per-user    | Explicit fraction of labels held out per calibration fold. `None` = per-embedder default (0.3 single-vector / 0.5 patch). |
 | `enrich_descriptions`             | `bool`         | per-user    | When `True`, attach `custom_metadata` from origins to result rows on export.                     |
 | `autopilot_goal_diversity`        | `int`          | per-user    | Diversity target used by autopilot pacing.                                                       |
-| `inclusion`                       | `int`          | per-user    | The Inclusion knob, `[-10, +10]`. A pure threshold shift (it never enters training); `0` is the default operating point. See [`training.md`](training.md#decision-thresholds). |
 | `data_dir`                        | `Path`         | bootstrap   | Filesystem root for caches, embeddings, and model downloads. Mirrors `DATA_DIR` at construction. |
 
 Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
@@ -86,9 +85,17 @@ Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
 keyed by exporter name), `projection_n_neighbors` (`int`,
 `PROJECTION_N_NEIGHBORS`), `projection_min_dist` (`float`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
-`signpost_vocab` (`dict[str, list[str]]`, `{}`), and `hide_ingest_eta`
+`signpost_vocab` (`dict[str, list[str]]`, `{}`), `hide_ingest_eta`
 (`bool`, `False` - when `True`, ingest progress bars publish no ETA; see
-[concurrency.md](concurrency.md#progresstracker)).
+[concurrency.md](concurrency.md#progresstracker)), and `min_precision`
+(`float | None`, `DEFAULT_MIN_PRECISION` - the user's precision floor, which
+seeds each detector's own; `None` is no floor, and the line is the Inclusion 0
+cut).
+
+`inclusion` is **deprecated** (#4269): Inclusion is no longer a user
+preference, and nothing reads the field. It defaults to `None` ("not given");
+`CoreConfig(inclusion=0)` still constructs, with a `DeprecationWarning`, and
+any other value raises `ValueError`.
 
 "Server" and "per-user" refer to where the app stores the corresponding
 setting - both tiers flow into the same `CoreConfig` so library code
@@ -112,7 +119,6 @@ config = CoreConfig(
     calibration_fraction=0.5,
     enrich_descriptions=False,
     autopilot_goal_diversity=8,
-    inclusion=0,
     data_dir=DATA_DIR,
 )
 ```

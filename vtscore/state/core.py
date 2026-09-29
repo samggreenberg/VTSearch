@@ -957,7 +957,7 @@ class DetectorContext:
         # ``verified_ids`` are the ids the human has explicitly verified this Find
         # session (a dict used as an ordered set, like ``good_votes``);
         # ``find_scores`` is the frozen per-item detector score from the single
-        # scoring pass, so an Inclusion (cutoff) change re-thresholds without
+        # scoring pass, so a floor (cutoff) change re-thresholds without
         # re-scoring.  Both are in-memory only and never persisted.
         "verified_ids",
         "find_scores",
@@ -968,13 +968,11 @@ class DetectorContext:
         # ``GET /api/find/stats``.  Cleared on a fresh find-label scoring pass and
         # on any session reset (clear votes / dataset switch).
         "find_eval_stale",
-        "inclusion",
         # The detector's precision floor (#4245): the fraction of what its cut
-        # returns that should be right, or ``None`` for "no floor - the
-        # Inclusion knob draws the line".  Per detector and seeded from the
-        # user's setting on first read, as ``inclusion`` is (#3416).  ``None``
-        # is a real value here, so seeding is tracked in its own flag rather
-        # than by ``None`` as ``inclusion`` does.
+        # returns that should be right, or ``None`` for "no floor - the line is
+        # the Inclusion 0 cut".  Per detector and seeded from the user's setting
+        # on first read (#3416).  ``None`` is a real value here, so seeding is
+        # tracked in its own flag.
         "min_precision",
         "min_precision_seeded",
         # Cached in-memory data (never exported)
@@ -1060,11 +1058,11 @@ class DetectorContext:
         # folds carry the per-fold held-out ``(scores, labels)``, the
         # fallback sentinel, and the trained fold models, and *holdout_rows*
         # names the training row behind each held-out score (the precision
-        # floor maps them back to votes, #4245).  Because inclusion is
-        # deliberately absent from *key*, an Inclusion change hits the cache
-        # and only re-runs the cheap quantile rule (no fold refit); a
-        # label/embedder change rotates *key* and falls through to a fresh
-        # calibration.
+        # floor maps them back to votes, #4245).  Because the operating point
+        # is deliberately absent from *key*, a re-cut at another inclusion
+        # (the acquisition cut, Smart's pricing) hits the cache and only
+        # re-runs the cheap quantile rule (no fold refit); a label/embedder
+        # change rotates *key* and falls through to a fresh calibration.
         "calibration_cache",  # tuple[Any, CalibrationFolds, tuple[tuple[int, ...], ...]] | None
         # The fold-anchored population estimator behind the current threshold
         # (``FoldAnchoredCut``), or None when the estimator degenerated.  A
@@ -1072,7 +1070,7 @@ class DetectorContext:
         # measured midpoint cut at inclusion 0 and tilts monotonically away
         # from it (issue #2865).  Written on every retrain that computes a safe
         # threshold; read by ``recut_detector_threshold`` so every re-cut (a
-        # floor or Inclusion change, the acquisition cut) uses the *shipped*
+        # floor change, the acquisition cut) uses the *shipped*
         # estimator instead of the raw cross-calibration one.  Holds fitted Gaussians and
         # sorted score samples - process-scoped, never serialised.
         "anchored_cut_cache",  # FoldAnchoredCut | None
@@ -1127,7 +1125,6 @@ class DetectorContext:
         # version that scored this pass; flipped True when its labelset changes
         # underneath (corrections folded in + retrain).
         self.find_eval_stale: bool = False
-        self.inclusion: int | None = None
         self.min_precision: float | None = None
         self.min_precision_seeded: bool = False
         # Cached in-memory data (never exported)
@@ -1565,8 +1562,8 @@ def clear_all_detector_contexts() -> None:
 def invalidate_loaded_detector_models() -> None:
     """Drop the cached MLP and threshold on every loaded detector context.
 
-    Called by the setters of training-relevant settings (``inclusion``,
-    ``calibrate_count``, ``calibration_fraction``) so
+    Called by the setters of training-relevant settings (``calibrate_count``,
+    ``calibration_fraction``) so
     the next consumer that would otherwise short-circuit on the cached
     ``det_ctx.model`` / ``det_ctx.threshold`` (``/api/find-label``,
     ``/api/find``, ``/api/auto-detect``) retrains under the new setting.
@@ -1590,13 +1587,13 @@ def recut_detector_threshold(
 ) -> float | None:
     """The threshold *ctx*'s cached estimators cut at an operating point, or ``None``.
 
-    The one place a detector's cut is re-derived without a retrain.  The
-    Inclusion slide and the floor (:func:`recompute_detector_thresholds`) and
-    the acquisition cut (:func:`detector_acquisition_threshold`) both read it.
+    The one place a detector's cut is re-derived without a retrain.  A floor
+    change (:func:`recompute_detector_thresholds`), the acquisition cut
+    (:func:`detector_acquisition_threshold`) and Smart's pricing all read it.
 
     The operating point is a precision floor (*min_precision*) or, when no
-    floor is given, an inclusion (*inclusion_value*).  A floor that promises
-    nothing re-cuts at
+    floor is given, an inclusion (*inclusion_value*) - the internal unit, not
+    a user preference (#4269).  A floor that promises nothing re-cuts at
     :data:`~vtscore.training.thresholds.PRECISION_FLOOR_FALLBACK_INCLUSION`, so
     the line never empties (#4247); which line an operating point draws is
     :func:`~vtscore.training.thresholds.reporting_line`, shared with training
@@ -1672,7 +1669,8 @@ def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) ->
     (#4247).  ``status`` is ``"promised"`` when the line is the floor's own cut,
     ``"unreachable"`` or ``"insufficient_evidence"`` when the floor promised
     nothing and the line is the Inclusion 0 fallback, and ``None`` when no
-    floor is set and Inclusion drew the line.  ``calibration_positives`` counts
+    floor is set (a library caller's choice; the app always sets one) and the
+    line is the Inclusion 0 cut with no promise attempted.  ``calibration_positives`` counts
     the evidence behind the verdict, and ``min_calibration_positives`` the gate
     it has to reach before any promise is made.
     """
@@ -1704,8 +1702,8 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
     ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md`` (PR #2876).
 
     The offset is relative to **the inclusion the reporting cut sits at**.
-    *inclusion_value* names it when the caller set the cut in those units (the
-    Inclusion knob).  ``None`` recovers it from ``ctx.threshold`` through
+    *inclusion_value* names it when the caller knows it in those units (the
+    Inclusion 0 cut a floor falls back to).  ``None`` recovers it from ``ctx.threshold`` through
     :meth:`~vtscore.training.thresholds.FoldAnchoredCut.inclusion_for_threshold`,
     which is the path a cut chosen by another rule takes: under a precision
     floor (#4224) the reporting cut is wherever the floor lands, and acquisition
@@ -1739,54 +1737,48 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
     return candidate if math.isfinite(candidate) else ctx.threshold
 
 
-def detector_line_inclusion(
-    ctx: "DetectorContext", inclusion_value: float, min_precision: float | None
-) -> float | None:
+def detector_line_inclusion(ctx: "DetectorContext", min_precision: float | None) -> float | None:
     """The inclusion *ctx*'s reporting line sits at, for Autopilot's acquisition offset.
 
-    Under the Inclusion knob it is *inclusion_value*.  Under a floor it is the
-    fallback inclusion when the floor promises nothing, and ``None`` when it
-    promises - :func:`detector_acquisition_threshold` then recovers it from the
-    line itself (owner, 2026-09-28: acquisition sits at *X - 4*, where *X* is
-    the derived inclusion of the production cut).
+    Under a floor it is the fallback inclusion when the floor promises nothing,
+    and ``None`` when it promises - :func:`detector_acquisition_threshold` then
+    recovers it from the line itself (owner, 2026-09-28: acquisition sits at
+    *X - 4*, where *X* is the derived inclusion of the production cut).  With
+    no floor it is Inclusion 0, the line's own cut (#4269).
     """
-    from vtscore.training.thresholds import reporting_line
+    from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION, reporting_line
 
     return reporting_line(
         ctx.anchored_cut_cache,
         ctx.precision_floor_cache,
-        inclusion_value=inclusion_value,
+        inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION,
         min_precision=min_precision,
     ).inclusion
 
 
-def recompute_detector_thresholds(inclusion_value: int | None, min_precision: float | None) -> None:
-    """Re-derive each loaded detector's threshold at its own operating point, leaving the MLP in place.
+def recompute_detector_thresholds(min_precision: float | None) -> None:
+    """Re-derive each loaded detector's threshold at its own floor, leaving the MLP in place.
 
-    Inclusion and the precision floor are pure cutoff knobs: a change must not
-    drop the model or re-score the haystack - only move the threshold over
-    already-computed scores (:func:`recut_detector_threshold`).  Detectors with
-    nothing cached to re-cut are left untouched; the next training pass
-    computes the threshold at the new operating point.
+    The precision floor is a pure cutoff knob: a change must not drop the model
+    or re-score the haystack - only move the threshold over already-computed
+    scores (:func:`recut_detector_threshold`).  Detectors with nothing cached
+    to re-cut are left untouched; the next training pass computes the
+    threshold at the new floor.
 
-    **Each detector is re-cut at its own values.**  Both are per detector
-    (``DetectorContext.inclusion`` / ``min_precision``, seeded from the user's
-    settings on first read; see #3416), and :func:`vtscore.state.set_inclusion`
-    / :func:`vtscore.state.set_min_precision` write only the active detector's.
-    *inclusion_value* and *min_precision* are what a detector that has not
-    read its own value yet takes - the user's setting, which is what that
-    first read will seed it with.  A detector already holding its own values
-    keeps its cut.  Re-cutting it at the new value, as this once did, left its
-    threshold at the new value while ``GET /api/inclusion`` still reported the
-    old one, so switching to it showed a stepper that disagreed with its line.
+    **Each detector is re-cut at its own floor.**  The floor is per detector
+    (``DetectorContext.min_precision``, seeded from the user's setting on
+    first read; see #3416), and :func:`vtscore.state.set_min_precision` writes
+    only the active detector's.  *min_precision* is what a detector that has
+    not read its own floor yet takes - the user's setting, which is what that
+    first read will seed it with.  A detector already holding its own floor
+    keeps its cut.  With no floor the line is the Inclusion 0 cut (#4269).
     """
+    from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
+
     with _state_lock:
         for ctx in loaded_detector_contexts():
-            own_incl = ctx.inclusion if ctx.inclusion is not None else inclusion_value
             floor = ctx.min_precision if ctx.min_precision_seeded else min_precision
-            if floor is None and own_incl is None:
-                continue
-            threshold = recut_detector_threshold(ctx, own_incl, min_precision=floor)
+            threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=floor)
             if threshold is not None:
                 ctx.threshold = threshold
 
@@ -1805,24 +1797,18 @@ def user_min_precision() -> float | None:
         return None
 
 
-def user_inclusion() -> int | None:
-    """The user's Inclusion setting, or ``None`` with no settings builder; see :func:`user_min_precision`."""
-    from vtscore.config import CoreConfig
-
-    try:
-        return CoreConfig.from_settings().inclusion
-    except RuntimeError:
-        return None
-
-
 def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
-    """Re-derive each loaded detector's threshold after an Inclusion change.
+    """Deprecated: accepts only ``0``, and re-cuts every loaded detector at its floor.
 
-    :func:`recompute_detector_thresholds` with the floor unchanged: a detector
-    whose floor is set keeps the floor's line (a set floor wins over the knob),
-    and one with no floor re-cuts at its own inclusion.
+    Inclusion is no longer a user preference (#4269), so there is no Inclusion
+    change to follow.  ``0`` is accepted with a ``DeprecationWarning`` and
+    delegates to :func:`recompute_detector_thresholds`; any other value raises
+    ``ValueError``.
     """
-    recompute_detector_thresholds(inclusion_value, user_min_precision())
+    from vtscore.config.core_config import _retired_inclusion
+
+    _retired_inclusion("vtscore.state.core.recompute_detector_thresholds_for_inclusion()", inclusion_value)
+    recompute_detector_thresholds(user_min_precision())
 
 
 # ---------------------------------------------------------------------------
@@ -1833,7 +1819,7 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
 # a full DatasetContext / DetectorContext reference can stay one-liners.
 # Dataset-intrinsic scalars (coverage_atlas, dataset_display_name) delegate
 # to the active DatasetContext.  Detector-related scalars (click_counter,
-# inclusion) delegate to the active DetectorContext.
+# min_precision) delegate to the active DetectorContext.
 # ---------------------------------------------------------------------------
 
 
@@ -1853,10 +1839,6 @@ def _set_dataset_display_name(value: str | None) -> None:
     get_active_context().dataset_display_name = value
 
 
-def _get_inclusion() -> int | None:
-    return get_active_detector_context().inclusion
-
-
 def _get_min_precision() -> tuple[bool, float | None]:
     """``(seeded, value)`` for the active detector's floor."""
     ctx = get_active_detector_context()
@@ -1865,29 +1847,19 @@ def _get_min_precision() -> tuple[bool, float | None]:
 
 def _set_min_precision(value: float | None) -> None:
     ctx = get_active_detector_context()
-    # As ``_set_inclusion``: a request that identifies no detector has the
-    # frozen request-missing sentinel as its active context, so the per-user
-    # persist still runs and this per-detector cache write is skipped.
+    # The floor is cached per-detector for fast reads, but its canonical
+    # persisted home is the per-user settings store (written by the caller's
+    # ``_persist_setting`` hook).  When a Flask request identifies no detector
+    # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
+    # active context is the frozen request-missing sentinel; there is no
+    # detector to cache the value on, so skip the cache write rather than
+    # raising ``RequestMissingContextError``.  The user-settings persist still
+    # runs, so a floor echoed back by a bulk settings save is a harmless no-op
+    # instead of a 400.
     if is_request_missing_detector_context(ctx):
         return
     ctx.min_precision = value
     ctx.min_precision_seeded = True
-
-
-def _set_inclusion(value: int | None) -> None:
-    ctx = get_active_detector_context()
-    # ``inclusion`` is cached per-detector for fast reads, but its canonical
-    # persisted home is the per-user settings store (written by the caller's
-    # ``_persist_setting`` hook). When a Flask request identifies no detector
-    # (e.g. the VTSBrowser, which has a dataset but no loaded detector), the
-    # active context is the frozen request-missing sentinel; there is no
-    # detector to cache the value on, so skip the cache write rather than
-    # raising ``RequestMissingContextError``. The user-settings persist still
-    # runs, so an inclusion value echoed back by a bulk settings save is a
-    # harmless no-op instead of a 400.
-    if is_request_missing_detector_context(ctx):
-        return
-    ctx.inclusion = value
 
 
 # ---------------------------------------------------------------------------

@@ -12,15 +12,12 @@ import {
 /** The dot colour for each state, in `.labeling-indicator[data-status]` terms. */
 type Dot = 'green' | 'yellow' | 'red' | 'none';
 
-/** The `<select>` value that stands for "no floor"; never emitted. */
-const NO_FLOOR = 'none';
-
 /**
  * The precision floor: "show me what's at least X% right" (#4246). Replaced the
  * Inclusion stepper; mounted in the Find row and the Manual tab.
  *
- * A `<select>` of the four floors #4220 priced, rather than a free number:
- * every choice is a measured one (owner, 2026-09-28). It is also not a range
+ * A `<select>` of five preset floors (`FLOOR_PRESETS`), rather than a free
+ * number (owner, 2026-09-28; 10% added 2026-09-29). It is also not a range
  * slider on purpose: `KeyboardService.isTyping()` lets ArrowLeft/Right through
  * from a focused `type="range"` input and casts a vote with them, while a
  * focused `<select>` keeps its keys to itself - and gives focus back once a
@@ -30,8 +27,7 @@ const NO_FLOOR = 'none';
  * the floor and its state, never the estimate behind it (owner, 2026-09-28):
  * at least X% right with the count, can't reach X% (showing the default cut),
  * or not enough evidence yet (showing the default cut, with the Good votes it
- * has). There is no "off": a stored `null` floor shows as "No floor" until the
- * user picks one.
+ * has). There is no "off": every detector has a floor (#4269).
  *
  * Content marked `floorActions` is projected onto the picker's line, so a host
  * can seat controls beside the picker (Find's work-queue actions) while the
@@ -46,8 +42,8 @@ const NO_FLOOR = 'none';
   styleUrl: './precision-floor.component.scss',
 })
 export class PrecisionFloorComponent {
-  /** The detector's floor, a fraction; null when none is set. */
-  readonly value = input<number | null>(DEFAULT_MIN_PRECISION);
+  /** The detector's floor, a fraction. */
+  readonly value = input<number>(DEFAULT_MIN_PRECISION);
   /** The floor's verdict on the line the list draws; null when there is no line from the detector. */
   readonly floor = input<LineFloor | null>(null);
   /** How many items the line returns; null when unknown. */
@@ -55,8 +51,6 @@ export class PrecisionFloorComponent {
 
   /** A floor the user picked, as a fraction. */
   readonly valueChange = output<number>();
-
-  readonly noFloor = NO_FLOOR;
 
   readonly hint =
     'Pick how much of what the detector returns should be right. The line then returns as much as it can ' +
@@ -67,15 +61,12 @@ export class PrecisionFloorComponent {
   /** The presets, plus the current value when it is not one of them, in order. */
   readonly options = computed(() => {
     const v = this.value();
-    const all = v === null || FLOOR_PRESETS.includes(v) ? [...FLOOR_PRESETS] : [...FLOOR_PRESETS, v];
+    const all = FLOOR_PRESETS.includes(v) ? [...FLOOR_PRESETS] : [...FLOOR_PRESETS, v];
     return all.sort((a, b) => a - b).map((p) => ({ value: String(p), label: floorPercent(p) }));
   });
 
   /** The `<select>`'s current value. */
-  readonly selected = computed(() => {
-    const v = this.value();
-    return v === null ? NO_FLOOR : String(v);
-  });
+  readonly selected = computed(() => String(this.value()));
 
   readonly summary = computed(() => floorSummary(this.floor(), this.returned()));
   readonly explanation = computed(() => floorExplanation(this.floor(), this.returned()));
@@ -107,7 +98,7 @@ export class PrecisionFloorComponent {
     const raw = select.value;
     const val = Number(raw);
     select.blur();
-    if (raw === NO_FLOOR || !Number.isFinite(val) || val <= 0 || val > 1) return;
+    if (!Number.isFinite(val) || val <= 0 || val > 1) return;
     this.valueChange.emit(val);
   }
 }

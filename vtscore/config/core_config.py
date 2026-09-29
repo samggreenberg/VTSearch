@@ -12,11 +12,41 @@ package re-exports functions and constants, not this mutable global.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from vtscore.config.runtime import DEFAULT_MIN_PRECISION, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+
+
+def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) -> None:
+    """Refuse a non-zero Inclusion passed to a retired name, and warn about a zero one.
+
+    Inclusion is no longer a user preference (#4269): the precision floor is
+    the operating point, and a detector with no promise draws its line at the
+    Inclusion 0 cut.  The names that used to set it (*where*) stay importable
+    so an out-of-tree caller keeps working, but only at 0 - the one value that
+    still means what it did.  Any other value is refused rather than ignored,
+    because a knob that silently stops moving the line is worse than an error.
+    ``None`` is "not given" and passes silently.  *stacklevel* points the
+    warning at the retired name's caller: the default fits a function that
+    calls this directly.
+    """
+    if value is None:
+        return
+    if value != 0:
+        raise ValueError(
+            f"{where}: Inclusion is retired as a user preference and is fixed at 0; got {value!r}. "
+            "Set a precision floor instead (min_precision= / vtscore.state.set_min_precision)."
+        )
+    warnings.warn(
+        f"{where} is deprecated: Inclusion is retired as a user preference and is always 0. "
+        "Set a precision floor instead (min_precision= / vtscore.state.set_min_precision).",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
+
 
 # ---------------------------------------------------------------------------
 # CoreConfig: runtime config bundle the (future) ``vtscore`` library consumes
@@ -90,7 +120,6 @@ class CoreConfig:
     calibration_fraction: float | None
     enrich_descriptions: bool
     autopilot_goal_diversity: int
-    inclusion: int
 
     # Filesystem root for caches, embeddings, model downloads.  Phase 4 will
     # route every hardcoded ``data/`` path through this field.
@@ -144,11 +173,22 @@ class CoreConfig:
     hide_ingest_eta: bool = False
 
     # The user's precision floor (#4245): the fraction of what a detector's cut
-    # returns that should be right, or ``None`` for no floor - the Inclusion
-    # knob then draws the line.  Seeds each detector's own floor on first read
-    # (``vtscore.state.get_min_precision``), as ``inclusion`` does.  Defaulted
-    # here so library-only ``CoreConfig(...)`` constructions keep working.
+    # returns that should be right, or ``None`` for no floor - the line is then
+    # the Inclusion 0 cut, with nothing promised.  Seeds each detector's own
+    # floor on first read (``vtscore.state.get_min_precision``).  The app always
+    # sets one; ``None`` survives for library callers.  Defaulted here so
+    # library-only ``CoreConfig(...)`` constructions keep working.
     min_precision: float | None = DEFAULT_MIN_PRECISION
+
+    # Deprecated (#4269): Inclusion is no longer a user preference, so nothing
+    # reads this.  ``None`` is "not given"; ``0`` is accepted with a
+    # ``DeprecationWarning`` and any other value is refused (see
+    # :func:`_retired_inclusion`).  Kept so an existing ``CoreConfig(inclusion=0)``
+    # still constructs.
+    inclusion: int | None = None
+
+    def __post_init__(self) -> None:
+        _retired_inclusion("CoreConfig(inclusion=...)", self.inclusion, stacklevel=4)
 
     @classmethod
     def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:

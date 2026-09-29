@@ -746,7 +746,7 @@ but in Manual mode you choose directly.
 ### 3. Precision floor
 
 Reads **At least 50% right**: pick how much of what the detector returns
-should be right - **25%**, **50%** (the default), **75%** or **90%**.
+should be right - **10%**, **25%**, **50%** (the default), **75%** or **90%**.
 The line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
 then returns as many items as it can while at least that share of them is

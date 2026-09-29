@@ -58,8 +58,8 @@ not list every commit. Use `git log` for the full history.
   line as before. AutoRun and command-line runs export the same set and
   record that it was unpromised, in the log and as a `floor` entry beside
   each detector's `threshold`. Every response that carries a detector's
-  line (`/api/inclusion`, the learned sort, `/api/find-label`,
-  `/api/auto-detect`) now carries that `floor` too; see
+  line (the learned sort, `/api/find-label`, `/api/auto-detect`) now
+  carries that `floor` too; see
   [the floor state](docs/api/labeling.md#the-floor-state).
 
 - **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
@@ -213,10 +213,23 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Inclusion is gone as a setting; every detector has a precision floor**
+  (issue #4269). The floor replaced the Inclusion stepper in #4246, and nothing
+  in the app wrote Inclusion after that, so the setting and its endpoint are
+  removed: `GET|POST /api/inclusion` answers 404, `PUT /api/settings` drops an
+  `inclusion` key like any unknown key, and `GET /api/settings` no longer
+  reports one. A detector whose floor can promise nothing draws its line at
+  the Inclusion 0 cut, as before; one that promises draws the floor's. There is
+  no "no floor" any more: `POST /api/min-precision` and `PUT /api/settings`
+  refuse `min_precision: null` with a 422, a `null` left in a settings file
+  reads as the default 50%, and the floor picker's *No floor* entry is gone.
+  If you had cleared the floor through the API or the settings file to let
+  Inclusion draw your line, your detectors are back on the 50% floor.
+
 - **The Inclusion stepper is gone: pick a precision floor instead** (issue
   #4246). Where the Manual tab and Find's left pane had the -10..10
-  Inclusion box, they now read **At least [50%] right**, with **25%**,
-  **50%**, **75%** and **90%** to pick from. A note under it says what the
+  Inclusion box, they now read **At least [50%] right**, with **10%**,
+  **25%**, **50%**, **75%** and **90%** to pick from. A note under it says what the
   floor is doing to the line: *At least 50% right* with how many items it
   returns, *Can't reach 50% on this dataset*, or *Not enough evidence yet*
   with the Good votes it has - the last two showing the default cut, as the
@@ -225,9 +238,8 @@ not list every commit. Use `git log` for the full history.
   across its precision chart and says whether the line keeps it; the chart's
   "Current cut (incl N)" legend is gone, and so are the unused `sweep` and
   `inclusion` fields of `GET /api/find/stats`, which gains the line's
-  `floor`. Inclusion itself stays settable through `POST /api/inclusion` and
-  `PUT /api/settings`, and draws the line only for a detector whose floor is
-  cleared. The how-to *Catch the borderline matches* now covers the floor.
+  `floor`. Inclusion itself is retired too (issue #4269, below). The how-to
+  *Catch the borderline matches* now covers the floor.
 
 - **Find Stats charts precision against how many items are returned** (issue
   #4242). The chart that plotted wrong and missed matches at each Inclusion

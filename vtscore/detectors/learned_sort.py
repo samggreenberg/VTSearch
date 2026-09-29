@@ -134,19 +134,24 @@ def build_learned_sort_signature(
     good,
     bad,
     region_boxes_snapshot,
-    inclusion_value,
     calibrate_count_value,
     calibration_fraction_value,
     min_precision_value=None,
+    inclusion_value=None,
 ):
     """Build the no-op short-circuit key for a learned-sort run.
 
     Two runs with equal signatures produce identical results, so the route's
     job manager can return the cached result instead of retraining.  The
     precision floor is part of the key: the threshold a run returns is the
-    floor's line whenever one is set.
+    floor's line whenever one is set.  *inclusion_value* is deprecated (#4269):
+    leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and any
+    other value raises ``ValueError``.
     """
+    from vtscore.config.core_config import _retired_inclusion
     from vtscore.detectors.model_loading import labelset_signature
+
+    _retired_inclusion("build_learned_sort_signature(inclusion_value=...)", inclusion_value)
 
     if labelset is not None:
         labels_sig = labelset_signature(labelset)
@@ -161,7 +166,6 @@ def build_learned_sort_signature(
         ds_ctx.dataset_id,
         tuple(sorted(snap.keys())),
         labels_sig,
-        inclusion_value,
         calibrate_count_value,
         calibration_fraction_value,
         min_precision_value,
@@ -178,10 +182,10 @@ def run_learned_sort(
     good,
     bad,
     region_boxes_snapshot,
-    inclusion_value,
     calibrate_count_value,
     calibration_fraction_value,
     min_precision_value=None,
+    inclusion_value=None,
 ):
     """Train and score a learned sort, reconciling the result with local votes.
 
@@ -192,9 +196,12 @@ def run_learned_sort(
     into the progress cache when it maps cleanly onto current-dataset votes;
     and stores the model + training set on *det_ctx*.  Returns
     ``(results, threshold)``: the threshold is the precision floor's line when
-    *min_precision_value* is set, else the inclusion's.
+    *min_precision_value* is set and promised, else the Inclusion 0 cut.
+    *inclusion_value* is deprecated (#4269): leave it unset; ``0`` is accepted
+    with a ``DeprecationWarning`` and any other value raises ``ValueError``.
     """
     from vtscore.concurrency.stalls import PhaseClock
+    from vtscore.config.core_config import _retired_inclusion
     from vtscore.detectors.cost_trend import smart_cut
     from vtscore.detectors.labeling_progress import inject_live_model
     from vtscore.detectors.labelset_training import labelset_train_and_score
@@ -208,6 +215,7 @@ def run_learned_sort(
         thread_detector_context,
     )
 
+    _retired_inclusion("run_learned_sort(inclusion_value=...)", inclusion_value)
     # Phase breakdown of the retrain, logged only when the whole run was slow
     # (issue #3853): the per-vote retrain is the prime suspect for the stalls,
     # and this is what says which part of it grew.
@@ -224,7 +232,6 @@ def run_learned_sort(
                 labelset,
                 media_type=det_media_type,
                 clips_dict=snap,
-                inclusion_value=inclusion_value,
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
                 min_precision=min_precision_value,
@@ -234,7 +241,6 @@ def run_learned_sort(
                 snap,
                 dict(good),
                 dict(bad),
-                inclusion_value,
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
                 vote_region_boxes=region_boxes_snapshot,
@@ -254,9 +260,9 @@ def run_learned_sort(
             # Smart scores every model at its own Inclusion 0 cut, not at the
             # line it was served with (issue #4243).  The re-cut reads the
             # estimator this training run just parked on *det_ctx*.  The line
-            # was served at the operating point's inclusion - none at all when a
+            # was served at Inclusion 0 - or at no inclusion at all when a
             # precision floor promised its own cut (#4245).
-            served_inclusion = detector_line_inclusion(det_ctx, inclusion_value, min_precision_value)
+            served_inclusion = detector_line_inclusion(det_ctx, min_precision_value)
             smart_threshold = smart_cut(threshold, served_inclusion, lambda k: recut_detector_threshold(det_ctx, k))
             inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold)
         clock.mark("inject_live_model")

@@ -184,25 +184,11 @@ def reset_state():
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
     # behaviour, which wipes the module-level ``_core_config_builder``
     # installed at app startup.  Re-register defensively so any later test
-    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_inclusion()``)
+    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_min_precision()``)
     # still has a backing implementation.
     from vtsearch.shim import register_app_config_builder
 
     register_app_config_builder()
-
-
-@pytest.fixture
-def no_precision_floor(isolated_settings):
-    """The user has cleared the precision floor, so the Inclusion knob draws every line (#4245).
-
-    For tests of the Inclusion knob's own mechanics.  Under the default floor a
-    set floor wins and an Inclusion slide does not move the line; clearing it
-    is how a user gets the knob back.  The settings file is per test, so
-    nothing needs undoing.
-    """
-    from vtsearch import settings as settings_mod
-
-    settings_mod.set_min_precision(None)
 
 
 class _MergedSettingsPath:

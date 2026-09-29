@@ -168,7 +168,7 @@ How many datasets the server downloads / embeds in parallel. Both knobs **autode
 | `VTSEARCH_MAX_STRUCTURAL_DETECT_PIXELS` | `2000000` (2 MP) | Resolution budget for local-feature detection in the structural (instance-matching) embedders. SIFT detection cost scales with pixel count while the keypoint set is capped regardless, so an uncapped high-resolution source pays many times over for the same descriptors — and spends them on fine texture that does not survive a rescale, so it matches worse as well as slower. Keypoints are stored in normalised coordinates and SIFT is scale-invariant, so features detected under different budgets still match each other. Set to `0` to detect at native size. |
 | `VTSEARCH_TRAIN_EPOCHS` | `200` | Upper bound on epochs for the BCE gradient loop. **Does not affect the shipped detector head**, which is a linear SVM fitted by liblinear (see [ML.md](ML.md#training-configuration)); only the eval-harness head arms and the structural-verification classifier run that loop. |
 | `VTSEARCH_TRAIN_PATIENCE` | `10` | Epochs that loop's loss may fail to improve before early-stop fires; `0` disables early-stop. Same scope as `VTSEARCH_TRAIN_EPOCHS`. |
-| `VTSEARCH_CALIBRATE_COUNT` | `2` | Default `calibrate_count` baked into a fresh user's settings. Each unit adds one fold-training pass per learned sort, and buys resolution on the Inclusion knob (which is a quantile rule over pooled held-out fold scores). Lower to `1` to trade calibration quality for sort latency. |
+| `VTSEARCH_CALIBRATE_COUNT` | `2` | Default `calibrate_count` baked into a fresh user's settings. Each unit adds one fold-training pass per learned sort, and buys resolution on the conformal inclusion rule (a quantile rule over pooled held-out fold scores). Lower to `1` to trade calibration quality for sort latency. |
 | `VTSEARCH_DISABLE_CUML` | unset | Set to any non-empty, non-`0` value to force the CPU clustering libraries for UMAP / k-means even when cuML is installed and the GPU is usable. Runtime opt-out — distinct from the install-time `VTSEARCH_SKIP_CUML` below. Useful when a RAPIDS install is present but misbehaving. |
 
 ### Install-time (`scripts/install.sh`)
@@ -701,7 +701,7 @@ An abridged example; the full field list is `UserSettings` in
 ```json
 {
   "volume": 1.0,
-  "inclusion": 0,
+  "min_precision": 0.5,
   "theme": "system",
   "enrich_descriptions": false,
   "calibrate_count": 2,

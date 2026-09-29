@@ -99,7 +99,6 @@ def apply_and_retrain(  # noqa: C901
             from vtscore.state import (
                 get_calibrate_count,
                 get_calibration_fraction,
-                get_inclusion,
                 get_min_precision,
             )
 
@@ -111,7 +110,6 @@ def apply_and_retrain(  # noqa: C901
                 snap,
                 proposed_good,
                 proposed_bad,
-                get_inclusion(),
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
                 vote_region_boxes=region_boxes,

@@ -20,7 +20,7 @@ anything to measure.  It asserts the provenance directly (a fitted
 cut) and, so the assertion cannot pass vacuously, that the pooled conformal cut
 over the same fold orderings is a different number.
 
-Labels follow `test_find_inclusion_slide.py`: 6 good / 6 bad keeps the
+Labels follow `test_find_floor_recut.py`: 6 good / 6 bad keeps the
 calibration folds non-separable, leaving ids 13-20 as the haystack the
 population estimator is fitted on.
 """
@@ -44,7 +44,6 @@ def _load_saved_detector(client, name: str):
         bad_ids=_BAD_IDS,
         snap=snapshot_medias(),
     )
-    client.post("/api/inclusion", json={"inclusion": 0})
     load_detector_and_wait(client, detector_id)
     ctx = get_detector_context(detector_id)
     assert ctx is not None

@@ -146,7 +146,7 @@ shows the wiring with a `ContextVar`.
 library actually reads:
 
 - ML knobs: `calibrate_count`, `calibration_fraction`,
-  `enrich_descriptions`, `inclusion`, `autopilot_goal_diversity`.
+  `enrich_descriptions`, `min_precision`, `autopilot_goal_diversity`.
 - Filesystem knobs: `data_dir`, `saved_datasets_dir`, `detectors_dir`.
 - Concurrency knobs: `max_concurrent_dataset_downloads`,
   `max_concurrent_dataset_embeddings`.
@@ -187,7 +187,6 @@ config = CoreConfig(
     calibration_fraction=0.5,
     enrich_descriptions=False,
     autopilot_goal_diversity=8,
-    inclusion=0,
 )
 ```
 

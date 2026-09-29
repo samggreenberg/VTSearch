@@ -394,7 +394,10 @@ MIRRORS: list[Mirror] = [
             "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
             "`resolve_hidden_dim(step_model.PRODUCTION_HEAD, ...)`, which "
             "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
-            "real - so a head change fails the suite as well as tripping this digest."
+            "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
+            "the app reads no stored Inclusion: its conformal cut is at "
+            "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
+            "whose default, 0, is that cut."
         ),
     ),
     Mirror(
@@ -411,7 +414,10 @@ MIRRORS: list[Mirror] = [
             "eligible_fold_orderings, each fold's own excluded haystack; #4221 found the "
             "promise's safety rests on that pool asymmetry) and where the line is chosen - both sides call the shared "
             "reporting_line, so which line an operating point draws is delegated; what this "
-            "digest watches is the estimate's inputs, which the harness has to build the same way."
+            "digest watches is the estimate's inputs, which the harness has to build the same way. "
+            "Since #4269 the app hands reporting_line PRECISION_FLOOR_FALLBACK_INCLUSION (0) "
+            "rather than a stored Inclusion; the harness hands it the arm's `inclusion`, whose "
+            "default is that 0."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
@@ -530,9 +536,9 @@ MIRRORS: list[Mirror] = [
             "are inclusion-blind by construction, so they would enter the #2865 frame as arms "
             "that trivially lose the knob-liveness comparison while saying nothing about the cut "
             "rule under test; the sweep skips that anchor weight instead. Fitting once and "
-            "re-cutting is also what production itself does on an Inclusion slide "
-            "(recompute_detector_thresholds_for_inclusion), so the sweep measures the object the "
-            "app re-cuts rather than a chain of independent retrains."
+            "re-cutting is also what production itself does for the acquisition cut and Smart's "
+            "pricing (recut_detector_threshold), so the sweep measures the object the app "
+            "re-cuts rather than a chain of independent retrains."
         ),
     ),
     Mirror(
