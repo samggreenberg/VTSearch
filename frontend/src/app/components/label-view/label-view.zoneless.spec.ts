@@ -668,16 +668,18 @@ describe('LabelViewComponent', () => {
   it('runs the spot check from the Threshold control and installs the line it ends on (#4273, #4317)', async () => {
     flushInitialRequests();
     await settleResource();
+    // Manual first: leaving Autopilot hands its sort mode back to the tab.
+    const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
+    left.setTab('manual');
+    await settleResource();
     const sortState = TestBed.inject(SortStateService);
     sortState.setSortMode('learned');
     sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineFloor('unchecked'));
-    const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
-    left.setTab('manual');
-    await settleZoneless(fixture);
+    await settleResource();
     const el = fixture.nativeElement as HTMLElement;
 
     (el.querySelector('vt-precision-floor .floor-check-btn') as HTMLButtonElement).click();
-    await settleZoneless(fixture);
+    await settleResource();
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
       floor: wireFloor('unchecked'),
       check: {
@@ -694,12 +696,12 @@ describe('LabelViewComponent', () => {
         range: null,
       },
     });
-    await settleZoneless(fixture);
+    await settleResource();
     expect(el.querySelector('vt-floor-check-modal')).not.toBeNull();
 
     // → votes the pick in the step; the list behind it gets nothing.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    await settleZoneless(fixture);
+    await settleResource();
     expect(httpMock.match((req) => req.url.startsWith('/api/medias/') && req.url.endsWith('/vote'))).toEqual([]);
     const votes = httpMock.expectOne((req) => req.url === '/api/precision-check/votes');
     expect(votes.request.body).toEqual({ votes: [{ id: 2, label: 'good' }] });
@@ -720,13 +722,13 @@ describe('LabelViewComponent', () => {
         range,
       },
     });
-    await settleZoneless(fixture);
+    await settleResource();
 
     // The finished check moved the line server-side; the view installs it.
     httpMock
       .expectOne((req) => req.url === '/api/min-precision' && req.method === 'GET')
       .flush({ ...wireFloor('confirmed'), threshold: 0.3, n_returned: 2 });
-    await settleZoneless(fixture);
+    await settleResource();
     expect(sortState.threshold).toBe(0.3);
     expect(sortState.floor?.status).toBe('confirmed');
     expect(el.querySelector('vt-precision-floor .floor-state')!.textContent).toContain('Confirmed');

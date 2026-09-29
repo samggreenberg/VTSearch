@@ -31,16 +31,27 @@
 
 .spectrum-bar {
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+// The ends wrap onto a second line in a narrow panel rather than overflow.
+.spectrum-ends {
+  display: flex;
   justify-content: space-between;
   gap: var(--space-sm);
-  padding: var(--space-2xs) var(--space-sm);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-subtle);
   font-size: var(--font-2xs);
-  letter-spacing: var(--tracking-wide);
   color: var(--text-secondary);
-  white-space: nowrap;
+
+  span:last-child {
+    text-align: right;
+  }
+}
+
+.spectrum-track {
+  height: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--border-secondary);
 }
 
 .spectrum-radios {

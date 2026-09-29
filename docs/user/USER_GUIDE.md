@@ -109,22 +109,25 @@ was right.
 
 #### How close the line got
 
-A detector draws its line at a **precision floor**: which way it leans
-between returning everything and returning only what is right. You pick the
-floor at the top of the left panel, where it reads **Lean: Centered** (see
-[Precision floor](#3-precision-floor)). Every detector starts at
-**Centered**.
+A detector draws its line at a **Threshold**: which of the two mistakes it
+leans toward. You set it at the top of the left panel, on a spectrum from
+**False Positives** to **False Negatives** with three radio buttons under
+it (see [Threshold](#3-threshold)). Toward False Positives the line returns
+more, with more wrong ones in it; toward False Negatives it returns only the
+surest, and misses more. Every detector starts on the middle radio.
 
 The line always keeps a set: the top of the ranking, among the items you
-haven't voted on. How many it keeps depends on the floor: the top 128 at
-**Complete**, and the top 32 at **Centered** and **Correct**. Until you
-**check** that set, nothing has measured how much of it is right, and the
-note under the floor says so: **Top 32 kept, unchecked**.
+haven't voted on. How many it keeps depends on the Threshold: the top 128 on
+the False Positives radio, and the top 32 on the middle and False Negatives
+radios. Until you **check** that set, nothing has measured how much of it is
+right, and the note under the Threshold says so: **Top 32 kept, unchecked**.
 
-**The spot check.** Click **Check 5 picks** beside the note. VTSearch draws
-a few items at random from the set the line keeps and shows them one at a
-time. Vote each one Good or Bad with the usual keys: → for Good, ← for Bad,
-and ↓ to go back and change one. The last vote of a round sends it.
+**The spot check.** In Train, click **Check 5 picks** beside the note.
+VTSearch draws a few items at random from the set the line keeps and shows
+them one at a time. Vote each one Good or Bad with the usual keys: → for
+Good, ← for Bad, and ↓ to go back and change one. The last vote of a round
+sends it. Find offers no check: it is where you test the Threshold you set
+here, not where you set it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
@@ -133,27 +136,29 @@ and ↓ to go back and change one. The last vote of a round sends it.
 
 The picks come in the order they were drawn, which is random, with no rank
 and no score. They are a sample from the whole set, not the top of the list.
-A round is 5 picks at **Complete** and **Centered**, and 29 at **Correct**:
-a floor that asks more takes more evidence to reach.
+A round is 5 picks on the False Positives and middle radios, and 29 on the
+False Negatives radio: a Threshold that asks more takes more evidence to
+reach.
 
 When a round falls short and the set can still shrink, the check says **Not
 there yet: checking a shorter list**, halves the set and draws a fresh
-round. A check at **Complete** can take up to three rounds (the top 128,
-then 64, then 32). It ends on the result, which the note
-under the floor then shows:
+round. A check on the False Positives radio can take up to three rounds (the
+top 128, then 64, then 32). It ends on the result, which the note under the
+Threshold then shows:
 
 - **Confirmed · likely 55–100% right (checked 5) · 32 kept** - the check
-  confirmed the floor for the set it ended on.
-- **Aimed at Centered: likely 19–92% right (checked 5) · top 32 kept** - the check
+  confirmed the Threshold for the set it ended on.
+- **Fell short · likely 19–92% right (checked 5) · top 32 kept** - the check
   fell short, and the line keeps the top 32 it ended on. The note names no
   cause: a dataset with very few matches and a detector that can't yet tell
   them apart look the same from here.
 
 **The likely range** says how much of the set the line keeps is probably
 right. It comes from your picks alone, never from the detector's own guess.
-With 5 picks it is wide, about 57 points on average at **Centered**; that width is the honest
-answer to "how close did we get?". The range also stands on the Find view's
-**Stats** chart, at the line where it meets the floor.
+With 5 picks it is wide, about 57 points on average on the middle radio;
+that width is the honest answer to "how close did we get?". The range also
+stands on the Find view's **Stats** chart, at the line where it meets the
+Threshold.
 
 **A range measures the list as it was when you checked it.** Your check
 votes are ordinary votes, so they train the detector like any other. Later
@@ -163,7 +168,7 @@ was, and hovering it says it was measured before your later votes. **Check**
 again for a fresh one: a check needs something to have changed since the
 last, and any vote does that.
 
-Cancelling or closing the check leaves the floor as it was. The rounds you
+Cancelling or closing the check leaves the Threshold as it was. The rounds you
 finished stay as votes.
 
 Everything that uses the matches works on the line in every state: the
@@ -329,8 +334,8 @@ picks up where it leaves off.
 - [Check and correct a detector's calls](howto/check-and-correct.md): verify
   the pictures near the line and hand your corrections back to the detector.
 - [Catch the borderline matches](howto/borderline-matches.md): review the
-  pictures either side of the line, and lower the **precision floor** toward
-  **Complete** to let more in.
+  pictures either side of the line, and move the **Threshold** toward
+  **False Positives** to let more in.
 - [Decide how far to trust a detector](howto/trust-a-detector.md): read the
   **Stats** that say which calls it is qualified to make.
 - [Send your matches somewhere](howto/export-matches.md): export to the
@@ -623,7 +628,7 @@ Once a dataset is loaded, VTSearch shows three panels left to right:
 </picture>
 
 - **Left panel** - the sort bar, your selection-strategy controls,
-  the precision floor, and the **media list** (ranked by the current
+  the Threshold, and the **media list** (ranked by the current
   sort). This is where you pick what to look at next.
 - **Centre panel** - the **media viewer**. The selected item plays
   (audio), displays (image, video, text, document page), and offers
@@ -739,7 +744,7 @@ The Manual tab shows three control rows above the media list.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/manual-controls.dark.webp" />
-  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the precision floor" width="720" />
+  <img src="assets/manual-controls.light.webp" alt="The three Manual-mode control rows: Sort mode, Selection strategy, and the Threshold" width="720" />
 </picture>
 
 ### 1. Sort mode
@@ -775,49 +780,55 @@ Picks *which unlabeled item* the app highlights next.
 Autopilot cycles through these automatically in its five phases,
 but in Manual mode you choose directly.
 
-### 3. Precision floor
+### 3. Threshold
 
-Reads **Lean: Centered**: pick what the detector's line leans toward -
-**Complete**, **Centered** (the default) or **Correct**. The line (see
+A spectrum from **False Positives** to **False Negatives**, with three radio
+buttons under it: one under each third. Pick where the detector's line
+falls. The line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
 keeps the top of the ranking, among the items you haven't voted on: the top
-128 at **Complete**, and the top 32 at **Centered** and **Correct**.
-**Complete** returns the most, and more of it may be wrong; **Correct** asks
-the most of what it returns; **Centered** sits between them. The floors are
-named rather than numbered because what the line keeps is measured, not
-promised: a check says how close it got. Changing the floor moves the line
-over the scores the detector already has; the ranking itself does not change.
+128 on the False Positives radio, and the top 32 on the middle and False
+Negatives radios. Toward False Positives the line returns the most, and more
+of it may be wrong; toward False Negatives it returns only the surest, and
+misses more; the middle radio (the default) sits between them. The radios
+carry no numbers because what the line keeps is measured, not promised: a
+check says how close it got. Hover a radio for what it does. Changing the
+Threshold moves the line over the scores the detector already has; the
+ranking itself does not change.
 
 Once the list is ranked by the detector (a **Learned** sort, or Find), the
-note under the picker says what the floor is doing to the line, in one of
-three states:
+note under the spectrum says what the Threshold is doing to the line, in one
+of three states:
 
-- **Top 32 kept, unchecked · aiming at Centered** - nothing has measured the
-  set yet.
+- **Top 32 kept, unchecked** - nothing has measured the set yet.
 - **Confirmed · likely 55–100% right (checked 5) · 32 kept** - a check
-  confirmed the floor.
-- **Aimed at Centered: likely 19–92% right (checked 5) · top 32 kept** - a
-  check fell short, and says how close it got.
+  confirmed the Threshold.
+- **Fell short · likely 19–92% right (checked 5) · top 32 kept** - a check
+  fell short, and says how close it got.
 
-The floor is named rather than numbered; the range a check measured is a
-number. Beside the note, **Check 5 picks** runs a spot check of the set: a
-few random picks you vote on, which measure how much of it is right. The pick
-count is the one a round takes at your floor (29 at **Correct**). See
+The range a check measured is a number. In Train, beside the note, **Check 5
+picks** runs a spot check of the set: a few random picks you vote on, which
+measure how much of it is right. The pick count is the one a round takes at
+your Threshold (29 on the False Negatives radio). See
 [How close the line got](#how-close-the-line-got) for the check and its
-likely range. The **?** beside the note explains the floor.
+likely range. Find shows the same note with no check beside it: there you
+test the Threshold, and it is too late to label more to set it. The **?**
+beside **Threshold** explains it in a sentence.
 
-A lower floor keeps a longer list, and the lists nest: everything the line
-keeps at **Correct** it still keeps at **Complete**, plus a band of
-borderline items. That makes a two-pass workflow natural: work at a strict
-floor first, then lower it and review the newly admitted band - the items
-just above the moved line (see
+A Threshold toward False Positives keeps a longer list, and the lists nest:
+everything the line keeps on the False Negatives radio it still keeps on the
+False Positives radio, plus a band of borderline items. That makes a
+two-pass workflow natural: work toward False Negatives first, then move
+toward False Positives and review the newly admitted band - the items just
+above the moved line (see
 [Catch the borderline matches](howto/borderline-matches.md)).
 
-Each detector keeps its own floor while VTSearch runs, and one you haven't
-set yet starts from the last floor you picked. Leave it at **Centered**
-unless you want to lean toward catching everything (**Complete**) or toward
-only the surest matches (**Correct**). A floor set some other way, such as
-from the command line, shows as the nearest of the three, and moves to it.
+Each detector keeps its own Threshold while VTSearch runs, and one you
+haven't set yet starts from the last one you picked. Leave it on the middle
+radio unless you want to lean toward catching everything (False Positives)
+or toward only the surest matches (False Negatives). A Threshold set some
+other way, such as from the command line, shows on the nearest of the three
+radios, and moves to it.
 
 ---
 
@@ -1003,9 +1014,9 @@ runs).
 
 - **Left pane** - the **work queue** of items the detector hasn't been
   confirmed on yet, ranked by score, under the same
-  [precision floor](#3-precision-floor) you use while labeling. The line
-  through it keeps the set the floor keeps, and the note under the floor
-  says how close it got; see
+  [Threshold](#3-threshold) you set while labeling. The line through it
+  keeps the set the Threshold keeps, and the note under the Threshold says
+  how close it got; see
   [How close the line got](#how-close-the-line-got).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.
@@ -1092,7 +1103,7 @@ controls, remembered per media type:
   thumbnails. Larger thumbnails = fewer per screen but more readable.
   After training, the list ranks the thumbnails by the detector's score,
   with a threshold line marking the good/bad cut (where it sits, and how
-  close it got to the precision floor, is in
+  close it got to the Threshold, is in
   [How close the line got](#how-close-the-line-got)):
 
   <picture>
@@ -1404,12 +1415,12 @@ you can map just the matched items and use **Verified Good** /
 In the labeling view, the right panel's **Export** button saves your current
 labels. In Find, the **Export** icons at the top of the **Verified Good** and
 **Verified Bad** piles send each set (checked or not), and the one beside
-the precision floor sends only the matches you haven't checked (see
+the Threshold sends only the matches you haven't checked (see
 [Send your matches somewhere](howto/export-matches.md)). Both open the same
 window with the same destinations, and its title says what is leaving:
 **Export Detector Labels** for your answers (the thing that rebuilds the
 detector), **Export Results** for what Find matched (**Export Unverified
-Good** from the precision-floor button). Formats (by their display names):
+Good** from the Threshold's button). Formats (by their display names):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/export-picker.dark.webp" />

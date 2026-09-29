@@ -2,38 +2,42 @@
 
 Every detector draws a line: pictures above it are matches, pictures below
 are not. Some real matches always land just under the line. Find already
-shows you pictures from both sides of it, and lowering the **precision
-floor** moves the line down to let the next band of pictures in. This page
-shows how to review the pictures near the line, lower the floor, and see what
-that costs you.
+shows you pictures from both sides of it, and moving the **Threshold**
+toward **False Positives** moves the line down to let the next band of
+pictures in. This page shows how to review the pictures near the line, move
+the Threshold, and see what that costs you.
 
 It picks up where [Step by step: your first search](../USER_GUIDE.md#step-by-step-your-first-search)
 ends: the `Yellow Smileys` detector, trained on `drawings`, has just been run
 over `drawings-new` with **Find**. The red numbers in each screenshot show
 where to click, in order.
 
-## How the floor moves the line
+## How the Threshold moves the line
 
-The floor sits at the top of the left-hand panel and reads **Lean:
-Centered**. It offers three: **Correct** returns only the pictures most likely
-to be matches, **Complete** returns as many as it can while accepting more
-misses among them, and **Centered** sits between the two. The line keeps the
-top of the ranking, among the pictures you haven't checked: the top 32 at
-**Centered** and **Correct**, and the top 128 at **Complete**. So leaning
-toward **Complete** moves the line down by a band of borderline pictures, and
-everything the line kept before it still keeps.
+The **Threshold** sits at the top of the left-hand panel: a spectrum from
+**False Positives** to **False Negatives**, with three radio buttons under
+it. Toward False Negatives it returns only the pictures most likely to be
+matches; toward False Positives it returns as many as it can while accepting
+more misses among them; the middle radio sits between the two. The line
+keeps the top of the ranking, among the pictures you haven't checked: the
+top 32 on the middle and False Negatives radios, and the top 128 on the False
+Positives radio. So moving toward False Positives moves the line down by a
+band of borderline pictures, and everything the line kept before it still
+keeps.
 
-The note under the picker says what the line keeps, and how close it got:
+The note under the spectrum says what the line keeps, and how close it got:
 
-- **Top 32 kept, unchecked** - the floor's starting set. Nothing has measured
-  it yet. A floor that keeps a different count moves the line straight away.
-- **Confirmed · likely 55–100% right (checked 5) · 32 kept**, or **Aimed at
-  Centered: likely 19–92% right (checked 5) · top 32 kept** - a spot check has
-  measured it. **Check 5 picks**, beside the note, runs one: see
-  [How close the line got](../USER_GUIDE.md#how-close-the-line-got).
+- **Top 32 kept, unchecked** - the Threshold's starting set. Nothing has
+  measured it yet. A Threshold that keeps a different count moves the line
+  straight away.
+- **Confirmed · likely 55–100% right (checked 5) · 32 kept**, or **Fell
+  short · likely 19–92% right (checked 5) · top 32 kept** - a spot check in
+  Train has measured it: see
+  [How close the line got](../USER_GUIDE.md#how-close-the-line-got). Find
+  offers no check of its own; it is where you test the Threshold.
 
-Moving the floor never re-scores anything and never changes the order of the
-pictures. Only the line moves. The user guide explains the line itself in
+Moving the Threshold never re-scores anything and never changes the order of
+the pictures. Only the line moves. The user guide explains the line itself in
 [Matches, the line, precision and recall](../USER_GUIDE.md#matches-the-line-precision-and-recall).
 
 ## Step 1: Check the pictures either side of the line
@@ -41,29 +45,29 @@ pictures. Only the line moves. The user guide explains the line itself in
 Check the pictures near the line first, as in
 [Check and correct a detector's calls](check-and-correct.md). Find serves
 them from both sides, alternating above and below the line, so the real
-matches just under it come up whatever the floor says. Every one you mark
+matches just under it come up wherever the Threshold sits. Every one you mark
 **Good** joins **Verified Good**, and counts as a match from then on.
 
-## Step 2: Lower the floor
+## Step 2: Move the Threshold toward False Positives
 
 At the top of the left-hand panel:
 
-1. Pick a lower floor: from **Centered**, that is **Complete**.
+1. Click the radio under the **False Positives** end of the spectrum: from
+   the middle radio, that is the one to its left.
 2. Read the note under it. **Top 128 kept, unchecked** means the line has
    moved down to keep the top 128, so more pictures sit above it and the count
    of **Unverified Good** on the right grows by the pictures it has just let
    in.
 3. Find the line in the list: the pictures just above it are the ones the
-   lower floor let in.
+   move let in.
 
-To know how much of that longer list is right, click **Check 5 picks** and
-answer the random picks it shows you: at **Complete** a check can take up to
-three rounds (see
-[How close the line got](../USER_GUIDE.md#how-close-the-line-got)).
+Checking the pictures in the band, as Step 3 does, is how you learn how much
+of that longer list is right here. Find has no spot check: that is for
+setting the Threshold in Train, before you test it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-floor.dark.webp" />
-  <img src="../assets/borderline-floor.light.webp" alt="Step 2: (1) the floor lowered to Complete, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list" width="720" />
+  <img src="../assets/borderline-floor.light.webp" alt="Step 2: (1) the Threshold moved toward False Positives, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list" width="720" />
 </picture>
 
 ## Step 3: Review the pictures it let in
@@ -75,8 +79,9 @@ there. Nothing on screen marks which pictures are new: they are the ones just
 above the line, and every one you check moves to the right-hand panel.
 
 Stop when the pictures above the line stop being matches. If you see only
-misses, go back to the floor you had. If you are still finding real matches,
-lower the floor another step and keep going.
+misses, go back to the radio you had. If you are still finding real matches,
+there is no further step toward False Positives: the line already keeps the
+most it can.
 
 ## Step 4: See the trade-off
 
@@ -84,14 +89,15 @@ lower the floor another step and keep going.
 2. Scroll to **Precision by Number Returned**. It reads down the ranked list:
    for the top N pictures, how many of them are real matches. Returning more
    (to the right) catches more matches, but the share that are right falls.
-   The solid line across the chart is your **Floor**, and the upright line is
-   where your **Line** is now. Lowering the floor moves the Line to the right.
-   Once you have run a spot check, a bar stands on the Line where it meets
-   the Floor: the check's likely range for how much of the list is right.
+   The solid line across the chart is your **Threshold**, and the upright
+   line is where your **Line** is now. Moving the Threshold toward False
+   Positives moves the Line to the right. Once a spot check has run in Train,
+   a bar stands on the Line where it meets the Threshold: the check's likely
+   range for how much of the list is right.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
-  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with the floor drawn across it, the line marked, and the line under the chart reading it there" width="720" />
+  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with the Threshold drawn across it, the line marked, and the line under the chart reading it there" width="720" />
 </picture>
 
 The chart has two curves:
@@ -107,12 +113,12 @@ The chart has two curves:
 
 Point at the chart to read both at any count; with the pointer off it, the
 line under the chart reads them at the Line. The chart is drawn when the Stats
-window opens, so close it and open it again after you move the floor.
+window opens, so close it and open it again after you move the Threshold.
 
 ## Where the setting goes
 
-The detector keeps its floor while VTSearch runs, and the floor decides where
-the line sits the next time you run Find with this detector, on this dataset
+The detector keeps its Threshold while VTSearch runs, and the Threshold
+decides where the line sits the next time you run Find with this detector, on this dataset
 or any other. The line decides which unchecked pictures count as matches when
 you **Export** or use **To Dataset**
 ([Send your matches somewhere](export-matches.md)).
@@ -126,5 +132,6 @@ along with the ones you checked by hand.
 
 - [Decide how far to trust a detector](trust-a-detector.md): the rest of the
   **Stats** window.
-- [Manual mode](../USER_GUIDE.md#3-precision-floor), in the user guide,
-  describes the same floor while you train.
+- [Manual mode](../USER_GUIDE.md#3-threshold), in the user guide,
+  describes the same Threshold while you train, and the spot check that
+  sets it.

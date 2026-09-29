@@ -431,17 +431,15 @@ describe('LeftPanelComponent', () => {
       fixture.componentRef.setInput('floor', lineFloor('confirmed', { minPrecision: 0.9 }));
       fixture.componentRef.setInput('returned', 212);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
-      const select = el.querySelector('.find-floor-row select') as HTMLSelectElement;
-      expect(select.value).toBe('0.9');
+      const checked = el.querySelector('.find-floor-row input[type="radio"]:checked') as HTMLInputElement;
+      expect(checked.value).toBe('0.9');
       expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('Confirmed · likely 55–100% right (checked 5) · 32 kept');
     });
 
     it('forwards a picked floor as minPrecisionChange', () => {
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const emitted = vi.spyOn(component.minPrecisionChange, 'emit');
-      const select = el.querySelector('.find-floor-row select') as HTMLSelectElement;
-      select.value = '0.9';
-      select.dispatchEvent(new Event('change'));
+      (el.querySelector('.find-floor-row input[type="radio"][value="0.9"]') as HTMLInputElement).click();
       expect(emitted).toHaveBeenCalledWith(0.9);
     });
   });

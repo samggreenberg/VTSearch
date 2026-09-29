@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, effect, input, output, untracked } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  computed,
+  effect,
+  input,
+  output,
+  untracked,
+  viewChildren,
+} from '@angular/core';
 import { FieldHintIconComponent } from '../../field-hint-icon/field-hint-icon.component';
 import {
   FLOOR_PRESETS,
@@ -28,12 +38,12 @@ type Dot = 'green' | 'yellow' | 'red' | 'none';
  * nearest preset, through the same `valueChange` a pick goes out on, once no
  * sort is running (see the constructor).
  *
- * The radios show the host's floor, never the click: a pick cancels the
- * click's default and emits, and `[checked]` follows `value()`. A host that
- * drops the pick (Find, mid-pass) leaves the radios where they were. It is not
- * a range slider on purpose: a focused `type="range"` input would move on the
- * very arrow keys that cast votes. A picked radio gives focus back (see
- * {@link onPick}).
+ * The radios show the host's floor, never the click: a pick puts them back on
+ * the floor the host holds and emits, and `[checked]` follows `value()` from
+ * there. A host that drops the pick (Find, mid-pass) leaves them where they
+ * were. It is not a range slider on purpose: a focused `type="range"` input
+ * would move on the very arrow keys that cast votes. A picked radio gives
+ * focus back (see {@link onPick}).
  *
  * Under the spectrum, one line says what the floor does to the current line -
  * the set the line keeps and how close the spot check got, never an estimate
@@ -86,6 +96,8 @@ export class PrecisionFloorComponent {
 
   readonly options = FLOOR_PRESETS;
 
+  private readonly radios = viewChildren<ElementRef<HTMLInputElement>>('radio');
+
   /** One radio group, and one heading, per control. */
   readonly groupName = `precision-floor-${PrecisionFloorComponent.nextId++}`;
   readonly labelId = `${this.groupName}-label`;
@@ -127,16 +139,19 @@ export class PrecisionFloorComponent {
   /**
    * Emit the picked floor, and hand focus back to the document.
    *
-   * The click's default is cancelled, so the radio doesn't check itself:
-   * `[checked]` follows `value()`, and a pick the host drops leaves the radios
-   * showing the floor it kept. The blur ends the task, as submitting does for
-   * the text sort (`SortBarComponent.submitTextSort`), so the next arrow key
-   * is a vote with nothing focused.
+   * The browser has already checked the picked radio; it is put back on the
+   * floor the host holds before the pick goes out, so the radios never run
+   * ahead of `value()`. A host that takes the pick moves `[checked]`, which
+   * checks the new radio at the next render; one that drops it leaves the
+   * radios as they were. The blur ends the task, as submitting does for the
+   * text sort (`SortBarComponent.submitTextSort`), so the next arrow key is a
+   * vote with nothing focused.
    */
   onPick(event: Event, value: number): void {
-    event.preventDefault();
     (event.target as HTMLElement).blur();
-    if (value === this.selected()) return;
+    const shown = this.selected();
+    for (const radio of this.radios()) radio.nativeElement.checked = Number(radio.nativeElement.value) === shown;
+    if (value === shown) return;
     this.valueChange.emit(value);
   }
 }

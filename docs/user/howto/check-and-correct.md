@@ -59,9 +59,9 @@ If every picture you checked agreed with the detector, the message says there
 was nothing to add.
 
 A correction counts whether you made it by clicking **Good** or **Bad**, or by
-moving the **precision floor** so that a picture crossed the line (see
-[Catch the borderline matches](borderline-matches.md)). Set the floor where
-you want it before adding corrections.
+moving the **Threshold** so that a picture crossed the line (see
+[Catch the borderline matches](borderline-matches.md)). Set the Threshold
+where you want it before adding corrections.
 
 ## Step 3: Run Find again
 

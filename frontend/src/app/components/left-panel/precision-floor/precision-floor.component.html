@@ -6,22 +6,27 @@
     <ng-content select="[floorActions]" />
   </div>
   <div class="floor-spectrum" role="radiogroup" [attr.aria-labelledby]="labelId">
-    <!-- The spectrum's two ends; each radio's own label says where it sits. -->
+    <!-- The spectrum: its two ends over a track. Each radio's own label says
+         where it sits, so the picture is hidden from assistive tech. -->
     <div class="spectrum-bar" aria-hidden="true">
-      <span>False Positives</span>
-      <span>False Negatives</span>
+      <div class="spectrum-ends">
+        <span>False Positives</span>
+        <span>False Negatives</span>
+      </div>
+      <div class="spectrum-track"></div>
     </div>
     <!-- One radio under each third of the spectrum, with no word or number (#4317). -->
     <div class="spectrum-radios">
       @for (opt of options; track opt.value) {
         <label class="spectrum-radio" [title]="opt.hint">
           <input
+            #radio
             type="radio"
             [name]="groupName"
             [value]="opt.value"
             [checked]="opt.value === selected()"
             [attr.aria-label]="opt.hint"
-            (click)="onPick($event, opt.value)"
+            (change)="onPick($event, opt.value)"
           />
         </label>
       }

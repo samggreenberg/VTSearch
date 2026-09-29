@@ -58,9 +58,7 @@ describe('PrecisionFloorComponent (#4246, #4317)', () => {
     });
 
     it('names no floor and numbers none: each radio says where it sits only in its tooltip', () => {
-      expect(root().querySelector('.floor-spectrum')!.textContent!.replace(/\s+/g, ' ').trim()).toBe(
-        'False Positives False Negatives',
-      );
+      expect(root().querySelector('.floor-spectrum')!.textContent!.replace(/\s+/g, '')).toBe('FalsePositivesFalseNegatives');
       expect(root().querySelector('.floor-head')!.textContent).not.toMatch(/\d/);
       const titles = Array.from(root().querySelectorAll('.spectrum-radio')).map((l) => l.getAttribute('title'));
       expect(titles[0]).toMatch(/^Toward false positives/);
