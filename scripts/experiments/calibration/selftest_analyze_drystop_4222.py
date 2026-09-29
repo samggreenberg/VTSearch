@@ -9,7 +9,8 @@ Plants two pools with four arms and known answers:
 * ``g20d8``: runs dry at vote 30 with 4 Goods; nothing starves; AP +0.06 in
   both pools - the arm the rule must pick;
 * ``g20``: never hands over; AP +0.10 in one pool but -0.10 in the other - the
-  quality guard must reject it.
+  quality guard must reject it.  One of its cells trains no detector and writes
+  no main frame: it must stay in the pairing at AP 0.
 
 Checks: how each opening ended and its length, the starved share per band and
 its paired delta, the paired AP delta, the guard, and the rule's choice.
@@ -62,6 +63,8 @@ def build_arm(root: Path, pool: str, label: str) -> Path:
         pd.DataFrame({"category": cat, "seed": seed, "t": t, "phase": phase, "picked_label": label_col}).to_csv(
             cells / f"task_{i:04d}__picks.csv", index=False
         )
+        if label == "g20" and i == 0:
+            continue  # a session with no detector writes no main frame: it must score AP 0
         noise = 0.001 * ((i * 7) % 5)  # a paired SE above zero, identical across arms
         pd.DataFrame(
             {
@@ -112,6 +115,16 @@ def main() -> int:
     row = q[(q.pool == "0.44%") & (q.arm == "g20d8") & (q.band == "all") & (q.t == 150)]
     dap = row[row.metric == "average_precision"]["delta_vs_g3"].iloc[0]
     check(abs(dap - 0.061) < 1e-9, f"paired AP delta read back ({dap:+.3f})", failures)
+
+    g20 = q[(q.pool == "0.1%") & (q.arm == "g20") & (q.band == "all") & (q.t == 150)]
+    g20 = g20[g20.metric == "average_precision"].iloc[0]
+    # 11 cells at -0.10 (+0.002 on the odd ones); cell 0 scores 0 against the control's 0.5.
+    want = (-0.10 * 11 + 0.002 * 6 - 0.5) / 12
+    check(
+        g20["n"] == 12 and abs(g20["no_detector"] - 1 / 12) < 1e-9 and abs(g20["delta_vs_g3"] - want) < 1e-9,
+        f"a no-detector session is kept and scores AP 0 ({g20['delta_vs_g3']:+.4f})",
+        failures,
+    )
 
     v = json.loads((out / "verdict.json").read_text())
     check(v["arms"]["g20"]["safe"] is False, "the guard rejects an arm that loses AP in one pool", failures)

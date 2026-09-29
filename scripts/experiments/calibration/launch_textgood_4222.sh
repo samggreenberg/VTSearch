@@ -10,6 +10,12 @@
 # recommended (#4254's grammar): g20d8 opens `g20+dry1/8@top,b4@mid`, the text
 # sort until 20 Goods or until 8 picks in a row hold none.  `plan` lists the
 # fixed-G arms only; name a dry arm to run it.
+#
+# A bare dry stop can end the walk BEFORE today's opening would: g20d8 handed
+# over at the first 8 empty picks even with 0-1 Goods, where g3 keeps walking to
+# its 3rd (92 of 720 cells at 0.44% then found no positive at all, against 18).
+# <world>-g3g20d16 keeps today's walk as a floor: `g3@top,g20+dry1/16@top,b4@mid`
+# walks to 3 Goods exactly as the app does, then on toward 20 unless it runs dry.
 #   bash launch_textgood_4222.sh status
 #
 # Today's app (the #4184 r7 rung: shipped cut, 70/30 split, acquisition offset)
@@ -61,13 +67,14 @@ export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
 # shellcheck disable=SC1091
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
-arm_env() {  # arm = <world>-g<G>[d<W>]; d<W> adds the #4254 dry stop +dry1/<W>
-  local world="${1%%-*}" g="${1##*-g}" dry=""
+arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>]; see the header
+  local world="${1%%-*}" g="${1#*-g}" dry="" first=""
   if [[ "$g" == *d* ]]; then dry="+dry1/${g##*d}"; g="${g%%d*}"; fi
+  if [[ "$g" == *g* ]]; then first="g${g%%g*}@top,"; g="${g##*g}"; fi
   unset CALIB_STARTUP_SCHEDULE CALIB_TARGET_PREVALENCE
   DIVERGES=""
-  if [[ "$g" != "3" || -n "$dry" ]]; then
-    export CALIB_STARTUP_SCHEDULE="g${g}${dry}@top,b4@mid"
+  if [[ "$g" != "3" || -n "$dry" || -n "$first" ]]; then
+    export CALIB_STARTUP_SCHEDULE="${first}g${g}${dry}@top,b4@mid"
     DIVERGES="startup_schedule"
   fi
   case "$world" in

@@ -12,7 +12,10 @@ each pool's control, today's app.  Reports, per arm:
   fewer than 3 positives in 150 votes, per size band (#4216: 28% of ``@small``
   hunts starve), paired against the control;
 * **detector quality** - average precision and oracle cost per checkpoint,
-  paired per cell against the pool's control, overall and per size band.
+  paired per cell against the pool's control, overall and per size band.  A
+  session that found no positive has no detector; it scores AP 0 (oracle cost
+  is left out for it) and is counted in ``no_detector``, so an arm cannot gain
+  by failing more cells.
 
 The decision rule is fixed on #4222 before the run: the arm with the largest
 mean paired AP gain over g3 at vote 150, averaged over the pools, among arms
@@ -44,7 +47,9 @@ KEY = T.KEY
 LEARNED = T.LEARNED
 CONTROL = "g3"
 STARVED = 3  # fewer positives than this in 150 votes is a starved hunt (#4216)
-ARM_RE = re.compile(r"^g(\d+)(?:d(\d+))?$")
+#: ``g<G>``, ``g<G>d<W>`` (the dry stop) or ``g<M>g<G>d<W>`` (walk to M Goods as
+#: the app does, then on toward G unless the walk runs dry).
+ARM_RE = re.compile(r"^(?:g(\d+))?g(\d+)(?:d(\d+))?$")
 
 
 def parse_arm(spec: str) -> tuple[str, str, int, int, Path]:
@@ -54,7 +59,7 @@ def parse_arm(spec: str) -> tuple[str, str, int, int, Path]:
     m = ARM_RE.match(label)
     if not pool or not m or not d:
         raise SystemExit(f"--arm wants pool/g<G>[d<W>]=DIR, got {spec!r}")
-    return pool, label, int(m.group(1)), int(m.group(2) or 0), Path(d) / "cells"
+    return pool, label, int(m.group(2)), int(m.group(3) or 0), Path(d) / "cells"
 
 
 def sessions(cells: Path, g: int) -> pd.DataFrame:
@@ -103,7 +108,7 @@ def simplicity(label: str) -> tuple[int, int]:
     """Sort key for a tie: a fixed G before a dry stop, then the smaller G."""
     m = ARM_RE.match(label)
     assert m
-    return (1 if m.group(2) else 0, int(m.group(1)))
+    return (1 if m.group(3) else 0, int(m.group(2)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,6 +130,14 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"no pick logs under {cells}")
         S[pool, label] = s
         q = T.quality(cells)
+        # A session that found no positive trains no detector and writes no row
+        # (`_cells_io.load_arm`); it still happened, and its user got no ranking.
+        # Score it AP 0 (a random ranking is ~prevalence, 0.001-0.0044 here), or a
+        # paired delta is read only on the cells where the arm succeeded.
+        grid = s[[*KEY, "t"]].drop_duplicates()
+        q = grid.merge(q, on=[*KEY, "t"], how="left")
+        q["no_detector"] = q["average_precision"].isna()
+        q["average_precision"] = q["average_precision"].fillna(0.0)
         q["band"] = q["category"].str.split("@").str[-1]
         Q[pool, label] = q
 
@@ -188,6 +201,7 @@ def main(argv: list[str] | None = None) -> int:
                             "t": t,
                             "metric": col,
                             "level": float(a[a["t"] == t][col].mean()),
+                            "no_detector": float(a[a["t"] == t]["no_detector"].mean()),
                             "delta_vs_g3": m,
                             "se": se,
                             "n": n,
