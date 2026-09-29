@@ -87,6 +87,14 @@ describe('PrecisionFloorComponent (#4246)', () => {
       expect(emitted).toHaveBeenCalledWith(0.25);
     });
 
+    it('hands focus back after a pick, so the arrow keys vote again', () => {
+      select().focus();
+      expect(document.activeElement).toBe(select());
+      select().value = '0.75';
+      select().dispatchEvent(new Event('change'));
+      expect(document.activeElement).not.toBe(select());
+    });
+
     it('never emits "No floor"', async () => {
       await show(null);
       const emitted = vi.spyOn(component.valueChange, 'emit');

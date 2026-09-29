@@ -138,9 +138,9 @@ def get_find_initial_labels() -> dict[int, str]:
 def set_find_scores(scores: dict[int, float]) -> None:
     """Store the frozen per-item detector scores from a find-label run.
 
-    These are the single-pass scores the cutoff (Inclusion) slides over
-    without re-scoring, and the basis for the Stats sweep and precision
-    curve.  In-memory only.
+    These are the single-pass scores the line (the precision floor, or
+    Inclusion) moves over without re-scoring, and the basis for the Stats
+    precision curve.  In-memory only.
     """
     with _state_lock:
         ctx = get_active_detector_context()

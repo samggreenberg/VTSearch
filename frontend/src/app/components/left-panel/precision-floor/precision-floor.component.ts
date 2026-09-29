@@ -23,7 +23,8 @@ const NO_FLOOR = 'none';
  * every choice is a measured one (owner, 2026-09-28). It is also not a range
  * slider on purpose: `KeyboardService.isTyping()` lets ArrowLeft/Right through
  * from a focused `type="range"` input and casts a vote with them, while a
- * focused `<select>` keeps its keys to itself.
+ * focused `<select>` keeps its keys to itself - and gives focus back once a
+ * floor is picked (see {@link onChange}).
  *
  * Under the picker, one line says what the floor does to the current line -
  * the floor and its state, never the estimate behind it (owner, 2026-09-28):
@@ -92,9 +93,20 @@ export class PrecisionFloorComponent {
     }
   });
 
+  /**
+   * Emit the picked floor, and hand focus back to the document.
+   *
+   * The blur is not a nicety: a focused `<select>` keeps the arrow keys, and
+   * Chrome (off macOS) steps a closed one through its options on
+   * ArrowLeft/Right. Left focused, the picker would turn the user's next
+   * "vote Good" (→) into a floor change. Picking ends the task, as submitting
+   * does for the text sort (`SortBarComponent.submitTextSort`).
+   */
   onChange(event: Event): void {
-    const raw = (event.target as HTMLSelectElement).value;
+    const select = event.target as HTMLSelectElement;
+    const raw = select.value;
     const val = Number(raw);
+    select.blur();
     if (raw === NO_FLOOR || !Number.isFinite(val) || val <= 0 || val > 1) return;
     this.valueChange.emit(val);
   }

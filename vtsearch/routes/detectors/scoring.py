@@ -298,8 +298,9 @@ def find_label(body: dict):
         # verified item the retrained detector now disagrees with reads as a
         # correction rather than vanishing.
         set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
-        # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
-        # without re-scoring, and the Stats sweep and precision curve can read them.
+        # Freeze the single-pass scores so the line (the precision floor, or
+        # Inclusion) re-thresholds without re-scoring, and the Stats precision
+        # curve can read them.
         set_find_scores({entry["id"]: entry["score"] for entry in results})
 
         from vtscore.detectors.registry import set_find_mode

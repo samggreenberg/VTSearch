@@ -1071,9 +1071,9 @@ class DetectorContext:
         # re-cut answers Inclusion: the shipped ``mid_tilt`` rule anchors the
         # measured midpoint cut at inclusion 0 and tilts monotonically away
         # from it (issue #2865).  Written on every retrain that computes a safe
-        # threshold; read by ``recompute_detector_thresholds_for_inclusion``
-        # and the Find Stats sweep so both re-cut the *shipped* estimator
-        # instead of the raw cross-calibration one.  Holds fitted Gaussians and
+        # threshold; read by ``recut_detector_threshold`` so every re-cut (a
+        # floor or Inclusion change, the acquisition cut) uses the *shipped*
+        # estimator instead of the raw cross-calibration one.  Holds fitted Gaussians and
         # sorted score samples - process-scoped, never serialised.
         "anchored_cut_cache",  # FoldAnchoredCut | None
         # The precision-floor estimate behind the current threshold
@@ -1591,9 +1591,8 @@ def recut_detector_threshold(
     """The threshold *ctx*'s cached estimators cut at an operating point, or ``None``.
 
     The one place a detector's cut is re-derived without a retrain.  The
-    Inclusion slide and the floor (:func:`recompute_detector_thresholds`), the
-    Find Stats sweep and the acquisition cut (:func:`detector_acquisition_threshold`)
-    all read it.
+    Inclusion slide and the floor (:func:`recompute_detector_thresholds`) and
+    the acquisition cut (:func:`detector_acquisition_threshold`) both read it.
 
     The operating point is a precision floor (*min_precision*) or, when no
     floor is given, an inclusion (*inclusion_value*).  A floor that promises
