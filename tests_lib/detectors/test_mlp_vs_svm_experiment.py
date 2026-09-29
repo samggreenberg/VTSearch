@@ -266,6 +266,34 @@ class TestPrecisionFrames:
             )
             assert 0 < f["test_labels"].sum() < len(f["test_labels"])
 
+    def test_each_calibration_vote_is_named_with_its_phase(self):
+        """#4224: the frame says which vote (and which phase) each held-out score is.
+
+        The mapping runs through the trainer's row order (Goods, then Bads), so
+        a slip there would pair a score with the wrong vote; the labels catch it.
+        """
+        from vtscore.eval.labels import media_is_positive
+
+        clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
+        sink: list = []
+        simulate_voting_iterations(
+            clips,
+            "cat0",
+            seed=0,
+            max_steps=20,
+            style="whole_image",
+            safe_thresholds=True,
+            emit_calibration_metrics=True,
+            precision_frame_sink=sink,
+            precision_frame_steps=(12, 20),
+        )
+        for f in sink:
+            votes = f["fold_cal_vote"].tolist()
+            assert len(votes) == len(f["fold_cal_scores"]) == len(f["fold_cal_phase"]) > 0
+            truth = [1 if media_is_positive(clips[v], "cat0") else 0 for v in votes]
+            assert truth == f["fold_cal_labels"].astype(int).tolist()
+            assert set(f["fold_cal_phase"].tolist()) <= {"good", "bad", "hard", "new", "done"}
+
     def test_recording_does_not_change_the_run(self):
         """The sink only reads: rows with and without it are the same."""
         plain = self._run(None, None)
