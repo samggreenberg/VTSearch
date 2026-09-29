@@ -23,7 +23,7 @@ On the dashboard of the VTSearch you are moving from:
 
 ## Step 2: Save them to a file
 
-In the **Export Labels** window:
+In the **Export Detector Labels** window:
 
 1. Leave **Categories** on **All**. The detector learns from its **Bad**
    answers as much as its **Good** ones, and the other end can't rebuild it

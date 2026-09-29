@@ -1367,8 +1367,11 @@ In the labeling view, the right panel's **Export** button saves your current
 labels. In Find, the **Export** icons at the top of the **Verified Good** and
 **Verified Bad** piles send each set (checked or not), and the one beside
 the precision floor sends only the matches you haven't checked (see
-[Send your matches somewhere](howto/export-matches.md)). Formats (by their
-display names):
+[Send your matches somewhere](howto/export-matches.md)). Both open the same
+window with the same destinations, and its title says what is leaving:
+**Export Detector Labels** for your answers (the thing that rebuilds the
+detector), **Export Results** for what Find matched (**Export Unverified
+Good** from the precision-floor button). Formats (by their display names):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/export-picker.dark.webp" />

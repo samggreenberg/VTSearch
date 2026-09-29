@@ -25,8 +25,8 @@ floor on the left act on only the matches you haven't checked yet.
 
 ## Step 1: Choose what to send
 
-Click **Export** at the top of the **Verified Good** pile. In the **Export**
-window:
+Click **Export** at the top of the **Verified Good** pile. In the **Export
+Results** window:
 
 1. **Categories**: keep **Good** for the matches. **All** sends the
    non-matches as well, labelled; **Corrections** sends only the pictures
@@ -37,7 +37,7 @@ window:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/export-choose.dark.webp" />
-  <img src="../assets/export-choose.light.webp" alt="Step 1: in Export, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows" width="720" />
+  <img src="../assets/export-choose.light.webp" alt="Step 1: in Export Results, (1) the Categories to send, (2) the Columns to include, (3) a preview of the rows" width="720" />
 </picture>
 
 ## Step 2: Send it
