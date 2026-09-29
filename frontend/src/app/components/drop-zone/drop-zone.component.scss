@@ -24,6 +24,15 @@
     outline-offset: 2px;
   }
 
+  // Missing = the zone answers a required field and nothing is picked
+  // yet.  Same red well as `.form-input:required:invalid` in
+  // `_components.scss`.  Declared before `--active` so a hovering drag
+  // still shows the accent "release here" look.
+  &--missing {
+    border-color: var(--color-bad);
+    background-image: linear-gradient(var(--bad-bg), var(--bad-bg));
+  }
+
   // Active = a file drag is currently hovering this zone.
   &--active {
     border-color: var(--accent);

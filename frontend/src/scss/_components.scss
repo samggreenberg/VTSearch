@@ -449,6 +449,19 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     outline: none;
     border-color: var(--accent);
   }
+
+  // A required field that is still unanswered: the well itself turns red,
+  // not only the `.required` star on its label.  Keyed off the native
+  // `required` attribute, so it clears the moment the field holds a value,
+  // never shows on a disabled control (those skip constraint validation),
+  // and yields to the accent border while the user is typing in it.  The
+  // tint is layered over `--bg-subtle` so the field still reads as a well.
+  // `<vt-drop-zone>` mirrors this look with its `missing` input, for the
+  // required fields that are a drop target rather than a native control.
+  &:required:invalid:not(:focus) {
+    border-color: var(--color-bad);
+    background-image: linear-gradient(var(--bad-bg), var(--bad-bg));
+  }
 }
 
 .form-select {
@@ -770,6 +783,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   font-family: var(--font-mono);
 }
 
+// The `*` after a required field's label.  It only marks the question; the
+// control that answers it also carries `required`, which highlights its
+// well until it is filled (see `.form-input` above).
 .required {
   color: var(--color-bad);
 }

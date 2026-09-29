@@ -92,6 +92,7 @@
                 [id]="'lif-' + field.key"
                 type="text"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
@@ -100,6 +101,7 @@
                 [id]="'lif-' + field.key"
                 type="file"
                 class="form-input"
+                [required]="!!field.required"
                 [accept]="field.accept || ''"
                 (change)="onFileSelected($event, field.key)"
               />
@@ -108,6 +110,7 @@
                 [id]="'lif-' + field.key"
                 type="password"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
@@ -116,6 +119,7 @@
                 [id]="'lif-' + field.key"
                 type="email"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
@@ -124,6 +128,7 @@
                 [id]="'lif-' + field.key"
                 type="url"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
@@ -132,6 +137,7 @@
                 [id]="'lif-' + field.key"
                 type="text"
                 class="form-input"
+                [required]="!!field.required"
                 [attr.list]="'lif-' + field.key + '-list'"
                 [(ngModel)]="formValues[field.key]"
                 [disabled]="!!fieldOptions.loading()[field.key]"
@@ -150,6 +156,7 @@
               <select
                 [id]="'lif-' + field.key"
                 class="form-select"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 (ngModelChange)="onFormFieldChanged(field.key)"
                 [disabled]="!!fieldOptions.loading()[field.key] || (!!field.dynamic_options && fieldOptions.optionsFor(field).length === 0)"
@@ -171,6 +178,7 @@
                 [id]="'lif-' + field.key"
                 type="number"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
                 [attr.min]="field.min || null"
@@ -182,6 +190,7 @@
                 [id]="'lif-' + field.key"
                 type="text"
                 class="form-input"
+                [required]="!!field.required"
                 [(ngModel)]="formValues[field.key]"
                 [placeholder]="field.placeholder || field.description || field.label || field.key"
               />
