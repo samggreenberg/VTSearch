@@ -2,8 +2,8 @@
 
 **Status:** This doc is the full-system reference for the screenshot pipeline
 (manifest + Playwright harness + driver scripts); the open follow-ups below
-(temp-data-dir determinism, annotation polish, canvas-shot scriptability,
-pixel-diff tolerance) are the remaining work.
+(temp-data-dir determinism, annotation polish, pixel-diff tolerance) are the
+remaining work.
 
 ## Open follow-ups
 
@@ -32,11 +32,6 @@ pixel-diff tolerance) are the remaining work.
 <!-- item-sep -->
 
 <!-- item-sep -->
-
-- **`browse-view` determinism** — seed the UMAP fit (fixed `random_state`) so
-  the layout is stable across runs, and pose the hover-preview popup; otherwise
-  hand-capture. The projection is expensive to build, so reuse a cached fixture
-  projection rather than rebuilding per run.
 
 <!-- item-sep -->
 
@@ -213,6 +208,10 @@ Images are served by an `angular.json` asset glob copying `docs/user/assets/**`
 
 The manifest (`docs/user/screenshots.manifest.ts`) is the source of truth for
 the current shot set; `wiring-check.py` (gated in `run-tests.sh`) keeps it in
-sync with the docs and the reshoot queue. Two `<canvas>` shots (`region-voting`,
-`browse-view`) are the determinism-risk cases — seed + disable animations, or
-hand-capture; the rest are DOM and diff cleanly.
+sync with the docs and the reshoot queue. The `<canvas>` shots are the
+determinism-risk cases. The Browse map is a UMAP layout, so `refresh.sh` starts
+the app with `VTSEARCH_PROJECTION_SEED` for the same map every run, and
+`ensure-fixtures.mjs` lays out the `drawings` map before any shot, since the
+first fit outlasts a recipe's wait on a small CPU box; the Browse recipes find
+a tile by hovering out from the middle rather than clicking a fixed point
+(#4296). The rest are DOM and diff cleanly.

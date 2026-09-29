@@ -5,7 +5,8 @@
 # after a GUI change but weren't.
 #
 # This is a MANUAL pre-release / periodic chore, NOT a run-tests.sh gate: it
-# needs a running app with the fixture datasets loaded, and it is far too slow
+# needs a running app with the fixture datasets loaded (started with
+# refresh.sh's VTSEARCH_PROJECTION_SEED, or the Browse shots drift), and it is far too slow
 # and machine-sensitive (font hinting, see below) to gate every test run.
 # (The cheap, browser-free docs⇄manifest gate is wiring-check.py.)
 #

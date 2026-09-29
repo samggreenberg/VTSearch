@@ -13,16 +13,26 @@
 # example's generated drawings (a pure function of the generator and its seeds)
 # with a fixed vote baseline. If no app is already serving on $APP, this script
 # starts one, waits for readiness, captures, then stops it.
+#
+# The Browse shots frame a UMAP map, which an unseeded fit lays out differently
+# every time. The app this script starts fits under VTSEARCH_PROJECTION_SEED, so
+# the map is the same on every refresh (#4296); an app you started yourself
+# needs the same variable, or the Browse shots show some other map.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="${APP:-http://localhost:5000}"
 REPO_ROOT="$(cd ../.. && pwd)"
+PROJECTION_SEED=0
 
 started_app=""
-if ! curl -sf -o /dev/null "$APP/" 2>/dev/null; then
+if curl -sf -o /dev/null "$APP/" 2>/dev/null; then
+    echo "Using the app already at $APP. Its Browse map matches the committed shots only if"
+    echo "it was started with VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED."
+else
     echo "No app at $APP — starting one (empty dataset registry → SigLIP loads lazily, no CLAP)…"
-    ( cd "$REPO_ROOT" && VTSEARCH_TORCH_THREADS=1 python app.py --local > /tmp/vtshots-refresh-app.log 2>&1 ) &
+    ( cd "$REPO_ROOT" && VTSEARCH_TORCH_THREADS=1 VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
+        python app.py --local > /tmp/vtshots-refresh-app.log 2>&1 ) &
     started_app=$!
     for _ in $(seq 1 60); do
         curl -sf -o /dev/null "$APP/" 2>/dev/null && break
