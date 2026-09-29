@@ -127,18 +127,19 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # Default ``calibrate_count`` baked into ``data/settings.json`` on first run.
 # Each unit adds one full fold-training pass per learned-sort; lower it to
 # trade calibration quality for latency.  Min 1 (clamped in
-# :mod:`vtsearch.settings`).  The default is 2: the Inclusion knob is a
-# quantile rule over the *pooled* held-out fold scores (see
+# :mod:`vtsearch.settings`).  The default is 2: the conformal inclusion rule
+# is a quantile rule over the *pooled* held-out fold scores (see
 # ``vtscore.training.thresholds.conformal_threshold``), so its resolution is
 # bounded by how many calibration scores the pool holds - at ~12 votes a
-# single fold yields only ~4 positive scores, i.e. ~4 usable knob positions;
+# single fold yields only ~4 positive scores, i.e. ~4 usable cut positions;
 # a second fold doubles that for one extra fold fit.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
 # The precision floor a user who has set none gets (#4245): the cut returns as
 # much as it can while at least half of it is estimated right, and falls back
-# to the Inclusion 0 cut when it can promise nothing (owner, 2026-09-28).  A
-# stored ``None`` is a user who cleared the floor, and the Inclusion knob draws
-# their line.  Re-exported as
+# to the Inclusion 0 cut when it can promise nothing (owner, 2026-09-28).  The
+# app always sets a floor (#4269): a stored ``None`` reads as this default.  A
+# library caller's ``None`` is no floor, and the line is the Inclusion 0 cut.
+# Re-exported as
 # ``vtscore.training.thresholds.DEFAULT_MIN_PRECISION``; defined here so the
 # settings layer can read it without importing the training stack.
 DEFAULT_MIN_PRECISION = 0.5

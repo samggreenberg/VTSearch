@@ -9,6 +9,7 @@ re-exports this package and layers the proxy view on top).
 from __future__ import annotations
 
 import gc
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -202,9 +203,14 @@ def clear_all() -> None:
 #: fire - the same failure mode :data:`vtscore.achievements_hooks.KNOWN_EVENTS`
 #: exists to catch, so this seam rejects it the same way rather than accepting
 #: a registration nothing will ever call.
-KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
-    {"inclusion", "min_precision", "calibrate_count", "calibration_fraction"}
-)
+KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"min_precision", "calibrate_count", "calibration_fraction"})
+
+#: Setting keys the library used to persist and no longer does.  Registering a
+#: persister for one is accepted with a ``DeprecationWarning`` rather than
+#: refused, so a host written against the old key set still starts; the
+#: persister is never called.  ``inclusion`` retired with Inclusion as a user
+#: preference (#4269): it is fixed at 0, so there is nothing to persist.
+_RETIRED_SETTING_KEYS: frozenset[str] = frozenset({"inclusion"})
 
 _setting_persisters: dict[str, Callable[[Any], None]] = {}
 
@@ -213,8 +219,17 @@ def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persistence callback for setting *key*.
 
     Called by ``vtsearch/shim`` at app startup.  *key* must be one of
-    :data:`KNOWN_SETTING_KEYS`.
+    :data:`KNOWN_SETTING_KEYS`; a retired key (``inclusion``) is
+    accepted with a ``DeprecationWarning`` and never fires.
     """
+    if key in _RETIRED_SETTING_KEYS:
+        warnings.warn(
+            f"register_setting_persister({key!r}) is deprecated: {key!r} is no longer a setting the library "
+            "persists, so this persister will never be called.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return
     if key not in KNOWN_SETTING_KEYS:
         raise ValueError(f"Unknown setting key {key!r}; known keys: {sorted(KNOWN_SETTING_KEYS)}")
     _setting_persisters[key] = fn
@@ -227,51 +242,45 @@ def _persist_setting(key: str, value: Any) -> None:
 
 
 def get_inclusion() -> int:
-    """Return the current inclusion setting (loaded from CoreConfig on first call)."""
-    from vtscore.config import CoreConfig
+    """Deprecated: always ``0``.
 
-    with _state_lock:
-        val = _core._get_inclusion()
-        if val is None:
-            val = CoreConfig.from_settings().inclusion
-            _core._set_inclusion(val)
-        return val
+    Inclusion is no longer a user preference (#4269).  The operating point is
+    the precision floor (:func:`get_min_precision`), and a line with no promise
+    is the Inclusion 0 cut.  Inclusion survives only as the internal unit the
+    threshold machinery measures cuts in.
+    """
+    warnings.warn(
+        "vtscore.state.get_inclusion() is deprecated: Inclusion is retired as a user preference and is "
+        "always 0. Read the precision floor instead (vtscore.state.get_min_precision).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return 0
 
 
 def set_inclusion(value: int) -> None:
-    """Set the global inclusion value and persist it via the registered hook."""
-    with _state_lock:
-        changed = value != _core._get_inclusion()
-        _core._set_inclusion(value)
-        _persist_setting("inclusion", value)
-    # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
-    # two locks never establish a cross-module ordering (audit M1).
-    # ``_ensure_cache`` self-heals if a concurrent reader observes the new
-    # inclusion before this clear runs - it re-clears whenever
-    # ``_cache_inclusion`` differs from the current value.
-    if changed:
-        from vtscore.detectors.labeling_progress import clear_progress_cache
+    """Deprecated: accepts only ``0``, which changes nothing.
 
-        clear_progress_cache()
-        # Inclusion is a pure cutoff knob: re-threshold from the cached fold
-        # orderings instead of dropping the (inclusion-independent) MLP, so the
-        # scores stay frozen across a slide.
-        _core.recompute_detector_thresholds_for_inclusion(value)
-        # In Find mode the unverified items' good/bad labels are derived from
-        # the cutoff, so the new threshold must re-split them over the frozen
-        # find_scores (no-op in Train mode / before a scoring pass).  Verified
-        # items keep their human vote.
-        rethreshold_unverified_find_items()
+    Inclusion is no longer a user preference (#4269), so there is no stored
+    value to move.  ``0`` is accepted with a ``DeprecationWarning``; any other
+    value raises ``ValueError`` rather than being silently ignored.  Set a
+    precision floor with :func:`set_min_precision` instead.
+    """
+    from vtscore.config.core_config import _retired_inclusion
+
+    _retired_inclusion("vtscore.state.set_inclusion()", value)
 
 
 def get_min_precision() -> float | None:
     """The active detector's precision floor, or ``None`` when no floor is set.
 
     Seeded from the user's setting (``CoreConfig.min_precision``) the first
-    time it is read for a detector, as :func:`get_inclusion` is.  ``None`` means
-    the Inclusion knob draws the line; a float in ``(0, 1]`` means the cut
+    time it is read for a detector.  A float in ``(0, 1]`` means the cut
     returns as much as it can while at least that fraction of it is right, and
     falls back to the Inclusion 0 cut when it can promise nothing (#4245).
+    ``None`` means no floor: the line is the Inclusion 0 cut, with no promise
+    attempted.  The app always sets a floor; ``None`` survives for library
+    callers (#4269).
     """
     from vtscore.config import CoreConfig
 
@@ -286,9 +295,9 @@ def get_min_precision() -> float | None:
 def set_min_precision(value: float | None) -> None:
     """Set the active detector's precision floor (``None`` clears it) and persist it via the registered hook.
 
-    A pure cutoff knob, like Inclusion: the active detector re-cuts its cached
-    estimators at the new floor (no retrain), and in Find mode the unverified
-    items re-split over the frozen scores.  Other loaded detectors keep their
+    A pure cutoff knob: the active detector re-cuts its cached estimators at
+    the new floor (no retrain), and in Find mode the unverified items re-split
+    over the frozen scores.  Other loaded detectors keep their
     own floor; one that has not read its floor yet takes this one.
     """
     if value is not None and not 0.0 < value <= 1.0:
@@ -299,7 +308,7 @@ def set_min_precision(value: float | None) -> None:
         _core._set_min_precision(value)
         _persist_setting("min_precision", value)
     if changed:
-        _core.recompute_detector_thresholds(_core.user_inclusion(), value)
+        _core.recompute_detector_thresholds(value)
         rethreshold_unverified_find_items()
 
 

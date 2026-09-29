@@ -13,9 +13,6 @@
         title="How much of what the detector returns should be right"
         (change)="onChange($event)"
       >
-        @if (value() === null) {
-          <option [value]="noFloor" [selected]="true" disabled>No floor</option>
-        }
         @for (opt of options(); track opt.value) {
           <option [value]="opt.value" [selected]="opt.value === selected()">{{ opt.label }}</option>
         }

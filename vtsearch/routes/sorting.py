@@ -4,8 +4,8 @@ Migrated to ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
-``examples`` / ``inclusion``; type-mismatched ``inclusion``
-values) surface as 422 with the
+``examples`` / ``min_precision``; a ``null`` or non-numeric ``min_precision``)
+surface as 422 with the
 standard ``errors`` envelope. Handler-level rejects (empty / whitespace
 ``text``, no votes, no medias, bad files in the multipart routes, etc.)
 keep their HTTP codes (400 / 404 / 500) with the standard ``message``
@@ -32,8 +32,6 @@ from vtscore.config import DATA_DIR
 from vtscore.embedding import embed_text_query
 from vtsearch.schemas.sorting import (
     CoverageAtlasNextResponseSchema,
-    InclusionRequestSchema,
-    InclusionResponseSchema,
     LabelFileSortResponseSchema,
     LearnedSortCancelResponseSchema,
     LearnedSortRequestSchema,
@@ -66,13 +64,11 @@ from vtsearch.state import (
     get_calibrate_count,
     get_calibration_fraction,
     get_coverage_atlas,
-    get_inclusion,
     get_learned_scores,
     get_min_precision,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
-    set_inclusion,
     set_min_precision,
     snapshot_medias,
     vote_region_boxes,
@@ -82,7 +78,7 @@ from vtscore.concurrency.progress import sort_progress, update_sort_progress
 sorting_bp = Blueprint(
     "sorting",
     __name__,
-    description="Text / example / learned sort, votes, inclusion, precision floor, safe-thresholds, coverage atlas.",
+    description="Text / example / learned sort, votes, precision floor, safe-thresholds, coverage atlas.",
 )
 
 # Text-sort proceeds in three phases: load the embedding model, embed the text
@@ -336,7 +332,7 @@ def learned_sort(body: dict):
     :func:`learned_sort_result` until ``status == "done"``.
 
     A small signature cache short-circuits the no-op case: when the votes,
-    detector, inclusion and thresholding settings are unchanged from the
+    detector, floor and thresholding settings are unchanged from the
     most recent successful run, the previous result is returned directly.
 
     Tests can pass ``{"wait": true}`` in the body to block until the job
@@ -375,7 +371,6 @@ def learned_sort(body: dict):
 
     _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
-    inclusion_value = get_inclusion()
     min_precision_value = get_min_precision()
     calibrate_count_value = get_calibrate_count()
     calibration_fraction_value = get_calibration_fraction()
@@ -389,7 +384,6 @@ def learned_sort(body: dict):
         good=good_snapshot,
         bad=bad_snapshot,
         region_boxes_snapshot=region_boxes_snapshot,
-        inclusion_value=inclusion_value,
         calibrate_count_value=calibrate_count_value,
         calibration_fraction_value=calibration_fraction_value,
         min_precision_value=min_precision_value,
@@ -412,7 +406,6 @@ def learned_sort(body: dict):
             good=good_snapshot,
             bad=bad_snapshot,
             region_boxes_snapshot=region_boxes_snapshot,
-            inclusion_value=inclusion_value,
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
             min_precision_value=min_precision_value,
@@ -423,7 +416,7 @@ def learned_sort(body: dict):
         # carries one.  It sits four inclusion steps stricter than the line:
         # under a promised floor no inclusion drew that line, so none is passed
         # and it is derived from the line itself (#4245).
-        line_incl = detector_line_inclusion(det_ctx, inclusion_value, min_precision_value)
+        line_incl = detector_line_inclusion(det_ctx, min_precision_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl)
         # Whether the line is a promise rides with it (#4247).
         floor = detector_floor_state(det_ctx, min_precision_value)
@@ -574,45 +567,6 @@ def add_textsort_suggestion_route(body: dict):
     return {"ok": True}
 
 
-@sorting_bp.route("/api/inclusion", methods=["GET"])
-@sorting_bp.response(200, InclusionResponseSchema)
-def get_inclusion_route():
-    """Get the current Inclusion setting and the cutoff it resolves to."""
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold(), "floor": _active_floor_state()}
-
-
-@sorting_bp.route("/api/inclusion", methods=["POST"])
-@sorting_bp.arguments(InclusionRequestSchema)
-@sorting_bp.response(200, InclusionResponseSchema)
-def set_inclusion_route(body: dict):
-    """Set the Inclusion setting (clamped to ``[-10, 10]``).
-
-    Inclusion is a pure cutoff knob: this re-derives the active detector's
-    threshold from its cached fold orderings (no MLP retrain) and, in Find
-    mode, re-splits the unverified items over the frozen scores.  The new
-    cutoff is returned so the Find slider can move the green/red line.
-    """
-    # The clamp is not spelled out here: ``settings.validate_inclusion`` is
-    # generated from the ``[-10, 10]`` bound declared once on
-    # ``UserSettings.inclusion``, so this endpoint and ``PUT /api/settings``
-    # cannot drift apart (issue #3416). The schema admits any number
-    # (``fields.Raw`` plus a numeric check), so truncate toward zero first --
-    # the pydantic field is an ``int`` and rejects a fractional value, and
-    # truncate-then-clamp is what this route has always done.
-    #
-    # This note stays a comment rather than joining the docstring above:
-    # flask-smorest publishes the docstring as the endpoint's OpenAPI
-    # ``description``, and internal wiring is not part of the contract.
-    from vtsearch import settings  # noqa: PLC0415
-
-    try:
-        new_inclusion = settings.validate_inclusion(int(body["inclusion"]))
-    except (TypeError, ValueError) as exc:
-        abort(400, message=str(exc))
-    set_inclusion(new_inclusion)
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold(), "floor": _active_floor_state()}
-
-
 @sorting_bp.route("/api/min-precision", methods=["GET"])
 @sorting_bp.response(200, MinPrecisionResponseSchema)
 def get_min_precision_route():
@@ -624,24 +578,27 @@ def get_min_precision_route():
 @sorting_bp.arguments(MinPrecisionRequestSchema)
 @sorting_bp.response(200, MinPrecisionResponseSchema)
 def set_min_precision_route(body: dict):
-    """Set the precision floor (a fraction clamped to ``[0.01, 1]``), or clear it with ``null``.
+    """Set the precision floor, a fraction clamped to ``[0.01, 1]``.
 
-    The counterpart of ``POST /api/inclusion``: a pure cutoff knob.  The active
-    detector re-cuts its cached estimators at the new floor (no retrain) and,
-    in Find mode, re-splits the unverified items over the frozen scores.  The
-    new line comes back in the same round trip.  A set floor draws the line
-    whatever Inclusion says; ``null`` hands it back to Inclusion.  A floor that
-    can promise nothing draws the Inclusion 0 line and says why in ``status``.
+    A pure cutoff knob: the active detector re-cuts its cached estimators at
+    the new floor (no retrain) and, in Find mode, re-splits the unverified
+    items over the frozen scores.  The new line comes back in the same round
+    trip.  A floor that can promise nothing draws the Inclusion 0 line and says
+    why in ``status``.  Every detector has a floor, so ``null`` is refused.
     """
-    # As ``set_inclusion_route``: the clamp is the one declared on
-    # ``UserSettings.min_precision``, reached through the autogenerated
-    # ``settings.validate_min_precision``, so this endpoint and
-    # ``PUT /api/settings`` cannot disagree about the range.
+    # The clamp is not spelled out here: ``settings.validate_min_precision`` is
+    # generated from the bound declared once on ``UserSettings.min_precision``,
+    # so this endpoint and ``PUT /api/settings`` cannot disagree about the
+    # range (issue #3416).  The schema admits any number (``fields.Raw`` plus a
+    # numeric check), so the value is coerced to a float first.
+    #
+    # This note stays a comment rather than joining the docstring above:
+    # flask-smorest publishes the docstring as the endpoint's OpenAPI
+    # ``description``, and internal wiring is not part of the contract.
     from vtsearch import settings  # noqa: PLC0415
 
-    raw = body["min_precision"]
     try:
-        value = None if raw is None else settings.validate_min_precision(float(raw))
+        value = settings.validate_min_precision(float(body["min_precision"]))
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
     set_min_precision(value)
@@ -658,13 +615,6 @@ def _min_precision_payload() -> dict:
     estimate = None if det_ctx is _empty_detector_context else det_ctx.precision_floor_cache
     n_returned = estimate.count_at(threshold) if estimate is not None and threshold is not None else None
     return {**state, "threshold": threshold, "n_returned": n_returned}
-
-
-def _active_floor_state() -> dict:
-    """What the precision floor says about the active detector's line (#4247)."""
-    from vtscore.state.core import detector_floor_state, get_active_detector_context
-
-    return detector_floor_state(get_active_detector_context(), get_min_precision())
 
 
 def _active_detector_threshold() -> float | None:

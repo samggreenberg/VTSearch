@@ -437,7 +437,7 @@ work to a background thread and returns immediately:
 
 Poll [`GET /api/learned-sort/result`](#learned-sort-result-poll) with that
 `job_id` until `status == "done"` to receive the results. A no-op call (votes,
-detector, inclusion, and threshold settings unchanged from the most recent
+detector, floor, and threshold settings unchanged from the most recent
 successful run) short-circuits and returns the cached `done` payload directly.
 
 Pass `{"wait": true}` in the body to block until the job finishes and receive

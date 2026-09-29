@@ -65,13 +65,13 @@ def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:
 HAYSTACK = 100
 
 
-def _trained(seed: int, detector_id: str, inclusion_value: int = 0):
+def _trained(seed: int, detector_id: str):
     rng = np.random.default_rng(seed)
     clips = _clips(rng, range(500, 500 + HAYSTACK))
     good = {cid: None for cid in range(500, 504)}
     bad = {cid: None for cid in range(504, 508)}
     det_ctx = DetectorContext(detector_id=detector_id, media_type="audio")
-    _results, threshold, model = train_and_score(clips, good, bad, inclusion_value=inclusion_value, det_ctx=det_ctx)
+    _results, threshold, model = train_and_score(clips, good, bad, det_ctx=det_ctx)
     assert model is not None
     det_ctx.threshold = threshold
     return det_ctx

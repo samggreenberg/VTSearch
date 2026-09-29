@@ -4,9 +4,9 @@ import type { FloorStatus, LineFloor } from '../utils/line-floor';
 export const NO_PROMISE_STATES: FloorStatus[] = ['unreachable', 'insufficient_evidence'];
 
 /** A floor verdict as the sort state holds it: a 50% floor with 3 of 10 calibration positives. */
-export function lineFloor(status: FloorStatus | null, overrides: Partial<LineFloor> = {}): LineFloor {
+export function lineFloor(status: FloorStatus, overrides: Partial<LineFloor> = {}): LineFloor {
   return {
-    minPrecision: status === null ? null : 0.5,
+    minPrecision: 0.5,
     status,
     calibrationPositives: 3,
     minCalibrationPositives: 10,
@@ -15,7 +15,7 @@ export function lineFloor(status: FloorStatus | null, overrides: Partial<LineFlo
 }
 
 /** The same verdict as the wire `floor` object a response carries. */
-export function wireFloor(status: FloorStatus | null, overrides: Partial<LineFloor> = {}) {
+export function wireFloor(status: FloorStatus, overrides: Partial<LineFloor> = {}) {
   const f = lineFloor(status, overrides);
   return {
     min_precision: f.minPrecision,

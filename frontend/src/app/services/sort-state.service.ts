@@ -86,9 +86,9 @@ export class SortStateService {
   private readonly _sortEtaSeconds = signal<number | null>(null);
   // The active detector's precision floor (#4246), the value the floor control
   // shows. Seeded per detector from `GET /api/min-precision` on a pair switch;
-  // `null` is a detector with no floor. Distinct from `_floor`, which is the
+  // every detector has one (#4269). Distinct from `_floor`, which is the
   // verdict on the line the list is drawing and arrives with that line.
-  private readonly _minPrecision = signal<number | null>(DEFAULT_MIN_PRECISION);
+  private readonly _minPrecision = signal<number>(DEFAULT_MIN_PRECISION);
   private readonly _loadSortLabel = signal('');
   private readonly _loadSortSource = signal<LoadSortSource | null>(null);
   private readonly _textQuery = signal('');
@@ -167,8 +167,8 @@ export class SortStateService {
     return this._sortEtaSeconds();
   }
 
-  /** The active detector's precision floor; null when it has none. */
-  get minPrecision(): number | null {
+  /** The active detector's precision floor. */
+  get minPrecision(): number {
     return this._minPrecision();
   }
 
@@ -335,7 +335,7 @@ export class SortStateService {
     this.findProgressSub = null;
   }
 
-  setMinPrecision(value: number | null): void {
+  setMinPrecision(value: number): void {
     this._minPrecision.set(value);
   }
 

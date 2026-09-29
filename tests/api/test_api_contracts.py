@@ -230,22 +230,26 @@ class TestLearnedSortContract:
             assert isinstance(entry["score"], (int, float))
 
 
-class TestInclusionContract:
-    """GET/POST /api/inclusion response shape."""
+class TestMinPrecisionContract:
+    """GET/POST /api/min-precision response shape."""
 
-    def test_get_returns_inclusion_key(self, client):
-        resp = client.get("/api/inclusion")
+    def test_get_returns_the_floor(self, client):
+        resp = client.get("/api/min-precision")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "inclusion" in data
-        assert isinstance(data["inclusion"], (int, float))
+        assert isinstance(data["min_precision"], (int, float))
+        assert "status" in data and "threshold" in data
 
-    def test_post_returns_inclusion_key(self, client):
-        resp = client.post("/api/inclusion", json={"inclusion": 3})
+    def test_post_returns_the_floor(self, client):
+        resp = client.post("/api/min-precision", json={"min_precision": 0.75})
         assert resp.status_code == 200
-        data = resp.get_json()
-        assert "inclusion" in data
-        assert data["inclusion"] == 3
+        assert resp.get_json()["min_precision"] == 0.75
+
+    def test_the_inclusion_endpoint_is_gone(self, client):
+        """Inclusion is retired as a user preference (#4269)."""
+        # 405 for the POST: the SPA fallback answers GET on any path.
+        assert client.get("/api/inclusion").status_code == 404
+        assert client.post("/api/inclusion", json={"inclusion": 3}).status_code in (404, 405)
 
 
 class TestLabelsExportContract:
@@ -628,12 +632,11 @@ class TestErrorResponseFormat:
         data = resp.get_json()
         assert "errors" in data
 
-    def test_400_inclusion_error_is_json(self, client):
-        # The sorting blueprint now returns flask-smorest's standard
-        # error envelope: type mismatches surface as 422 with a per-field
+    def test_400_min_precision_error_is_json(self, client):
+        # The sorting blueprint returns flask-smorest's standard error
+        # envelope: type mismatches surface as 422 with a per-field
         # ``errors`` dict, not the legacy ``{"error": str}`` shape.
-        # Keeping the test name for grep continuity.
-        resp = client.post("/api/inclusion", json={"inclusion": "not_a_number"})
+        resp = client.post("/api/min-precision", json={"min_precision": "not_a_number"})
         assert resp.status_code == 422
         data = resp.get_json()
         assert "errors" in data

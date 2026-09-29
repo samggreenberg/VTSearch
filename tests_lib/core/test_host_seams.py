@@ -90,7 +90,7 @@ class TestRestore:
     def test_a_leaked_keyed_seam_is_put_back(self, restore_afterwards):
         import vtscore.state as state
 
-        state.register_setting_persister("inclusion", lambda v: None)
+        state.register_setting_persister("calibrate_count", lambda v: None)
 
         restore_host_seams(restore_afterwards)
 

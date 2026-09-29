@@ -1,4 +1,4 @@
-"""Schemas for the sorting / voting / inclusion APIs.
+"""Schemas for the sorting / voting / precision-floor APIs.
 
 Covers the routes in ``vtsearch/routes/sorting.py``:
 
@@ -13,9 +13,6 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
 * ``GET  /api/textsort-suggestions``          -> :class:`TextsortSuggestionsResponseSchema`
 * ``POST /api/textsort-suggestions``          -> :class:`TextsortSuggestionRequestSchema` ->
                                                 :class:`OkResponseSchema`
-* ``GET  /api/inclusion``                     -> :class:`InclusionResponseSchema`
-* ``POST /api/inclusion``                     -> :class:`InclusionRequestSchema` ->
-                                                :class:`InclusionResponseSchema`
 * ``GET  /api/min-precision``                 -> :class:`MinPrecisionResponseSchema`
 * ``POST /api/min-precision``                 -> :class:`MinPrecisionRequestSchema` ->
                                                 :class:`MinPrecisionResponseSchema`
@@ -62,12 +59,12 @@ class FloorStateSchema(Schema):
     :func:`vtscore.state.core.detector_floor_state`.
     """
 
-    # The detector's floor, or ``null`` when none is set and Inclusion drew the line.
-    min_precision = fields.Float(required=True, allow_none=True)
+    # The detector's floor.  Every detector has one (#4269).
+    min_precision = fields.Float(required=True)
     # ``promised``: the line is the floor's own cut.  ``unreachable`` /
     # ``insufficient_evidence``: the floor promised nothing and the line is the
-    # Inclusion 0 cut, unpromised.  ``null`` with no floor.
-    status = fields.String(required=True, allow_none=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
+    # Inclusion 0 cut, unpromised.
+    status = fields.String(required=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
     # Positives among the held-out votes that may calibrate the promise.
     calibration_positives = fields.Integer(required=True)
     # How many the floor needs before it promises anything.
@@ -256,42 +253,14 @@ class TextsortSuggestionRequestSchema(Schema):
     text = fields.String(required=True)
 
 
-# ---------------------------------------------------------------------------
-# /api/inclusion
-# ---------------------------------------------------------------------------
-
-
-class InclusionResponseSchema(Schema):
-    """Response for ``GET|POST /api/inclusion``."""
-
-    inclusion = fields.Integer(required=True)
-    # The cutoff that this inclusion resolves to over the active detector's
-    # cached fold orderings.  Returned so the Find slider can move the
-    # green/red line over the frozen scores without re-scoring.  ``None`` when
-    # no detector context has computed a threshold yet.
-    threshold = fields.Float(required=False, allow_none=True)
-    # What the precision floor says about ``threshold`` (#4247): under a set
-    # floor the line is the floor's, and Inclusion does not move it.
-    floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
-
-
 def _validate_numeric(value):
-    """Reject booleans and non-numeric values for the inclusion field.
+    """Reject booleans, ``null`` and non-numeric values for the floor.
 
     Booleans are a subclass of ``int`` in Python; without this guard
     ``true`` / ``false`` would sneak through as ``1`` / ``0``.
-    Declared as a plain validator rather than ``fields.Integer(strict=True)``
-    so that ``3.7`` continues to round to ``3`` in the handler
-    (preserving the pre-migration coercion behavior).
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValidationError("Must be a number.")
-
-
-class InclusionRequestSchema(Schema):
-    """Body for ``POST /api/inclusion``."""
-
-    inclusion = fields.Raw(required=True, validate=_validate_numeric)
 
 
 # ---------------------------------------------------------------------------
@@ -302,18 +271,17 @@ class InclusionRequestSchema(Schema):
 class MinPrecisionResponseSchema(Schema):
     """Response for ``GET|POST /api/min-precision``."""
 
-    # The active detector's floor, or ``null`` when none is set and the
-    # Inclusion knob draws the line.
-    min_precision = fields.Float(required=True, allow_none=True)
+    # The active detector's floor.  Every detector has one (#4269).
+    min_precision = fields.Float(required=True)
     # What the floor can say about the detector's corpus: ``promised`` (at
     # least ``min_precision`` of what the line returns is estimated right),
     # ``unreachable`` (enough evidence, but no cut gets there), or
     # ``insufficient_evidence`` (too few calibration positives to promise
-    # anything).  ``null`` when no floor is set.
-    status = fields.String(required=True, allow_none=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
+    # anything).
+    status = fields.String(required=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
     # The line the detector draws: the floor's cut when promised, the
-    # Inclusion 0 cut when the floor promises nothing, the Inclusion knob's
-    # cut when no floor is set.  ``null`` when no detector has a threshold.
+    # Inclusion 0 cut when the floor promises nothing.  ``null`` when no
+    # detector has a threshold.
     threshold = fields.Float(required=True, allow_none=True)
     # How many items the line returns in the corpus the cut decides (the
     # dataset the detector last trained against, less its voted items when the
@@ -326,19 +294,13 @@ class MinPrecisionResponseSchema(Schema):
     min_calibration_positives = fields.Integer(required=True)
 
 
-def _validate_floor(value):
-    """Accept ``null`` (clear the floor) or a number; reject booleans."""
-    if value is None:
-        return
-    _validate_numeric(value)
-
-
 class MinPrecisionRequestSchema(Schema):
     """Body for ``POST /api/min-precision``."""
 
-    # A fraction in ``(0, 1]`` (clamped to ``[0.01, 1]``), or ``null`` to clear
-    # the floor and hand the line back to the Inclusion knob.
-    min_precision = fields.Raw(required=True, allow_none=True, validate=_validate_floor)
+    # A fraction in ``(0, 1]``, clamped to ``[0.01, 1]``.  ``null`` is refused:
+    # every detector has a floor (#4269).  ``fields.Raw`` plus a numeric check
+    # rather than ``fields.Float`` so a boolean is refused too.
+    min_precision = fields.Raw(required=True, validate=_validate_numeric)
 
 
 # ---------------------------------------------------------------------------
@@ -389,8 +351,6 @@ class CoverageAtlasNextResponseSchema(Schema):
 __all__ = [
     "CoverageAtlasNextRequestSchema",
     "CoverageAtlasNextResponseSchema",
-    "InclusionRequestSchema",
-    "InclusionResponseSchema",
     "LabelFileSortResponseSchema",
     "LearnedSortCancelResponseSchema",
     "LearnedSortRequestSchema",

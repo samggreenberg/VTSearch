@@ -278,7 +278,7 @@ export class FindStatsModalComponent implements OnInit {
     return this.stats()?.precision_curve.some((p) => p.verified_precision != null) ?? false;
   }
 
-  /** Y position of the floor, or null when the detector has none. */
+  /** Y position of the floor, or null before the stats arrive. */
   get floorY(): number | null {
     const p = this.stats()?.floor.min_precision;
     return p == null ? null : this.yFor(p);

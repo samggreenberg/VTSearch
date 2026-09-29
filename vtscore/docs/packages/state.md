@@ -121,9 +121,8 @@ canonical persisted form.
 | `textsort_suggestions` | `list[str]` | LRU of recent text-sort queries |
 | `find_initial_labels` | `dict[int, str]` | Labels the detector applied during a Find run |
 | `verified_ids` | `dict[int, None]` | IDs the human explicitly verified this Find session |
-| `find_scores` | `dict[int, float]` | Frozen per-item score, so an Inclusion change re-thresholds without re-scoring |
+| `find_scores` | `dict[int, float]` | Frozen per-item score, so a floor change re-thresholds without re-scoring |
 | `find_eval_stale` | `bool` | The labelset changed since this Find evaluation was scored |
-| `inclusion` | `int \| None` | This detector's Inclusion value: seeded from the user's setting on first read, `None` until then. An Inclusion change re-cuts each loaded detector at its own value |
 | `training_medias` | `dict[int, dict[str, Any]]` | Voted medias with embeddings |
 | `label_embeddings` | `dict[str, np.ndarray]` | `stable_element_id -> embedding`, built from origins |
 | `label_embedding_regions` | `dict[str, tuple \| None]` | The region each cached `label_embeddings` entry was pooled from - detects a region edit |
@@ -138,7 +137,7 @@ canonical persisted form.
 | `cached_labelset` | `LabelSet \| None` | Parsed labelset, reused across requests |
 | `cached_labelset_mtime` / `cached_labelset_media_type` | `float` / `str` | Mtime and media type of the JSON the cache was built from |
 | `labelset_source` | `dict \| None` | Active sync target |
-| `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* inclusion, so an Inclusion change re-runs only the quantile rule |
+| `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another floor or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
 
 Everything in this table is in-memory only. `model`,
@@ -582,8 +581,7 @@ username to a data directory.
 
 ## Setting-persistence hooks
 
-Some library helpers - `get_inclusion`, `set_inclusion`,
-`get_min_precision`, `set_min_precision`,
+Some library helpers - `get_min_precision`, `set_min_precision`,
 `set_calibrate_count`, `set_calibration_fraction` - read or write
 user-pref values that a **host** owns. The library exposes the hook
 surface; the host installs the persistence callbacks. Library-only
@@ -591,12 +589,12 @@ consumers see purely in-memory mutation.
 
 ```python
 # vtscore/state/__init__.py
-KNOWN_SETTING_KEYS = frozenset({"inclusion", "min_precision",
-                                "calibrate_count", "calibration_fraction"})
+KNOWN_SETTING_KEYS = frozenset({"min_precision", "calibrate_count", "calibration_fraction"})
 
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persister for *key*, which must be in
-    KNOWN_SETTING_KEYS; anything else raises ValueError."""
+    KNOWN_SETTING_KEYS; the retired ``"inclusion"`` warns and never fires;
+    anything else raises ValueError."""
 ```
 
 A host wires it at startup:
@@ -604,16 +602,23 @@ A host wires it at startup:
 ```python
 from vtscore.state import register_setting_persister
 
-register_setting_persister("inclusion", my_settings.save_inclusion)
+register_setting_persister("min_precision", my_settings.save_min_precision)
 ```
 
-`get_inclusion()` seeds its first read from `CoreConfig.from_settings()`
-(see [config.md](config.md)), per detector, and so does `get_min_precision()`.
-The floor is a float in `(0, 1]` or `None`: `None` means no floor, and the
-Inclusion knob draws the line; a set floor wins over it. `set_min_precision`
-re-cuts the active detector at the new floor with no retrain
+`get_min_precision()` seeds its first read from `CoreConfig.from_settings()`
+(see [config.md](config.md)), per detector. The floor is a float in `(0, 1]`
+or `None`: `None` means no floor, and the line is the Inclusion 0 cut, with no
+promise attempted (the app always sets one). `set_min_precision` re-cuts the
+active detector at the new floor with no retrain
 (`recut_detector_threshold(ctx, min_precision=...)`) and, in Find mode,
 re-splits the unverified items.
+
+**Inclusion is retired as a user preference** (#4269). `get_inclusion()` is
+deprecated and always returns `0`; `set_inclusion()` accepts only `0`, with a
+`DeprecationWarning`, and raises `ValueError` for anything else, as does
+`recompute_detector_thresholds_for_inclusion()`. Registering an `"inclusion"`
+persister warns and never fires. Inclusion survives as the internal unit the
+threshold machinery measures cuts in (`recut_detector_threshold(ctx, k)`).
 
 Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 (shallow copy under the lock), `get_media(cid)`, `clear_medias()`,

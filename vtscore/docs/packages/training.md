@@ -143,9 +143,10 @@ with torch.no_grad():
 
 Behaviour shared by every head:
 
-- **Inclusion does not enter training.** It is a pure threshold knob applied
-  later in `vtscore.training.thresholds.conformal_threshold`, so the trained
-  model - and therefore every item's score - is independent of inclusion.
+- **Inclusion does not enter training.** It is the unit cuts are measured
+  in, applied later in `vtscore.training.thresholds.conformal_threshold`, so
+  the trained model - and therefore every item's score - is independent of
+  inclusion.
 - **Class balance:** by default the fit balances class frequencies
   (`weight_true = num_false / num_true`, `weight_false = 1.0`, which is what
   `class_weight="balanced"` derives on the SVM path). Pass `sample_weights` to
@@ -252,7 +253,7 @@ are summarised in
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 | `precision_floor_cut`                     | The largest set whose estimated precision clears a floor (#4224); a detector's line when its floor is set |
-| `reporting_line`                          | Which line an operating point draws: the floor's, its Inclusion 0 fallback, or Inclusion's |
+| `reporting_line`                          | Which line an operating point draws: the floor's, its Inclusion 0 fallback, or the given inclusion's with no floor |
 
 ### `text_sort_threshold(scores, rule=None)`
 
@@ -379,7 +380,7 @@ what the eval harness's head-sweep arms want and nothing else does.
 ### `calibration_folds_cached(...)` + `threshold_from_folds(...)`
 
 The interactive path splits the work in two, because only half of it
-depends on the Inclusion knob:
+depends on where the cut goes:
 
 ```python
 from vtscore.training import calibration_folds_cached, threshold_from_folds
@@ -398,8 +399,9 @@ behind each held-out score, so a caller can tell which votes a fold held out
 (the precision floor calibrates only on the learned sort's own draws).
 `calibration_folds_cached` memoises it on `det_ctx.calibration_cache` under a
 deterministic key built from `X_list`, `y_list`, the calibrate settings,
-`hidden_dim`, and any `score_rows_by_group` - so toggling Inclusion during
-an interactive sort re-runs only the cheap rule, with no fold refits. A real label change produces a different key and falls through to a
+`hidden_dim`, and any `score_rows_by_group` - so a re-cut at another
+inclusion (the acquisition cut, Smart's pricing) re-runs only the cheap rule,
+with no fold refits. A real label change produces a different key and falls through to a
 fresh calibration; no explicit invalidation is needed.
 
 The key bytes encode the actual training vectors (not just label IDs),
@@ -486,8 +488,11 @@ score-only selection.
 
 Which line a detector draws at an operating point, shared by training, the
 no-refit re-cut (`vtscore.state.core.recut_detector_threshold`) and the eval
-harness's default arm. `min_precision=None` is the Inclusion knob:
-`cut.threshold_at(inclusion_value)`. A floor that is `promised` draws its own
+harness's default arm. `min_precision=None` is no floor:
+`cut.threshold_at(inclusion_value)`, where *inclusion_value* is the internal
+unit, not a user preference (#4269) - the app passes
+`PRECISION_FLOOR_FALLBACK_INCLUSION`, and a re-cut passes the acquisition or
+Smart inclusion. A floor that is `promised` draws its own
 threshold, whatever the inclusion. One that promises nothing draws the
 `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut, so an unmet floor never empties the
 results. The returned `ReportingLine` carries the verdict, and `line_inclusion`

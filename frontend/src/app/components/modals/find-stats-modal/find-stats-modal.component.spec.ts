@@ -322,13 +322,6 @@ describe('FindStatsModalComponent', () => {
         true,
       );
     });
-
-    it('draws no floor for a detector without one', async () => {
-      const el = await load({ floor: wireFloor(null) });
-      expect(el.querySelector('.precision-chart .floor')).toBeNull();
-      expect(legend(el)).not.toContain('Floor');
-      expect(legend(el)).toContain('Line');
-    });
   });
 });
 

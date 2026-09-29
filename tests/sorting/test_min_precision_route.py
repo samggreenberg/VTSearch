@@ -1,9 +1,9 @@
 """``GET|POST /api/min-precision`` and the precision floor as a setting (#4245).
 
-The counterpart of ``/api/inclusion``: a pure cutoff knob whose response carries
-the line it draws in the same round trip.  Two owner rulings are pinned here
-(2026-09-28): a user who has set no floor gets one at 50%, and a set floor wins
-over Inclusion - clearing it (``null``) hands the line back to the knob.
+A pure cutoff knob whose response carries the line it draws in the same round
+trip.  Two owner rulings are pinned here: a user who has set no floor gets one
+at 50% (2026-09-28), and every detector has a floor - ``null`` is refused, now
+that Inclusion is retired as a user preference (#4269).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class TestTheSetting:
 
         assert UserSettings().min_precision == resolve_min_precision(None)
 
-    def test_it_is_a_state_tier_setting_like_inclusion(self):
+    def test_it_is_a_state_tier_setting(self):
         from vtsearch.routes.settings import api
 
         assert "min_precision" in api._STATE_TIER_SETTERS
@@ -47,26 +47,24 @@ class TestTheSetting:
     def test_put_settings_and_the_route_agree(self, client):
         assert client.put("/api/settings", json={"min_precision": 0.75}).get_json()["min_precision"] == 0.75
         assert client.get("/api/min-precision").get_json()["min_precision"] == 0.75
-        assert client.put("/api/settings", json={"min_precision": None}).get_json()["min_precision"] is None
-        assert client.get("/api/min-precision").get_json()["min_precision"] is None
+        assert client.put("/api/settings", json={"min_precision": None}).status_code == 422
+        assert client.get("/api/min-precision").get_json()["min_precision"] == 0.75
 
 
 class TestTheRoute:
     def test_no_trained_detector_no_evidence(self, client):
         data = client.get("/api/min-precision").get_json()
         assert data["status"] == "insufficient_evidence"
-        # ``threshold`` is whatever ``/api/inclusion`` reports for the context.
-        assert data["threshold"] == client.get("/api/inclusion").get_json()["threshold"]
         assert data["n_returned"] is None
         assert data["calibration_positives"] == 0
 
-    def test_set_persists_and_clear_reports_no_status(self, client):
+    def test_set_persists_and_null_is_refused(self, client):
         data = client.post("/api/min-precision", json={"min_precision": 0.8}).get_json()
         assert data["min_precision"] == 0.8 and data["status"] in _STATES
         assert client.get("/api/min-precision").get_json()["min_precision"] == 0.8
 
-        cleared = client.post("/api/min-precision", json={"min_precision": None}).get_json()
-        assert cleared["min_precision"] is None and cleared["status"] is None
+        assert client.post("/api/min-precision", json={"min_precision": None}).status_code == 422
+        assert client.get("/api/min-precision").get_json()["min_precision"] == 0.8
 
     @pytest.mark.parametrize(("sent", "stored"), [(0, 0.01), (-3, 0.01), (5, 1.0), (0.9, 0.9)])
     def test_out_of_range_is_clamped(self, client, sent, stored):
@@ -90,15 +88,31 @@ class TestTheLine:
         assert data["threshold"] == ctx.threshold == ctx.anchored_cut_cache.threshold_at(0)
         assert data["n_returned"] == ctx.precision_floor_cache.count_at(ctx.threshold)
 
-    def test_a_set_floor_wins_over_inclusion_and_null_hands_it_back(self, client):
-        _load_trained_detector(client)
-        ctx = get_active_detector_context()
-        client.post("/api/min-precision", json={"min_precision": 0.5})
-        floored = ctx.threshold
 
-        moved = client.post("/api/inclusion", json={"inclusion": -10}).get_json()
-        assert moved["threshold"] == floored, "a set floor draws the line whatever Inclusion says"
+class TestTheClampHasOneOwner:
+    """The floor's ``[0.01, 1]`` bound is declared exactly once.
 
-        released = client.post("/api/min-precision", json={"min_precision": None}).get_json()
-        assert released["threshold"] == ctx.anchored_cut_cache.threshold_at(-10)
-        assert released["threshold"] != floored
+    It lives on ``UserSettings.min_precision`` in :mod:`vtsearch.settings_models`,
+    and both write paths reach it through the accessor generated from that
+    field (``settings.validate_min_precision``): ``POST /api/min-precision``
+    calls it directly, and ``PUT /api/settings`` reaches it via
+    ``settings.validate_setting`` because ``min_precision`` is dispatched
+    through ``_STATE_TIER_SETTERS``.  A bespoke clamp on either route would be
+    a second copy of the range (issue #3416, first found on Inclusion).
+    """
+
+    VALUES = [-3, 0, 0.005, 0.01, 0.25, 0.9, 1, 1.5, 100]
+
+    def test_both_write_paths_agree_with_the_pydantic_field(self, client):
+        from vtsearch import settings
+
+        for value in self.VALUES:
+            expected = settings.validate_min_precision(float(value))
+
+            post = client.post("/api/min-precision", json={"min_precision": value})
+            assert post.status_code == 200, f"POST /api/min-precision rejected {value!r}"
+            assert post.get_json()["min_precision"] == expected, value
+
+            put = client.put("/api/settings", json={"min_precision": value})
+            assert put.status_code == 200, f"PUT /api/settings rejected {value!r}"
+            assert put.get_json()["min_precision"] == expected, value

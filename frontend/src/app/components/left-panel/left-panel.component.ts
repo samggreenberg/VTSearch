@@ -81,8 +81,8 @@ export class LeftPanelComponent implements OnInit {
   readonly votesLoaded = input(false);
   readonly sortMode = input<SortMode>('text');
   readonly selectMode = input<SelectMode>('top');
-  /** The active detector's precision floor (#4246); null when it has none. */
-  readonly minPrecision = input<number | null>(DEFAULT_MIN_PRECISION);
+  /** The active detector's precision floor (#4246). */
+  readonly minPrecision = input<number>(DEFAULT_MIN_PRECISION);
   /** How many items the line returns, for the floor control's count; null when unknown. */
   readonly returned = input<number | null>(null);
   readonly sortBusy = input(false);
