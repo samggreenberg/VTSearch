@@ -65,7 +65,9 @@
     }
   }
 
-  &.done {
+  // Dim a finished step's text only: its check is the light's last state
+  // and stays full green.
+  &.done .ap-step-content {
     opacity: 0.7;
   }
 
@@ -74,19 +76,24 @@
   }
 }
 
+// One label line tall at the label's font size, so every marker (the light,
+// the check it turns into, the unlit dot) centres on the label's first line.
 .ap-step-marker {
   flex-shrink: 0;
   width: 18px;
+  height: 1lh;
+  font-size: var(--font-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 1px;
 }
 
+// A light's green state (#4319): red circle, yellow circle, green check. A
+// flex box rather than inline text, so no line box drops the icon below
+// where the circle sat.
 .ap-check {
-  color: var(--color-good);
-  font-size: var(--font-md);
-  font-weight: var(--weight-semibold);
+  display: flex;
+  color: var(--status-green-dot);
 }
 
 // Upcoming step: an unlit light.
@@ -97,8 +104,9 @@
   background: var(--indicator-dot);
 }
 
-// The active step's one light (#4319): red -> yellow -> green as the step
-// nears its end. `color` carries the status so the glow matches the fill.
+// The active step's one light (#4319): red -> yellow as the step nears its
+// end, then the green check (`.ap-check`) once it's through. `color` carries
+// the status so the glow matches the fill.
 .ap-light {
   display: inline-block;
   flex-shrink: 0;
@@ -111,10 +119,6 @@
 
   &[data-color="yellow"] {
     color: var(--status-yellow-dot);
-  }
-
-  &[data-color="green"] {
-    color: var(--status-green-dot);
   }
 }
 

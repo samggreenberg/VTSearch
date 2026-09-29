@@ -19,13 +19,19 @@
         >
           @if (step.state === 'active') {
             @if (step.light; as light) {
-              <span
-                class="ap-light"
-                [attr.data-color]="light.color"
-                [attr.aria-label]="light.ariaLabel"
-                [title]="light.title"
-                role="img"
-              ></span>
+              @if (light.color === 'green') {
+                <span class="ap-check" role="img" [attr.aria-label]="light.ariaLabel" [title]="light.title">
+                  <vt-icon type="check" [size]="14"></vt-icon>
+                </span>
+              } @else {
+                <span
+                  class="ap-light"
+                  [attr.data-color]="light.color"
+                  [attr.aria-label]="light.ariaLabel"
+                  [title]="light.title"
+                  role="img"
+                ></span>
+              }
             }
             <span class="collapsed-step-label">{{ step.shortLabel }}</span>
           } @else {
@@ -61,13 +67,19 @@
               @if (step.state === 'done') {
                 <span class="ap-check" title="Complete" aria-label="Complete"><vt-icon type="check" [size]="14"></vt-icon></span>
               } @else if (step.light; as light) {
-                <span
-                  class="ap-light"
-                  [attr.data-color]="light.color"
-                  [attr.aria-label]="light.ariaLabel"
-                  [title]="light.title"
-                  role="img"
-                ></span>
+                @if (light.color === 'green') {
+                  <span class="ap-check" role="img" [attr.aria-label]="light.ariaLabel" [title]="light.title">
+                    <vt-icon type="check" [size]="14"></vt-icon>
+                  </span>
+                } @else {
+                  <span
+                    class="ap-light"
+                    [attr.data-color]="light.color"
+                    [attr.aria-label]="light.ariaLabel"
+                    [title]="light.title"
+                    role="img"
+                  ></span>
+                }
               } @else {
                 <span class="ap-dot" title="Upcoming step" aria-label="Upcoming step"></span>
               }

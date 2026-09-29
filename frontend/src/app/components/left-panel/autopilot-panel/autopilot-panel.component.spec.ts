@@ -314,13 +314,27 @@ describe('AutopilotPanelComponent', () => {
       expect(activeLight()).toBe('red');
     });
 
-    it('the done step is green', async () => {
+    it('the done step is green, drawn as the check a finished step keeps', async () => {
       fixture.componentRef.setInput('goodVotes', goods(20));
       fixture.componentRef.setInput('badVotes', bads(5));
       fixture.componentRef.setInput('labelingStatus', ALL_GREEN);
       await settleZoneless(fixture);
       expect(component.state.phase).toBe('done');
       expect(activeLight()).toBe('green');
+
+      // Red circle, yellow circle, green check: no green circle is ever drawn.
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelectorAll('.ap-light').length).toBe(0);
+      const activeCheck = el.querySelector('.ap-step.active .ap-check')!;
+      expect(activeCheck).toBeTruthy();
+      expect(activeCheck.getAttribute('aria-label')).toBe('Step progress: green');
+      // ...and every finished step before it carries the same check.
+      expect(el.querySelectorAll('.ap-step.done .ap-check').length).toBe(5);
+
+      fixture.componentRef.setInput('collapsed', true);
+      await settleZoneless(fixture);
+      expect(el.querySelectorAll('.collapsed-step.active .ap-check').length).toBe(1);
+      expect(el.querySelectorAll('.ap-light').length).toBe(0);
     });
   });
 

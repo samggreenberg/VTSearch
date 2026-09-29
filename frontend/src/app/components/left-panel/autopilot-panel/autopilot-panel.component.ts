@@ -23,7 +23,8 @@ export type { AutopilotPhase, AutopilotState };
 
 /**
  * A step's one light (#4319). It climbs red -> yellow -> green as the step
- * nears its end, and the step hands over to the next one at green.
+ * nears its end, and the step hands over to the next one at green. Red and
+ * yellow render as a circle, green as the check a finished step keeps.
  */
 type LightColor = 'red' | 'yellow' | 'green';
 
