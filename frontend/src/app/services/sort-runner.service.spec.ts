@@ -276,6 +276,69 @@ describe('SortRunnerService', () => {
     expect(TestBed.inject(AutopilotStateService).state.fracDiversity).toBe(3);
   });
 
+  /**
+   * The centre panel keeps the voted item swiped off-screen while this is true,
+   * so it has to be true for exactly the length of the round-trip (#4307).
+   */
+  describe('advancePending', () => {
+    const probes = () =>
+      httpMock.match((req) => req.url.startsWith('/api/coverage-atlas/next'));
+
+    beforeEach(() => {
+      sortState.setSelectMode('new');
+      sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+    });
+
+    it('is true while the New-mode probe is in the air, and false once it answers', () => {
+      expect(runner.advancePending()).toBe(false);
+
+      runner.autoSelectNext();
+      expect(runner.advancePending()).toBe(true);
+
+      probes()[0].flush({ id: 42, coverage_level: 3 });
+      expect(mediaState.selectedId()).toBe(42);
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('ends when the probe comes back empty', () => {
+      runner.autoSelectNext();
+      probes()[0].flush({ id: null, coverage_level: 3 });
+
+      expect(runner.queueExhausted()).toBe(true);
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('holds until the last of two overlapping probes answers', () => {
+      runner.autoSelectNext();
+      runner.autoSelectNext();
+      const [first, second] = probes();
+
+      first.flush({ id: 5, coverage_level: 1 });
+      expect(runner.advancePending()).toBe(true);
+
+      second.flush({ id: 6, coverage_level: 1 });
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('ends when a pair switch supersedes the probe', () => {
+      runner.autoSelectNext();
+      expect(runner.advancePending()).toBe(true);
+
+      TestBed.inject(PairScopeService).resetForNewPair();
+
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('is never set by an advance that needs no request', () => {
+      sortState.setSelectMode('top');
+
+      runner.autoSelectNext();
+
+      expect(mediaState.selectedId()).toBe(1);
+      expect(runner.advancePending()).toBe(false);
+    });
+  });
+
   it('selects the top unlabeled item without any request in `top` mode', () => {
     sortState.setSelectMode('top');
     sortState.setSortResults(

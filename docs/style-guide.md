@@ -286,13 +286,14 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
 | `closed` (output) | Fired by the `×`, a backdrop click, and Escape. Wire it to whatever tears the dialog down. |
 | default `<ng-content>` | Projected into `.modal-body` (the only scrollable region). |
 | `[modal-footer]` slot | Projected into `.modal-footer`. Put the action buttons in a plain `<div modal-footer>`. |
+| `[modal-footer-start]` slot | Projected at the left end of the footer row, with the actions still on the right. For one secondary affordance that would otherwise sit alone on a half-empty line just above the buttons: the **Advanced ▾** disclosure in New Detector and Add Dataset. The block it opens stays at the foot of the body. Put the attribute on the element itself (one root per `@if`), not on a wrapper. |
 
 **Why the component and not the markup.** `vt-modal` supplies `cdkTrapFocus` with auto-capture (focus moves into the dialog on open, Tab cycles inside it, focus returns to the trigger on close), `role="dialog"`, `aria-modal="true"`, the `aria-label`, backdrop-click dismissal, and Escape handling that closes **only the topmost** modal (stacked flows like New Detector → media-crop would otherwise all collapse on one keypress). Hand-copied markup silently drops every one of those - it is an accessibility regression, not a styling shortcut.
 
 Spacing inside modals (the shared classes already do this - do not redo it in your content):
 - `.modal-content` already has `padding: var(--space-2xl)` - **do not** wrap your projected content in a padding div.
 - `.modal-header` and `.modal-body` already have `margin-bottom: var(--space-xl)` - **do not** add it again.
-- `.modal-footer` is a right-aligned flex row with `gap: var(--space-md)`, so buttons projected into `[modal-footer]` need no wrapper layout of their own.
+- `.modal-footer` is a right-aligned, vertically centred flex row with `gap: var(--space-md)`, so buttons projected into `[modal-footer]` need no wrapper layout of their own, and a `[modal-footer-start]` element is pushed to the left end by an auto margin. Give the `<div modal-footer>` no top margin: it would push the buttons off-centre from a start-slot item beside them.
 - `.modal-content` uses `--shadow-lg` and `--radius-xl`, and is a flex column so the body is the only scrolling region - the header and footer stay pinned when content overflows.
 
 **Width scale.** A dialog that needs a fixed width picks one of the three

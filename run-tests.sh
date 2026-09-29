@@ -737,11 +737,9 @@ fi
 #                                                  by launchpadlib in the Ubuntu
 #                                                  base image, so requirements
 #                                                  can't upgrade it)
-#   oauthlib 3.2.2     CVE-2026-49265             (not a VTSearch dep; the Ubuntu
-#                                                  base image's python3-oauthlib,
-#                                                  needed by lazr.restfulclient
-#                                                  for launchpadlib, same as
-#                                                  httplib2 above)
+#   oauthlib 3.2.2     CVE-2026-49265             (same: an Ubuntu base-image
+#                                                  package in dist-packages that
+#                                                  nothing pip-installed requires)
 PIP_AUDIT_IGNORE=(
     --ignore-vuln PYSEC-2024-277
     --ignore-vuln PYSEC-2025-183

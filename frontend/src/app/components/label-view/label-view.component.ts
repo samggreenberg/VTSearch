@@ -124,6 +124,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  from {@link SortRunnerService}; see its doc for the two paths that reach
    *  it without {@link queueExhausted} ever being true (#4028). */
   readonly datasetExhausted = this.sortRunner.datasetExhausted;
+  /** True while the advance is a server round-trip still in the air (the `new`
+   *  Select mode). Bound into the centre panel so the voted item stays swiped
+   *  off-screen until its successor arrives, rather than sliding back into view
+   *  for the length of the wait (#4307). Aliased from {@link SortRunnerService}. */
+  readonly advancePending = this.sortRunner.advancePending;
 
   /**
    * The centre pane has nothing left to show and should say so, for any of the

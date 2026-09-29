@@ -86,35 +86,33 @@
     />
   </div>
 
-  <div class="form-group form-group--section">
-    <vt-import-advanced
-      [availableConverters]="availableConverters"
-      [nativeType]="outputTypeId"
-      [typeLabels]="mediaTypeLabels"
-      [embedders]="embedders()"
-      [clippers]="clippers()"
-      [cleaners]="cleaners()"
-      [selectedCleaners]="selectedCleaners()"
-      (selectedCleanersChange)="selectedCleaners.set($event)"
-      [showSourceSpecs]="true"
-      [sourceSpecs]="sourceSpecs()"
-      (sourceSpecsChange)="onSpecsChange($event)"
-      [selectedEmbedder]="selectedEmbedder()"
-      (selectedEmbedderChange)="selectedEmbedder.set($event)"
-      [selectedPatchEmbedder]="selectedPatchEmbedder()"
-      (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
-      [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
-      (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
-      [lockedEmbedder]="lockedEmbedderFor(mediaType(), embedders())"
-      [selectedClipper]="selectedClipper()"
-      [selectedClipperParams]="clipperParamValues()"
-      (clipperChooserRequested)="openClipperChooser()"
-      [buildProjection]="buildProjection()"
-      (buildProjectionChange)="buildProjectionChange.emit($event)"
-      [mergeNearDuplicates]="mergeNearDuplicates()"
-      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-    ></vt-import-advanced>
-  </div>
+  <vt-import-advanced
+    [availableConverters]="availableConverters"
+    [nativeType]="outputTypeId"
+    [typeLabels]="mediaTypeLabels"
+    [embedders]="embedders()"
+    [clippers]="clippers()"
+    [cleaners]="cleaners()"
+    [selectedCleaners]="selectedCleaners()"
+    (selectedCleanersChange)="selectedCleaners.set($event)"
+    [showSourceSpecs]="true"
+    [sourceSpecs]="sourceSpecs()"
+    (sourceSpecsChange)="onSpecsChange($event)"
+    [selectedEmbedder]="selectedEmbedder()"
+    (selectedEmbedderChange)="selectedEmbedder.set($event)"
+    [selectedPatchEmbedder]="selectedPatchEmbedder()"
+    (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
+    [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
+    (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
+    [lockedEmbedder]="lockedEmbedderFor(mediaType(), embedders())"
+    [selectedClipper]="selectedClipper()"
+    [selectedClipperParams]="clipperParamValues()"
+    (clipperChooserRequested)="openClipperChooser()"
+    [buildProjection]="buildProjection()"
+    (buildProjectionChange)="buildProjectionChange.emit($event)"
+    [mergeNearDuplicates]="mergeNearDuplicates()"
+    (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+  ></vt-import-advanced>
 </div>
 
 <vt-clipper-chooser

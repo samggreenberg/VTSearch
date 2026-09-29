@@ -551,7 +551,14 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 .modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--space-md);
+
+  // Whatever is projected into `[modal-footer-start]` takes the left end of
+  // the row; the auto margin pushes the actions to the right as before.
+  > [modal-footer-start] {
+    margin-right: auto;
+  }
 }
 
 // --- Drawer slide (side panels) ---
@@ -704,10 +711,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 // Extra vertical breathing room above a grouped section inside an
-// importer form (e.g. the Embedder/Clipper "Advanced" block).  Shared
-// by every Add Dataset picker view (generic form / server-folder /
-// local-folder / demo), each of which renders its own
-// `<vt-import-advanced>` wrapped in a `.form-group.form-group--section`.
+// importer form (e.g. the local-folder drop zone in `<vt-source-picker>`).
+// The Add Dataset "Advanced" block gives its own host the same margin
+// while open, since collapsed it must take no box at all.
 .form-group--section { margin-top: var(--space-xl); }
 
 // A text field paired with a "Browse" button that opens an inline

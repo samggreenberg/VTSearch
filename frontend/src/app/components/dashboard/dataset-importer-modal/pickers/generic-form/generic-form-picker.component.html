@@ -174,35 +174,33 @@
       <p class="info-text">This importer requires no additional configuration.</p>
     }
 
-    <div class="form-group form-group--section">
-      <vt-import-advanced
-        [availableConverters]="availableConverters"
-        [nativeType]="outputTypeId"
-        [typeLabels]="mediaTypeLabels"
-        [embedders]="availableEmbedders()"
-        [clippers]="availableClippers()"
-        [cleaners]="cleaners()"
-        [selectedCleaners]="selectedCleaners()"
-        (selectedCleanersChange)="selectedCleaners.set($event)"
-        [showSourceSpecs]="true"
-        [sourceSpecs]="sourceSpecs"
-        (sourceSpecsChange)="onSpecsChange($event)"
-        [selectedEmbedder]="selectedEmbedder()"
-        (selectedEmbedderChange)="selectedEmbedder.set($event)"
-        [selectedPatchEmbedder]="selectedPatchEmbedder()"
-        (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
-        [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
-        (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
-        [lockedEmbedder]="lockedEmbedderFor(outputTypeId, availableEmbedders())"
-        [selectedClipper]="selectedClipper()"
-        [selectedClipperParams]="clipperParamValues()"
-        (clipperChooserRequested)="openClipperChooser()"
-        [buildProjection]="buildProjection()"
-        (buildProjectionChange)="buildProjectionChange.emit($event)"
-        [mergeNearDuplicates]="mergeNearDuplicates()"
-        (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
-      ></vt-import-advanced>
-    </div>
+    <vt-import-advanced
+      [availableConverters]="availableConverters"
+      [nativeType]="outputTypeId"
+      [typeLabels]="mediaTypeLabels"
+      [embedders]="availableEmbedders()"
+      [clippers]="availableClippers()"
+      [cleaners]="cleaners()"
+      [selectedCleaners]="selectedCleaners()"
+      (selectedCleanersChange)="selectedCleaners.set($event)"
+      [showSourceSpecs]="true"
+      [sourceSpecs]="sourceSpecs"
+      (sourceSpecsChange)="onSpecsChange($event)"
+      [selectedEmbedder]="selectedEmbedder()"
+      (selectedEmbedderChange)="selectedEmbedder.set($event)"
+      [selectedPatchEmbedder]="selectedPatchEmbedder()"
+      (selectedPatchEmbedderChange)="selectedPatchEmbedder.set($event)"
+      [selectedStructuralEmbedder]="selectedStructuralEmbedder()"
+      (selectedStructuralEmbedderChange)="selectedStructuralEmbedder.set($event)"
+      [lockedEmbedder]="lockedEmbedderFor(outputTypeId, availableEmbedders())"
+      [selectedClipper]="selectedClipper()"
+      [selectedClipperParams]="clipperParamValues()"
+      (clipperChooserRequested)="openClipperChooser()"
+      [buildProjection]="buildProjection()"
+      (buildProjectionChange)="buildProjectionChange.emit($event)"
+      [mergeNearDuplicates]="mergeNearDuplicates()"
+      (mergeNearDuplicatesChange)="mergeNearDuplicatesChange.emit($event)"
+    ></vt-import-advanced>
 
     @if (error()) {
       <p class="error-text">{{ error() }}</p>

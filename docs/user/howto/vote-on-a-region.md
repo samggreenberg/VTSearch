@@ -18,7 +18,7 @@ Click the **+** <picture><source media="(prefers-color-scheme: dark)" srcset="..
 **Dataset name** to `drawing-regions`. (For pictures of your own, use
 **Files** and **Folder** as in the first search; the rest is the same.) Then:
 
-1. Click **Advanced ▾**.
+1. Click **Advanced ▾**, at the bottom left beside **Cancel**.
 2. Set **Region embedder (optional)** to **DINOv2 patch (region-aware
    images)**.
 3. Click **Import**.
@@ -39,7 +39,7 @@ Tick `drawing-regions` on the dashboard and click the **+** <picture><source med
 **Detectors** card. Describe what you are looking for (`yellow smiley face`)
 and name the detector (`Smileys (regions)`), then:
 
-1. Click **Advanced ▾**.
+1. Click **Advanced ▾**, at the bottom left beside **Cancel**.
 2. Set **Detector Embedder Type** to **Patch Semantic**.
 3. Click **Create**.
 

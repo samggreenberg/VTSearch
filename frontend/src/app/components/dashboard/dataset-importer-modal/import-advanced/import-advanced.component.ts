@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, ElementRef, inject, Injector, input, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 
@@ -12,6 +12,7 @@ import {
   SourceSpec,
 } from '../../../../models/api.models';
 import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-picker.component';
+import { revealInScrollParent } from '../../../../utils/reveal-in-scroll-parent';
 
 /** "Advanced ▾" block of the Add Dataset modal: Include media (source
  *  specs), Convert to, Embedder, Clipper, Cleanup, and the two ingest
@@ -25,6 +26,14 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
  *  picker the user has moved off its default, which earlier versions kept
  *  visible so the override stayed discoverable.  What the current
  *  selection is instead surfaces in :prop:`advancedToggleTitle`.
+ *
+ *  **The toggle itself is not in this component.**  The Add Dataset modal
+ *  renders "Advanced ▾" at the left end of its footer row (#4305), so that
+ *  collapsed it shares the Cancel / Import line instead of taking one of its
+ *  own, and drives :prop:`advancedOpen` / :meth:`toggleAdvanced` /
+ *  :prop:`advancedToggleTitle` on the active picker's instance.  That is why
+ *  the component stays mounted while collapsed: it owns the open state and
+ *  the tooltip, which reads the current selection.
  *
  *  The clipper chooser modal lives one level up (each of the four
  *  Add Dataset picker views - generic form / server-folder /
@@ -41,8 +50,12 @@ import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-
   imports: [FormsModule, SourceSpecsPickerComponent],
   templateUrl: './import-advanced.component.html',
   styleUrl: './import-advanced.component.scss',
+  host: { '[class.is-open]': 'advancedOpen()' },
 })
 export class ImportAdvancedComponent {
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+
   /** Converters available for the current native type; feeds the
    *  source-specs picker.  Computed by the parent from the importer's
    *  ``available_converters_by_media_type``. */
@@ -156,11 +169,17 @@ export class ImportAdvancedComponent {
 
   /** Whether the Advanced section is currently expanded.  Local state
    *  per instance; opening Advanced in one flow does not carry over
-   *  to another (the user only ever sees one flow at a time). */
-  advancedOpen = false;
+   *  to another (the user only ever sees one flow at a time).  A signal
+   *  because the modal's footer toggle reads it from outside this view. */
+  readonly advancedOpen = signal(false);
 
+  /** Open or close the block.  The toggle sits in the modal footer, below the
+   *  scrolling body, so on opening bring the new fields into view once they
+   *  have rendered. */
   toggleAdvanced(): void {
-    this.advancedOpen = !this.advancedOpen;
+    this.advancedOpen.update((open) => !open);
+    if (!this.advancedOpen()) return;
+    afterNextRender(() => revealInScrollParent(this.host.nativeElement), { injector: this.injector });
   }
 
   /** True when the user has not overridden the embedder, or when the
