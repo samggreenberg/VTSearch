@@ -4,7 +4,7 @@ Covers:
 - mark-verified on find-mode votes (and un-verify on un-vote)
 - the ``verified`` array on ``GET /api/votes``
 - ``label_filter=unverified`` / ``verified`` export partitioning
-- ``GET /api/find/stats`` (2x2 confusion, FP/FN inclusion sweep, precision curve)
+- ``GET /api/find/stats`` (2x2 confusion, the floor's verdict, precision curve)
 - verified votes surviving a re-score (issue #2928)
 - a live Find session surviving a detector-file write (issue #2786)
 """
@@ -171,8 +171,8 @@ class TestRethresholdUnverified:
 
 class TestFindStats:
     """``GET /api/find/stats`` over the ADOPTED label set (all items, with
-    unverified flood-filled), the FP/FN inclusion sweep, and the precision
-    curve against the number returned (#4242)."""
+    unverified flood-filled), the floor's verdict on the line (#4246), and the
+    precision curve against the number returned (#4242)."""
 
     def _setup(self):
         ctx = get_active_detector_context()
@@ -219,18 +219,29 @@ class TestFindStats:
         assert data["verified_called_good"] == 2
         assert data["verified_precision"] == 0.5
 
-    def test_sweep_shape_and_values(self, client):
+    def test_floor_rides_with_the_line(self, client):
+        """The chart marks the floor and says whether the line keeps it (#4246)."""
         self._setup()
+        client.post("/api/min-precision", json={"min_precision": 0.75})
+        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=3)
         data = client.get("/api/find/stats").get_json()
-        sweep = data["sweep"]
-        assert len(sweep) == 21
-        assert [p["inclusion"] for p in sweep] == list(range(-10, 11))
-        # No cached fold orderings -> every point uses threshold 0.5.
-        # Adopted-bad above the line: id2 (0.8) -> 1 FP. Adopted-good below it:
-        # id4 (0.1) -> 1 FN. (id1=0.9 good above, id3=0.2 bad below: correct.)
-        for p in sweep:
-            assert p["false_pos"] == 1
-            assert p["false_neg"] == 1
+        assert data["floor"] == {
+            "min_precision": 0.75,
+            "status": "insufficient_evidence",
+            "calibration_positives": 6,
+            "min_calibration_positives": 10,
+        }
+        # The sweep went with the Inclusion stepper.
+        assert "sweep" not in data
+        assert "inclusion" not in data
+
+    def test_floor_is_null_with_no_floor_set(self, client):
+        self._setup()
+        client.post("/api/min-precision", json={"min_precision": None})
+        get_active_detector_context().precision_floor_cache = None
+        floor = client.get("/api/find/stats").get_json()["floor"]
+        assert floor["min_precision"] is None
+        assert floor["status"] is None
 
     def test_empty_when_no_votes(self, client):
         ctx = get_active_detector_context()
@@ -244,7 +255,6 @@ class TestFindStats:
         assert data["verified_precision"] is None
         assert data["verified_called_good"] == 0
         assert data["verified_kept_good"] == 0
-        assert len(data["sweep"]) == 21
 
     def test_precision_curve_over_the_ranking(self, client):
         """Each point is the top k by score, with verified precision over what was checked in it."""

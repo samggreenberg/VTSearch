@@ -84,8 +84,8 @@ Find, it does more.
 ## Browse the matches from Find
 
 In Find, the eye button at the top of the **Verified Good** pile opens Browse
-on just the matches, checked or not. (The eye beside **Inclusion** on the left
-opens only the ones you haven't checked.) Wrong matches tend to sit together
+on just the matches, checked or not. (The eye beside the precision floor on
+the left opens only the ones you haven't checked.) Wrong matches tend to sit together
 on the map, which makes them quick to clear out:
 
 1. Select the tiles that are wrong, or right.

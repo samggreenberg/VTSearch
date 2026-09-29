@@ -213,6 +213,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Inclusion stepper is gone: pick a precision floor instead** (issue
+  #4246). Where the Manual tab and Find's left pane had the -10..10
+  Inclusion box, they now read **At least [50%] right**, with **25%**,
+  **50%**, **75%** and **90%** to pick from. A note under it says what the
+  floor is doing to the line: *At least 50% right* with how many items it
+  returns, *Can't reach 50% on this dataset*, or *Not enough evidence yet*
+  with the Good votes it has - the last two showing the default cut, as the
+  dashed *unpromised* line already said. The floor is the detector's own,
+  seeded from the last one you picked. In Find, **Stats** draws the floor
+  across its precision chart and says whether the line keeps it; the chart's
+  "Current cut (incl N)" legend is gone, and so are the unused `sweep` and
+  `inclusion` fields of `GET /api/find/stats`, which gains the line's
+  `floor`. Inclusion itself stays settable through `POST /api/inclusion` and
+  `PUT /api/settings`, and draws the line only for a detector whose floor is
+  cleared. The how-to *Catch the borderline matches* now covers the floor.
+
 - **Find Stats charts precision against how many items are returned** (issue
   #4242). The chart that plotted wrong and missed matches at each Inclusion
   stop now reads down the ranked list: for the top N items, on a log-scale

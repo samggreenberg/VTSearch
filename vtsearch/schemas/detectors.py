@@ -953,15 +953,6 @@ class DetectorLabelVoteResponseSchema(Schema):
     action = fields.String(required=True)
 
 
-class FindStatsSweepPointSchema(Schema):
-    """One point on the Stats FP/FN-vs-inclusion sweep."""
-
-    inclusion = fields.Integer(required=True)
-    threshold = fields.Float(required=True)
-    false_pos = fields.Integer(required=True)
-    false_neg = fields.Integer(required=True)
-
-
 class FindStatsPrecisionPointSchema(Schema):
     """One point on the Stats precision-vs-returned curve: the top ``n_returned`` by score."""
 
@@ -1004,9 +995,11 @@ class FindStatsResponseSchema(Schema):
     verified_precision = fields.Float(required=True, allow_none=True)
     verified_called_good = fields.Integer(required=True)
     verified_kept_good = fields.Integer(required=True)
-    # Run context.
-    inclusion = fields.Integer(required=True)
+    # Run context: the line, and what the precision floor says about it (the
+    # floor it was cut at, and whether it keeps it or is the unpromised
+    # default cut).
     threshold = fields.Float(required=True)
+    floor = fields.Nested(FloorStateSchema, required=True)
     # How many items the Find run scored, and how many clear the current cut.
     n_scored = fields.Integer(required=True)
     n_returned = fields.Integer(required=True)
@@ -1014,9 +1007,6 @@ class FindStatsResponseSchema(Schema):
     # retrain) after this evaluation was scored, so these numbers reflect the
     # previous detector version.  Drives the "out of date" note in the UI.
     stale = fields.Boolean(required=True)
-    # FP/FN at every inclusion from -10..10 over all adopted items.  No longer
-    # charted; kept until the Inclusion stepper is gone (#4246).
-    sweep = fields.List(fields.Nested(FindStatsSweepPointSchema), required=True)
     # Precision against the number returned, at log-spaced counts plus the
     # current cut's.
     precision_curve = fields.List(fields.Nested(FindStatsPrecisionPointSchema), required=True)
@@ -1134,6 +1124,5 @@ __all__ = [
     "FindRequestSchema",
     "FindResponseSchema",
     "FindStatsResponseSchema",
-    "FindStatsSweepPointSchema",
     "PendingLabelsetMoveSchema",
 ]

@@ -484,8 +484,8 @@ def maybe_structural_rerank(
             # The threshold returned below is the classifier's boundary, not a
             # cut on the retrieval MLP's scale, so the MLP-scale estimators the
             # Stage-1 pass cached no longer describe it.  Left in place, the next
-            # re-cut (an Inclusion slide, the Find Stats sweep, the acquisition
-            # cut) would replace this boundary with an MLP-scale threshold and
+            # re-cut (a floor or Inclusion change, the acquisition cut) would
+            # replace this boundary with an MLP-scale threshold and
             # apply it to verification scores.
             det_ctx.anchored_cut_cache = None
             det_ctx.calibration_cache = None

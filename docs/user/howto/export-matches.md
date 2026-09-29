@@ -13,15 +13,15 @@ where to click, in order.
 
 The *good set* is every picture you checked and marked **Good**, plus every
 picture you haven't checked that sits above the detector's line. Checking
-pictures is optional; if you move the **Inclusion** line
+pictures is optional; if the line moves with the **precision floor**
 ([Catch the borderline matches](borderline-matches.md)), the good set moves
 with it.
 
 Three small buttons at the top of the **Verified Good** pile act on the good
 set: **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-to-dataset.dark.webp" /><img src="../assets/icon-to-dataset.light.webp" alt="The To Dataset button in the Find view" height="24" /></picture>, **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-export.dark.webp" /><img src="../assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> and **Browse** (the eye). The
 **Export** button at the top of **Verified Bad** does the same for the
-pictures that did not match, and the three buttons next to **Inclusion** on
-the left act on only the matches you haven't checked yet.
+pictures that did not match, and the three buttons next to the precision
+floor on the left act on only the matches you haven't checked yet.
 
 ## Step 1: Choose what to send
 

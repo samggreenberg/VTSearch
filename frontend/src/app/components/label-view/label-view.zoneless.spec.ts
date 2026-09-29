@@ -82,7 +82,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
       // Include smart/stable/span: the autopilot panel's ngOnChanges feeds this
@@ -141,7 +141,7 @@ describe('LabelViewComponent', () => {
 
   // Flush the HTTP calls that fire synchronously during the first
   // `fixture.detectChanges()`. label-view's ngOnInit loads medias, votes,
-  // settings, dataset status, inclusion; the left panel loads media-types
+  // settings, dataset status, the precision floor; the left panel loads media-types
   // and embedders. The `/api/labeling-status` and polling `/api/votes`
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
@@ -181,9 +181,9 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
     );
-    // /api/inclusion
-    httpMock.match('/api/inclusion').forEach(req =>
-      req.flush({ inclusion: 0 }),
+    // /api/min-precision
+    httpMock.match('/api/min-precision').forEach(req =>
+      req.flush({ min_precision: 0.5 }),
     );
     // /api/media-types (left panel)
     httpMock.match('/api/media-types').forEach(req =>
@@ -567,14 +567,22 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should handle inclusion change', () => {
+  it('should handle a precision-floor change', () => {
     flushInitialRequests();
-    component.onInclusionChange(5);
-    expect(component.sortState.inclusion).toBe(5);
+    component.onMinPrecisionChange(0.75);
+    expect(component.sortState.minPrecision).toBe(0.75);
 
-    const req = httpMock.expectOne('/api/inclusion');
-    expect(req.request.body).toEqual({ inclusion: 5 });
-    req.flush({ inclusion: 5 });
+    const req = httpMock.expectOne((r) => r.url === '/api/min-precision' && r.method === 'POST');
+    expect(req.request.body).toEqual({ min_precision: 0.75 });
+    req.flush({ min_precision: 0.75 });
+  });
+
+  it('seeds the floor control from the detector on entry', () => {
+    TestBed.tick();
+    TestBed.tick();
+    httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.9 }));
+    flushInitialRequests();
+    expect(component.sortState.minPrecision).toBe(0.9);
   });
 
   it('should render center panel component', () => {
@@ -681,8 +689,8 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
     );
-    httpMock.match('/api/inclusion').forEach(req =>
-      req.flush({ inclusion: 0 }),
+    httpMock.match('/api/min-precision').forEach(req =>
+      req.flush({ min_precision: 0.5 }),
     );
     httpMock.match('/api/media-types').forEach(req =>
       req.flush({ media_types: [] }),
@@ -731,7 +739,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );
-      httpMock.match('/api/inclusion').forEach(req => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach(req => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach(req => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach(req =>
         req.flush({ embedders: [{ name: 'dinov3', supports_text: false }] }),

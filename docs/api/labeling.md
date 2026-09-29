@@ -33,14 +33,15 @@ frozen scores. The same value is also settable as `inclusion` on
 → `{"inclusion": 3, "threshold": 0.4471, "floor": {"min_precision": null, "status": null, "calibration_positives": 3, "min_calibration_positives": 10}}`
 
 Both verbs return the cutoff the inclusion resolves to on the **active
-detector** (`X-Detector-Id`), so the Find slider can move its line without
-re-scoring. `threshold` is `null` when no detector is active or none has
-computed a threshold yet.
+detector** (`X-Detector-Id`). `threshold` is `null` when no detector is active
+or none has computed a threshold yet.
 
 Inclusion draws the line only while the detector has **no precision floor**:
 a set floor wins (see below), and `threshold` is then the floor's line.
 `floor` says which: it is the [floor state](#the-floor-state) of the line
-`threshold` names.
+`threshold` names. The app no longer writes Inclusion: its control is the
+precision floor below. Inclusion survives as a setting and as the unit the
+floor's fallback and Autopilot's acquisition cut are measured in.
 
 ### Get / set the precision floor
 
@@ -64,7 +65,10 @@ per detector and seeded from the user's `min_precision` setting, which is
 or non-number is a 422. Like Inclusion it is a pure cutoff knob — the active
 detector re-cuts without retraining and, in Find mode, re-splits the
 unverified items — and the same value is settable as `min_precision` on
-`PUT /api/settings`.
+`PUT /api/settings`. Both verbs return the new line in the same round trip,
+so the app's floor control moves its line without re-scoring. The control
+offers 25%, 50%, 75% and 90%, the floors the estimator was measured at, and
+never sends `null`; the API takes any value in range.
 
 | Field | Meaning |
 |---|---|

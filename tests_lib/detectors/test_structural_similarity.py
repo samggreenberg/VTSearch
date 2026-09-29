@@ -344,8 +344,8 @@ class TestMaybeStructuralRerank:
         """The boundary it returns is not on the retrieval MLP's scale, so nothing may re-cut it.
 
         Stage 1 parks the MLP's fold-anchored estimator and calibration folds on
-        the detector.  Left there, the next re-cut - an Inclusion slide, the Find
-        Stats sweep, the acquisition cut - replaced the classifier's boundary
+        the detector.  Left there, the next re-cut - a floor or Inclusion change,
+        the acquisition cut - replaced the classifier's boundary
         with an MLP-scale threshold and applied it to verification scores.
         """
         from vtscore.state.core import DetectorContext, recut_detector_threshold

@@ -193,12 +193,26 @@ name — see the note on `SortStateService` in `PairScopeService`'s header.
 
 The three panels are shared with the Find view:
 
-- **Left** — media list (virtual scroller), sort bar, inclusion slider, stripe
+- **Left** — media list (virtual scroller), sort bar, precision floor, stripe
   overview, select mode, and the **Autopilot panel** that drives the automated
   vote → train → re-sort loop.
 - **Center** — the media viewer, one child per media type (image, text, video,
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
+
+**The precision floor** (`vt-precision-floor`, in the Manual tab and Find's
+top row) is the one knob on the detector's line. Two values back it, and they
+travel separately: `SortStateService.minPrecision` is the floor the picker
+shows, seeded per pair by `PairScopeService.seedMinPrecision`; `floor` is the
+verdict on the line on screen, and only ever arrives *with* that line (a sort,
+a Find pass, or the floor POST's own response). Each view has one write path,
+both `switchMap`-ed and pair-scoped so a floor the user moved past can never
+land last. Find's (`minPrecisionRequests$`, debounced) installs the returned
+line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
+the learned sort, but only from the POST's response: the learned sort reads
+the floor server-side and caches by it, so a re-sort that beat the POST would
+come back at the old floor. When the floor promised nothing before and after,
+both lines are the default cut, and only the verdict is swapped.
 
 ### Find view (`components/find-view/`)
 

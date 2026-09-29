@@ -298,8 +298,9 @@ def find_label(body: dict):
         # verified item the retrained detector now disagrees with reads as a
         # correction rather than vanishing.
         set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
-        # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
-        # without re-scoring, and the Stats sweep and precision curve can read them.
+        # Freeze the single-pass scores so the line (the precision floor, or
+        # Inclusion) re-thresholds without re-scoring, and the Stats precision
+        # curve can read them.
         set_find_scores({entry["id"]: entry["score"] for entry in results})
 
         from vtscore.detectors.registry import set_find_mode
@@ -367,10 +368,9 @@ def find_stats():
     everything untouched).  This can give false confidence in the detector -
     that's the price of not verifying every item - but it reports the real
     counts.  Crosses each item's adopted label against the detector's original
-    call (``find_initial_labels``) for a 2x2 confusion, and sweeps the
-    calibrated threshold across inclusion -10..10 (re-cutting the cached
-    estimator behind the current cutoff) for false-positive / false-negative
-    counts at every stop.
+    call (``find_initial_labels``) for a 2x2 confusion, and reports what the
+    precision floor says about the current line (``floor``), so the chart can
+    mark the floor and say whether the line keeps it.
 
     The **Kept rate** (``verified_precision``) is the exception to "treat
     unverified as verified": it counts only the items the user checked, since
@@ -383,10 +383,10 @@ def find_stats():
     """
     import numpy as np
 
-    from vtscore.state.core import get_active_detector_context, recut_detector_threshold
-    from vtscore.training.thresholds import INCLUSION_MAX, INCLUSION_MIN, MIN_CALIBRATION_POSITIVES
+    from vtscore.state.core import detector_floor_state, get_active_detector_context
+    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES
     from vtsearch.routes.detectors._find_precision import curve_counts, estimated_precision_at, verified_precision_at
-    from vtsearch.state import get_inclusion
+    from vtsearch.state import get_min_precision
 
     det_ctx = get_active_detector_context()
     good = det_ctx.good_votes
@@ -414,27 +414,6 @@ def find_stats():
     verified_called_good = [cid for cid in verified if initial.get(cid) == "good"]
     verified_kept = sum(1 for cid in verified_called_good if cid in good)
     verified_precision = verified_kept / len(verified_called_good) if verified_called_good else None
-
-    # Sweep FP/FN over ALL adopted items at every inclusion's threshold.
-    # Adopted-bad above the line are false positives; adopted-good below it are
-    # false negatives.  Thresholds come from the same re-cut an Inclusion slide
-    # applies (`recut_detector_threshold`), so the chart plots the line the user
-    # would actually get at each stop, and the sweep stays cheap (no refit, no
-    # re-scoring).  A detector with nothing to re-cut plots its current line flat.
-    good_scores = [scores[c] for c in good if c in scores]
-    bad_scores = [scores[c] for c in bad if c in scores]
-    sweep = []
-    for incl in range(INCLUSION_MIN, INCLUSION_MAX + 1):
-        recut = recut_detector_threshold(det_ctx, incl)
-        t_i = recut if recut is not None else det_ctx.threshold
-        sweep.append(
-            {
-                "inclusion": incl,
-                "threshold": round(t_i, 4),
-                "false_pos": sum(1 for s in bad_scores if s >= t_i),
-                "false_neg": sum(1 for s in good_scores if s < t_i),
-            }
-        )
 
     # Precision against the number returned.  Ranked as the Find list ranks
     # (score descending, id to break ties), so point k is the top k the user sees.
@@ -471,12 +450,12 @@ def find_stats():
         "verified_precision": None if verified_precision is None else round(verified_precision, 4),
         "verified_called_good": len(verified_called_good),
         "verified_kept_good": verified_kept,
-        "inclusion": get_inclusion(),
         "threshold": round(det_ctx.threshold, 4),
+        # The floor the line was cut at, and whether it keeps it (#4246).
+        "floor": detector_floor_state(det_ctx, get_min_precision()),
         "n_scored": len(ranked),
         "n_returned": n_returned,
         "stale": getattr(det_ctx, "find_eval_stale", False),
-        "sweep": sweep,
         "precision_curve": precision_curve,
         "estimate_status": estimate.status,
         "calibration_positives": estimate.calibration_positives,

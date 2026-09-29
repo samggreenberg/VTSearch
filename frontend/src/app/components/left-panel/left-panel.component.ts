@@ -15,7 +15,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { SortBarComponent } from './sort-bar/sort-bar.component';
 import { SelectModeComponent } from './select-mode/select-mode.component';
-import { InclusionSliderComponent } from './inclusion-slider/inclusion-slider.component';
+import { PrecisionFloorComponent } from './precision-floor/precision-floor.component';
 import { ProgressIndicatorsComponent } from './progress-indicators/progress-indicators.component';
 import { MediaListComponent } from './media-list/media-list.component';
 import { StripeOverviewComponent } from './stripe-overview/stripe-overview.component';
@@ -29,7 +29,7 @@ import { EmbedderCapabilityService } from '../../services/embedder-capability.se
 import { MediaTypeCapabilityService } from '../../services/media-type-capability.service';
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { allItemsLabeled } from '../../utils/all-labeled';
-import type { LineFloor } from '../../utils/line-floor';
+import { DEFAULT_MIN_PRECISION, type LineFloor } from '../../utils/line-floor';
 
 export type { SortMode, SelectMode, SortedItem };
 
@@ -41,7 +41,7 @@ export type { SortMode, SelectMode, SortedItem };
     CommonModule,
     SortBarComponent,
     SelectModeComponent,
-    InclusionSliderComponent,
+    PrecisionFloorComponent,
     ProgressIndicatorsComponent,
     MediaListComponent,
     StripeOverviewComponent,
@@ -81,7 +81,10 @@ export class LeftPanelComponent implements OnInit {
   readonly votesLoaded = input(false);
   readonly sortMode = input<SortMode>('text');
   readonly selectMode = input<SelectMode>('top');
-  readonly inclusion = input<number>(0);
+  /** The active detector's precision floor (#4246); null when it has none. */
+  readonly minPrecision = input<number | null>(DEFAULT_MIN_PRECISION);
+  /** How many items the line returns, for the floor control's count; null when unknown. */
+  readonly returned = input<number | null>(null);
   readonly sortBusy = input(false);
   readonly sortStatus = input('');
   readonly sortProgress = input(0);
@@ -114,7 +117,8 @@ export class LeftPanelComponent implements OnInit {
 
   readonly sortModeChange = output<SortMode>();
   readonly selectModeChange = output<SelectMode>();
-  readonly inclusionChange = output<number>();
+  /** The user picked a precision floor (a fraction). */
+  readonly minPrecisionChange = output<number>();
   readonly textSort = output<string>();
   readonly learnedSort = output<void>();
   readonly loadSort = output<void>();
