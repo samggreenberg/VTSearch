@@ -581,13 +581,24 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * `back` walks the trail of items already voted on, one press per step, and
    * counts as an explicit pick (so the "all items reviewed" pane gets out of
    * the way, exactly as clicking the item in the verified pile would).
-   * `forward` is the same boundary walk a vote makes, and is the user saying
-   * they are done looking back, so it releases that pick.
+   * `forward` is the user saying they are done looking back: it returns them to
+   * the item the walk started from (#4306), or — with no walk to end — takes
+   * the same boundary walk a vote makes and releases that pick.
+   *
+   * While the "all items reviewed" pane is up the user is standing on no item,
+   * so the walk records `null` as its start and `forward` from it lands back
+   * on the pane — see `LabelViewComponent.onNavigate`.
    */
   onNavigate(direction: NavDirection): void {
+    const here = this.centreExhausted() ? null : this.mediaState.selectedId();
     if (direction === 'back') {
-      const id = this.voteHistory.stepBack(this.mediaState.selectedId());
+      const id = this.voteHistory.stepBack(here);
       if (id !== null) this.onMediaSelect(id);
+      return;
+    }
+    const origin = this.voteHistory.stepForward(here);
+    if (origin !== null) {
+      this.onMediaSelect(origin);
       return;
     }
     this.pickedWhileDone.set(null);

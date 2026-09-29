@@ -146,6 +146,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **`↓` then `↑` returns you to the item you were on** (issue #4306). `↑`
+  re-ran the advance instead, and the ranking has often moved since the item
+  was picked (in Train the re-sort a vote triggers lands after it; in Find each
+  advance switches sides of the cutoff), so it landed on an item you had not
+  seen. `↑` now goes back to where the first `↓` started, and only takes the
+  usual advance once you have voted or picked something else in between.
+
 - **The Inclusion stepper no longer jumps the line early in a session.** With
   too few votes for the calibration splits, the first change of the stepper
   replaced the trained cutoff with a fixed 0.5, so the matches could change in
