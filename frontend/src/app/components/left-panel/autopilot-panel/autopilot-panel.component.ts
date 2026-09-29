@@ -21,10 +21,42 @@ import { AutopilotCompleteModalComponent } from '../../modals/autopilot-complete
 
 export type { AutopilotPhase, AutopilotState };
 
-interface StatusIcon {
-  color: 'green' | 'yellow';
+/**
+ * A step's one light (#4319). It climbs red -> yellow -> green as the step
+ * nears its end, and the step hands over to the next one at green.
+ */
+export type LightColor = 'red' | 'yellow' | 'green';
+
+interface StepLight {
+  color: LightColor;
   ariaLabel: string;
   title: string;
+}
+
+/** Ordered so the lower of two lights is the one with the lower rank. */
+const LIGHT_RANK: Record<LightColor, number> = { red: 0, yellow: 1, green: 2 };
+
+/**
+ * Light for a step that ends at a target: red for the first half of the way,
+ * yellow for the second half, green once the target is met. A target the
+ * dataset can't supply (capped to 0) is already met.
+ */
+function progressLight(count: number, target: number): LightColor {
+  if (count >= target) return 'green';
+  return count * 2 >= target ? 'yellow' : 'red';
+}
+
+/** A backend indicator's status as a light. Unreported (``''``) reads red. */
+function indicatorLight(status: string): LightColor {
+  return status === 'green' || status === 'yellow' ? status : 'red';
+}
+
+/** Leads each light's tooltip, so the color is stated as well as shown. */
+const LIGHT_WORDS: Record<LightColor, string> = { red: 'Red.', yellow: 'Yellow.', green: 'Green.' };
+
+/** How a count step's light reads, for its tooltip. */
+function countTitle(target: number, kind: 'good' | 'bad'): string {
+  return `Red until half of the ${target} ${kind} labels are in, yellow past halfway, green at ${target}.`;
 }
 
 export interface StepDisplay {
@@ -35,7 +67,8 @@ export interface StepDisplay {
   state: 'done' | 'active' | 'future';
   detail: string;
   detailTitle: string;
-  statusIcons: StatusIcon[];
+  /** The active step's light; ``null`` on done and future steps. */
+  light: StepLight | null;
   helpText: string;
   intent: string;
 }
@@ -233,7 +266,7 @@ export class AutopilotPanelComponent implements OnInit {
         state: stateStr,
         detail: stateStr === 'active' ? this.phaseDetail(phase) : '',
         detailTitle: stateStr === 'active' ? this.phaseDetailTitle(phase) : '',
-        statusIcons: stateStr === 'active' ? this.phaseStatusIcons(phase) : [],
+        light: stateStr === 'active' ? this.phaseLight(phase) : null,
         helpText: this.phaseHelpText(phase),
         intent: this.phaseIntent(phase, i + 1),
       };
@@ -328,41 +361,84 @@ export class AutopilotPanelComponent implements OnInit {
     }
   }
 
-  private phaseStatusIcons(phase: AutopilotPhase): StatusIcon[] {
+  /**
+   * The active step's one light (#4319): red, then yellow, then green, at
+   * which point autopilot moves on to the next step.
+   *
+   * - The count steps (initial goods, initial bads, more goods) go yellow at
+   *   half their target and green at the target. The "more" walk can also end
+   *   early on a run of misses; the light keeps tracking goods, since a miss
+   *   is not progress toward the target and a hit must never dim the light.
+   * - The boundary step shows the lower of Smart and Stable: it ends when both
+   *   are green, so the one further behind is the one holding it.
+   * - The diversity step paces the coverage level against the Span
+   *   indicator's own green target, split at half like the count steps. The
+   *   level is a tricky metric (consecutive covered atlas nodes, so it stalls
+   *   at a gap and then jumps), but the diversity sort always picks from the
+   *   first uncovered node, so each vote in this step raises it by at least
+   *   one: the plain halfway split already tracks votes, and a jump only ever
+   *   lands closer to green. Green itself is the indicator's own call.
+   */
+  private phaseLight(phase: AutopilotPhase): StepLight {
     const st = this.state;
-    // The boundary phase is gated by the smart + stable indicators, so it
-    // shows both dots. The diversity phase runs *after* smart + stable are
-    // already green (that is the condition for leaving the boundary phase),
-    // so showing those two dots here would just be two stale greens. The
-    // indicator that actually gates the diversity phase is span coverage, so
-    // the diversity row shows a single span dot instead.
-    if (phase === 'hard') {
-      const smartState = st.smartStatus === 'green' ? 'green' : 'pending';
-      const stableState = st.stableStatus === 'green' ? 'green' : 'pending';
-      return [
-        {
-          color: st.smartStatus === 'green' ? 'green' : 'yellow',
-          ariaLabel: `Smart: ${smartState}`,
-          title: `Smart: ${smartState}. Tracks the detector's accuracy as you label. Green when its accuracy has settled and stopped improving. Yellow when it's still getting better.`,
-        },
-        {
-          color: st.stableStatus === 'green' ? 'green' : 'yellow',
-          ariaLabel: `Stable: ${stableState}`,
-          title: `Stable: ${stableState}. Tracks whether the detector keeps changing its mind. Green when it has stopped changing its calls between labeling steps. Yellow when its calls are still shifting.`,
-        },
-      ];
+    const light = (color: LightColor, title: string): StepLight => ({
+      color,
+      ariaLabel: `Step progress: ${color}`,
+      title: `${LIGHT_WORDS[color]} ${title}`,
+    });
+    switch (phase) {
+      case 'good': {
+        const target = this.effGoodTarget;
+        return light(
+          progressLight(this.goodVotes().size, target),
+          countTitle(target, 'good'),
+        );
+      }
+      case 'bad': {
+        const target = this.effBadTarget;
+        return light(
+          progressLight(this.badVotes().size, target),
+          countTitle(target, 'bad'),
+        );
+      }
+      case 'more': {
+        const target = this.effMoreTarget;
+        return light(
+          progressLight(this.goodVotes().size, target),
+          `${countTitle(target, 'good')} The step can also end early, after ${st.moreDryRun} matches in a row that are not good.`,
+        );
+      }
+      case 'hard': {
+        const smart = indicatorLight(st.smartStatus);
+        const stable = indicatorLight(st.stableStatus);
+        const color = LIGHT_RANK[smart] <= LIGHT_RANK[stable] ? smart : stable;
+        return light(
+          color,
+          `Shows the lower of two indicators; the step ends when both are green. `
+          + `Smart (${smart}) tracks the detector's accuracy: green once it has settled and stopped improving. `
+          + `Stable (${stable}) tracks whether the detector keeps changing its mind: green once its calls stop shifting between labeling steps.`,
+        );
+      }
+      case 'new': {
+        const target = st.spanTarget;
+        const level = Math.round(st.fracDiversity);
+        let color: LightColor;
+        if (st.spanStatus === 'green') color = 'green';
+        else if (target > 0) color = progressLight(level, target) === 'red' ? 'red' : 'yellow';
+        else color = 'red';
+        const coverage = target > 0
+          ? `Your votes reach ${level} of the ${target} groups of your collection this step asks for.`
+          : 'Waiting for the first coverage reading.';
+        return light(
+          color,
+          `Tracks how much of your collection your votes cover. ${coverage} Yellow past halfway, green once they span a broad mix of items.`,
+        );
+      }
+      case 'done':
+        return light('green', 'All quality indicators are green.');
+      default:
+        return light('red', '');
     }
-    if (phase === 'new') {
-      const spanState = st.spanStatus === 'green' ? 'green' : 'pending';
-      return [
-        {
-          color: st.spanStatus === 'green' ? 'green' : 'yellow',
-          ariaLabel: `Diversity: ${spanState}`,
-          title: `Diverse: ${spanState}. Tracks how much of your collection your votes cover. Green when your votes span a broad mix of items. Yellow when they're still bunched together.`,
-        },
-      ];
-    }
-    return [];
   }
 
   private phaseHelpText(phase: AutopilotPhase): string {
@@ -422,7 +498,9 @@ export class AutopilotPanelComponent implements OnInit {
         return `${total} labels`;
       }
       case 'new':
-        return `Diversity: ${Math.round(st.fracDiversity)}`;
+        return st.spanTarget > 0
+          ? `Diversity: ${Math.round(st.fracDiversity)}/${st.spanTarget}`
+          : `Diversity: ${Math.round(st.fracDiversity)}`;
       case 'done':
         return 'All indicators green';
       default:
