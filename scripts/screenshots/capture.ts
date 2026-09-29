@@ -3,13 +3,13 @@
  * and, for each shot × theme, drives a running VTSearch app in headless
  * chromium and writes docs/user/assets/<id>.<theme>.webp.
  *
- * Design notes specific to this machine (see docs/plans/user-docs-screenshots.md
- * "What shipped"): the box is RAM-tight (~3.7 GB), so the harness connects to a
- * SINGLE already-running app (started by refresh.sh) rather than booting its own
- * per run — two app instances would load the image embedder twice and risk OOM.
- * Determinism still holds because the fixtures are the Smiley example's
- * generated drawings (`smiley-example.mjs`), a pure function of the generator
- * and its seeds.
+ * Design notes (see docs/plans/user-docs-screenshots.md): the dev box is
+ * RAM-tight (~3.7 GB), so the harness connects to a SINGLE running app rather
+ * than booting its own per shot — two app instances would load the image
+ * embedder twice and risk OOM. refresh.sh starts that app on a fresh data dir
+ * with a seeded Browse map, so every run begins from the same state; the
+ * fixtures are the Smiley example's generated drawings (`smiley-example.mjs`),
+ * a pure function of the generator and its seeds.
  *
  * Usage:
  *   tsx capture.ts                 # capture every shot, both themes
@@ -31,6 +31,9 @@ import { execFileSync, execSync } from 'node:child_process';
 import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
 
 const APP = process.env.APP || 'http://localhost:5000';
+// The fresh data dir refresh.sh gives the app it starts (#4299), or unset when
+// the harness drives an app someone else started on the checkout's own.
+const APP_DATA_DIR = process.env.SHOTS_APP_DATA_DIR || '';
 const HERE = dirname(fileURLToPath(import.meta.url));
 // OUT_DIR lets check.sh render to a temp dir for pixel-diffing without
 // clobbering the committed baselines; defaults to the real assets dir.
@@ -74,10 +77,11 @@ const STILL_CSS =
 
 /**
  * Replace volatile text (clock-driven dates, the RAM/disk gauges, the git-stamp
- * version) with fixed strings so pixel-diffs are stable across runs.
+ * version, how long an import took) with fixed strings so pixel-diffs are
+ * stable across runs.
  */
 async function maskVolatile(page: Page): Promise<void> {
-  await page.evaluate((repo) => {
+  await page.evaluate(([repo, dataDir]) => {
     const fixedDate = '2026-01-01 00:00';
     const walk = (re: RegExp, replace: (m: string) => string) => {
       const it = document.createNodeIterator(document.body, NodeFilter.SHOW_TEXT);
@@ -102,26 +106,43 @@ async function maskVolatile(page: Page): Promise<void> {
       el.textContent = (el.textContent || '').replace(/[\d.]+\s*[GM]B\s+free\s+of/i, '— free of');
     });
     // version stamp "v 2026-..." already covered by the date rule.
+    // How long an import took (Dataset Stats' Duration: `45s`, `1m 41s`, …)
+    // is the machine's speed, and moves on every run.
+    document.querySelectorAll('td.stat-label').forEach((label) => {
+      const value = label.nextElementSibling;
+      if (label.textContent?.trim() === 'Duration' && value?.textContent?.trim() !== '-') {
+        value!.textContent = '1m 30s';
+      }
+    });
     // The fixture corpora live under `<checkout>/data/doc-fixtures/`, which is
     // a different path on every machine. Show it as `/data/<corpus>` — in text
     // and in the importer's path field, whose value is set without an input
     // event, so the form keeps the real path it validated against.
     const fixtureRe = /\S*\/data\/doc-fixtures\//g;
     walk(fixtureRe, () => '/data/');
+    // refresh.sh runs the app on a fresh data dir of its own; a path under it
+    // (the server exporters' default file) reads as under the install's data
+    // dir, as it did when the app ran on the checkout's.
+    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const dataDirRe = dataDir ? new RegExp(escape(dataDir) + '/', 'g') : null;
+    if (dataDirRe) walk(dataDirRe, () => '/opt/vtsearch/data/');
     // Any other path under the checkout (a default file path a form fills
     // in, say) is shown as under a generic install folder.
-    const checkoutRe = new RegExp(repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/', 'g');
+    const checkoutRe = new RegExp(escape(repo) + '/', 'g');
     walk(checkoutRe, () => '/opt/vtsearch/');
     document.querySelectorAll('input').forEach((el) => {
       const input = el as HTMLInputElement;
       if (input.value.includes('/data/doc-fixtures/')) {
         input.value = input.value.replace(fixtureRe, '/data/');
       }
+      if (dataDir && input.value.includes(dataDir + '/')) {
+        input.value = input.value.split(dataDir + '/').join('/opt/vtsearch/data/');
+      }
       if (input.value.includes(repo + '/')) {
         input.value = input.value.split(repo + '/').join('/opt/vtsearch/');
       }
     });
-  }, REPO);
+  }, [REPO, APP_DATA_DIR]);
 }
 
 function makeHelpers(page: Page): Helpers {

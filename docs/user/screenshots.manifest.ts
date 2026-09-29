@@ -1908,6 +1908,10 @@ export const SHOTS: Shot[] = [
       { target: 'button[title="Cancel this dataset load"]', kind: 'step', step: 2, at: 'right' },
     ],
     // A real import, cancelled once photographed and cleared away.
+    //
+    // Posed at one moment, or the frame is whatever the clock gives (#4299):
+    // the recipe waits for the embedding step, the longest by far, then pins
+    // the count, the bar and the time left, which move every second.
     async recipe(page, h) {
       await h.app.dropDatasets('drawings-more');
       await h.dashboard();
@@ -1918,13 +1922,27 @@ export const SHOTS: Shot[] = [
       await page.locator('#field-seed').fill('4');
       await page.locator('#field-dataset_name').fill('drawings-more');
       await page.locator('vt-modal .btn--primary', { hasText: 'Import' }).first().click();
-      await page.waitForSelector('tr.loading-task-row vt-job-progress', { timeout: 30000 });
+      const row = page.locator('tr.loading-task-row vt-job-progress').first();
+      await row.locator('.jp__header', { hasText: 'Step 3 of 4' }).waitFor({ timeout: 180000 });
+      await row.locator('.jp__detail', { hasText: /^\d+\/\d+/ }).waitFor({ timeout: 60000 });
       await page.mouse.move(700, 60);
-      await h.wait(2500);
+      // Replacing each element's text detaches the text node the app updates,
+      // so the pin holds; the bar's width is an inline style it re-binds, so
+      // a rule that outranks it holds that.
+      await page.evaluate(() => {
+        const jp = document.querySelector('tr.loading-task-row vt-job-progress')!;
+        const detail = jp.querySelector('.jp__detail')!;
+        detail.textContent = (detail.textContent || '').replace(/^\d+\//, '60/');
+        jp.querySelector('.jp__eta')!.textContent = '';
+      });
+      await page.addStyleTag({ content: 'tr.loading-task-row vt-job-progress .progress-fill{width:45%!important}' });
+      await h.wait(500);
     },
+    // The next shot is the Add Dataset dialog over this same dashboard, so the
+    // cancelled import has to be gone, not just cancelling.
     after: async (page, h) => {
       await page.locator('button[title="Cancel this dataset load"]').first().click().catch(() => {});
-      await page.waitForTimeout(3000);
+      await page.waitForSelector('tr.loading-task-row', { state: 'detached', timeout: 120000 }).catch(() => {});
       await h.app.dropDatasets('drawings-more');
     },
   },

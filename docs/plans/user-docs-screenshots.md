@@ -2,19 +2,11 @@
 
 **Status:** This doc is the full-system reference for the screenshot pipeline
 (manifest + Playwright harness + driver scripts); the open follow-ups below
-(temp-data-dir determinism, annotation polish, pixel-diff tolerance) are the
-remaining work.
+(annotation polish, pixel-diff tolerance) are the remaining work.
 
 ## Open follow-ups
 
 <!-- item-sep -->
-
-- **Self-booting / temp-data-dir determinism.** The harness currently drives an
-  already-running app against the real `data/` dir (a RAM-driven choice — a
-  second instance would load the image embedder twice and OOM the ~3.7 GB box).
-  The plan's original intent was a temp data dir per run. Revisit if pixel-diff
-  drift from shared state becomes a problem; the seeded drawings and the fixed
-  vote baseline already cover content stability.
 
 <!-- item-sep -->
 
@@ -141,7 +133,8 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 (deterministic, so `check.sh` can still compare bytes).
 
 **Determinism knobs (non-negotiable):** the Smiley example's corpora (seeded
-drawings) and a fixed vote baseline;
+drawings) and a fixed vote baseline, on a fresh app data dir every run (#4299)
+with a seeded Browse map (#4296);
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
 (`* { transition:none !important; animation:none !important; }`); mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text);
@@ -151,7 +144,10 @@ stub randomness the UI exposes (never rely on unseeded draws).
 
 - `refresh.sh` — regenerate **every** shot from the manifest in place; then
   `git diff --stat docs/user/assets/` is the precise list of shots the GUI
-  change moved. The everyday refresh.
+  change moved. The everyday refresh. Unless an app is already serving, it
+  starts one on a fresh data dir (`data/.screenshots-app`, emptied every run,
+  the model cache shared) and stops it afterwards, so no refresh photographs
+  state an earlier one left behind; the fixtures are imported afresh each run.
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.

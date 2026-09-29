@@ -6,38 +6,73 @@
 # Usage:
 #   scripts/screenshots/refresh.sh            # all shots, both themes
 #   scripts/screenshots/refresh.sh <id>...    # only these shot ids
+#   OUT_DIR=/tmp/x scripts/screenshots/refresh.sh   # render elsewhere (check.sh)
 #
-# This harness drives a SINGLE running app (it does not boot its own per run):
-# the dev box is RAM-tight and a second app instance would load the image
-# embedder twice. Determinism still holds because the fixtures are the Smiley
-# example's generated drawings (a pure function of the generator and its seeds)
-# with a fixed vote baseline. If no app is already serving on $APP, this script
-# starts one, waits for readiness, captures, then stops it.
+# This harness drives a SINGLE app: the dev box is RAM-tight and a second
+# instance would load the image embedder twice. If no app is serving on $APP,
+# this script starts one, captures, then stops it; that is the reproducible
+# path, and the one to use.
 #
-# The Browse shots frame a UMAP map, which an unseeded fit lays out differently
-# every time. The app this script starts fits under VTSEARCH_PROJECTION_SEED, so
-# the map is the same on every refresh (#4296); an app you started yourself
-# needs the same variable, or the Browse shots show some other map.
+# The app it starts runs on a fresh data dir, emptied every run
+# (data/.screenshots-app), so no refresh photographs state an earlier one left
+# behind: example media a recipe uploaded, a dragged panel width, achievement
+# counters, an import still winding down (#4299). The model cache is shared, so
+# nothing is downloaded twice; the fixtures are imported again every run, which
+# costs a few minutes of embedding on a CPU box.
+#
+# It also fits the Browse map under VTSEARCH_PROJECTION_SEED, because an
+# unseeded UMAP fit lays the map out differently every time (#4296).
+#
+# An app you started yourself is used as it is, with its own data and settings,
+# so the shots it gives are not the committed ones.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 APP="${APP:-http://localhost:5000}"
 REPO_ROOT="$(cd ../.. && pwd)"
 PROJECTION_SEED=0
+APP_DATA_DIR="$REPO_ROOT/data/.screenshots-app"
+APP_LOG=/tmp/vtshots-refresh-app.log
 
 started_app=""
+stop_app() {
+    if [[ -n "$started_app" ]]; then
+        echo "Stopping the app refresh.sh started (pid $started_app)…"
+        kill "$started_app" 2>/dev/null || true
+        wait "$started_app" 2>/dev/null || true
+    fi
+}
+trap stop_app EXIT
+
 if curl -sf -o /dev/null "$APP/" 2>/dev/null; then
-    echo "Using the app already at $APP. Its Browse map matches the committed shots only if"
-    echo "it was started with VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED."
+    echo "Using the app already at $APP, with its own data and settings. For the committed"
+    echo "shots, stop it and let refresh.sh start one on a fresh data dir."
 else
-    echo "No app at $APP — starting one (empty dataset registry → SigLIP loads lazily, no CLAP)…"
-    ( cd "$REPO_ROOT" && VTSEARCH_TORCH_THREADS=1 VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
-        python app.py --local > /tmp/vtshots-refresh-app.log 2>&1 ) &
+    echo "No app at $APP — starting one on a fresh data dir ($APP_DATA_DIR)…"
+    rm -rf "$APP_DATA_DIR"
+    mkdir -p "$APP_DATA_DIR"
+    # `exec`, so $! is the app itself and stop_app's kill reaches it.
+    (
+        cd "$REPO_ROOT"
+        VTSEARCH_DATA_DIR="$APP_DATA_DIR" \
+            VTSEARCH_MODELS_DIR="${VTSEARCH_MODELS_DIR:-$REPO_ROOT/data/models}" \
+            VTSEARCH_TORCH_THREADS=1 \
+            VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
+            exec python app.py --local > "$APP_LOG" 2>&1
+    ) &
     started_app=$!
-    for _ in $(seq 1 60); do
+    # capture.ts shows this dir as the install's own data dir (maskVolatile).
+    export SHOTS_APP_DATA_DIR="$APP_DATA_DIR"
+    for _ in $(seq 1 90); do
         curl -sf -o /dev/null "$APP/" 2>/dev/null && break
+        if ! kill -0 "$started_app" 2>/dev/null; then
+            echo "The app exited before it was ready; the end of $APP_LOG:" >&2
+            tail -20 "$APP_LOG" >&2
+            exit 1
+        fi
         sleep 2
     done
+    curl -sf -o /dev/null "$APP/" 2>/dev/null || { echo "The app at $APP never came up; see $APP_LOG" >&2; exit 1; }
 fi
 
 # Create the deterministic fixtures the recipes need (idempotent).
@@ -46,8 +81,3 @@ node ensure-fixtures.mjs
 # tsx is a dev dependency in this folder's package.json. capture.ts writes
 # WebP directly (see its encodeWebp), so there is no post-pass here.
 node_modules/.bin/tsx capture.ts "$@"
-
-if [[ -n "$started_app" ]]; then
-    echo "Stopping app started by refresh.sh (pid $started_app)…"
-    kill "$started_app" 2>/dev/null || true
-fi
