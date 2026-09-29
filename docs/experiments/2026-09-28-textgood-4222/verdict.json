@@ -1,0 +1,32 @@
+{
+  "natural": {
+    "past_gate_by_50": {
+      "3": 0.018,
+      "6": 0.041,
+      "10": 0.067,
+      "20": 0.599
+    },
+    "ap_safe": {
+      "3": true,
+      "6": true,
+      "10": true,
+      "20": true
+    },
+    "smallest_G_at_max": 20
+  },
+  "p0.001": {
+    "past_gate_by_50": {
+      "3": 0.0,
+      "6": 0.0,
+      "10": 0.0,
+      "20": 0.012
+    },
+    "ap_safe": {
+      "3": true,
+      "6": true,
+      "10": false,
+      "20": false
+    },
+    "smallest_G_at_max": 3
+  }
+}

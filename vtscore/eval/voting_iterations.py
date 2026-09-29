@@ -3096,7 +3096,7 @@ def run_voting_iterations_eval(
             ``["app"]``; pass e.g. ``["app", "svm_linear", "svm_rbf"]`` for the
             head-to-head comparison.  Recorded in the ``trainer`` column.
         prevalence_arms: Which prevalence arms to run per (dataset, category).
-            ``None`` (default) runs ``[None]`` (natural prevalence only); pass
+            ``None`` (default) runs ``[None]`` (the dataset's own prevalence only); pass
             e.g. ``[None, 0.01]`` to add the 1%-prevalence rare arm.  Recorded
             in the ``prevalence_arm`` / ``realized_prevalence`` columns.
         styles: Which detection styles to run per cell (see

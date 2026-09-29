@@ -274,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"trainer={cfg.TRAINER} strategy={cfg.STRATEGY} standalone_cut={cfg.STANDALONE_CUT} "
         f"haystack_prevalence={cfg.HAYSTACK_PREVALENCE or 'natural'} "
+        f"target_prevalence={cfg.TARGET_PREVALENCE or 'natural'} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
         f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
@@ -363,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
             strategy=cfg.STRATEGY,
             standalone_cut=cfg.STANDALONE_CUT,
             haystack_prevalence=cfg.HAYSTACK_PREVALENCE,
+            target_prevalence=cfg.TARGET_PREVALENCE,
             head=cfg.HEAD,
             style=style,
             test_bands=cfg.TEST_BANDS,
