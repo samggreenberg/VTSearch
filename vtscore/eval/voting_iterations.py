@@ -1557,6 +1557,24 @@ def _resolve_startup_state(
     return startup_state
 
 
+def _parse_opening_diversity(spec: Optional[str]) -> Optional[tuple[float, int]]:
+    """``"<tau>/<k>"`` -> ``(tau, k)`` for the #4197 knob; ``None`` stays ``None``.
+
+    Strict, like every arm-defining knob: a misread spec is an arm measuring
+    something its launcher does not say.
+    """
+    if spec is None or not str(spec).strip():
+        return None
+    try:
+        tau_s, k_s = str(spec).split("/")
+        tau, k = float(tau_s), int(k_s)
+    except ValueError as exc:
+        raise ValueError(f"opening_diversity must be '<tau>/<k>', e.g. '0.85/1'; got {spec!r}") from exc
+    if not (0.0 < tau <= 1.0) or k < 1:
+        raise ValueError(f"opening_diversity needs 0 < tau <= 1 and k >= 1; got {spec!r}")
+    return tau, k
+
+
 def _resolve_run_knobs(
     *,
     fold_count_schedule: str | None,
@@ -1757,6 +1775,7 @@ def simulate_voting_iterations(  # noqa: C901
     acq_inclusion_offset: float = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
+    opening_diversity: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
@@ -1938,6 +1957,12 @@ def simulate_voting_iterations(  # noqa: C901
             evidence and truth a precision-floor estimator is priced on (#4220).
             Only the calibration-metrics path fills it.  ``None`` (default) = off.
         precision_frame_steps: The steps (``t``) to record; ignored without a sink.
+        opening_diversity: ``"<tau>/<k>"`` - an experiment knob (issue #4197),
+            not app behaviour.  While the opening walks the top of the seed sort
+            (``good`` / ``more``), pass over candidates with cosine >= *tau* to at
+            least *k* Bads voted so far (the text query's sibling cluster).
+            ``None`` - the default - is the app.  See
+            :func:`vtscore.eval.al_strategies._diverse_top`.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -2157,6 +2182,7 @@ def simulate_voting_iterations(  # noqa: C901
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
 
+    diversity = _parse_opening_diversity(opening_diversity)
     knobs = _resolve_run_knobs(
         fold_count_schedule=fold_count_schedule,
         calibrate_count=calibrate_count,
@@ -2583,6 +2609,7 @@ def simulate_voting_iterations(  # noqa: C901
                 phase=phase,
                 startup_cut=startup_cut,
                 uncertainty=pool_uncertainty,
+                opening_diversity=diversity,
             )
             cid = select_next(strategy, ctx)
             # What the app would record for this click (#4245).

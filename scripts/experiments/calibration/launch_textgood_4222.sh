@@ -58,7 +58,7 @@ WORLDS="natural p0.001"
 # --- science knobs: today's app, as the #4184 r7 rung ran it ---------------------
 export CALIB_SAFE_THRESHOLDS=1
 unset CALIB_HEAD CALIB_BLEND_SCHEDULE CALIB_EXCLUDE_VOTED CALIB_CALIBRATION_SEEDS CALIB_LIVE_CUT_RULE
-unset CALIB_LIVE_THRESHOLD CALIB_CALIBRATION_FRACTION CALIB_ACQ_INCLUSION_OFFSET CALIB_HAYSTACK_PREVALENCE
+unset CALIB_LIVE_THRESHOLD CALIB_CALIBRATION_FRACTION CALIB_ACQ_INCLUSION_OFFSET CALIB_HAYSTACK_PREVALENCE CALIB_OPENING_DIVERSITY
 export CALIB_SCHEDULE_VARIANTS="" CALIB_REPOOL_VARIANTS="" CALIB_FOLD_COUNTS="" CALIB_ANCHORED=0 CALIB_CUT_INCL_KS=""
 export CALIB_DATASETS=coco_better CALIB_COCO_BETTER_EMBEDDERS=siglip CALIB_CATEGORY_MODE=all CALIB_PATCH_STYLES=max_patch
 export CALIB_REQUIRE_OPENING=text CALIB_REQUIRE_SEED_QUERY=1
@@ -79,6 +79,19 @@ source "$WT/scripts/experiments/pile/pile_env.sh"
 arm_env() {  # arm = <world>-g[<M>g]<G>[d<W>], or <world>-old / <world>-new; see the header
   local world="${1%%-*}" g="${1#*-g}" dry="" first=""
   unset CALIB_HAYSTACK_PREVALENCE
+  unset CALIB_OPENING_DIVERSITY
+  if [[ "${1##*-}" == div* ]]; then
+    # #4197: the default opening with the diversity knob. div85k1 = "0.85/1":
+    # pass over text-sort candidates at cosine >= 0.85 to at least 1 Bad.
+    local d="${1##*-div}"
+    unset CALIB_STARTUP_SCHEDULE CALIB_TARGET_PREVALENCE
+    DIVERGES="opening_diversity"
+    export CALIB_OPENING_DIVERSITY="0.${d%%k*}/${d##*k}"
+    world_env "$world"
+    export CALIB_EXP="$BASE/$1" CALIB_RESULTS="$BASE/$1/results" CALIB_JOB_NAME="tg4222-$1"
+    mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
+    return
+  fi
   if [[ "${1##*-}" == "old" || "${1##*-}" == "new" ]]; then
     # #4303: the openings either side of #4288. "new" is the app default (unset);
     # "old" spells the pre-#4288 opening out, since the default no longer is it.
