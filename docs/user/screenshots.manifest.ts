@@ -373,23 +373,50 @@ async function setAutoRun(h: Helpers, on: boolean): Promise<void> {
   await h.app.api(`/api/detectors/registry/${det.id}/autofind`, { method: 'PUT', body: { autofind: on } });
 }
 
+/** How far apart, in CSS px, `clickTile` tries points on the Browse canvas. */
+const TILE_PROBE_STEP = 20;
+
 /**
- * Click the Browse canvas, *button* 'left' or 'right', at the first point
- * (working out from the centre) where it lands on a tile, judged by *hit*.
- * Tiles leave gaps between clusters, and a right-click on empty space soon
- * after another zooms out, so the tries are spaced out.
+ * Every point of a *step*-spaced grid within *reach* of the origin, nearest
+ * first. The order among equally near points is fixed, so the same map always
+ * gets the same tile.
+ */
+function outFromMiddle(reach: number, step: number): [number, number][] {
+  const n = Math.floor(reach / step);
+  const points: [number, number][] = [];
+  for (let i = -n; i <= n; i++) {
+    for (let j = -n; j <= n; j++) {
+      if (i * i + j * j <= n * n) points.push([i * step, j * step]);
+    }
+  }
+  return points.sort((a, b) => a[0] ** 2 + a[1] ** 2 - (b[0] ** 2 + b[1] ** 2));
+}
+
+/**
+ * Click the Browse canvas, *button* 'left' or 'right', on the tile nearest its
+ * middle, and check with *hit* that the click took.
+ *
+ * Where the tiles fall is up to the UMAP layout, and they leave gaps between
+ * clusters, so any fixed point can land on empty space (#4296). The pointer
+ * instead sweeps out from the middle until the hover preview says it is over a
+ * tile, and clicks there. Hovering changes nothing, where a stray right-click
+ * on empty space soon after another zooms the map out.
  */
 async function clickTile(page: Page, h: Helpers, button: 'left' | 'right', hit: () => Promise<boolean>): Promise<void> {
   const box = await page.locator('vt-browse-canvas').first().boundingBox();
   if (!box) throw new Error('no Browse canvas');
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  for (const [dx, dy] of [[0, 0], [40, 0], [-40, 0], [0, 40], [0, -40], [80, 40], [-80, -40], [120, 0], [-120, 0], [0, 120]]) {
+  const hovering = page.locator('.hover-popup');
+  for (const [dx, dy] of outFromMiddle(Math.min(box.width, box.height) / 2 - TILE_PROBE_STEP, TILE_PROBE_STEP)) {
+    await page.mouse.move(cx + dx, cy + dy);
+    await h.wait(120);
+    if (!(await hovering.count())) continue;
     await page.mouse.click(cx + dx, cy + dy, { button });
     await h.wait(1200);
     if (await hit()) return;
   }
-  throw new Error('no tile found near the middle of the Browse canvas');
+  throw new Error('no tile found on the Browse canvas');
 }
 
 /** How far the manual-text-sort shot widens the left panel, in CSS px. */
