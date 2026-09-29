@@ -3,7 +3,7 @@
 # positives a low-prevalence session starves for?
 #
 #   bash launch_textgood_4222.sh plan               # the arm table; submits nothing
-#   bash launch_textgood_4222.sh prepare            # link the #4184 prepare output (once)
+#   bash launch_textgood_4222.sh prepare [ARM..]    # link the #4184 prepare output (once per arm)
 #   bash launch_textgood_4222.sh arms [ARM..]       # submit; default: every arm
 #
 # An arm is <world>-g<G>, or <world>-g<G>d<W> for the adaptive stop the report
@@ -91,12 +91,13 @@ case "$MODE" in
     ;;
   prepare)
     [[ -f "$PREPARE_SRC/prepare_info.json" ]] || { echo "no prepare at $PREPARE_SRC" >&2; exit 1; }
-    for a in $(all_arms); do
+    shift
+    for a in ${*:-$(all_arms)}; do
       arm_env "$a"
       cp -n "$PREPARE_SRC/prepare_info.json" "$CALIB_RESULTS/"
       [[ -d "$PREPARE_SRC/crops" && ! -e "$CALIB_RESULTS/crops" ]] && cp -r "$PREPARE_SRC/crops" "$CALIB_RESULTS/crops"
     done
-    echo "prepare linked into $(all_arms | wc -l) arms under $BASE"
+    echo "prepare linked into ${*:-$(all_arms | wc -l) arms} under $BASE"
     ;;
   arms)
     shift
