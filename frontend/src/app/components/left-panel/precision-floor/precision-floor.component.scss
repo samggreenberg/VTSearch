@@ -1,4 +1,6 @@
 .precision-floor {
+  // The hint's tooltip hangs below this block, as wide as it (`below-block`).
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
@@ -7,8 +9,15 @@
 
 .floor-picker {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.floor-phrase {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2xs);
 }
 
 .floor-label {
@@ -27,7 +36,6 @@
   font-size: var(--font-2xs);
   letter-spacing: var(--tracking-wide);
   color: var(--text-muted);
-  cursor: help;
 
   .indicator-dot {
     width: 6px;
@@ -54,4 +62,5 @@
 
 .floor-state-text {
   min-width: 0;
+  cursor: help;
 }

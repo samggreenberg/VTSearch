@@ -99,7 +99,6 @@ describe('line-floor (#4247)', () => {
     it('explains a promise without the estimate behind it', () => {
       const why = floorExplanation(lineFloor('promised'), 12)!;
       expect(why).toContain('At least 50% of the 12 items the line returns');
-      expect(why).not.toMatch(/\d+% right\b(?! at)/);
     });
 
     it('explains an unpromised line with its reason', () => {

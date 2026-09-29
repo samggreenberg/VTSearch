@@ -160,10 +160,11 @@
     }
   }
 
+  // The floor: the precision the line is asked to keep. Solid, so it reads
+  // apart from the dashed unpromised line and from the fainter grid under it.
   .floor {
     stroke: var(--text-secondary);
     stroke-width: 1;
-    stroke-dasharray: 6 3;
   }
 
   .crosshair {
@@ -241,7 +242,8 @@
 }
 
 .swatch-floor {
-  background: repeating-linear-gradient(90deg, var(--text-secondary) 0 6px, transparent 6px 9px);
+  height: 1px;
+  background: var(--text-secondary);
 }
 
 .chart-readout {

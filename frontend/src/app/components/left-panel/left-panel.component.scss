@@ -159,26 +159,16 @@
   margin-left: var(--space-xs);
 }
 
-// Find mode: the precision floor and the unverified-positives work-queue
-// actions share one row, with the action cluster pushed to the right edge.
-// Top-aligned, so the actions sit beside the floor's picker while its state
-// line wraps underneath; in a panel too narrow for both, the actions wrap.
+// Find mode: the precision floor, with the unverified-positives work-queue
+// actions projected onto its picker line (`floorActions`) and pushed to the
+// right edge, so the floor's state line keeps the full width underneath.
 .find-floor-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-xs) var(--space-sm);
   padding: 0 var(--space-xs);
   flex-shrink: 0;
-
-  vt-precision-floor {
-    flex: 1 1 0;
-    min-width: 0;
-  }
 }
 
-// Icon-only action cluster (Browse / To Dataset / Export) sitting next to the
-// precision floor. Mirrors the right panel's ``.goods-actions``: compact,
+// Icon-only action cluster (Browse / To Dataset / Export) sitting on the
+// precision floor's picker line. Mirrors the right panel's ``.goods-actions``: compact,
 // borderless, tooltip-labelled.
 .find-queue-actions {
   margin-left: auto;

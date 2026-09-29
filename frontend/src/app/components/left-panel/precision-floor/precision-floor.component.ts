@@ -31,6 +31,10 @@ const NO_FLOOR = 'none';
  * or not enough evidence yet (showing the default cut, with the Good votes it
  * has). There is no "off": a stored `null` floor shows as "No floor" until the
  * user picks one.
+ *
+ * Content marked `floorActions` is projected onto the picker's line, so a host
+ * can seat controls beside the picker (Find's work-queue actions) while the
+ * state line keeps the full width underneath.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

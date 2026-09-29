@@ -1,29 +1,38 @@
 <div class="precision-floor">
   <div class="floor-picker">
-    <label class="floor-label" for="precision-floor-select" title="The share of what the detector returns that should be right">
-      At least
-    </label>
-    <select
-      id="precision-floor-select"
-      class="form-select form-select--compact"
-      aria-label="Precision floor"
-      title="How much of what the detector returns should be right"
-      (change)="onChange($event)"
-    >
-      @if (value() === null) {
-        <option [value]="noFloor" disabled selected>No floor</option>
+    <!-- "At least [X] right" reads as one phrase, so it sits tighter than the
+         controls projected after it. -->
+    <span class="floor-phrase">
+      <label class="floor-label" for="precision-floor-select" title="The share of what the detector returns that should be right">
+        At least
+      </label>
+      <select
+        id="precision-floor-select"
+        class="form-select form-select--compact"
+        aria-label="Precision floor"
+        title="How much of what the detector returns should be right"
+        (change)="onChange($event)"
+      >
+        @if (value() === null) {
+          <option [value]="noFloor" [selected]="true" disabled>No floor</option>
+        }
+        @for (opt of options(); track opt.value) {
+          <option [value]="opt.value" [selected]="opt.value === selected()">{{ opt.label }}</option>
+        }
+      </select>
+      <span class="floor-label">right</span>
+      @if (!summary()) {
+        <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
       }
-      @for (opt of options(); track opt.value) {
-        <option [value]="opt.value" [selected]="opt.value === selected()">{{ opt.label }}</option>
-      }
-    </select>
-    <span class="floor-label">right</span>
-    <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" />
+    </span>
+    <!-- Controls that belong on the picker's line (Find's work-queue actions). -->
+    <ng-content select="[floorActions]" />
   </div>
   @if (summary(); as text) {
-    <p class="floor-state" role="status" [attr.data-status]="dot()" [title]="explanation() ?? ''">
+    <p class="floor-state" [attr.data-status]="dot()">
       <span class="indicator-dot" aria-hidden="true"></span>
-      <span class="floor-state-text">{{ text }}</span>
+      <span class="floor-state-text" role="status" [title]="explanation() ?? ''">{{ text }}</span>
+      <vt-field-hint-icon [hint]="hint" ariaLabel="What the precision floor means" placement="below-block" />
     </p>
   }
 </div>
