@@ -126,6 +126,11 @@ def main() -> int:
         failures,
     )
 
+    c = pd.read_csv(out / "class_paired.csv").set_index(["pool", "arm", "class"])
+    d0 = c.loc[("0.44%", "g6", "cls0"), "average_precision_delta"]
+    check(abs(d0 - 0.031) < 1e-3, f"per-class AP delta read back ({d0:+.3f})", failures)
+    check(c.loc[("0.44%", "g3", "cls2"), "goods"] == 1.0, "per-class Goods found read back", failures)
+
     v = json.loads((out / "verdict.json").read_text())
     check(v["arms"]["g20"]["safe"] is False, "the guard rejects an arm that loses AP in one pool", failures)
     check(v["winner"] == "g20d8", f"the rule picks g20d8 (got {v['winner']})", failures)

@@ -1012,6 +1012,11 @@ ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 #: that wants to name it explicitly, and is pinned against the app.
 STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 
+#: Issue #4197's opening-diversity knob, ``"<tau>/<k>"``: while Autopilot's
+#: opening walks the top of the text sort, pass over candidates with cosine >= tau
+#: to at least k of the Bads voted so far.  Unset (the default) is the app.
+OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or None
+
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
 #: only frame that records the **opening**, which emits no main row because no

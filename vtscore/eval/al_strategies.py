@@ -129,6 +129,12 @@ class ALContext:
             the step's trainer reports one (``StepModel.predict_std``); ``None``
             otherwise, which those strategies treat as an error rather than a
             reason to fall back to the rank pick.
+        opening_diversity: ``(tau, k)`` - an experiment knob (issue #4197), not
+            app behaviour.  While the opening walks the top of the seed sort
+            (``good`` / ``more``), pass over a candidate whose embedding has
+            cosine >= ``tau`` to at least ``k`` of the Bads voted so far: the
+            text query's sibling cluster (keyboards for "laptop"), voted Bad
+            again and again.  ``None`` - the default - is the app.
     """
 
     pool_ids: list[int]
@@ -144,6 +150,7 @@ class ALContext:
     phase: Optional[str] = None
     startup_cut: Optional[float] = None
     uncertainty: Optional[dict[int, float]] = None
+    opening_diversity: Optional[tuple[float, int]] = None
 
 
 # ------------------------------------------------------------------
@@ -308,9 +315,39 @@ def _pick_good_phase(ctx: ALContext) -> int:
     pool = ctx.pool_ids
     if ctx.seed_scores is not None:
         seed = ctx.seed_scores
+        if ctx.opening_diversity is not None:
+            pick = _diverse_top(ctx, seed, *ctx.opening_diversity)
+            if pick is not None:
+                return pick
         return max(pool, key=lambda i: seed.get(i, -np.inf))
     positives = [i for i in pool if ctx.pool_labels is not None and ctx.pool_labels.get(i) == 1.0]
     return _uniform_pick(ctx, positives or pool)
+
+
+def _unit(v: Any) -> np.ndarray:
+    v = np.asarray(v, dtype=np.float32).ravel()
+    n = float(np.linalg.norm(v))
+    return v / n if n > _EPS else v
+
+
+def _diverse_top(ctx: ALContext, seed: dict[int, float], tau: float, k: int) -> Optional[int]:
+    """The top of the seed sort, passing over the Bads' near neighbours (#4197).
+
+    Walks the pool down the seed ranking and returns the first candidate with
+    fewer than *k* Bads at cosine >= *tau*.  ``None`` when there is no Bad yet,
+    or when every candidate is passed over, so the caller takes the plain top.
+    """
+    bads = [i for i, v in ctx.labeled.items() if v == 0.0 and i in ctx.embeddings]
+    if not bads:
+        return None
+    bad_mat = np.stack([_unit(ctx.embeddings[i]) for i in bads])
+    for cid in sorted(ctx.pool_ids, key=lambda i: seed.get(i, -np.inf), reverse=True):
+        if cid not in ctx.embeddings:
+            return cid
+        near = int(np.count_nonzero(bad_mat @ _unit(ctx.embeddings[cid]) >= tau))
+        if near < k:
+            return cid
+    return None
 
 
 def _pick_on_seed_sort(ctx: ALContext, cut: Optional[float]) -> int:
