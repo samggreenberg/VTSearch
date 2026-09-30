@@ -115,14 +115,40 @@ interface Annotation {
 
 ### 2. The harness — `scripts/screenshots/capture.ts`
 
-For each shot × theme: boot the app once (Smiley-example fixtures), set
-deterministic knobs, run the recipe, apply the theme, inject declarative
+For each shot: boot the app once (Smiley-example fixtures), set deterministic
+knobs, run the recipe, then for each theme apply it, inject declarative
 annotations as an absolutely-positioned DOM overlay computed from each `target`'s
-bounding rect, then capture (`clip` element if given, else viewport) → WebP.
+bounding rect, and capture (`clip` element if given, else viewport) → WebP.
 A recipe should *pose* the app (a form filled in, a menu open) rather than
 change it; one that has to change it to reach its frame (pictures verified in
 Find, a detector moved to AutoRun) puts it back in `after`, which runs once the
 shot is taken, pass or fail, so no later shot inherits the change.
+
+**One recipe run, both themes** (#4341). The theme is only the colour scheme the
+browser reports and the `data-theme` attribute it resolves to, so both files
+come from one frame: light is taken, the theme flips, dark is taken. That
+halves the recipe time, which is most of a run, and makes each pair show the
+same moment; when every theme replayed the recipe, the light run's leftovers
+(a persisted Manual tab, a panel width `after` could not restore exactly) could
+put the dark shot in a different state. Anything styled by CSS follows the flip,
+and the Browse canvas, minimap and legend repaint on it. A frame holding
+something that paints the theme's colours once and keeps them (the progress
+modal's charts, the Help panel's images) sets `rerunPerTheme` on its shot.
+
+**Settling on the page, not the clock** (#4341). The label view sorts on entry
+and on a tab switch, and the frame follows whichever sort settled last (#4299).
+It only ever starts a sort in answer to something the page received — a
+response, or a ≤ 300 ms timer set as one landed — so `settleSorts` waits for a
+sort to begin *or* for the page to go quiet (nothing in flight and nothing
+landed for a second), then for every begun sort to settle and the page to go
+quiet again. The old fixed start windows (up to 15 s) now only cap that wait;
+they used to run out in full whenever no sort came, which was most of a run.
+
+**Timing.** Every shot's log line gives its time, split into recipe, sort
+settling and capture; the run ends with the slowest ten, and `refresh.sh` with
+its phase totals (app start, fixtures, capture). On a 4-vCPU cloud container a
+full run went from ~45 min to ~19: about 6 min of fixture import and 13 of
+capture.
 
 **WebP, not PNG** (#4202). It came in while the shots were photographs behind
 UI chrome, which PNG is bad at: a full-window shot was 2.4–3.4 MB lossless —
@@ -136,7 +162,8 @@ Playwright captures PNG; `capture.ts` re-encodes it with Pillow
 drawings) and a fixed vote baseline, on a fresh app data dir every run (#4299)
 with a seeded Browse map (#4296);
 viewport **1440 × 900**, `deviceScaleFactor: 2`; animations/transitions disabled
-(`* { transition:none !important; animation:none !important; }`); mask volatile
+(`* { transition:none !important; animation:none !important; }`), and timed
+flashes (Settings' "✓ saved") hidden; mask volatile
 text (app version — a git timestamp — and any wall-clock/elapsed/gauge text)
 and pin the RAM / disk gauges' fill bar at a fixed fraction;
 stub randomness the UI exposes (never rely on unseeded draws).
@@ -149,6 +176,8 @@ stub randomness the UI exposes (never rely on unseeded draws).
   starts one on a fresh data dir (`data/.screenshots-app`, emptied every run,
   the model cache shared) and stops it afterwards, so no refresh photographs
   state an earlier one left behind; the fixtures are imported afresh each run.
+  That app runs with its stall watchdog off, whose thread dump has crashed it
+  mid-import (#4345).
   An app already serving is refused, and named, when its `GET /api/version`
   is not the checkout's: it would shoot another commit's code, and the
   stale-build toast that would say so is hidden in every shot.
