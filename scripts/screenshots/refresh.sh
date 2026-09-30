@@ -25,6 +25,11 @@
 # the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an unseeded
 # draw shows the floor-check shot a different pick every time (#4330).
 #
+# It turns the app's stall watchdog off (VTSEARCH_STALL_WATCHDOG_MS=0): a
+# heartbeat it misses during the fixtures' CPU embedding makes it dump every
+# thread's frames while they run, which has segfaulted the app mid-import
+# (#4345), and a harness run has no stall to diagnose.
+#
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's
 # commit, though: one from any other commit is refused, and named (#4324).
@@ -101,6 +106,7 @@ else
             VTSEARCH_TORCH_THREADS=1 \
             VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
             VTSEARCH_SPOT_CHECK_SEED=$SPOT_CHECK_SEED \
+            VTSEARCH_STALL_WATCHDOG_MS=0 \
             exec python app.py --local > "$APP_LOG" 2>&1
     ) &
     started_app=$!
@@ -118,9 +124,19 @@ else
     curl -sf -o /dev/null "$APP/" 2>/dev/null || { echo "The app at $APP never came up; see $APP_LOG" >&2; exit 1; }
 fi
 
+# How long each phase took, printed at the end so a slow run says where (#4341).
+phase_start=$SECONDS
+app_secs=$phase_start
+
 # Create the deterministic fixtures the recipes need (idempotent).
 node ensure-fixtures.mjs
+fixture_secs=$((SECONDS - phase_start))
+phase_start=$SECONDS
 
 # tsx is a dev dependency in this folder's package.json. capture.ts writes
 # WebP directly (see its encodeWebp), so there is no post-pass here.
 node_modules/.bin/tsx capture.ts "$@"
+capture_secs=$((SECONDS - phase_start))
+
+mmss() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
+echo "refresh.sh: $(mmss "$SECONDS") in all (app start $(mmss "$app_secs"), fixtures $(mmss "$fixture_secs"), capture $(mmss "$capture_secs"))"
