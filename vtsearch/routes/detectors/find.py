@@ -521,9 +521,18 @@ def _score_with_cold_detector(
     labelled media from the haystack (issue #3308).  Below the usable-fold
     floor the schedule blend answers, exactly as everywhere else.
     """
+    from vtscore.config import CoreConfig  # noqa: PLC0415
     from vtscore.detectors.labelset_training import labelset_train_and_score  # noqa: PLC0415
 
     det_ctx = _cold_detector_context(dc)
+    # The same training settings the load and learned-sort paths read.  A cold
+    # detector has no per-detector floor of its own (it has never been the
+    # active detector), so it takes the user's persisted value - what its
+    # ``DetectorContext.min_precision`` would be seeded with on first load
+    # (#4245) - cut on the corpus this Find decides.  Leaving these at the
+    # call's defaults cut every cold Find with no floor and two calibration
+    # splits, whatever the user had set.
+    cfg = CoreConfig.from_settings()
     labelset = _cold_labelset(dc)
     media_type = dc["detector_data"].get("media_type", "audio")
 
@@ -550,8 +559,11 @@ def _score_with_cold_detector(
             labelset,
             media_type=media_type,
             clips_dict=temp_medias,
+            calibrate_count=cfg.calibrate_count,
+            calibration_fraction=cfg.calibration_fraction,
             rows=rows,
             on_progress=_on_label,
+            min_precision=cfg.min_precision,
         )
         if model is None:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")

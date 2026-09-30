@@ -90,6 +90,7 @@ def effective_settings() -> dict[str, Any]:
     from vtscore.concurrency.stalls import (
         gc_freeze_enabled,
         gc_warn_threshold_ms,
+        live_dump_enabled,
         slow_phase_threshold_ms,
         watchdog_threshold_ms,
     )
@@ -104,6 +105,9 @@ def effective_settings() -> dict[str, Any]:
         "slow_phase_ms": slow_phase_threshold_ms(),
         "gc_warn_ms": gc_warn_threshold_ms(),
         "watchdog_ms": watchdog_threshold_ms(),
+        # Whether a stall can also leave faulthandler's mid-stall dump, and
+        # run the risk of it crashing the process (#4345).
+        "live_dump": live_dump_enabled(),
         "gc_freeze": gc_freeze_enabled(),
         "detector_write": detector_write_mode(),
         "log_file": os.environ.get("VTSEARCH_LOG_FILE") or "<none>",
@@ -121,13 +125,14 @@ def log_effective_settings() -> dict[str, Any]:
     settings = effective_settings()
     log.warning(
         "diagnostics config: diagnose=%s log_level=%s slow_request=%.0fms slow_phase=%.0fms "
-        "gc_warn=%.0fms watchdog=%.0fms gc_freeze=%s detector_write=%s log_file=%s",
+        "gc_warn=%.0fms watchdog=%.0fms live_dump=%s gc_freeze=%s detector_write=%s log_file=%s",
         settings["diagnose"],
         settings["log_level"],
         settings["slow_request_ms"],
         settings["slow_phase_ms"],
         settings["gc_warn_ms"],
         settings["watchdog_ms"],
+        settings["live_dump"],
         settings["gc_freeze"],
         settings["detector_write"],
         settings["log_file"],

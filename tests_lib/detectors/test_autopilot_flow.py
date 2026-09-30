@@ -24,6 +24,8 @@ from vtscore.eval.autopilot_flow import (
     BAD_TARGET,
     GOOD_TARGET,
     MIN_PER_CLASS,
+    MORE_DRY_RUN,
+    MORE_TARGET,
     SMART_FLAT_THRESHOLD,
     SMART_SLOPE_T,
     SPAN_YELLOW,
@@ -69,7 +71,8 @@ def _fidelity_rows():
         clips,
         "cat",
         seed=1,
-        max_steps=20,
+        # Long enough to get past the #4282 walk into a learned phase.
+        max_steps=45,
         atlas_min_node_size=5,
         seed_scores=seed_scores,
     )
@@ -89,16 +92,21 @@ def _phase(
     stable: Status = "red",
     span: Status = "red",
     remaining: float = 1000,
+    more_done: bool = False,
 ) -> str:
-    return next_phase(good, bad, remaining_unlabeled=remaining, smart=smart, stable=stable, span=span)
+    return next_phase(
+        good, bad, remaining_unlabeled=remaining, smart=smart, stable=stable, span=span, more_done=more_done
+    )
 
 
 class TestPortedConstants:
     """The app's numbers, asserted literally so a drift fails loudly."""
 
     def test_vote_targets_match_autopilot_initial_state(self):
-        # frontend INITIAL_STATE: goodToStart 3, badToStart 4.
+        # frontend INITIAL_STATE: goodToStart 3, badToStart 4, moreToStart 20,
+        # moreDryRun 16 (#4282).
         assert (GOOD_TARGET, BAD_TARGET) == (3, 4)
+        assert (MORE_TARGET, MORE_DRY_RUN) == (20, 16)
 
     def test_indicator_gates_match_labeling_progress(self):
         # _compute_smart_status / _compute_stable_status: "Need at least 5 good
@@ -134,17 +142,29 @@ class TestPhaseMachine:
         assert _phase(GOOD_TARGET, 0) == "bad"
         assert _phase(GOOD_TARGET, BAD_TARGET - 1) == "bad"
 
-    def test_hard_once_quorum_is_reached(self):
-        assert _phase(GOOD_TARGET, BAD_TARGET) == "hard"
+    def test_the_more_walk_follows_the_quorum(self):
+        """#4282: back to the top of the seed sort until MORE_TARGET goods."""
+        assert _phase(GOOD_TARGET, BAD_TARGET) == "more"
+        assert _phase(MORE_TARGET - 1, BAD_TARGET) == "more"
+
+    def test_hard_once_the_walk_meets_its_target(self):
+        assert _phase(MORE_TARGET, BAD_TARGET) == "hard"
+
+    def test_hard_once_the_walk_has_ended(self):
+        assert _phase(GOOD_TARGET, BAD_TARGET, more_done=True) == "hard"
+
+    def test_the_walk_target_is_capped_by_what_the_collection_can_supply(self):
+        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=2) == "more"
+        assert _phase(GOOD_TARGET, BAD_TARGET, remaining=0) == "exhausted"
 
     def test_new_only_once_smart_and_stable_are_green(self):
         """The app switches to diversity on the indicators, never on parity."""
-        assert _phase(9, 9, smart="green", stable="yellow") == "hard"
-        assert _phase(9, 9, smart="yellow", stable="green") == "hard"
-        assert _phase(9, 9, smart="green", stable="green") == "new"
+        assert _phase(9, 9, smart="green", stable="yellow", more_done=True) == "hard"
+        assert _phase(9, 9, smart="yellow", stable="green", more_done=True) == "hard"
+        assert _phase(9, 9, smart="green", stable="green", more_done=True) == "new"
 
     def test_done_when_all_three_are_green(self):
-        assert _phase(9, 9, smart="green", stable="green", span="green") == "done"
+        assert _phase(9, 9, smart="green", stable="green", span="green", more_done=True) == "done"
 
     def test_exhausted_when_nothing_left_and_not_all_green(self):
         assert _phase(9, 9, remaining=0) == "exhausted"
@@ -167,8 +187,8 @@ class TestPhaseMachine:
         assert _phase(0, 0, remaining=math.inf) == "good"
 
     def test_phase_can_regress_when_votes_are_removed(self):
-        assert _phase(GOOD_TARGET, BAD_TARGET) == "hard"
-        assert _phase(GOOD_TARGET - 1, BAD_TARGET) == "good"
+        assert _phase(GOOD_TARGET, BAD_TARGET, more_done=True) == "hard"
+        assert _phase(GOOD_TARGET - 1, BAD_TARGET, more_done=True) == "good"
 
 
 class TestDetectorVisibility:
@@ -282,7 +302,49 @@ class TestAutopilotFlow:
     def test_advances_through_the_initial_phases(self):
         flow = AutopilotFlow()
         assert flow.update(GOOD_TARGET, 0, 500, None) == "bad"
-        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "hard"
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
+
+    def _in_walk(self) -> AutopilotFlow:
+        flow = AutopilotFlow()
+        flow.update(GOOD_TARGET, 0, 500, None)
+        assert flow.update(GOOD_TARGET, BAD_TARGET, 500, None) == "more"
+        return flow
+
+    def test_the_walk_runs_dry_after_its_run_of_misses(self):
+        flow = self._in_walk()
+        bad = BAD_TARGET
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            assert flow.update(GOOD_TARGET, bad, 500, None) == "more"
+        assert flow.update(GOOD_TARGET, bad + 1, 500, None) == "hard"
+        assert flow.more_done
+
+    def test_a_hit_restarts_the_run_of_misses(self):
+        flow = self._in_walk()
+        good, bad = GOOD_TARGET, BAD_TARGET
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            flow.update(good, bad, 500, None)
+        good += 1
+        assert flow.update(good, bad, 500, None) == "more"
+        for _ in range(MORE_DRY_RUN - 1):
+            bad += 1
+            assert flow.update(good, bad, 500, None) == "more"
+
+    def test_the_walk_ends_at_its_target(self):
+        flow = self._in_walk()
+        assert flow.update(MORE_TARGET, BAD_TARGET, 500, None) == "hard"
+
+    def test_the_walk_never_resumes(self):
+        """Once it has ended the walk is spent, as a schedule round is."""
+        flow = self._in_walk()
+        flow.update(MORE_TARGET, BAD_TARGET, 500, None)
+        assert flow.update(MORE_TARGET - 1, BAD_TARGET, 500, None) == "hard"
+
+    def test_only_votes_cast_in_the_walk_count(self):
+        """The four Bads of the Bad phase are not walk misses."""
+        flow = self._in_walk()
+        assert flow.more_misses == 0
 
     def test_records_flip_counts_between_consecutive_steps(self):
         flow = AutopilotFlow()
@@ -334,6 +396,7 @@ class TestAutopilotFlow:
 
     def test_span_drives_the_new_to_done_transition(self):
         flow = AutopilotFlow()
+        flow.more_done = True
         flow.recent_error_costs = [0.3] * 4
         flow.stability = [_entry(0)] * 6
         assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"

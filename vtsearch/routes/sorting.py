@@ -4,8 +4,8 @@ Migrated to ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
-``examples`` / ``inclusion``; type-mismatched ``inclusion``
-values) surface as 422 with the
+``examples`` / ``min_precision``; a ``null`` or non-numeric ``min_precision``)
+surface as 422 with the
 standard ``errors`` envelope. Handler-level rejects (empty / whitespace
 ``text``, no votes, no medias, bad files in the multipart routes, etc.)
 keep their HTTP codes (400 / 404 / 500) with the standard ``message``
@@ -32,13 +32,13 @@ from vtscore.config import DATA_DIR
 from vtscore.embedding import embed_text_query
 from vtsearch.schemas.sorting import (
     CoverageAtlasNextResponseSchema,
-    InclusionRequestSchema,
-    InclusionResponseSchema,
     LabelFileSortResponseSchema,
     LearnedSortCancelResponseSchema,
     LearnedSortRequestSchema,
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
+    MinPrecisionRequestSchema,
+    MinPrecisionResponseSchema,
     OkResponseSchema,
     SortPageQuerySchema,
     SortPageResponseSchema,
@@ -64,12 +64,12 @@ from vtsearch.state import (
     get_calibrate_count,
     get_calibration_fraction,
     get_coverage_atlas,
-    get_inclusion,
     get_learned_scores,
+    get_min_precision,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
-    set_inclusion,
+    set_min_precision,
     snapshot_medias,
     vote_region_boxes,
 )
@@ -78,7 +78,7 @@ from vtscore.concurrency.progress import sort_progress, update_sort_progress
 sorting_bp = Blueprint(
     "sorting",
     __name__,
-    description="Text / example / learned sort, votes, inclusion, safe-thresholds, coverage atlas.",
+    description="Text / example / learned sort, votes, precision floor, safe-thresholds, coverage atlas.",
 )
 
 # Text-sort proceeds in three phases: load the embedding model, embed the text
@@ -298,6 +298,7 @@ def _learned_sort_done_payload(job) -> dict:
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
         "acq_threshold": result.get("acq_threshold"),
+        "floor": result.get("floor"),
         "sort_token": result.get("sort_token"),
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
@@ -331,7 +332,7 @@ def learned_sort(body: dict):
     :func:`learned_sort_result` until ``status == "done"``.
 
     A small signature cache short-circuits the no-op case: when the votes,
-    detector, inclusion and thresholding settings are unchanged from the
+    detector, floor and thresholding settings are unchanged from the
     most recent successful run, the previous result is returned directly.
 
     Tests can pass ``{"wait": true}`` in the body to block until the job
@@ -345,6 +346,8 @@ def learned_sort(body: dict):
     )
     from vtscore.state.core import (
         detector_acquisition_threshold,
+        detector_floor_state,
+        detector_line_inclusion,
         get_active_context,
         get_active_detector_context,
     )
@@ -368,7 +371,7 @@ def learned_sort(body: dict):
 
     _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
-    inclusion_value = get_inclusion()
+    min_precision_value = get_min_precision()
     calibrate_count_value = get_calibrate_count()
     calibration_fraction_value = get_calibration_fraction()
     region_boxes_snapshot = dict(vote_region_boxes)
@@ -381,13 +384,18 @@ def learned_sort(body: dict):
         good=good_snapshot,
         bad=bad_snapshot,
         region_boxes_snapshot=region_boxes_snapshot,
-        inclusion_value=inclusion_value,
         calibrate_count_value=calibrate_count_value,
         calibration_fraction_value=calibration_fraction_value,
+        min_precision_value=min_precision_value,
     )
 
+    # A cached result is only as good as the ranking its line was drawn over.
+    # A dataset switch drops ``line_ranking`` (media ids are per dataset) while
+    # the votes, and so the signature, come back unchanged; reusing the result
+    # then would draw a line the detector can no longer re-cut or spot-check,
+    # so train again instead (#4317).
     cached = learned_sort_jobs.cached_for(signature)
-    if cached is not None:
+    if cached is not None and det_ctx.line_ranking is not None:
         return _learned_sort_done_payload(cached)
 
     # _run closes over the resolved inputs and delegates the train → score →
@@ -403,16 +411,21 @@ def learned_sort(body: dict):
             good=good_snapshot,
             bad=bad_snapshot,
             region_boxes_snapshot=region_boxes_snapshot,
-            inclusion_value=inclusion_value,
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
+            min_precision_value=min_precision_value,
         )
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
-        # carries one.
-        acq = detector_acquisition_threshold(det_ctx, inclusion_value)
-        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4))
+        # carries one.  It sits four inclusion steps stricter than the line:
+        # under a promised floor no inclusion drew that line, so none is passed
+        # and it is derived from the line itself (#4245).
+        line_incl = detector_line_inclusion(det_ctx, min_precision_value)
+        acq = detector_acquisition_threshold(det_ctx, line_incl)
+        # Whether the line is a promise rides with it (#4247).
+        floor = detector_floor_state(det_ctx, min_precision_value)
+        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), floor=floor)
 
     job = learned_sort_jobs.start(
         signature,
@@ -559,31 +572,31 @@ def add_textsort_suggestion_route(body: dict):
     return {"ok": True}
 
 
-@sorting_bp.route("/api/inclusion", methods=["GET"])
-@sorting_bp.response(200, InclusionResponseSchema)
-def get_inclusion_route():
-    """Get the current Inclusion setting and the cutoff it resolves to."""
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+@sorting_bp.route("/api/min-precision", methods=["GET"])
+@sorting_bp.response(200, MinPrecisionResponseSchema)
+def get_min_precision_route():
+    """Get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws."""
+    return _min_precision_payload()
 
 
-@sorting_bp.route("/api/inclusion", methods=["POST"])
-@sorting_bp.arguments(InclusionRequestSchema)
-@sorting_bp.response(200, InclusionResponseSchema)
-def set_inclusion_route(body: dict):
-    """Set the Inclusion setting (clamped to ``[-10, 10]``).
+@sorting_bp.route("/api/min-precision", methods=["POST"])
+@sorting_bp.arguments(MinPrecisionRequestSchema)
+@sorting_bp.response(200, MinPrecisionResponseSchema)
+def set_min_precision_route(body: dict):
+    """Set the precision floor, a fraction clamped to ``[0.01, 1]``.
 
-    Inclusion is a pure cutoff knob: this re-derives the active detector's
-    threshold from its cached fold orderings (no MLP retrain) and, in Find
-    mode, re-splits the unverified items over the frozen scores.  The new
-    cutoff is returned so the Find slider can move the green/red line.
+    A pure cutoff knob: the active detector's line moves to the set the new
+    floor keeps (no retrain) and, in Find mode, the unverified items re-split
+    over the frozen scores.  The new line comes back in the same round trip,
+    with the floor's state: ``unchecked`` until a spot check runs at this
+    floor (``/api/precision-check``), then ``confirmed`` or ``short`` with the
+    check's likely range.  Every detector has a floor, so ``null`` is refused.
     """
-    # The clamp is not spelled out here: ``settings.validate_inclusion`` is
-    # generated from the ``[-10, 10]`` bound declared once on
-    # ``UserSettings.inclusion``, so this endpoint and ``PUT /api/settings``
-    # cannot drift apart (issue #3416). The schema admits any number
-    # (``fields.Raw`` plus a numeric check), so truncate toward zero first --
-    # the pydantic field is an ``int`` and rejects a fractional value, and
-    # truncate-then-clamp is what this route has always done.
+    # The clamp is not spelled out here: ``settings.validate_min_precision`` is
+    # generated from the bound declared once on ``UserSettings.min_precision``,
+    # so this endpoint and ``PUT /api/settings`` cannot disagree about the
+    # range (issue #3416).  The schema admits any number (``fields.Raw`` plus a
+    # numeric check), so the value is coerced to a float first.
     #
     # This note stays a comment rather than joining the docstring above:
     # flask-smorest publishes the docstring as the endpoint's OpenAPI
@@ -591,11 +604,24 @@ def set_inclusion_route(body: dict):
     from vtsearch import settings  # noqa: PLC0415
 
     try:
-        new_inclusion = settings.validate_inclusion(int(body["inclusion"]))
+        value = settings.validate_min_precision(float(body["min_precision"]))
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
-    set_inclusion(new_inclusion)
-    return {"inclusion": get_inclusion(), "threshold": _active_detector_threshold()}
+    set_min_precision(value)
+    return _min_precision_payload()
+
+
+def _min_precision_payload() -> dict:
+    """The ``/api/min-precision`` response for the active detector."""
+    from vtscore.state.core import _empty_detector_context, detector_floor_state, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    threshold = _active_detector_threshold()
+    # The app always sets a floor, so the state is never ``None`` here.
+    state = detector_floor_state(det_ctx, get_min_precision()) or {}
+    ranking = None if det_ctx is _empty_detector_context else det_ctx.line_ranking
+    n_returned = ranking.above(threshold) if ranking is not None and threshold is not None else None
+    return {**state, "threshold": threshold, "n_returned": n_returned}
 
 
 def _active_detector_threshold() -> float | None:

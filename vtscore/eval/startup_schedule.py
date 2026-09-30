@@ -35,18 +35,20 @@ ranking toward the positives - the same direction, and the same reason, as
 sort.  ``k`` far enough below zero converges on ``top``, which is the issue's
 "Text-Good is Text-Hard(-100)" made literal.
 
-**The spec.**  A schedule is a comma-separated list of ``<stop><n>@<cut>``
-rounds:
+**The spec.**  A schedule is a comma-separated list of
+``<stop><n>[+dry<m>/<w>]@<cut>`` rounds:
 
-==========  ====================================================================
-``g3``      stay until **3 goods** exist (a global count, as in the app)
-``b4``      stay until **4 bads** exist (likewise)
-``n8``      stay for **8 clicks**, whatever they turn out to be
-``@top``    cut above every score - the top of the sort (today's Good phase)
-``@mid``    the shipped GMM midpoint (today's Bad phase, and every cosine sort)
-``@k-3``    the fitted GMM split at inclusion ``-3``; ``@k0`` is prior-agnostic
-``@q0.05``  cut at the sort's own 5th percentile, by rank
-==========  ====================================================================
+============  ==================================================================
+``g3``        stay until **3 goods** exist (a global count, as in the app)
+``b4``        stay until **4 bads** exist (likewise)
+``n8``        stay for **8 clicks**, whatever they turn out to be
+``+dry1/8``   ...or until this round's last **8** picks yielded fewer than
+              **1** good - the walk has run dry (``g`` and ``n`` rounds only)
+``@top``      cut above every score - the top of the sort (today's Good phase)
+``@mid``      the shipped GMM midpoint (today's Bad phase, and every cosine sort)
+``@k-3``      the fitted GMM split at inclusion ``-3``; ``@k0`` is prior-agnostic
+``@q0.05``    cut at the sort's own 5th percentile, by rank
+============  ==================================================================
 
 **Why ``q`` exists next to ``k``.**  ``k`` is the arm that could *ship* - the app
 has an Inclusion knob and no rank-position knob - but how far a given ``k`` moves
@@ -58,6 +60,18 @@ establish whether *position* is the mechanism before asking whether ``k`` is a
 usable handle on it.  Read :data:`~vtscore.eval.voting_columns.PICK_COLUMNS`'
 ``startup_cut_percentile`` to see where each round's cut really landed; a ``k``
 family that does not separate there has not been tested, whatever its spec says.
+
+**Why ``+dry`` exists.**  A fixed Good target is the wrong length in one
+pool or the other (#4222): at 0.44% prevalence walking the text sort until 20
+goods beat today's 3, but at 0.1% there are ~11 positives to find, so ``g10``
+and up never met their target, walked the text sort for the whole session, and
+never handed over to a learned sort.  ``g20+dry1/8@top`` keeps the long walk
+where the text sort is still paying and stops it where it has stopped paying:
+the round ends at the 20th good *or* once its last 8 picks held none.  The
+window counts this round's own picks only, and cannot fire until it is full,
+so a round always spends at least ``w`` clicks before it can call itself dry.
+It counts goods, which is why a ``b`` round refuses it: a round hunting
+negatives would call itself dry on exactly the picks it wants.
 
 :data:`PRODUCTION_STARTUP` spells today's opening in that grammar, and
 ``tests_lib/detectors/test_startup_schedule.py`` pins it against the ported
@@ -71,21 +85,26 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, replace
 from typing import Literal, Optional, Sequence
 
 #: Today's opening, in the grammar above: the top of the seed sort until three
-#: positives, then that sort's midpoint cut until four negatives.  Equal by
-#: construction to ``GOOD_TARGET`` / ``BAD_TARGET`` and the Sort+Select pairing
-#: in :func:`vtscore.eval.al_strategies._select_phase_faithful`; pinned against
-#: both by ``tests_lib/detectors/test_startup_schedule.py`` and by
+#: positives, then that sort's midpoint cut until four negatives, then the top of
+#: the sort again until twenty positives or sixteen picks in a row without one
+#: (the ``more`` walk, #4282; measured by #4222's dry-stop study).  Equal by
+#: construction to ``GOOD_TARGET`` / ``BAD_TARGET`` / ``MORE_TARGET`` /
+#: ``MORE_DRY_RUN`` and the Sort+Select pairing in
+#: :func:`vtscore.eval.al_strategies._select_phase_faithful`; pinned against all
+#: of them by ``tests_lib/detectors/test_startup_schedule.py`` and by
 #: ``scripts/check-eval-app-sync.py``'s ``autopilot.startup_default`` mirror.
-PRODUCTION_STARTUP = "g3@top,b4@mid"
+#: Until #4282 it was ``g3@top,b4@mid``.
+PRODUCTION_STARTUP = "g3@top,b4@mid,g20+dry1/16@top"
 
 StopKind = Literal["good", "bad", "clicks"]
 CutKind = Literal["top", "mid", "rate", "quantile"]
 
-_ROUND_RE = re.compile(r"^([gbn])(\d+)@(top|mid|k-?\d+|q0?\.\d+|q1\.0+|q0|q1)$")
+_ROUND_RE = re.compile(r"^([gbn])(\d+)(?:\+dry(\d+)/(\d+))?@(top|mid|k-?\d+|q0?\.\d+|q1\.0+|q0|q1)$")
 
 #: Phase names a schedule produces: ``s0``, ``s1``, ...  Deliberately outside
 #: :data:`~vtscore.eval.autopilot_flow.TRAINED_PHASES` - a startup round is on
@@ -121,6 +140,15 @@ class StartupRound:
     """Rank quantile of the seed sort for ``cut == "quantile"`` (0 = the top);
     ignored otherwise."""
 
+    dry_goods: int = 0
+    """The ``m`` of a ``+dry<m>/<w>`` stop: the round also ends once its last
+    :attr:`dry_window` picks held **fewer** than this many goods.  Meaningless
+    while :attr:`dry_window` is 0."""
+
+    dry_window: int = 0
+    """The ``w`` of a ``+dry<m>/<w>`` stop, counted in this round's own picks;
+    ``0`` means the round has no dry stop, which is every round but #4222's."""
+
     def spec(self) -> str:
         """Round-trip this round back to its spec string."""
         stop = {"good": "g", "bad": "b", "clicks": "n"}[self.stop]
@@ -130,7 +158,8 @@ class StartupRound:
             cut = f"k{self.k}"
         else:
             cut = f"q{self.q}"
-        return f"{stop}{self.n}@{cut}"
+        dry = f"+dry{self.dry_goods}/{self.dry_window}" if self.dry_window else ""
+        return f"{stop}{self.n}{dry}@{cut}"
 
 
 def parse_startup_schedule(spec: str) -> tuple[StartupRound, ...]:
@@ -140,31 +169,44 @@ def parse_startup_schedule(spec: str) -> tuple[StartupRound, ...]:
     something other than what its launch script says it measures, and the
     schedule is the only thing that distinguishes one arm from the next here.
     """
-    rounds: list[StartupRound] = []
-    for raw in spec.split(","):
-        token = raw.strip()
-        if not token:
-            continue
-        m = _ROUND_RE.match(token)
-        if m is None:
-            raise ValueError(
-                f"bad startup round {token!r} in schedule {spec!r}; "
-                "expected <g|b|n><count>@<top|mid|k[-]N|q<frac>>, "
-                "e.g. 'g3@top', 'n8@k-3' or 'n8@q0.05'"
-            )
-        stop_letter, count, cut = m.group(1), int(m.group(2)), m.group(3)
-        if count <= 0:
-            raise ValueError(f"round {token!r} has a non-positive count")
-        stop: StopKind = {"g": "good", "b": "bad", "n": "clicks"}[stop_letter]  # type: ignore[assignment]
-        if cut.startswith("k"):
-            rounds.append(StartupRound(stop=stop, n=count, cut="rate", k=int(cut[1:])))
-        elif cut.startswith("q"):
-            rounds.append(StartupRound(stop=stop, n=count, cut="quantile", q=float(cut[1:])))
-        else:
-            rounds.append(StartupRound(stop=stop, n=count, cut=cut))  # type: ignore[arg-type]
+    rounds = tuple(_parse_round(raw.strip(), spec) for raw in spec.split(",") if raw.strip())
     if not rounds:
         raise ValueError(f"empty startup schedule {spec!r}")
-    return tuple(rounds)
+    return rounds
+
+
+def _parse_round(token: str, spec: str) -> StartupRound:
+    m = _ROUND_RE.match(token)
+    if m is None:
+        raise ValueError(
+            f"bad startup round {token!r} in schedule {spec!r}; "
+            "expected <g|b|n><count>[+dry<m>/<w>]@<top|mid|k[-]N|q<frac>>, "
+            "e.g. 'g3@top', 'n8@k-3', 'n8@q0.05' or 'g20+dry1/8@top'"
+        )
+    stop_letter, count, cut = m.group(1), int(m.group(2)), m.group(5)
+    if count <= 0:
+        raise ValueError(f"round {token!r} has a non-positive count")
+    stop: StopKind = {"g": "good", "b": "bad", "n": "clicks"}[stop_letter]  # type: ignore[assignment]
+    if cut.startswith("k"):
+        rnd = StartupRound(stop=stop, n=count, cut="rate", k=int(cut[1:]))
+    elif cut.startswith("q"):
+        rnd = StartupRound(stop=stop, n=count, cut="quantile", q=float(cut[1:]))
+    else:
+        rnd = StartupRound(stop=stop, n=count, cut=cut)  # type: ignore[arg-type]
+    if m.group(3) is None:
+        return rnd
+    dry_goods, dry_window = int(m.group(3)), int(m.group(4))
+    if stop == "bad":
+        raise ValueError(
+            f"round {token!r} puts a dry stop on a bad round; the dry stop counts "
+            "goods, so a round hunting negatives would end on the picks it wants"
+        )
+    if not 0 < dry_goods <= dry_window:
+        raise ValueError(
+            f"round {token!r} needs 0 < m <= w in +dry<m>/<w>: with m = 0 the round "
+            "could never run dry, and with m > w it is dry the moment its window fills"
+        )
+    return replace(rnd, dry_goods=dry_goods, dry_window=dry_window)
 
 
 def round_cut(scores: Sequence[float], rnd: StartupRound) -> float:
@@ -233,6 +275,11 @@ class StartupState:
         #: trainable pair and the harness had to keep voting to get one.
         self.extended_clicks = 0
         self._held_for_quorum = False
+        #: The current round's last ``dry_window`` outcomes (``True`` = good),
+        #: for its dry stop.  Rebuilt on entering each round, so the window
+        #: never reaches back into another round's picks.
+        self._recent: deque[bool] = deque()
+        self._enter_round()
 
     @property
     def done(self) -> bool:
@@ -261,12 +308,39 @@ class StartupState:
         """``s0``, ``s1``, ... - the phase label rows carry for this round."""
         return f"{_PHASE_PREFIX}{min(self.index, len(self.rounds) - 1)}"
 
-    def on_click(self) -> None:
-        """Record one vote against the current round's click budget."""
+    def _enter_round(self) -> None:
+        self.clicks_in_round = 0
+        rnd = self.current()
+        self._recent = deque(maxlen=rnd.dry_window if rnd is not None and rnd.dry_window else None)
+
+    def ran_dry(self) -> bool:
+        """Whether the current round's dry stop has fired.
+
+        Only on a full window: a round that has cast fewer than ``w`` picks has
+        not yet seen enough of the sort to call it dry, however those picks went.
+        """
+        rnd = self.current()
+        if rnd is None or not rnd.dry_window or len(self._recent) < rnd.dry_window:
+            return False
+        return sum(self._recent) < rnd.dry_goods
+
+    def on_click(self, good: Optional[bool] = None) -> None:
+        """Record one vote against the current round's click budget.
+
+        *good* is the vote's outcome.  Only a round with a dry stop reads it,
+        and that round refuses a click without one: a dry stop that silently
+        counted nothing would never fire, and the arm would run as the plain
+        ``g``/``n`` round its spec says it is not.
+        """
         if self.done or self._held_for_quorum:
             self.extended_clicks += 1
-        else:
-            self.clicks_in_round += 1
+            return
+        self.clicks_in_round += 1
+        rnd = self.rounds[self.index]
+        if rnd.dry_window:
+            if good is None:
+                raise ValueError(f"round {rnd.spec()!r} has a dry stop, so every click needs its outcome")
+            self._recent.append(bool(good))
 
     def advance(self, good_count: int, bad_count: int, remaining_unlabeled: float) -> None:
         """Finish any rounds whose stop condition is now met.
@@ -282,18 +356,24 @@ class StartupState:
         one-class labelset would leave the selector picking at random and make
         the arm uninterpretable.  Those extra clicks stay on the last round and
         are counted in :attr:`extended_clicks`.
+
+        A round with a dry stop also ends when :meth:`ran_dry`, whichever of the
+        two comes first; the quorum hold applies to it all the same.
         """
         while not self.done:
             rnd = self.rounds[self.index]
-            if rnd.stop == "good" and good_count < min(rnd.n, good_count + remaining_unlabeled):
-                return
-            if rnd.stop == "bad" and bad_count < min(rnd.n, bad_count + remaining_unlabeled):
-                return
-            if rnd.stop == "clicks" and self.clicks_in_round < rnd.n and remaining_unlabeled > 0:
+            if not (self._target_met(rnd, good_count, bad_count, remaining_unlabeled) or self.ran_dry()):
                 return
             if self.index == len(self.rounds) - 1 and remaining_unlabeled > 0 and (good_count == 0 or bad_count == 0):
                 self._held_for_quorum = True
                 return
             self._held_for_quorum = False
             self.index += 1
-            self.clicks_in_round = 0
+            self._enter_round()
+
+    def _target_met(self, rnd: StartupRound, good_count: int, bad_count: int, remaining_unlabeled: float) -> bool:
+        if rnd.stop == "good":
+            return good_count >= min(rnd.n, good_count + remaining_unlabeled)
+        if rnd.stop == "bad":
+            return bad_count >= min(rnd.n, bad_count + remaining_unlabeled)
+        return self.clicks_in_round >= rnd.n or remaining_unlabeled <= 0

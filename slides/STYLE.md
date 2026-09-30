@@ -64,8 +64,8 @@ to work out what the colour is telling them — and "this bit is important" does
 not deserve a colour when bold already says it.
 
 **Hue is reserved for identity, and the identity is shared with the figure
-beside it.** `themes/vtsearch.css` defines three, matching the palette in
-`slides/figs/src/make-calib-figs.py`:
+beside it.** `themes/vtsearch.css` defines three hues, matching the palette in
+`slides/figs/src/make-calib-figs.py`, plus the red step disc:
 
 | class | hue | means |
 |---|---|---|
@@ -108,7 +108,7 @@ in the report and it is unreadable from the third row.
 Two consequences for any figure headed for a slide:
 
 - **Size it to the slot, not to the page.** The slot is the full 1280×720
-  slide (see *Size a figure to a 16:9 slot* above). A 1:1 figure fills 56% of
+  slide (see *Size a figure to a 16:9 slot* below). A 1:1 figure fills 56% of
   it and wastes the rest, which is the same decision as drawing everything at
   three-quarter size. Six panels go 2 rows × 3 cols, not 3 × 2.
 - **Then subtract.** One shared legend, not one per panel. No suptitle — the
@@ -399,7 +399,7 @@ is anchored in the argument, and a topic change gets an unmistakable signal to
 wake up for.
 
 **The opening list is unmarked, and the marked first section follows it.** The
-room reads `1 … 7` all one weight — every section still ahead of them — and
+room reads `1 … 8` all one weight — every section still ahead of them — and
 only then does section 1 go bold and the rest go quiet. Those two pages are not
 a stutter: the first is the shape of the talk and the second is the entry into
 it, and running them together (opening straight on `+at1`) means the whole list
@@ -407,10 +407,10 @@ is never once shown as a list. So a deck's outline appears *N* + 2 times for
 *N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on, and
 then once more to close the deck (below).
 
-**All of those pages are one slide**, numbered `1a … 1i` — see *Numbering* in
-[`README.md`](README.md). The room is being shown the same thing again with a
-different line marked, and the deck should say so rather than spending nine
-numbers on it.
+**All of those pages are one slide**, numbered `1a … 1j` in `hold-the-line` —
+see *Numbering* in [`README.md`](README.md). The room is being shown the same
+thing again with a different line marked, and the deck should say so rather than
+spending ten numbers on it.
 
 **The outline's last showing is the last slide, and it says `The End`.** A deck
 does not need a separate "Questions" page: the room is already looking at the
@@ -427,7 +427,7 @@ the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that
 slide's figure — it is the one thing the room is asked to look at — so it gets
 the slot the deck gives figures, and the title does not move on the one slide
-that comes back nine times.
+that comes back ten times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
@@ -481,8 +481,6 @@ would have taken is shared out. Either way the overview is why a note never has
 to *describe* the build: "this slide is a seven-page build" is a sentence spent
 saying what a picture already says.
 
-**Notes are budgeted, not paginated.** `build.py --check` fails a fragment
-whose notes would not fit its one speaker page, naming it and roughly how many
-characters it is over. A presenter does not turn over mid-sentence, and more
-often never notices that a second page exists — so a wordy slide is an edit,
-not a continuation.
+**Notes are budgeted, not paginated.** A wordy slide is an edit, not a
+continuation: `build.py --check` fails notes that overflow their one speaker
+page (see *One slide, one speaker page* in [`README.md`](README.md)).

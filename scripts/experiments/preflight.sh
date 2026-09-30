@@ -141,7 +141,7 @@ if [[ -n "$ARMS" ]]; then
       cells="$EXP/$root/$arm/cells"
       [[ -d "$cells" ]] || continue
       seen=1
-      n=$(find "$cells" -name 'task_*.csv' ! -name '*sweep*' 2>/dev/null | wc -l)
+      n=$(find "$cells" -name 'task_*.csv*' ! -name '*__*' 2>/dev/null | wc -l)
       if [[ "$n" -gt 0 ]]; then
         say_fail "arm '$arm' already has $n cell files in $cells"
         echo "        -> a fresh study needs its own --exp dir; a resume should pass --warn-only"
@@ -196,7 +196,7 @@ fi
 ZROOTS=()
 for root in results-ab results; do [[ -d "$EXP/$root" ]] && ZROOTS+=("$EXP/$root"); done
 if [[ "${#ZROOTS[@]}" -gt 0 ]]; then
-  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l)
+  z=$(find "${ZROOTS[@]}" -name 'task_*.csv*' ! -name '*__*' -size 0 2>/dev/null | wc -l)
   if [[ "$z" -gt 0 ]]; then
     say_fail "$z zero-byte cell files present - delete them or they will never be re-run"
   else

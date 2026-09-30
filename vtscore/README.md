@@ -9,18 +9,19 @@ here works without it.
 
 ## Documentation
 
-Comprehensive developer documentation lives under [`docs/`](docs/):
+Developer documentation lives under [`docs/`](docs/README.md), which is the
+index. Read it in this order:
 
-- **[Quickstart](docs/quickstart.md)** - load a folder, train a detector, score new media. Start here.
-- **[Architecture](docs/architecture.md)** - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
-- **[Concepts](docs/concepts.md)** - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the linear-head detector. The vocabulary every other doc assumes.
-- **[Package reference](docs/README.md#package-reference)** - one deep-dive guide per subpackage.
-- **[Extending vtscore](docs/extending/README.md)** - eleven plugin families with authoring guides for each.
+1. **[Quickstart](docs/quickstart.md)** - load a folder, train a detector, score new media. Start here.
+2. **[Concepts](docs/concepts.md)** - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, detector, plugin. The vocabulary every other doc assumes.
+3. **[Tutorials](docs/tutorials/README.md)** - longer end-to-end walkthroughs.
+4. **[Integration](docs/integration.md)** - the hooks to install when embedding `vtscore` in your own application.
+5. **[Package reference](docs/README.md#package-reference)** - one guide per subpackage; the canonical inventory of what each exports.
+6. **[Extending vtscore](docs/extending/README.md)** - authoring guides for the plugin families.
 
-For the canonical inventory of every name vtscore exports, see the
-[package reference](docs/README.md#package-reference); for the real dotted
-import path of any symbol, see
-[Architecture § Import paths](docs/architecture.md#import-paths-read-before-copy-pasting).
+[Architecture](docs/architecture.md) (layering, threading, the real import
+path of every package) and the [FAQ](docs/faq.md) are reference material to
+consult as needed.
 
 ## Install
 
@@ -37,81 +38,43 @@ A standalone `vtscore` PyPI distribution is deferred until a real
 external consumer asks for it. For now, install the repo and import
 `vtscore` directly.
 
-## Quickstart (90 seconds)
+## Quickstart
 
-The library exports three core flows: **load a dataset**, **train a
-detector from labels**, **score new media**. The shortest end-to-end
-script is a few dozen lines — see
-[docs/quickstart.md](docs/quickstart.md) for the full walkthrough (with
-the `CoreConfig` builder, origin stamping, embedding step, and hand-off
-between the three flows). This top-level README does not carry a
-copy-paste snippet, because the "shortest possible" version has to skip
-so much wiring (origins, embedder setup, labelset serialisation) that
-the copy-paste doesn't actually run. The quickstart is validated
-end-to-end by `tests_lib/integration/test_docs_quickstart.py`, so its
-snippets stay honest.
+There is deliberately no copy-paste snippet here: the shortest version that
+actually runs needs a `CoreConfig`, an origin stamp and an explicit embed
+step, and [docs/quickstart.md](docs/quickstart.md) walks through exactly
+that. Its snippets are executed by
+`tests_lib/integration/test_docs_quickstart.py`, so they stay honest.
 
-## Public surface
+## Plugins
 
-The 17 subpackages and what they do:
-
-| Package | Purpose |
-|---------|---------|
-| `vtscore.config` | `CoreConfig` dataclass + environment-driven constants |
-| `vtscore.media` | `MediaType` plugins (audio, image, text, video, document) + embedders + clippers |
-| `vtscore.embedding` | Embedder façade, torch runtime, cached `(N, D)` matrix |
-| `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources |
-| `vtscore.training` | Head (linear / MLP) / threshold / SVM / region-similarity primitives |
-| `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync |
-| `vtscore.eval` | Offline evaluation (text-sort, learned-sort, voting iterations) |
-| `vtscore.converters` | Cross-format converters (audio→spectrogram, ASR, OCR, …) |
-| `vtscore.exporters` | Results exporters (JSON, CSV, webhook, email); JSON/CSV/gui support CLI streaming for sources larger than RAM |
-| `vtscore.labels` | Label importers + labelset sync sources |
-| `vtscore.plugins` | `PluginRegistry`, sentinel discovery, `importlib.metadata` hooks |
-| `vtscore.concurrency` | Async jobs, memory budget, long-running progress trackers |
-| `vtscore.state` | `DatasetContext`, `DetectorContext` (no Flask) |
-| `vtscore.sync` | `SyncSource[L,S]` ABC |
-| `vtscore.security` | Path / URL validation, safe pickle loader |
-| `vtscore.utils` | `build_media_hit`, synthetic-media generators |
-| `vtscore.cli` | Flask-free CLI entry points (autodetect, pipeline, progress) |
-
-## Plugin discovery
-
-`vtscore` plugins (importers, exporters, label importers, labelset
-sources, media types, embedders, clippers, converters, media sources)
-are auto-discovered at import time via module sentinels. Third-party
-packages register plugins without monkey-patching by declaring entry
-points under the `vtscore.<family>` groups:
+Dataset, datasource and seed importers, results exporters, label
+importers, labelset sources, converters and media sources are discovered from module sentinels inside `vtscore` and
+from `importlib.metadata` entry points under `vtscore.<family>` groups, so
+a separate distribution can add one without touching this repository. The
+entry point names the **instantiated** plugin (the sentinel), not its class:
 
 ```toml
 [project.entry-points."vtscore.importers"]
-my_importer = "my_package.importer:MyImporter"
+my_importer = "my_package.importer:IMPORTER"
 ```
 
-See [docs/extending/](docs/extending/) for per-family authoring guides.
+Media types, embedders, clippers and cleaners have no entry-point group.
+See [docs/extending/](docs/extending/README.md) for the family table and
+per-family guides.
 
 ## Conventions
 
-- **No persisted vectors or model weights.** Embeddings and trained models
-  live in-memory only. Origins are the canonical persisted form; the
-  library re-derives `origin → file → embedding → head` on demand. The
-  single exception is dataset pickle files, which are by design a
-  snapshot of media + their embeddings.
-- **No hardcoded `data/` paths.** Every reference routes through
-  `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), which is
-  snapshotted into `CoreConfig.data_dir`.
-- **No Flask, no `vtsearch.settings` imports** anywhere in vtscore.
-  Verified by `./run-tests.sh vtscore-clean`.
-
-See [docs/architecture.md](docs/architecture.md) for the full set of
-architectural invariants.
+No persisted vectors or model weights, no hardcoded `data/` paths, no Flask
+or `vtsearch` imports: the rules every package follows are listed once, in
+[docs/README.md § Conventions](docs/README.md#conventions).
 
 ## Versioning
 
 `vtscore.__version__` is independent semver, bumped manually in
-`vtscore/__init__.py` on each release. The companion `vtsearch` package
-uses a git-derived timestamp instead. See [`CHANGELOG.md`](CHANGELOG.md)
-for per-release notes.
+`vtscore/__init__.py` on each release (the companion `vtsearch` app uses a
+git-derived timestamp instead). See [`CHANGELOG.md`](CHANGELOG.md) for
+per-release notes.
 
 ## License
 

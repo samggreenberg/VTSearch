@@ -11,6 +11,7 @@ import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
+import { FLOOR_STATES, lineFloor, wireFloor } from '../testing/line-floor';
 
 /**
  * `SortRunnerService` in isolation.
@@ -180,6 +181,41 @@ describe('SortRunnerService', () => {
       .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
   }
 
+  // --- the floor on the line (#4247, #4272) ------------------------------------
+
+  it.each(FLOOR_STATES)(
+    'installs a learned sort\'s line with its verdict when %s',
+    (status) => {
+      enableLearnedSort();
+      runner.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [
+          { id: 1, score: 0.9 },
+          { id: 2, score: 0.3 },
+        ],
+        threshold: 0.5,
+        acq_threshold: 0.7,
+        floor: wireFloor(status),
+        total: 2,
+        above_threshold: 1,
+        has_more_below: false,
+      });
+
+      // The cut is a cut: the line, its count and Autopilot's acquisition cut all land.
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.aboveThreshold).toBe(1);
+      expect(sortState.acqThreshold).toBe(0.7);
+      expect(sortState.floor?.status).toBe(status);
+    },
+  );
+
+  it('a text sort carries no floor', () => {
+    runner.onTextSort('birds');
+    httpMock.expectOne('/api/sort').flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 });
+    expect(sortState.floor).toBeNull();
+  });
+
   it('cancels the learned-sort job by id, and only once', () => {
     enableLearnedSort();
     runner.onLearnedSort();
@@ -225,6 +261,113 @@ describe('SortRunnerService', () => {
     httpMock.expectOne('/api/find/cancel').flush({ ok: true });
   });
 
+  it('quiesce forgets the kind of the sort it superseded (#4326)', () => {
+    runner.onTextSort('birds');
+    runner.quiesce();
+
+    expect(runner.newestSortKind()).toBeNull();
+  });
+
+  // --- a newer sort ends an older one (#4318) -----------------------------------
+
+  describe('a newer sort ends an older one (#4318)', () => {
+    it('drops the answer of a sort asked for before the one on its way', () => {
+      runner.onTextSort('first');
+      runner.onTextSort('second');
+      const [first, second] = httpMock.match('/api/sort');
+
+      expect(first.cancelled).toBe(true);
+      second.flush({ results: [{ id: 2, similarity: 0.9 }], threshold: 0.5 });
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([2]);
+      expect(sortState.sortBusy).toBe(false);
+    });
+
+    it('keeps the older sort from clearing the busy flag the newer one raised', () => {
+      enableLearnedSort();
+      runner.onTextSort('seed');
+      runner.onLearnedSort(false);
+
+      // The text request is gone, so nothing can land and report "not busy"
+      // while the model is still training.
+      expect(httpMock.expectOne('/api/sort').cancelled).toBe(true);
+      expect(sortState.sortBusy).toBe(true);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+      });
+      expect(sortState.sortBusy).toBe(false);
+    });
+
+    it('stops polling a learned-sort job a newer sort replaced, and leaves the job alone', () => {
+      enableLearnedSort();
+      runner.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({ status: 'running', job_id: 'job-3' });
+
+      runner.onTextSort('birds');
+      httpMock.expectOne('/api/sort').flush({ results: [{ id: 2, similarity: 0.9 }], threshold: 0.5 });
+
+      // The server coalesces a pair's learned sorts into one job, so cancelling
+      // it there could cancel a newer request's; the Cancel button cannot reach
+      // it either.
+      runner.onSortCancel();
+      httpMock.expectNone((req) => req.url.startsWith('/api/learned-sort/cancel'));
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([2]);
+    });
+
+    it('treats a ranking installed on the spot as the newest sort', () => {
+      runner.onTextSort('birds');
+      runner.onExampleSortStarted({ results: [{ id: 3, similarity: 0.8 }], threshold: 0.5 }, false);
+
+      expect(httpMock.expectOne('/api/sort').cancelled).toBe(true);
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([3]);
+    });
+
+    it('never appends a page of the ranking a newer sort replaced', () => {
+      seedWindow();
+      runner.onLoadMore();
+      const page = httpMock.expectOne((req) => req.url.startsWith('/api/sort/page'));
+
+      runner.onTextSort('fish');
+      expect(page.cancelled).toBe(true);
+      // Paging is free again, rather than stuck behind the fetch that never answered.
+      expect(runner.loadingMoreSort()).toBe(false);
+    });
+
+    it('stops a detector sort\'s progress feed and count when a newer sort starts', () => {
+      runner.onModelSelected('det-1');
+      sortState.setSortProgress(40, 100);
+
+      runner.onTextSort('birds');
+
+      expect(httpMock.expectOne('/api/find-label').cancelled).toBe(true);
+      expect(sortState.sortProgress).toBe(0);
+      expect(sortState.sortProgressTotal).toBe(0);
+    });
+
+    it('names the kind of the newest sort, in flight and once landed (#4326)', () => {
+      enableLearnedSort();
+      expect(runner.newestSortKind()).toBeNull();
+      // A `learned` mode carried over from the last session says nothing about
+      // the sort actually on its way.
+      sortState.setSortMode('learned');
+      runner.onTextSort('seed');
+      expect(runner.newestSortKind()).toBe('text');
+
+      runner.onLearnedSort(false);
+      expect(runner.newestSortKind()).toBe('learned');
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+      });
+      expect(runner.newestSortKind()).toBe('learned');
+
+      runner.onExampleSortStarted({ results: [{ id: 3, similarity: 0.8 }], threshold: 0.5 }, false);
+      expect(runner.newestSortKind()).toBe('example');
+    });
+  });
+
   // --- selection advance ----------------------------------------------------
 
   it('probes the coverage atlas in `new` mode and records the level it reports', () => {
@@ -238,6 +381,69 @@ describe('SortRunnerService', () => {
 
     expect(mediaState.selectedId()).toBe(42);
     expect(TestBed.inject(AutopilotStateService).state.fracDiversity).toBe(3);
+  });
+
+  /**
+   * The centre panel keeps the voted item swiped off-screen while this is true,
+   * so it has to be true for exactly the length of the round-trip (#4307).
+   */
+  describe('advancePending', () => {
+    const probes = () =>
+      httpMock.match((req) => req.url.startsWith('/api/coverage-atlas/next'));
+
+    beforeEach(() => {
+      sortState.setSelectMode('new');
+      sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+    });
+
+    it('is true while the New-mode probe is in the air, and false once it answers', () => {
+      expect(runner.advancePending()).toBe(false);
+
+      runner.autoSelectNext();
+      expect(runner.advancePending()).toBe(true);
+
+      probes()[0].flush({ id: 42, coverage_level: 3 });
+      expect(mediaState.selectedId()).toBe(42);
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('ends when the probe comes back empty', () => {
+      runner.autoSelectNext();
+      probes()[0].flush({ id: null, coverage_level: 3 });
+
+      expect(runner.queueExhausted()).toBe(true);
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('holds until the last of two overlapping probes answers', () => {
+      runner.autoSelectNext();
+      runner.autoSelectNext();
+      const [first, second] = probes();
+
+      first.flush({ id: 5, coverage_level: 1 });
+      expect(runner.advancePending()).toBe(true);
+
+      second.flush({ id: 6, coverage_level: 1 });
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('ends when a pair switch supersedes the probe', () => {
+      runner.autoSelectNext();
+      expect(runner.advancePending()).toBe(true);
+
+      TestBed.inject(PairScopeService).resetForNewPair();
+
+      expect(runner.advancePending()).toBe(false);
+    });
+
+    it('is never set by an advance that needs no request', () => {
+      sortState.setSelectMode('top');
+
+      runner.autoSelectNext();
+
+      expect(mediaState.selectedId()).toBe(1);
+      expect(runner.advancePending()).toBe(false);
+    });
   });
 
   it('selects the top unlabeled item without any request in `top` mode', () => {
@@ -360,17 +566,180 @@ describe('SortRunnerService', () => {
     });
   });
 
-  // --- inclusion ------------------------------------------------------------
+  // --- precision floor (#4246) ------------------------------------------------
 
-  it('pushes the inclusion value and re-advances the selection', () => {
-    sortState.setSelectMode('top');
-    sortState.setSortResults([{ id: 5, score: 0.9 }], 0.5);
+  describe('the line after a spot check (#4273)', () => {
+    const floorGet = (req: { url: string; method: string }) =>
+      req.url === '/api/min-precision' && req.method === 'GET';
 
-    runner.onInclusionChange(0.25);
+    it('moves a learned line to the set the check ended on, without a re-sort', () => {
+      vi.useFakeTimers();
+      enableLearnedSort();
+      sortState.setSortMode('learned');
+      sortState.setSortResults(
+        [
+          { id: 5, score: 0.9 },
+          { id: 6, score: 0.2 },
+        ],
+        0.5,
+        lineFloor('unchecked', { count: 64 }),
+      );
 
-    expect(sortState.inclusion).toBe(0.25);
-    httpMock.expectOne('/api/inclusion').flush({ inclusion: 0.25 });
-    expect(mediaState.selectedId()).toBe(5);
+      runner.refreshLine();
+      httpMock.expectOne(floorGet).flush({ ...wireFloor('short'), threshold: 0.8, n_returned: 7 });
+      vi.advanceTimersByTime(1000);
+
+      expect(sortState.threshold).toBe(0.8);
+      expect(sortState.floor?.status).toBe('short');
+      expect(sortState.floor?.range?.labelled).toBe(5);
+      // The server's count over the whole ranking, not the loaded head's.
+      expect(sortState.aboveThreshold).toBe(7);
+      expect(sortState.sortOrder?.map((i) => i.id)).toEqual([5, 6]);
+      httpMock.expectNone('/api/learned-sort');
+      vi.useRealTimers();
+    });
+
+    it('leaves a ranking the detector did not draw alone', () => {
+      sortState.setSortMode('text');
+      sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
+      runner.refreshLine();
+      httpMock.expectOne(floorGet).flush({ ...wireFloor('confirmed'), threshold: 0.8, n_returned: 1 });
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.floor).toBeNull();
+    });
+  });
+
+  describe('a precision-floor change', () => {
+    const floorPost = (req: { url: string; method: string }) =>
+      req.url === '/api/min-precision' && req.method === 'POST';
+
+    /** A learned ranking on screen, with the floor's verdict on its line. */
+    function learnedRanking(status: Parameters<typeof lineFloor>[0]): void {
+      enableLearnedSort();
+      sortState.setSortMode('learned');
+      sortState.setSelectMode('top');
+      sortState.setSortResults(
+        [
+          { id: 5, score: 0.9 },
+          { id: 6, score: 0.2 },
+        ],
+        0.5,
+        lineFloor(status),
+      );
+    }
+
+    afterEach(() => vi.useRealTimers());
+
+    it('posts the floor and moves the picker at once', () => {
+      runner.onMinPrecisionChange(0.75);
+
+      expect(sortState.minPrecision).toBe(0.75);
+      expect(httpMock.expectOne(floorPost).request.body).toEqual({ min_precision: 0.75 });
+    });
+
+    it('leaves a ranking the detector did not draw alone', () => {
+      vi.useFakeTimers();
+      sortState.setSortMode('text');
+      sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
+
+      runner.onMinPrecisionChange(0.25);
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.1, n_returned: 9 });
+      vi.advanceTimersByTime(1000);
+
+      httpMock.expectNone('/api/learned-sort');
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.floor).toBeNull();
+    });
+
+    it.each(FLOOR_STATES)(
+      'keeps the line and swaps only the verdict when the new floor keeps the same count (%s)',
+      (status) => {
+        vi.useFakeTimers();
+        learnedRanking('unchecked');
+
+        runner.onMinPrecisionChange(0.9);
+        httpMock.expectOne(floorPost).flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
+        vi.advanceTimersByTime(1000);
+
+        // Both floors keep the top 32: the count decides the line, so it cannot move.
+        httpMock.expectNone('/api/learned-sort');
+        expect(sortState.threshold).toBe(0.5);
+        expect(sortState.floor?.status).toBe(status);
+        expect(sortState.floor?.minPrecision).toBe(0.9);
+      },
+    );
+
+    it('re-runs the learned sort only once the server has the new floor', () => {
+      vi.useFakeTimers();
+      learnedRanking('confirmed');
+
+      runner.onMinPrecisionChange(0.25);
+      const post = httpMock.expectOne(floorPost);
+      // A re-sort that beat the POST would read the old floor server-side.
+      vi.advanceTimersByTime(1000);
+      httpMock.expectNone('/api/learned-sort');
+
+      post.flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.15, n_returned: 2 });
+      vi.advanceTimersByTime(300);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [
+          { id: 6, score: 0.2 },
+          { id: 5, score: 0.1 },
+        ],
+        threshold: 0.15,
+        acq_threshold: 0.18,
+        floor: wireFloor('confirmed', { minPrecision: 0.25, count: 64 }),
+        total: 2,
+        above_threshold: 1,
+        has_more_below: false,
+      });
+
+      // The re-sort brings the line, its verdict, the count and the acquisition cut back together...
+      expect(sortState.threshold).toBe(0.15);
+      expect(sortState.acqThreshold).toBe(0.18);
+      expect(sortState.aboveThreshold).toBe(1);
+      expect(sortState.floor?.minPrecision).toBe(0.25);
+      // ...and lands on the next pick from them.
+      expect(mediaState.selectedId()).toBe(6);
+    });
+
+    it('re-sorts when the new floor keeps a different count', () => {
+      vi.useFakeTimers();
+      learnedRanking('unchecked');
+
+      runner.onMinPrecisionChange(0.25);
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.15, n_returned: 2 });
+      vi.advanceTimersByTime(300);
+
+      httpMock.expectOne('/api/learned-sort');
+    });
+
+    it('drops a floor the user moved past', () => {
+      learnedRanking('unchecked');
+
+      runner.onMinPrecisionChange(0.75);
+      const stale = httpMock.expectOne(floorPost);
+      runner.onMinPrecisionChange(0.25);
+
+      expect(stale.cancelled).toBe(true);
+      const fresh = httpMock.expectOne(floorPost);
+      expect(fresh.request.body).toEqual({ min_precision: 0.25 });
+      fresh.flush({ ...wireFloor('short', { minPrecision: 0.25 }), threshold: 0.5, n_returned: 1 });
+      expect(sortState.floor?.minPrecision).toBe(0.25);
+    });
+
+    it('keeps posting after a failed change', () => {
+      learnedRanking('unchecked');
+
+      runner.onMinPrecisionChange(0.75);
+      httpMock.expectOne(floorPost).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expect(sortState.floor?.minPrecision).toBe(0.5);
+
+      runner.onMinPrecisionChange(0.9);
+      httpMock.expectOne(floorPost).flush({ ...wireFloor('short', { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
+      expect(sortState.floor?.status).toBe('short');
+    });
   });
 
   // --- exhausted queue (#3887) ---------------------------------------------
@@ -437,6 +806,84 @@ describe('SortRunnerService', () => {
         .flush({ id: 7, coverage_level: 3 });
       expect(runner.queueExhausted()).toBe(false);
       expect(mediaState.selectedId()).toBe(7);
+    });
+
+    /**
+     * #4312: under New the answer is the server's, so it cannot be derived from
+     * the vote sets the way Top / Hard's is. It is kept with the labels it was
+     * given, and lapses once one of those is un-voted.
+     */
+    describe('under the New select mode', () => {
+      const isAtlasProbe = (req: { url: string }) => req.url.startsWith('/api/coverage-atlas/next');
+
+      /** Vote item 1 good and let the advance come back empty. */
+      function exhaustOnItemOne(): void {
+        sortState.setSelectMode('new');
+        sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+        mediaState.selectMedia(1);
+        voteState.recordVote(1, 'good', 'one.png');
+        voteState.applyOptimisticState(1, 'good');
+        runner.autoSelectNext(1);
+        httpMock.expectOne(isAtlasProbe).flush({ id: null, coverage_level: 3 });
+        expect(runner.queueExhausted()).toBe(true);
+      }
+
+      it('goes back to false when an undo un-votes a label the empty answer was given', () => {
+        exhaustOnItemOne();
+
+        voteState.undo();
+
+        // Straight back to work, as under Top / Hard: the undone item is still
+        // the selection, and nothing waits on the server to say so.
+        expect(runner.queueExhausted()).toBe(false);
+        expect(mediaState.selectedId()).toBe(1);
+        httpMock.expectNone(isAtlasProbe);
+        httpMock.expectOne('/api/medias/1/vote').flush({ ok: true, state: 'none', click_time: null });
+        expect(runner.queueExhausted()).toBe(false);
+      });
+
+      it('holds through votes that only add labels or flip one', () => {
+        exhaustOnItemOne();
+
+        // The atlas runs dry when every node carries a label, so neither of
+        // these can bring an unseen node back.
+        voteState.applyOptimisticState(9, 'bad');
+        voteState.applyOptimisticState(1, 'bad');
+
+        expect(runner.queueExhausted()).toBe(true);
+      });
+
+      it('stays up across the probe a re-vote fires, rather than blinking off', () => {
+        exhaustOnItemOne();
+        voteState.applyOptimisticState(1, 'none');
+        expect(runner.queueExhausted()).toBe(false);
+
+        // Re-voting restores the labels the empty answer was given, so the
+        // answer holds again, and the probe the vote fires can only confirm it.
+        voteState.applyOptimisticState(1, 'good');
+        expect(runner.queueExhausted()).toBe(true);
+        runner.autoSelectNext(1);
+        expect(runner.advancePending()).toBe(true);
+        expect(runner.queueExhausted()).toBe(true);
+
+        httpMock.expectOne(isAtlasProbe).flush({ id: null, coverage_level: 3 });
+        expect(runner.queueExhausted()).toBe(true);
+      });
+
+      it('goes back to false for an undo that lands while the probe is in the air', () => {
+        sortState.setSelectMode('new');
+        sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+        voteState.applyOptimisticState(1, 'good');
+        runner.autoSelectNext(1);
+        const probe = httpMock.expectOne(isAtlasProbe);
+
+        // The server may well have answered before it saw the undo, so the
+        // answer is about the labels the probe went out with.
+        voteState.applyOptimisticState(1, 'none');
+        probe.flush({ id: null, coverage_level: 3 });
+
+        expect(runner.queueExhausted()).toBe(false);
+      });
     });
   });
 

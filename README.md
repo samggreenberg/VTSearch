@@ -1,7 +1,8 @@
 <!-- This file is served raw at GET /api/achievements/docs/readme/raw and its
-     footer phrase is hash-matched in vtsearch/achievements.py (grep for
-     "Readme Reader code phrase" — the hash is defined there). Don't remove
-     or reword that line without updating achievements.py to match. -->
+     footer phrase is hash-matched against _DOCS_RAW in
+     vtsearch/achievements_catalog.py (tests/core/test_achievements.py checks
+     the two agree). Don't remove or reword the "Readme Reader code phrase"
+     line without updating achievements_catalog.py to match. -->
 
 # VTSearch
 
@@ -9,77 +10,51 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/user/assets/dashboard-loaded.dark.webp" />
-  <img src="docs/user/assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of photographs on the top card, the Books detector on the bottom one, and Train / Find beneath them" width="720" />
+  <img src="docs/user/assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them" width="720" />
 </picture>
 
 > **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.
 
 ## Quick start
 
+You need **Python 3.10+**, **Node.js 20.19+** with npm, and Git. Then, from the repository root:
+
 ```bash
 bash scripts/install.sh                            # install Python deps (auto-detects CPU vs GPU)
 cd frontend && npm install && npm run build:prod   # build the Angular frontend into static/
-cd .. && python app.py --local                     # start the app at http://localhost:5000
+cd .. && python app.py                             # start the app
 ```
 
-See [docs/SETUP.md](docs/SETUP.md) for prerequisites, virtual environment setup, and the full walkthrough.
-
-## Setup and running tests
-
-See [docs/SETUP.md](docs/SETUP.md) for prerequisites, getting the code, virtual environment setup, installing dependencies, and running the test suite.
-
-## Running the app
-
-For development, start the Flask dev server:
-
-```bash
-python app.py
-```
-
-Use `--local` to run in local development mode:
-
-```bash
-python app.py --local
-```
-
-You should see output like:
+The first start loads the ML libraries, so give it a minute. When the server is up it prints:
 
 ```
- * Running on http://0.0.0.0:5000
+🌐 Open http://localhost:5000 in your browser
 ```
 
-Open `http://localhost:5000` in your browser. The app starts with no clips loaded. Use the menu to load a demo dataset (see below).
+Open that URL. The app starts with no datasets loaded; add a demo dataset (below) or your own folder of media, then follow the [User Guide](docs/user/USER_GUIDE.md#step-by-step-your-first-search). Press **Ctrl+C** in the terminal to stop the server.
 
-Press **Ctrl+C** in the terminal to stop the server.
-
-For production, run under gunicorn (the Docker images do this automatically):
-
-```bash
-VTSEARCH_SERVER_INIT=1 gunicorn -c gunicorn.conf.py app:app
-```
-
-See [docs/SETUP.md](docs/SETUP.md#running-the-app) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for details.
+[docs/SETUP.md](docs/SETUP.md) is the full install walkthrough: prerequisites per OS, virtual environments, what `install.sh` does on a GPU machine (including headless installs), Docker images, SLURM clusters, and running the test suite. For production (gunicorn, reverse proxy, offline hosts, environment variables), see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Loading a demo dataset
 
-When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. From there you can browse the available demo datasets and load one. Each demo is downloaded and embedded on first use, then cached for instant loading afterward.
+When the app is running, click the **+** button on the **Datasets** card to open the **Add Dataset** dialog, then pick the **Demo** tab. **Downloaded Media** lists open datasets by media type; each is downloaded and embedded on first use, then cached for instant loading afterward. **Synthetic Media** generates a dataset on the spot and downloads nothing, which makes it the quickest thing to try: its images are the cartoon smiley faces the [User Guide](docs/user/USER_GUIDE.md#step-by-step-your-first-search) walks through, so you can follow it step by step.
 
 See [docs/demos.md](docs/demos.md) for the full list of available demo datasets.
 
-You can also load your own data from pickle files or folders via the same dialog.
+To load your own media, use the **Files** tab of the same dialog: point it at a folder (or a manifest of file paths) on the server.
 
 ---
 
 ## Command-line interface
 
-VTSearch provides several CLI workflows for applying detectors to datasets, importing labels, and importing processors, all without starting the web server. See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
+VTSearch's `python app.py` entry point also runs detectors over a dataset and exports the hits without starting the web server (`--autodetect`, or a YAML `--pipeline` file), optionally merging external labels into a detector first. It also carries the server's own flags (port, login provider, admin restrictions) and plugin listings (`--list-plugins`). See [docs/CLI.md](docs/CLI.md) for the full CLI reference.
 
 ## Project structure
 
 VTSearch is split into two Python packages along an **app tier / library tier** line:
 
 - **`vtsearch/`** — the app tier: Flask routes, authentication, settings, the achievements state machine, and the CLI entry point (`vtsearch/cli_main.py`). Anything that depends on Flask/Werkzeug lives here.
-- **`vtscore/`** — the library tier: the ML (training, classifier head, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
+- **`vtscore/`** — the library tier: the ML (training, classifier head, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document, and the convert-in `face` type), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
 
 The remaining top level:
 
@@ -92,7 +67,13 @@ The remaining top level:
 ├── static/           # Angular build output (HTML, JS, CSS, assets)
 ├── tests/            # App-tier test suite (pytest); grouped by folder (core, api, sorting, …)
 ├── tests_lib/        # Library-tier test suite (mirrors tests/, import-clean of Flask)
+├── tests_shared/     # Test machinery shared by both suites
 ├── docs/             # Extended documentation (see docs/ARCHITECTURE.md for the full map)
+├── docker/           # Dockerfiles and docker/compose/ files
+├── requirements/     # pip requirement sets (base, gpu, no-AGPL, slim image variants)
+├── scripts/          # install.sh, doc/lint gates, screenshot harness, SLURM helpers, experiments
+├── slides/           # Slide-deck sources and build tooling
+├── run-tests.sh      # The test and lint gate
 └── pyproject.toml    # Project metadata and dependencies
 ```
 

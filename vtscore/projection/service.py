@@ -291,6 +291,7 @@ def fit_and_install_layout(
         n_neighbors=params.n_neighbors,
         min_dist=params.min_dist,
         compact=params.compact,
+        random_state=params.random_state,
         on_progress=_on_fit_progress,
     )
     _phase(2, "building pyramid")

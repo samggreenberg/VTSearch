@@ -114,6 +114,50 @@ describe('DashboardSelectionService', () => {
     expect([...service.ids('detector')]).toEqual([]);
   });
 
+  describe('only rows on the visible detector tab can be selected (#4228)', () => {
+    /** m1 is a draft, m2 is on AutoRun. */
+    function setMixedDetectors(autorunIds: string[] = ['m2']): void {
+      const ds = datasetState as unknown as { _detectors: { set: (v: unknown) => void } };
+      ds._detectors.set(
+        ['m1', 'm2'].map(
+          (id) => ({ id, name: id, autofind: autorunIds.includes(id) }) as DetectorRegistryEntry,
+        ),
+      );
+    }
+
+    it('drops a detector the registry places on the hidden tab', () => {
+      setMixedDetectors();
+      service.selectOnly('detector', ['m1', 'm2']);
+      expect([...service.ids('detector')]).toEqual(['m1']);
+      service.selectOnly('detector', ['m2']);
+      expect([...service.ids('detector')]).toEqual([]);
+    });
+
+    it('keeps an id the registry does not list yet', () => {
+      // A just-created detector is selected ahead of the refresh carrying it.
+      setMixedDetectors();
+      service.selectOnly('detector', ['m9']);
+      expect([...service.ids('detector')]).toEqual(['m9']);
+    });
+
+    it('prunes a selected detector once it hops to the other tab', () => {
+      setMixedDetectors();
+      service.selectOnly('detector', ['m1']);
+      setMixedDetectors(['m1', 'm2']);
+      service.retain('detector', new Set(['m1', 'm2']));
+      expect([...service.ids('detector')]).toEqual([]);
+    });
+
+    it('brings the tab of a picked detector forward rather than selecting a hidden row', () => {
+      // The top-bar pulldown lists both tabs and picks through `toggle`.
+      setMixedDetectors();
+      service.selectOnly('detector', ['m1']);
+      service.toggle('detector', 'm2', false);
+      expect(service.detectorTab()).toBe('autorun');
+      expect([...service.ids('detector')]).toEqual(['m2']);
+    });
+  });
+
   describe('the ids the top bar reads', () => {
     it('filters to rows that still exist, in registry order', () => {
       service.selectOnly('dataset', ['d3', 'd1', 'gone']);

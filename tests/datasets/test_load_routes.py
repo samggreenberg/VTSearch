@@ -106,7 +106,7 @@ class TestLoadFile:
 
         captured: dict = {}
 
-        def _capture(importer, field_values):
+        def _capture(importer, field_values, *, post_load=None):
             captured["importer"] = importer
             captured["field_values"] = field_values
             return "task-regression"

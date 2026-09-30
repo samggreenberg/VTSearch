@@ -310,3 +310,145 @@ class TestThroughTheHarness:
                 test_bands="auto",
                 target_prevalence=0.05,
             )
+
+
+class TestPairedMix:
+    """The mixed arm of a train-size x test-size table (#4160).
+
+    Tested beside the pure arms, a mix is only fair if it never trains on an
+    image a pure arm holds out, and if its per-band columns are read off the
+    same images as theirs.
+    """
+
+    EQUAL: dict[str, float] = {"small": 1.0, "medium": 1.0, "large": 1.0}
+
+    def _mix(self, medias=None, mix=None, seed=5, label="mix-equal"):
+        medias = medias if medias is not None else _medias(per_band=(30, 30, 30), n_neg=60)
+        return sb.paired_mix(medias, "car", mix or self.EQUAL, sim_fraction=0.5, seed=seed, label=label)
+
+    def test_the_cohorts_are_the_pure_arms_own(self):
+        """What makes the mixed row of the table pair with the pure rows."""
+        medias = _medias(per_band=(30, 30, 30), n_neg=60)
+        _, _, _, cohorts, _ = self._mix(medias)
+        pure = sb.band_cohorts(medias, "car@small", sim_fraction=0.5, seed=5)
+        assert {b: sorted(v) for b, v in cohorts.items()} == {b: sorted(v) for b, v in pure.items()}
+
+    def test_no_image_is_on_both_sides(self):
+        _, sim_ids, test_ids, _, _ = self._mix()
+        assert not set(sim_ids) & set(test_ids)
+
+    def test_train_positives_come_only_from_the_pure_sim_halves(self):
+        """A pure arm's held-out image in the mix's training set is the leak."""
+        medias = _medias(per_band=(30, 30, 30), n_neg=60)
+        out, sim_ids, _, _, _ = self._mix(medias)
+        held = set()
+        for band in BANDS:
+            pool = evaluable_pool(medias, f"car@{band}")
+            held |= set(sb.holdout_ids(list(pool), 0.5, 5))
+        sim_pos = [cid for cid in sim_ids if media_is_positive(out[cid], "car@mix-equal")]
+        assert sim_pos and not set(sim_pos) & held
+
+    def test_it_votes_over_as_many_positives_as_a_pure_arm(self):
+        """Same count, same prevalence: the arms differ only in the sizes."""
+        medias = _medias(per_band=(30, 30, 30), n_neg=60)
+        _, _, _, _, report = self._mix(medias)
+        pure = []
+        for band in BANDS:
+            pool = evaluable_pool(medias, f"car@{band}")
+            held = set(sb.holdout_ids(list(pool), 0.5, 5))
+            pure.append(sum(1 for cid in pool if cid not in held and media_is_positive(pool[cid], f"car@{band}")))
+        assert report["n_sim_positives"] == round(sum(pure) / len(pure))
+
+    def test_the_shares_are_honoured(self):
+        _, _, _, _, report = self._mix(mix={"small": 1, "medium": 2, "large": 1})
+        got = report["sim_positives_by_band"]
+        assert got["medium"] > got["small"] and got["medium"] > got["large"]
+
+    def test_a_band_the_class_lacks_is_renormalised_away(self):
+        """`apple@small` was never built; an equal mix of apple is half and half."""
+        medias = {
+            cid: m for cid, m in _medias(per_band=(30, 30, 30), n_neg=60).items() if m["categories"] != ["car@small"]
+        }
+        for m in medias.values():
+            m["evaluable_categories"] = [c for c in m["evaluable_categories"] if c != "car@small"]
+        _, _, _, cohorts, report = self._mix(medias)
+        assert set(report["effective_mix"]) == {"medium", "large"}
+        assert set(cohorts) == {"medium", "large"}
+
+    def test_negatives_split_and_stay_negatives(self):
+        out, sim_ids, test_ids, _, report = self._mix()
+        negs = [cid for cid in out if not media_is_positive(out[cid], "car@mix-equal")]
+        assert len(negs) == report["n_negatives"] == 60
+        assert all(media_is_evaluable(out[cid], "car@mix-equal") for cid in negs)
+        assert set(negs) & set(sim_ids) and set(negs) & set(test_ids)
+
+    def test_regions_are_retagged(self):
+        out, sim_ids, _, _, _ = self._mix()
+        pos = next(out[cid] for cid in sim_ids if media_is_positive(out[cid], "car@mix-equal"))
+        assert region_box_for_category(pos, "car@mix-equal") is not None
+
+    def test_the_draw_varies_with_the_seed(self):
+        _, a, _, _, _ = self._mix(seed=1)
+        _, b, _, _, _ = self._mix(seed=2)
+        assert a != b
+
+    def test_a_named_mix_is_not_a_band(self):
+        assert sb.is_mix_band("mix") and sb.is_mix_band("mix-natural")
+        assert not sb.is_mix_band("small") and not sb.is_mix_band(None)
+        medias = _medias()
+        medias[999] = {"id": 999, "categories": ["car@mix-equal"], "evaluable_categories": ["car@mix-equal"]}
+        assert sb.unreportable_bands(medias, "car") == []
+
+
+class TestMixThroughTheHarness:
+    """`train_mix` end to end, and `test_band_auroc` moving nothing else."""
+
+    def _run(self, target="car@mix-equal", **kw):
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+        return simulate_voting_iterations(
+            TestThroughTheHarness._banded_clips(),
+            target,
+            seed=11,
+            dataset_name="banded",
+            calibrate_count=1,
+            **kw,
+        )
+
+    def test_a_mixed_arm_reports_the_pure_arms_cohorts(self):
+        mixed = self._run(train_mix={"small": 1, "medium": 1, "large": 1}, test_bands="auto")
+        pure = self._run(target="car@small", test_bands="auto")
+        assert mixed and pure
+        for band in BANDS:
+            assert mixed[0][f"n_test_pos_{band}"] == pure[0][f"n_test_pos_{band}"] > 0
+
+    def test_the_mixed_headline_fnr_pools_the_three_cohorts(self):
+        for row in self._run(train_mix={"small": 1, "medium": 1, "large": 1}, test_bands="auto"):
+            n = [row[f"n_test_pos_{b}"] for b in BANDS]
+            pooled = sum(row[f"fnr_{b}"] * k for b, k in zip(BANDS, n)) / sum(n)
+            assert row["n_test_pos"] == sum(n)
+            assert row["fnr"] == pytest.approx(pooled, abs=1e-5)
+
+    def test_a_pure_target_is_refused(self):
+        with pytest.raises(ValueError, match="mixed target"):
+            self._run(target="car@small", train_mix="natural")
+
+    def test_band_auroc_is_nan_unless_asked(self):
+        import math
+
+        row = self._run(target="car@small", test_bands="auto")[-1]
+        assert all(math.isnan(row[f"auroc_{b}"]) for b in BANDS)
+
+    def test_band_auroc_moves_no_other_column(self):
+        from vtscore.eval.voting_columns import BAND_COLUMNS
+
+        keys = ("t", "cost", "fpr", "fnr", "auroc", "average_precision", *(c for c in BAND_COLUMNS if "auroc" not in c))
+        plain = self._run(target="car@small", test_bands="auto")
+        ranked = self._run(target="car@small", test_bands="auto", test_band_auroc=True)
+        assert [{k: r[k] for k in keys} for r in plain] == [{k: r[k] for k in keys} for r in ranked]
+        assert all(0.0 <= ranked[-1][f"auroc_{b}"] <= 1.0 for b in BANDS)
+
+    def test_the_own_band_auroc_is_the_headline_auroc(self):
+        """On a pure arm the own cohort IS the test positives, so the two agree."""
+        for row in self._run(target="car@small", test_bands="auto", test_band_auroc=True):
+            assert row["auroc_small"] == pytest.approx(row["auroc"], abs=1e-6)

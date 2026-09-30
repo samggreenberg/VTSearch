@@ -19,7 +19,7 @@ python scripts/vulture-audit.py
 
 The script owns the whole invocation — scan paths, excludes, ignore lists, confidence floor — so there is nothing to copy-paste and nothing to drift. It scans every tier that defines or consumes first-party Python (`vtsearch/`, `app.py`, `tests/`, `vtscore/`, `tests_lib/`, `scripts/`) and applies `.vulture-whitelist.py` itself.
 
-The **findings** are intentionally **not** a CI gate (false positives against the plugin-discovery pattern), so a non-clean exit doesn't block the promotion — but every finding gets triaged:
+The **findings** are intentionally **not** a `run-tests.sh` gate (false positives against the plugin-discovery pattern), so a non-clean exit doesn't block the promotion — but every finding gets triaged:
 
 - **Genuinely unused** → delete the symbol and any imports/references that fall out.
 - **Used reflectively** → add it to `.vulture-whitelist.py` with a one-line comment explaining the indirect use.
@@ -57,6 +57,17 @@ Use the summary verbatim as the PR body (step 5) and also output it in chat, wri
 - Run `python scripts/punchcard/punchcard.py`, which rewrites `scripts/punchcard/vtsearch_pr_punchcard.png`.
 - Commit the regenerated PNG and the updated `pr_merges.txt`.
 
+## 4b. Drain the screenshot reshoot queue
+
+GUI-changing sessions don't re-render the app's screenshots; they queue the shots they moved as one file each under [`docs/reshoot-queue/`](reshoot-queue/README.md), and this step shoots them all at once, so `main` never ships a stale screenshot. If the directory holds nothing but its `README.md`, skip this step.
+
+- **Docs shots** (any entry naming a manifest id): run `scripts/screenshots/refresh.sh` with **no ids**, so it re-renders the whole set. A GUI change routinely moves shots its session didn't think to list, and a full run's `git diff --stat docs/user/assets/` is the exact list of what moved; a shot whose UI didn't change comes out byte-identical and leaves no diff.
+- **Slide figures** (any entry naming `slides:<group>`): run `node slides/figs/src/shoot-ui-figs.mjs <group>...` with the queued groups, per [`slides/README.md`](../slides/README.md) (it downloads COCO val2017 on its first run, and needs `cd scripts/screenshots && npm install` once for playwright).
+- **Review the diff like any other.** Look at every changed image, not only the queued ones: a frame showing an error toast, a spinner or an empty panel is a harness failure rather than a GUI change, so leave that shot's old image in place and file an issue for the harness. A queued shot that didn't move is fine; its change may have been reverted, or its session listed it to be safe.
+- **Commit the images and delete the drained entry files in the same commit**, leaving `README.md`. Entries whose shots could not be rendered stay queued for the next release; say which in chat.
+
+A harness that won't run at all doesn't block the release: stale screenshots are a docs defect, not a reason to hold shipped fixes back. Leave the queue as it is, file an issue for the harness failure, and carry on with step 5.
+
 ## 5. Open the release PR
 
 - **Title:** `Release: dev → main (YYYY-MM-DD)` using today's date.
@@ -75,7 +86,7 @@ Now that the release PR is open, close the GitHub issues whose fixes are include
   - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
 - Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.) A pointer naming a **commit** rather than a PR (`Fixed on dev by <sha>`) belongs in this bucket too — resolve the SHA to the PR that carried it (step 6b's `NEEDS REVIEW` notes give the recipe, including the case where the SHA is not on `dev` at all), then reconcile it like any other orphan.
 
-**Both merge shapes count, which is why the list comes from a script.** CLAUDE.md's "Merging a PR" rule forbids squashing, and this walk is one of its reasons — but the rule can only stop the *next* squash. It cannot un-squash the four already on `dev` (#3671, #3672, #3682, #3685, all merged 2026-09-06), in a window that otherwise holds 41 findable merges. A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and enumerating merges would have orphaned all four *by construction*: none of the three buckets above would ever have been offered their issues, and no later release re-examines an already-merged PR. So the enumeration does not rest on the convention holding. `scripts/release-prs.py` walks `--first-parent` — which is what "landed on `dev`" actually means, independent of how it landed — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`).
+**Both merge shapes count, which is why the list comes from a script.** A squash lands as a single **one-parent** commit, so `git log --merges` walks straight past it, and four squashes are already on `dev` (#3671, #3672, #3682, #3685). `scripts/release-prs.py` therefore walks `--first-parent` — what "landed on `dev`" actually means — and reads the PR number off the **trailing** `(#N)` of a squash subject, because the leading one is usually the issue the PR closes (`... measured (#3673) (#3685)`). Do not replace it with `git log --merges`.
 
 Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main`. Real incident: #2940, #2930 and #2951 each shipped in the 2026-08-12 release under `Refs`, with an "Addressed in #M" comment on the issue, and all three stayed open. So the non-closing and orphan buckets get **reconciled** rather than dropped.
 
@@ -109,9 +120,7 @@ Run it right after step 6 to confirm nothing was left behind. It is also worth r
 
 The script is a pure function from data to plan — it does no network I/O of its own, so gather the data first and pipe it in.
 
-**Use the `gh` CLI to gather it.** This paragraph used to say the GitHub REST API was unreachable from a Claude session and that access was intermediated by the MCP server. That was only ever true of a raw `GITHUB_TOKEN` (which 403s, and is not even set in a session); `gh` carries its own authenticated token and `gh api` works normally. Writing it as "unreachable" made the MCP server look load-bearing, and this recipe became unrunnable the moment that server was removed from a machine — which has now happened. `gh api` and `gh pr list`/`gh issue list` are the path; the MCP tools are an equivalent alternative where they happen to be configured, not a prerequisite.
-
-**Run it from the laptop, though.** The correction above is about the laptop, where `gh auth login` has run. A Claude Code on the web container ships no `gh` at all, and installing one there does not help: it picks up the ambient `GH_TOKEN`, which 403s with `GitHub access is not enabled for this session` on REST and GraphQL alike (measured while building the `gh issue close` guard in #3634). In a web session the `github` MCP tools are the only working path.
+**Use the `gh` CLI to gather it, from the laptop.** `gh` carries its own authenticated token, so `gh api` and `gh pr list`/`gh issue list` work normally there (only a raw `GITHUB_TOKEN` 403s); the MCP tools are an equivalent alternative where configured, not a prerequisite. A Claude Code on the web container ships no `gh`, and one installed there picks up the ambient `GH_TOKEN`, which 403s (`GitHub access is not enabled for this session`) on REST and GraphQL alike — in a web session the `github` MCP tools are the only working path.
 
 1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**. These are `release_prs`.
 2. List the PRs currently **open** against `dev` (`open_prs`) and those **closed without merging** since the last release (`abandoned_prs`), with their bodies. The open ones are why an issue can be labelled before any merge; the abandoned ones are the only way a label comes off outside a close.

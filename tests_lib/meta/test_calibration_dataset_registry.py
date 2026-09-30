@@ -127,3 +127,63 @@ class TestCocoBetterIsRunnable:
         """The two sets exist to be read against each other, so a query that
         drifted between them would put a seeding axis inside the source axis."""
         assert cfg.EXPERIMENT_QUERIES["coco_better"] == cfg.EXPERIMENT_QUERIES["vg_scale"]
+
+
+class TestTrainMixCells:
+    """#4160: a mixed cell is enumerated per class and opens on its class's text."""
+
+    def test_a_mixed_cell_takes_its_pure_bands_text(self, cfg):
+        text = cfg.seed_query_text("coco_better", "bus@small")
+        assert text
+        assert cfg.seed_query_text("coco_better", "bus@mix-equal") == text
+
+    def test_mixes_add_one_cell_per_banded_class(self, cfg, monkeypatch):
+        monkeypatch.setattr(cfg, "TRAIN_MIXES", ["equal", "natural"])
+        cats = ["apple@medium", "apple@large", "bus@small", "bus@medium", "bus@large", "solo@small"]
+        got = cfg.with_train_mixes(cats)
+        assert got[: len(cats)] == cats
+        assert got[len(cats) :] == ["apple@mix-equal", "apple@mix-natural", "bus@mix-equal", "bus@mix-natural"]
+
+    def test_no_mixes_adds_nothing(self, cfg, monkeypatch):
+        monkeypatch.setattr(cfg, "TRAIN_MIXES", [])
+        assert cfg.with_train_mixes(["bus@small"]) == ["bus@small"]
+
+    def test_the_equal_mix_weights_every_band(self, cfg):
+        assert cfg.train_mix_for("bus@mix-equal") == {"small": 1.0, "medium": 1.0, "large": 1.0}
+        assert cfg.train_mix_for("bus@small") is None
+
+    def test_the_natural_mix_reads_the_corpus_shares(self, cfg, monkeypatch, tmp_path):
+        shares = tmp_path / "shares.json"
+        shares.write_text('{"bus": {"small": 0.05, "medium": 0.27, "large": 0.68}}')
+        monkeypatch.setattr(cfg, "MIX_SHARES_PATH", str(shares))
+        assert cfg.train_mix_for("bus@mix-natural") == {"small": 0.05, "medium": 0.27, "large": 0.68}
+        with pytest.raises(KeyError):
+            cfg.train_mix_for("dog@mix-natural")
+
+
+class TestCategoryFile:
+    """#4213: ``CALIB_CATEGORY_FILE`` narrows a designated grid and refuses a typo."""
+
+    def test_it_keeps_only_the_listed_categories(self, cfg, monkeypatch, tmp_path):
+        f = tmp_path / "cats.txt"
+        f.write_text("# hard + easy\nbus@small\n\ndog@large\n")
+        monkeypatch.setattr(cfg, "CATEGORY_MODE", "all")
+        monkeypatch.setattr(cfg, "CATEGORY_FILE", str(f))
+        counts = {"bus@small": 100, "dog@large": 100, "cup@medium": 100}
+        selected, report = cfg.select_categories({}, counts)
+        assert selected == ["bus@small", "dog@large"]
+        assert report["not_in_category_file"] == ["cup@medium"]
+
+    def test_a_name_the_selection_did_not_produce_is_refused(self, cfg, monkeypatch, tmp_path):
+        f = tmp_path / "cats.txt"
+        f.write_text("bus@small\nbus@tiny\n")
+        monkeypatch.setattr(cfg, "CATEGORY_MODE", "all")
+        monkeypatch.setattr(cfg, "CATEGORY_FILE", str(f))
+        with pytest.raises(ValueError, match="bus@tiny"):
+            cfg.select_categories({}, {"bus@small": 100})
+
+    def test_unset_changes_nothing(self, cfg, monkeypatch):
+        monkeypatch.setattr(cfg, "CATEGORY_MODE", "all")
+        monkeypatch.setattr(cfg, "CATEGORY_FILE", "")
+        selected, _ = cfg.select_categories({}, {"a@small": 1, "b@large": 1})
+        assert selected == ["a@small", "b@large"]

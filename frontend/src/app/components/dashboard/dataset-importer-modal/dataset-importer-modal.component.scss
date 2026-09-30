@@ -19,4 +19,13 @@
   }
 }
 
-.form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); margin-top: var(--space-md); }
+// No top margin: `.modal-body` already spaces the footer, and a margin here
+// would push the buttons off-centre from the Advanced toggle beside them.
+.form-actions { display: flex; justify-content: flex-end; gap: var(--space-md); }
+
+// The Run AutoRun box sits under whichever picker is showing; indent it like
+// the importer forms (`.importer-form`) so it lines up with their controls
+// rather than with the tab bars.
+.autorun-toggle {
+  padding-left: var(--space-2xl);
+}

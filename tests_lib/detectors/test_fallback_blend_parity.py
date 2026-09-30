@@ -134,7 +134,6 @@ class TestFallbackBlendParity:
             ),
             None,
             sim_scores,
-            0,
             ctx,
             SCHEDULE,
         )

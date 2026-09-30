@@ -2,10 +2,10 @@
 
 An *admin override* is a server-wide restriction an operator sets at startup:
 it applies to every user, is fixed for the lifetime of the process, and is not
-editable through ``PUT /api/settings``. Six exist today -- the solo mediaType
-lock, the per-mediaType solo-embedder locks, the plugin hide list, the dataset
-retention window, the support-email address, and the Semantic-only embedder
-lock.
+editable through ``PUT /api/settings``. Seven exist today -- the solo
+mediaType lock, the per-mediaType solo-embedder locks, the plugin hide list,
+the dataset retention window, the support-email address, the Semantic-only
+embedder lock, and the switch that hides ingest progress-bar ETAs.
 
 Each one used to be spelled out four times: a ``set_cli_X`` / ``get_cli_X`` /
 ``get_effective_X`` triad in :mod:`vtsearch.settings`, an ``_apply_X`` argparse
@@ -33,7 +33,7 @@ override with the persisted setting, and the key it surfaces under at
 * ``vtsearch.routes.settings.api._with_effective`` loops the registry to build
   the read-only overlay.
 
-Adding a seventh knob is therefore one :class:`AdminOverride` entry, and
+Adding another knob is therefore one :class:`AdminOverride` entry, and
 ``tests/core/test_admin_overrides.py`` fails if it does not carry a flag, an env
 var, and an overlay key -- the coverage can no longer go arbitrary by accident.
 
@@ -276,7 +276,8 @@ def _resolve_solo_media_type(override: str | None, persisted: Any) -> str | None
     return persisted
 
 
-def _resolve_semantic_only(override: bool | None, persisted: Any) -> bool:
+def _resolve_switch(override: bool | None, persisted: Any) -> bool:
+    """A ``"switch"`` knob: the flag can only turn it on, else the file decides."""
     return bool(persisted) if override is None else override
 
 
@@ -463,7 +464,7 @@ _REGISTRY: tuple[AdminOverride, ...] = (
         kind="switch",
         persisted_getter="get_semantic_only",
         effective_key="semantic_only",
-        resolve=_resolve_semantic_only,
+        resolve=_resolve_switch,
         help=(
             "Lock this instance to Semantic embedders: the prototype Patch "
             "Semantic and Structural embedder types are hidden from every "
@@ -472,6 +473,25 @@ _REGISTRY: tuple[AdminOverride, ...] = (
             "is not editable via the settings API. There is no "
             "--no-semantic-only: the flag can only enable the lock, never "
             "loosen one the persisted semantic_only setting asked for."
+        ),
+    ),
+    AdminOverride(
+        name="hide_ingest_eta",
+        flag="--hide-ingest-eta",
+        env="VTSEARCH_HIDE_INGEST_ETA",
+        kind="switch",
+        persisted_getter="get_hide_ingest_eta",
+        effective_key="hide_ingest_eta",
+        resolve=_resolve_switch,
+        help=(
+            "Hide the remaining-time estimate on ingest progress bars (dataset "
+            "imports, staging imports, and a labelset's missing-media fetch) "
+            "for deployments where those jobs are too erratic to predict. The "
+            "bars still fill and show their counts; other progress bars keep "
+            "their ETA. Applies to all users for the lifetime of the process "
+            "and is not editable via the settings API. There is no "
+            "--no-hide-ingest-eta: the flag can only hide, never re-show ETAs "
+            "the persisted hide_ingest_eta setting hid."
         ),
     ),
 )

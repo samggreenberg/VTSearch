@@ -180,6 +180,44 @@ class TestStreamingNdjsonExport:
         # The atomic temp file must not be left behind.
         assert not out.with_name(out.name + ".tmp").exists()
 
+    def test_the_header_carries_each_detectors_floor_verdict(self, client, tmp_path, monkeypatch, _stub_split_training):
+        """Each detector's floor state reaches the NDJSON ``_meta``; its hits still stream (#4247, #4272)."""
+        import vtscore.cli as cli_mod
+
+        stub = cli_mod._load_and_train_detectors
+        floor = {
+            "min_precision": 0.5,
+            "status": "unchecked",
+            "count": 32,
+            "range": None,
+            "schedule": {"candidate": 32, "rounds": 1, "picks": 5},
+        }
+        monkeypatch.setattr(
+            cli_mod,
+            "_load_and_train_detectors",
+            lambda *a, **k: {name: {**info, "floor": floor} for name, info in stub(*a, **k).items()},
+        )
+        _write_pretrained_detector("stream-floor")
+        settings_path = _settings_file_with_detector(tmp_path, "stream-floor")
+        ds_path = tmp_path / "ds.pkl"
+        _write_pickle_dataset(ds_path, {i: _make_audio_media(i) for i in range(1, 6)})
+        out = tmp_path / "hits.ndjson"
+
+        from vtscore.cli import autodetect_main_chunked
+
+        autodetect_main_chunked(
+            dataset_path=str(ds_path),
+            chunk_size=2,
+            settings_path=str(settings_path),
+            exporter_name="server_json_file",
+            exporter_field_values={"filepath": str(out)},
+            stream_results=True,
+        )
+
+        meta, hits = _read_ndjson(out)
+        assert meta["detectors"] == [{"detector_name": "stream-floor", "threshold": 0.5, "floor": floor}]
+        assert sorted(h["id"] for h in hits) == [1, 2, 3]
+
     def test_keep_negatives_streams_both(self, client, tmp_path, _stub_split_training):
         _write_pretrained_detector("stream-tm2")
         settings_path = _settings_file_with_detector(tmp_path, "stream-tm2")

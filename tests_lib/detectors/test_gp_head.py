@@ -168,7 +168,9 @@ class TestGPStepTrainer:
         assert p.shape == s.shape == (80,)
         assert 0.0 <= threshold <= 1.0
         assert set(timings) == {"train_seconds", "xcal_seconds"}
-        assert details == {"threshold_rule": "xcal_raw"}
+        # ``row_votes`` names the vote behind each training row, so the
+        # precision floor can tell which held-out votes may calibrate (#4245).
+        assert details == {"threshold_rule": "xcal_raw", "row_votes": [*good, *bad]}
 
     def test_app_and_svm_paths_carry_no_spread(self):
         clips = _clips()
@@ -252,7 +254,7 @@ class TestRankTransferredThreshold:
                 calibration_fraction=0.5,
                 haystack_X=hay_arg,
             )
-            assert details == {"threshold_rule": rule}
+            assert details == {"threshold_rule": rule, "row_votes": [*good, *bad]}
             assert np.isfinite(threshold)
 
 
@@ -511,6 +513,8 @@ class TestGPFoldAnchored:
             safe_thresholds=True,
             standalone_cut="anchored",
             emit_calibration_metrics=True,
+            # The Inclusion arm: under a floor the line is the floor's set, whatever estimator ran (#4272).
+            min_precision="off",
         )
         assert rows and all(np.isfinite(r["cost"]) for r in rows)
         provenance = [str(r["threshold_provenance"]) for r in rows]

@@ -10,9 +10,11 @@ import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { FLOOR_STATES, lineFloor, wireFloor } from '../../testing/line-floor';
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -72,7 +74,7 @@ describe('FindViewComponent (zoneless canary)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
     }
@@ -237,7 +239,7 @@ describe('FindViewComponent (pair-switch supersession)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
       httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
@@ -274,13 +276,13 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortBusy).toBe(false);
   });
 
-  // The Inclusion POST is deferred until the slider settles (issue #2973), and
-  // that settle window is inside the pair scope too: a slide the user abandons
+  // The floor POST is deferred until the picker settles (issue #2973), and
+  // that settle window is inside the pair scope too: a pick the user abandons
   // by switching pair must never be written into the pair they switched *to*,
-  // whose own inclusion the reload has just re-seeded.
-  it('drops a pending inclusion POST when the pair switches first', async () => {
+  // whose own floor the reload has just re-seeded.
+  it('drops a pending floor POST when the pair switches first', async () => {
     await flushInit();
-    // Land the first pair's ranking so the slider isn't disabled by sortBusy.
+    // Land the first pair's ranking so the picker isn't disabled by sortBusy.
     httpMock
       .expectOne('/api/find-label')
       .flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
@@ -289,13 +291,13 @@ describe('FindViewComponent (pair-switch supersession)', () => {
 
     vi.useFakeTimers();
     try {
-      fixture.componentInstance.onInclusionChange(5);
+      fixture.componentInstance.onMinPrecisionChange(0.9);
       // Still inside the settle window when the user switches pair.
       vi.advanceTimersByTime(50);
       activeContext.setActivePair('ds2', 'det2');
       vi.advanceTimersByTime(1000);
 
-      httpMock.expectNone((req) => req.url === '/api/inclusion' && req.method === 'POST');
+      httpMock.expectNone((req) => req.url === '/api/min-precision' && req.method === 'POST');
     } finally {
       vi.useRealTimers();
     }
@@ -303,17 +305,17 @@ describe('FindViewComponent (pair-switch supersession)', () => {
 });
 
 /**
- * Issue #2973: the Inclusion slider emits on every `input` event, so walking the
- * cutoff a few steps used to leave several `POST /api/inclusion` requests in
- * flight at once, each installing its own threshold on arrival. A slow response
- * for a value the user had already moved past could land *last* and overwrite
- * the newer threshold, snapping the green/red line (and the left/right split)
- * back to a cutoff that was no longer selected — with nothing to re-reconcile it
- * until the next slide. Slider changes now funnel through one debounced
- * `switchMap` pipeline, so only the settled value is sent and only its response
- * is applied.
+ * Issue #2973, carried over from the Inclusion slider to the precision floor
+ * (#4246): the picker emits a `change` per arrow key, so walking the floors
+ * would leave several `POST /api/min-precision` requests in flight at once,
+ * each installing its own threshold on arrival. A slow response for a floor the
+ * user had already moved past could land *last* and overwrite the newer
+ * threshold, snapping the green/red line (and the left/right split) back to a
+ * floor that was no longer selected — with nothing to re-reconcile it until the
+ * next pick. Picks funnel through one debounced `switchMap` pipeline, so only
+ * the settled floor is sent and only its response is applied.
  */
-describe('FindViewComponent (inclusion supersession)', () => {
+describe('FindViewComponent (floor supersession)', () => {
   let fixture: ComponentFixture<FindViewComponent>;
   let httpMock: HttpTestingController;
 
@@ -341,7 +343,7 @@ describe('FindViewComponent (inclusion supersession)', () => {
   });
 
   // Same drain as the canary above; no pair is active, so `runFindLabel` no-ops
-  // and the only /api/inclusion traffic afterwards is the slider's.
+  // and the only /api/min-precision traffic afterwards is the picker's.
   async function flushInit(): Promise<void> {
     TestBed.tick();
     for (let i = 0; i < 3; i++) {
@@ -353,7 +355,7 @@ describe('FindViewComponent (inclusion supersession)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
       httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
@@ -367,28 +369,30 @@ describe('FindViewComponent (inclusion supersession)', () => {
     return sortState;
   }
 
-  it('coalesces a rapid walk of the slider into one POST for the settled value', async () => {
+  it('coalesces a rapid walk through the floors into one POST for the settled one', async () => {
     await flushInit();
     await settleZoneless(fixture);
     const sortState = seedRanking();
     const component = fixture.componentInstance;
 
     vi.useFakeTimers();
-    // Three steps up in quick succession: the box tracks every one of them...
-    component.onInclusionChange(1);
+    // Three floors in quick succession: the picker tracks every one of them...
+    component.onMinPrecisionChange(0.1);
     vi.advanceTimersByTime(40);
-    component.onInclusionChange(2);
+    component.onMinPrecisionChange(0.5);
     vi.advanceTimersByTime(40);
-    component.onInclusionChange(3);
-    expect(sortState.inclusion).toBe(3);
-    // ...but nothing is sent until the slider settles.
-    httpMock.expectNone('/api/inclusion');
+    component.onMinPrecisionChange(0.9);
+    expect(sortState.minPrecision).toBe(0.9);
+    // ...but nothing is sent until the picker settles.
+    httpMock.expectNone('/api/min-precision');
 
     vi.advanceTimersByTime(200);
-    const req = httpMock.expectOne('/api/inclusion');
-    expect(req.request.body).toEqual({ inclusion: 3 });
-    req.flush({ inclusion: 3, threshold: 0.7 });
+    const req = httpMock.expectOne('/api/min-precision');
+    expect(req.request.body).toEqual({ min_precision: 0.9 });
+    req.flush({ ...wireFloor('confirmed', { minPrecision: 0.9 }), threshold: 0.7, n_returned: 1 });
     expect(sortState.threshold).toBe(0.7);
+    expect(sortState.floor?.status).toBe('confirmed');
+    expect(sortState.floor?.minPrecision).toBe(0.9);
   });
 
   it('cancels a superseded POST so its stale threshold can never land', async () => {
@@ -398,45 +402,58 @@ describe('FindViewComponent (inclusion supersession)', () => {
     const component = fixture.componentInstance;
 
     vi.useFakeTimers();
-    component.onInclusionChange(3);
+    component.onMinPrecisionChange(0.1);
     vi.advanceTimersByTime(200);
-    // The first POST is still in flight (a slow re-threshold server-side) when
-    // the user moves the cutoff again.
-    const stale = httpMock.expectOne('/api/inclusion');
+    // The first POST is still in flight (a slow re-cut server-side) when the
+    // user picks another floor.
+    const stale = httpMock.expectOne('/api/min-precision');
     expect(stale.cancelled).toBe(false);
 
-    component.onInclusionChange(7);
+    component.onMinPrecisionChange(0.9);
     vi.advanceTimersByTime(200);
 
-    // switchMap aborted the superseded request, so its threshold (0.2) has no
+    // switchMap aborted the superseded request, so its threshold has no
     // subscriber left to install it however late it resolves.
     expect(stale.cancelled).toBe(true);
-    const fresh = httpMock.expectOne('/api/inclusion');
-    expect(fresh.request.body).toEqual({ inclusion: 7 });
-    fresh.flush({ inclusion: 7, threshold: 0.9 });
+    const fresh = httpMock.expectOne('/api/min-precision');
+    expect(fresh.request.body).toEqual({ min_precision: 0.9 });
+    fresh.flush({ ...wireFloor('confirmed', { minPrecision: 0.9 }), threshold: 0.9, n_returned: 1 });
     expect(sortState.threshold).toBe(0.9);
   });
 
-  it('keeps posting after a failed slide', async () => {
+  it('keeps posting after a failed pick', async () => {
     await flushInit();
     await settleZoneless(fixture);
     const sortState = seedRanking();
     const component = fixture.componentInstance;
 
     vi.useFakeTimers();
-    component.onInclusionChange(2);
+    component.onMinPrecisionChange(0.5);
     vi.advanceTimersByTime(200);
     httpMock
-      .expectOne('/api/inclusion')
+      .expectOne('/api/min-precision')
       .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
 
     // The error is swallowed per-request, so the shared pipeline survives it.
-    component.onInclusionChange(4);
+    component.onMinPrecisionChange(0.1);
     vi.advanceTimersByTime(200);
-    const retry = httpMock.expectOne('/api/inclusion');
-    expect(retry.request.body).toEqual({ inclusion: 4 });
-    retry.flush({ inclusion: 4, threshold: 0.6 });
+    const retry = httpMock.expectOne('/api/min-precision');
+    expect(retry.request.body).toEqual({ min_precision: 0.1 });
+    retry.flush({ ...wireFloor('confirmed', { minPrecision: 0.1 }), threshold: 0.6, n_returned: 1 });
     expect(sortState.threshold).toBe(0.6);
+  });
+
+  it('sends nothing while the detector is still scoring', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const sortState = seedRanking();
+    sortState.setSortBusy(true);
+
+    vi.useFakeTimers();
+    fixture.componentInstance.onMinPrecisionChange(0.9);
+    vi.advanceTimersByTime(1000);
+    httpMock.expectNone('/api/min-precision');
+    expect(sortState.minPrecision).toBe(0.5);
   });
 });
 
@@ -479,7 +496,7 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
     }
@@ -525,12 +542,263 @@ describe('FindViewComponent prefetching the next review images (#3896)', () => {
     (fixture.componentInstance as unknown as { nextFindSide: string }).nextFindSide = 'below';
     TestBed.tick();
 
-    // An inclusion slide re-thresholds with 2 still on screen. Cut at 0.3:
+    // A floor change re-thresholds with 2 still on screen. Cut at 0.3:
     // above = {1, 2, 3}, below = {4}. `below` first → 4, then the nearest item
     // above the line that is not on screen → 3.
     sortState.setSortResults(ranking, 0.3);
     TestBed.tick();
 
     expect(lastCall()).toEqual([[url(4), url(3)], [url(2)]]);
+  });
+});
+
+/**
+ * #4306: every boundary-walk advance flips which side of the cutoff it serves,
+ * so re-running it on `↑` could never land back on the item `↓` left.
+ */
+describe('FindViewComponent ↓ then ↑ (#4306)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+
+  // Descending by score; the cutoff at 0.5 sits between ids 2 and 3.
+  const ranking = [
+    { id: 1, score: 0.9 },
+    { id: 2, score: 0.6 },
+    { id: 3, score: 0.4 },
+    { id: 4, score: 0.2 },
+  ];
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock
+        .match('/api/medias/ids')
+        .forEach((req) => req.flush(ranking.map(({ id }) => ({ id, media_type: 'image' }))));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+    }
+    httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'x' }));
+    await settleZoneless(fixture);
+  });
+
+  afterEach(() => {
+    fixture.destroy();
+    TestBed.inject(VoteStateService).stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  it('returns to the item the walk started from, not the other side of the line', () => {
+    const component = fixture.componentInstance;
+    const selected = () => TestBed.inject(MediaStateService).selectedId();
+    TestBed.inject(SortStateService).setSortResults(ranking, 0.5);
+    // Verifying 2 (the marginal positive) advanced below the line, to 3; the
+    // next advance would serve the positive side again.
+    TestBed.inject(VoteStateService).setOptimisticVerified(2, true);
+    TestBed.inject(VoteHistoryService).record(2);
+    TestBed.inject(MediaStateService).selectMedia(3);
+    (component as unknown as { nextFindSide: string }).nextFindSide = 'above';
+    TestBed.tick();
+
+    component.onNavigate('back');
+    expect(selected()).toBe(2);
+    component.onNavigate('forward');
+    expect(selected()).toBe(3);
+
+    // With no walk left to end, `↑` is the boundary walk again.
+    component.onNavigate('forward');
+    expect(selected()).toBe(1);
+  });
+});
+
+/**
+ * #4247: when the precision floor promises nothing, find-label still returns a
+ * cut - the default one (Inclusion 0) - with the floor's verdict beside it. Every
+ * consumer of the cut keeps working on it: the boundary walk, the queue-empty
+ * state, and the positive sets behind Browse / To Dataset / Export. Only the
+ * line's label changes.
+ */
+describe('FindViewComponent with no precision promise (#4247)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+  let sortState: SortStateService;
+
+  // Descending by score; the fallback cut at 0.5 sits between ids 2 and 3.
+  const ranking = [
+    { id: 1, score: 0.9 },
+    { id: 2, score: 0.6 },
+    { id: 3, score: 0.4 },
+    { id: 4, score: 0.2 },
+  ];
+
+  /** The private consumers under test, reached the way the prefetch spec reaches `nextFindSide`. */
+  type Consumers = {
+    unverifiedGoodIds(): number[];
+    goodIds(): number[];
+    advanceToBoundary(): void;
+    nextFindSide: string;
+  };
+  const view = () => fixture.componentInstance as unknown as Consumers;
+
+  /** Drain the init loads for *ids*, all images (the viewer's audio path needs Web Audio). */
+  async function flushInit(ids: number[]): Promise<void> {
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush(ids.map((id) => ({ id, media_type: 'image' }))));
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
+    }
+  }
+
+  async function setUp(withPair: boolean): Promise<void> {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+    // With a pair active `runFindLabel` scores on init; without one it no-ops
+    // and the ranking is installed straight into the sort state, as the
+    // prefetch spec above does.
+    if (withPair) TestBed.inject(ActiveContextService).setActivePair('ds1', 'det1');
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+    sortState = TestBed.inject(SortStateService);
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    fixture.destroy();
+    TestBed.inject(VoteStateService).stopPolling();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+  });
+
+  describe('a scoring pass', () => {
+    beforeEach(() => setUp(true));
+
+    it.each(FLOOR_STATES)('installs the line of the kept set with its verdict when %s', async (status) => {
+      await flushInit([1]);
+      httpMock.expectOne('/api/find-label').flush({
+        ok: true,
+        results: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+        floor: wireFloor(status),
+        good_count: 1,
+        bad_count: 0,
+        detector_name: 'det',
+      });
+      await flushInit([1]);
+      await settleZoneless(fixture);
+
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.floor?.status).toBe(status);
+      // The walk still seeds on the marginal positive. (One result draws no
+      // line - nothing falls below it - so the label is pinned further down.)
+      expect(TestBed.inject(MediaStateService).selectedId()).toBe(1);
+    });
+  });
+
+  describe('the consumers of the cut', () => {
+    beforeEach(async () => {
+      await setUp(false);
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+    });
+
+    it.each(FLOOR_STATES)('walk the boundary of the line when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      const mediaState = TestBed.inject(MediaStateService);
+      view().nextFindSide = 'above';
+      view().advanceToBoundary();
+      expect(mediaState.selectedId()).toBe(2);
+      view().advanceToBoundary();
+      expect(mediaState.selectedId()).toBe(3);
+    });
+
+    it.each(FLOOR_STATES)('empty the queue only once every item is verified, when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      expect(fixture.componentInstance.queueEmpty()).toBe(false);
+      const voteState = TestBed.inject(VoteStateService);
+      ranking.forEach(({ id }) => voteState.setOptimisticVerified(id, true));
+      expect(fixture.componentInstance.queueEmpty()).toBe(true);
+    });
+
+    it.each(FLOOR_STATES)('hand Browse / To Dataset / Export the positives above the line when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      expect(view().unverifiedGoodIds()).toEqual([1, 2]);
+      expect(view().goodIds()).toEqual([1, 2]);
+    });
+
+    it.each(FLOOR_STATES)('draw the line the same in the work queue when %s, naming the state only in its tooltip', async (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const line = el.querySelector('.media-threshold-line') as HTMLElement;
+      expect(line).not.toBeNull();
+      expect(line.className).toBe('media-threshold-line');
+      expect(el.querySelector('.stripe-threshold')!.className).toBe('stripe-threshold');
+      expect(line.textContent!.trim().toLowerCase()).toBe('threshold');
+      expect(line.title).toContain(status === 'unchecked' ? 'Unchecked' : 'random picks');
+    });
+
+    it.each(FLOOR_STATES)('install the line and verdict a floor change returns when %s', (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      vi.useFakeTimers();
+      fixture.componentInstance.onMinPrecisionChange(0.9);
+      vi.advanceTimersByTime(200);
+      httpMock
+        .expectOne((req) => req.url === '/api/min-precision' && req.method === 'POST')
+        .flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 2 });
+      expect(sortState.threshold).toBe(0.5);
+      expect(sortState.floor?.status).toBe(status);
+      expect(sortState.floor?.minPrecision).toBe(0.9);
+    });
+
+    it('move the line when a floor change keeps a larger set', () => {
+      sortState.setSortResults(ranking, 0.5, lineFloor('unchecked'));
+      vi.useFakeTimers();
+      fixture.componentInstance.onMinPrecisionChange(0.25);
+      vi.advanceTimersByTime(200);
+      httpMock
+        .expectOne((req) => req.url === '/api/min-precision' && req.method === 'POST')
+        .flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.3, n_returned: 3 });
+      expect(sortState.threshold).toBe(0.3);
+      expect(sortState.floor?.status).toBe('confirmed');
+      expect(view().unverifiedGoodIds()).toEqual([1, 2, 3]);
+    });
+
+    it.each(FLOOR_STATES)('show the Threshold and its state in the Find row, with no check, when %s', async (status) => {
+      sortState.setSortResults(ranking, 0.5, lineFloor(status));
+      await settleZoneless(fixture);
+      const row = (fixture.nativeElement as HTMLElement).querySelector('.find-floor-row')!;
+      const text = row.querySelector('.floor-state')!.textContent!;
+      expect(text).toContain(
+        status === 'unchecked' ? 'unchecked' : status === 'confirmed' ? 'Confirmed · likely 55–100% right (checked 5)' : 'Fell short · likely 11–73% right',
+      );
+      // Find tests the threshold Train set: it offers no spot check to set one (#4317).
+      expect(row.querySelector('.floor-check-btn')).toBeNull();
+      expect((fixture.nativeElement as HTMLElement).querySelector('vt-floor-check-modal')).toBeNull();
+    });
   });
 });

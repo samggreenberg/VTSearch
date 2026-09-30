@@ -14,7 +14,8 @@ Event names emitted today:
 - ``chunks_done``    - chunked scoring finished
   fields: ``total_medias`` (int), ``chunks`` (int)
 - ``labels_imported`` - one-shot ``--import-labels-into`` finished
-  fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int)
+  fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int),
+  ``created`` (bool - ``--create-detector`` made the detector)
 - ``export_complete`` - exporter finished its run
   fields: ``message`` (str - the exporter's own confirmation text),
   ``open_url`` (str? - only when the exporter returned one; an ``http(s)``
@@ -22,6 +23,14 @@ Event names emitted today:
 - ``progress``       - a tick from the embedding / loading stack
   fields: ``status`` (str), ``message`` (str?), ``current`` (int?),
   ``total`` (int?), ``pct`` (float? - only when total > 0)
+- ``dataset_saved``  - a saving run registered (or found) its dataset on the
+  dashboard
+  fields: ``dataset_id`` (str), ``name`` (str), ``num_items`` (int),
+  ``pkl_path`` (str), ``already_saved`` (bool - the pickle was already a
+  registered dataset, so nothing new was imported)
+- ``detection_skipped`` - a saving run had no detector to score with; the
+  dataset is still saved and the run exits 0
+  fields: ``reason`` (str)
 - ``notification``   - a non-fatal message a plugin wanted the user to see
   (see :mod:`vtscore.concurrency.notifications`; in the GUI these become
   toasts). The run continues either way, including at ``level="error"``.
@@ -168,12 +177,16 @@ def notification_subscriber(notification: "Notification") -> None:
     label = _NOTIFICATION_LABEL.get(notification.level, "Note")
     source = f" [{notification.source}]" if notification.source else ""
     detail = f" - {notification.detail}" if notification.detail else ""
+    # The GUI keeps the item list behind a Details toggle; headless there is
+    # nothing to toggle, so each item gets its own indented line.
+    items = "".join(f"\n  - {item}" for item in notification.items or ())
     emit(
         "notification",
-        text=f"{label}:{source} {notification.message}{detail}",
+        text=f"{label}:{source} {notification.message}{detail}{items}",
         stream=None if _format == "json" else sys.stderr,
         level=notification.level,
         message=notification.message,
         detail=notification.detail,
         source=notification.source,
+        items=list(notification.items) if notification.items else None,
     )

@@ -139,7 +139,8 @@ GET /api/medias/{media_id}/video
 
 → Video binary stream (`video/mp4`, `video/webm`, or `video/ogg` based on
 filename extension). Non-browser-playable formats are transcoded to MP4.
-400 if not a video. 404 if not found.
+400 if not a video. 404 if not found. 415 if transcoding is needed but neither
+ffmpeg nor OpenCV is available.
 
 ### Stream image
 
@@ -436,7 +437,7 @@ work to a background thread and returns immediately:
 
 Poll [`GET /api/learned-sort/result`](#learned-sort-result-poll) with that
 `job_id` until `status == "done"` to receive the results. A no-op call (votes,
-detector, inclusion, and threshold settings unchanged from the most recent
+detector, floor, and threshold settings unchanged from the most recent
 successful run) short-circuits and returns the cached `done` payload directly.
 
 Pass `{"wait": true}` in the body to block until the job finishes and receive
@@ -447,16 +448,18 @@ the result inline (used by tests; the frontend leaves it `false`):
 
 The `done` payload — whether returned inline (`wait=true`) or via the result
 poll — is that same windowed envelope: `results`, `threshold`,
-`acq_threshold`, `sort_token`, `total`, `above_threshold`, `has_more_below`.
-This is the only sort with a detector behind it, so the only one whose
-`acq_threshold` is non-`null`.
+`acq_threshold`, `floor`, `sort_token`, `total`, `above_threshold`,
+`has_more_below`. This is the only sort with a detector behind it, so the only
+one whose `acq_threshold` and `floor` are non-`null`; `floor` is the
+[floor state](labeling.md#the-floor-state) of `threshold`: the set the line
+keeps, and what the precision floor's spot check found on it.
 
 `threshold` is the **decision line**: the cutoff shown to the user, what
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`
 is the **acquisition cut**, and it is a different number — Autopilot's Hard and
 New picks read a threshold as a *rank position* rather than a boundary, so they
-sample around a cut taken three inclusion steps below the reporting one, which
-places it higher in the ranking. Nothing shown to the user reads it. It is
+sample around a cut taken four inclusion steps below the reporting one
+(`ACQUISITION_INCLUSION_OFFSET`), which places it higher in the ranking. Nothing shown to the user reads it. It is
 `null` on sorts with no detector behind them (`/api/sort`, `/api/example-sort`,
 `/api/label-file-sort`), where a client should fall back to `threshold`. See
 [`docs/ML.md`](../ML.md#threshold-calibration) for the mechanism and the
@@ -649,8 +652,8 @@ POST /api/seed-import/{importer_name}
 ```
 
 **Body:** plugin-dependent — the fields the named importer declares (JSON, or
-multipart when it declares a `file` field). Not described in the OpenAPI spec
-for that reason; see [Routes absent from the spec](../API.md#routes-absent-from-the-spec).
+multipart when it declares a `file` field). The spec carries no body schema
+for that reason; see [Routes with no typed schema](../API.md#routes-with-no-typed-schema).
 
 Runs the importer and saves each returned item's bytes into the per-user
 `example_media/` directory.
@@ -678,6 +681,50 @@ was dropped. `count: 0` is a valid "nothing matched" answer, not an error.
 
 ```
 POST /api/seed-import/{importer_name}/options
+```
+
+Dynamic select options, same contract as the dataset-importer variant.
+
+### Datasource importers
+
+A **datasource importer** is the single-item sibling of a dataset importer: it
+fetches exactly one media item from some source (a URL, a server path, a
+third-party service) into the per-user `example_media/` directory. It powers
+the example-media picker in the New Detector modal. Plugins live in
+`vtscore.datasource_importers`.
+
+```
+GET /api/datasource-importers
+```
+
+→ `{"importers": [{"name": ..., "display_name": ..., "fields": [...], ...}], "tabs": [...]}`
+
+`tabs` are the dataset-importer picker-tab declarations; datasource importers
+use the same category ids so both families share one tab bar.
+
+```
+POST /api/datasource-import/{importer_name}
+```
+
+**Body:** plugin-dependent — the importer's declared fields (JSON, or multipart
+when it declares a `file` field); see
+[Routes with no typed schema](../API.md#routes-with-no-typed-schema).
+
+→ `{"filename": "abc123.wav", "original_name": "bark.wav", "origin": {...}}` (201)
+
+The same `{filename, original_name}` contract as
+[`POST /api/server-media-files/upload`](#upload-server-media-file), so the
+result plugs into a `{"type": "media", "value": <filename>}` detector example
+unchanged. `origin` is the item's durable origin when the importer reports one
+(`null` otherwise); store it on the example to keep the item re-fetchable after
+the cached file is gone.
+
+400 (bad user input), 404 (unknown importer), 422 (missing/invalid field),
+501 (`fetch` not implemented), 502 (source failure, or the importer returned no
+data).
+
+```
+POST /api/datasource-import/{importer_name}/options
 ```
 
 Dynamic select options, same contract as the dataset-importer variant.

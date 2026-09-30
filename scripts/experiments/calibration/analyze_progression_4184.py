@@ -105,6 +105,34 @@ def premise_failures(label: str, frame: pd.DataFrame) -> list[str]:
     return bad
 
 
+def baseline_mismatches(raw: pd.DataFrame, frames: dict[str, pd.DataFrame]) -> list[str]:
+    """Every rung whose cells were not tested on the sets the baseline was cut on.
+
+    The notch and every pre-detector click are read off the baseline, so it has
+    to describe the same held-out images the cells were graded on.  A baseline
+    built before the pool changed pairs each cell with a stranger's test set and
+    raises nothing: #4184's first analysis did, with a 09-25 baseline that
+    matched 30 of 702 cells.  ``n_test_pos`` is the fingerprint both sides write.
+    """
+    if "n_test_pos" not in raw.columns:
+        return ["baseline has no `n_test_pos` column - cannot check it was cut on these cells' test sets"]
+    base = raw.groupby(CELL)["n_test_pos"].first()
+    bad = []
+    for label, frame in frames.items():
+        if "n_test_pos" not in frame.columns:
+            bad.append(f"{label}: no `n_test_pos` column - cannot pair it with the baseline")
+            continue
+        cells = frame.groupby(CELL)["n_test_pos"].first()
+        both = cells.to_frame("cell").join(base.rename("base"), how="inner")
+        off = int((both["cell"] != both["base"]).sum())
+        if off:
+            bad.append(
+                f"{label}: {off}/{len(both)} cells were tested on a different set from the baseline's "
+                "- it was built from another pool; rebuild it with `launch_progression_4184.sh baseline`"
+            )
+    return bad
+
+
 def filled_matrix(
     frame: pd.DataFrame,
     cells: pd.DataFrame,
@@ -202,6 +230,17 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         frame["arm"] = label
         frames[label] = frame
         failures += premise_failures(label, frame)
+    # Every rung must run on the same pool: the #4201 haystack arm is a second
+    # grid, and a rung borrowed from the other one would pair against nothing.
+    pools = {
+        label: sorted({str(v) for v in f.get("prevalence_arm", pd.Series(dtype=str)).dropna().unique()})
+        for label, f in frames.items()
+    }
+    arms_seen = sorted({a for v in pools.values() for a in v})
+    if len(arms_seen) > 1:
+        failures.append(f"rungs ran on different pools: {pools}")
+    lines.append(f"Pool: `{arms_seen[0] if len(arms_seen) == 1 else arms_seen}` (prevalence arm).")
+    failures += baseline_mismatches(pd.read_csv(args.baseline), frames)
     lines.append("")
     if failures:
         lines += ["## Premise failures", "", *[f"- {f}" for f in failures], ""]
@@ -209,7 +248,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     # The grid: every cell any rung measured, plus every cell the baseline
     # anchors.  A cell missing from one rung is either starved there (filled)
-    # or lost there (dropped from that rung, and counted).
+    # or lost there (dropped from that rung, and counted).  Lost is a file that
+    # died mid-write *or* one that never landed: a task that timed out writes
+    # nothing, and filling its cell with text cost would pass it off as starved.
     seen = pd.concat([f[CELL] for f in frames.values()], ignore_index=True)
     grid = pd.concat([seen, baseline[CELL]], ignore_index=True).drop_duplicates().reset_index(drop=True)
     lines.append(f"Grid: {len(grid)} cells (union of every rung's cells and the baseline's).")
@@ -218,13 +259,18 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     mats: dict[str, pd.DataFrame] = {}
     ap_mats: dict[str, pd.DataFrame] = {}
     curve_rows = []
-    lines += ["| rung | cells | lost | filled-only | coverage@10 | coverage@50 |", "|---|---|---|---|---|---|"]
+    lines += [
+        "| rung | cells | lost | of which missing | filled-only | coverage@10 | coverage@50 |",
+        "|---|---|---|---|---|---|---|",
+    ]
     for order, label in enumerate(labels, start=1):
         if label not in frames:
             continue
         frame = frames[label]
-        lost = len(provs[label].get("unreadable") or []) + len(provs[label].get("zero_byte") or [])
         present = frame[CELL].drop_duplicates()
+        starved = len(provs[label].get("no_positive_found") or [])
+        missing = max(len(grid) - len(present) - starved, 0)
+        lost = len(provs[label].get("unreadable") or []) + len(provs[label].get("zero_byte") or []) + missing
         cells = grid if lost == 0 else present
         m, shown_mask = filled_matrix(frame, cells, text_cost, args.horizon)
         mats[label] = m
@@ -242,7 +288,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         curve_rows.append(s)
         filled_only = len(cells) - len(present) if lost == 0 else 0
         lines.append(
-            f"| {label} | {len(cells)} | {lost} | {filled_only} | {cov.get(10, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
+            f"| {label} | {len(cells)} | {lost} | {missing} | {filled_only} "
+            f"| {cov.get(10, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
         )
     lines.append("")
     curve = pd.concat(curve_rows, ignore_index=True)[

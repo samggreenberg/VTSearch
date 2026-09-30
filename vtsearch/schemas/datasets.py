@@ -710,7 +710,31 @@ class DetectMediaTypeResponseSchema(Schema):
 # ---------------------------------------------------------------------------
 
 
-class DashboardDiskUsageResponseSchema(Schema):
+class _DashboardHeadroomSchema(Schema):
+    """Whether a usage probe's free bytes are short, measured in datasets."""
+
+    dataset_bytes = fields.Integer(
+        required=True,
+        metadata={
+            "description": "Footprint of one dataset, the unit headroom is measured in: the largest "
+            "registered dataset's on-disk size (pkl plus sidecars), or a stand-in when none is registered."
+        },
+    )
+    dataset_bytes_source = fields.String(
+        required=True,
+        validate=validate.OneOf(["largest", "default"]),
+        metadata={"description": "``largest`` when measured from the registry, ``default`` for the stand-in."},
+    )
+    low = fields.Boolean(
+        required=True,
+        metadata={
+            "description": "True when ``free`` holds fewer than a few more datasets of ``dataset_bytes``; "
+            "the Dashboard shows the bar on its Default setting only then."
+        },
+    )
+
+
+class DashboardDiskUsageResponseSchema(_DashboardHeadroomSchema):
     """Response for ``GET /api/dashboard/disk-usage``."""
 
     total = fields.Integer(required=True)
@@ -719,7 +743,7 @@ class DashboardDiskUsageResponseSchema(Schema):
     path = fields.String(required=True)
 
 
-class DashboardRamUsageResponseSchema(Schema):
+class DashboardRamUsageResponseSchema(_DashboardHeadroomSchema):
     """Response for ``GET /api/dashboard/ram-usage``."""
 
     total = fields.Integer(required=True)
@@ -782,6 +806,16 @@ class DatasetLoadDemoRequestSchema(Schema):
     merge_near_duplicates = fields.String(
         load_default="false",
         metadata={"description": "When 'true', collapse near-duplicate media into dupe sets at ingest."},
+    )
+    autorun = fields.String(
+        load_default=None,
+        allow_none=True,
+        metadata={
+            "description": (
+                "'true' / 'false': whether to run the caller's AutoRun detectors on the dataset once it "
+                "is saved, remembered as their `autorun_on_import` setting. Omitted, that setting decides."
+            )
+        },
     )
 
 

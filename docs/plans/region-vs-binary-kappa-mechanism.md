@@ -177,7 +177,7 @@ bench checkpoints per configuration, so a rerun resumes.
   vary `m` while holding the dataset, embedder and votes fixed: re-pool an
   existing patch-embedder region environment at `m` ∈ {1, 4, 24} (top-1 vs
   top-k vs all regions — the harness already has `segment_topk_mean_pool` and
-  the `_repool_variants` machinery from #2781) and re-run the κ sweep on each.
+  the `repool_variants` machinery in `vtscore.eval.voting_iterations` from #2781) and re-run the κ sweep on each.
   A real-data κ\* that falls with `m` on the *same* images is the causal claim;
   #2864's cross-dataset comparison cannot make it. This is the expensive one
   (GPU prepare + a full cell array) and should wait on run 2.

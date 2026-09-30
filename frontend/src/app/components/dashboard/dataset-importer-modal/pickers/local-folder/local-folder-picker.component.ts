@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -60,6 +60,10 @@ export class LocalFolderPickerComponent {
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
 
+  /** This view's "Advanced" block. The Add Dataset modal reads it to render
+   *  the block's toggle in its footer row (#4305). */
+  readonly importAdvanced = viewChild(ImportAdvancedComponent);
+
   readonly importers = input<ImporterInfo[]>([]);
   readonly mediaTypes = input<MediaTypeInfo[]>([]);
   readonly guessedMediaType = input('');
@@ -69,6 +73,10 @@ export class LocalFolderPickerComponent {
   readonly buildProjectionChange = output<boolean>();
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
+  /** The Add Dataset dialog's "Run AutoRun" choice for this import, sent as
+   *  ``autorun``; ``null`` (the box is hidden) sends nothing, so the user's
+   *  remembered ``autorun_on_import`` setting decides server-side. */
+  readonly autorun = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
 
@@ -474,6 +482,8 @@ export class LocalFolderPickerComponent {
     }
     formData.append('build_projection', this.buildProjection() ? 'true' : 'false');
     formData.append('merge_near_duplicates', this.mergeNearDuplicates() ? 'true' : 'false');
+    const autorun = this.autorun();
+    if (autorun !== null) formData.append('autorun', autorun ? 'true' : 'false');
   }
 
   private offerSaveImportDefaults(): void {

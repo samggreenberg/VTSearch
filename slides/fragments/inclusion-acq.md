@@ -16,8 +16,9 @@
      threshold decides twice. Everything since has been the first job; this is
      the second. -->
 
-<!-- **a** — The fitted estimator, cutting at the reporting threshold.
-     **b** — Job one, drawn as a bracket over what comes back. -->
+<!-- **a** — The fitted estimator, cutting where the line sits — today, at
+     the foot of the floor's candidate. **b** — Job one, drawn as a bracket
+     over what comes back. -->
 
 <!-- **c** — The turn, and the mechanism is not what people guess. Autopilot's
      hard pick ranks the corpus descending, finds the first position at or below
@@ -27,9 +28,11 @@
      items either side of the cut. -->
 
 <!-- **d** — The change: a second cut from the same fit, four inclusion steps
-     *below* the reporting one. Say it slowly — a negative offset prices false
-     alarms higher, which raises the cut, which moves it up the ranking, which
-     returns more positives to vote on. -->
+     *below* the line's own. Nobody sets that inclusion any more, so it is read
+     off the line — the strictest step that reproduces the cut — and the
+     second cut is four down from wherever that lands. Say it slowly — a
+     negative offset prices false alarms higher, which raises the cut, which
+     moves it up the ranking, which returns more positives to vote on. -->
 
 <!-- **e** — And the loop closes: that vote goes back into the labelled set, the
      model retrains, and the threshold that chose the question is re-derived

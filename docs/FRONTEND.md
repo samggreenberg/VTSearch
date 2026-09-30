@@ -110,7 +110,8 @@ frontend/
 ├── docs-assets/            Symlink to docs/user/ — the in-app user guide is served from here
 ├── public/                 Favicons, logo (copied verbatim into the build output)
 ├── scripts/
-│   └── openapi-gen-cached.mjs   Hash-stamped wrapper around ng-openapi-gen
+│   ├── openapi-gen-cached.mjs   Hash-stamped wrapper around ng-openapi-gen
+│   └── build-stamp.mjs          Writes generated/build-stamp.ts (the bundle's version, §7)
 └── src/
     ├── main.ts, index.html, test-setup.ts
     ├── styles.scss         Global stylesheet entry; @use's the scss/ partials
@@ -123,10 +124,11 @@ frontend/
         ├── guards/         Route guards that resolve the URL pair into context (§6)
         ├── interceptors/   The four HTTP interceptors (§7)
         ├── directives/     Cross-cutting DOM behaviour (`no-focus-steal`, `panel-resize`)
-        ├── models/         Hand-written types the OpenAPI spec cannot describe (§7)
+        ├── models/         Hand-written types (§7): api.models.ts, projection.models.ts
         ├── utils/          Pure functions — no Angular DI, trivially unit-testable
         ├── testing/        Shared TestBed fragments and zoneless helpers (§10)
-        └── generated/      **gitignored**; regenerated from openapi.json on prebuild/pretest
+        └── generated/      **gitignored**; api-client/ (from openapi.json) and
+                            build-stamp.ts, both rewritten on prebuild/pretest
 ```
 
 Two rules keep this navigable:
@@ -189,14 +191,69 @@ re-sort prompt. Neither service is `providedIn: 'root'`: the requests in them
 are cancelled by the *component's* pair scope, which a singleton has no way to
 name — see the note on `SortStateService` in `PairScopeService`'s header.
 
+Two ordering rules keep what the view serves independent of which request
+answers first (#4318). Starting a sort ends whichever one is still in flight,
+so the ranking on screen is the answer to the sort asked for last. And on entry
+or after a pair switch the centre item is the view's own pick, made again
+against every ranking and Select mode that lands until the user clicks, votes
+or steps; from then on it is theirs, and no re-rank moves it. The backstop that
+ranks a pair nothing else ranked (`seedRankingIfUnranked`) follows the first
+rule: it reads the kind of the sort started last
+(`SortRunnerService.newestSortKind`), not `sortMode`, and gives way only to a
+learned one, so a text seed still in the air cannot hold it off (#4326).
+
 The three panels are shared with the Find view:
 
-- **Left** — media list (virtual scroller), sort bar, inclusion slider, stripe
+- **Left** — media list (virtual scroller), sort bar, Threshold, stripe
   overview, select mode, and the **Autopilot panel** that drives the automated
   vote → train → re-sort loop.
 - **Center** — the media viewer, one child per media type (image, text, video,
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
+
+**The Threshold** (`vt-precision-floor`, the precision floor, in the Manual
+tab and Find's top row) is the one knob on the detector's line. Two values
+back it, and they travel separately: `SortStateService.minPrecision` is the
+floor the radios show, seeded per pair by `PairScopeService.seedMinPrecision`; `floor` is the
+verdict on the line on screen, and only ever arrives *with* that line (a sort,
+a Find pass, or the floor POST's own response). Each view has one write path,
+both `switchMap`-ed and pair-scoped so a floor the user moved past can never
+land last. Find's (`minPrecisionRequests$`, debounced) installs the returned
+line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
+the learned sort, but only from the POST's response: the learned sort reads
+the floor server-side and caches by it, so a re-sort that beat the POST would
+come back at the old floor. When the floor keeps the same count of items
+before and after (an unchecked middle and right radio both keep the top 32),
+the line stays put and only its state is swapped: the count, not the state,
+decides where the line sits. The control is a False Positives - False
+Negatives spectrum with three radios under its thirds (`FLOOR_PRESETS` in
+`utils/line-floor.ts`, 0.1 / 0.5 / 0.9), and never shows a floor as a word or
+a number: each radio's tooltip says where it sits (#4298, #4317). The radios
+show the host's floor, never the click: a pick puts the DOM back on `value()`
+before emitting, so a pick the host drops (Find, mid-pass) leaves them where
+they were. A stored floor off the list is shown on the nearest radio and
+snapped to it through the control's own `valueChange`, once `busy` (the
+host's `sortBusy`) is false, because Find drops a floor change while a pass is
+running.
+
+**The spot check** (`vt-floor-check-modal`, #4273) measures that line, in
+Train only. The control's "Check N picks" emits `check`; the left panel
+forwards it as `floorCheck`, and the label view hosts the modal behind a
+`showFloorCheck` signal. Find sets the control's `offerCheck` false and hosts
+no modal: it tests the threshold Train set, and labelling more to set one is
+too late there (#4317).
+The modal owns the check's lifecycle against `/api/precision-check` and holds a
+round's votes locally until every pick has one, then sends the round whole. It
+takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
+routes ←/→ and ↓/↑ to its holder even with a modal open and sends nothing to
+`action$`, so the ranked list behind it never votes. Each round's `voted` event
+refreshes the piles; a finished check has moved the line server-side, so the
+view re-reads it with `GET /api/min-precision` and installs it over the
+ranking on screen through `SortRunnerService.refreshLine`. No re-sort follows: a retrain moves the list
+under the result, which is what reports it `stale`, and the owner's model is
+that *later* votes do that. The line draws the same in every state; the state
+and its likely range live in the floor control and on the Stats chart, and a
+stale range differs only in its tooltip.
 
 ### Find view (`components/find-view/`)
 
@@ -211,9 +268,10 @@ VTSBrowse: a UMAP projection rendered on a canvas as a hex-tile pyramid. This
 area is unusual and mostly self-contained — `browse-canvas` is the single
 largest component in the app because it owns the render loop. Its state is
 split across small services rather than living in the canvas:
-`BrowseViewportService` (visible region, shared with the minimap),
+`BrowseViewportService` (visible region, shared with the minimap) and
 `BrowseSelectionService` (selection at *item* granularity, so it stays coherent
-as bins split and merge across zoom levels), `TileCacheService`,
+as bins split and merge across zoom levels) — both provided on `browse-view`,
+not root — plus the root `TileCacheService`,
 `BrowsePrepService` (load + project before navigating), and
 `ProjectionApiService`.
 
@@ -279,6 +337,7 @@ The ones worth knowing before changing anything:
 | `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
+| `AutoRunService` | The end of a background AutoRun: opens the results of a run this tab started from a dataset's ⋯ **Run AutoRun**, toasts any other run of the user's (an import's) with a **View results** action, and holds the run the app-root AutoRun Results dialog shows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
 | `PairScopeService` | **Component-provided** (`find-view`, `label-view`): the active pair's lifetime, the `scoped()` teardown operator, and the pair-change reset in its one correct order |
 | `SortRunnerService` | **Component-provided** (`label-view`): runs the sorts — text, learned (with its job poll), detector, example — and advances the selection they end on. Lives beside the view rather than on the root-singleton `SortStateService` because every call in it is torn down by `pairScope.scoped()` |
@@ -354,7 +413,8 @@ this codebase, and it is silent.
   `MediaStateService`, several picker modals so far). `rxResource({ params,
   stream })` wraps the *existing* generated-client method, so the typed client
   and interceptor chain are untouched and the service's public surface becomes
-  `valueSignal()` / `isLoading()` / `error()`. Prefer it over raw
+  a value signal (e.g. `settingsSignal`, a `computed` over `resource.value()`)
+  plus `isLoading()` / `error()`. Prefer it over raw
   `httpResource`, which would bypass the generated client. The remaining
   conversion recipe and the list of still-open call sites live in
   [`docs/plans/httpresource-migration.md`](plans/httpresource-migration.md).
@@ -505,12 +565,16 @@ rebuilt automatically:
 
 ```
 prebuild / prebuild:prod / pretest / pretest:ci
-    → node scripts/openapi-gen-cached.mjs
+    → node scripts/openapi-gen-cached.mjs && node scripts/build-stamp.mjs
 ```
 
 The wrapper hashes the spec, the generator config, and the generator's own
 version, and skips regeneration when nothing moved (`--force`, or
 `npm run generate-api-client`, regenerates unconditionally).
+`build-stamp.mjs` writes the bundle's version into
+`generated/build-stamp.ts`; `BuildSkewService` compares it with
+`GET /api/version` at startup and raises a toast when a new server is serving
+a stale SPA (the mechanism is described under "Versioning" in `CLAUDE.md`).
 
 The snapshot itself is gated: `./run-tests.sh` re-dumps the spec from the
 running Flask app and **fails if `frontend/openapi.json` is stale**. When you
@@ -535,7 +599,10 @@ describe them:
 
 Adding a hand-written interface that duplicates a generated one is a
 regression: it can drift, and the compile-time guarantee is exactly what is
-lost.
+lost.  `models/projection.models.ts` is the standing exception to clean up: it
+hand-writes the Browse payloads (`ProjectionMeta`, `ProjectionBuildResponse`,
+`ProjectionLabelsResponse`, …) although the spec now carries schemas of the
+same names.
 
 ### The interceptor chain
 
@@ -703,7 +770,7 @@ without the stack one keypress closed them all and lost the outer form.
   including the canonical markup and the persistent-tab exception, is in
   [`CLAUDE.md`](../CLAUDE.md) under "Nested-modal back buttons".
 - **Plugin-field forms preview their template variables.** A modal that builds
-  a form from a plugin's `fields` (Export, Auto-Detect results) seeds each
+  a form from a plugin's `fields` (Export, AutoRun Results) seeds each
   value through `PluginTemplateVarsService`, which resolves the *declared*
   `template_vars` — `{detector_name}`, `{username}`, the date parts — so the
   user sees and can edit the value the server would substitute rather than a
@@ -746,12 +813,16 @@ bundle's *static* imports from `main.js` and fails if the package reappears.
 `components/icon/` maps names (and backend-supplied emoji) to sanitised inline
 SVG, cached per process. `components/context-menu/`, `drop-zone/`,
 `skeleton/`, `progress-bar/`, `job-progress/`, `clipboard-copy/` are the small
-shared widgets. `directives/no-focus-steal.directive.ts` stops toolbar buttons
+shared widgets. `pointer-arrow/` draws a measured "look here" arrow from one
+element to another (the Dashboard's first-run hints); drop it under any
+positioned container that encloses both ends. `directives/no-focus-steal.directive.ts` stops toolbar buttons
 next to the Browse canvas from swallowing keyboard focus on mousedown.
 
 Services are root-provided by default; provide one on a component only when
-per-instance state is the point (`LabelViewPanelStateService` is the current
-example).
+per-instance state or a component-bound lifetime is the point.  The complete
+list today: `LabelViewPanelStateService` and `SortRunnerService`
+(`label-view`), `PairScopeService` (`label-view`, `find-view`), and
+`BrowseViewportService` / `BrowseSelectionService` (`browse-view`).
 
 ---
 
@@ -773,9 +844,10 @@ classes, patterns, and copy style. The structural facts:
 - Themes (dark / light / high-viz / system) are token swaps driven by
   `ThemeService`; components should read tokens, not hardcode colors.
 
-If your change alters a GUI surface framed by a screenshot in the user docs,
-add the shot id to `docs/user/screenshots-reshoot-queue.md` — the wiring check
-in `./run-tests.sh` keeps that queue honest.
+If your change alters a GUI surface framed by a screenshot in the user docs
+or the slides, don't reshoot it: queue the shot in `docs/reshoot-queue/` and
+the release run re-renders it. The full rule is "Screenshot reshoots" in
+`CLAUDE.md`.
 
 ---
 

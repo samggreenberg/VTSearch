@@ -1,8 +1,11 @@
 # Extending VTSearch: Media System
 
-How to add new content types, embedders, clippers, converters, and media
-sources. Media plugins are auto-discovered via sentinel attributes on
-sub-packages of `vtscore/media/`.
+How to add new content types, embedders, clippers, cleaners, converters,
+and media sources. The first four are auto-discovered via sentinel
+attributes on sub-packages of `vtscore/media/`; converters and media
+sources are `PluginRegistry` families (flat modules under
+`vtscore/converters/` and `vtscore/datasets/sources/`, plus entry-point
+groups).
 
 **Related docs:** [EXTENDING.md](EXTENDING.md) (index, checklists, auth,
 dependencies) · [EXTENDING-plugins.md](EXTENDING-plugins.md) (importers,
@@ -39,18 +42,26 @@ module-level sentinel attributes:
 | `MEDIA_TYPE` | media-type package `__init__.py` | `MediaType`          | A single media type instance         |
 | `CLIPPERS`   | media-type package `__init__.py` | `list[MediaClipper]` | Clipper instances (may be empty)     |
 | `CLEANERS`   | media-type package `__init__.py` | `list[MediaCleaner]` | Cleanup-gate instances (may be empty) |
-| `EMBEDDER`   | an `embedder_<name>.py` file inside the media-type package | `MediaEmbedder` | One embedder per module              |
+| `EMBEDDER`   | an `embedder_<name>.py` module (or `embedder_<name>/` sub-package) inside the media-type package | `MediaEmbedder` | One embedder per module              |
 
 Embedders use **one module per embedder**: any `embedder_<name>.py` file
-inside a media-type package is auto-loaded and its module-level `EMBEDDER`
-sentinel is registered. Symlinked directories **and** symlinked embedder
-files are both supported, so a custom embedder can live outside the
-VTSearch tree and be wired in by symlinking a single file into the
-appropriate media-type package. No edits to any `__init__.py` are required.
+(or `embedder_<name>/__init__.py` sub-package) inside a media-type package
+is auto-loaded and its module-level `EMBEDDER` sentinel is registered.
+Names starting with `_` are skipped, which is how shared helpers such as
+`_dinov3_shared.py` stay out of the scan. Symlinked directories **and**
+symlinked embedder files are both supported, so a custom embedder can live
+outside the VTSearch tree and be wired in by symlinking a single file into
+the appropriate media-type package. No edits to any `__init__.py` are
+required.
 
-Third-party or project-specific types can still be registered manually
-via `register()`, `register_embedder()`, `register_clipper()`, and
-`register_cleaner()`.
+These four families have **no `importlib.metadata` entry-point group**
+(unlike the `PluginRegistry` families in
+[EXTENDING-plugins.md](EXTENDING-plugins.md#pluginregistry-auto-discovery)).
+Out of the tree, either symlink into `vtscore/media/` as above or call
+`register()`, `register_embedder()`, `register_clipper()`, and
+`register_cleaner()` (all in `vtscore.media`) from code that runs before
+the app needs the plugin. Converters and media sources, documented at the
+end of this file, *are* `PluginRegistry` families with entry-point groups.
 
 ---
 
@@ -71,7 +82,7 @@ app-tier wiring.
 
 ```
 vtscore/media/<your_type>/
-├── __init__.py       # Must expose MEDIA_TYPE and CLIPPERS sentinels
+├── __init__.py       # Must expose MEDIA_TYPE; CLIPPERS / CLEANERS lists are optional
 ├── media_type.py     # Your MediaType subclass (required)
 └── embedder_<name>.py  # Optional; one file per embedder, each exposing EMBEDDER
 ```
@@ -132,11 +143,13 @@ class CodeMediaType(MediaType):
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
         """Return media-specific fields to merge into the media dict.
 
-        The base media dict already contains: id, type, file_size, md5,
-        embedding, filename, category.  You MUST include a "duration" key
-        (use 0 for non-temporal media).
+        The base media dict already contains: id, media_type, file_size,
+        md5, filename, category.  You MUST include a "duration" key
+        (use 0 for non-temporal media).  When media_bytes is given, use
+        it instead of re-reading the file.
         """
-        content = file_path.read_text(errors="replace")
+        raw = media_bytes if media_bytes is not None else file_path.read_bytes()
+        content = raw.decode("utf-8", errors="replace")
         return {
             "media_string": content,
             "duration": 0,
@@ -243,6 +256,7 @@ changes to `vtscore/media/__init__.py` are needed.
 | `display_metadata(media)`     | `(dict) -> dict[str, Any]`         | Metadata for the labeling UI       |
 | `image_response(media)`       | `(dict) -> MediaResponse \| None`  | A *paintable image* for the media (waveform, frame, first page, crop) for every surface that shows a picture rather than plays the media. Defaults to `None` — "this type has no visual form" |
 | `ensure_thumbnail_bytes(media)` | `(dict) -> bytes \| None`        | Generate + memoise `media["thumbnail_bytes"]` from the media's *resolvable* bytes, for media that had no file at ingest. Defaults to a plain read of what's cached (no generation) |
+| `load_thin_media_data(file_path)` | `(Path) -> dict`               | Display fields for a thin (reference) load. Default calls `load_media_data` and strips the payload keys; override only if that read is expensive |
 | `load_models()`               | `() -> None`                       | Load inline embedding models (legacy) |
 | `embed_text(text)`            | `(str) -> Optional[np.ndarray]`    | Inline text embedding (legacy)     |
 | `load_demo_source(...)`       | See docstring                      | Download and embed a demo dataset  |
@@ -325,7 +339,7 @@ app-tier wiring.
 
 ```
 vtscore/media/<type>/
-└── embedder_<name>.py    # One file per embedder, each exposing EMBEDDER
+└── embedder_<name>.py    # One file (or embedder_<name>/ package) per embedder, each exposing EMBEDDER
 ```
 
 Every embedder lives in its own `embedder_<name>.py` file. Exactly one
@@ -413,6 +427,16 @@ class CodeBertEmbedder(MediaEmbedder):
         """
         return True
 
+    # --- Descriptor metadata (optional, but declare them) ---
+
+    @property
+    def model_id(self) -> str:
+        return "microsoft/codebert-base"
+
+    @property
+    def embedding_dim(self) -> int:
+        return 768
+
     # --- Model lifecycle (required abstract method) ---
 
     def _load_models_impl(self) -> None:
@@ -420,7 +444,8 @@ class CodeBertEmbedder(MediaEmbedder):
 
         Override ``_load_models_impl`` (not ``load_models``).
         The public ``load_models()`` wrapper handles locking and
-        ImportError wrapping automatically.
+        ImportError wrapping, and returns early once ``self._model`` is
+        set, so keep the loaded model on that attribute.
         """
         if self._model is not None:
             return
@@ -441,7 +466,8 @@ class CodeBertEmbedder(MediaEmbedder):
 
         Override ``_embed_media_impl`` (not ``embed_media``).  The public
         ``embed_media()`` wrapper acquires a global lock so that only one
-        forward pass runs at a time.
+        forward pass runs at a time, and L2-normalises the result — do not
+        normalise here.
 
         Returns None if embedding fails.  The vector dimensionality must
         be consistent and must match embed_text().
@@ -449,10 +475,18 @@ class CodeBertEmbedder(MediaEmbedder):
         if self._model is None:
             self.load_models()
         try:
-            text = Path(media["media_path"]).read_text(errors="replace")[:8000]
-            return self._model.encode(text, normalize_embeddings=True)
+            text = self._media_text(media)[:8000]
+            return self._model.encode(text)
         except Exception:
             return None
+
+    @staticmethod
+    def _media_text(media: dict) -> str:
+        # Preloaded media carry media_string; thin (reference) loads carry
+        # only media_path.
+        if media.get("media_string") is not None:
+            return media["media_string"]
+        return Path(media["media_path"]).read_text(errors="replace")
 
     # --- Optional: text embedding ---
     # Override `_embed_text_impl` (the subclass hook), NOT `embed_text`.
@@ -472,10 +506,15 @@ class CodeBertEmbedder(MediaEmbedder):
         if self._model is None:
             self.load_models()
         try:
-            return self._model.encode(text, normalize_embeddings=True)
+            return self._model.encode(text)
         except Exception:
             return None
 ```
+
+An embedder with no text tower omits `_embed_text_impl` **and** overrides
+`supports_text` to return `False` (see [capability
+flags](#embedder-capability-flags)); the default `True` would advertise
+text search it cannot serve.
 
 ### Decoding audio: use `decode_audio`, never `librosa.load`
 
@@ -602,6 +641,12 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Property               | Returns     | Description                                |
 |------------------------|-------------|--------------------------------------------|
+| `is_default`           | `bool`      | `True` on exactly one embedder per media type. Default `False` |
+| `display_name`         | `str`       | Friendly picker label. Default: `name` |
+| `model_id`             | `str \| None` | The downloadable checkpoint (HF repo id or weights URL); surfaced in portable-detector bundles. Default `None` |
+| `embedding_dim`        | `int \| None` | Output width, declared without loading weights. Pre-computed vectors an importer tags with this embedder are width-checked against it, and the generated docs tables read it. Built-ins all declare one. Default `None` |
+| `eval_only`            | `bool`      | `True` hides the embedder from every app picker and listing while keeping it resolvable by name (research arms). Default `False` |
+| `embed_batch_size`     | `int`       | Items per forward pass. Default reads `VTSEARCH_EMBED_BATCH_SIZE`; override for tight VRAM budgets |
 | `description_wrappers` | `list[str]` | Templates with `{text}` for enriched embedding (e.g. `["the sound of {text}"]`). Default `[]` — see below |
 
 Whether a prompt ensemble helps is a property of the **embedder**, not of the
@@ -623,27 +668,10 @@ evidence.
 
 ### Built-in embedders
 
-| Embedder | Name | Media Type | Model | Dimensions |
-|----------|------|------------|-------|------------|
-| `AudioClapEmbedder` | `clap` | `audio` | LAION CLAP (laion/clap-htsat-unfused) | 512 |
-| `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
-| `AudioClapGeneralEmbedder` | `clap_general` | `audio` | CLAP General 2024 (laion/larger_clap_general) | 512 |
-| `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` | ParaSpeechCLAP speech-style (WavLM-Large + Granite, ajd12342/paraspeechclap-combined) | 768 |
-| `AudioBEATsEmbedder` | `beats` | `audio` | BEATs iter3+ AS2M self-supervised encoder (lpepino/beats_ckpts), audio-only | 768 |
-| `AudioASTEmbedder` | `ast` | `audio` | AST audio spectrogram (MIT/ast-finetuned-audioset-10-10-0.4593), audio-only | 768 |
-| `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` | Whisper-base encoder (openai/whisper-base), audio-only | 512 |
-| `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
-| `ImageSiglip2Embedder` | `siglip2` | `image` | SigLIP 2 (google/siglip2-base-patch16-224) | 768 |
-| `ImageSiglip2LEmbedder` | `siglip2_l` | `image` | SigLIP2-L (google/siglip2-so400m-patch14-384) | 1152 |
-| `ImageClipEmbedder` | `clip` | `image` | CLIP (openai/clip-vit-base-patch32) | 512 |
-| `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base), ungated | 768 |
-| `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m), HF-gated | 768 |
-| `ImageEupeSingleEmbedder` / `ImageEupePatchEmbedder` | `eupe_single` / `eupe_patch` | `image` | EUPE ViT-B/16 (facebookresearch/EUPE), FAIR Noncommercial Research Licence | 768 |
-| `ImageSiftVladEmbedder` | `sift_vlad` | `image` | SIFT/VLAD instance matching (classical, no text encoder) | 8192 (64 × 128) |
-| `FaceEmbedder` | `face` | `face` | FaceNet identity (InceptionResnetV1, face crops, no text encoder) | 512 |
-| `TextE5Embedder` | `e5` | `text` | E5-base-v2 (intfloat/e5-base-v2) | 768 |
-| `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
-| `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
+The file inventory above is the class-to-module map. Each built-in's
+checkpoint (`model_id`), output width (`embedding_dim`), and text support
+are in the generated roster in [ML.md § Embedding
+Models](ML.md#embedding-models).
 
 The image embedders come in **single/patch pairs**: `_single` slugs expose only the CLS-pooled vector (same shape and cost as SigLIP); `_patch` slugs additionally populate `media["patch_grid"]` (raw `H × W × D` fp16) so the region-similarity, region-aware detector scoring, and region-voting code paths can opt in. Both variants of a backbone share weights via an underscore-prefixed `_<backbone>_shared.py` module that the auto-discovery scan skips.
 
@@ -712,7 +740,8 @@ class and the user re-parameterises it through `with_params()`.
 
 ### What to implement
 
-Subclass `MediaClipper` from `vtscore.media.base`.
+Subclass `MediaClipper` from `vtscore.media.clipper` (also re-exported
+from `vtscore.media`).
 
 ```python
 # vtscore/media/audio/clipper.py  (or a new file)
@@ -726,6 +755,17 @@ class SoundOverlapClipper(MediaClipper):
 
     def __init__(self, duration: float) -> None:
         self._duration = duration
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        """User-configurable settings, rendered in the clipper chooser."""
+        return [{"key": "duration", "label": "Segment length (s)", "type": "number",
+                 "default": self._duration, "min": 0.5, "step": 0.5,
+                 "description": "Length of each tile; tiles overlap by half."}]
+
+    def with_params(self, params: dict[str, Any]) -> "SoundOverlapClipper":
+        """Return a NEW clipper; the registered instance is shared."""
+        return SoundOverlapClipper(float(params.get("duration", self._duration)))
 
     @property
     def name(self) -> str:
@@ -1169,17 +1209,17 @@ CONVERTER = Audio2TextMediaConverter()
 
 The `PluginRegistry` auto-discovers `.py` files in `vtscore/converters/`
 that expose a `CONVERTER` attribute. No manual registration in
-`__init__.py` is needed.
+`__init__.py` is needed. An out-of-tree package registers the same object
+through the `vtscore.converters` entry-point group:
 
-<!--
-   Old explicit registration (no longer needed):
-   ```python
-   __all__ = [
-       # ... existing entries ...
-       "Audio2TextMediaConverter",
-   ]
-   ```
--->
+```toml
+[project.entry-points."vtscore.converters"]
+text2audio = "my_pkg.tts:CONVERTER"   # a pair no built-in covers
+```
+
+A converter's `name` is always `"{source_type}2{target_type}"`, so a
+third-party converter for a pair that already ships in-tree is skipped (the
+built-in wins).
 
 ### MediaConverter abstract interface reference
 
@@ -1239,17 +1279,35 @@ fresh instance. Callers should call `cleanup()` when done.
 vtscore/datasets/sources/<your_source>.py     # Source factory + SOURCE instance (required)
 ```
 
-Media sources are **flat `.py` modules**, not sub-packages — the discovery scan
-(`discover_modules=True` in `vtscore/datasets/sources/__init__.py`) walks module
-files and picks up their `SOURCE` sentinel. A source built inside a subdirectory
-`__init__.py` is never seen. Every built-in source (`local_folder.py`,
-`http_archive.py`, `server_files.py`, …) follows this shape.
+Every built-in source (`local_folder.py`, `http_archive.py`,
+`server_files.py`, …) is a **flat `.py` module**; the registry
+(`discover_modules=True` in `vtscore/datasets/sources/__init__.py`) scans
+module files as well as sub-packages for the `SOURCE` sentinel, so follow
+the flat shape for consistency. An out-of-tree package registers its
+factory through the `vtscore.media_sources` entry-point group instead:
+
+```toml
+[project.entry-points."vtscore.media_sources"]
+s3 = "my_pkg.s3_source:SOURCE"
+```
 
 ### What to implement
 
 Unlike other plugin families, media sources use a **factory pattern**.
-The `SOURCE` sentinel is a factory object with a `create_from_origin()`
-method that returns a `MediaSource` instance.
+The `SOURCE` sentinel is a plain factory object (not a `PluginBase`) with a
+`name` and a `create_from_origin()` method that returns a `MediaSource`
+instance, or `None` when the origin lacks what it needs.
+
+**The factory's `name` is a lookup key, not a label:** it must equal the
+`origin["importer"]` value of the media it can re-fetch. That is usually
+the name of the dataset or datasource importer that stamped the origin —
+`local_folder.py`'s factory is named `server_folder` for exactly that
+reason. There is no form, no `fields`, and no UI; at runtime a source is
+reached only through `get_source_for_origin()`. The example below pairs
+with the S3 importer in [EXTENDING-plugins.md § Adding a Data
+Importer](EXTENDING-plugins.md#adding-a-data-importer), whose default
+`build_origin()` records `{"importer": "s3", "params": {"bucket": …,
+"prefix": …}}`.
 
 All fetch and resolve methods return `FetchedItem` instead of a bare
 `Path | None`. `FetchedItem` carries the local path alongside optional

@@ -69,14 +69,6 @@ folds.
 
 ## Relation to other plans
 
-- [`threshold-stability-experiment.md`](threshold-stability-experiment.md)
-  owns rank-transfer as an S3 *diagnostic* on the `evaluation-framework`
-  harness. The two measurements are complementary: that one measures temporal
-  stability on the realistic loop, this one measured deep-regime accuracy on
-  paired within-step variants.
-- [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md)'s cold-start
-  item ("interpolating against the population score distribution") is the
-  ≤20-vote special case of the same idea, now subsumed by the shipped fusion.
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
   is orthogonal: it filters *which labels* enter calibration; this plan changed
   *what the labels are fused with*. Both can ship.

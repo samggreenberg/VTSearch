@@ -32,7 +32,7 @@ end-to-end example per family.
 
 - [Architecture in one paragraph](#architecture-in-one-paragraph)
 - [`PluginField`](#pluginfield)
-  - [Field-value normalization (`vtscore.plugins.normalize`)](#field-value-normalization)
+- [Field-value normalization](#field-value-normalization)
 - [`PluginBase`](#pluginbase)
 - [`PluginRegistry`](#pluginregistry)
 - [`make_plugin_registry()` factory](#make_plugin_registry-factory)
@@ -40,7 +40,6 @@ end-to-end example per family.
 - [Entry-point integration](#entry-point-integration)
 - [Inventory (`vtscore.plugins.inventory`)](#inventory)
 - [Schema helpers (`vtscore.plugins.schema`)](#schema-helpers)
-- [Field-value normalisation](#field-value-normalisation)
 - [File uploads](#file-uploads)
 - [End-to-end: writing a third-party plugin](#end-to-end-writing-a-third-party-plugin)
 
@@ -48,10 +47,12 @@ end-to-end example per family.
 
 ## Architecture in one paragraph
 
-Every plugin family - dataset importers, results exporters, label
-importers, labelset sources, media sources, media converters,
-processor importers, settings importers/exporters/sources - is one
-`PluginRegistry` instance over a Python package. The registry scans the
+Every sentinel-discovered plugin family - dataset importers, datasource
+importers, seed importers, results exporters, label importers, labelset
+sources, media sources, media converters (and, app-side, settings
+importers/exporters/sources) - is one `PluginRegistry` instance over a
+Python package. (Media types, embedders, clippers and cleaners use the
+separate registry in [`vtscore.media`](media.md#registry-api).) The registry scans the
 package directory at construction time (eager, by default), imports
 each sub-package or flat module, and registers any module-level
 sentinel attribute (`IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`, …) as a
@@ -106,16 +107,16 @@ Defined as `Literal[...]` in `vtscore/plugins/__init__.py`:
 
 | Value | Frontend widget | Notes |
 |-------|-----------------|-------|
-| `"file"` | OS file picker | Value arrives as a `werkzeug.datastructures.FileStorage` on the web path; skipped by `vtscore.plugins.schema` and populated from `request.files` |
+| `"file"` | OS file picker | Value arrives as an [`UploadedFile`](#file-uploads); skipped by `vtscore.plugins.schema` and by normalization |
 | `"folder"` | Path text input / OS folder picker | Plain string |
 | `"url"` | Text input pre-validated as URL | Plain string |
 | `"text"` | Generic single-line input | Plain string |
 | `"password"` | Masked text input | Plain string |
 | `"email"` | Email input | Plain string; loosely validated |
-| `"number"` | Numeric input with min/max/step | Coerced to `int` or `float` by `is_integer_number()` (`vtscore/plugins/__init__.py`) |
+| `"number"` | Numeric input with min/max/step | `int` or `float` per `PluginField.is_integer_number()` |
 | `"select"` | Dropdown | `options` must be populated, or `dynamic_options=True` |
-| `"server_path"` | Server filesystem path picker | Confined to the user's data dir by `vtscore.security.confine_server_filepath` in the normalization pass, which writes the approved path back |
-| `"checkbox"` | Boolean tickbox | `default` is `"true"` / `"false"`; values arrive coerced via `bool(str(v).lower() == "true")` |
+| `"server_path"` | Server filesystem path picker | Confined by `vtscore.security.path_validation.confine_server_filepath` in the normalization pass, which writes the approved path back (so is `"folder"`) |
+| `"checkbox"` | Boolean tickbox | `default` is `"true"` / `"false"`; coerce with `vtscore.plugins.parse_checkbox(value)` |
 
 ### Number-field type inference
 
@@ -135,15 +136,8 @@ declares (the default raises `NotImplementedError`, naming the field).
 List dependencies in `depends_on=[...]` so the frontend re-fetches
 whenever any depended-on field changes.
 
-Every family that renders a field form serves the options over a route
-of the same shape, so the hook works the same wherever the plugin lives:
-dataset importers (`POST /api/dataset/import/<name>/options`), label
-importers (`POST /api/label-importers/field-options/<name>`), datasource
-importers (`POST /api/datasource-import/<name>/options`), seed importers
-(`POST /api/seed-import/<name>/options`), and results exporters
-(`POST /api/exporters/field-options/<name>`).
-
-A dynamic select's declared `options` are only a seed for the first
+Each option is a plain string or a `(value, label)` tuple (`FieldOption`).
+Delegate to `super()` for keys you don't handle. A dynamic select's declared `options` are only a seed for the first
 render, so the CLI does *not* pin the generated flag's `choices` to them
 and the request schema does not validate against them - the value a
 plugin resolves at runtime is by definition not in the declared list.
@@ -153,70 +147,72 @@ listing endpoint; the keys mirror the dataclass attributes 1-to-1 (with
 the exception of `include_in_origin` and `origin_serializer`, which are
 server-side only).
 
-### Field-value normalization
+## Field-value normalization
 
-`vtscore/plugins/normalize.py` holds the framework's
-`normalize_field_values(plugin, field_values)` pass. It mutates
-*field_values* in place, returns it, and is idempotent. For each
-declared field of a text-like type (`text`, `url`, `email`, `password`,
-`folder`, `server_path`, `select`) it:
+`vtscore/plugins/normalize.py::normalize_field_values(plugin, field_values)`
+applies, after the *shape* check (marshmallow / argparse), the behaviours
+that used to be every plugin author's job. It mutates *field_values* in
+place, returns it, skips `"file"` fields and non-string values, and is
+idempotent. Per declared field:
 
-1. Strips whitespace, and raises `ValueError("<Label> is required.")`
-   for a `required` field that is then empty (or was absent).
-2. Substitutes each `{name}` listed in the field's `template_vars`,
-   running every resolved value through
-   `vtscore.security.path_validation.sanitize_template_value`. An
-   undeclared or unknown name raises `ValueError`. Supported names:
-   `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`, `MM`, `DD`, `detector_name`,
-   `detector_id`, `username`.
-3. Runs the field-type validator: `url` → `validate_url` (or
-   `validate_browser_url` when the field sets `opened_in_browser`);
-   `server_path` / `folder` → `confine_server_filepath` anchored at
-   `get_file_access_base_dir()`, whose **approved path is written back**
-   into `field_values` so the plugin body consumes exactly what was
-   validated.
+1. **Default fallback.** A blank (missing / empty / whitespace) value of
+   any non-file type is filled from `default`, so a declared default
+   satisfies `required`.
+2. **Whitespace strip** on text-like types (`text`, `url`, `email`,
+   `password`, `folder`, `server_path`, `select`); a `required` field that
+   is then empty raises `ValueError("<Label> is required.")`.
+3. **Template substitution** of each `{name}` listed in the field's
+   `template_vars`. Known names: `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`,
+   `MM`, `DD`, `detector_name`, `detector_id`, `username`; each resolved
+   value runs through
+   `vtscore.security.path_validation.sanitize_template_value`. An unknown
+   name raises `ValueError`.
+4. **Field-type security validation.** `url` → `validate_url` (or
+   `validate_browser_url` when `opened_in_browser=True`); `server_path` /
+   `folder` → `confine_server_filepath` anchored at
+   `get_file_access_base_dir()`, whose **approved path is written back**.
+   The write-back is a security property: under multi-user confinement a
+   relative path is resolved against the user's data dir, and consuming
+   the raw string could read another user's directory.
 
-File fields and non-string values are skipped.
-
-Step 3's write-back is a security property, not a convenience: under
-multi-user confinement the validator resolves a relative path against
-the user's data dir while a plugin body would resolve it against the
-process CWD, so consuming the raw string can read another user's
-directory even though the check passed.
-
-Both ingress points run the pass, so HTTP and CLI behave identically:
-`vtsearch/routes/_plugins.py`'s `validate_plugin_args()` and
-`validate_exporter_field_values()` on the web path,
-`PluginBase.validate_cli_field_values()` on the CLI path, and
+The pass runs at every ingress: the host's HTTP handler (after schema
+load), `PluginBase.validate_cli_field_values()` on the CLI path, and
 `SyncSource.load()` / `save()` / `peek_version()` for sync sources (see
-[`sync.md`](sync.md)). Plugin bodies are expected to trust the result:
-no `.strip()`, no `if not foo: raise`, no manual `validate_url` /
-`validate_server_filepath` chains.
+[sync.md](sync.md)). Plugin bodies should trust the result: no `.strip()`,
+no `if not foo: raise`, no manual validator chains. Calling the validators
+again by hand is harmless (they are idempotent).
 
-**Not covered:** `MediaConverter.params` and `MediaClipper.parameters`
-arrive as pass-through payloads rather than plugin form bodies.
-Converter params are shape-validated against the `fields` schema by
-`MediaConverter.convert_normalized()` — ranges and `select` whitelists,
-but no URL or path guard.
+**Not covered:** `MediaConverter.params` and `MediaClipper.parameters` are
+pass-through payloads, not plugin form bodies. Converter params are
+shape-validated against `fields` by `MediaConverter.convert_normalized()`
+(ranges and `select` whitelists, no URL or path guard).
 
 ## `PluginBase`
 
 `vtscore/plugins/__init__.py` - the mixin every plugin class
 inherits from (directly or via a family-specific ABC like
-`LabelsetExporter`). It supplies the CLI-flag, JSON-serialisation, and
+`ResultsExporter`). It supplies the CLI-flag, JSON-serialisation, and
 field-validation glue that's identical across families.
 
 ### Class attributes the subclass sets
 
 | Attribute | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `name` | `str` | Yes | Snake-case identifier; the registry key and the URL path segment |
-| `display_name` | `str` | Yes | Human-readable label |
-| `description` | `str` | Yes | One-sentence subtitle |
-| `icon` | `str` | No | Emoji / icon glyph; each family ships a sensible default |
+| `name` | `str` | No* | Snake-case identifier; the registry key |
+| `display_name` | `str` | No* | Human-readable label |
+| `description` | `str` | No* | One-sentence subtitle |
+| `icon` | `str` | No* | Emoji / icon glyph |
 | `fields` | `list[PluginField]` | Yes | Ordered list of user-facing inputs (may be empty) |
 | `ui_mode` | `str` | No | `"form"` (default), `"file_upload"`, `"custom"`, or `"none"` |
 | `hidden_from_picker` | `bool` | No | When `True`, omitted from generic family pickers; useful for scaffolds and special-cased plugins |
+
+\* Auto-derived when not declared anywhere in the MRO: `name` is the class
+name with the family-base suffix (e.g. `ResultsExporter`,
+`DatasetImporter`) stripped and snake-cased (`MyShinyExporter` →
+`"my_shiny"`); `display_name` is the title-cased `name`; `description` is
+the first docstring line; `icon` is the first letter of `display_name`
+(rendered as a boxed letter). Explicit declarations always win. A family
+base opts out of derivation with `_is_plugin_family_base = True`.
 
 `ui_mode="form"` tells the frontend to render the generic form built
 from `fields`. `"file_upload"` skips the form and uses the native file
@@ -229,11 +225,12 @@ frontend handles its result-display directly.
 
 | Method | Description |
 |--------|-------------|
-| `resolve_display_name(field_values) -> str` | Returns the label for the thing these `field_values` describe: the user-typed `dataset_name` when non-empty, else `default_display_name(field_values)`. Importers override `default_display_name`, not this. Default returns `display_name`. |
-| `add_cli_arguments(parser)` | Walks `fields` and adds an `argparse` argument per field. `"checkbox"` fields use `BooleanOptionalAction` (`--<key>` / `--no-<key>`). `"select"` fields get a `choices` constraint. `"number"` fields get `type=int` or `type=float` per `is_integer_number()`. |
-| `validate_cli_field_values(field_values)` | Raises `ValueError("Missing required argument: --<flag>")` if any non-checkbox required field is empty. Checkboxes are skipped because argparse always populates them. |
+| `resolve_display_name(field_values) -> str` | Returns `display_name`. Dataset importers override it (user-typed `dataset_name`, else `default_display_name(field_values)`); see `vtscore/datasets/importers/base/core.py::ImporterBase`. |
+| `get_field_options(field_key, current_values)` | Options for a `dynamic_options` field; default raises `NotImplementedError`. |
+| `add_cli_arguments(parser)` | Adds one `argparse` flag per field (`key` with `_` → `-`). `"checkbox"` → `BooleanOptionalAction` (`--<key>` / `--no-<key>`); static `"select"` (not `allow_free_text` / `dynamic_options`) → `choices`; `"number"` → `type=int` or `float` per `is_integer_number()`. |
+| `validate_cli_field_values(field_values)` | Raises `ValueError("Missing required argument: --<flag>")` for a required, default-less, non-checkbox field that is empty, then runs [`normalize_field_values`](#field-value-normalization). |
 | `to_dict()` | Returns the JSON-serialisable plugin metadata used by listing endpoints: `{name, display_name, description, icon, fields, ui_mode, hidden_from_picker}`. |
-| `notify(message, *, level="info", detail=None)` | Shows the user a one-off message (a toast in the app, a printed line under the CLI) with `display_name` as the source, and keeps going. For the recoverable problem that shouldn't fail the run - see [`concurrency.md`](concurrency.md#user-notifications). Never raises. |
+| `notify(message, *, level="info", detail=None, items=None) -> Notification` | Shows the user a one-off message (a toast in the app, a printed line under the CLI) with `display_name` as the source, and keeps going. For the recoverable problem that shouldn't fail the run - see [`concurrency.md`](concurrency.md#user-notifications). Never raises. |
 
 Subclasses normally only override `to_dict()` if they need to attach
 family-specific metadata (e.g. converters expose `source_type` /
@@ -270,8 +267,8 @@ PluginRegistry(
 ### Public API
 
 ```python
-registry.get(name: str) -> T | None     # returns None if not found
-registry.list() -> list[T]              # discovery order; alphabetical for built-ins
+registry.get(name: str) -> T | None     # None if not found; may return an EntryPointTombstone
+registry.list() -> list[T]              # discovery order (alphabetical built-ins, then entry points); no tombstones
 ```
 
 Both methods trigger lazy discovery on first call if `eager=False`. A
@@ -317,8 +314,7 @@ get_exporter, list_exporters = make_plugin_registry(
 
 The factory keeps the `PluginRegistry` instance alive as a closure;
 external code only ever sees the two accessors. If you need the
-registry object itself (e.g. to call `_discover()` manually in tests),
-instantiate `PluginRegistry` directly.
+registry object itself, instantiate `PluginRegistry` directly.
 
 ## Sentinel auto-discovery
 
@@ -328,14 +324,14 @@ with:
 
 ```python
 # vtscore/exporters/sftp/__init__.py
-class SftpExporter(LabelsetExporter):
+class SftpResultsExporter(ResultsExporter):
     name = "sftp"
     display_name = "SFTP Upload"
-    description = "POST results to an SFTP server."
+    description = "Upload results to an SFTP server."
     fields = [...]
-    def export(self, results, field_values): ...
+    def export_find_results(self, results, field_values): ...
 
-EXPORTER = SftpExporter()
+EXPORTER = SftpResultsExporter()
 ```
 
 The convention is one plugin per module. The sentinel attribute is the
@@ -352,14 +348,14 @@ path.
 | Family | Library package | Sentinel | Base class | Entry-point group |
 |--------|-----------------|----------|------------|-------------------|
 | Dataset importers | `vtscore.datasets.importers` | `IMPORTER` | `DatasetImporter` | `vtscore.importers` |
-| Results exporters | `vtscore.exporters` | `EXPORTER` | `LabelsetExporter` | `vtscore.exporters` |
+| Datasource importers | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | `vtscore.datasource_importers` |
+| Seed importers | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | `vtscore.seed_importers` |
+| Results exporters | `vtscore.exporters` | `EXPORTER` | `ResultsExporter` (alias `LabelsetExporter`) | `vtscore.exporters` |
 | Label importers | `vtscore.labels.importers` | `LABEL_IMPORTER` | `LabelImporter` | `vtscore.label_importers` |
 | Labelset sources | `vtscore.labels.sources` | `LABELSET_SOURCE` | `LabelsetSource` | `vtscore.labelset_sources` |
 | Media sources | `vtscore.datasets.sources` | `SOURCE` | `MediaSource` | `vtscore.media_sources` |
-| Media types | `vtscore.media` | - (registered via `register_media_type`) | `MediaType` | `vtscore.media_types` |
-| Media embedders | `vtscore.media` | - (registered via `register_embedder`) | `MediaEmbedder` | `vtscore.embedders` |
-| Media clippers | `vtscore.media` | - (registered via `register_clipper`) | `MediaClipper` | `vtscore.clippers` |
 | Media converters | `vtscore.converters` | `CONVERTER` | `MediaConverter` | `vtscore.converters` |
+| Media types / embedders / clippers / cleaners | `vtscore.media` | `MEDIA_TYPE` / `EMBEDDER` / `CLIPPERS` / `CLEANERS` (own scanner, not `PluginRegistry`) | `MediaType` / `MediaEmbedder` / `MediaClipper` / `MediaCleaner` | none - call `vtscore.media.register*` directly; see [media.md](media.md#registry-api) |
 
 App-tier families keep their own entry-point group prefix, e.g.
 `vtsearch.settings_importers`, `vtsearch.settings_exporters`,
@@ -385,8 +381,8 @@ my_exporter = "my_pkg.exporter:EXPORTER"
 
 After `pip install` of your package, the plugin appears in
 `list_importers()` / `list_exporters()` / etc. without any code change
-to `vtscore`. The discovery routine is `_discover_entry_points()` at
-`vtscore/plugins/__init__.py`.
+to `vtscore`. The discovery routine is
+`vtscore/plugins/__init__.py::PluginRegistry._discover_entry_points`.
 
 ### Invariants
 
@@ -448,31 +444,30 @@ register_plugin_family(FamilyProvider(
 
 Library-tier families self-register at module import (see
 `_LIBRARY_FAMILIES` in `vtscore/plugins/inventory.py`). App-tier
-families (settings importers/exporters/sources) are registered by
-`vtsearch/shim/register_app_plugin_families()` at app startup so
-`vtscore` stays free of cross-boundary imports.
+families are registered by the host application at startup, so
+`vtscore` stays free of app imports.
 
 ### `FAMILIES`, `gather_plugins()`, formatters
 
-`FAMILIES` is exposed via a module-level `__getattr__` so importers
-see a live tuple snapshot at access time - including app-only families
-that the shim installs after `vtscore` imports. `gather_plugins()`
+`FAMILIES` is a module-level `__getattr__` returning a tuple of the
+registered family keys at access time - including families the host
+registers after `vtscore` imports. `gather_plugins()`
 runs each family's loader inside `_safe_list()`, swallowing
 `ImportError` / `ModuleNotFoundError` so missing optional deps in one
 family can't block the rest. Three formatters (`format_plain`,
 `format_names`, `format_json`) render the inventory for humans, shell
 completion scripts, and tooling respectively.
 
-`register_family_shortcuts(parser)` adds `--list-<family>` flags to
+`register_family_shortcuts(parser)` adds `--list-<family>` flags (name from
+`family_flag(family)`) to
 an `argparse.ArgumentParser`, one per registered family - each
 equivalent to `--list-plugins --plugin-family <family>`.
 
 ## Schema helpers
 
 `vtscore/plugins/schema.py` builds a marshmallow `Schema` class from a
-plugin's declared `fields` at request time, caches it on the plugin
-instance, and uses it to validate incoming POST bodies on the
-plugin-driven HTTP routes (e.g. `/api/dataset/import/<importer>`).
+plugin's declared `fields`, caches it on the plugin instance, and is what
+a host's HTTP layer uses to validate incoming POST bodies.
 
 The mapping is:
 
@@ -489,47 +484,8 @@ The mapping is:
 `get_plugin_arg_schema(plugin)` returns a cached instance (cached on
 the plugin instance, so the schema-build cost is paid once per
 process). Unknown keys are dropped (`Meta.unknown = "exclude"`).
-This module is used by the Flask routes in `vtsearch/routes/`;
-library consumers don't typically interact with it directly.
-
-## Field-value normalisation
-
-Schema validation checks the *shape* of incoming values.
-`vtscore/plugins/normalize.py` applies the behaviours that come after,
-which used to be every plugin author's job to remember:
-
-```python
-def normalize_field_values(plugin: PluginBase, field_values: dict) -> dict: ...
-```
-
-1. **Whitespace strip** on every text-like value, so a plugin body can
-   trust `field_values[key]` is already trimmed.
-2. **Template substitution** for fields declaring
-   `PluginField.template_vars` - `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`,
-   `MM`, `DD`, `detector_name`, `detector_id`, `username`. Each
-   resolved value runs through `sanitize_template_value`, so an
-   attacker-controlled name cannot escape the directory an
-   admin-configured template implies.
-3. **Field-type-driven security validation.** `field_type="url"` goes
-   through `validate_url` (`validate_browser_url` with
-   `opened_in_browser=True`); `field_type="server_path"` goes through
-   `confine_server_filepath` anchored at the per-user data dir, and the
-   **approved** path is written back into `field_values` so the plugin
-   body consumes exactly what was validated.
-
-It is wired into both ingress points - the HTTP path
-(`validate_plugin_args`, after marshmallow loads the body) and the CLI
-path (`PluginBase.validate_cli_field_values`, after the presence check).
-So a plugin body should trust the dict it receives: no
-`if not foo: raise ValueError` boilerplate, no manual `validate_url` /
-`validate_server_filepath` calls, no bespoke `str.replace("{detector_name}", ...)`
-chains. External plugins that still call the validators by hand keep
-working - re-validation is idempotent on already-validated values.
-
-It mutates *field_values* in place and returns it, skips file uploads
-and non-string values, and raises `ValueError` for a missing required
-field, an invalid URL, a path-traversal attempt, or an unknown template
-variable. The whole pass is idempotent.
+`make_plugin_route_schema(...)` builds the route-level wrapper schema.
+Library consumers don't typically call this module directly.
 
 ## File uploads
 
@@ -546,8 +502,9 @@ Three implementations satisfy it, one per ingress:
 | CLI (`--file <path>`) | `CliUploadedFile`, backed by a local filesystem path |
 | Background-thread upload | `BytesIOUploadedFile`, holding the bytes in memory so the thread can still read them after the request context is torn down |
 
-Write plugin bodies against `.filename` (matching Werkzeug's name) and
-they work on all three.
+Write plugin bodies against the `UploadedFile` surface and they work on
+all three. `wrap_cli_file_fields(fields, field_values)` does the CLI
+wrapping; the default `run_cli` of label importers calls it for you.
 
 ## End-to-end: writing a third-party plugin
 
@@ -563,10 +520,10 @@ from __future__ import annotations
 from typing import Any
 import json
 
-from vtscore.exporters.base import LabelsetExporter, PluginField
+from vtscore.exporters.base import PluginField, ResultsExporter
 
 
-class StdoutLabelsetExporter(LabelsetExporter):
+class StdoutResultsExporter(ResultsExporter):
     name = "stdout"
     display_name = "Stdout (JSON)"
     description = "Print the labelset as JSON to stdout."
@@ -583,13 +540,15 @@ class StdoutLabelsetExporter(LabelsetExporter):
         ),
     ]
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        indent = int(field_values.get("indent", 2))
-        print(json.dumps(results, indent=indent))
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        print(json.dumps(results, indent=int(field_values["indent"])))
         return {"message": "Printed to stdout."}
 
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        return self.export_find_results(labelset, field_values)
 
-EXPORTER = StdoutLabelsetExporter()
+
+EXPORTER = StdoutResultsExporter()
 ```
 
 ```toml
@@ -610,7 +569,7 @@ After `pip install -e .`:
 >>> [e.name for e in list_exporters()]
 ['email_smtp', 'gui', 'open_url', 'portable_detector', 'server_csv_file', 'server_json_file', 'stdout', 'webhook']
 >>> exp = get_exporter("stdout")
->>> exp.export({"detectors_run": 1, "results": {}}, {"indent": "4"})
+>>> exp.export_find_results({"detectors_run": 1, "results": {}}, {"indent": "4"})
 {
     "detectors_run": 1,
     "results": {}
@@ -619,8 +578,8 @@ After `pip install -e .`:
 ```
 
 A CLI driver gets the auto-generated `--indent` flag for free via
-`PluginBase.add_cli_arguments()`. The marshmallow schema for the HTTP
-route is built the first time the plugin is invoked, then cached.
+`PluginBase.add_cli_arguments()`. See [exporters.md](exporters.md) for
+the full exporter contract.
 
 ### Common pitfalls
 
@@ -640,7 +599,7 @@ route is built the first time the plugin is invoked, then cached.
 
 ## Cross-references
 
-- [`vtscore.exporters`](exporters.md) - the labelset-exporter family
+- [`vtscore.exporters`](exporters.md) - the results-exporter family
   built on this framework.
 - [`vtscore.sync`](sync.md) - the bidirectional-sync ABC that
   `LabelsetSource` (in `vtscore.labels.sources`) and `SettingsSource`

@@ -35,8 +35,8 @@ def _inclusion_sweep_rows(
     Near-free (no refits): pools the cached fold orderings once and applies the
     conformal rule at each ``k``, then measures the realised test FPR/FNR at that
     cut.  Checks the Inclusion budget ``alpha(k) = 0.25 * 2^-k`` against the
-    measured FNR under the **grouped** calibration path (issue #2781 / the
-    grouped-arm follow-up in inclusion-calibration-bias.md).  Returns ``[]`` when
+    measured FNR under the **grouped** calibration path (issue #2781; the
+    precision-floor version of that question is #4248).  Returns ``[]`` when
     the base threshold was a fallback (no real orderings to sweep).
     """
     import numpy as np  # noqa: PLC0415
@@ -96,10 +96,10 @@ def _cut_inclusion_rows(
     :meth:`~vtscore.training.thresholds.FoldAnchoredCut.threshold_at`.  That is
     not merely cheaper than calling
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` per point,
-    it is exactly what production does when the user drags the slider
-    (:func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`
-    re-cuts a cached estimator with no refit), so the sweep measures the object
-    the app actually re-cuts rather than a chain of independent retrains.
+    it is exactly what production does when it re-cuts at another inclusion
+    (:func:`vtscore.state.core.recut_detector_threshold` re-cuts a cached
+    estimator with no refit), so the sweep measures the object the app
+    actually re-cuts rather than a chain of independent retrains.
 
     A weight whose fit fails outright contributes no rows.  The terminal
     fallbacks :func:`fold_anchored_gmm_threshold` applies in that case

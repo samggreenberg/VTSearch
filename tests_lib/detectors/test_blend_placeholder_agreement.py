@@ -69,7 +69,10 @@ def _snap(rng: np.random.Generator, n: int = 12) -> dict[int, dict]:
     }
 
 
+@pytest.mark.usefixtures("no_precision_floor")
 class TestPlaceholderAgreement:
+    """With no floor: under one, the line keeps the floor's set whatever the fit did (#4272)."""
+
     def test_both_paths_admit_nothing_when_the_gmm_degenerates(self, degenerate_gmm):
         rng = np.random.default_rng(2841)
         X_list, y_list = _tiny_labelset(rng)
@@ -80,7 +83,6 @@ class TestPlaceholderAgreement:
             X_list,
             y_list,
             snap,
-            inclusion_value=0,
             calibrate_count=2,
             calibration_fraction=0.5,
             det_ctx=None,

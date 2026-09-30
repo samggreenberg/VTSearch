@@ -145,11 +145,13 @@ export class DatasetsCrudApiService {
   }
 
   /** Multipart upload; see {@link importLocalFolder}.  ``buildProjection``
-   *  opts into computing the 2-D Browse projection at ingest. */
-  loadFile(file: File, buildProjection = false): Observable<DatasetLoadStartedResponse> {
+   *  opts into computing the 2-D Browse projection at ingest; ``autorun``
+   *  (when not ``null``) is the Run AutoRun choice for this import. */
+  loadFile(file: File, buildProjection = false, autorun: boolean | null = null): Observable<DatasetLoadStartedResponse> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('build_projection', buildProjection ? 'true' : 'false');
+    if (autorun !== null) formData.append('autorun', autorun ? 'true' : 'false');
     return this.http.post<DatasetLoadStartedResponse>('/api/dataset/load-file', formData);
   }
 

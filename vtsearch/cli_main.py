@@ -80,7 +80,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--autodetect",
         action="store_true",
-        help="Run a detector on a dataset from the command line and print predicted-Good items",
+        help=(
+            "Import a dataset from the command line, save it to the dashboard, and run the "
+            "Auto-Find detectors on it (export the predicted-Good items). With no Auto-Find "
+            "detector for its media type the dataset is saved and detection is skipped."
+        ),
+    )
+    parser.add_argument(
+        "--tempimport",
+        action="store_true",
+        help=(
+            "Make --autodetect's import temporary: score the dataset, then discard it instead "
+            "of saving it to the dashboard. Implies --autodetect. Required with --stream-results."
+        ),
     )
     parser.add_argument(
         "--user",
@@ -211,7 +223,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         dest="import_labels_into",
-        help=("Detector name to merge labels into before scoring. Used with --autodetect plus --label-importer-file."),
+        help=(
+            "Detector name to merge labels into before scoring. Used with "
+            "--autodetect plus --label-importer-file. That detector is then "
+            "the only one the run scores with: the settings file's Auto-Find "
+            "list is not consulted."
+        ),
     )
     parser.add_argument(
         "--label-importer",
@@ -240,6 +257,30 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--create-detector",
+        action="store_true",
+        dest="create_detector",
+        help=(
+            "With --import-labels-into, create the detector from the imported "
+            "labels if it does not exist yet (it appears in the Dashboard's "
+            "Drafts); an existing one is merged into as usual. Its media type "
+            "is --detector-media-type, else the source's: the --dataset "
+            "pickle's metadata or the importer's --media-type."
+        ),
+    )
+    parser.add_argument(
+        "--detector-media-type",
+        type=str,
+        default=None,
+        dest="detector_media_type",
+        help=(
+            "Media type of a detector --create-detector creates, when it should "
+            "differ from the source's (e.g. image, to score video frames through "
+            "a converter) or the source declares none. Unused when the detector "
+            "already exists."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         dest="dry_run",
@@ -264,9 +305,10 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     # The process-level admin overrides (--solo-media-type, --solo-embedder,
-    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only)
-    # are declared once in vtsearch.admin_overrides, which owns their flag
-    # spellings, help text, env-var equivalents and validators together.
+    # --hide-plugin, --dataset-max-age-days, --support-email, --semantic-only,
+    # --hide-ingest-eta) are declared once in vtsearch.admin_overrides, which
+    # owns their flag spellings, help text, env-var equivalents and validators
+    # together.
     admin_overrides.register_override_flags(parser)
     return parser
 
@@ -330,7 +372,10 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
             "import_labels_into",
             "label_importer_file",
             "label_importer_fields",
+            "create_detector",
+            "detector_media_type",
             "dry_run",
+            "tempimport",
         ):
             if getattr(args, conflicting, None):
                 cli_flag = f"--{conflicting.replace('_', '-')}"
@@ -389,7 +434,7 @@ def _resolve_plugins(args, parser, remaining):
     importer = None
     exporter = None
 
-    if args.autodetect:
+    if args.autodetect or args.tempimport:
         importer, exporter = _register_plugin_cli_args(args, parser)
 
     if importer or exporter:
@@ -483,12 +528,23 @@ def _authenticate_cli_user(args, parser) -> None:
         parser.error("--api-key requires --user <name>")
 
 
-def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
-    """Optionally merge labels into a detector before scoring (``--import-labels-into``)."""
+def _maybe_import_labels(args, parser, settings_path, dry_run, importer) -> None:
+    """Optionally merge labels into a detector before scoring (``--import-labels-into``).
+
+    With ``--create-detector`` a missing detector is created from the imported
+    labels (#4238), so a labelled detector can be run headlessly without ever
+    being made in the UI.
+    """
     from vtscore import cli_progress
 
+    if args.create_detector and not args.import_labels_into:
+        parser.error("--create-detector only applies with --import-labels-into")
+    if args.detector_media_type and not args.create_detector:
+        parser.error("--detector-media-type only applies with --create-detector")
+
     # Optional one-shot label import into a detector before scoring.
-    # The merged labelset is picked up by the autodetect pipeline below.
+    # The autodetect pipeline below then scores with that detector alone
+    # (see _dispatch_autodetect), using the merged labelset.
     if args.import_labels_into:
         field_values = _label_importer_field_values(args, parser)
         # Settings file controls detectors_dir, so apply it first.
@@ -496,43 +552,97 @@ def _maybe_import_labels(args, parser, settings_path, dry_run) -> None:
             from vtsearch.settings import set_settings_path
 
             set_settings_path(settings_path)
+        create_media_type = _create_detector_media_type(args, parser, importer)
+        target = (
+            f"new detector {args.import_labels_into!r} (media_type={create_media_type})"
+            if create_media_type
+            else f"detector {args.import_labels_into!r}"
+        )
         if dry_run:
             cli_progress.emit(
                 "labels_import_dry_run",
                 text=(
                     f"DRY RUN: would import labels with fields {field_values!r} "
-                    f"via importer {args.label_importer!r} into detector "
-                    f"{args.import_labels_into!r}."
+                    f"via importer {args.label_importer!r} into {target}."
                 ),
                 detector=args.import_labels_into,
                 importer=args.label_importer,
                 filepath=field_values.get("filepath"),
                 fields=field_values,
+                create_media_type=create_media_type,
             )
             if cli_progress.get_format() == "text":
                 print("", flush=True)
         else:
-            from vtscore.cli import import_labels_into_detector
+            from vtscore.cli import DetectorNotFoundError, import_labels_into_detector
 
             try:
                 applied, skipped = import_labels_into_detector(
                     args.import_labels_into,
                     args.label_importer,
                     field_values,
+                    create_media_type=create_media_type,
+                )
+                done = (
+                    f"Created {target} with {applied} label(s)"
+                    if create_media_type
+                    else f"Imported {applied} label(s) into {target}"
                 )
                 cli_progress.emit(
                     "labels_imported",
-                    text=(
-                        f"Imported {applied} label(s) into detector "
-                        f"'{args.import_labels_into}' (skipped {skipped} duplicate/invalid)."
-                    ),
+                    text=f"{done} (skipped {skipped} duplicate/invalid).",
                     detector=args.import_labels_into,
                     applied=applied,
                     skipped=skipped,
+                    created=bool(create_media_type),
                 )
+            except DetectorNotFoundError as exc:
+                cli_progress.emit_error(
+                    f"importing labels: {exc} Pass --create-detector to create it from the imported labels."
+                )
+                sys.exit(1)
             except (FileNotFoundError, ValueError) as exc:
                 cli_progress.emit_error(f"importing labels: {exc}")
                 sys.exit(1)
+
+
+def _create_detector_media_type(args, parser, importer) -> str:
+    """The media type ``--create-detector`` would create the detector with, or ``""``.
+
+    ``""`` when the flag is off or the detector already exists.  A detector
+    that must be created but whose media type can't be told (no
+    ``--detector-media-type``, and the source declares none) ends the run
+    here - before any media is loaded, and under ``--dry-run`` too.
+    """
+    from vtscore import cli_progress
+    from vtscore.cli import _label_import_media_type, _SourceSpec
+
+    if not args.create_detector:
+        return ""
+    if args.importer:
+        spec = _SourceSpec(
+            kind="importer", importer_name=args.importer, field_values=_importer_field_values(args, importer)
+        )
+    elif args.dataset:
+        spec = _SourceSpec(kind="pickle", dataset_path=args.dataset)
+    else:
+        parser.error("--autodetect requires either --dataset <file.pkl> or --importer <name>")
+    try:
+        return _label_import_media_type(
+            args.import_labels_into,
+            spec,
+            create=True,
+            media_type=args.detector_media_type or "",
+            media_type_option="--detector-media-type",
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        cli_progress.emit_error(f"importing labels: {exc}")
+        sys.exit(1)
+
+
+def _importer_field_values(args, importer) -> dict[str, Any]:
+    """The ``--importer``'s field values, as its per-plugin flags parsed them."""
+    return {f.key: getattr(args, f.key, f.default) for f in importer.fields}
 
 
 def _label_importer_field_values(args, parser) -> dict[str, str]:
@@ -563,8 +673,14 @@ def _dispatch_autodetect(
     dry_run,
     stream_results,
     keep_negatives,
+    save_dataset,
 ) -> None:
-    """Run the autodetect workflow via the importer- or pickle-file code path."""
+    """Run the autodetect workflow via the importer- or pickle-file code path.
+
+    ``--import-labels-into NAME`` makes NAME the run's only detector, in place
+    of the settings file's Auto-Find list, so a labelled detector can be run
+    headlessly without first moving it to AutoRun in the UI (#4235).
+    """
     from vtscore.cli import (
         autodetect_importer_main,
         autodetect_importer_main_chunked,
@@ -577,7 +693,7 @@ def _dispatch_autodetect(
     entry_point: Callable[..., None]
     source_args: tuple[Any, ...]
     if args.importer:
-        field_values = {f.key: getattr(args, f.key, f.default) for f in importer.fields}
+        field_values = _importer_field_values(args, importer)
         if chunk_size:
             entry_point, source_args = autodetect_importer_main_chunked, (args.importer, field_values, chunk_size)
         else:
@@ -598,6 +714,8 @@ def _dispatch_autodetect(
         dry_run=dry_run,
         stream_results=stream_results,
         keep_negatives=keep_negatives,
+        save_dataset=save_dataset,
+        override_detectors=[args.import_labels_into] if args.import_labels_into else None,
     )
 
 
@@ -639,8 +757,16 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         parser.error("--stream-results requires --chunk-size N (it streams chunk by chunk)")
     if keep_negatives and not stream_results:
         parser.error("--keep-negatives only applies with --stream-results")
+    # The imported dataset is saved to the dashboard unless --tempimport says
+    # otherwise (#4226). Streaming exists for sources too big to hold, and
+    # saving means holding the whole dataset, so the two cannot be combined.
+    save_dataset = not getattr(args, "tempimport", False)
+    if stream_results and save_dataset:
+        from vtscore.cli import _STREAM_CANNOT_SAVE
 
-    _maybe_import_labels(args, parser, settings_path, dry_run)
+        parser.error(f"--stream-results requires --tempimport: {_STREAM_CANNOT_SAVE}")
+
+    _maybe_import_labels(args, parser, settings_path, dry_run, importer)
 
     _dispatch_autodetect(
         args,
@@ -653,6 +779,7 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
         dry_run,
         stream_results,
         keep_negatives,
+        save_dataset,
     )
 
 
@@ -714,6 +841,11 @@ def main(app, initialize_server) -> None:
     _maybe_list_plugins(args, parser)
     _maybe_run_pipeline(args, parser, remaining)
     args, importer, exporter = _resolve_plugins(args, parser, remaining)
+    # A temporary import only means something for a detect run, so the flag
+    # alone selects one rather than falling through to the web server. Set
+    # after _resolve_plugins, whose second parse pass rebuilds ``args``.
+    if args.tempimport:
+        args.autodetect = True
 
     _apply_verbosity(args)
     _apply_admin_overrides(args, parser)

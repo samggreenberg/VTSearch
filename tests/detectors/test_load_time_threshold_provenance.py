@@ -20,7 +20,7 @@ anything to measure.  It asserts the provenance directly (a fitted
 cut) and, so the assertion cannot pass vacuously, that the pooled conformal cut
 over the same fold orderings is a different number.
 
-Labels follow `test_find_inclusion_slide.py`: 6 good / 6 bad keeps the
+Labels follow `test_find_floor_recut.py`: 6 good / 6 bad keeps the
 calibration folds non-separable, leaving ids 13-20 as the haystack the
 population estimator is fitted on.
 """
@@ -44,21 +44,26 @@ def _load_saved_detector(client, name: str):
         bad_ids=_BAD_IDS,
         snap=snapshot_medias(),
     )
-    client.post("/api/inclusion", json={"inclusion": 0})
     load_detector_and_wait(client, detector_id)
     ctx = get_detector_context(detector_id)
     assert ctx is not None
     return ctx
 
 
-def test_reloaded_detector_starts_on_the_anchored_cut(client):
+def test_reloaded_detector_starts_on_the_floors_set(client):
+    from vtscore.state.core import human_voted_ids
+
     ctx = _load_saved_detector(client, "reload-anchored")
 
     assert ctx.anchored_cut_cache is not None, (
         "the registry load path must fit the fold-anchored population estimator; "
         "without it a resumed session would start on the pooled conformal cut"
     )
-    assert ctx.threshold == ctx.anchored_cut_cache.threshold_at(0)
+    # Under the floor the line keeps the floor's starting candidate of the
+    # haystack the load scored (#4272), and acquisition re-cuts the anchored
+    # estimator from it.
+    assert ctx.line_ranking is not None
+    assert ctx.threshold == ctx.line_ranking.threshold_for(32, human_voted_ids(ctx))
 
 
 def test_reloaded_threshold_is_not_the_pooled_conformal_cut(client):

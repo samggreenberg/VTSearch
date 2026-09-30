@@ -81,7 +81,7 @@ POST /api/find
 
 Each verdict is one of `Good`, `Bad`, `Error`, `N/A`. Errors: **400** (empty
 id lists, or a detector has no labels), **404** (unknown dataset/detector id),
-**500** (pickle load failed).
+**409** (cancelled via `POST /api/find/cancel`), **500** (pickle load failed).
 
 ### Cancel find
 
@@ -90,8 +90,8 @@ POST /api/find/cancel
 ```
 
 Sets the shared `find_progress` cancel flag so any in-flight scoring path
-(find / find-label / auto-detect) stops cooperatively. Always **200**, no-op
-when idle.
+(find / find-label / auto-detect) stops cooperatively; the cancelled request
+then answers **409**. Always **200**, no-op when idle.
 
 → `{"ok": true}`
 
@@ -151,16 +151,20 @@ everywhere except those held votes.
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
+  "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks"
 }
 ```
 
-On patch-region-aware datasets each result additionally carries `best_region`.
+`floor` is the [floor state](labeling.md#the-floor-state) of `threshold`:
+the set the Good/Bad split keeps, and whether a spot check confirmed the
+floor on it. A fresh pass is `unchecked` until one runs. On patch-region-aware
+datasets each result additionally carries `best_region`.
 Errors: **400** (no medias loaded, or detector has no labels), **404**
 (detector not found), **409** (active dataset can't supply the detector's
-embedder type).
+embedder type, or the run was cancelled).
 
 ### Auto-Detect
 
@@ -183,6 +187,7 @@ demand, and returns one result column per detector.
     "Dog Barks": {
       "detector_name": "Dog Barks",
       "threshold": 0.5,
+      "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -192,10 +197,36 @@ demand, and returns one result column per detector.
 }
 ```
 
+Each detector's `floor` is the [floor state](labeling.md#the-floor-state) of
+its `threshold` (`null` only when there was no trained context to ask). Nobody
+can vote in a headless run, so every detector exports its floor's `unchecked`
+starting candidate, and the server logs that the set was never checked.
+
 When an exporter is configured for Auto-Find, an `auto_export` object
-(`{exporter, success, message?/error?}`) is added. Errors: **400** (no medias
-loaded, or no Auto-Find detectors for the media type), **404** (named detector
-not flagged for Auto-Find).
+(`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
+extras such as `filepath`) is added. Errors: **400** (no medias loaded, or no
+AutoRun detectors for the media type), **404** (named detector not on the
+caller's AutoRun list), **409** (cancelled).
+
+This is the synchronous, scripted form. The Dashboard runs the same detectors
+in the **background** instead - after a web import (see the `autorun` flag
+under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
+⋯ **Run AutoRun**
+([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)) -
+and keeps each run's results for the user who started it:
+
+### AutoRun results
+
+```
+GET /api/autorun/runs/{run_id}
+```
+
+`run_id` is the background run's `task_id`. Returns the body above
+(`auto_export` included when an exporter ran) plus `run_id`, `dataset_id`,
+`dataset_name`, `trigger` (`"import"` or `"manual"`) and `created_at`.
+Runs live in memory only, and only the most recent few, so **404** covers an
+unknown run, another user's, one that has aged out, and any from before a
+restart alike.
 
 ### Find stats (detector evaluation)
 
@@ -204,8 +235,9 @@ GET /api/find/stats
 ```
 
 Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
-confusion of the adopted label vs. the detector's original call, plus an FP/FN
-threshold sweep.
+confusion of the adopted label vs. the detector's original call, the Kept rate,
+what the precision floor says about the line, and the precision curve the Stats
+chart draws.
 
 →
 ```json
@@ -215,13 +247,108 @@ threshold sweep.
   "confirmed_good": 25, "confirmed_bad": 3,
   "culled_false_pos": 3, "rescued_false_neg": 2,
   "agreements": 28, "corrections": 2,
-  "agreement_rate": 0.93, "precision": 0.89,
-  "inclusion": 0, "threshold": 0.5, "stale": false,
-  "sweep": [{"inclusion": -10, "threshold": 0.7, "false_pos": 1, "false_neg": 9}, ...]
+  "agreement_rate": 0.93,
+  "verified_precision": 0.82, "verified_called_good": 17, "verified_kept_good": 14,
+  "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
+  "floor": {"min_precision": 0.5, "status": "confirmed", "count": 32, "range": {"lo": 0.55, "hi": 1.0, "labelled": 5, "right": 5, "stale": false}, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
+  "precision_curve": [
+    {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
+     "verified_precision": 1.0, "estimated_precision": 0.91}, ...
+  ],
+  "estimate_status": "estimated", "calibration_positives": 14, "min_calibration_positives": 10
 }
 ```
 
-`sweep` covers inclusion −10..10.
+- `verified_precision` (the Stats **Kept rate**) is taken over the checked items
+  the detector called Good only: `verified_kept_good / verified_called_good`,
+  `null` when none is checked. Unchecked matches are not counted as right.
+- `precision_curve` reads down the ranking (score descending): each point is the
+  top `n_returned` items, sampled at about 40 log-spaced counts plus the current
+  cut's (`n_returned` at the top level). `verified_precision` is
+  `checked_good / checked` over the items in it the user verified (`null` when
+  none). `estimated_precision` is the #4220 estimator's lower-bound curve (the
+  detector's `precision_floor_cache`, applied to this Find run's scores as the
+  corpus, sampled to 50,000 above that): the held-out calibration votes the
+  learned sort chose, and the whole haystack the detector trained against,
+  voted items included, as the reference pool. It is a model-based reading of
+  the ranking; the line itself is drawn by the spot check, not by this curve
+  (see [labeling.md](labeling.md#get--set-the-precision-floor)).
+- `estimate_status` says whether the curve carries an estimate: `estimated`;
+  `insufficient_evidence` when those votes hold fewer than
+  `min_calibration_positives` Good ones (the precision floor's own gate); or
+  `unavailable` when the detector has no calibration folds.
+- `floor` is the [floor state](labeling.md#the-floor-state) of the line at
+  `threshold`: the floor it was cut at (the chart draws it across at that
+  precision), the set the line keeps, and the spot check's likely range for it.
+- `stale` is `true` once corrections have been folded into the detector since
+  this Find run scored.
+
+### Find work queues
+
+These compute Find's working sets **server-side** from the frozen scores, the
+live cutoff, and the verified set, so a client holding only a window of a large
+ranking can still act on every matching item. Both **require** `X-Detector-Id`.
+Neither has a frontend caller yet: they were built ahead of the Find-view
+windowing work that switches the client onto them.
+
+```
+GET /api/find/queue-ids?filter=unverified_good
+```
+
+`filter`: `unverified_good` (default — the left work queue: above-cutoff items
+not yet verified) or `good` (verified-good plus unverified positives).
+
+→ `{"ids": [12, 7, 40], "count": 3}` in rank order; empty outside Find mode or
+before a scoring pass.
+
+```
+GET /api/find/boundary-next?side=above&exclude=12
+```
+
+The next unverified item on the boundary walk, which steps outward from the
+cutoff alternating faces, so "just sit and vote" samples marginal positives
+and marginal negatives. `side` (`above` default / `below`) is the preferred
+face, falling back to the other; `exclude` skips one id (the item just voted,
+whose verification may not be visible yet).
+
+→ `{"id": 57, "side": "below"}`, or `{"id": null, "side": null}` when both sides
+are exhausted.
+
+### Evidence coverage
+
+```
+GET /api/find/evidence-coverage
+```
+
+How much of the active dataset the active detector is calling **without
+labeled evidence behind the call**. For each scored item it compares the
+distance to the predicted class's labeled examples against the labelset's own
+leave-one-out distances (a conformal support p-value) and computes a trust-score
+ratio against the other class. It needs only the detector's labelset
+(re-embedded in memory at load), not the dataset it was trained on, so it works
+for a detector handed over from another user — the complement to the
+[domain-shift report](datasets.md#domain-shift-report), which needs the
+training dataset's atlas. Pure read.
+
+→
+```json
+{
+  "available": true,
+  "n_items": 5000, "n_pos_labels": 40, "n_neg_labels": 35,
+  "k": 1, "alpha": 0.05,
+  "frac_unsupported": 0.21, "expected_unsupported": 0.05, "z_score": 51.9,
+  "median_support": 0.34,
+  "frac_low_trust": 0.12, "median_trust": 1.6,
+  "unsupported": true
+}
+```
+
+`frac_unsupported` is the share of items whose support p-value falls below
+`alpha` (it sits near `expected_unsupported` when the labels cover the data);
+`frac_low_trust` the share closer to the other class's evidence than their
+own. `unsupported` is the headline verdict (z > 3 **and** `frac_unsupported ≥
+2·alpha`). `available: false` (with zeroed fields) — never a 4xx — when there
+is no scored Find run or no resolvable labelset.
 
 ### Fold corrections into the detector
 

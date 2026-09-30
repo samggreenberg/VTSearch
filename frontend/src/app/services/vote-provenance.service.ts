@@ -20,11 +20,14 @@ export type VoteFlow =
 /**
  * How a voted-on item came to be in front of the user, captured at click time.
  *
- * Recorded, never read back: nothing in the app changes behaviour on these
- * values. They exist because the surfacing context is *not re-derivable* —
- * `sortOrder` is ephemeral client state and the model behind `score` is
- * overwritten by the next retrain — so a vote not annotated now is annotated
- * never. See `docs/plans/provenance-partitioned-calibration.md`.
+ * Recorded at click time because the surfacing context is *not
+ * re-derivable* — `sortOrder` is ephemeral client state and the model behind
+ * `score` is overwritten by the next retrain — so a vote not annotated now is
+ * annotated never. One server-side reader changes behaviour: the precision
+ * floor calibrates its promise only on votes drawn off the learned sort
+ * (`calibrates_precision` in `vtscore/datasets/vote_provenance.py`, #4245), so
+ * `sort_kind` and `select_mode` here decide which votes count as evidence.
+ * See also `docs/plans/provenance-partitioned-calibration.md`.
  *
  * Deliberately narrower than the generated `VoteProvenance` model, which
  * carries every value the wire format allows including the ones only the
@@ -34,7 +37,7 @@ export type VoteFlow =
 export interface VoteProvenance {
   flow?: VoteFlow;
   /** Autopilot phase; only meaningful when `flow` is `autopilot`. */
-  phase?: 'good' | 'bad' | 'hard' | 'new';
+  phase?: 'good' | 'bad' | 'more' | 'hard' | 'new';
   /** How the item was drawn off the ranking. */
   select_mode?: 'top' | 'hard' | 'new';
   /** Which ranking the user was looking at. */
@@ -79,7 +82,7 @@ export class VoteProvenanceService {
 
     const phase = this.autopilot.state.phase;
     const labelingPhase =
-      phase === 'good' || phase === 'bad' || phase === 'hard' || phase === 'new' ? phase : null;
+      phase === 'good' || phase === 'bad' || phase === 'more' || phase === 'hard' || phase === 'new' ? phase : null;
 
     // Autopilot only claims the vote while it is actually surfacing items. Its
     // `done` / `exhausted` states leave the user labeling off the last sort by

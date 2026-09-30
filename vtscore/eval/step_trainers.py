@@ -412,6 +412,7 @@ def _app_train_and_calibrate(
     # The folds' orderings *and* models ride out in ``details`` unconditionally:
     # the shipped safe threshold anchors on the fold models' held-out scores, so
     # they are an input to the baseline arm, not study-only extras.
+    holdouts: list[list[int]] = []
     folds = calibration_folds(
         X_list,
         y_list,
@@ -420,6 +421,7 @@ def _app_train_and_calibrate(
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
         rng=np.random.RandomState(calibration_seed),
+        holdout_sink=holdouts,
     )
     threshold = threshold_from_folds(folds, inclusion)
     xcal_seconds = time.monotonic() - t_xcal
@@ -447,6 +449,11 @@ def _app_train_and_calibrate(
         # is NO_GOOD_THRESHOLD whenever this is set, as production's does
         # (see :func:`_blend_xcal_input`).
         "fold_fallback": folds.fallback,
+        # Which vote each fold held out, as training rows, and the vote behind
+        # each row: the precision floor calibrates only on the votes the
+        # learned sort chose (#4245), exactly as the app filters them.
+        "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
+        "row_votes": [*good_votes, *bad_votes],
     }
     return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, details
 
@@ -541,6 +548,7 @@ def _style_train_and_calibrate(
         # Same fold work as the metrics branch, minus the study extras: the
         # shipped safe threshold anchors on the fold models, so they ride out
         # in ``details`` on every path (see :func:`_safe_threshold_for_step`).
+        holdouts: list[list[int]] = []
         folds = calibration_folds(
             X_list,
             y_list,
@@ -551,13 +559,18 @@ def _style_train_and_calibrate(
             rng=np.random.RandomState(calibration_seed),
             groups=cal_groups,
             score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
+            holdout_sink=holdouts,
         )
         threshold = threshold_from_folds(folds, inclusion)
         details = {
             "fold_orderings": folds.orderings,
             "fold_models": folds.models,
             "fold_fallback": folds.fallback,
+            "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
         }
+    # The vote behind each training row, for the precision floor's evidence
+    # filter (see ``_app_train_and_calibrate``).
+    details["row_votes"] = [vid for _kind, vid in groups]
     xcal_seconds = time.monotonic() - t_xcal
     # Under the #2897 screen this step trained Kmax folds, not ``calibrate_count``
     # of them.  Bill the reported wall clock for the live count only, so the
@@ -666,6 +679,7 @@ def _calibrate_with_details(
     # #2852 fold-anchored arm can score the haystack on each fold's own scale
     # without retraining; production callers never see them.
     fold_models: list = []
+    holdouts: list[list[int]] = []
     if cal_groups is not None:
         fold_node_data, fallback = compute_grouped_fold_node_scores(
             X_list,
@@ -679,6 +693,7 @@ def _calibrate_with_details(
             score_rows_by_group=score_rows_by_group,
             model_sink=fold_models,
             seconds_sink=fold_seconds,
+            holdout_sink=holdouts,
         )
         if fallback is not None:
             return fallback, {
@@ -700,6 +715,7 @@ def _calibrate_with_details(
                 "fold_node_data": fold_node_data[:calibrate_count],
                 "fold_models": fold_models[:calibrate_count],
                 "fold_fallback": None,
+                "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts[:calibrate_count]),
             },
             all_orderings,
         )
@@ -715,6 +731,7 @@ def _calibrate_with_details(
         hidden_dim=hidden_dim,
         model_sink=fold_models,
         seconds_sink=fold_seconds,
+        holdout_sink=holdouts,
     )
     if fallback is not None:
         return fallback, {
@@ -733,6 +750,7 @@ def _calibrate_with_details(
             "fold_node_data": None,
             "fold_models": fold_models[:calibrate_count],
             "fold_fallback": None,
+            "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts[:calibrate_count]),
         },
         all_orderings,
     )
@@ -913,6 +931,7 @@ def _gp_train_and_calibrate(
             cal_fraction=calibration_fraction,
         )
         details = {"threshold_rule": "xcal_rank"}
+    details["row_votes"] = [*good_votes, *bad_votes]
     xcal_seconds = time.monotonic() - t_xcal
 
     def predict(X_test: Any) -> "np.ndarray":
@@ -970,6 +989,7 @@ def _gp_fold_orderings(
         return lambda X_q: _as_scores(fitted(np.asarray(X_q, dtype=np.float32)))
 
     fold_models: list[Any] = []
+    holdouts: list[list[int]] = []
     orderings, fallback = compute_fold_orderings(
         list(X),
         [float(v) for v in y],
@@ -979,6 +999,7 @@ def _gp_fold_orderings(
         calibration_fraction=calibration_fraction,
         model_sink=fold_models,
         fold_fit=fold_fit,
+        holdout_sink=holdouts,
     )
     if fallback is not None:
         return fallback, {
@@ -994,6 +1015,7 @@ def _gp_fold_orderings(
         "fold_orderings": orderings,
         "fold_models": fold_models,
         "fold_fallback": None,
+        "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
     }
 
 

@@ -609,6 +609,25 @@ def build_xy_from_labelset(
     return X_list, y_list, groups, score_rows
 
 
+def labelset_calibrating_groups(labelset: LabelSet) -> set:
+    """The bags of :func:`build_xy_from_labelset` whose vote the learned sort chose.
+
+    Read from each element's recorded surfacing provenance
+    (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`), which
+    rides in its metadata through every save and import.  Only these bags'
+    held-out scores may calibrate a precision-floor promise (#4245); every
+    element still trains the model.
+    """
+    from vtscore.datasets.vote_provenance import calibrates_precision, read_provenance
+    from vtscore.detectors.labelset_elements import stable_element_id
+
+    return {
+        ("g" if elem.label == "good" else "b", stable_element_id(elem))
+        for elem in labelset.elements
+        if elem.label in ("good", "bad") and calibrates_precision(read_provenance(elem.metadata))
+    }
+
+
 def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None) -> set[int]:
     """The media ids in *snap* that carry a good/bad label in *labelset*.
 
@@ -969,8 +988,8 @@ def train_from_labelset(
 
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the safe-threshold pass in that same space.
-    # Pass det_ctx so the fold orderings are cached for a no-retrain Inclusion
-    # slide (otherwise the slide can't move the cutoff — see train_and_threshold).
+    # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
+    # (otherwise a floor change can't move the cutoff — see train_and_threshold).
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
     voted_ids = labeled_media_ids(labelset, snap)
     if haystack is not None:
@@ -987,6 +1006,7 @@ def train_from_labelset(
         score_rows=score_rows,
         voted_ids=voted_ids,
         haystack=haystack.medias if haystack is not None else None,
+        calibrating_groups=labelset_calibrating_groups(labelset),
     )
     from vtscore.detectors.model_loading import labelset_signature
 
@@ -1002,11 +1022,12 @@ def labelset_train_and_score(
     *,
     media_type: str,
     clips_dict: dict[int, dict[str, Any]],
-    inclusion_value: int = 0,
+    inclusion_value: int | None = None,
     calibrate_count: int = 2,
     calibration_fraction: float | None = None,
     rows: Any = None,
     on_progress: ProgressCallback | None = None,
+    min_precision: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -1035,8 +1056,18 @@ def labelset_train_and_score(
     *clips_dict*: each unresolved element costs one origin fetch (and, on a
     patch detector, one ``patch_forward``).  A caller driving a progress bar -
     or wanting a cancellation checkpoint - passes it.
+
+    *min_precision* is the precision floor to cut at (the line keeps the set
+    the floor keeps, #4272), or ``None`` for no floor (the Inclusion 0 cut);
+    only the elements the learned sort chose calibrate the Find Stats estimate
+    (:func:`labelset_calibrating_groups`).  *inclusion_value* is deprecated
+    (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
+    any other value raises ``ValueError``.
     """
+    from vtscore.config.core_config import _retired_inclusion
     from vtscore.detectors.training import _train_and_score_xy
+
+    _retired_inclusion("labelset_train_and_score(inclusion_value=...)", inclusion_value)
 
     populate_label_embeddings(det_ctx, labelset, media_type=media_type, snap=clips_dict, on_progress=on_progress)
     X_list, y_list, groups, score_rows = build_xy_from_labelset(det_ctx, labelset)
@@ -1044,7 +1075,6 @@ def labelset_train_and_score(
         X_list,
         y_list,
         clips_dict,
-        inclusion_value=inclusion_value,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
@@ -1052,6 +1082,8 @@ def labelset_train_and_score(
         score_rows=score_rows,
         voted_ids=labeled_media_ids(labelset, clips_dict),
         rows=rows,
+        min_precision=min_precision,
+        calibrating_groups=labelset_calibrating_groups(labelset),
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

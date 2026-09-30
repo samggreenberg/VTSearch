@@ -174,13 +174,6 @@ above safe. It is worth confirming it is actually set.
 
 ## History
 
-This document previously described the repo as **private on the Free plan**,
-where protected branches and rulesets are unavailable, and concluded that
-"nothing GitHub-side can hard-*prevent* a collaborator from pushing to `main`."
-It carried a cost table of ways to *obtain* enforcement — GitHub Pro, making the
-repo public, or moving to an organization.
-
-The repo has since taken the free option in that table and gone public, so
-enforcement is available and in place, and the sections describing its absence
-were removed rather than left to be reasoned from. The collaborator list in that
-version (seven accounts) no longer matches either.
+Earlier versions of this document described the repo as private on the Free plan,
+where protection was unavailable. The repo has since gone public, so enforcement is
+available and in place; the sections describing its absence were removed.

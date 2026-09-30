@@ -21,9 +21,13 @@ cannot answer: #3853's residue is a felt half-second made of a chain of
 requests, a retrain and a collection that are each below every bar, so the
 analysis has to add the trace up rather than look for an outlier in it.
 
-Interleaved with those, ``faulthandler`` writes its thread dump as plain
-text (``Timeout (0:00:01)!`` then one ``Thread 0x… (most recent call
-first):`` block per thread).  Those lines are not JSON; they are collected
+Interleaved with those, the watchdog writes every thread's stack as plain
+text, just before its ``stall:`` line: ``Stall snapshot (heartbeat late by
+…):`` then one ``Thread 0x… (most recent call first):`` block per thread, the
+thread that burned the most CPU across the gap first (issue #4345).  With
+``VTSEARCH_STALL_LIVE_DUMP=1``, and in every log from before #4345,
+``faulthandler`` writes its own dump *during* the stall in the same layout,
+headed ``Timeout (0:00:01)!``.  Those lines are not JSON; they are collected
 as dump blocks and attached to the stall that follows them.
 
 Usage::
@@ -94,14 +98,15 @@ def load(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                     continue
                 events.append({"line": n, "t": _parse_ts(str(rec.get("ts", ""))), "kind": kind, "msg": msg})
                 continue
-            # faulthandler output
-            if line.startswith("Timeout (") or line.startswith("Fatal Python error"):
-                current = {"line": n, "threads": []}
+            # thread dumps: the watchdog's own, and faulthandler's
+            if line.startswith(("Stall snapshot", "Timeout (", "Fatal Python error")):
+                live = not line.startswith("Stall snapshot")
+                current = {"line": n, "threads": [], "live": live}
                 dumps.append(current)
                 thread = None
             elif line.startswith("Thread 0x") or line.startswith("Current thread 0x"):
                 if current is None:
-                    current = {"line": n, "threads": []}
+                    current = {"line": n, "threads": [], "live": True}
                     dumps.append(current)
                 thread = {"header": line, "frames": []}
                 current["threads"].append(thread)
@@ -111,7 +116,8 @@ def load(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
 
 def _dump_summary(dump: dict[str, Any], frames_per_thread: int = 3) -> str:
-    out = [f"  thread dump at log line {dump['line']} ({len(dump['threads'])} threads):"]
+    kind = "live faulthandler dump" if dump.get("live") else "thread stacks at wake"
+    out = [f"  {kind} at log line {dump['line']} ({len(dump['threads'])} threads):"]
     for th in dump["threads"]:
         frames = th["frames"][:frames_per_thread]
         if not frames:
@@ -166,6 +172,7 @@ def main() -> None:
     stalls = [e for e in events if e["kind"] == "stall"]
     if not stalls:
         print("\nno stall lines: the watchdog never missed a beat in this log")
+    prev_stall_line = 0
     for s in stalls:
         m = _STALL.search(s["msg"])
         lag = int(m.group(1)) if m else 0
@@ -180,11 +187,18 @@ def main() -> None:
         for e in sorted(near, key=lambda e: e["t"]):
             rel = e["t"] - t_start
             print(f"  {rel:+8.2f}s  [{e['kind']:9s}] {e['msg'][:160]}")
-        # The dump that fired during this stall is the last one logged before
-        # the report line (faulthandler writes it mid-stall, the report after).
-        before = [d for d in dumps if d["line"] < s["line"]]
-        if before:
-            print(_dump_summary(before[-1]))
+        # The watchdog writes this stall's stacks immediately before its
+        # report line, so they are the last dump before it.  A live
+        # faulthandler dump fires mid-stall, so when one is on it sits just
+        # above those; in a log from before #4345 it is the only dump.
+        before = [d for d in dumps if prev_stall_line < d["line"] < s["line"]]
+        prev_stall_line = s["line"]
+        shown = before[-1:]
+        if len(before) >= 2 and before[-2].get("live") and not before[-1].get("live"):
+            shown = before[-2:]
+        if shown:
+            for d in shown:
+                print(_dump_summary(d))
         else:
             print("  (no thread dump found before this stall line)")
 

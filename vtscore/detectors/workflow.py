@@ -99,7 +99,7 @@ def apply_and_retrain(  # noqa: C901
             from vtscore.state import (
                 get_calibrate_count,
                 get_calibration_fraction,
-                get_inclusion,
+                get_min_precision,
             )
 
             from vtscore.datasets.labelset import LabelSet
@@ -110,11 +110,11 @@ def apply_and_retrain(  # noqa: C901
                 snap,
                 proposed_good,
                 proposed_bad,
-                get_inclusion(),
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
                 vote_region_boxes=region_boxes,
                 det_ctx=det_ctx,
+                min_precision=get_min_precision(),
             )
             # This head sees only the labels resolvable in this dataset.  Its
             # signature matches the saved labelset exactly when that is all the

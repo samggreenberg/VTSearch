@@ -14,16 +14,29 @@ For end users of the VTSearch web app, see the
 
 ## Start here
 
-- [Quickstart](quickstart.md) - load a folder, train a detector, score new media. ~15 minute read.
-- [Architecture](architecture.md) - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
-- [Concepts](concepts.md) - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the linear-head detector. The vocabulary every other doc assumes.
-- [Tutorials](tutorials/README.md) - end-to-end worked examples that go deeper than the quickstart, starting with [training and scoring a detector](tutorials/train-and-score.md).
+Read in this order; each doc assumes the ones above it.
+
+1. [Quickstart](quickstart.md) - load a folder, train a detector, score new media. ~15 minute read.
+2. [Concepts](concepts.md) - `Media`, `Embedding`, `Origin`, `LabelSet`, `Embedder`, detector, `Context`, plugin. The vocabulary every other doc assumes.
+3. [Tutorials](tutorials/README.md) - end-to-end worked examples that go deeper than the quickstart, starting with [training and scoring a detector](tutorials/train-and-score.md).
+4. [Integration](integration.md) - embedding `vtscore` in a script, web app or worker pool: the hooks to install, where it writes to disk, per-user data.
+5. [Package reference](#package-reference) - one guide per subpackage.
+6. [Extending vtscore](#extending-vtscore) - writing plugins.
+
+Reference to consult as needed:
+
+- [Architecture](architecture.md) - how the library is layered, the resolution chain for "active context", threading rules, the directory map, and the real import path of every package.
 - [FAQ & common gotchas](faq.md) - the questions and pitfalls that come up most often. Read it when something behaves unexpectedly.
 
 ## Package reference
 
 One guide per public subpackage. Each covers the package's purpose, its public
-surface, worked examples, and gotchas.
+surface, worked examples, and gotchas; together they are the authoritative
+inventory of the public surface. The guides group symbols by intent rather
+than by import path, so pair them with
+[Architecture § Import paths](architecture.md#import-paths-read-before-copy-pasting),
+which records the real dotted path for every package - including the ones
+whose `__init__.py` re-exports nothing.
 
 | Package | Purpose | Doc |
 |---------|---------|-----|
@@ -69,6 +82,13 @@ library discovers it automatically. See:
 - [Results exporters](extending/results-exporters.md)
 - [Label importers](extending/label-importers.md)
 - [Labelset sources](extending/labelset-sources.md)
+- [Media sources](extending/media-sources.md)
+
+Datasource importers, seed importers and media cleaners have no authoring
+guide yet; their contracts are described in
+[packages/datasource-importers.md](packages/datasource-importers.md),
+[packages/seed-importers.md](packages/seed-importers.md) and
+[packages/media.md](packages/media.md).
 
 ## Conventions
 
@@ -94,28 +114,21 @@ the docs make sense:
 - **Votes are `dict[int, None]`, not sets.** `votes[cid] = None` adds a
   vote; `del votes[cid]` removes one. The dict shape preserves insertion
   order and serialises consistently.
-- **Library is multi-context.** There is no global "active" dataset or
-  detector. Every operation resolves a context via the chain: explicit
-  `override_*_context()` → installed resolver hook → thread-local → `None`.
-  See [Architecture](architecture.md) for the full resolution rules.
-
-## API contract reference
-
-The [package reference](#package-reference) above is the authoritative
-inventory of the public surface: one guide per subpackage, each listing the
-symbols that package exports and what they guarantee. The guides group
-symbols by intent rather than by import path, so pair them with
-[Architecture § Import paths](architecture.md#import-paths-read-before-copy-pasting),
-which records the real dotted path for every package - including the ones
-whose `__init__.py` re-exports nothing.
+- **Library is multi-context.** There is no implicit "first loaded"
+  dataset or detector. Every operation resolves a context via a chain
+  (explicit `override_detector_context()` → installed resolver hook →
+  thread-local → a shared, empty fallback), so bind one explicitly. See
+  [Architecture](architecture.md#resolution-chain-for-active-context) for
+  the full resolution rules.
 
 ## Versioning
 
 `vtscore.__version__` is independent semver, bumped manually in
 `vtscore/__init__.py` on each release. The companion `vtsearch` package
 uses a git-derived timestamp instead, since every commit on `dev` is
-effectively a new app release. See the top-level
-[`CHANGELOG.md`](../CHANGELOG.md) for per-release notes.
+effectively a new app release. See the library's own
+[`CHANGELOG.md`](../CHANGELOG.md) for per-release notes, including any
+change to a plugin contract.
 
 ## Doc conventions
 

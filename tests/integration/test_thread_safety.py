@@ -269,11 +269,11 @@ class TestConcurrentApplyLabel:
                 assert i in bad_votes
 
 
-class TestConcurrentSetInclusion:
-    """Verify that concurrent set_inclusion keeps in-memory and on-disk state in sync."""
+class TestConcurrentSetMinPrecision:
+    """Verify that concurrent set_min_precision keeps in-memory and on-disk state in sync."""
 
-    def test_concurrent_set_inclusion_memory_disk_sync(self, isolated_settings):
-        """After concurrent writes, in-memory inclusion must equal the persisted value."""
+    def test_concurrent_set_min_precision_memory_disk_sync(self, isolated_settings):
+        """After concurrent writes, the in-memory floor must equal the persisted value."""
         num_threads = 20
         iterations = 30
         errors = []
@@ -281,11 +281,11 @@ class TestConcurrentSetInclusion:
         def worker(value):
             try:
                 for _ in range(iterations):
-                    _state.set_inclusion(value)
+                    _state.set_min_precision(value)
             except Exception as e:
                 errors.append(e)
 
-        threads = [threading.Thread(target=worker, args=(i % 5,)) for i in range(num_threads)]
+        threads = [threading.Thread(target=worker, args=(0.1 + 0.2 * (i % 5),)) for i in range(num_threads)]
         for th in threads:
             th.start()
         for th in threads:
@@ -293,8 +293,8 @@ class TestConcurrentSetInclusion:
 
         assert not errors
         # The critical invariant: in-memory value must match the on-disk value.
-        in_memory = _state.get_inclusion()
-        on_disk = _settings_mod.get_inclusion()
+        in_memory = _state.get_min_precision()
+        on_disk = _settings_mod.get_min_precision()
         assert in_memory == on_disk
 
 
@@ -804,7 +804,7 @@ class TestStateProgressLockOrder:
 
     The canonical lock order is ``_state_lock`` first, ``_progress_lock`` strictly
     outside it.  Every state→progress callsite (``set_vote``, ``toggle_vote``,
-    ``clear_votes``, ``clear_medias``, ``set_inclusion``, ``register_detector_context``,
+    ``clear_votes``, ``clear_medias``, ``register_detector_context``,
     ``unregister_detector_context``) must release ``_state_lock`` before calling
     into ``vtscore.detectors.labeling_progress``.  Otherwise a contributor adding
     code that takes the locks in the reverse order opens a deadlock window.
@@ -864,17 +864,6 @@ class TestStateProgressLockOrder:
 
         clear_medias()
         assert held, "clear_progress_cache was never called from clear_medias"
-        assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
-
-    def test_set_inclusion_releases_state_lock_before_progress_clear(self, monkeypatch, isolated_settings):
-        held = self._patch_capture(monkeypatch, "clear_progress_cache")
-        import vtsearch.state as _vstate
-
-        # Two distinct values to force the change-detection branch that triggers a clear.
-        current = _vstate.get_inclusion()
-        new_value = (current + 1) % 11  # inclusion is in [-10, 10]; bump within range
-        _vstate.set_inclusion(new_value)
-        assert held, "clear_progress_cache was never called from set_inclusion"
         assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
 
     def test_vote_mutation_does_not_block_when_progress_lock_held(self):

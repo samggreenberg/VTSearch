@@ -34,6 +34,7 @@ from __future__ import annotations
 import math
 import os
 import zlib
+from pathlib import Path
 
 # --- Datasets and their embedders (arms differ per dataset) ---
 DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
@@ -306,6 +307,16 @@ def seed_query_text(dataset: str, category: str) -> str:
     local = EXPERIMENT_QUERIES.get(dataset) or {}
     if category in local:
         return local[category]
+    # A mixed cell (#4160) is the class at several sizes, and every band of a
+    # class shares one text -- someone hunting a car types "a car" whatever its
+    # size -- so it takes its pure bands' text.
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    cls, band = scale_bands.parse_cell(category)
+    if scale_bands.is_mix_band(band):
+        texts = {local[f"{cls}@{b}"] for b in scale_bands.REPORTED_BANDS if f"{cls}@{b}" in local}
+        if len(texts) == 1:
+            return texts.pop()
 
     from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
 
@@ -503,6 +514,72 @@ if TEST_BANDS and TEST_BANDS != "all":
 elif TEST_BANDS == "all":
     TEST_BANDS = "auto"
 
+#: Also rank each band's cohort against the held-out negatives
+#: (``auroc_<band>``, #4160).  Off by default: it scores the negatives a second
+#: time every step, which is cheap on a whole-image arm and is not on a region
+#: one.
+TEST_BAND_AUROC = os.environ.get("CALIB_TEST_BAND_AUROC", "0") == "1"
+
+#: Train-side size mixes to run BESIDE the pure bands (#4160), as a comma list:
+#: ``equal`` (the class's bands at equal shares) and/or ``natural`` (the shares
+#: the whole corpus holds, read from :data:`MIX_SHARES_PATH`).  Each adds one
+#: cell per class, ``<class>@mix-<name>``, run through
+#: :func:`vtscore.eval.scale_bands.paired_mix` so its per-band test cohorts are
+#: the pure arms' own.  Empty (the default) adds nothing.
+TRAIN_MIXES = [m.strip() for m in os.environ.get("CALIB_TRAIN_MIXES", "").split(",") if m.strip()]
+_KNOWN_MIXES = ("equal", "natural")
+if set(TRAIN_MIXES) - set(_KNOWN_MIXES):
+    raise ValueError(f"CALIB_TRAIN_MIXES={TRAIN_MIXES} names a mix outside {_KNOWN_MIXES}")
+
+#: ``{class: {band: share}}`` for the ``natural`` mix.  The shares have to come
+#: from the corpus, not from the cell pickle: the pile designates the same
+#: number of positives in every band, so a pickle's own shares are equal by
+#: construction.  ``coco_better_export.py --mix-census-json`` writes this file.
+MIX_SHARES_PATH = os.environ.get("CALIB_MIX_SHARES", "").strip()
+
+
+def with_train_mixes(categories: list[str]) -> list[str]:
+    """*categories* plus one ``<class>@mix-<name>`` per banded class per mix.
+
+    A class gets a mixed cell only when it has at least two pure bands: a mix
+    over one band is that band's arm under another name.
+    """
+    if not TRAIN_MIXES:
+        return list(categories)
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    bands: dict[str, set[str]] = {}
+    for cat in categories:
+        cls, band = scale_bands.parse_cell(cat)
+        if band is not None and not scale_bands.is_mix_band(band):
+            bands.setdefault(cls, set()).add(band)
+    extra = [f"{cls}@{scale_bands.MIX_BAND}-{m}" for cls in sorted(bands) if len(bands[cls]) > 1 for m in TRAIN_MIXES]
+    return [*categories, *(c for c in extra if c not in categories)]
+
+
+def train_mix_for(category: str) -> "dict[str, float] | None":
+    """The per-band shares a ``<class>@mix-<name>`` cell trains at, else ``None``."""
+    from vtscore.eval import scale_bands  # noqa: PLC0415
+
+    cls, band = scale_bands.parse_cell(category)
+    if not scale_bands.is_mix_band(band):
+        return None
+    name = (band or "").partition("-")[2]
+    if name == "equal":
+        return {b: 1.0 for b in scale_bands.REPORTED_BANDS}
+    if name == "natural":
+        if not MIX_SHARES_PATH:
+            raise ValueError(f"{category!r} needs CALIB_MIX_SHARES (the corpus band shares)")
+        import json  # noqa: PLC0415
+        from pathlib import Path  # noqa: PLC0415
+
+        shares = json.loads(Path(MIX_SHARES_PATH).read_text()).get(cls)
+        if not shares:
+            raise KeyError(f"{MIX_SHARES_PATH} has no shares for {cls!r}")
+        return {b: float(w) for b, w in shares.items()}
+    raise ValueError(f"{category!r} names an unknown mix {name!r}")
+
+
 #: Inclusion values the fold orderings are re-thresholded at for the budget sweep.
 INCLUSION_SWEEP_KS = [int(k) for k in os.environ.get("CALIB_SWEEP_KS", "-4,-2,-1,0,1,2,4").split(",")]
 
@@ -629,6 +706,26 @@ else:
         ) from None
     if EXCLUSION_MIN_REMAINDER < 0:
         raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
+
+
+#: The precision floor the reporting line is drawn at (#4245).  Unset is the
+#: app's own default floor - a live detector's line - resolved by
+#: ``vtscore.training.thresholds.resolve_min_precision``; ``off`` is the
+#: Inclusion arm every study before #4245 ran, and the one an Inclusion sweep
+#: needs, because a set floor wins over the knob; a number pins a floor.
+_MIN_PRECISION_ENV = os.environ.get("CALIB_MIN_PRECISION", "").strip().lower()
+MIN_PRECISION: float | str | None
+if _MIN_PRECISION_ENV in ("", "default", "app"):
+    MIN_PRECISION = None
+elif _MIN_PRECISION_ENV == "off":
+    MIN_PRECISION = "off"
+else:
+    try:
+        MIN_PRECISION = float(_MIN_PRECISION_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_MIN_PRECISION={_MIN_PRECISION_ENV!r} is not 'off', a floor in (0, 1], or unset (= the app's default)"
+        ) from None
 
 
 def exclusion_arm_name() -> str:
@@ -819,7 +916,8 @@ SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").spli
 #: like #2799's ("should safe_thresholds be forced on for every VTSearch
 #: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``
 #: for the logistic head the SVM replaced (#2790/#2809), or ``CALIB_HEAD=mlp``
-#: for the historical auto-sized-MLP arm (#2781).
+#: for the historical auto-sized-MLP arm (#2781), or ``CALIB_HEAD=linear_logreg``
+#: for the logistic loss fitted to convergence by scikit-learn (#4114).
 HEAD = os.environ.get("CALIB_HEAD") or None
 
 #: Which **pipeline** runs at each step (issue #3959).  Unset is ``"app"``, the
@@ -914,11 +1012,45 @@ ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 #: that wants to name it explicitly, and is pinned against the app.
 STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
 
+#: Issue #4197's opening-diversity knob, ``"<tau>/<k>"``: while Autopilot's
+#: opening walks the top of the text sort, pass over candidates with cosine >= tau
+#: to at least k of the Bads voted so far.  Unset (the default) is the app.
+OPENING_DIVERSITY = os.environ.get("CALIB_OPENING_DIVERSITY", "").strip() or None
+
 #: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
 #: #3267 run and harmless everywhere else - one small row per vote.  It is the
 #: only frame that records the **opening**, which emits no main row because no
 #: detector exists yet, so an arm's mining behaviour is invisible without it.
 EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
+
+#: Thin POSITIVES across the whole cell, before the split, to this prevalence
+#: (issue #4222): the low-prevalence world below a dataset's natural rate, e.g.
+#: ``0.001`` for about 1 in 1,000.  Unset = natural.  The simulator's
+#: ``target_prevalence``: test and pool both sit at the target, a cell left
+#: with fewer than 15 positives is skipped, and it refuses ``CALIB_TEST_BANDS``.
+TARGET_PREVALENCE = float(os.environ["CALIB_TARGET_PREVALENCE"]) if os.environ.get("CALIB_TARGET_PREVALENCE") else None
+
+#: Thin the simulation half's negatives so positives are this fraction of the
+#: pool the cut rules read (issue #4184/#4201).  Unset = natural prevalence.
+#: The test set and band cohorts are untouched, so a cell pairs with its
+#: natural twin; see ``vtscore.eval.voting_iterations.thin_haystack``.
+HAYSTACK_PREVALENCE = (
+    float(os.environ["CALIB_HAYSTACK_PREVALENCE"]) if os.environ.get("CALIB_HAYSTACK_PREVALENCE") else None
+)
+
+#: Record a precision frame (``task_NNNN__pframes.npz``) at these steps
+#: (issue #4220), e.g. ``25,50,100,150``: the test half's scores and labels, the
+#: app's pool scores, the votes' in-sample scores, and every calibration fold's
+#: held-out vote scores with its own haystack - what a precision-floor
+#: estimator reads, and the truth it is graded on.  Unset = off.
+PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").replace(",", " ").split())
+
+#: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
+#: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
+#: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.
+#: ``_cells_paths`` reads both spellings, so every analyzer that goes through
+#: it is unaffected.
+CELLS_GZIP = os.environ.get("CALIB_CELLS_GZIP", "0") == "1"
 
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
@@ -1128,6 +1260,20 @@ def select_categories_by_scale(
 #: ``"scale"`` forces banding; unset infers as before.
 CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
 
+#: A file naming the categories to keep, one per line (#4213).  Applied after
+#: :data:`CATEGORY_MODE`'s selection, so it can only narrow a grid, and it
+#: refuses a name the selection did not produce rather than silently running
+#: fewer cells.  For a study that samples strata of a designated set chosen by a
+#: measurement made elsewhere - e.g. the hardest and easiest quartiles - where a
+#: region cell costs too much to run all of them.  Unset: every run before #4213.
+CATEGORY_FILE = os.environ.get("CALIB_CATEGORY_FILE", "").strip()
+
+
+def _read_category_file(path: str) -> list[str]:
+    lines = [ln.strip() for ln in Path(path).read_text().splitlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
+
 #: Restrict category selection to categories that have a typed query (#3267).
 #:
 #: The autopilot's opening is a walk down the **seed sort**, and where that sort
@@ -1192,6 +1338,14 @@ def select_categories(
         category_counts = eligible
 
     selected, report = _select_categories_inner(medias, category_counts)
+    if CATEGORY_FILE:
+        wanted = _read_category_file(CATEGORY_FILE)
+        missing = sorted(set(wanted) - set(selected))
+        if missing:
+            raise ValueError(f"CALIB_CATEGORY_FILE names categories the selection did not produce: {missing}")
+        report["category_file"] = CATEGORY_FILE
+        report["not_in_category_file"] = sorted(set(selected) - set(wanted))
+        selected = sorted(wanted)
     if REQUIRE_SEED_QUERY and dataset is not None:
         report["require_seed_query"] = True
         report["dropped_no_seed_query"] = dropped_no_query

@@ -512,10 +512,10 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] != first_key
 
-    def test_inclusion_change_reuses_cached_orderings(self):
-        """Inclusion is a pure threshold knob now: changing it must reuse the
-        cached fold orderings (no fold refit) and only re-run the cheap
-        min-cost search."""
+    def test_floor_change_reuses_cached_orderings(self):
+        """The precision floor is a pure threshold knob: a retrain at another
+        floor must reuse the cached fold orderings (no fold refit) and only
+        re-run the cheap cut."""
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
@@ -526,8 +526,8 @@ class TestCalibrationCache:
             medias,
             good_votes,
             bad_votes,
-            inclusion_value=0,
             det_ctx=det_ctx,
+            min_precision=0.5,
         )
         assert det_ctx.calibration_cache is not None
         key_before = det_ctx.calibration_cache[0]
@@ -541,10 +541,10 @@ class TestCalibrationCache:
                 medias,
                 good_votes,
                 bad_votes,
-                inclusion_value=2,
                 det_ctx=det_ctx,
+                min_precision=0.9,
             )
-        # No fold refit, and the cache key is unchanged (inclusion is not in it).
+        # No fold refit, and the cache key is unchanged (the floor is not in it).
         assert patched.call_count == 0
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] == key_before
@@ -711,6 +711,35 @@ class TestLearnedSortAsync:
         third = client.post("/api/learned-sort", json={"wait": True}).get_json()
         assert third["status"] == "done"
         assert third["job_id"] != first_job_id
+
+        learned_sort_jobs.reset_for_tests()
+
+    def test_a_dropped_line_ranking_retrains_rather_than_reusing_the_cache(self, client):
+        """A cached sort must not outlive the ranking its line was drawn over (#4317).
+
+        A dataset switch drops ``line_ranking`` (media ids are per dataset), and
+        coming back with the same votes used to hit the signature cache: the
+        response drew a line and a floor state while the detector held no
+        ranking, so Train's spot check refused with "No ranking to check".
+        """
+        from vtscore.concurrency.async_jobs import learned_sort_jobs
+        from vtscore.state.core import get_active_detector_context
+
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+
+        first = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert first["status"] == "done"
+        ctx = get_active_detector_context()
+        assert ctx.line_ranking is not None
+
+        # What a round trip through another dataset leaves behind.
+        ctx.line_ranking = None
+        second = client.post("/api/learned-sort", json={"wait": True}).get_json()
+        assert second["status"] == "done"
+        assert second["job_id"] != first["job_id"]
+        assert ctx.line_ranking is not None
+        assert client.post("/api/precision-check/start", json={}).status_code == 200
 
         learned_sort_jobs.reset_for_tests()
 

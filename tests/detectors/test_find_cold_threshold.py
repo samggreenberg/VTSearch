@@ -131,9 +131,9 @@ class TestColdFindCutsOnTheCorpusItDecides:
         seen: list[dict] = []
         real_fused = training_mod._fused_threshold
 
-        def _spy(xcal, folds, rows, scores, inclusion, blend_ctx, schedule, **kwargs):
+        def _spy(xcal, folds, rows, scores, blend_ctx, schedule, **kwargs):
             seen.append({"rows": rows, **kwargs})
-            return real_fused(xcal, folds, rows, scores, inclusion, blend_ctx, schedule, **kwargs)
+            return real_fused(xcal, folds, rows, scores, blend_ctx, schedule, **kwargs)
 
         monkeypatch.setattr(training_mod, "_fused_threshold", _spy)
         _run_find(corpus, _cold_config(), monkeypatch)
@@ -440,3 +440,43 @@ class TestEveryMediaGetsAVerdict:
         assert any(v != "N/A" for cid, v in verdicts.items() if cid != 10) or positives, (
             "one unscorable media must not sink the other nine"
         )
+
+
+class TestColdFindTrainsUnderTheUsersSettings:
+    def test_it_cuts_at_the_users_floor_and_calibration(self, monkeypatch):
+        """A cold detector is trained the way the load and learned-sort paths train it.
+
+        The cold path called ``labelset_train_and_score`` with its defaults, so
+        every cold Find was cut with no floor over two calibration splits,
+        whatever the user had set - while the *live* path over the same detector
+        used the user's line.  One labelset should mean one detector either way.
+        No Inclusion reaches it: that is no longer a user preference (#4269).
+        """
+        import dataclasses
+
+        import vtscore.config as config_mod
+        import vtscore.detectors.labelset_training as labelset_mod
+
+        real_from_settings = config_mod.CoreConfig.from_settings
+
+        def _from_settings(cls, settings_path=None):
+            return dataclasses.replace(
+                real_from_settings(settings_path), min_precision=0.75, calibrate_count=3, calibration_fraction=0.4
+            )
+
+        monkeypatch.setattr(config_mod.CoreConfig, "from_settings", classmethod(_from_settings))
+        seen: list[dict] = []
+        real_train = labelset_mod.labelset_train_and_score
+
+        def _spy(*args, **kwargs):
+            seen.append(kwargs)
+            return real_train(*args, **kwargs)
+
+        monkeypatch.setattr(labelset_mod, "labelset_train_and_score", _spy)
+        _run_find(_cold_corpus(), _cold_config(), monkeypatch)
+
+        assert seen, "the cold path never trained"
+        assert "inclusion_value" not in seen[0]
+        assert seen[0]["min_precision"] == 0.75
+        assert seen[0]["calibrate_count"] == 3
+        assert seen[0]["calibration_fraction"] == 0.4

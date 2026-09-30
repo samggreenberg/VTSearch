@@ -215,10 +215,11 @@ Two of these settle open questions:
 2. **Revert the equal-density crossing cut to the midpoint** (#2798/#2801), as a
    separate PR with its own before/after.
 3. **Close the logit-space idea** with the number above.
-4. `docs/plans/inclusion-calibration-bias.md`'s "Cold-start calibration" item
-   should cite this study as evidence the blend **earns its keep** rather than
-   being part of the cold-start problem (it removes the degenerate cuts, and it
-   beats the raw conformal cut at every vote count where it has authority).
+4. The (since retired) inclusion-calibration-bias plan's "Cold-start
+   calibration" item should cite this study as evidence the blend **earns its
+   keep** rather than being part of the cold-start problem (it removes the
+   degenerate cuts, and it beats the raw conformal cut at every vote count where
+   it has authority).
 
 ## Reproducing
 

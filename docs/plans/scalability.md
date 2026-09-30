@@ -10,8 +10,8 @@ fix direction + implementation sketch for each item still owed.
 **Scope:** What breaks as datasets grow to 100 k / 1 M / 10 M items and as
 LabelSets grow to 1 k / 10 k / 100 k labels, GUI and CLI. Items track **future
 work only**: shipped items (S1 mmap embedding-matrix sidecar, S2/S8
-coverage-atlas auto-defer, S9 GMM subsample, S14 cached secondary lookups, S16
-grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
+coverage-atlas auto-defer, S9 GMM subsample, S13 streamed GUI label export, S14 cached secondary lookups,
+S16 grid virtual scroll, S18 prefetch cap, S21 CLI progress throttle) have been
 pruned per the plan-file policy — git history is their record. `S#` numbering
 has gaps where those were removed; that is expected (labels are stable, never
 renumbered).
@@ -36,7 +36,6 @@ deferred. Items are independently shippable.
    labelsets not stall the UI.
 6. **S11** (parallel label resolution); required for cross-dataset detectors with
    10 k+ labels.
-7. **S13** (stream the GUI label-export route); the CLI side already streams.
 8. **S15** (streaming pickle load + cancel-check); required for 10 M+ datasets.
 
 **Gated until interactive datasets approach 1 M:** S6, S7 (see below).
@@ -51,8 +50,7 @@ deferred. Items are independently shippable.
 - The **recurring root causes** table (bottom) collects patterns: fixing a
   pattern fixes many items at once.
 - "At N" estimates are back-of-envelope with SigLIP/E5 embedding dim ~384
-  (float32 = 4 B), sorted-list cost at ~1 µs/item, JSON at ~50 B/element. Line
-  references are approximate and will drift.
+  (float32 = 4 B), sorted-list cost at ~1 µs/item, JSON at ~50 B/element.
 
 ---
 
@@ -129,7 +127,7 @@ several hundred MB before the embedding arrays.
 
 **Fix (medium-term, long horizon):** Extract embeddings from the per-item dict
 into the embedding matrix on load (mirroring the shipped mmap embedding-matrix
-sidecar), replacing `media["embedding"]` with a row-index pointer — ~60–70%
+sidecar), replacing the per-item `media["embeddings"]` vectors with a row-index pointer — ~60–70%
 smaller per-item dict at 384-dim. The full columnar rewrite (per-field NumPy
 arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
@@ -143,14 +141,14 @@ arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
 > **Verdict (re-confirmed): defer.** The invalidation half already shipped safely
 > — `media_revision`, bumped automatically by the `MediasDict` subclass on every
-> structural change (`core.py:261+`), keys the matrix cache's *validity* via an
-> O(1) revision compare (`matrix.py:128`), and the original O(N) id-list
+> structural change (`MediasDict` in `core.py`), keys the matrix cache's *validity*
+> via an O(1) revision compare in `get_embedding_matrix`, and the original O(N) id-list
 > comparison is gone. Crucially, the auto-bumping `MediasDict` removes the
 > staleness risk the earlier gating flagged (a manual invariant every mutation
 > site must remember to bump): there is no manual bump to miss.
 >
 > **What remains** is only the perf tail: `get_embedding_matrix` still calls
-> `sorted(ctx.medias.keys())` on *every* call (`matrix.py:116`), before the
+> `sorted(ctx.medias.keys())` on *every* call (`get_embedding_matrix`), before the
 > cache-hit return, to produce the returned id list — the O(N log N) the item
 > targeted is not eliminated. The fix is small: on a revision cache-hit, return
 > the stored `_emb_matrix_ids` instead of re-sorting. But at target scale the
@@ -162,7 +160,7 @@ arrays or a Polars frame) is deferred: it touches every media-reading call site.
 
 ### S7: epoch-based learned-sort signature — ⏸ GATED (with S6)
 
-**File:** `vtscore/detectors/learned_sort.py:143,148` (`build_learned_sort_signature`)
+**File:** `vtscore/detectors/learned_sort.py` (`build_learned_sort_signature`)
 
 `tuple(sorted(snap.keys()))` (O(N log N)) and
 `tuple(sorted(region_boxes_snapshot.items()))` appear inside the signature checked
@@ -281,7 +279,7 @@ the *pickle* loader, which still reads the whole file at once.
 `for det_name in detector_names:` loop), `vtsearch/routes/detectors/scoring.py`
 
 **Partly shipped** (see [`cli-stream-massive-images.md`](cli-stream-massive-images.md)):
-`--autodetect --chunk-size N --stream-results` scores chunk by chunk and streams
+`--autodetect --tempimport --chunk-size N --stream-results` scores chunk by chunk and streams
 hits straight to the exporter, so the *target* side no longer holds all N items,
 all hits, or the full export in RAM; folder enumeration is lazy; each chunk is
 embedded one at a time.
@@ -343,7 +341,7 @@ embedder. Shares the S11 approach.
 |-----------|-----------------------|
 | **O(N log N) sorted-key comparisons** used as change detection | S6, S7 |
 | **Full in-memory arrays / dicts** for every N items | S3, S4, S17, S19 |
-| **No streaming** for large JSON / pickle payloads | S3, S13, S15 |
+| **No streaming** for large JSON / pickle payloads | S3, S15 |
 | **Serial I/O** where parallelism is easy | S11, S20 |
 | **No debouncing** on high-frequency write paths | S12 |
 

@@ -38,11 +38,10 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 ## Thresholds and calibration
 
+- [`min-precision.md`](min-precision.md)
 - [`population-anchored-calibration.md`](population-anchored-calibration.md)
-- [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md)
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
 - [`calibration-experiment.md`](calibration-experiment.md)
-- [`threshold-stability-experiment.md`](threshold-stability-experiment.md)
 - [`region-vs-binary-kappa-mechanism.md`](region-vs-binary-kappa-mechanism.md)
 
 ## Scoring and eval
@@ -50,7 +49,6 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`max-patch-experiment.md`](max-patch-experiment.md)
 - [`set-scorer-experiment.md`](set-scorer-experiment.md)
 - [`coverage-atlas.md`](coverage-atlas.md)
-- [`vg-scale-bands-and-corrections.md`](vg-scale-bands-and-corrections.md)
 - [`coco-better.md`](coco-better.md)
 - [`stopping-rules-in-eval.md`](stopping-rules-in-eval.md)
 
@@ -67,4 +65,5 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 ## Cross-cutting audits
 
 - [`codebase-audit-2026-08.md`](codebase-audit-2026-08.md)
+- [`codebase-audit-2026-09.md`](codebase-audit-2026-09.md)
 - [`documentation-accuracy.md`](documentation-accuracy.md)

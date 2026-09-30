@@ -27,6 +27,7 @@ from vtscore.concurrency.gate import ConcurrencyGate
 from vtscore.concurrency.progress import (
     CancelledError,
     clear_thread_progress,
+    ingest_eta_hidden,
     loading_tasks,
     set_thread_progress,
 )
@@ -281,10 +282,12 @@ def _start_import_task(
 
     The two import pipelines below — a full dataset load and a combine-flow
     staging import — open identically: mint a task id, create the per-task
-    tracker (so two concurrent imports never interleave one channel), start the
-    timing recorder that labels each measured phase, and snapshot the user who
-    asked for the work.  Only the family name, the step structure, and the
-    tracker's extra fields differ, so they are parameters here.
+    tracker (so two concurrent imports never interleave one channel, and with
+    no ETA when the deployment hides ingest ETAs — see
+    :func:`~vtscore.concurrency.progress.ingest_eta_hidden`), start the timing
+    recorder that labels each measured phase, and snapshot the user who asked
+    for the work.  Only the family name, the step structure, and the tracker's
+    extra fields differ, so they are parameters here.
 
     The caller writes its own first ``tracker.update`` (rather than this
     function writing a generic one) because the load flow subscribes its
@@ -301,6 +304,7 @@ def _start_import_task(
         embedder=embedder,
         extra_fields=extra_fields,
         step_weights=weights,
+        publish_eta=not ingest_eta_hidden(),
     )
     recorder = record_task(
         tracker,
@@ -596,6 +600,7 @@ def _run_origin_load_in_background(
     dataset_id: str = "",
     n_hint: int | None = None,
     download_size_mb_hint: float | None = None,
+    post_load: Callable[[DatasetContext], None] | None = None,
 ) -> str:
     """Run a dataset load in a background thread with standard error handling.
 
@@ -614,6 +619,16 @@ def _run_origin_load_in_background(
     The dataset context is NOT activated during loading.  It is activated
     only upon successful completion, and only if no other dataset is
     currently active.
+
+    *post_load*, when given, is called once with the new dataset's
+    :class:`DatasetContext` after a load that **succeeded** (never after a
+    failure or a cancel).  It runs on the worker thread, with that context
+    pinned as the thread's dataset context and the requesting user replayed,
+    but only once the load's own tracker has parked terminal and its timing
+    recorders have finished - so the dataset row is already live, and nothing
+    the hook does is billed to the load's cost model.  An exception it raises
+    is logged and swallowed: the dataset is saved either way.  The app uses it
+    to start the importing user's AutoRun detectors on the new dataset.
 
     Returns the task_id that can be used to poll progress or cancel.
     """
@@ -728,7 +743,7 @@ def _run_origin_load_in_background(
                     apply_custom_metadata_md5(ctx.medias)
                     _tag_origins(ctx.medias, origin)
                     _apply_clipper_stage(ctx, pacer, clipper, clipper_params, chain_steps)
-                    _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
+                    embed_failures = _embed_missing_stage(ctx, pacer, embedders if embedders else [embedder])
                     # Step 4 (finalize) bundles several sub-stages. Route them
                     # through a FinalizeProgress proxy so each maps into its own
                     # ordered slice of the step-4 bar instead of independently
@@ -737,7 +752,7 @@ def _run_origin_load_in_background(
                     # serialize/disk-write window. See FinalizeProgress.
                     fin = FinalizeProgress(pacer, media_type)
                     fin.begin("cleanup")
-                    _drop_none_embeddings_stage(ctx, fin)
+                    _drop_none_embeddings_stage(ctx, fin, embed_failures)
                     # Re-lazify clips from reference (thin) parents now that
                     # embedding is done: strip their materialized bytes so the
                     # dataset stores recipes, not duplicated clip payloads.
@@ -816,7 +831,24 @@ def _run_origin_load_in_background(
             )
             _park_load_terminal(tracker, len(ctx.medias))
 
+        # Outside the ``finally``: a load that raised past it never reaches
+        # here, and one that failed inside it stamped ``error`` on the tracker.
+        _run_post_load(post_load, ctx, tracker)
+
     return _spawn_import_worker(task, load_task)
+
+
+def _run_post_load(post_load: Callable[[DatasetContext], None] | None, ctx: DatasetContext, tracker) -> None:
+    """Call a load's *post_load* hook if the load succeeded; see :func:`_run_origin_load_in_background`."""
+    if post_load is None or tracker.get().get("error"):
+        return
+    from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
+
+    with thread_dataset_context(ctx):
+        try:
+            post_load(ctx)
+        except Exception:
+            traceback.print_exc()
 
 
 def consume_chunks_into(
@@ -857,7 +889,12 @@ def auto_chunk_size(media_type: str) -> int:
     return _CHUNK_SIZE_BY_MEDIA_TYPE.get(_normalize_media_type(media_type), 100)
 
 
-def _run_importer_in_background(importer, field_values: dict) -> str:
+def _run_importer_in_background(
+    importer,
+    field_values: dict,
+    *,
+    post_load: Callable[[DatasetContext], None] | None = None,
+) -> str:
     """Start *importer*.run() in a daemon thread.
 
     When the importer reports ``supports_chunked``, the loader streams
@@ -865,6 +902,9 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     import/embedding phase.  The chunk size is auto-selected from the
     field's ``media_type`` (see :func:`auto_chunk_size`); there is no
     user-facing knob.
+
+    *post_load* is forwarded to :func:`_run_origin_load_in_background`,
+    which documents when it runs.
 
     Returns the task_id for progress tracking.
     """
@@ -950,6 +990,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
         dataset_id=demo_id,
         n_hint=n_hint,
         download_size_mb_hint=download_size_mb_hint,
+        post_load=post_load,
     )
 
 

@@ -38,13 +38,13 @@ imported/loaded from disk and applied as-is. The architecture combines:
   Detectors are persisted as **labelsets** (origin info + labels; never
   weights; weights are an in-memory artifact, re-derived on demand from
   origins and the active embedder).
-- **Semantic sort (text-similarity search)**: LAION-CLAP (audio),
-  SigLIP (images), X-CLIP (video), E5-base-v2 (text) for
-  embedding-based similarity search, with alternative embedders
-  available (CLAP Music, BGE). Used to seed a detector during the
-  training loop, or as a quick stand-alone search.
-- **Flask web UI**: Angular SPA frontend with a REST API (see
-  [FRONTEND.md](FRONTEND.md)).
+- **Semantic sort (text-similarity search)**: a joint text/media
+  embedder per media type (CLAP for audio, SigLIP for images, X-CLIP for
+  video, E5 for text; alternatives in the [Media types](#media-types)
+  table) ranks items by similarity to a text query. Used to seed a
+  detector during the training loop, or as a quick stand-alone search.
+- **Web UI**: an Angular SPA (see [FRONTEND.md](FRONTEND.md)) over a
+  Flask REST API (see [API.md](API.md)).
 - **Plugin systems**: auto-discovered plugin families (dataset importers,
   results exporters, converters, embedders, ...). The generated family
   inventory in [Plugin architecture details](#plugin-architecture-details)
@@ -132,8 +132,11 @@ VTSearch/
 │                                   vtsearch/hooks.py and vtsearch/errors.py
 │
 ├── vtscore/                        Library tier; no Flask dependency (gated, see below)
-│   ├── config.py                   Constants (sample rates, paths, model IDs), resolve_device()
+│   ├── config/                     CoreConfig (core_config.py), paths / DATA_DIR, model IDs,
+│   │                               runtime knobs (TRAIN_EPOCHS, …), resolve_device() (device.py)
 │   ├── achievements_hooks.py       Achievement-event seam; app installs the recorders
+│   ├── host_seams.py               Snapshot/restore of every callback the app installs into the
+│   │                               library (resolvers, persistence hooks, config builder)
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── cli_pipeline.py             Pipeline YAML loader
 │   ├── cli_progress.py             CLI progress bars
@@ -152,6 +155,8 @@ VTSearch/
 │   │   ├── torch_ops.py           Torch tensor/device adapters shared by every embedder
 │   │   ├── clipper.py              MediaClipper ABC + shared clipper logic
 │   │   ├── cleaner.py              MediaCleaner (a MediaClipper subclass; 1→1 cleanup gates)
+│   │   ├── cropping.py             Apply a user-specified bounded clipper to one media file
+│   │   ├── near_dupes.py           Near-duplicate detection + collapsing (image pHash, text SimHash)
 │   │   ├── patch_embed.py          Patch-semantic embedding: per-region vectors on one media
 │   │   ├── structural.py           Structural (geometric-verification) embedding, with
 │   │   │   structural_geometry.py  the geometric consistency check and
@@ -178,6 +183,8 @@ VTSearch/
 │   │                               importable; FaceNet embedder), fed by the image2face converter
 │   │
 │   ├── converters/                 Media type converters (auto-discovered via CONVERTER sentinel)
+│   │   ├── base.py                 MediaConverter ABC
+│   │   ├── runner.py               Runs converters over a scanned folder; stamps converter provenance
 │   │   ├── audio2image.py          Mel/CQT spectrogram rendering
 │   │   ├── audio2text.py           Whisper ASR transcription
 │   │   ├── document2image.py       PDF page rendering
@@ -188,12 +195,18 @@ VTSearch/
 │   │   └── video2image.py          Frame sampling
 │   │
 │   ├── training/                   Generic learned-sort primitives (no Flask, no state)
-│   │   ├── mlp.py                  build_model, train_model (pure PyTorch)
-│   │   ├── thresholds/             GMM / cross-calibration / fold-anchored threshold helpers
+│   │   ├── mlp.py                  build_model, train_model — the head selector (LINEAR_SVM_HEAD is
+│   │   │                           production; LINEAR_HEAD and the MLP survive as eval arms)
+│   │   ├── svm.py                  fit_linear_svm_head (the production head) + kernel sweep arms
+│   │   ├── thresholds/             Conformal / GMM / anchored / blend threshold helpers
 │   │   ├── blend_schedules.py      Vote-count → blend-weight schedules (production + arms)
-│   │   ├── svm.py                  SVM trainer prototype
+│   │   ├── query_sort.py           External-query sorts: example media, label files
 │   │   ├── region_similarity.py    Region-aware cosine similarity scoring
 │   │   └── structural_similarity.py  Geometric-verification scoring for structural embedders
+│   │
+│   ├── coverage/                   Coverage Atlas algorithm (atlas.py): hierarchical k-means +
+│   │                               per-class evidence channels + typicality; no context, no lock.
+│   │                               The wiring onto the active dataset is state/coverage.py
 │   │
 │   ├── embedding/                  Embedder façades and torch runtime
 │   │   ├── helpers.py              embed_audio_file / embed_image_file / embed_text_query / …
@@ -233,12 +246,17 @@ VTSearch/
 │   │   ├── positives_browse.py     Browse the detector's positive examples
 │   │   ├── dataset_sync.py         Sync detectors when a dataset loads
 │   │   ├── media_seeding.py        Media seeding utilities
+│   │   ├── cost_trend.py           The Smart indicator's arithmetic (shared with the eval harness)
+│   │   ├── stability.py            The Stable indicator's arithmetic (shared with the eval harness)
 │   │   └── labeling_progress.py    Per-step head cache + stability analysis
 │   │
 │   ├── datasets/                   Dataset loading, downloading, ingestion
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
 │   │   ├── labelset.py             LabelSet / LabeledElement (labeled data with origins)
+│   │   ├── vote_provenance.py      "vt:provenance" vocabulary + validation (see LabelSet below)
+│   │   ├── config.py               Per-media-type dataset configs, built from the media registry
 │   │   ├── loader.py               Public façade + re-exports
+│   │   ├── loader_common.py        Helpers shared by the loaders
 │   │   ├── loader_folder.py        load_dataset_from_folder + chunked variant
 │   │   ├── loader_pickle.py        load_dataset_from_pickle + chunked + sidecars
 │   │   ├── loader_demo.py          load_demo_dataset, _stamp_demo_origin
@@ -293,6 +311,15 @@ VTSearch/
 │   │   ├── config.py               EvalConfig / arm definitions
 │   │   ├── runner.py               run_eval() orchestrator
 │   │   ├── sweep_trainers.py       Standalone estimators for the label-curve/timing sweeps
+│   │   │                           (trainers.py is a deprecated alias)
+│   │   ├── step_model.py           Per-step ranker the voting-iterations eval trains, and
+│   │   │   step_trainers.py        its per-step trainers + pool scorers
+│   │   ├── arms_*.py               Named experiment-arm families (anchored, fit_quality,
+│   │   │                           fold_count, inclusion, safe_gmm, schedule)
+│   │   ├── live_threshold_rules.py Threshold rules the app no longer ships, as live arms
+│   │   ├── scale_bands.py          Scale-banded cells across sizes
+│   │   ├── row_metrics.py          Shapes one result row from a scored test set;
+│   │   │   voting_columns.py       voting-iterations output-row schemas
 │   │   ├── patch_styles.py         Patch-scoring arms (max_patch default, whole_image, HAC, …)
 │   │   ├── evt_mixture.py          Gumbel/Normal mixture — the research arm behind the gumbel_* cuts
 │   │   ├── autopilot_flow.py       Ported autopilot loop (the app's TypeScript flow, re-implemented)
@@ -334,7 +361,7 @@ VTSearch/
 │   │   ├── async_jobs.py           AsyncJob, JobManager, eval_jobs, learned_sort_jobs
 │   │   ├── gate.py                 ConcurrencyGate (dynamic-limit semaphore for load phases)
 │   │   ├── memory_budget.py        cap_workers_by_memory
-│   │   ├── stalls.py               Stall diagnostics: heartbeat watchdog + faulthandler dumps, GC-pause log, PhaseClock / timed_lock
+│   │   ├── stalls.py               Stall diagnostics: heartbeat watchdog + thread stacks, GC-pause log, PhaseClock / timed_lock
 │   │   ├── events.py               SSE channel registry feeding /api/events (push, replaces polling)
 │   │   ├── notifications.py        Producer side of the one-shot server→client toast pipeline;
 │   │   │                           publishes on the `notification` SSE channel and is what
@@ -349,9 +376,10 @@ VTSearch/
 │   │   │                           reader through register_request_user_resolver()
 │   │   ├── votes.py                toggle_vote / apply_label / clear_votes
 │   │   ├── clicks.py               Vote click-time tracking
-│   │   ├── coverage.py             Coverage atlas construction and sampling
-│   │   ├── coverage_atlas.py       CoverageAtlas structure (hierarchical k-means + evidence channels + typicality)
-│   │   ├── near_dupes.py           Near-duplicate detection / grouping
+│   │   ├── coverage.py             Builds / caches the coverage atlas on the active dataset and
+│   │   │                           replays the detector's votes into it
+│   │   ├── coverage_atlas.py,      Deprecated aliases (warn on import) for vtscore.coverage.atlas
+│   │   │   near_dupes.py           and vtscore.media.near_dupes
 │   │   ├── sort_results_cache.py   Per-detector cache of the last sort's result rows
 │   │   └── media_lookup.py         Origin-keyed lookup, collapse_duplicates
 │   │
@@ -371,7 +399,7 @@ VTSearch/
 │   │                               origin_validation, hf_auth, login)
 │   ├── sync/                       SyncSource[LoadT, SaveT] generic base class
 │   └── utils/                      Shared helpers: hits.py (build_media_hit), hashing.py,
-│                                   scores.py, optional_deps.py, synthetic/
+│                                   scores.py, optional_deps.py, import_metadata.py, synthetic/
 │
 ├── vtsearch/                       Flask app tier (imports Flask; not library-safe)
 │   ├── hooks.py                    before_request / after_request handlers (user resolution, auth
@@ -388,8 +416,13 @@ VTSearch/
 │   │                               resolution rule, and /api/settings key
 │   ├── threading.py                Context-carrying thread helper (user + dataset + detector locals)
 │   ├── achievements.py             Achievement state management
+│   ├── achievements_catalog.py     Static achievement declarations (no state machine)
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
+│   ├── autorun_detectors.py        Runs a user's AutoRun detectors on a dataset: /api/auto-detect's core,
+│   │                               the background run after an import / from Run AutoRun, kept results
 │   ├── logging_config.py           Logging setup
+│   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
+│   ├── torch_threads.py            Native-math thread count for the server process
 │   ├── openapi_postprocess.py      OpenAPI schema post-processing
 │   ├── cli_main.py                 `python app.py` argparse + dispatch (list-plugins,
 │   │                               pipeline, autodetect, dev-server launch)
@@ -548,7 +581,7 @@ modules on the right.
 - **Nothing under `vtscore/` imports Flask** — see the note under the
   [Directory map](#directory-map).  `training/` and `embedding/` additionally
   touch no global state: core functions in `training/mlp.py`,
-  `training/thresholds.py`, and `embedding/helpers.py` accept parameters only.
+  `training/thresholds/`, and `embedding/helpers.py` accept parameters only.
   The modules that *do* reach for the active context (e.g.
   `detectors/workflow.py`, `labels/sync.py`) resolve it through
   `vtscore/state/`, which falls back to a thread-local when no framework is
@@ -576,7 +609,7 @@ modules on the right.
 
 | Module | Flask? | Global state? | Can extract standalone? |
 |--------|--------|---------------|-------------------------|
-| `vtscore/training/mlp.py` + `thresholds.py` | No | No (params) | **Yes**: pure PyTorch/sklearn |
+| `vtscore/training/mlp.py` + `svm.py` + `thresholds/` | No | No (params) | **Yes**: pure PyTorch/sklearn |
 | `vtscore/detectors/labeling_progress.py` | No | No (params) | **Yes**: pure torch/numpy |
 | `vtscore/exporters/` (base + all) | No | No | **Yes**: pure data processing |
 | `vtscore/labels/importers/` (base + all) | No | No | **Yes**: pure data processing |
@@ -587,7 +620,7 @@ modules on the right.
 | `vtscore/datasets/loader.py` | No | No (callback + params) | **Yes**: needs media registry |
 | `vtscore/datasets/importers/` (base + all) | No | No (callback) | **Yes**: each self-contained |
 | `vtscore/eval/` | No | No | **Yes**: needs media + datasets |
-| `vtsearch/settings.py` | No | No | **Yes**: JSON file I/O |
+| `vtsearch/settings.py` | No | Yes (per-user caches, current user) | Partially: JSON file I/O, but app-tier (imports `vtsearch.*`) |
 | `vtscore/media/base.py` | No | No | **Yes**: abstract only |
 | `vtscore/media/{audio,image,text,video,document,face}` | No | No | **Yes**: torch + HF models |
 | `vtscore/converters/` | No | No | **Yes**: pure media conversion |
@@ -607,23 +640,24 @@ modules on the right.
 
 ### The ML training pipeline
 
-**Files:** `vtscore/training/mlp.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
+**Files:** `vtscore/training/mlp.py` / `vtscore/training/svm.py` / `vtscore/training/thresholds/`, `vtscore/config/runtime.py` (for `TRAIN_EPOCHS`)
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
 **What you get:** `train_model()` trains a classifier on embeddings +
-binary labels — the linear SVM head production uses
-(`hidden_dim=LINEAR_HEAD`), or the MLP for a positive `hidden_dim`.  `conformal_threshold()` maps an
-`inclusion` value to a decision threshold via a split-conformal
+binary labels.  `hidden_dim` picks the head: `LINEAR_SVM_HEAD` is the linear
+SVM production uses (fitted by `svm.fit_linear_svm_head`); `LINEAR_HEAD` (the
+logistic head) and a positive width (the MLP) survive as eval arms.  `conformal_threshold()` maps an
+inclusion (the internal unit cuts are measured in) to a decision threshold via a split-conformal
 quantile rule over held-out calibration scores.  A separate
 `calculate_gmm_threshold()` fits a 2-component GMM for semantic sort
 thresholds.
 
 ```python
-from vtscore.training.mlp import LINEAR_HEAD, train_model
+from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
 from vtscore.training.thresholds import conformal_threshold
 
-model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=LINEAR_HEAD)
+model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=LINEAR_SVM_HEAD)
 threshold = conformal_threshold(scores, labels, inclusion_value=0)
 ```
 
@@ -678,41 +712,23 @@ and would abort the wrong load.
 
 That process-wide default is `update_progress`, which resolves *per thread* in
 turn: an unscoped load on a thread that bound no tracker reaches a no-op, and
-one inside a load reaches that load's own tracker.  It used to be a global
-`dataset_progress` singleton instead — a channel nothing else terminates, since
-a sink cannot see when the work it is narrating ends — and `load_models()` had
-to append a synthetic `idle` tick on the way out to compensate.  Both the
-singleton and the compensating tick are gone (#3376); what remains is that
-background warm-ups which should not appear on *any* channel say so explicitly
-with `with emb.silent_progress():` (the smart-preload threads, the post-import
-embedder warm-up), so a warm-up running at the tail of an import does not
-narrate itself onto that import's row after it has finished.  Skipping that is
-how a *finished* import came to look identical to a wedged one, with the
-dataset channel parked on "Loading SigLIP processor…" and no loader thread
-anywhere in the process (#3167).
+one inside a load reaches that load's own tracker.  Background warm-ups that
+should appear on *no* channel (the smart-preload threads, the post-import
+embedder warm-up) must say so with `with emb.silent_progress():` — otherwise a
+warm-up running at the tail of an import narrates itself onto that import's
+row after it finished, and a finished import looks wedged (#3167).
 
 ### The plugin systems
 
-**Pattern:** Each `PluginRegistry`-backed plugin family uses the same
-architecture:
-1. An abstract base class with `fields` (form descriptors) and a
-   `run()`/`export()`/`load()`/`save()` method.
-2. Auto-discovery via `PluginRegistry`; direct filesystem scanning
-   (`Path.iterdir()`) of the family's own package for a sentinel attribute
-   (`EXPORTER`, `IMPORTER`, `DATASOURCE_IMPORTER`, `LABEL_IMPORTER`,
-   `SETTINGS_IMPORTER`, `SETTINGS_EXPORTER`, `SETTINGS_SOURCE`,
-   `LABELSET_SOURCE`, `CONVERTER`, `SOURCE`), **plus** an
-   `importlib.metadata` entry-point group (`vtscore.importers`,
-   `vtscore.exporters`, …) so an installed third-party package can add
-   plugins without living in this tree.
-3. CLI support auto-derived from field definitions.
-
-To use an exporter standalone:
+Every form-driven family shares one `PluginBase` / `PluginRegistry` shape —
+see [Plugin architecture details](#plugin-architecture-details) below.  Each
+plugin is a plain object with no Flask dependency, so it can be called
+directly.  To use an exporter standalone:
 
 ```python
 from vtscore.exporters.server_json_file import EXPORTER
 
-result = EXPORTER.export(
+result = EXPORTER.export_find_results(
     results={"media_type": "audio", "results": {...}},
     field_values={"filepath": "/tmp/output.json"},
 )
@@ -730,7 +746,9 @@ load_dataset_from_folder(
     medias=medias,
     on_progress=lambda s, m, c, t: print(f"{m} {c}/{t}"),
 )
-# medias is now {1: {"id": 1, "embeddings": {name: ...}, "media_bytes": ..., ...}, ...}
+# medias is now {1: {"id": 1, "media_bytes": ..., "origin": ..., ...}, ...}
+# Loaders do not embed: vtscore.datasets.stages.embedding.embed_missing()
+# fills embeddings in afterwards (the app's load pipeline runs it for you).
 ```
 
 ### Progress tracking
@@ -798,21 +816,28 @@ The form-driven families share a common `PluginBase` / `PluginField` /
    default, validation, and placeholder.
 3. **Auto-discovery** via `PluginRegistry` scans sub-packages using
    direct filesystem scanning for a sentinel attribute (`IMPORTER`,
-   `DATASOURCE_IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`, `SETTINGS_IMPORTER`,
-   `SETTINGS_EXPORTER`, `SETTINGS_SOURCE`, `LABELSET_SOURCE`, `CONVERTER`,
-   `SOURCE`) and registers them lazily on first access.  Each family also
-   declares an `importlib.metadata` entry-point group, so a third-party
-   package can register into it from outside the tree — which is why the
-   built-in counts above are a floor, not a total.
+   `DATASOURCE_IMPORTER`, `SEED_IMPORTER`, `EXPORTER`, `LABEL_IMPORTER`,
+   `LABELSET_SOURCE`, `CONVERTER`, `SOURCE`, and app-tier
+   `SETTINGS_IMPORTER` / `SETTINGS_EXPORTER` / `SETTINGS_SOURCE`).  Each
+   family also declares an `importlib.metadata` entry-point group
+   (`vtscore.<family>`; the app-tier settings families use
+   `vtsearch.settings_*`), so a third-party package can register into it
+   from outside the tree — which is why the built-in counts above are a
+   floor, not a total.  The full mechanics are in
+   [EXTENDING-plugins.md](EXTENDING-plugins.md).
 4. **CLI support** auto-generates `argparse` flags from field
    definitions.  Override `add_cli_arguments()` for custom handling.
 5. **Graceful degradation**; if a plugin's optional dependency is
    missing, a warning is emitted but the app continues.
 
-### Explicitly registered plugins (media types / embedders / clippers / cleaners)
+### Media registries (media types / embedders / clippers / cleaners)
 
 Media types, embedders, clippers, and cleaners use four separate dict-based
-registries in `vtscore/media/__init__.py`:
+registries in `vtscore/media/__init__.py` rather than `PluginRegistry`.  The
+built-ins are still auto-discovered at import: each media-type sub-package
+(`audio/`, `image/`, …) exposes `MEDIA_TYPE`, `CLIPPERS` and `CLEANERS`
+sentinels, and every `embedder*.py` / `embedder*/` inside it exposes an
+`EMBEDDER` sentinel.  Out-of-tree code calls the `register_*` functions:
 
 | Registry | Registration function | Lookup functions |
 |----------|----------------------|------------------|
@@ -838,8 +863,8 @@ Media converters use the same `PluginRegistry` auto-discovery pattern
 `list_converters()`, `get_converter(name)`,
 `list_converters_for_source()`, and `list_converters_for_target()`.
 
-To add a new extension, create the class, import it, and call the
-register function.  See `EXTENDING.md` (in this directory) for full examples.
+For worked examples of every extension type, see [EXTENDING.md](EXTENDING.md)
+and [EXTENDING-media.md](EXTENDING-media.md).
 
 ---
 
@@ -849,32 +874,27 @@ Application state is split across two packages: **`vtscore/state/`**
 owns `DatasetContext`, `DetectorContext`, `_state_lock`, and all context
 operations; **`vtsearch/state/__init__.py`** is the app-tier shim that
 re-exports everything from `vtscore.state` and adds the proxy view.  The
-module-level names below are **proxy objects** (from `vtsearch/state_proxies.py`)
-that delegate to a per-request `DatasetContext` or `DetectorContext`;
-see [Multi-dataset support](#multi-dataset-support). All mutable access
-is protected by `_state_lock` (a `threading.RLock`):
+module-level names below are **proxy objects** (generated from the
+`_PROXY_SPECS` table in `vtsearch/state_proxies.py`) that delegate to the
+active `DatasetContext` or `DetectorContext`; see
+[Multi-dataset support](#multi-dataset-support). Mutable access is
+protected by `_state_lock` (a `threading.RLock`):
 
-| Variable | Type | Purpose |
-|----------|------|---------|
-| `medias` | `dict[int, dict]` | All loaded media items with embeddings |
-| `good_votes` | `dict[int, None]` | Media IDs voted "good" |
-| `bad_votes` | `dict[int, None]` | Media IDs voted "bad" |
-| `label_history` | `list[tuple[int, str, float]]` | Ordered labelling events `(media_id, label, timestamp)` |
-| `vote_click_times` | `dict[int, int]` | Media ID → click order (1-indexed); tracks voting sequence |
-| `last_learned_scores` | `dict[int, float]` | Media ID → score from the most recent learned sort |
-| `inclusion` | `int \| None` | FPR/FNR trade-off parameter; lazy-loaded from settings |
-| `textsort_suggestions` | `list[str]` | Text queries that received a Good vote (MRU order) |
-| `autorun_extractors` | `dict` | Saved extractor configurations |
-| `autorun_localizers` | `dict` | Saved localizer configurations |
-| `_coverage_atlas` | `CoverageAtlas \| None` | Hierarchical k-means partition with per-class evidence channels and calibrated typicality, for diverse sampling and domain-shift checks |
-| `_dataset_display_name` | `str \| None` | Custom display name for the loaded dataset |
+| Proxy | Type | Delegates to | Purpose |
+|-------|------|--------------|---------|
+| `medias` | `dict[int, dict]` | `DatasetContext` | All loaded media items |
+| `good_votes` / `bad_votes` | `dict[int, None]` | `DetectorContext` | Media IDs voted good / bad |
+| `label_history` | `list[tuple[int, str, float]]` | `DetectorContext` | Ordered labelling events `(media_id, label, timestamp)` |
+| `vote_click_times` | `dict[int, int]` | `DetectorContext` | Media ID → click order (1-indexed) |
+| `vote_region_boxes` | `dict[int, tuple[float, float, float, float]]` | `DetectorContext` | Normalised box drawn on a yes-vote (patch embedders) |
+| `last_learned_scores` | `dict[int, float]` | `DetectorContext` | Media ID → score from the most recent learned sort |
+| `textsort_suggestions` | `list[str]` | `DetectorContext` | Text queries that received a Good vote (most recent last) |
 
-Of these, only `autorun_extractors` and `autorun_localizers` are truly
-global (shared across all loaded datasets). The rest are per-dataset
-(`medias`, `_coverage_atlas`, `_dataset_display_name`) or per-detector
-(votes, label history, click times, learned scores, inclusion, textsort
-suggestions) and resolve via the active `DatasetContext` /
-`DetectorContext`.
+Other per-context values are reached through accessor functions rather than
+proxies: `get_min_precision()` / `set_min_precision()` (per detector),
+`get_coverage_atlas()` and `get_dataset_display_name()` (per dataset).  The
+only truly global (cross-dataset) state is `autorun_extractors` /
+`autorun_localizers` in `vtsearch/autorun_processors.py`.
 
 Persistent settings live in `vtsearch/settings.py`, split across two tiers.
 The two Pydantic models in `vtsearch/settings_models.py` are the authoritative
@@ -883,22 +903,27 @@ field lists — this document names the tiers and the shape, not every key.
 - **Server tier** (`ServerSettings`, shared, `data/settings.json`): the
   deployment-level knobs an operator sets — `saved_datasets_dir`,
   `detectors_dir`, `max_concurrent_*`, `hidden_plugins`,
-  `dataset_max_age_days`, `support_email`, `semantic_only`, `solo_media_type`,
-  `projection_n_neighbors`, `projection_min_dist`, `browse_signpost_vocab`,
-  `default_settings_source`.
+  `dataset_max_age_days`, `support_email`, `docs_links`, `semantic_only`,
+  `hide_ingest_eta`, `solo_media_type`, `projection_n_neighbors`,
+  `projection_min_dist`,
+  `browse_signpost_vocab`, `default_settings_source`.
 - **Per-user tier** (`UserSettings`, `<user_data_dir>/user_settings.json`):
   everything else — the preferences a user arrives with. `volume`, `theme`,
-  `inclusion`, `enrich_descriptions`, `calibrate_count`,
-  `calibration_fraction`, `audio_playing`, `show_animations`, `show_metadata`,
+  `min_precision`, `enrich_descriptions`, `calibrate_count`,
+  `calibration_fraction`, `audio_playing`, `show_animations`, `show_usage_bars`,
+  `show_metadata`,
   the `browse_*` canvas preferences, `grid_icon_size_*`, `focus_mode_*`,
-  `panel_pct_*`, `autopilot_*`, `settings_source`, `achievement_state`, and the
+  `panel_pct_*`, `autopilot_*`, `solo_embedder_per_media_type`,
+  `settings_source`, `achievement_state`, and the
   **Auto-Find** keys `autofind_detectors`, `autofind_exporter`,
-  `autofind_exporter_field_values`.
+  `autofind_exporter_field_values`, and `autorun_on_import` (whether a web
+  import runs the AutoRun detectors; the Add Dataset checkbox's memory).
 
-Six of those server-tier keys double as **admin overrides**: an operator can
-pin `solo_media_type`, `solo_embedder_per_media_type`, `hidden_plugins`,
-`dataset_max_age_days`, `support_email` and `semantic_only` at startup, for
-every user and for the life of the process, without the settings file. Each is
+Seven settings double as **admin overrides**: an operator can pin the
+server-tier `solo_media_type`, `hidden_plugins`, `dataset_max_age_days`,
+`support_email`, `semantic_only` and `hide_ingest_eta`, plus the per-user
+`solo_embedder_per_media_type`, at startup, for every user and for the life
+of the process, without the settings file. Each is
 declared once in `vtsearch/admin_overrides.py` — a descriptor carrying its CLI
 flag, its env-var equivalent (so the gunicorn images, which never parse `argv`,
 can set it too), the validator both entry paths share, how it combines with the
@@ -914,9 +939,11 @@ user (CLI / single-user back-compat); see `_DEFAULT_USER_FALLBACK_KEYS`.
 `theme` has four values: `system` (the default; follow the OS), `dark`,
 `light`, and `highviz` (high-contrast).
 
-Detectors are persisted as JSON files in `data/detectors/`
-via the `detectors_crud_bp` / `detectors_labels_bp` route blueprints.
-Each stores a name, text query, media type, examples list, and labelset.
+Detectors are persisted as JSON files, `<detectors_dir>/<slug>.json`
+(default `data/detectors/`), by `vtscore.detectors.store.save_detector` /
+`load_detector`.  Each stores a name, media type, labelset, optional
+`embedder_type`, and caller extras such as `text_query` — never embeddings or
+weights.
 
 **Primarily Flask routes mutate this state.**  Most ML and dataset
 functions accept state as parameters; so you can use the ML code in a
@@ -938,14 +965,12 @@ re-exports all of them for app-tier call-sites:
 | `current_user.py` | Framework-free current-user resolution (`register_request_user_resolver`) |
 | `votes.py` | Vote operations, label history, text-sort suggestions, learned scores |
 | `clicks.py` | Click-time tracking for vote sequence analysis |
-| `coverage.py` | Coverage atlas construction and sampling |
-| `coverage_atlas.py` | The `CoverageAtlas` structure itself |
-| `near_dupes.py` | Near-duplicate detection and grouping |
+| `coverage.py` | Coverage atlas build/cache on the active dataset (the algorithm is `vtscore/coverage/`) |
 | `sort_results_cache.py` | Per-detector cache of the last sort's result rows |
-| `media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking |
+| `media_lookup.py` | Media ID resolution, duplicate collapsing, origin tracking, `next_media_id` |
 
-Global (non-per-context) state lives in `vtsearch/autorun_processors.py`:
-`autorun_extractors` and `autorun_localizers` dicts and their CRUD.
+(`coverage_atlas.py` and `near_dupes.py` are deprecated import aliases; see the
+directory map.)
 
 ### Multi-dataset support
 
@@ -956,33 +981,40 @@ per-detector state in `DetectorContext` objects:
 | Context | Key state |
 |---------|-----------|
 | `DatasetContext` | `medias` (plus the `media_revision` counter every cache keys on), `coverage_atlas`, `dataset_display_name`, the role-typed embedder binding (`text` / `patch` / `structural` embedder *names*), and a family of lazily-built, revision-keyed caches: the `(N, D)` embedding matrix and its patch-expanded region matrix, the origin/md5/name lookup indexes, the VTSBrowse projection + per-bin-shape pyramids + region signposts, and their subset-layout twins |
-| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `inclusion`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut caches, the cached labelset, and `labelset_source` |
+| `DetectorContext` | `good_votes`, `bad_votes`, `label_history`, `vote_click_times`, `vote_region_boxes`, `vote_provenance`, `click_counter`, `last_learned_scores`, `textsort_suggestions`, `find_initial_labels`, `find_scores`, `verified_ids`, `min_precision`, `training_medias`, `label_embeddings` / `label_local_features` and their region variants, `model`, `verification_classifier`, `threshold`, the calibration / anchored-cut / precision-floor caches, the ranking the line keeps a set of (`line_ranking`) and the floor's spot check (`precision_check`, `precision_check_run`), the cached labelset, and `labelset_source` |
 
 Every cached vector on either context is **in-memory only** — see the
 "No Persisted Vectors or MLPs" rule in `CLAUDE.md`.  Origins are the persisted
 form; the caches are rebuilt from them.
 
 The module-level names (`medias`, `good_votes`, etc.) are **proxy
-objects** (`_ProxyDict` / `_ProxyList`) that delegate to the context
-resolved per-request:
+objects** (`_ProxyDict` / `_ProxyList`) that call
+`get_active_context()` / `get_active_detector_context()`
+(`vtscore/state/core.py`) on every access.  Those resolve, in order:
 
-1. **Inside a Flask request**; the `before_request` handler
-   (`vtsearch/hooks.py`) reads the `X-Dataset-Id` and `X-Detector-Id`
-   headers — falling back to `dataset_id` / `detector_id` query parameters
-   for browser-native requests (`<img>` / `<audio>` / `<video>` sources) that
-   bypass Angular's interceptor — resolves the matching contexts, and stashes
-   them on Flask's `g`. Proxies check `g` first.  An id that is *present but
-   not loaded* is stashed as such, so the proxy raises
-   `DatasetNotLoadedError` / `DetectorNotLoadedError` (mapped to a 409) rather
-   than silently serving the empty context; routes that never touch the
-   proxies still respond normally.
-2. **Outside a request** (background threads, CLI, tests); proxies
-   fall back to a thread-local context scoped via the
-   `thread_dataset_context()` / `thread_detector_context()` context
-   managers (which snapshot and restore the prior value automatically).
-   The bare `set_thread_dataset_context()` / `set_thread_detector_context()`
-   setters remain available for tests and for the rare call site that
-   wants the unscoped form.
+1. **A request-scoped context.** The app registers Flask resolvers
+   (`vtsearch/shim/`, `register_flask_context_resolvers()`) that read what the
+   `before_request` handler (`vtsearch/hooks.py`) stashed on Flask's `g`: the
+   contexts named by the `X-Dataset-Id` / `X-Detector-Id` headers — or the
+   `dataset_id` / `detector_id` query parameters for browser-native requests
+   (`<img>` / `<audio>` / `<video>` sources) that bypass Angular's
+   interceptor.  An id that is *present but not loaded* is stashed as such, so
+   the proxy raises `DatasetNotLoadedError` / `DetectorNotLoadedError` (mapped
+   to a 409) rather than silently serving the empty context; routes that never
+   touch the proxies still respond normally.
+2. **A thread-local context** (background threads, CLI, tests), scoped via the
+   `thread_dataset_context()` / `thread_detector_context()` context managers
+   (which snapshot and restore the prior value).  The bare
+   `set_thread_*_context()` setters remain for tests and the rare unscoped
+   call site; `override_detector_context()` beats both for the length of a
+   block.
+3. **Inside a request that named no context**, a frozen sentinel context:
+   reads see empty data, writes raise `RequestMissingContextError`, so a
+   dropped header fails loudly at the write site.
+4. **Otherwise** (library / CLI callers), an empty fallback context.
+
+The same chain, from the library's side, is in
+[vtscore/docs/architecture.md](../vtscore/docs/architecture.md#resolution-chain-for-active-context).
 
 There is no single global "active" pointer. Key functions:
 `register_context()`, `unregister_context()`, `get_context()`,
@@ -1101,7 +1133,7 @@ Every data element (clip) carries its own provenance so that:
 
 ### Per-clip fields
 
-Each clip dict includes two provenance fields:
+Each clip dict carries these provenance / locator fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1125,7 +1157,8 @@ Origins are set automatically when data is loaded:
   `DatasetImporter.build_origin(field_values)`.
 - **Demo datasets** get `Origin("demo", {"name": dataset_name})`.
 - **Pickle loads** preserve the per-element origins stored in the file.
-  Old pickles without origins fall back to the legacy `creation_info` stored in the pickle (if any).
+  An element stored without one loads with `origin: None` and its filename
+  as `origin_name`.
 
 ### Derived media: converter and clipper provenance
 
@@ -1189,7 +1222,7 @@ its columns are opt-in and machine-facing.
 
 ### Reference (no-copy) imports and lazy clips
 
-Server-side importers (e.g. `server_folder`, `server_manifest`) can import in
+Server-side importers (e.g. `server_folder`, `server_files`) can import in
 **thin mode** (`thin=True`): instead of inlining `media_bytes` into the
 registry pickle, each clip stores a `media_path` reference to the file that
 already lives on the server, and `MediaType._resolve_media_bytes`
@@ -1276,7 +1309,7 @@ Two rules keep the record honest: it is written **only on a vote-state change**
 (an idempotent re-apply keeps what the original click recorded, so a stale tab
 cannot rewrite it), and `restore_labels_from_detector` carries it back into
 vote state on load — without that, the next vote's labelset resync would erase
-every recorded vote's provenance, the bug `region_box` shipped with.
+every recorded vote's provenance.
 
 The `GET /api/labels/export` endpoint returns a `LabelSet` serialised
 as JSON.  It answers two different questions, and the caller picks which:

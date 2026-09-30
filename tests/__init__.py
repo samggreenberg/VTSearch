@@ -27,6 +27,30 @@ def wait_for_detector_task(task_id, timeout=30.0):
     pytest.fail(f"wait_for_detector_task timed out after {timeout}s waiting for {task_id!r}")
 
 
+def wait_for_loading_task(task_id, timeout=30.0):
+    """Block until the dataset task *task_id* finishes; return its snapshot.
+
+    The ``loading-tasks`` twin of :func:`wait_for_detector_task`, for work that
+    reports on the dataset channel (loads, coverage-atlas builds, background
+    AutoRun runs).  The returned snapshot carries the task's terminal ``error``
+    and any task-specific block (``autorun``, ``staging_result``).
+    """
+    import time
+
+    import pytest
+
+    from vtscore.concurrency.progress import loading_tasks
+
+    assert task_id, "wait_for_loading_task needs a task id"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if loading_tasks.is_finished(task_id):
+            tracker = loading_tasks.get_tracker(task_id)
+            return tracker.get() if tracker is not None else {}
+        time.sleep(0.02)
+    pytest.fail(f"wait_for_loading_task timed out after {timeout}s waiting for {task_id!r}")
+
+
 def load_detector_and_wait(client, detector_id, timeout=30.0):
     """Load a detector via POST and poll until the background task finishes.
 

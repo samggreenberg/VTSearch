@@ -200,6 +200,31 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: them a sign error in the acquisition cut is invisible.
     "acq_pool_percentile",
     "report_pool_percentile",
+    # --- The precision floor (#4245, #4272).
+    #: The floor the reporting line was drawn at; NaN on the Inclusion arm
+    #: (``min_precision="off"``), where ``threshold`` is the knob's cut.
+    "min_precision",
+    #: The floor's state this step - ``unchecked`` (the line keeps the floor's
+    #: starting candidate), ``confirmed`` or ``short`` (the set the run's spot
+    #: check ended on) - and so what ``threshold`` is.  Empty where no floor
+    #: line was drawn.
+    "floor_status",
+    #: How many unvoted items the line keeps: 128 / 64 / 32 at 10% / 25% / 50%
+    #: and above until a check ends, then the check's set.  -1 with no floor
+    #: line.
+    "floor_count",
+    #: The check's likely range for the kept set's precision (Clopper-Pearson,
+    #: each tail at alpha / rounds; exact for a census), and the labels behind
+    #: it: how many of the set's items the check labelled and how many were
+    #: right.  NaN / -1 before a check has ended.
+    "range_lo",
+    "range_hi",
+    "check_labelled",
+    "check_right",
+    #: 1 once the ranking under a finished check has moved (later votes
+    #: retrained the model, so the range describes the list as it was), 0
+    #: while it holds, -1 with no finished check.
+    "check_stale",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
@@ -260,6 +285,11 @@ BAND_COLUMNS: tuple[str, ...] = (
     "n_test_pos_small",
     "n_test_pos_medium",
     "n_test_pos_large",
+    #: Each cohort ranked against the run's held-out negatives (#4160): the
+    #: threshold-free half of the per-band reading. NaN unless asked for.
+    "auroc_small",
+    "auroc_medium",
+    "auroc_large",
 )
 
 

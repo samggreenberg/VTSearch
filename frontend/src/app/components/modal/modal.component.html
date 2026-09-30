@@ -27,6 +27,10 @@
       <ng-content />
     </div>
     <div class="modal-footer">
+      <!-- Left end of the footer row: a secondary affordance that belongs on
+           the action line rather than on a half-empty line of its own (the
+           "Advanced ▾" disclosure, #4305). The actions stay right-aligned. -->
+      <ng-content select="[modal-footer-start]" />
       <ng-content select="[modal-footer]" />
     </div>
   </div>

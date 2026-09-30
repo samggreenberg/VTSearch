@@ -59,67 +59,27 @@ A genuine removal is a deliberate library break: raise it with the user first.
 - Module splits are non-breaking at the import surface: every public name stays
   importable from its old path via a package `__init__` re-export or a shim.
 
-**Suggested first wave** (high value, low risk): #3441 and #3434 (verified-dead
-frontend code and repo hygiene), #3389/#3399 (mechanical vtscore dedup and
-converter logging), #3400 (eval defaults that no longer match the shipped
-algorithm), #3382/#3402/#3404. The god-module splits (#3381, #3377, #3405, #3417)
-and the settings rework (#3412) are the highest-payoff items but need Opus-tier
-care.
-
 ---
-
-## Library tier — god modules & misplaced code
-
-- [x] #3396 — Move `evt_mixture.py` out of the shipped `vtscore/training/` surface (Haiku 4.5)
 
 ## Library tier — duplication
 
 - [ ] #3379 — Collapse the five copies of the clip-dict builder in `image/_demo_sources.py` (Sonnet 5)
 - [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet 5)
 - [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet 5)
-- [x] #3389 — Deduplicate the streaming atomic-write ritual and JSON label extraction (Haiku 4.5)
-- [x] #3394 — Extract one background-import harness shared by both import pipelines (Sonnet 5)
 
 ## Library tier — dead code & unkept promises
 
-- [x] #3397 — Keep the resolver extension point but delete its auto-wire dance and import-error mask (Sonnet 5)
 - [ ] #3401 — Declare `image_response` on the `MediaType` ABC and document both undeclared hooks (Sonnet 5)
 - [ ] #3402 — Apply the sub-output disambiguators in the converted-demo emitter (Sonnet 5)
-- [x] #3404 — Small vtscore batch: `JOB_MANAGERS` coverage, registry construction, `SAVED_DATASETS_DIR` (Haiku 4.5)
-
-## Concurrency & progress
-
-- [x] #3382 — Route the raw staging thread through `vtsearch.threading.spawn` (Haiku 4.5)
 
 ## Layering & host seams
 
-- [x] #3385 — Give the app-to-library host seams a shared test reset (Sonnet 5)
 - [ ] #3388 — Drive `PluginBase` auto-derivation from family-base opt-in instead of three hardcoded tables (Opus 4.8)
 
 ## App tier — settings
 
 - [ ] #3413 — Delete the settings migration shims for old persisted formats (Sonnet 5)
 - [ ] #3416 — Give `inclusion` one owner and one clamp (Sonnet 5)
-
-## App tier — routes, schemas, facades
-
-- [x] #3420 — Split `routes/_shared.py`: nine unrelated modules in one 866-line file (Haiku 4.5)
-- [x] #3427 — Register one dynamic plugin route and generate its bodies at spec-build time (Opus 4.8)
-- [x] #3438 — Small app-tier batch: exempt prefixes as a route attribute, plus the orphan-endpoint decision (Sonnet 5)
-
-## Eval harness & experiments
-
-- [x] #3407 — Eight hand-rolled `load_cells` copies, and the live `bench_cells._SIDECARS` regression (Sonnet 5)
-- [x] #3411 — Experiment runners: `_neutralise_editable_finder` forked four ways (Sonnet 5)
-- [x] #3414 — The Smart-indicator FP/FN cost loop is a mirror that doesn't need to be one (Opus 4.8)
-
-## Frontend — duplication & dead code
-
-- [x] #3499 — `BrowseMinimapComponent`'s floating mode looks entirely unreachable (Sonnet 5). Found while doing #3441, not by the audit sweep: `resized` was only the visible half of it.
-
-## Frontend — state & idiom consistency
-
-- [x] #3447 — Per-media-type settings preferences hand-rolled in 14 components (Opus 4.8)
 
 ## Tests & tooling
 
@@ -143,6 +103,6 @@ What remains is one genuine design fork:
 
 - **What is `CoreConfig` for?** — `vtscore/config/core_config.py`
 
-  All 14 call sites call `CoreConfig.from_settings()` ad hoc, each invoking ~18 settings getters through the app shim, so the frozen-value-object abstraction buys nothing while costing a full settings snapshot per lookup. The design comment at `config.py:793-816` still says "Until those land this class is unused at runtime" — stale for a while now.
+  All 19 call sites call `CoreConfig.from_settings()` ad hoc, each invoking ~18 settings getters through the app shim, so the frozen-value-object abstraction buys nothing while costing a full settings snapshot per lookup. The design comment at the top of `vtscore/config/core_config.py` still says "Until those land this class is unused at runtime" — stale for a while now.
 
   *The fork:* either restore the original design (build one snapshot per operation and pass it down, which is a real plumbing change) or accept that the getters won and replace `CoreConfig` with direct calls. Both are defensible; picking one is a design call, not a cleanup. The stale comment should go either way.

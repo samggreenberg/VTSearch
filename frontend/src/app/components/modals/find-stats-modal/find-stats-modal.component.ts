@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, ElementRef, inject, OnInit, output, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ModalComponent } from '../../modal/modal.component';
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
@@ -7,24 +7,36 @@ import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 import { ActiveDatasetService } from '../../../services/active-dataset.service';
 import type { FindStatsResponse } from '../../../generated/api-client/models/find-stats-response';
+import type { FindStatsPrecisionPoint } from '../../../generated/api-client/models/find-stats-precision-point';
 import type { FindEvidenceCoverageResponse } from '../../../generated/api-client/models/find-evidence-coverage-response';
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { lineFloorFrom, rangePercent, rangeTitle, type LikelyRange } from '../../../utils/line-floor';
 
-/** A scaled point on the FP/FN-vs-inclusion chart. */
-interface ChartPoint {
-  inclusion: number;
+/** A tick on the precision chart's log-scale x axis. */
+interface XTick {
   x: number;
-  yFp: number;
-  yFn: number;
+  label: string;
+}
+
+/** Compact count label for an axis tick: 1, 10, 100, 1k, 10k, 1M. */
+function compactCount(n: number): string {
+  if (n >= 1_000_000) return `${n / 1_000_000}M`;
+  if (n >= 1_000) return `${n / 1_000}k`;
+  return `${n}`;
 }
 
 /**
  * Detector-evaluation Stats for a Find run: the 2×2 confusion of the adopted
  * label set against the detector's original call, the derived agreement /
- * precision rates, and the headline FP/FN-vs-inclusion sweep rendered as a
- * dependency-free inline SVG line chart (current inclusion marked).
+ * kept rates, and the headline precision-vs-returned chart (#4242) rendered as
+ * a dependency-free inline SVG line chart: the estimated (lower-bound)
+ * precision of the top N and the verified precision of the checked items in
+ * it, on a log-scale count axis with the line (the current cut) marked, and
+ * the precision floor it was cut at drawn across it (#4246). Where the line
+ * meets the floor, the spot check's likely range for the set the line keeps
+ * stands as a bar (#4273): the check's picks alone, never the estimate.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,6 +52,8 @@ export class FindStatsModalComponent implements OnInit {
   private datasetState = inject(DatasetStateService);
   private activeCtx = inject(ActiveContextService);
   private activeDataset = inject(ActiveDatasetService);
+
+  private destroyRef = inject(DestroyRef);
 
   readonly closed = output<void>();
 
@@ -70,15 +84,36 @@ export class FindStatsModalComponent implements OnInit {
   // behind the call. See docs/plans/coverage-atlas.md §6.1 (phase v0).
   readonly evidence = signal<FindEvidenceCoverageResponse | null>(null);
 
-  // Chart geometry (SVG user units; the viewBox scales to the container width).
-  readonly chartWidth = 320;
-  readonly chartHeight = 150;
-  private readonly padLeft = 34;
-  private readonly padRight = 10;
+  // Index into `precision_curve` of the point under the pointer, or null.
+  readonly hoverIndex = signal<number | null>(null);
+
+  // Chart geometry.  The viewBox tracks the chart's rendered width, so one user
+  // unit is one CSS pixel: nothing is stretched however wide the modal grows
+  // (a fixed viewBox under preserveAspectRatio="none" stretched the text and
+  // dots sideways).  320 until the first measurement, and under jsdom.
+  readonly chartWidth = signal(320);
+  readonly chartHeight = 170;
+  private readonly chartSvg = viewChild<ElementRef<SVGSVGElement>>('chartSvg');
+  private resizeObserver: ResizeObserver | null = null;
+  // The chart mounts only once the stats land, so observe it when it appears.
+  private readonly observeChart = effect(() => {
+    const svg = this.chartSvg()?.nativeElement;
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    if (!svg || typeof ResizeObserver === 'undefined') return;
+    this.resizeObserver = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (width > 0) this.chartWidth.set(width);
+    });
+    this.resizeObserver.observe(svg);
+  });
+  private readonly padLeft = 40;
+  private readonly padRight = 16;
   private readonly padTop = 10;
-  private readonly padBottom = 22;
+  private readonly padBottom = 34;
 
   ngOnInit(): void {
+    this.destroyRef.onDestroy(() => this.resizeObserver?.disconnect());
     this.findApi.getFindStats().subscribe({
       next: (data) => {
         this.stats.set(data);
@@ -186,63 +221,167 @@ export class FindStatsModalComponent implements OnInit {
     return s ? `${Math.round(s.agreement_rate * 100)}%` : '-';
   }
 
-  get precisionPct(): string {
-    const s = this.stats();
-    return s ? `${Math.round(s.precision * 100)}%` : '-';
+  /** The Kept rate: of the matches the user checked, the share kept Good. */
+  get keptRatePct(): string {
+    const p = this.stats()?.verified_precision;
+    return p == null ? '-' : `${Math.round(p * 100)}%`;
   }
 
-  // --- FP/FN-vs-inclusion chart -------------------------------------------
+  // --- Precision-vs-returned chart ---------------------------------------
 
   private get plotW(): number {
-    return this.chartWidth - this.padLeft - this.padRight;
+    return this.chartWidth() - this.padLeft - this.padRight;
   }
 
   private get plotH(): number {
     return this.chartHeight - this.padTop - this.padBottom;
   }
 
-  /** Largest FP/FN count in the sweep; the chart's y-axis top (min 1). */
-  get maxCount(): number {
-    const s = this.stats();
-    if (!s) return 1;
-    let m = 1;
-    for (const p of s.sweep) {
-      m = Math.max(m, p.false_pos, p.false_neg);
+  /** Right end of the log-scale count axis (at least 10, so one decade shows). */
+  private get xMax(): number {
+    return Math.max(this.stats()?.n_scored ?? 0, 10);
+  }
+
+  xFor(count: number): number {
+    return this.padLeft + (Math.log10(Math.max(count, 1)) / Math.log10(this.xMax)) * this.plotW;
+  }
+
+  yFor(precision: number): number {
+    return this.padTop + (1 - precision) * this.plotH;
+  }
+
+  /** Powers of ten up to the corpus size. */
+  get xTicks(): XTick[] {
+    const ticks: XTick[] = [];
+    for (let n = 1; n <= this.xMax; n *= 10) {
+      ticks.push({ x: this.xFor(n), label: compactCount(n) });
     }
-    return m;
+    return ticks;
   }
 
-  private xFor(inclusion: number): number {
-    return this.padLeft + ((inclusion + 10) / 20) * this.plotW;
-  }
-
-  private yFor(count: number): number {
-    return this.padTop + (1 - count / this.maxCount) * this.plotH;
-  }
-
-  get points(): ChartPoint[] {
+  private polyline(key: 'estimated_precision' | 'verified_precision'): string {
     const s = this.stats();
-    if (!s) return [];
-    return s.sweep.map((p) => ({
-      inclusion: p.inclusion,
-      x: this.xFor(p.inclusion),
-      yFp: this.yFor(p.false_pos),
-      yFn: this.yFor(p.false_neg),
-    }));
+    if (!s) return '';
+    return s.precision_curve
+      .filter((p) => p[key] != null)
+      .map((p) => `${this.xFor(p.n_returned).toFixed(1)},${this.yFor(p[key] as number).toFixed(1)}`)
+      .join(' ');
   }
 
-  get fpPolyline(): string {
-    return this.points.map((p) => `${p.x.toFixed(1)},${p.yFp.toFixed(1)}`).join(' ');
+  get estimatedPolyline(): string {
+    return this.polyline('estimated_precision');
   }
 
-  get fnPolyline(): string {
-    return this.points.map((p) => `${p.x.toFixed(1)},${p.yFn.toFixed(1)}`).join(' ');
+  get verifiedPolyline(): string {
+    return this.polyline('verified_precision');
   }
 
-  /** X position of the current-inclusion marker line. */
-  get currentX(): number {
+  get hasVerified(): boolean {
+    return this.stats()?.precision_curve.some((p) => p.verified_precision != null) ?? false;
+  }
+
+  /** Y position of the floor, or null before the stats arrive. */
+  get floorY(): number | null {
+    const p = this.stats()?.floor.min_precision;
+    return p == null ? null : this.yFor(p);
+  }
+
+  /** The floor's state as the sort state would hold it; null before the stats arrive. */
+  get lineFloor() {
+    return lineFloorFrom(this.stats()?.floor);
+  }
+
+  /** "11–73%" for a range, for the template. */
+  rangeText(range: Pick<LikelyRange, 'lo' | 'hi'>): string {
+    return rangePercent(range);
+  }
+
+  /** The check's likely range for the set the line keeps; null while unchecked. */
+  get lineRange(): LikelyRange | null {
+    return this.lineFloor?.range ?? null;
+  }
+
+  /**
+   * The range's tooltip, on the bar and its legend entry. A stale range is
+   * drawn exactly as a current one: this is the only place it differs.
+   */
+  get rangeTooltip(): string {
+    const r = this.lineRange;
+    return r ? rangeTitle(r) : '';
+  }
+
+  /** The range's legend entry: "Likely 11–73% right (checked 5)". */
+  get rangeLegend(): string {
+    const r = this.lineRange;
+    return r ? `Likely ${rangePercent(r)} right (checked ${r.labelled})` : '';
+  }
+
+  /** The line's legend entry: whether the check confirmed the floor, fell short of it, or never ran. */
+  get lineLegend(): string {
+    const floor = this.lineFloor;
+    if (!floor) return 'Line';
+    const kept = floor.count.toLocaleString();
+    if (floor.status === 'confirmed') return `Line: confirmed (${kept} kept)`;
+    if (floor.status === 'short') return `Line: the top ${kept}, fell short`;
+    return `Line: the top ${kept}, unchecked`;
+  }
+
+  /** X position of the line's marker, or null when nothing clears it. */
+  get cutX(): number | null {
     const s = this.stats();
-    return s ? this.xFor(s.inclusion) : 0;
+    return s && s.n_returned > 0 ? this.xFor(s.n_returned) : null;
+  }
+
+  /** The curve's point at the current cut (the backend always samples it). */
+  get cutPoint(): FindStatsPrecisionPoint | null {
+    const s = this.stats();
+    if (!s || s.n_returned <= 0) return null;
+    return s.precision_curve.find((p) => p.n_returned === s.n_returned) ?? null;
+  }
+
+  get hoverPoint(): FindStatsPrecisionPoint | null {
+    const i = this.hoverIndex();
+    const s = this.stats();
+    return i == null || !s ? null : (s.precision_curve[i] ?? null);
+  }
+
+  /** Snap the hover readout to the sampled count nearest the pointer (in log space). */
+  onChartMove(event: MouseEvent): void {
+    const s = this.stats();
+    const svg = event.currentTarget as SVGSVGElement | null;
+    if (!s || !svg || s.precision_curve.length === 0) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const x = ((event.clientX - rect.left) / rect.width) * this.chartWidth();
+    let best = 0;
+    let bestDist = Infinity;
+    s.precision_curve.forEach((p, i) => {
+      const d = Math.abs(this.xFor(p.n_returned) - x);
+      if (d < bestDist) {
+        best = i;
+        bestDist = d;
+      }
+    });
+    this.hoverIndex.set(best);
+  }
+
+  onChartLeave(): void {
+    this.hoverIndex.set(null);
+  }
+
+  pct(p: number | null | undefined): string {
+    return p == null ? '-' : `${Math.round(p * 100)}%`;
+  }
+
+  /** The readout under the chart for one point: what is known there, and the checked count. */
+  readout(p: FindStatsPrecisionPoint): { main: string; detail: string } {
+    const parts: string[] = [];
+    if (p.estimated_precision != null) parts.push(`estimated at least ${this.pct(p.estimated_precision)}`);
+    parts.push(p.checked > 0 ? `checked ${this.pct(p.verified_precision)}` : 'nothing checked');
+    return {
+      main: parts.join(' · '),
+      detail: p.checked > 0 ? `(${p.checked_good.toLocaleString()} of ${p.checked.toLocaleString()} Good)` : '',
+    };
   }
 
   get axisTop(): number {
@@ -258,6 +397,6 @@ export class FindStatsModalComponent implements OnInit {
   }
 
   get axisRight(): number {
-    return this.chartWidth - this.padRight;
+    return this.chartWidth() - this.padRight;
   }
 }

@@ -42,6 +42,7 @@ something else through it. Examples that ship in the box:
 | `video2audio` | video → audio | Extract the audio track for CLAP embedding |
 | `document2image` | document → image | Render PDF pages as searchable images |
 | `document2text` | document → text | Extract embedded text from PDFs |
+| `image2face` | image → face | Crop detected faces out of images for the FaceNet identity space (`face` is a convert-in type: this is the only way media of that type arise) |
 
 If you instead want to add a new content kind (point clouds, 3D
 meshes), write a [media type](media-types.md). If you want a different
@@ -63,8 +64,9 @@ encoder for the same kind, write an [embedder](embedders.md).
 because every framework call site passes a populated `params` dict.
 
 `name` is auto-derived as `f"{source_type}2{target_type}"` - don't
-override it. Two converters with the same source / target would clash;
-keep the pairing unique.
+override it. It is the registry key, so two converters with the same
+source / target pair clash: a third-party one is skipped in favour of the
+built-in. Keep the pairing unique.
 
 Optional overrides:
 
@@ -228,21 +230,22 @@ audio2text_whisperx = "my_pkg.audio2text_whisperx:CONVERTER"
 ```
 
 Notice the entry-point **name** can differ from the converter's
-auto-derived `name`. The registry uses the converter's
-`source_type`/`target_type` derived name as the registry key, so a
-third-party `audio2text` converter will clash with the built-in
-`audio2text`. Pick a unique source/target pair or contribute the
-improvement upstream.
+auto-derived `name`. The registry keys on the derived
+`source_type`/`target_type` name, so a third-party `audio2text`
+converter would clash with the built-in `audio2text` and be skipped
+(with a warning). Pick a source/target pair no built-in covers, or
+contribute the improvement upstream.
 
 ## Worked example
 
-A minimal `audio2text` alternative using OpenAI Whisper for ASR (the
-in-tree `audio2text` uses faster-whisper; this third-party one wraps
-the official Whisper Python package). It declares two parameters:
-model size and language.
+A `video2text` converter that transcribes a video's soundtrack with
+OpenAI Whisper. No built-in converts video straight to text (the
+in-tree path is `video2audio` then `audio2text`), so the derived name
+`video2text` is free. It declares two parameters: model size and
+language.
 
 ```python
-# my_pkg/audio2text_whisper.py
+# my_pkg/video2text_whisper.py
 from __future__ import annotations
 
 import logging
@@ -256,11 +259,11 @@ from vtscore.plugins import PluginField
 logger = logging.getLogger(__name__)
 
 
-class Audio2TextWhisperConverter(MediaConverter):
-    """Transcribe audio to text using OpenAI Whisper."""
+class Video2TextWhisperConverter(MediaConverter):
+    """Transcribe a video's soundtrack to text using OpenAI Whisper."""
 
-    display_name = "Audio → Text (Whisper)"
-    description = "Run OpenAI Whisper ASR on audio files."
+    display_name = "Video → Text (Whisper)"
+    description = "Run OpenAI Whisper ASR on each video's audio track."
     fields = [
         PluginField(
             key="model_size",
@@ -284,7 +287,7 @@ class Audio2TextWhisperConverter(MediaConverter):
 
     @property
     def source_type(self) -> str:
-        return "audio"
+        return "video"
 
     @property
     def target_type(self) -> str:
@@ -304,15 +307,20 @@ class Audio2TextWhisperConverter(MediaConverter):
         try:
             import whisper  # noqa: PLC0415
         except ImportError:
-            logger.warning("audio2text_whisper requires openai-whisper: pip install openai-whisper")
+            logger.warning("video2text requires openai-whisper: pip install openai-whisper")
             return []
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        suffix = Path(media.get("filename", "video.mp4")).suffix or ".mp4"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             tmp.write(media_bytes)
             tmp_path = tmp.name
         try:
+            # Whisper decodes the audio track through ffmpeg itself.
             model = whisper.load_model(model_size)
             result = model.transcribe(tmp_path, language=language)
+        except Exception:
+            logger.error("Transcription failed on %s", media.get("filename"), exc_info=True)
+            return []
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
@@ -320,7 +328,7 @@ class Audio2TextWhisperConverter(MediaConverter):
         if not text:
             return []
 
-        stem = Path(media.get("filename", "audio.wav")).stem
+        stem = Path(media.get("filename", "video.mp4")).stem
         return [{
             "filename": f"{stem}_transcript.txt",
             "media_string": text,
@@ -328,20 +336,18 @@ class Audio2TextWhisperConverter(MediaConverter):
         }]
 
 
-CONVERTER = Audio2TextWhisperConverter()
+CONVERTER = Video2TextWhisperConverter()
 ```
 
 The `pyproject.toml`:
 
 ```toml
 [project.entry-points."vtscore.converters"]
-audio2text_whisper = "my_pkg.audio2text_whisper:CONVERTER"
+video2text_whisper = "my_pkg.video2text_whisper:CONVERTER"
 ```
 
-This name collides with the built-in `audio2text` - to ship both, give
-the third-party one a distinct source/target pair (e.g. add an
-`audio2text_whisper` source-type alias) or contribute the model-size
-parameter upstream.
+After `pip install`, `get_converter("video2text")` returns it (the
+registry key is the derived name, not the entry-point name).
 
 ## Testing pattern
 
@@ -352,54 +358,40 @@ post-load-conversion pipeline. For library-only smoke tests, drop a
 file in `tests_lib/core/` or `tests_lib/datasets/`:
 
 ```python
-# tests_lib/core/test_audio2text_whisper.py
-import io
-import wave
+# tests_lib/core/test_video2text_whisper.py
+import importlib.util
+
 import pytest
 
 from vtscore.converters import get_converter, list_converters_for_source
 
 
-def _make_wav() -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(16_000)
-        w.writeframes(b"\x00\x00" * 16_000)
-    return buf.getvalue()
-
-
-class TestAudio2TextWhisperRegistration:
+class TestVideo2TextWhisperRegistration:
     def test_is_discoverable(self):
-        names = [c.name for c in list_converters_for_source("audio")]
-        # Built-in or our entry-point; assert ours under the chosen name
-        assert "audio2text" in names or "audio2text_whisper" in names
+        names = [c.name for c in list_converters_for_source("video")]
+        assert "video2text" in names
 
     def test_fields_have_defaults(self):
-        conv = get_converter("audio2text")  # or your unique name
-        keys = {f.key for f in conv.fields}
-        assert "model_size" in keys
+        conv = get_converter("video2text")
+        assert {f.key: f.default for f in conv.fields} == {"model_size": "base", "language": ""}
+
+    def test_params_are_default_filled(self):
+        conv = get_converter("video2text")
+        # convert_normalized() validates and default-fills before convert();
+        # an empty media produces no output without touching Whisper.
+        assert conv.convert_normalized({"filename": "a.mp4"}, {}) == []
+
+    def test_rejects_an_unknown_model_size(self):
+        conv = get_converter("video2text")
+        with pytest.raises(ValueError):
+            conv.convert_normalized({"filename": "a.mp4"}, {"model_size": "gigantic"})
 
 
-class TestAudio2TextWhisperConvert:
-    @pytest.mark.skipif(
-        not _has_module("whisper"),
-        reason="openai-whisper not installed",
-    )
-    def test_produces_text_or_empty_list(self):
-        from my_pkg.audio2text_whisper import Audio2TextWhisperConverter
-
-        conv = Audio2TextWhisperConverter()
-        media = {"filename": "a.wav", "media_bytes": _make_wav()}
-        out = conv.convert(media, {"model_size": "tiny"})
-        # Silent WAV produces no transcript; non-silent would produce one dict
-        assert isinstance(out, list)
-
-
-def _has_module(name: str) -> bool:
-    import importlib.util
-    return importlib.util.find_spec(name) is not None
+@pytest.mark.skipif(importlib.util.find_spec("whisper") is None, reason="openai-whisper not installed")
+def test_transcribes_a_real_clip(sample_video_bytes):  # your own fixture
+    conv = get_converter("video2text")
+    out = conv.convert_normalized({"filename": "a.mp4", "media_bytes": sample_video_bytes}, {"model_size": "tiny"})
+    assert isinstance(out, list)
 ```
 
 The built-in [`tests/converters/`](../../../tests/converters/) tests

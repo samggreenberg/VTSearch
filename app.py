@@ -123,6 +123,7 @@ from vtsearch.routes import (  # noqa: E402
     sessions_bp,
     settings_bp,
     settings_io_bp,
+    precision_check_bp,
     sorting_bp,
     sync_sources_bp,
 )
@@ -227,8 +228,8 @@ register_error_handlers(app)
 # achievements_bp, auth_bp, and main_bp are flask-smorest Blueprints
 # (OpenAPI migration); register them via the Api so their decorated
 # routes appear in /api/openapi.json. Their undecorated routes (e.g.
-# main_bp's SPA-serving paths, achievements_bp's raw-markdown stream)
-# attach to Flask normally and are simply absent from the spec.
+# achievements_bp's raw-markdown stream) still appear in the spec, just
+# without a typed schema; see "Routes with no typed schema" in docs/API.md.
 api.register_blueprint(achievements_bp)
 api.register_blueprint(auth_bp)
 api.register_blueprint(eval_bp)
@@ -242,6 +243,7 @@ api.register_blueprint(seed_importers_bp)
 api.register_blueprint(main_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)
+api.register_blueprint(precision_check_bp)
 api.register_blueprint(sessions_bp)
 api.register_blueprint(processors_crud_bp)
 api.register_blueprint(processors_scoring_bp)
@@ -317,6 +319,7 @@ _OVERRIDE_ICONS = {
     "dataset_max_age_days": "\U0001f5d3️",
     "support_email": "\U0001f4e7",
     "semantic_only": "\U0001f512",
+    "hide_ingest_eta": "\u23f3",
 }
 
 _OVERRIDE_LABELS = {
@@ -326,7 +329,31 @@ _OVERRIDE_LABELS = {
     "dataset_max_age_days": "Dataset max age",
     "support_email": "Support email",
     "semantic_only": "Semantic embedders only",
+    "hide_ingest_eta": "Ingest ETAs hidden",
 }
+
+
+def _report_docs_links() -> None:
+    """Log the Help-modal doc links this deployment configured, and any it drops.
+
+    ``docs_links`` is set only in the server settings file, so a typo there
+    (a missing label, a URL without ``https://``) would otherwise just leave a
+    link silently absent from the Help modal. Naming each dropped entry here
+    gives the operator the one place to find out why. An empty list, the
+    shipped default, prints nothing.
+    """
+    from vtsearch import settings as _settings
+
+    links = _settings.get_docs_links()
+    if links:
+        labels = ", ".join(link["label"] for link in links)
+        print(f"\U0001f4d6  Help-modal docs: {labels} (from the docs_links setting)", flush=True)
+    for entry in _settings.get_rejected_docs_links():
+        print(
+            f"\u26a0\ufe0f  Ignoring docs_links entry {entry!r}: it needs a non-empty label and a url "
+            "that is an absolute http(s) URL or a /path on this host",
+            flush=True,
+        )
 
 
 def _format_override(value) -> str:
@@ -360,9 +387,10 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     # through the environment (they never parse argv). An explicit flag wins.
     admin_overrides.apply_env_overrides()
     _report_admin_overrides()
+    _report_docs_links()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat
-    # watchdog that dumps every thread's frames when the interpreter freezes.
+    # watchdog that writes every thread's stack when the interpreter freezes.
     # Started before the model loads so a stall during startup is caught too;
     # ``VTSEARCH_STALL_WATCHDOG_MS=0`` turns the watchdog off.
     from vtscore.concurrency.stalls import start_stall_diagnostics_from_env

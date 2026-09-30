@@ -716,6 +716,73 @@ describe('CenterPanelComponent', () => {
   });
 
   /**
+   * When the host's advance is a server round-trip (Train's `new` Select mode),
+   * the item just voted on has to stay swiped off-screen until its successor
+   * arrives. Un-pinning at the end of the swipe, as #4028's fix did for every
+   * vote, brought it back for the length of the wait: the voted image
+   * flickered on screen before the next one replaced it (#4307).
+   */
+  describe('the swipe stays parked while the host fetches the next item (#4307)', () => {
+    const docMedia: Media = { ...mockMedia, media_type: 'document' };
+
+    beforeEach(() => {
+      document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_ON_CLASS);
+      fixture.componentRef.setInput('media', docMedia);
+      component.showAnimations.set(true);
+      TestBed.tick();
+      // Stand in for Train in `new` mode: the vote handler starts a round-trip
+      // for the next item, and the host says so through the input.
+      component.mediaVoted.subscribe(() => fixture.componentRef.setInput('advancePending', true));
+    });
+
+    afterEach(() => {
+      document.documentElement.classList.remove(ANIMATIONS_ON_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_OFF_CLASS);
+    });
+
+    /** Vote, and wait out the 180ms swipe that hands the vote to the host. */
+    async function voteAndSwipe(): Promise<void> {
+      component.castVote('bad');
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'bad', click_time: 1 });
+      TestBed.tick();
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+      TestBed.tick();
+    }
+
+    const wrapperClass = (): string =>
+      (fixture.nativeElement.querySelector('.media-swipe-wrapper') as HTMLElement).className;
+
+    it('keeps the voted item off-screen until the next one arrives', async () => {
+      await voteAndSwipe();
+      expect(component.swipeClass()).toBe('swipe-left');
+      expect(wrapperClass()).toContain('swipe-left');
+
+      // The answer lands: the host selects the next item and stops waiting,
+      // in the same turn.
+      fixture.componentRef.setInput('media', { ...docMedia, id: 2, filename: 'next.pdf' });
+      fixture.componentRef.setInput('advancePending', false);
+      TestBed.tick();
+
+      expect(component.swipeClass()).toBe('');
+      expect(wrapperClass()).not.toContain('swipe-left');
+    });
+
+    it('brings the voted item back when the wait ends with nothing to show', async () => {
+      await voteAndSwipe();
+      expect(component.swipeClass()).toBe('swipe-left');
+
+      // The round-trip failed or was superseded: no next item, and no longer
+      // waiting for one. #4028's rule applies again.
+      fixture.componentRef.setInput('advancePending', false);
+      TestBed.tick();
+
+      expect(component.swipeClass()).toBe('');
+      expect(wrapperClass()).not.toContain('swipe-left');
+    });
+  });
+
+  /**
    * The other empty pane: nothing is selected at all. It used to be one line of
    * grey text in an otherwise black rectangle, which reads as a broken view
    * rather than as a state — and it says "select a media item" without saying

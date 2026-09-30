@@ -43,6 +43,7 @@ Optional but commonly overridden:
 | Member | Default | Purpose |
 |--------|---------|---------|
 | `display_name` | `name` | Friendlier label for the picker UI |
+| `embedding_dim` | `None` | Output dimensionality, declared without loading weights (tooling and the generated inventories read it) |
 | `is_default` | `False` | Exactly one embedder per media type should return `True` - that one is what `embedders_for_type(t)[0]` returns |
 | `_embed_text_impl(text)` | `None` | Text-query hook - override this, NOT `embed_text`, which L2-normalizes the result for you. Leave the default to disable text-query sort; otherwise return a vector in the same space as `_embed_media_impl` |
 | `description_wrappers` | `[]` | Templates with `{text}` for enriched text embedding (e.g. `["the sound of {text}"]`). Keep the default unless you have measured that the ensemble beats the typed query on your checkpoint - it is a loss on most (#3127/#3341) |
@@ -218,6 +219,10 @@ class TextMiniLMEmbedder(MediaEmbedder):
         return "text"
 
     @property
+    def embedding_dim(self) -> int:
+        return 384
+
+    @property
     def is_default(self) -> bool:
         return False  # E5 stays default; this is an alternative
 
@@ -251,12 +256,14 @@ class TextMiniLMEmbedder(MediaEmbedder):
             text = Path(media["media_path"]).read_text(errors="replace")[:8000]
         if not text:
             return None
-        return self._model.encode(text, normalize_embeddings=True)
+        return self._model.encode(text)  # embed_media() L2-normalizes it
 
-    def embed_text(self, text: str) -> Optional[np.ndarray]:
+    def _embed_text_impl(self, text: str) -> Optional[np.ndarray]:
+        # Override the hook, not embed_text(): the public wrapper
+        # L2-normalizes whatever this returns.
         if self._model is None:
             self.load_models()
-        return self._model.encode(text, normalize_embeddings=True)
+        return self._model.encode(text)
 
 
 EMBEDDER = TextMiniLMEmbedder()

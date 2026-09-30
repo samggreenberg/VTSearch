@@ -122,10 +122,10 @@ previous review gets one short note at most, never a section or the framing.
 Spend the effort on the why: for each class that does poorly, look at its images
 and say what the app gets wrong.
 
-The report goes in `docs/experiments/<date>-state-of-the-app/REPORT.md` and
-carries these sections, in this order:
+Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/REPORT.md`
+(e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
 
-1. **Headline per path:** mean text-only cost, then cost at 25 and 50 clicks,
+1. **Headline:** mean text-only cost, then cost at 25 and 50 clicks,
    then the final cost against the ceiling. Do the same for F1.
 2. **Where the app does well and where it does poorly,** by class and by band.
    Name the classes, with numbers.

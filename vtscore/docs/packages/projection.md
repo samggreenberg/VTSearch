@@ -6,9 +6,13 @@ aggregate that layout into a multi-resolution tile pyramid the canvas
 streams while panning and zooming, and letter the map with named
 regions.
 
-Nothing here is interactive. The package computes structures; the HTTP
-endpoints that serve them, and the persistence that stores them, live in
-the VTSearch Browse routes and in `vtscore.datasets.container`.
+Nothing here is interactive. The package computes structures; only the
+HTTP endpoints that serve them live outside it (in the host app). The
+package root re-exports the pure-NumPy stages (`fit_projection`,
+`Projection`, `build_pyramid`, the pyramid types, the label types,
+`compact_layout`, the binning helpers and the params resolver);
+`store` and `service` are **not** re-exported because they pull in the
+dataset registry and job runners - import them by submodule.
 
 Related docs: [`embedding.md`](embedding.md) for the matrix this
 consumes; [`state.md`](state.md) for the `DatasetContext` fields that
@@ -27,6 +31,7 @@ for the background-job runner the builds ride on.
 | `vtscore/projection/hexbin.py` | Vectorised d3-style hexagonal binning (no d3 dependency) |
 | `vtscore/projection/squarebin.py` | Vectorised square-grid binning |
 | `vtscore/projection/persistence.py` | Serialisation helpers shared with the ZIP container |
+| `vtscore/projection/params.py` | `resolve_projection_params` / `ProjectionParams` / `projection_embedder_for` - the one resolver for the knobs a layout is fit under |
 
 **The lifecycle** - what turns those stages into a browsable map.
 
@@ -40,12 +45,15 @@ for the background-job runner the builds ride on.
 | Module | Concern |
 |--------|---------|
 | `vtscore/projection/labels.py` | The data contract: `RegionLabel`, `RegionLabelSet`, `make_label_set` |
-| `vtscore/projection/signpost_prep.py` | The one entry point every build path calls: texts → fit → cache |
+| `vtscore/projection/signpost_prep.py` | `prep_signposts`, the one entry point every build path calls: texts → fit → cache |
 | `vtscore/projection/signpost_texts.py` | The `object_to_text` layer: one cached text per media, provider per media type |
 | `vtscore/projection/signpost_captioners.py` | The generative text tier (image VLM, audio captioner) |
 | `vtscore/projection/signpost_build.py` | Fit Toponymy over a frozen layout and flatten its topic tree into labels |
 | `vtscore/projection/demo_signposts.py` | Ground-truth signposts read from a dataset's hierarchical `category` |
 | `vtscore/projection/signpost_serve.py` | The read side: which set to letter a layout with, and the background self-heal of a stale one |
+
+`vtscore/projection/assets/` holds the zero-shot tag vocabularies
+(`audioset527_labels.txt`, `openimages600_labels.txt`).
 
 ---
 
@@ -60,10 +68,20 @@ def fit_projection(
     min_dist: float = PROJECTION_MIN_DIST,
     min_n_for_umap: int = 10,
     random_state: int | None = None,
-    compact: bool = True,
+    compact: bool = PROJECTION_COMPACT_DEFAULT,   # False
     on_progress: ProgressCallback | None = None,
 ) -> Projection: ...
 ```
+
+The signature defaults (`PROJECTION_N_NEIGHBORS = 15`,
+`PROJECTION_MIN_DIST = 0.1`, from [`vtscore.config`](config.md)) know
+nothing about the dataset's embedder or the operator's settings.
+Production callers resolve the knobs with
+`vtscore/projection/params.py::resolve_projection_params(ctx)`, which
+applies, in order: an explicit `CoreConfig` override
+(`projection_n_neighbors` / `projection_min_dist`), the per-embedder
+tuned default (`PROJECTION_DEFAULTS_BY_EMBEDDER`), then the global
+default. Every knob is stamped onto the returned `Projection`.
 
 UMAP runs with the plain `"euclidean"` metric and no per-fit
 normalisation. That is correct rather than sloppy: embeddings are
@@ -75,12 +93,20 @@ distance.
 UMAP's numba parallelism on. That is only safe because a projection is
 computed exactly once per dataset and then frozen and persisted - it
 never re-runs, so its non-reproducibility never surfaces. Pass an int
-for a reproducible fit, at the cost of parallelism; tests do.
+for a reproducible fit, at the cost of parallelism; tests do. The app
+does only when `VTSEARCH_PROJECTION_SEED` is set
+(`PROJECTION_SEED` in [`vtscore.config`](config.md)), which
+`resolve_projection_params` hands every fit; the user-docs screenshot
+harness sets it so the Browse shots frame the same map on every refresh.
+The signposts' own clustering UMAP (`signpost_build._clusterable_vectors`)
+is fit under the seed stamped on the layout it labels, so a seeded map gets
+the same signs too.
 
 Small datasets can't support a neighbour graph (UMAP needs
 `n_neighbors < N`), so `n_neighbors` is clamped to `N - 1`, and below
 `min_n_for_umap` points the layout falls back to a deterministic PCA-2
-- or a trivial layout for `N ≤ 1` - rather than failing.
+- or a trivial layout for `N ≤ 2` (or 1-D embeddings) - rather than
+failing.
 
 `umap` is imported lazily, so importing this package never pays numba's
 JIT until an actual fit runs.
@@ -92,7 +118,8 @@ JIT until an actual fit runs.
 | `projection_id` | Minted at the one-time fit; tiles derived from this layout are cached against it |
 | `ids` / `coords` | `coords[i]` is the 2-D point for media id `ids[i]`; `(N, 2)` float32 |
 | `method` | `"umap"`, `"pca"`, or `"trivial"` |
-| `n_neighbors` / `min_dist` | The knobs this layout was fit under, stamped so a persisted projection can be invalidated when the settings change. `None` on the fallbacks and on legacy containers |
+| `n_neighbors` / `min_dist` / `compact` | The knobs this layout was fit under, stamped so a persisted projection can be invalidated when the settings change (`vtscore/projection/store.py::projection_params_match`). `None` on the fallbacks and on legacy containers |
+| `random_state` | The seed the UMAP fit ran under; `None` when unseeded, on the fallbacks, and on legacy containers. Checked only when a seed is asked for: a seeded process refits a layout persisted under any other seed, while an unseeded one serves any layout |
 | `bounds` (property) | `(xmin, ymin, xmax, ymax)`, zeros when empty |
 
 `remove_ids(projection, remove)` returns a new `Projection` without
@@ -107,8 +134,9 @@ layout is mostly dead water. `compact_layout` clusters the points and
 slides each cluster together **as a rigid body**, preserving its
 internal shape exactly - only the between-cluster gaps shrink.
 
-It runs by default (`compact=True`) and only on the UMAP path; the PCA
-and trivial fallbacks are too small to be worth packing.
+It is **off by default** (`PROJECTION_COMPACT_DEFAULT = False`, measured
+as a consistent loss) and, when enabled, only runs on the UMAP path; the
+PCA and trivial fallbacks are too small to be worth packing.
 
 ## Stage 2: `build_pyramid`
 
@@ -136,11 +164,13 @@ from equality and never persisted - the frozen coords re-imply it.
 
 ### Hex or square?
 
-`BIN_SHAPES` is `("hex", "square")`, and the choice is **per media
-type, not a user setting**: `bin_shape_for_media_type(t)` returns
-squares for media with browsable thumbnails (image, video, document)
-and hexes for the rest (audio, text). A square grid tiles a thumbnail
-grid without gaps; a hex lattice packs abstract density better.
+`BIN_SHAPES` is `("hex", "square")` (`DEFAULT_BIN_SHAPE = "hex"`), and
+the choice is **per media type, not a user setting**:
+`bin_shape_for_media_type(t)` returns `"square"` when
+`MediaType.has_thumbnail` is true (image, video, document, face, and audio
+via its waveform PNG) and `"hex"` otherwise (text, or an unknown type). A
+square grid tiles thumbnails without gaps; a hex lattice packs abstract
+density better.
 
 `rebin_like(projection, template, *, preserve_reps=True)` builds a
 pyramid for a new projection using an existing one's geometry, so two
@@ -168,7 +198,7 @@ clusterable UMAP are dropped on the floor at the end of the build.
 
 ### The pipeline, and why it splits where it does
 
-`signpost_prep` is the single entry point, called by the ingest
+`signpost_prep.prep_signposts` is the single entry point, called by the ingest
 projection stage, by the lazy Browse build, and by the Find→Browse
 subset build. It splits the work by cost profile:
 
@@ -177,15 +207,18 @@ subset build. It splits the work by cost profile:
   exemplars it shows the LLM - and they are clustering-independent. So
   they are computed once and **cached on the media dicts**, which means
   a text computed at ingest persists inside the dataset pickle and every
-  later browse or subset re-fit reuses it. Cached strings are derived
-  text, which the No-Persisted-Vectors rule explicitly allows.
+  later browse or subset re-fit reuses it (fields `signpost_text`,
+  `signpost_text_source`, `signpost_text_kind`). Cached strings are
+  derived text, which the
+  [no-persisted-vectors rule](../architecture.md#the-no-persisted-vectors-rule)
+  allows.
 - **Clustering and naming** are layout-scoped and cheap (a ~5-D UMAP
   plus the fit), so they re-run fresh per layout, full or subset.
 
 That is also why a Find→Browse subset **re-fits** its signs rather than
 filtering the dataset-level ones: contrastive keyphrases recompute
-against the subset's own siblings, which the image study showed beats
-filtering - and it stays interactive because the expensive half is
+against the subset's own siblings, which measured better than filtering -
+and it stays interactive because the expensive half is
 already cached.
 
 ### Text providers
@@ -194,9 +227,9 @@ Providers are registered per media type. The zero-shot tier matches each
 media against a fixed vocabulary by cosine: CLAP against AudioSet-527
 for audio, SigLIP against OpenImages-600 for images, top-5 each. The
 generative tier (`signpost_captioners`) instead produces free text -
-Qwen2.5-VL-3B-Instruct for images, `whisper-small-audio-captioning` for
-audio - and is **opt-in per media type** through the
-`browse_signpost_captioner` setting. A captioner always wraps the tag
+`Qwen/Qwen2.5-VL-3B-Instruct` for images,
+`MU-NLPC/whisper-small-audio-captioning` for audio - and is **opt-in per
+media type** through the `browse_signpost_captioner` setting. A captioner always wraps the tag
 provider as a fallback, so a failed model download or a per-item decode
 failure degrades to tags rather than leaving the map blank.
 
@@ -228,9 +261,10 @@ text-capable embedder, or a media type with no provider, is a routine
 data-dependent skip and stays silent. A missing `toponymy` install is
 **not**: `scripts/install.sh` installs it unconditionally, so its
 absence means a broken environment. Build paths therefore gate on
-`require_signposting()`, which logs a one-time error, while the serve
-and signature paths use the quiet `signposting_available()` probe, since
-`None` there is expected on every poll.
+`signpost_build.require_signposting()`, which logs a one-time error,
+while the serve and signature paths use the quiet
+`signposting_available()` probe, since `None` there is expected on every
+poll.
 
 ### What the fit swallows, and where it says so
 
@@ -243,8 +277,9 @@ topics fell back to the literal name `"unnamed"`, and how many
 duplicate-name disambiguation passes ran. The line is `debug` on a clean
 fit and `warning` as soon as either count is non-zero.
 
-The count is the only signal a broken prompt parse would ever give.
-`KeyphraseNamer` reads Toponymy's own prompt layouts with two regexes, so
+The count is the only signal a broken prompt parse would ever give. The
+namer built by `make_keyphrase_namer` reads Toponymy's own prompt layouts
+with two regexes, so
 a library bump can invalidate them silently; when it does, the naming
 retry path burns three `wait_random_exponential(4, 10)` sleeps per
 colliding cluster and says nothing. Warnings from other modules are
@@ -271,12 +306,15 @@ lights up the moment it is browsed.
 
 `persistence.py` holds the serialisation helpers only; the ZIP container
 module (`vtscore.datasets.container`) does the actual writing; `store.py`
-resolves which container a dataset writes to and judges whether what is
-already stored is still fresh; and the Browse routes own nothing but the
-HTTP surface.
+resolves which container a dataset writes to (`pkl_path_for`), writes and
+removes layouts (`persist_projection`, `remove_persisted_projections`),
+and judges whether what is already stored is still fresh
+(`load_persisted_layout`, `load_any_persisted_layout`,
+`projection_params_match`).
 
 Storing a projection and its pyramid **is** a carve-out from the
-No-Persisted-Vectors rule, and a narrow one: what gets written is the
+[no-persisted-vectors rule](../architecture.md#the-no-persisted-vectors-rule),
+and a narrow one: what gets written is the
 2-D layout and the aggregated cells, not the `(N, d)` embeddings they
 were derived from. The projection is frozen at ingest precisely so it
 never re-runs; that is what makes the unseeded fit acceptable, and it is

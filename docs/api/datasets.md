@@ -164,28 +164,25 @@ GET /api/dataset/status
 
 → `{"loaded": true, "num_medias": 500, "has_votes": true, "media_type": "audio", "display_name": "ESC-50", "num_dupes": 3}`
 
+With no dataset loaded: `loaded: false`, counts `0`, `media_type` and
+`display_name` `null`.
+
 ### Dataset progress (SSE)
 
-Progress for dataset operations is streamed through the unified
-[`/api/events`](events.md) Server-Sent Events endpoint. Two channels
-carry dataset state:
+Every dataset load, import, staging, combine, promote, and atlas build runs as
+a **task** with its own `task_id` (returned by the endpoint that started it),
+and progress streams on the `loading-tasks` channel of the unified
+[`/api/events`](events.md) Server-Sent Events endpoint — an array of every
+active task:
 
-- `dataset`: the singleton dataset progress tracker (used by staging,
-  embedding, and other one-at-a-time operations):
+```json
+[{"task_id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "current": 50, "total": 500}]
+```
 
-  ```json
-  {"status": "loading", "message": "Embedding medias…", "current": 50, "total": 500}
-  ```
-
-- `loading-tasks`: array of all active dataset loading tasks:
-
-  ```json
-  [{"task_id": "task_abc", "name": "ESC-50", "status": "loading", "message": "...", "current": 50, "total": 500}]
-  ```
-
-Connect with `new EventSource('/api/events')` and listen for the
-`dataset` and `loading-tasks` events. The first frame on each channel
-is the current snapshot; no separate bootstrap call is needed.
+See [events.md](events.md#task-object-shape-loading-tasks--detector-loading-tasks)
+for the full task shape. The first frame is the current snapshot; no separate
+bootstrap call is needed. (There is no process-wide `dataset` channel any
+more; work that isn't bound to a task reports nowhere.)
 
 ### Cancel loading
 
@@ -234,9 +231,10 @@ Cancels a specific loading task, with the same response shape and the same
 GET /api/dataset/all-importers
 ```
 
-Returns all registered importers including built-in ones (pickle, combine_datasets, demo).
+Returns all registered importers including built-in ones (pickle, combine_datasets, demo),
+plus the picker-tab declarations the Add-Dataset modal groups them under.
 
-→ `{"importers": [{"name": "...", "display_name": "...", "description": "...", "fields": [...]}]}`
+→ `{"importers": [{"name": "...", "display_name": "...", "description": "...", "fields": [...], "ui_mode": "form", "category": "...", ...}], "tabs": [{"id": "...", "label": "...", "icon": "...", "order": 0}]}`
 
 ```
 GET /api/dataset/importers
@@ -334,7 +332,7 @@ POST /api/dataset/load-file
 
 **Form:** `file`: `.pkl` file.
 
-→ `{"ok": true, "message": "Loading started"}`
+→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
 
 **From demo:**
 
@@ -344,15 +342,18 @@ POST /api/dataset/load-demo
 
 **Body:** `{"name": "esc50_animals"}`
 
-Optional fields: `embedder`, `clipper`, `clipper_params`, `converter`,
-`dataset_name`, `build_projection`. When `clipper` names a real (non-default)
+Optional fields: `embedder` (or `embedders`, a list of create-time picks —
+one per embedder kind — producing a multi-embedder dataset), `clipper`,
+`clipper_params`, `converter`, `cleaners`, `dataset_name`, and the
+string flags `build_projection` / `merge_near_duplicates` (`"true"` /
+`"false"`, default `"false"`). When `clipper` names a real (non-default)
 clipper, every loaded media is split into sub-clips at load time and the clips
 are re-embedded; `clipper_params` (e.g. `{"duration": 5.0}`) overrides the
 clipper's defaults. The pre-selected default clipper for a media type is a
 no-op. Clipped clips inherit their parent media's category. Example:
 `{"name": "tut_sound_events_2017_a", "clipper": "sound_tiling", "clipper_params": {"duration": 5.0}}`.
 
-→ `{"ok": true, "message": "Loading started"}`
+→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
 
 **From importer:**
 
@@ -360,9 +361,11 @@ no-op. Clipped clips inherit their parent media's category. Example:
 POST /api/dataset/import/{importer_name}
 ```
 
-**Form or Body:** importer-specific fields.
+**Form or Body:** the importer's declared `fields` (from
+`GET /api/dataset/all-importers`), plus the shared load options (`embedder`,
+`clipper`, `clipper_params`, `cleaners`, `dataset_name`, …).
 
-→ `{"ok": true, "message": "Loading started"}`
+→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
 
 **From source origin:**
 
@@ -372,7 +375,9 @@ POST /api/dataset/load-source
 
 **Body:** `{"source": {"importer": "demo", "params": {"name": "esc50"}}}`
 
-→ `{"ok": true, "message": "Loading started"}`
+Re-runs a recorded origin (e.g. a registry entry's `source`).
+
+→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
 
 **From a browser folder upload:**
 
@@ -403,14 +408,33 @@ importer in the background. Same response shape as `import-local-folder`.
 
 → `{"ok": true, "message": "...", "task_id": "..."}`
 
-All load endpoints are async; subscribe to the `dataset` and
-`loading-tasks` channels on [`/api/events`](events.md) (SSE) for progress.
+All load endpoints are async: they return as soon as the task is started, and
+the returned `task_id` names it on the `loading-tasks` channel of
+[`/api/events`](events.md) (SSE). `task_id` can be `""` in the rare case no task
+was registered. Cancel with `POST /api/dataset/cancel/{task_id}`.
+
+**AutoRun after import.** `load-file`, `load-demo`, `import/{importer_name}`,
+`import-local-folder` and `import-local-files` accept an optional `autorun`
+flag (`"true"` / `"false"`): whether to run the caller's AutoRun detectors on
+the dataset once it is saved. A sent flag is also remembered as the caller's
+`autorun_on_import` [setting](settings.md), which decides an import that
+sends none (default `true`). The run starts only after the import finished
+successfully, as its own task on the `loading-tasks` channel keyed to the new
+dataset (see [Run AutoRun](#run-autorun-on-a-registered-dataset)). When none
+of the caller's AutoRun detectors applies (another media type, or an embedder
+type the dataset lacks) nothing runs; if they have any AutoRun detectors at
+all, a row that is already idle reports it, its `autorun.skipped` holding the
+reason.
 
 ### Demo datasets
 
 ```
 GET /api/dataset/demo-list
 ```
+
+**Query (optional):** `embedder`, `clipper`, `converter` — the choices the
+user is about to load with; each entry's `status` is computed against them
+(a cached pickle built with a different embedder/clipper is not `ready`).
 
 →
 ```json
@@ -425,7 +449,10 @@ GET /api/dataset/demo-list
       "download_size_mb": 45.2,
       "description": "...",
       "media_type": "audio",
-      "num_categories": 5
+      "num_categories": 5,
+      "pkl_embedder": "clap",
+      "pkl_clipper": "",
+      "available_converters": []
     }
   ]
 }
@@ -467,9 +494,12 @@ media files with recognized extensions.
 {
   "directories": [{"name": "dog", "path": "dog", "modified_at": "2025-03-31T10:15:00"}],
   "files": [{"name": "bark.wav", "path": "dog/bark.wav", "size_bytes": 12345, "modified_at": "2025-03-31T10:15:00"}],
-  "root_path": "/absolute/path/to/root"
+  "root_path": "/absolute/path/to/root",
+  "default_path": ""
 }
 ```
+
+`default_path` (optional) is the sub-path the picker should open at.
 
 ### Select browsed file
 
@@ -500,13 +530,21 @@ POST /api/dataset/stage-file
 POST /api/dataset/stage-import/{importer_name}
 ```
 
-→ `{"ok": true, "message": "Staging started"}`
+**Form or Body:** the importer's fields, as for `POST /api/dataset/import/{importer_name}`.
+
+→ `{"ok": true, "message": "Staging started", "task_id": "..."}`
 
 ```
 POST /api/dataset/stage-demo/{name}
 ```
 
-→ `{"ok": true, "message": "Staging demo dataset..."}`
+**Body (optional):** `{"converter": "...", "dataset_name": "..."}`
+
+→ `{"ok": true, "message": "Staging demo dataset...", "task_id": "..."}`
+
+Staging tasks report on the `loading-tasks` channel; the finished task's
+`staging_result` carries the staged file (same shape as `stage-file`'s
+response).
 
 ```
 DELETE /api/dataset/staging
@@ -520,11 +558,16 @@ DELETE /api/dataset/staging
 POST /api/dataset/combine
 ```
 
-**Body:** `{"datasets": ["/path/to/a.pkl", "/path/to/b.pkl"]}`
+**Body:** `{"datasets": ["/path/to/a.pkl", "/path/to/b.pkl"], "name": "Merged", "resolutions": {}}`
 
-Requires at least two paths.
+Requires at least two paths. When the sources bind conflicting embedders of
+the same kind (say one `siglip` and one `clip` dataset, both semantic), each
+conflict must be settled in `resolutions`, keyed by embedder type:
+`{"action": "reembed", "embedder": "siglip"}` re-embeds every source to that
+embedder, `{"action": "drop"}` leaves that embedder type out. An unresolved
+conflict is a 400 rather than a silently mixed vector space.
 
-→ `{"ok": true, "message": "Combining datasets..."}`
+→ `{"ok": true, "message": "Combining datasets...", "task_id": "..."}`
 
 ### Promote a selection to a new dataset
 
@@ -592,13 +635,42 @@ GET /api/datasets/registry
 }
 ```
 
+Entries also carry provenance and embedder fields (`created_by`, `readers`,
+`expires_at`, `embedder`, `bound_embedders`, `embedders_by_type`, `clipper`,
+`num_dupes`, `file_type_counts`, …); see the `DatasetsRegistryListResponse` schema in
+the spec for the full list.
+
 ### Load registered dataset
 
 ```
 POST /api/datasets/registry/{dataset_id}/load
 ```
 
-→ `{"ok": true, "message": "Loading started"}`
+→ `{"ok": true, "message": "Loading started", "task_id": "..."}`
+
+403 if access is denied; 404 if the dataset or its saved pickle is missing.
+
+### Run AutoRun on a registered dataset
+
+```
+POST /api/datasets/registry/{dataset_id}/autorun
+```
+
+→ `{"ok": true, "message": "AutoRun started", "task_id": "_autorun_…"}`
+
+Runs the caller's AutoRun detectors that apply to the (loaded) dataset in the
+background - the Dashboard's ⋯ **Run AutoRun**. The task reports on the
+`loading-tasks` channel with the dataset's `dataset_id`, so it renders on the
+dataset's row, and carries an `autorun` block: `{run_id, owner, trigger,
+dataset_id, dataset_name}`, plus `detectors_run`, `total_hits`,
+`missing_detectors` and `auto_export` once it finishes. The results go to the
+caller's Auto-Find exporter when one is set, and are served by
+[`GET /api/autorun/runs/{run_id}`](find.md#autorun-results). Cancel with
+`POST /api/dataset/cancel/{task_id}`.
+
+400 when none of the caller's AutoRun detectors applies (wrong media type, or
+an embedder type the dataset lacks); 403 if access is denied; 404 if the
+dataset is unknown; 409 if it is not loaded.
 
 ### Unload registered dataset
 
@@ -607,6 +679,8 @@ POST /api/datasets/registry/{dataset_id}/unload
 ```
 
 → `{"ok": true}`
+
+400 if not loaded; 403 if the caller isn't the creator.
 
 ### Delete registered dataset
 
@@ -776,3 +850,23 @@ the scores are and are not.
 the two datasets use different embedders, the reference uses a patch
 embedder, or the active dataset equals the reference; 403 if access is
 denied; 404 if the reference doesn't exist.
+
+---
+
+## VTSBrowse projection
+
+The Browse view's 2-D map of the **active** dataset (`X-Dataset-Id`): a UMAP
+layout binned into a multi-level tile pyramid. The bin shape (squares for
+image/video/document, hexagons otherwise) is fixed by the media type and never
+sent by the client; `meta` reports it as `bin_shape`. Every read endpoint takes
+`?subset=true` to address the ephemeral subset layout instead of the
+full-dataset one. Nothing here persists vectors: the layout is derived from the
+dataset's own embeddings (see `vtscore.projection.service`).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/projection/build` | Body (optional) `{"ids": [...], "force": false}`. Returns at once: `{"status": "ready", "projection_id"}` when a layout is cached or persisted, otherwise starts the background fit and returns `{"status": "building", "job_id"}`; poll `meta` until ready. `ids` fits a subset layout over just those items (e.g. a Find run's positives); `force` discards the existing layout and re-fits ("Re-project"). 409 if the dataset is empty or has no embeddings. |
+| GET | `/api/projection/meta` | Build status (`status`, plus `current` / `total` / `step` / `overall` / `eta_seconds` / `error` while building) and, once ready, `projection_id`, `bounds`, `levels` (`{level, n_cells, radius}`), `base_radius`, `tile_span`, `point_count`, `media_type`, `bin_shape`, `has_labels`, `content_version`. |
+| GET | `/api/projection/tiles/{level}/{tx}/{ty}` | One tile's cells: `{"level", "tx", "ty", "cells": [{q, r, cx, cy, count, rep_id, member_ids?}]}`. Tile coordinates may be negative. Immutable for a given layout, so the response is browser-cacheable (`Vary: X-Dataset-Id`). 404 until the projection is built. |
+| GET | `/api/projection/labels` | Region signpost labels: `{"status", "projection_id", "labels": [{text, x, y, level, score?, source?, has_coarser?, has_finer?}]}`. An empty list (not an error) when labeling hasn't run; `status` is `"idle"` only when no projection exists. |
+| POST | `/api/projection/subset/remove` | Body `{"ids": [...]}`. Culls items from the current subset layout **without re-fitting**: positions are kept, `projection_id` is unchanged, `content_version` bumps (busting the tile cache), and `bounds` shrink to the survivors. Returns the updated subset `meta`. 409 if no subset layout exists. |

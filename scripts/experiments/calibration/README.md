@@ -91,8 +91,18 @@ produced.
 | **#3796 Calibration-split noise floor** — [plan](../../../docs/experiments/2026-09-11-calibration-seed-3796/PLAN.md) | `launch_calseed_3796.sh`, `analyze_calseed_3796.py`, `selftest_analyze_calseed_3796.py`. The grid is inverted — the cell seed is HELD and the Train/Calibrate split is redrawn — so the draws are a cell axis (`CALIB_CALIBRATION_SEEDS`) rather than the arm-per-value shape #3287 needed: #3794 put a `calibration_seed` column on every row, and an arm per draw would be twenty arrays whose only difference is already written down |
 | **#3557 Sign-dependent (hinge) cut rule** — [plan](../../../docs/experiments/2026-09-22-hinge-tilt-3557/PLAN.md) | `launch_hinge_3557.sh`, `analyze_hinge_3557.py`, `selftest_analyze_hinge_3557.py`, `figures_hinge_3557.py`. Two run-level arms (live rule `mid_tilt` vs `hinge`, `CALIB_LIVE_CUT_RULE`) because the acquisition cut re-cuts the same estimator below the hinge's seam; each arm also carries the paired re-cut frame |
 | **#3551 Tuning the retired `rare` / `corridor` blend schedules** — [plan](../../../docs/experiments/2026-09-22-blend-endpoints-3551/PLAN.md) | `launch_blend_3551.sh`, `analyze_blend_3551.py`, `selftest_analyze_blend_3551.py`, `analyze_blend_ab_3551.py`. The schedule is now only the fused cut's fold fallback, so the screen splits every schedule row by `shipped_provenance` into Q1 (the fallback it would ship) and Q2 (a replacement for the fused cut), and gates on the shipped fallback reproducing the live threshold; `ab` runs promoted arms per voting mode (`AB_MODE`) |
-| **#4184 The calibration ladder on COCO Better** (one cost curve per rung of the *Hold The Line* deck, for its slide) — [plan](../../../docs/experiments/2026-09-25-progression-4184/PLAN.md) | `launch_progression_4184.sh`, `analyze_progression_4184.py`, `selftest_analyze_progression_4184.py`. Seven run-level arms, one per rung; the four retired thresholds are `CALIB_LIVE_THRESHOLD` (`vtscore/eval/live_threshold_rules.py`), because a rung's line picks its own questions and a re-cut of another rung's trajectory would not. The slide figure is `slides/figs/src/make-progression-fig.py`, which reads the analyzer's committed `progression_curve.csv` |
+| **#4184 The calibration ladder on COCO Better** (one cost curve per rung of the *Hold The Line* deck, for its slide) — [plan](../../../docs/experiments/2026-09-25-progression-4184/PLAN.md), [report](../../../docs/experiments/2026-09-25-progression-4184/REPORT.md) | `launch_progression_4184.sh`, `analyze_progression_4184.py`, `selftest_analyze_progression_4184.py`, and for the #4201 prevalence arm (`CALIB_HAYSTACK_PREVALENCE`) `compare_prevalence_4201.py` (the rungs at two prevalences, paired per cell) and `figure_prevalence_4201.py` (the report's two figures). Seven run-level arms, one per rung; the four retired thresholds are `CALIB_LIVE_THRESHOLD` (`vtscore/eval/live_threshold_rules.py`), because a rung's line picks its own questions and a re-cut of another rung's trajectory would not. The slide figure is `slides/figs/src/make-progression-fig.py`, which reads the 5% arm's committed `h0.05/progression_curve.csv` |
+| **#4114 The converged logistic head in the loop, on COCO Better** — [report](../../../docs/experiments/2026-09-27-logreg-head-4114/REPORT.md) (analyzers, examples and figures live in [`../svm_vs_logistic/`](../svm_vs_logistic/)) | `launch_logreg_4114.sh`. Arms `svm` / `lrconv` (head `linear_logreg`) / `linear` |
 
+| **#4220 Can a precision-floor promise be kept from the app's votes?** (the #4223 ruling's objective, priced offline) — [report](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md) | `analyze_pframes_4220.py`, `selftest_analyze_pframes_4220.py`, `figure_pframes_4220.py`. Reads the per-cell precision frames `task_NNNN__pframes.npz` that `CALIB_PFRAME_STEPS` makes the cell runner record (test truth, pool, votes, fold held-out votes and haystacks); prices P(y\|score) estimators (in-sample, fold-rank, fold-raw × logistic/isotonic × point/bootstrap lower bound, ± EM prior shift) on recall at a precision floor X and the violation rate, in the same-prevalence and shifted-corpus scenarios |
+| **#4222 Stay in TextTop until G Goods, in the low-prevalence world** (does a deeper text opening mine the positives a precision promise needs?) — [report](../../../docs/experiments/2026-09-28-textgood-4222/REPORT.md) | `launch_textgood_4222.sh`, `analyze_textgood_4222.py`, `selftest_analyze_textgood_4222.py`, `figure_textgood_4222.py`. Today's app with the opening's Good round at G = 3 (production) / 6 / 10 / 20, at COCO Better's default 0.44% and positives thinned to 0.1% (`CALIB_TARGET_PREVALENCE`); precision frames on. Reports harvest, calibration positives against the #4220 gate, the #4220 estimator's promises, and AP paired against the G = 3 control, then applies the decision rule fixed in #4222 |
+| **#4224 Rank frames for precision-floor studies off the GRID** — [data and schema](../../../docs/experiments/2026-09-28-rank-frames/README.md) | `export_rank_frames.py`. Cuts the #4220/#4222 precision frames down to the ranks of each test corpus's positives, plus the shipped estimator's cuts (as shipped, and with a consistent reference pool) at X = 25/50/75%, so random-verification and audit-sampling studies can run from CSVs in the repo |
+| **#4257 How many audit votes does an honest precision-floor promise cost?** — [report](../../../docs/experiments/2026-09-28-random-verification/REPORT.md) | `analyze_random_verification.py`, `selftest_analyze_random_verification.py`. Reads the #4224 rank frames and prices random verification: the user audits a uniform sample of a candidate top k, and a Clopper–Pearson lower bound decides the promise. One-round, sequential-shrinking and stratified rules against the stored estimators and against reading the top K; the audit draws are hypergeometric and the only randomness. Pure pandas/numpy/scipy, runs anywhere in about a minute, and writes the report's tables and figures |
+| **#4267 How big should the spot check's candidate be at a low floor?** (the owner's 10% preset, and "the candidate grows as the floor falls") — [report](../../../docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md) | `analyze_floor_candidate_4267.py`, `selftest_analyze_floor_candidate_4267.py`. Reuses the #4257 analyzer's audit simulation on the #4224 rank frames to price one-round and shrinking spot checks from a top 32 to a top 512 at X = 10–50%, and the schedule the owner picked from them (start at the top 128 at 10% and the top 64 at 25%, 5 picks a round, halving to 32) at all five presets, against reading the top 32 yourself. Pure pandas/numpy/scipy, about 30 seconds |
+| **#4287 Does the shipped opening change what the spot check returns?** (#4282's `g3@top,b4@mid,g20+dry1/16@top` against today's g3) — [report](../../../docs/experiments/2026-09-29-floor-opening-4287/REPORT.md) | `compare_floor_opening_4287.py`. Reads the #4267 analyzer's `best_attempt.csv` for two openings' rank frames (exported from #4222's grids) and adds absolute recall plus paired per-session differences (unchecked top-K precision, oracle recall at X) with SEs. Pure pandas/numpy, seconds |
+| **#4256 Calibrate the precision floor on learned-sort votes only?** (does a provenance filter keep the promise) — [report](../../../docs/experiments/2026-09-28-provenance-4256/REPORT.md) | `analyze_provenance_4256.py`, `selftest_analyze_provenance_4256.py`, `figure_provenance_4256.py`. Reads precision frames that name each calibration vote (`fold_cal_vote`) and the cell's pick log, and runs the library estimator with all votes or only those picked at or after the first learned-phase pick, under the shipped and a consistent reference pool; arms from the #4222 launcher under a separate base. `--shard I/N` + `--merge` split the ~16 s-a-cell analysis over an array. Verdict: no - learned-only evidence avoids broken promises only by abstaining, and still breaks 83-100% with a consistent pool |
+| **#4222 The dry stop: text sort until G Goods or until it runs dry** (does #4254's adaptive opening beat a fixed G at both 0.44% and 0.1%, and feed #4216's starved small hunts?) — [report](../../../docs/experiments/2026-09-29-drystop-4222/REPORT.md) | `analyze_drystop_4222.py`, `selftest_analyze_drystop_4222.py`, `figure_drystop_4222.py`. Arms `pool/g<G>[d<W>]` from the #4222 launcher above (`<world>-g20d8` = `g20+dry1/8@top,b4@mid`); reports how each opening ended (met G / ran dry / never), Good votes by checkpoint, the share of hunts finding < 3 positives per size band paired against g3, and AP / oracle cost paired against g3 per band (a no-detector session scores AP 0); applies the rule fixed on #4222. Verdict: `g3@top,g20+dry1/16@top,b4@mid` (+0.052 / +0.032 AP at vote 150); a bare dry stop quits early and fails 4-5x more sessions |
+| **#4197 Sibling fixation: diversify the opening's text-sort walk?** (the text query surfaces a sibling class - keyboards for "laptop" - that gets voted Bad again and again) — [report](../../../docs/experiments/2026-09-29-opening-diversity-4197/REPORT.md) | `analyze_siblings_4197.py`. Arms from the #4222 launcher (`<world>-div<TT>k<K>` sets `CALIB_OPENING_DIVERSITY=0.TT/K`: pass over text-sort candidates at cosine >= tau to >= k Bads); read with the dry-stop analyzer (AP, final cost, per class) plus this script's share of each phase's Bad clicks that hold the class's sibling. Verdict: not shipped - the fixation is in the opening, and the knob gains ~0.0035 cost |
 <!-- END INDEX -->
 
 ## Arms
@@ -198,8 +208,14 @@ alongside them harmlessly), and writes all study output under
 ## Fixed config (pre-registered)
 
 `inclusion=0` (cost = FPR + FNR), `sim_fraction=0.5`, `calibrate_count=2`,
-`calibration_fraction=0.5`, MLP trainer, 150 votes, 4 seeds. Env knobs mirror
-the `MAXPATCH_*` set under the `CALIB_*` prefix.
+150 votes, 4 seeds. Env knobs mirror the `MAXPATCH_*` set under the `CALIB_*`
+prefix.
+
+#2781 also pre-registered `calibration_fraction=0.5` and the auto-sized MLP
+head. Both now follow the app instead: the head is the shipped linear SVM
+(`CALIB_HEAD` unset; `CALIB_HEAD=mlp` recovers the historical arm), and the
+fraction resolves per space through `production_split_for` (0.3 single-vector,
+0.5 patch) unless `CALIB_CALIBRATION_FRACTION` pins it.
 
 `safe_thresholds` was pre-registered `False` here and is **`True` now** (#3400):
 #2781 pre-registered the unfused control while it was still a shipped path, and
@@ -444,7 +460,9 @@ Analyzer: `analyze_exclusion.py`. Design and pre-registered decision rules:
 Getting enough Goods looks like what separates a VTSearch run that works from
 one that fails, and the *opening* is where Goods come from. Today it is fixed:
 the top of the seed sort until 3 positives, that sort's cutoff until 4
-negatives, then the learned Hard sort ever after.
+negatives, then the learned Hard sort ever after. (Since #4282 it adds a third
+round, the top of the sort again until 20 positives or 16 misses in a row;
+this section describes the study as it ran.)
 
 Both of those phases are the **same operation** — a rank-space `hard` select
 against a cut drawn on the seed sort — at two different cuts. The Good phase's
@@ -455,11 +473,15 @@ So the opening collapses to a list of rounds, each naming *how many clicks* and
 
 ```bash
 GM_STAGE=live bash launch_good_mining.sh    # coco_val + visual_genome_m
-GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large
+GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large: cached pickles only (see below)
 bash analyse_good_mining.sh                 # once every arm drains: everything
 python selftest_analyze_startup.py          # planted-answer check on the analyzer
 python selftest_curves.py                   # ...and on the quality-over-clicks pair
 ```
+
+The `bands` stage runs only where its prepared pickles are still cached: the
+`vg_box_*` datasets were unregistered when the Visual Genome machinery was
+retired (#4038), so `prepare_data.py` can no longer build them fresh.
 
 `analyse_good_mining.sh` is the whole analysis in one command, because the pieces
 have to agree. To re-run only the analyzer, give it the zero-click anchor
@@ -472,11 +494,14 @@ GM_TEXT_BASELINE="$OUT/text_baseline.csv" GM_OUT="$OUT" python analyze_startup.p
 ```
 
 Grammar (full reference: [`vtscore/eval/startup_schedule.py`](../../../vtscore/eval/startup_schedule.py)):
-`<g|b|n><count>@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3` stays until 3
-goods exist, `b4` until 4 bads, `n8` for 8 clicks; `@top` cuts above every score,
+`<g|b|n><count>[+dry<m>/<w>]@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3`
+stays until 3 goods exist, `b4` until 4 bads, `n8` for 8 clicks; `+dry1/8` also
+ends a `g` or `n` round once its last 8 picks held fewer than 1 good (#4222's
+adaptive stop, e.g. `g20+dry1/8@top`); `@top` cuts above every score,
 `@mid` at the shipped GMM midpoint, `@k-3` at that GMM split under inclusion −3,
-`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid` is today's opening
-and is *required* to reproduce a default run click for click.
+`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid,g20+dry1/16@top` is today's
+opening (#4282; `g3@top,b4@mid` before it) and is *required* to reproduce a
+default run click for click.
 
 **Two arms are load-bearing.**
 

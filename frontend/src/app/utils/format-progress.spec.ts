@@ -201,6 +201,26 @@ function capitalizeFirst(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+describe('formatProgressHeader for a background AutoRun', () => {
+  it('names the run, not a load, and counts detectors', () => {
+    const { header, subtitle, detail } = formatProgressHeader(
+      { status: 'loading', message: 'Resolving 27 label origins…', current: 0, total: 2 },
+      'autorun',
+    );
+    expect(header).toBe('Running AutoRun · Resolving labels');
+    expect(subtitle).toContain('labeled examples');
+    expect(detail).toBe('0/2 detectors done');
+  });
+
+  it('falls back to scoring between trains', () => {
+    const { header } = formatProgressHeader(
+      { status: 'loading', message: 'Scored 1 of 2 AutoRun detectors…', current: 1, total: 2 },
+      'autorun',
+    );
+    expect(header).toBe('Running AutoRun · Scoring');
+  });
+});
+
 describe('formatEta', () => {
   it('returns empty for null, non-finite, or non-positive values', () => {
     expect(formatEta(null)).toBe('');

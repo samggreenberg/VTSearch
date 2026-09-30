@@ -48,22 +48,25 @@ def _build_config(settings_path=None) -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 register_core_config_builder(_build_config)
 print(f"Library data dir: {CoreConfig.from_settings().data_dir}")
 ```
 
-That's the only setup `vtscore` requires. The library refuses to guess
-where to put data - by setting up the config builder, you've answered.
+That's the only setup `vtscore` requires: the builder answers where
+datasets and detectors go. Two locations are *not* taken from it - the
+model-weight cache and the dataset/detector registries resolve from
+`$VTSEARCH_MODELS_DIR` / `$VTSEARCH_DATA_DIR` at import time (see
+[integration.md § Persistent storage](../integration.md#persistent-storage)),
+so export those first if you want the tutorial fully self-contained.
 
 ## Step 1: Load a folder
 
-We'll use the ESC-50 demo dataset, which ships with vtscore and contains
-2,000 5-second environmental audio clips across 50 categories (one of
-which is "dog"). If you don't want to download ESC-50, swap in your
-own folder of `.wav` files.
+We'll use the ESC-50 corpus (2,000 5-second environmental audio clips
+across 50 categories, one of which is "dog"). It is one of the audio demo
+datasets `vtscore` knows how to download, but here we simply point at an
+extracted copy on disk. Any folder of `.wav` files works instead.
 
 ```python
 from vtscore.media import audio  # noqa: F401 - registry is auto-discovered; see below
@@ -105,7 +108,7 @@ What just happened:
    General), ran every item through it in one bulk call, and wrote the
    vectors into `media["embeddings"]["clap_general"]`.
 4. CLAP General downloaded its weights on first use to
-   `WORKDIR/models/` (about 776 MB; subsequent runs are instant).
+   `vtscore.config.MODELS_CACHE_DIR` (subsequent runs load from there).
 
 The first call takes ~30s for model download and ~10s per 100 files
 for embedding. Once cached, the same call runs in seconds.
@@ -245,9 +248,9 @@ path = save_detector("dog-barks", labelset, media_type="audio")
 print(f"Saved detector to {path}")
 ```
 
-`save_detector` slugifies the name for the filename (lowercased, everything
-outside `[a-z0-9_-]` collapsed to `_`), so "Dog Barks" and "dog-barks" both
-land on `dog-barks.json`. It writes the file and nothing else - to make the
+`save_detector` slugifies the name for the filename (lowercased, every run
+of characters outside `[a-z0-9_-]` collapsed to `_`), so "dog-barks" lands
+on `dog-barks.json` while "Dog Barks" would land on `dog_barks.json`. It writes the file and nothing else - to make the
 detector visible in the app's dashboard, also add a registry entry with
 `vtscore.detectors.registry.register_detector(name="dog-barks",
 media_type="audio", num_training=len(labelset))`.
@@ -431,8 +434,8 @@ By the end of the tutorial:
 
 - **`/tmp/vtscore-tutorial/detectors/dog-barks.json`** - your detector,
   six origins, no weights. ~1 KB.
-- **`/tmp/vtscore-tutorial/models/`** - cached LAION-CLAP General weights.
-  Reused by every future detector with `embedder="clap_general"`. ~776 MB.
+- **`vtscore.config.MODELS_CACHE_DIR`** - cached LAION-CLAP General
+  weights, reused by every future detector with `embedder="clap_general"`.
 - **`ctx.model`** + **`ctx.threshold`** - in-memory trained head, ready
   to score anything.
 

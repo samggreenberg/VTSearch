@@ -21,9 +21,8 @@ measured what that costs, and the answer splits cleanly by **labeling flow**:
   **grows** with votes, 0.254 → 0.410 from 12 → 100, and Inclusion 0 recall
   falls to 0.474.
 
-The textbook repair — propensity-**weighted** conformal quantiles — is shelved in
-[`inclusion-calibration-bias.md`](inclusion-calibration-bias.md) because weights
-*estimated* from tens of votes are high-variance, and its pre-registered trigger
+The textbook repair — propensity-**weighted** conformal quantiles — was shelved
+because weights *estimated* from tens of votes are high-variance, and its pre-registered trigger
 is "a genuinely exploitative labeling flow." That flow already exists (manual
 list review), but the cheaper repair is not weighting: it is **partitioning**.
 Every vote's surfacing context is *known at click time* (which Autopilot phase

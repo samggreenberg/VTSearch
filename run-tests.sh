@@ -82,7 +82,7 @@
 # `docs` is the same idea one step wider, and it does not wait to be asked.
 # A change confined to tracked markdown cannot be seen by pyright (which
 # excludes markdown), by pip-audit, by the frontend build or its unit suite, or
-# by ~1600 of the ~1603 Python tests. So a *bare* `./run-tests.sh` looks at what
+# by nearly all of the Python tests. So a *bare* `./run-tests.sh` looks at what
 # the branch actually changed and, when the answer is "markdown and nothing
 # else", keeps the whole of stage 1 — the gates that genuinely read markdown
 # live there — and narrows pytest to the tests that can observe a doc
@@ -349,7 +349,7 @@ fi
 # A change confined to tracked markdown is invisible to most of this script:
 # pyright excludes markdown, pip-audit reads the venv, the Angular build only
 # *copies* docs/user/*.md into the bundle (frontend/docs-assets is a symlink to
-# it) and cannot fail on its contents, and of ~1603 Python tests only the ones
+# it) and cannot fail on its contents, and of the Python tests only the ones
 # named in tests_shared/markdown_surface.py ever open a doc. What *can* see a
 # doc is stage 1 — check-docs, codespell, the doc-inventory and screenshot
 # wiring snapshots, the deck preflight — so a markdown-only run keeps stage 1
@@ -737,6 +737,9 @@ fi
 #                                                  by launchpadlib in the Ubuntu
 #                                                  base image, so requirements
 #                                                  can't upgrade it)
+#   oauthlib 3.2.2     CVE-2026-49265             (same: an Ubuntu base-image
+#                                                  package in dist-packages that
+#                                                  nothing pip-installed requires)
 PIP_AUDIT_IGNORE=(
     --ignore-vuln PYSEC-2024-277
     --ignore-vuln PYSEC-2025-183
@@ -749,6 +752,7 @@ PIP_AUDIT_IGNORE=(
     --ignore-vuln PYSEC-2025-217
     --ignore-vuln PYSEC-2025-218
     --ignore-vuln PYSEC-2026-3444
+    --ignore-vuln CVE-2026-49265
 )
 
 _lane_names=()

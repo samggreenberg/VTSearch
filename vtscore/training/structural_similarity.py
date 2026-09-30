@@ -481,6 +481,16 @@ def maybe_structural_rerank(
     if det_ctx is not None:
         try:
             det_ctx.verification_classifier = classifier
+            # The threshold returned below is the classifier's boundary, not a
+            # cut on the retrieval MLP's scale, so the MLP-scale estimators the
+            # Stage-1 pass cached no longer describe it.  Left in place, the next
+            # re-cut (a floor or Inclusion change, the acquisition cut) would
+            # replace this boundary with an MLP-scale threshold and
+            # apply it to verification scores.
+            det_ctx.anchored_cut_cache = None
+            det_ctx.calibration_cache = None
+            det_ctx.precision_floor_cache = None
+            det_ctx.line_ranking = None
         except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
             pass
 

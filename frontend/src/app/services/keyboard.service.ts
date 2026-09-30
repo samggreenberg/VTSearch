@@ -17,6 +17,18 @@ export interface KeyboardAction {
   navDirection?: NavDirection;
 }
 
+/**
+ * A claim on the vote keys, held by a step that votes on items of its own
+ * while it is open: the precision floor's spot check (#4273). While a claim
+ * is held, ←/→ vote and ↓/↑ navigate for its holder, even from inside a modal,
+ * and nothing reaches {@link KeyboardService.action$} - the ranked list behind
+ * the step never sees them.
+ */
+export interface KeyCapture {
+  vote(direction: VoteDirection): void;
+  navigate?(direction: NavDirection): void;
+}
+
 @Injectable({ providedIn: 'root' })
 export class KeyboardService implements OnDestroy {
   private zone = inject(NgZone);
@@ -30,6 +42,29 @@ export class KeyboardService implements OnDestroy {
   readonly action$ = new Subject<KeyboardAction>();
 
   private listener: ((e: KeyboardEvent) => void) | null = null;
+
+  /** Held claims on the vote keys, newest last; only the newest is served. */
+  private readonly captures: KeyCapture[] = [];
+
+  /**
+   * Route the vote and navigation keys to *capture* until the returned
+   * function is called.
+   *
+   * The ranked list's shortcuts are off while a modal is open, so a step that
+   * lives in a modal would otherwise get no keys at all; and a step that did
+   * not live in one would share them with the list. A claim settles both: its
+   * holder gets ←/→ and ↓/↑ (without Shift), the list gets nothing, and every
+   * other shortcut stays off. Typing in a field and held modifiers are
+   * respected exactly as for the list, and so is OS auto-repeat: each vote is
+   * a discrete press.
+   */
+  captureVoteKeys(capture: KeyCapture): () => void {
+    this.captures.push(capture);
+    return () => {
+      const i = this.captures.indexOf(capture);
+      if (i !== -1) this.captures.splice(i, 1);
+    };
+  }
 
   /** Start listening for keyboard shortcuts on the document. */
   start(): void {
@@ -54,6 +89,14 @@ export class KeyboardService implements OnDestroy {
   }
 
   private handleKeydown(e: KeyboardEvent): void {
+    // A step holding the vote keys takes them ahead of the modal check below:
+    // it usually is the modal.
+    const capture = this.captures[this.captures.length - 1];
+    if (capture) {
+      this.handleCaptured(e, capture);
+      return;
+    }
+
     // Skip when a modal is open
     if (document.querySelector('.modal-backdrop')) return;
 
@@ -146,6 +189,38 @@ export class KeyboardService implements OnDestroy {
         this.action$.next({ type: 'rotate', rotateDirection: 'right' });
         break;
     }
+  }
+
+  /**
+   * The keys a {@link KeyCapture} holds. Focus is left where it is (unlike the
+   * list's votes, which blur): the holder is a modal with a focus trap, and a
+   * blur would drop focus out of it.
+   */
+  private handleCaptured(e: KeyboardEvent, capture: KeyCapture): void {
+    if (this.isTyping()) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    let vote: VoteDirection | null = null;
+    let nav: NavDirection | null = null;
+    switch (e.key) {
+      case 'ArrowRight':
+        vote = 'good';
+        break;
+      case 'ArrowLeft':
+        vote = 'bad';
+        break;
+      case 'ArrowUp':
+        nav = 'forward';
+        break;
+      case 'ArrowDown':
+        nav = 'back';
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    if (e.repeat) return;
+    if (vote) capture.vote(vote);
+    else if (nav) capture.navigate?.(nav);
   }
 
   private isTyping(): boolean {

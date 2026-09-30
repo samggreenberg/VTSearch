@@ -1,0 +1,4770 @@
+cls,seed,train,n_good
+airplane,0,L,45
+airplane,1,L,43
+airplane,2,L,46
+airplane,3,L,44
+airplane,4,L,41
+airplane,5,L,36
+airplane,6,L,36
+airplane,7,L,24
+airplane,8,L,44
+airplane,9,L,49
+airplane,10,L,40
+airplane,11,L,8
+airplane,12,L,48
+airplane,13,L,30
+airplane,14,L,25
+airplane,15,L,34
+airplane,16,L,28
+airplane,17,L,29
+airplane,18,L,41
+airplane,19,L,43
+airplane,0,M,17
+airplane,1,M,49
+airplane,2,M,8
+airplane,3,M,28
+airplane,4,M,33
+airplane,5,M,18
+airplane,6,M,21
+airplane,7,M,9
+airplane,8,M,34
+airplane,9,M,20
+airplane,10,M,31
+airplane,11,M,33
+airplane,12,M,50
+airplane,13,M,20
+airplane,14,M,9
+airplane,15,M,36
+airplane,16,M,20
+airplane,17,M,27
+airplane,18,M,29
+airplane,19,M,20
+airplane,0,SML=,3
+airplane,1,SML=,23
+airplane,2,SML=,9
+airplane,3,SML=,18
+airplane,4,SML=,6
+airplane,5,SML=,3
+airplane,6,SML=,5
+airplane,7,SML=,16
+airplane,8,SML=,38
+airplane,9,SML=,5
+airplane,10,SML=,9
+airplane,11,SML=,26
+airplane,12,SML=,3
+airplane,13,SML=,7
+airplane,14,SML=,4
+airplane,15,SML=,15
+airplane,16,SML=,21
+airplane,17,SML=,7
+airplane,18,SML=,3
+airplane,19,SML=,29
+airplane,0,SMLn,43
+airplane,1,SMLn,48
+airplane,2,SMLn,37
+airplane,3,SMLn,45
+airplane,4,SMLn,38
+airplane,5,SMLn,37
+airplane,6,SMLn,32
+airplane,7,SMLn,43
+airplane,8,SMLn,37
+airplane,9,SMLn,39
+airplane,10,SMLn,43
+airplane,11,SMLn,25
+airplane,12,SMLn,49
+airplane,13,SMLn,11
+airplane,14,SMLn,12
+airplane,15,SMLn,8
+airplane,16,SMLn,4
+airplane,17,SMLn,28
+airplane,18,SMLn,11
+airplane,19,SMLn,36
+airplane,0,S,3
+airplane,1,S,3
+airplane,2,S,3
+airplane,3,S,5
+airplane,4,S,5
+airplane,5,S,5
+airplane,6,S,3
+airplane,7,S,4
+airplane,8,S,5
+airplane,9,S,4
+airplane,10,S,3
+airplane,11,S,5
+airplane,12,S,5
+airplane,13,S,3
+airplane,14,S,8
+airplane,15,S,4
+airplane,16,S,4
+airplane,17,S,4
+airplane,18,S,3
+airplane,19,S,4
+apple,0,L,29
+apple,1,L,9
+apple,2,L,23
+apple,3,L,3
+apple,4,L,3
+apple,5,L,3
+apple,6,L,4
+apple,7,L,3
+apple,8,L,23
+apple,9,L,4
+apple,10,L,3
+apple,11,L,3
+apple,12,L,23
+apple,13,L,4
+apple,14,L,3
+apple,15,L,4
+apple,16,L,5
+apple,17,L,3
+apple,18,L,24
+apple,19,L,4
+apple,0,M,4
+apple,1,M,4
+apple,2,M,5
+apple,3,M,3
+apple,4,M,5
+apple,5,M,4
+apple,6,M,6
+apple,7,M,3
+apple,8,M,4
+apple,9,M,4
+apple,10,M,5
+apple,11,M,6
+apple,12,M,3
+apple,13,M,4
+apple,14,M,5
+apple,15,M,6
+apple,16,M,3
+apple,17,M,4
+apple,18,M,6
+apple,19,M,4
+apple,0,SML=,5
+apple,1,SML=,7
+apple,2,SML=,5
+apple,3,SML=,4
+apple,4,SML=,6
+apple,5,SML=,3
+apple,6,SML=,7
+apple,7,SML=,4
+apple,8,SML=,4
+apple,9,SML=,4
+apple,10,SML=,15
+apple,11,SML=,5
+apple,12,SML=,4
+apple,13,SML=,13
+apple,14,SML=,5
+apple,15,SML=,6
+apple,16,SML=,5
+apple,17,SML=,4
+apple,18,SML=,5
+apple,19,SML=,5
+apple,0,SMLn,5
+apple,1,SMLn,6
+apple,2,SMLn,5
+apple,3,SMLn,3
+apple,4,SMLn,7
+apple,5,SMLn,3
+apple,6,SMLn,4
+apple,7,SMLn,7
+apple,8,SMLn,5
+apple,9,SMLn,3
+apple,10,SMLn,15
+apple,11,SMLn,4
+apple,12,SMLn,4
+apple,13,SMLn,5
+apple,14,SMLn,4
+apple,15,SMLn,4
+apple,16,SMLn,4
+apple,17,SMLn,4
+apple,18,SMLn,4
+apple,19,SMLn,3
+bag or luggage,0,L,4
+bag or luggage,1,L,4
+bag or luggage,2,L,3
+bag or luggage,3,L,3
+bag or luggage,4,L,5
+bag or luggage,5,L,3
+bag or luggage,6,L,3
+bag or luggage,7,L,4
+bag or luggage,8,L,6
+bag or luggage,9,L,3
+bag or luggage,10,L,3
+bag or luggage,11,L,3
+bag or luggage,12,L,3
+bag or luggage,13,L,4
+bag or luggage,14,L,3
+bag or luggage,15,L,3
+bag or luggage,16,L,4
+bag or luggage,17,L,3
+bag or luggage,18,L,3
+bag or luggage,19,L,3
+bag or luggage,0,M,5
+bag or luggage,1,M,3
+bag or luggage,2,M,3
+bag or luggage,3,M,6
+bag or luggage,4,M,4
+bag or luggage,5,M,4
+bag or luggage,6,M,3
+bag or luggage,7,M,7
+bag or luggage,8,M,4
+bag or luggage,9,M,5
+bag or luggage,10,M,6
+bag or luggage,11,M,6
+bag or luggage,12,M,4
+bag or luggage,13,M,3
+bag or luggage,14,M,6
+bag or luggage,15,M,4
+bag or luggage,16,M,5
+bag or luggage,17,M,7
+bag or luggage,18,M,5
+bag or luggage,19,M,4
+bag or luggage,0,SML=,4
+bag or luggage,1,SML=,3
+bag or luggage,2,SML=,4
+bag or luggage,3,SML=,6
+bag or luggage,4,SML=,7
+bag or luggage,5,SML=,5
+bag or luggage,6,SML=,4
+bag or luggage,7,SML=,6
+bag or luggage,8,SML=,4
+bag or luggage,9,SML=,3
+bag or luggage,10,SML=,4
+bag or luggage,11,SML=,3
+bag or luggage,12,SML=,3
+bag or luggage,13,SML=,6
+bag or luggage,14,SML=,5
+bag or luggage,15,SML=,3
+bag or luggage,16,SML=,4
+bag or luggage,17,SML=,6
+bag or luggage,18,SML=,4
+bag or luggage,19,SML=,3
+bag or luggage,0,SMLn,4
+bag or luggage,1,SMLn,4
+bag or luggage,2,SMLn,5
+bag or luggage,3,SMLn,4
+bag or luggage,4,SMLn,5
+bag or luggage,5,SMLn,3
+bag or luggage,6,SMLn,3
+bag or luggage,7,SMLn,3
+bag or luggage,8,SMLn,6
+bag or luggage,9,SMLn,3
+bag or luggage,10,SMLn,4
+bag or luggage,11,SMLn,3
+bag or luggage,12,SMLn,7
+bag or luggage,13,SMLn,5
+bag or luggage,14,SMLn,5
+bag or luggage,15,SMLn,4
+bag or luggage,16,SMLn,5
+bag or luggage,17,SMLn,7
+bag or luggage,18,SMLn,6
+bag or luggage,19,SMLn,5
+bag or luggage,0,S,2
+bag or luggage,1,S,1
+bag or luggage,2,S,1
+bag or luggage,3,S,4
+bag or luggage,4,S,3
+bag or luggage,5,S,1
+bag or luggage,6,S,2
+bag or luggage,7,S,2
+bag or luggage,8,S,1
+bag or luggage,10,S,2
+bag or luggage,11,S,1
+bag or luggage,12,S,1
+bag or luggage,13,S,3
+bag or luggage,14,S,3
+bag or luggage,15,S,1
+bag or luggage,16,S,3
+bag or luggage,17,S,2
+bag or luggage,18,S,2
+bag or luggage,19,S,1
+banana,0,L,4
+banana,1,L,5
+banana,2,L,5
+banana,3,L,3
+banana,4,L,4
+banana,5,L,4
+banana,6,L,3
+banana,7,L,3
+banana,8,L,27
+banana,9,L,15
+banana,10,L,3
+banana,11,L,5
+banana,12,L,8
+banana,13,L,4
+banana,14,L,18
+banana,15,L,21
+banana,16,L,10
+banana,17,L,9
+banana,18,L,8
+banana,19,L,6
+banana,0,M,3
+banana,1,M,3
+banana,2,M,8
+banana,3,M,3
+banana,4,M,3
+banana,5,M,3
+banana,6,M,5
+banana,7,M,3
+banana,8,M,4
+banana,9,M,5
+banana,10,M,3
+banana,11,M,7
+banana,12,M,3
+banana,13,M,3
+banana,14,M,3
+banana,15,M,4
+banana,16,M,5
+banana,17,M,5
+banana,18,M,3
+banana,19,M,3
+banana,0,SML=,4
+banana,1,SML=,5
+banana,2,SML=,4
+banana,3,SML=,3
+banana,4,SML=,5
+banana,5,SML=,3
+banana,6,SML=,5
+banana,7,SML=,7
+banana,8,SML=,4
+banana,9,SML=,5
+banana,10,SML=,4
+banana,11,SML=,4
+banana,12,SML=,8
+banana,13,SML=,4
+banana,14,SML=,4
+banana,15,SML=,3
+banana,16,SML=,3
+banana,17,SML=,4
+banana,18,SML=,3
+banana,19,SML=,6
+banana,0,SMLn,5
+banana,1,SMLn,4
+banana,2,SMLn,10
+banana,3,SMLn,3
+banana,4,SMLn,3
+banana,5,SMLn,3
+banana,6,SMLn,3
+banana,7,SMLn,4
+banana,8,SMLn,5
+banana,9,SMLn,3
+banana,10,SMLn,5
+banana,11,SMLn,3
+banana,12,SMLn,4
+banana,13,SMLn,4
+banana,14,SMLn,4
+banana,15,SMLn,4
+banana,16,SMLn,3
+banana,17,SMLn,4
+banana,18,SMLn,5
+banana,19,SMLn,4
+baseball bat,0,L,5
+baseball bat,1,L,25
+baseball bat,2,L,3
+baseball bat,3,L,36
+baseball bat,4,L,3
+baseball bat,5,L,30
+baseball bat,6,L,37
+baseball bat,7,L,20
+baseball bat,8,L,41
+baseball bat,9,L,30
+baseball bat,10,L,23
+baseball bat,11,L,5
+baseball bat,12,L,34
+baseball bat,13,L,40
+baseball bat,14,L,40
+baseball bat,15,L,6
+baseball bat,16,L,6
+baseball bat,17,L,35
+baseball bat,18,L,5
+baseball bat,19,L,16
+baseball bat,0,M,41
+baseball bat,1,M,34
+baseball bat,2,M,3
+baseball bat,3,M,3
+baseball bat,4,M,16
+baseball bat,5,M,9
+baseball bat,6,M,32
+baseball bat,7,M,15
+baseball bat,8,M,3
+baseball bat,9,M,3
+baseball bat,10,M,3
+baseball bat,11,M,31
+baseball bat,12,M,50
+baseball bat,13,M,45
+baseball bat,14,M,48
+baseball bat,15,M,3
+baseball bat,16,M,11
+baseball bat,17,M,35
+baseball bat,18,M,31
+baseball bat,19,M,46
+baseball bat,0,SML=,3
+baseball bat,1,SML=,34
+baseball bat,2,SML=,3
+baseball bat,3,SML=,19
+baseball bat,4,SML=,39
+baseball bat,5,SML=,44
+baseball bat,6,SML=,27
+baseball bat,7,SML=,48
+baseball bat,8,SML=,45
+baseball bat,9,SML=,4
+baseball bat,10,SML=,37
+baseball bat,11,SML=,30
+baseball bat,12,SML=,30
+baseball bat,13,SML=,43
+baseball bat,14,SML=,3
+baseball bat,15,SML=,3
+baseball bat,16,SML=,39
+baseball bat,17,SML=,23
+baseball bat,18,SML=,25
+baseball bat,19,SML=,36
+baseball bat,0,SMLn,3
+baseball bat,1,SMLn,32
+baseball bat,2,SMLn,3
+baseball bat,3,SMLn,3
+baseball bat,4,SMLn,43
+baseball bat,5,SMLn,47
+baseball bat,6,SMLn,3
+baseball bat,7,SMLn,50
+baseball bat,8,SMLn,29
+baseball bat,9,SMLn,43
+baseball bat,10,SMLn,3
+baseball bat,11,SMLn,3
+baseball bat,12,SMLn,4
+baseball bat,13,SMLn,29
+baseball bat,14,SMLn,3
+baseball bat,15,SMLn,3
+baseball bat,16,SMLn,5
+baseball bat,17,SMLn,35
+baseball bat,18,SMLn,27
+baseball bat,19,SMLn,43
+baseball bat,0,S,29
+baseball bat,1,S,36
+baseball bat,2,S,41
+baseball bat,3,S,30
+baseball bat,4,S,48
+baseball bat,5,S,49
+baseball bat,6,S,47
+baseball bat,7,S,50
+baseball bat,8,S,44
+baseball bat,9,S,40
+baseball bat,10,S,29
+baseball bat,11,S,47
+baseball bat,12,S,29
+baseball bat,13,S,42
+baseball bat,14,S,45
+baseball bat,15,S,41
+baseball bat,16,S,46
+baseball bat,17,S,36
+baseball bat,18,S,35
+baseball bat,19,S,48
+bench,0,L,4
+bench,1,L,3
+bench,2,L,4
+bench,3,L,5
+bench,4,L,4
+bench,5,L,4
+bench,6,L,4
+bench,7,L,3
+bench,8,L,5
+bench,9,L,6
+bench,10,L,7
+bench,11,L,3
+bench,12,L,5
+bench,13,L,3
+bench,14,L,4
+bench,15,L,3
+bench,16,L,6
+bench,17,L,3
+bench,18,L,3
+bench,19,L,3
+bench,0,M,3
+bench,1,M,3
+bench,2,M,3
+bench,3,M,4
+bench,4,M,5
+bench,5,M,4
+bench,6,M,4
+bench,7,M,6
+bench,8,M,4
+bench,9,M,4
+bench,10,M,4
+bench,11,M,3
+bench,12,M,4
+bench,13,M,3
+bench,14,M,5
+bench,15,M,3
+bench,16,M,4
+bench,17,M,4
+bench,18,M,4
+bench,19,M,4
+bench,0,SML=,4
+bench,1,SML=,4
+bench,2,SML=,6
+bench,3,SML=,4
+bench,4,SML=,5
+bench,5,SML=,6
+bench,6,SML=,4
+bench,7,SML=,6
+bench,8,SML=,3
+bench,9,SML=,4
+bench,10,SML=,3
+bench,11,SML=,5
+bench,12,SML=,4
+bench,13,SML=,4
+bench,14,SML=,5
+bench,15,SML=,4
+bench,16,SML=,3
+bench,17,SML=,3
+bench,18,SML=,3
+bench,19,SML=,3
+bench,0,SMLn,3
+bench,1,SMLn,6
+bench,2,SMLn,3
+bench,3,SMLn,5
+bench,4,SMLn,3
+bench,5,SMLn,5
+bench,6,SMLn,5
+bench,7,SMLn,7
+bench,8,SMLn,5
+bench,9,SMLn,3
+bench,10,SMLn,5
+bench,11,SMLn,4
+bench,12,SMLn,4
+bench,13,SMLn,3
+bench,14,SMLn,6
+bench,15,SMLn,3
+bench,16,SMLn,3
+bench,17,SMLn,4
+bench,18,SMLn,5
+bench,19,SMLn,3
+bench,0,S,1
+bench,1,S,1
+bench,2,S,2
+bench,3,S,1
+bench,4,S,2
+bench,5,S,1
+bench,6,S,2
+bench,7,S,1
+bench,8,S,1
+bench,9,S,2
+bench,10,S,1
+bench,12,S,1
+bench,15,S,1
+bench,16,S,1
+bench,18,S,2
+bicycle,0,L,4
+bicycle,1,L,3
+bicycle,2,L,4
+bicycle,3,L,4
+bicycle,4,L,3
+bicycle,5,L,3
+bicycle,6,L,4
+bicycle,7,L,3
+bicycle,8,L,7
+bicycle,9,L,3
+bicycle,10,L,3
+bicycle,11,L,3
+bicycle,12,L,6
+bicycle,13,L,8
+bicycle,14,L,7
+bicycle,15,L,3
+bicycle,16,L,3
+bicycle,17,L,4
+bicycle,18,L,3
+bicycle,19,L,3
+bicycle,0,M,4
+bicycle,1,M,4
+bicycle,2,M,3
+bicycle,3,M,6
+bicycle,4,M,4
+bicycle,5,M,4
+bicycle,6,M,7
+bicycle,7,M,5
+bicycle,8,M,8
+bicycle,9,M,7
+bicycle,10,M,5
+bicycle,11,M,5
+bicycle,12,M,4
+bicycle,13,M,5
+bicycle,14,M,3
+bicycle,15,M,6
+bicycle,16,M,6
+bicycle,17,M,4
+bicycle,18,M,4
+bicycle,19,M,5
+bicycle,0,SML=,4
+bicycle,1,SML=,4
+bicycle,2,SML=,3
+bicycle,3,SML=,4
+bicycle,4,SML=,3
+bicycle,5,SML=,3
+bicycle,6,SML=,5
+bicycle,7,SML=,5
+bicycle,8,SML=,3
+bicycle,9,SML=,6
+bicycle,10,SML=,5
+bicycle,11,SML=,4
+bicycle,12,SML=,6
+bicycle,13,SML=,3
+bicycle,14,SML=,3
+bicycle,15,SML=,4
+bicycle,16,SML=,3
+bicycle,17,SML=,3
+bicycle,18,SML=,5
+bicycle,19,SML=,3
+bicycle,0,SMLn,5
+bicycle,1,SMLn,3
+bicycle,2,SMLn,3
+bicycle,3,SMLn,3
+bicycle,4,SMLn,3
+bicycle,5,SMLn,6
+bicycle,6,SMLn,3
+bicycle,7,SMLn,4
+bicycle,8,SMLn,4
+bicycle,9,SMLn,3
+bicycle,10,SMLn,3
+bicycle,11,SMLn,3
+bicycle,12,SMLn,3
+bicycle,13,SMLn,4
+bicycle,14,SMLn,3
+bicycle,15,SMLn,5
+bicycle,16,SMLn,6
+bicycle,17,SMLn,5
+bicycle,18,SMLn,5
+bicycle,19,SMLn,4
+bicycle,0,S,3
+bicycle,1,S,4
+bicycle,2,S,4
+bicycle,3,S,4
+bicycle,4,S,3
+bicycle,5,S,5
+bicycle,6,S,5
+bicycle,7,S,3
+bicycle,8,S,4
+bicycle,9,S,5
+bicycle,10,S,3
+bicycle,11,S,5
+bicycle,12,S,4
+bicycle,13,S,3
+bicycle,14,S,3
+bicycle,15,S,5
+bicycle,16,S,3
+bicycle,17,S,4
+bicycle,18,S,5
+bicycle,19,S,5
+bird,0,L,23
+bird,1,L,12
+bird,2,L,9
+bird,3,L,9
+bird,4,L,39
+bird,5,L,8
+bird,6,L,5
+bird,7,L,29
+bird,8,L,16
+bird,9,L,31
+bird,10,L,19
+bird,11,L,23
+bird,12,L,30
+bird,13,L,47
+bird,14,L,10
+bird,15,L,47
+bird,16,L,37
+bird,17,L,44
+bird,18,L,19
+bird,19,L,14
+bird,0,M,3
+bird,1,M,4
+bird,2,M,3
+bird,3,M,3
+bird,4,M,4
+bird,5,M,3
+bird,6,M,4
+bird,7,M,3
+bird,8,M,3
+bird,9,M,3
+bird,10,M,5
+bird,11,M,4
+bird,12,M,6
+bird,13,M,3
+bird,14,M,3
+bird,15,M,3
+bird,16,M,5
+bird,17,M,3
+bird,18,M,3
+bird,19,M,4
+bird,0,SML=,3
+bird,1,SML=,7
+bird,2,SML=,6
+bird,3,SML=,3
+bird,4,SML=,10
+bird,5,SML=,8
+bird,6,SML=,4
+bird,7,SML=,9
+bird,8,SML=,5
+bird,9,SML=,5
+bird,10,SML=,6
+bird,11,SML=,17
+bird,12,SML=,3
+bird,13,SML=,12
+bird,14,SML=,5
+bird,15,SML=,4
+bird,16,SML=,3
+bird,17,SML=,6
+bird,18,SML=,7
+bird,19,SML=,6
+bird,0,SMLn,4
+bird,1,SMLn,6
+bird,2,SMLn,9
+bird,3,SMLn,3
+bird,4,SMLn,8
+bird,5,SMLn,10
+bird,6,SMLn,3
+bird,7,SMLn,9
+bird,8,SMLn,4
+bird,9,SMLn,8
+bird,10,SMLn,3
+bird,11,SMLn,11
+bird,12,SMLn,4
+bird,13,SMLn,8
+bird,14,SMLn,4
+bird,15,SMLn,4
+bird,16,SMLn,3
+bird,17,SMLn,9
+bird,18,SMLn,6
+bird,19,SMLn,5
+bird,0,S,5
+bird,1,S,5
+bird,2,S,3
+bird,3,S,3
+bird,4,S,6
+bird,5,S,7
+bird,6,S,3
+bird,7,S,3
+bird,8,S,5
+bird,9,S,3
+bird,10,S,5
+bird,11,S,3
+bird,12,S,5
+bird,13,S,5
+bird,14,S,3
+bird,15,S,6
+bird,16,S,4
+bird,17,S,5
+bird,18,S,3
+bird,19,S,4
+boat,0,L,3
+boat,1,L,5
+boat,2,L,3
+boat,3,L,3
+boat,4,L,3
+boat,5,L,3
+boat,6,L,3
+boat,7,L,7
+boat,8,L,5
+boat,9,L,4
+boat,10,L,6
+boat,11,L,7
+boat,12,L,3
+boat,13,L,3
+boat,14,L,3
+boat,15,L,6
+boat,16,L,3
+boat,17,L,8
+boat,18,L,3
+boat,19,L,3
+boat,0,M,4
+boat,1,M,5
+boat,2,M,6
+boat,3,M,4
+boat,4,M,4
+boat,5,M,6
+boat,6,M,4
+boat,7,M,6
+boat,8,M,5
+boat,9,M,3
+boat,10,M,5
+boat,11,M,4
+boat,12,M,3
+boat,13,M,8
+boat,14,M,4
+boat,15,M,3
+boat,16,M,3
+boat,17,M,3
+boat,18,M,6
+boat,19,M,6
+boat,0,SML=,10
+boat,1,SML=,3
+boat,2,SML=,3
+boat,3,SML=,7
+boat,4,SML=,3
+boat,5,SML=,5
+boat,6,SML=,3
+boat,7,SML=,4
+boat,8,SML=,9
+boat,9,SML=,5
+boat,10,SML=,3
+boat,11,SML=,6
+boat,12,SML=,3
+boat,13,SML=,3
+boat,14,SML=,4
+boat,15,SML=,4
+boat,16,SML=,6
+boat,17,SML=,5
+boat,18,SML=,5
+boat,19,SML=,8
+boat,0,SMLn,6
+boat,1,SMLn,3
+boat,2,SMLn,4
+boat,3,SMLn,3
+boat,4,SMLn,4
+boat,5,SMLn,4
+boat,6,SMLn,3
+boat,7,SMLn,3
+boat,8,SMLn,13
+boat,9,SMLn,4
+boat,10,SMLn,6
+boat,11,SMLn,4
+boat,12,SMLn,3
+boat,13,SMLn,3
+boat,14,SMLn,3
+boat,15,SMLn,4
+boat,16,SMLn,4
+boat,17,SMLn,4
+boat,18,SMLn,8
+boat,19,SMLn,5
+boat,0,S,3
+boat,1,S,5
+boat,2,S,5
+boat,3,S,3
+boat,4,S,6
+boat,5,S,3
+boat,6,S,3
+boat,7,S,3
+boat,8,S,6
+boat,9,S,4
+boat,10,S,7
+boat,11,S,5
+boat,12,S,6
+boat,13,S,3
+boat,14,S,5
+boat,15,S,5
+boat,16,S,4
+boat,17,S,5
+boat,18,S,6
+boat,19,S,4
+book,0,L,6
+book,1,L,3
+book,2,L,3
+book,3,L,6
+book,4,L,4
+book,5,L,3
+book,6,L,4
+book,7,L,3
+book,8,L,3
+book,9,L,3
+book,10,L,3
+book,11,L,4
+book,12,L,3
+book,13,L,4
+book,14,L,3
+book,15,L,3
+book,16,L,3
+book,17,L,3
+book,18,L,5
+book,19,L,3
+book,0,M,3
+book,1,M,2
+book,2,M,4
+book,3,M,4
+book,4,M,4
+book,5,M,4
+book,6,M,4
+book,7,M,4
+book,8,M,5
+book,9,M,4
+book,10,M,4
+book,11,M,4
+book,12,M,3
+book,13,M,5
+book,14,M,4
+book,15,M,5
+book,16,M,3
+book,17,M,3
+book,18,M,6
+book,19,M,3
+book,0,SML=,3
+book,1,SML=,3
+book,2,SML=,6
+book,3,SML=,5
+book,4,SML=,4
+book,5,SML=,3
+book,6,SML=,4
+book,7,SML=,4
+book,8,SML=,7
+book,9,SML=,3
+book,10,SML=,5
+book,11,SML=,3
+book,12,SML=,4
+book,13,SML=,5
+book,14,SML=,6
+book,15,SML=,3
+book,16,SML=,4
+book,17,SML=,3
+book,18,SML=,3
+book,19,SML=,7
+book,0,SMLn,3
+book,1,SMLn,3
+book,2,SMLn,6
+book,3,SMLn,5
+book,4,SMLn,4
+book,5,SMLn,7
+book,6,SMLn,4
+book,7,SMLn,6
+book,8,SMLn,4
+book,9,SMLn,3
+book,10,SMLn,6
+book,11,SMLn,3
+book,12,SMLn,6
+book,13,SMLn,4
+book,14,SMLn,5
+book,15,SMLn,3
+book,16,SMLn,4
+book,17,SMLn,4
+book,18,SMLn,4
+book,19,SMLn,5
+book,1,S,3
+book,2,S,2
+book,3,S,4
+book,4,S,4
+book,5,S,3
+book,6,S,4
+book,7,S,2
+book,8,S,2
+book,9,S,2
+book,10,S,2
+book,11,S,2
+book,12,S,1
+book,13,S,1
+book,14,S,3
+book,15,S,3
+book,16,S,2
+book,17,S,5
+book,18,S,2
+book,19,S,3
+bottle,0,L,4
+bottle,1,L,3
+bottle,2,L,4
+bottle,3,L,3
+bottle,4,L,7
+bottle,5,L,3
+bottle,6,L,3
+bottle,7,L,5
+bottle,8,L,4
+bottle,9,L,3
+bottle,10,L,3
+bottle,11,L,4
+bottle,12,L,5
+bottle,13,L,4
+bottle,14,L,5
+bottle,15,L,4
+bottle,16,L,4
+bottle,17,L,5
+bottle,18,L,5
+bottle,19,L,3
+bottle,0,M,4
+bottle,1,M,4
+bottle,2,M,4
+bottle,3,M,3
+bottle,4,M,4
+bottle,5,M,4
+bottle,6,M,4
+bottle,7,M,4
+bottle,8,M,3
+bottle,9,M,3
+bottle,10,M,3
+bottle,11,M,5
+bottle,12,M,5
+bottle,13,M,3
+bottle,14,M,3
+bottle,15,M,4
+bottle,16,M,3
+bottle,17,M,3
+bottle,18,M,3
+bottle,19,M,3
+bottle,0,SML=,4
+bottle,1,SML=,3
+bottle,2,SML=,3
+bottle,3,SML=,5
+bottle,4,SML=,5
+bottle,5,SML=,4
+bottle,6,SML=,3
+bottle,7,SML=,3
+bottle,8,SML=,5
+bottle,9,SML=,5
+bottle,10,SML=,4
+bottle,11,SML=,6
+bottle,12,SML=,3
+bottle,13,SML=,3
+bottle,14,SML=,4
+bottle,15,SML=,6
+bottle,16,SML=,4
+bottle,17,SML=,5
+bottle,18,SML=,4
+bottle,19,SML=,6
+bottle,0,SMLn,4
+bottle,1,SMLn,4
+bottle,2,SMLn,5
+bottle,3,SMLn,5
+bottle,4,SMLn,4
+bottle,5,SMLn,3
+bottle,6,SMLn,4
+bottle,7,SMLn,5
+bottle,8,SMLn,4
+bottle,9,SMLn,4
+bottle,10,SMLn,3
+bottle,11,SMLn,3
+bottle,12,SMLn,4
+bottle,13,SMLn,4
+bottle,14,SMLn,5
+bottle,15,SMLn,6
+bottle,16,SMLn,4
+bottle,17,SMLn,5
+bottle,18,SMLn,5
+bottle,19,SMLn,7
+bottle,0,S,1
+bottle,2,S,2
+bottle,3,S,2
+bottle,4,S,2
+bottle,6,S,2
+bottle,7,S,1
+bottle,8,S,5
+bottle,9,S,1
+bottle,10,S,2
+bottle,11,S,2
+bottle,12,S,1
+bottle,13,S,2
+bottle,14,S,4
+bottle,15,S,2
+bottle,17,S,2
+bottle,18,S,1
+bottle,19,S,5
+bowl,0,L,5
+bowl,1,L,5
+bowl,2,L,6
+bowl,3,L,3
+bowl,4,L,4
+bowl,5,L,5
+bowl,6,L,5
+bowl,7,L,4
+bowl,8,L,3
+bowl,9,L,5
+bowl,10,L,7
+bowl,11,L,6
+bowl,12,L,5
+bowl,13,L,5
+bowl,14,L,4
+bowl,15,L,4
+bowl,16,L,6
+bowl,17,L,4
+bowl,18,L,8
+bowl,19,L,6
+bowl,0,M,4
+bowl,1,M,4
+bowl,2,M,4
+bowl,3,M,5
+bowl,4,M,3
+bowl,5,M,4
+bowl,6,M,5
+bowl,7,M,3
+bowl,8,M,3
+bowl,9,M,3
+bowl,10,M,5
+bowl,11,M,3
+bowl,12,M,3
+bowl,13,M,3
+bowl,14,M,3
+bowl,15,M,3
+bowl,16,M,3
+bowl,17,M,3
+bowl,18,M,3
+bowl,19,M,6
+bowl,0,SML=,3
+bowl,1,SML=,3
+bowl,2,SML=,5
+bowl,3,SML=,4
+bowl,4,SML=,5
+bowl,5,SML=,4
+bowl,6,SML=,3
+bowl,7,SML=,4
+bowl,8,SML=,8
+bowl,9,SML=,2
+bowl,10,SML=,4
+bowl,11,SML=,6
+bowl,12,SML=,8
+bowl,13,SML=,4
+bowl,14,SML=,7
+bowl,15,SML=,5
+bowl,16,SML=,3
+bowl,17,SML=,5
+bowl,18,SML=,6
+bowl,19,SML=,4
+bowl,0,SMLn,3
+bowl,1,SMLn,6
+bowl,2,SMLn,5
+bowl,3,SMLn,6
+bowl,4,SMLn,3
+bowl,5,SMLn,4
+bowl,6,SMLn,3
+bowl,7,SMLn,6
+bowl,8,SMLn,6
+bowl,9,SMLn,1
+bowl,10,SMLn,5
+bowl,11,SMLn,5
+bowl,12,SMLn,5
+bowl,13,SMLn,3
+bowl,14,SMLn,4
+bowl,15,SMLn,3
+bowl,16,SMLn,2
+bowl,17,SMLn,6
+bowl,18,SMLn,6
+bowl,19,SMLn,6
+bowl,2,S,1
+bowl,3,S,1
+bowl,6,S,1
+bowl,7,S,1
+bowl,11,S,1
+bowl,14,S,1
+bowl,18,S,1
+bus,0,L,3
+bus,1,L,4
+bus,2,L,3
+bus,3,L,4
+bus,4,L,3
+bus,5,L,4
+bus,6,L,3
+bus,7,L,4
+bus,8,L,3
+bus,9,L,3
+bus,10,L,3
+bus,11,L,3
+bus,12,L,4
+bus,13,L,3
+bus,14,L,3
+bus,15,L,3
+bus,16,L,3
+bus,17,L,4
+bus,18,L,3
+bus,19,L,3
+bus,0,M,3
+bus,1,M,4
+bus,2,M,4
+bus,3,M,4
+bus,4,M,4
+bus,5,M,3
+bus,6,M,3
+bus,7,M,4
+bus,8,M,3
+bus,9,M,3
+bus,10,M,3
+bus,11,M,4
+bus,12,M,5
+bus,13,M,3
+bus,14,M,3
+bus,15,M,4
+bus,16,M,3
+bus,17,M,4
+bus,18,M,4
+bus,19,M,4
+bus,0,SML=,6
+bus,1,SML=,5
+bus,2,SML=,4
+bus,3,SML=,3
+bus,4,SML=,4
+bus,5,SML=,5
+bus,6,SML=,5
+bus,7,SML=,4
+bus,8,SML=,5
+bus,9,SML=,4
+bus,10,SML=,5
+bus,11,SML=,5
+bus,12,SML=,4
+bus,13,SML=,4
+bus,14,SML=,3
+bus,15,SML=,3
+bus,16,SML=,4
+bus,17,SML=,4
+bus,18,SML=,3
+bus,19,SML=,3
+bus,0,SMLn,3
+bus,1,SMLn,4
+bus,2,SMLn,4
+bus,3,SMLn,4
+bus,4,SMLn,4
+bus,5,SMLn,3
+bus,6,SMLn,3
+bus,7,SMLn,4
+bus,8,SMLn,3
+bus,9,SMLn,4
+bus,10,SMLn,4
+bus,11,SMLn,4
+bus,12,SMLn,3
+bus,13,SMLn,3
+bus,14,SMLn,3
+bus,15,SMLn,4
+bus,16,SMLn,4
+bus,17,SMLn,3
+bus,18,SMLn,4
+bus,19,SMLn,3
+bus,0,S,3
+bus,1,S,3
+bus,2,S,3
+bus,3,S,6
+bus,4,S,5
+bus,5,S,3
+bus,6,S,4
+bus,7,S,3
+bus,8,S,3
+bus,9,S,2
+bus,10,S,6
+bus,11,S,4
+bus,12,S,3
+bus,13,S,2
+bus,14,S,3
+bus,15,S,4
+bus,16,S,3
+bus,17,S,3
+bus,18,S,3
+bus,19,S,4
+cell phone,0,L,4
+cell phone,1,L,6
+cell phone,2,L,14
+cell phone,3,L,27
+cell phone,4,L,5
+cell phone,5,L,29
+cell phone,6,L,21
+cell phone,7,L,4
+cell phone,8,L,24
+cell phone,9,L,13
+cell phone,10,L,5
+cell phone,11,L,3
+cell phone,12,L,17
+cell phone,13,L,3
+cell phone,14,L,5
+cell phone,15,L,3
+cell phone,16,L,4
+cell phone,17,L,17
+cell phone,18,L,3
+cell phone,19,L,3
+cell phone,0,M,6
+cell phone,1,M,3
+cell phone,2,M,4
+cell phone,3,M,7
+cell phone,4,M,4
+cell phone,5,M,6
+cell phone,6,M,9
+cell phone,7,M,6
+cell phone,8,M,6
+cell phone,9,M,4
+cell phone,10,M,5
+cell phone,11,M,7
+cell phone,12,M,3
+cell phone,13,M,5
+cell phone,14,M,7
+cell phone,15,M,6
+cell phone,16,M,5
+cell phone,17,M,5
+cell phone,18,M,4
+cell phone,19,M,3
+cell phone,0,SML=,4
+cell phone,1,SML=,4
+cell phone,2,SML=,7
+cell phone,3,SML=,5
+cell phone,4,SML=,4
+cell phone,5,SML=,4
+cell phone,6,SML=,5
+cell phone,7,SML=,4
+cell phone,8,SML=,6
+cell phone,9,SML=,3
+cell phone,10,SML=,9
+cell phone,11,SML=,5
+cell phone,12,SML=,4
+cell phone,13,SML=,4
+cell phone,14,SML=,5
+cell phone,15,SML=,3
+cell phone,16,SML=,5
+cell phone,17,SML=,4
+cell phone,18,SML=,4
+cell phone,19,SML=,10
+cell phone,0,SMLn,4
+cell phone,1,SMLn,6
+cell phone,2,SMLn,4
+cell phone,3,SMLn,7
+cell phone,4,SMLn,4
+cell phone,5,SMLn,3
+cell phone,6,SMLn,3
+cell phone,7,SMLn,3
+cell phone,8,SMLn,5
+cell phone,9,SMLn,4
+cell phone,10,SMLn,5
+cell phone,11,SMLn,3
+cell phone,12,SMLn,3
+cell phone,13,SMLn,3
+cell phone,14,SMLn,4
+cell phone,15,SMLn,3
+cell phone,16,SMLn,6
+cell phone,17,SMLn,3
+cell phone,18,SMLn,3
+cell phone,19,SMLn,4
+cell phone,0,S,3
+cell phone,1,S,5
+cell phone,2,S,4
+cell phone,3,S,4
+cell phone,4,S,4
+cell phone,5,S,6
+cell phone,6,S,4
+cell phone,7,S,3
+cell phone,8,S,3
+cell phone,9,S,4
+cell phone,10,S,4
+cell phone,11,S,4
+cell phone,12,S,4
+cell phone,13,S,3
+cell phone,14,S,3
+cell phone,15,S,4
+cell phone,16,S,4
+cell phone,17,S,3
+cell phone,18,S,3
+cell phone,19,S,3
+chair,0,L,4
+chair,1,L,3
+chair,2,L,4
+chair,3,L,3
+chair,4,L,3
+chair,5,L,5
+chair,6,L,3
+chair,7,L,3
+chair,8,L,5
+chair,9,L,4
+chair,10,L,6
+chair,11,L,5
+chair,12,L,5
+chair,13,L,4
+chair,14,L,6
+chair,15,L,3
+chair,16,L,3
+chair,17,L,6
+chair,18,L,5
+chair,19,L,5
+chair,0,M,3
+chair,1,M,3
+chair,2,M,3
+chair,3,M,1
+chair,4,M,3
+chair,5,M,3
+chair,6,M,5
+chair,7,M,4
+chair,8,M,3
+chair,9,M,2
+chair,10,M,4
+chair,11,M,2
+chair,12,M,2
+chair,13,M,2
+chair,14,M,1
+chair,15,M,5
+chair,16,M,3
+chair,17,M,3
+chair,18,M,3
+chair,19,M,4
+chair,0,SML=,5
+chair,1,SML=,3
+chair,2,SML=,3
+chair,3,SML=,5
+chair,4,SML=,4
+chair,5,SML=,5
+chair,6,SML=,6
+chair,7,SML=,3
+chair,8,SML=,3
+chair,9,SML=,3
+chair,10,SML=,4
+chair,11,SML=,6
+chair,12,SML=,5
+chair,13,SML=,5
+chair,14,SML=,3
+chair,15,SML=,5
+chair,16,SML=,5
+chair,17,SML=,5
+chair,18,SML=,6
+chair,19,SML=,5
+chair,0,SMLn,3
+chair,1,SMLn,6
+chair,2,SMLn,6
+chair,3,SMLn,3
+chair,4,SMLn,5
+chair,5,SMLn,5
+chair,6,SMLn,3
+chair,7,SMLn,4
+chair,8,SMLn,4
+chair,9,SMLn,3
+chair,10,SMLn,3
+chair,11,SMLn,4
+chair,12,SMLn,5
+chair,13,SMLn,9
+chair,14,SMLn,4
+chair,15,SMLn,3
+chair,16,SMLn,5
+chair,17,SMLn,3
+chair,18,SMLn,3
+chair,19,SMLn,5
+clock,0,L,11
+clock,1,L,3
+clock,2,L,3
+clock,3,L,3
+clock,4,L,3
+clock,5,L,4
+clock,6,L,3
+clock,7,L,3
+clock,8,L,3
+clock,9,L,3
+clock,10,L,3
+clock,11,L,3
+clock,12,L,3
+clock,13,L,3
+clock,14,L,3
+clock,15,L,3
+clock,16,L,3
+clock,17,L,3
+clock,18,L,3
+clock,19,L,3
+clock,0,M,3
+clock,1,M,6
+clock,2,M,3
+clock,3,M,5
+clock,4,M,3
+clock,5,M,3
+clock,6,M,4
+clock,7,M,4
+clock,8,M,4
+clock,9,M,3
+clock,10,M,3
+clock,11,M,3
+clock,12,M,3
+clock,13,M,3
+clock,14,M,3
+clock,15,M,4
+clock,16,M,3
+clock,17,M,3
+clock,18,M,4
+clock,19,M,4
+clock,0,SML=,4
+clock,1,SML=,3
+clock,2,SML=,3
+clock,3,SML=,4
+clock,4,SML=,3
+clock,5,SML=,3
+clock,6,SML=,4
+clock,7,SML=,3
+clock,8,SML=,4
+clock,9,SML=,4
+clock,10,SML=,3
+clock,11,SML=,3
+clock,12,SML=,3
+clock,13,SML=,3
+clock,14,SML=,3
+clock,15,SML=,4
+clock,16,SML=,3
+clock,17,SML=,7
+clock,18,SML=,3
+clock,19,SML=,3
+clock,0,SMLn,3
+clock,1,SMLn,5
+clock,2,SMLn,4
+clock,3,SMLn,3
+clock,4,SMLn,3
+clock,5,SMLn,3
+clock,6,SMLn,5
+clock,7,SMLn,3
+clock,8,SMLn,6
+clock,9,SMLn,3
+clock,10,SMLn,4
+clock,11,SMLn,3
+clock,12,SMLn,3
+clock,13,SMLn,3
+clock,14,SMLn,7
+clock,15,SMLn,5
+clock,16,SMLn,3
+clock,17,SMLn,3
+clock,18,SMLn,3
+clock,19,SMLn,4
+clock,0,S,3
+clock,1,S,4
+clock,2,S,4
+clock,3,S,4
+clock,4,S,4
+clock,5,S,4
+clock,6,S,3
+clock,7,S,3
+clock,8,S,3
+clock,9,S,3
+clock,10,S,3
+clock,11,S,4
+clock,12,S,3
+clock,13,S,3
+clock,14,S,4
+clock,15,S,4
+clock,16,S,4
+clock,17,S,3
+clock,18,S,5
+clock,19,S,4
+dining table,0,L,4
+dining table,1,L,4
+dining table,2,L,6
+dining table,3,L,5
+dining table,4,L,6
+dining table,5,L,3
+dining table,6,L,6
+dining table,7,L,5
+dining table,8,L,4
+dining table,9,L,3
+dining table,10,L,4
+dining table,11,L,5
+dining table,12,L,3
+dining table,13,L,5
+dining table,14,L,4
+dining table,15,L,3
+dining table,16,L,4
+dining table,17,L,3
+dining table,18,L,4
+dining table,19,L,4
+dining table,0,M,5
+dining table,1,M,6
+dining table,2,M,4
+dining table,3,M,6
+dining table,4,M,5
+dining table,5,M,6
+dining table,6,M,5
+dining table,7,M,5
+dining table,8,M,7
+dining table,9,M,3
+dining table,10,M,5
+dining table,11,M,5
+dining table,12,M,4
+dining table,13,M,3
+dining table,14,M,5
+dining table,15,M,6
+dining table,16,M,5
+dining table,17,M,4
+dining table,18,M,5
+dining table,19,M,7
+dining table,0,SML=,6
+dining table,1,SML=,3
+dining table,2,SML=,3
+dining table,3,SML=,4
+dining table,4,SML=,4
+dining table,5,SML=,5
+dining table,6,SML=,4
+dining table,7,SML=,3
+dining table,8,SML=,4
+dining table,9,SML=,5
+dining table,10,SML=,5
+dining table,11,SML=,5
+dining table,12,SML=,4
+dining table,13,SML=,3
+dining table,14,SML=,6
+dining table,15,SML=,3
+dining table,16,SML=,4
+dining table,17,SML=,5
+dining table,18,SML=,5
+dining table,19,SML=,7
+dining table,0,SMLn,5
+dining table,1,SMLn,4
+dining table,2,SMLn,5
+dining table,3,SMLn,6
+dining table,4,SMLn,4
+dining table,5,SMLn,4
+dining table,6,SMLn,4
+dining table,7,SMLn,3
+dining table,8,SMLn,3
+dining table,9,SMLn,7
+dining table,10,SMLn,4
+dining table,11,SMLn,5
+dining table,12,SMLn,4
+dining table,13,SMLn,3
+dining table,14,SMLn,5
+dining table,15,SMLn,4
+dining table,16,SMLn,7
+dining table,17,SMLn,4
+dining table,18,SMLn,5
+dining table,19,SMLn,5
+dining table,0,S,3
+dining table,1,S,3
+dining table,2,S,5
+dining table,3,S,3
+dining table,4,S,2
+dining table,5,S,3
+dining table,6,S,4
+dining table,7,S,4
+dining table,8,S,5
+dining table,9,S,3
+dining table,10,S,4
+dining table,11,S,3
+dining table,12,S,4
+dining table,13,S,3
+dining table,14,S,3
+dining table,15,S,3
+dining table,16,S,1
+dining table,17,S,3
+dining table,18,S,5
+dining table,19,S,3
+dog,0,L,3
+dog,1,L,3
+dog,2,L,4
+dog,3,L,5
+dog,4,L,4
+dog,5,L,3
+dog,6,L,3
+dog,7,L,5
+dog,8,L,5
+dog,9,L,3
+dog,10,L,3
+dog,11,L,4
+dog,12,L,3
+dog,13,L,4
+dog,14,L,3
+dog,15,L,3
+dog,16,L,3
+dog,17,L,3
+dog,18,L,3
+dog,19,L,3
+dog,0,M,4
+dog,1,M,6
+dog,2,M,4
+dog,3,M,4
+dog,4,M,5
+dog,5,M,4
+dog,6,M,5
+dog,7,M,4
+dog,8,M,3
+dog,9,M,4
+dog,10,M,4
+dog,11,M,4
+dog,12,M,5
+dog,13,M,3
+dog,14,M,5
+dog,15,M,6
+dog,16,M,5
+dog,17,M,4
+dog,18,M,5
+dog,19,M,4
+dog,0,SML=,6
+dog,1,SML=,5
+dog,2,SML=,3
+dog,3,SML=,3
+dog,4,SML=,6
+dog,5,SML=,3
+dog,6,SML=,3
+dog,7,SML=,4
+dog,8,SML=,3
+dog,9,SML=,5
+dog,10,SML=,3
+dog,11,SML=,4
+dog,12,SML=,4
+dog,13,SML=,5
+dog,14,SML=,5
+dog,15,SML=,3
+dog,16,SML=,4
+dog,17,SML=,8
+dog,18,SML=,3
+dog,19,SML=,4
+dog,0,SMLn,5
+dog,1,SMLn,3
+dog,2,SMLn,4
+dog,3,SMLn,3
+dog,4,SMLn,5
+dog,5,SMLn,5
+dog,6,SMLn,3
+dog,7,SMLn,3
+dog,8,SMLn,3
+dog,9,SMLn,3
+dog,10,SMLn,5
+dog,11,SMLn,3
+dog,12,SMLn,4
+dog,13,SMLn,4
+dog,14,SMLn,4
+dog,15,SMLn,4
+dog,16,SMLn,3
+dog,17,SMLn,3
+dog,18,SMLn,3
+dog,19,SMLn,3
+dog,0,S,4
+dog,1,S,3
+dog,2,S,5
+dog,3,S,6
+dog,4,S,5
+dog,5,S,3
+dog,6,S,4
+dog,7,S,4
+dog,8,S,4
+dog,9,S,5
+dog,10,S,6
+dog,11,S,5
+dog,12,S,3
+dog,13,S,3
+dog,14,S,4
+dog,15,S,4
+dog,16,S,3
+dog,17,S,4
+dog,18,S,4
+dog,19,S,3
+enclosed road vehicle,0,L,3
+enclosed road vehicle,1,L,4
+enclosed road vehicle,2,L,8
+enclosed road vehicle,3,L,4
+enclosed road vehicle,4,L,5
+enclosed road vehicle,5,L,5
+enclosed road vehicle,6,L,3
+enclosed road vehicle,7,L,4
+enclosed road vehicle,8,L,5
+enclosed road vehicle,9,L,6
+enclosed road vehicle,10,L,4
+enclosed road vehicle,11,L,5
+enclosed road vehicle,12,L,5
+enclosed road vehicle,13,L,4
+enclosed road vehicle,14,L,4
+enclosed road vehicle,15,L,4
+enclosed road vehicle,16,L,5
+enclosed road vehicle,17,L,4
+enclosed road vehicle,18,L,3
+enclosed road vehicle,19,L,5
+enclosed road vehicle,0,M,5
+enclosed road vehicle,1,M,5
+enclosed road vehicle,2,M,3
+enclosed road vehicle,3,M,4
+enclosed road vehicle,4,M,4
+enclosed road vehicle,5,M,5
+enclosed road vehicle,6,M,4
+enclosed road vehicle,7,M,5
+enclosed road vehicle,8,M,5
+enclosed road vehicle,9,M,4
+enclosed road vehicle,10,M,3
+enclosed road vehicle,11,M,3
+enclosed road vehicle,12,M,5
+enclosed road vehicle,13,M,3
+enclosed road vehicle,14,M,3
+enclosed road vehicle,15,M,4
+enclosed road vehicle,16,M,5
+enclosed road vehicle,17,M,4
+enclosed road vehicle,18,M,5
+enclosed road vehicle,19,M,6
+enclosed road vehicle,0,SML=,4
+enclosed road vehicle,1,SML=,5
+enclosed road vehicle,2,SML=,5
+enclosed road vehicle,3,SML=,7
+enclosed road vehicle,4,SML=,4
+enclosed road vehicle,5,SML=,3
+enclosed road vehicle,6,SML=,6
+enclosed road vehicle,7,SML=,7
+enclosed road vehicle,8,SML=,5
+enclosed road vehicle,9,SML=,4
+enclosed road vehicle,10,SML=,5
+enclosed road vehicle,11,SML=,6
+enclosed road vehicle,12,SML=,5
+enclosed road vehicle,13,SML=,4
+enclosed road vehicle,14,SML=,3
+enclosed road vehicle,15,SML=,5
+enclosed road vehicle,16,SML=,5
+enclosed road vehicle,17,SML=,6
+enclosed road vehicle,18,SML=,6
+enclosed road vehicle,19,SML=,5
+enclosed road vehicle,0,SMLn,6
+enclosed road vehicle,1,SMLn,6
+enclosed road vehicle,2,SMLn,5
+enclosed road vehicle,3,SMLn,3
+enclosed road vehicle,4,SMLn,5
+enclosed road vehicle,5,SMLn,5
+enclosed road vehicle,6,SMLn,4
+enclosed road vehicle,7,SMLn,6
+enclosed road vehicle,8,SMLn,4
+enclosed road vehicle,9,SMLn,6
+enclosed road vehicle,10,SMLn,5
+enclosed road vehicle,11,SMLn,6
+enclosed road vehicle,12,SMLn,7
+enclosed road vehicle,13,SMLn,3
+enclosed road vehicle,14,SMLn,6
+enclosed road vehicle,15,SMLn,5
+enclosed road vehicle,16,SMLn,5
+enclosed road vehicle,17,SMLn,7
+enclosed road vehicle,18,SMLn,4
+enclosed road vehicle,19,SMLn,5
+enclosed road vehicle,0,S,3
+enclosed road vehicle,2,S,4
+enclosed road vehicle,3,S,2
+enclosed road vehicle,4,S,2
+enclosed road vehicle,5,S,3
+enclosed road vehicle,6,S,3
+enclosed road vehicle,7,S,4
+enclosed road vehicle,8,S,4
+enclosed road vehicle,9,S,3
+enclosed road vehicle,10,S,3
+enclosed road vehicle,11,S,2
+enclosed road vehicle,12,S,4
+enclosed road vehicle,13,S,3
+enclosed road vehicle,14,S,3
+enclosed road vehicle,15,S,3
+enclosed road vehicle,16,S,3
+enclosed road vehicle,17,S,2
+enclosed road vehicle,18,S,3
+enclosed road vehicle,19,S,2
+fire hydrant,0,L,19
+fire hydrant,1,L,9
+fire hydrant,2,L,31
+fire hydrant,3,L,33
+fire hydrant,4,L,21
+fire hydrant,5,L,6
+fire hydrant,6,L,35
+fire hydrant,7,L,30
+fire hydrant,8,L,20
+fire hydrant,9,L,30
+fire hydrant,10,L,29
+fire hydrant,11,L,4
+fire hydrant,12,L,34
+fire hydrant,13,L,30
+fire hydrant,14,L,26
+fire hydrant,15,L,3
+fire hydrant,16,L,42
+fire hydrant,17,L,32
+fire hydrant,18,L,3
+fire hydrant,19,L,26
+fire hydrant,0,M,3
+fire hydrant,1,M,3
+fire hydrant,2,M,3
+fire hydrant,3,M,4
+fire hydrant,4,M,4
+fire hydrant,5,M,5
+fire hydrant,6,M,4
+fire hydrant,7,M,4
+fire hydrant,8,M,5
+fire hydrant,9,M,3
+fire hydrant,10,M,5
+fire hydrant,11,M,3
+fire hydrant,12,M,3
+fire hydrant,13,M,4
+fire hydrant,14,M,4
+fire hydrant,15,M,3
+fire hydrant,16,M,4
+fire hydrant,17,M,3
+fire hydrant,18,M,3
+fire hydrant,19,M,3
+fire hydrant,0,SML=,6
+fire hydrant,1,SML=,3
+fire hydrant,2,SML=,7
+fire hydrant,3,SML=,3
+fire hydrant,4,SML=,10
+fire hydrant,5,SML=,7
+fire hydrant,6,SML=,3
+fire hydrant,7,SML=,5
+fire hydrant,8,SML=,5
+fire hydrant,9,SML=,4
+fire hydrant,10,SML=,3
+fire hydrant,11,SML=,6
+fire hydrant,12,SML=,3
+fire hydrant,13,SML=,5
+fire hydrant,14,SML=,5
+fire hydrant,15,SML=,3
+fire hydrant,16,SML=,5
+fire hydrant,17,SML=,6
+fire hydrant,18,SML=,4
+fire hydrant,19,SML=,3
+fire hydrant,0,SMLn,4
+fire hydrant,1,SMLn,3
+fire hydrant,2,SMLn,5
+fire hydrant,3,SMLn,3
+fire hydrant,4,SMLn,4
+fire hydrant,5,SMLn,4
+fire hydrant,6,SMLn,3
+fire hydrant,7,SMLn,4
+fire hydrant,8,SMLn,3
+fire hydrant,9,SMLn,3
+fire hydrant,10,SMLn,4
+fire hydrant,11,SMLn,3
+fire hydrant,12,SMLn,4
+fire hydrant,13,SMLn,4
+fire hydrant,14,SMLn,5
+fire hydrant,15,SMLn,3
+fire hydrant,16,SMLn,4
+fire hydrant,17,SMLn,4
+fire hydrant,18,SMLn,4
+fire hydrant,19,SMLn,4
+fire hydrant,0,S,3
+fire hydrant,1,S,3
+fire hydrant,2,S,4
+fire hydrant,3,S,5
+fire hydrant,4,S,3
+fire hydrant,5,S,4
+fire hydrant,6,S,3
+fire hydrant,7,S,4
+fire hydrant,8,S,3
+fire hydrant,9,S,5
+fire hydrant,10,S,5
+fire hydrant,11,S,3
+fire hydrant,12,S,3
+fire hydrant,13,S,5
+fire hydrant,14,S,4
+fire hydrant,15,S,5
+fire hydrant,16,S,4
+fire hydrant,17,S,3
+fire hydrant,18,S,3
+fire hydrant,19,S,5
+fork,0,L,4
+fork,1,L,5
+fork,2,L,5
+fork,3,L,5
+fork,4,L,5
+fork,5,L,3
+fork,6,L,9
+fork,7,L,7
+fork,8,L,7
+fork,9,L,9
+fork,10,L,3
+fork,11,L,6
+fork,12,L,10
+fork,13,L,3
+fork,14,L,6
+fork,15,L,5
+fork,16,L,6
+fork,17,L,5
+fork,18,L,6
+fork,19,L,3
+fork,0,M,4
+fork,1,M,6
+fork,2,M,5
+fork,3,M,4
+fork,4,M,5
+fork,5,M,3
+fork,6,M,7
+fork,7,M,6
+fork,8,M,3
+fork,9,M,4
+fork,10,M,5
+fork,11,M,5
+fork,12,M,5
+fork,13,M,4
+fork,14,M,3
+fork,15,M,4
+fork,16,M,4
+fork,17,M,5
+fork,18,M,3
+fork,19,M,3
+fork,0,SML=,4
+fork,1,SML=,4
+fork,2,SML=,5
+fork,3,SML=,3
+fork,4,SML=,6
+fork,5,SML=,3
+fork,6,SML=,3
+fork,7,SML=,4
+fork,8,SML=,3
+fork,9,SML=,8
+fork,10,SML=,6
+fork,11,SML=,5
+fork,12,SML=,6
+fork,13,SML=,7
+fork,14,SML=,4
+fork,15,SML=,4
+fork,16,SML=,4
+fork,17,SML=,5
+fork,18,SML=,6
+fork,19,SML=,7
+fork,0,SMLn,5
+fork,1,SMLn,3
+fork,2,SMLn,3
+fork,3,SMLn,7
+fork,4,SMLn,4
+fork,5,SMLn,5
+fork,6,SMLn,3
+fork,7,SMLn,6
+fork,8,SMLn,3
+fork,9,SMLn,5
+fork,10,SMLn,5
+fork,11,SMLn,3
+fork,12,SMLn,3
+fork,13,SMLn,5
+fork,14,SMLn,4
+fork,15,SMLn,5
+fork,16,SMLn,5
+fork,17,SMLn,4
+fork,18,SMLn,5
+fork,19,SMLn,5
+fork,0,S,3
+fork,1,S,3
+fork,2,S,3
+fork,3,S,5
+fork,4,S,5
+fork,5,S,3
+fork,6,S,4
+fork,7,S,3
+fork,8,S,3
+fork,9,S,3
+fork,10,S,3
+fork,11,S,3
+fork,12,S,4
+fork,13,S,3
+fork,14,S,3
+fork,15,S,4
+fork,16,S,4
+fork,17,S,3
+fork,18,S,3
+fork,19,S,4
+frisbee,0,L,5
+frisbee,1,L,3
+frisbee,2,L,5
+frisbee,3,L,4
+frisbee,4,L,4
+frisbee,5,L,4
+frisbee,6,L,4
+frisbee,7,L,4
+frisbee,8,L,4
+frisbee,9,L,3
+frisbee,10,L,5
+frisbee,11,L,5
+frisbee,12,L,4
+frisbee,13,L,4
+frisbee,14,L,3
+frisbee,15,L,3
+frisbee,16,L,3
+frisbee,17,L,4
+frisbee,18,L,5
+frisbee,19,L,3
+frisbee,0,M,4
+frisbee,1,M,3
+frisbee,2,M,3
+frisbee,3,M,3
+frisbee,4,M,3
+frisbee,5,M,3
+frisbee,6,M,4
+frisbee,7,M,3
+frisbee,8,M,3
+frisbee,9,M,3
+frisbee,10,M,4
+frisbee,11,M,4
+frisbee,12,M,3
+frisbee,13,M,4
+frisbee,14,M,3
+frisbee,15,M,3
+frisbee,16,M,3
+frisbee,17,M,4
+frisbee,18,M,3
+frisbee,19,M,3
+frisbee,0,SML=,4
+frisbee,1,SML=,3
+frisbee,2,SML=,4
+frisbee,3,SML=,3
+frisbee,4,SML=,4
+frisbee,5,SML=,4
+frisbee,6,SML=,4
+frisbee,7,SML=,3
+frisbee,8,SML=,5
+frisbee,9,SML=,4
+frisbee,10,SML=,3
+frisbee,11,SML=,5
+frisbee,12,SML=,3
+frisbee,13,SML=,4
+frisbee,14,SML=,4
+frisbee,15,SML=,3
+frisbee,16,SML=,4
+frisbee,17,SML=,5
+frisbee,18,SML=,4
+frisbee,19,SML=,3
+frisbee,0,SMLn,3
+frisbee,1,SMLn,5
+frisbee,2,SMLn,4
+frisbee,3,SMLn,5
+frisbee,4,SMLn,3
+frisbee,5,SMLn,4
+frisbee,6,SMLn,3
+frisbee,7,SMLn,3
+frisbee,8,SMLn,3
+frisbee,9,SMLn,4
+frisbee,10,SMLn,3
+frisbee,11,SMLn,4
+frisbee,12,SMLn,4
+frisbee,13,SMLn,5
+frisbee,14,SMLn,4
+frisbee,15,SMLn,4
+frisbee,16,SMLn,5
+frisbee,17,SMLn,3
+frisbee,18,SMLn,4
+frisbee,19,SMLn,3
+frisbee,0,S,3
+frisbee,1,S,3
+frisbee,2,S,5
+frisbee,3,S,3
+frisbee,4,S,3
+frisbee,5,S,5
+frisbee,6,S,4
+frisbee,7,S,3
+frisbee,8,S,3
+frisbee,9,S,3
+frisbee,10,S,4
+frisbee,11,S,4
+frisbee,12,S,3
+frisbee,13,S,3
+frisbee,14,S,6
+frisbee,15,S,4
+frisbee,16,S,4
+frisbee,17,S,4
+frisbee,18,S,3
+frisbee,19,S,4
+keyboard,0,L,3
+keyboard,1,L,4
+keyboard,2,L,3
+keyboard,3,L,5
+keyboard,4,L,3
+keyboard,5,L,8
+keyboard,6,L,4
+keyboard,7,L,6
+keyboard,8,L,4
+keyboard,9,L,5
+keyboard,10,L,3
+keyboard,11,L,3
+keyboard,12,L,8
+keyboard,13,L,4
+keyboard,14,L,6
+keyboard,15,L,3
+keyboard,16,L,4
+keyboard,17,L,4
+keyboard,18,L,6
+keyboard,19,L,4
+keyboard,0,M,4
+keyboard,1,M,3
+keyboard,2,M,3
+keyboard,3,M,3
+keyboard,4,M,5
+keyboard,5,M,3
+keyboard,6,M,5
+keyboard,7,M,4
+keyboard,8,M,6
+keyboard,9,M,3
+keyboard,10,M,3
+keyboard,11,M,3
+keyboard,12,M,4
+keyboard,13,M,3
+keyboard,14,M,5
+keyboard,15,M,3
+keyboard,16,M,3
+keyboard,17,M,3
+keyboard,18,M,3
+keyboard,19,M,4
+keyboard,0,SML=,3
+keyboard,1,SML=,3
+keyboard,2,SML=,4
+keyboard,3,SML=,4
+keyboard,4,SML=,5
+keyboard,5,SML=,5
+keyboard,6,SML=,3
+keyboard,7,SML=,5
+keyboard,8,SML=,5
+keyboard,9,SML=,4
+keyboard,10,SML=,5
+keyboard,11,SML=,4
+keyboard,12,SML=,4
+keyboard,13,SML=,5
+keyboard,14,SML=,3
+keyboard,15,SML=,7
+keyboard,16,SML=,6
+keyboard,17,SML=,4
+keyboard,18,SML=,8
+keyboard,19,SML=,5
+keyboard,0,SMLn,3
+keyboard,1,SMLn,4
+keyboard,2,SMLn,3
+keyboard,3,SMLn,4
+keyboard,4,SMLn,4
+keyboard,5,SMLn,4
+keyboard,6,SMLn,3
+keyboard,7,SMLn,6
+keyboard,8,SMLn,5
+keyboard,9,SMLn,3
+keyboard,10,SMLn,6
+keyboard,11,SMLn,4
+keyboard,12,SMLn,5
+keyboard,13,SMLn,5
+keyboard,14,SMLn,3
+keyboard,15,SMLn,6
+keyboard,16,SMLn,5
+keyboard,17,SMLn,5
+keyboard,18,SMLn,5
+keyboard,19,SMLn,6
+keyboard,0,S,2
+keyboard,1,S,3
+keyboard,2,S,2
+keyboard,3,S,1
+keyboard,4,S,3
+keyboard,5,S,3
+keyboard,6,S,2
+keyboard,7,S,3
+keyboard,8,S,2
+keyboard,9,S,2
+keyboard,10,S,2
+keyboard,11,S,2
+keyboard,12,S,3
+keyboard,13,S,3
+keyboard,14,S,1
+keyboard,15,S,2
+keyboard,16,S,3
+keyboard,17,S,3
+keyboard,18,S,2
+keyboard,19,S,1
+kite,0,L,4
+kite,1,L,3
+kite,2,L,3
+kite,3,L,6
+kite,4,L,6
+kite,5,L,4
+kite,6,L,3
+kite,7,L,14
+kite,8,L,25
+kite,9,L,18
+kite,10,L,4
+kite,11,L,4
+kite,12,L,3
+kite,13,L,8
+kite,14,L,11
+kite,15,L,4
+kite,16,L,4
+kite,17,L,4
+kite,18,L,5
+kite,19,L,13
+kite,0,M,4
+kite,1,M,4
+kite,2,M,4
+kite,3,M,4
+kite,4,M,6
+kite,5,M,3
+kite,6,M,3
+kite,7,M,3
+kite,8,M,4
+kite,9,M,4
+kite,10,M,4
+kite,11,M,4
+kite,12,M,9
+kite,13,M,5
+kite,14,M,11
+kite,15,M,4
+kite,16,M,4
+kite,17,M,4
+kite,18,M,3
+kite,19,M,8
+kite,0,SML=,5
+kite,1,SML=,4
+kite,2,SML=,3
+kite,3,SML=,3
+kite,4,SML=,5
+kite,5,SML=,5
+kite,6,SML=,5
+kite,7,SML=,4
+kite,8,SML=,4
+kite,9,SML=,5
+kite,10,SML=,3
+kite,11,SML=,5
+kite,12,SML=,4
+kite,13,SML=,4
+kite,14,SML=,5
+kite,15,SML=,3
+kite,16,SML=,10
+kite,17,SML=,5
+kite,18,SML=,3
+kite,19,SML=,5
+kite,0,SMLn,5
+kite,1,SMLn,4
+kite,2,SMLn,3
+kite,3,SMLn,4
+kite,4,SMLn,4
+kite,5,SMLn,4
+kite,6,SMLn,4
+kite,7,SMLn,4
+kite,8,SMLn,5
+kite,9,SMLn,5
+kite,10,SMLn,3
+kite,11,SMLn,4
+kite,12,SMLn,5
+kite,13,SMLn,5
+kite,14,SMLn,5
+kite,15,SMLn,4
+kite,16,SMLn,3
+kite,17,SMLn,10
+kite,18,SMLn,3
+kite,19,SMLn,6
+kite,0,S,3
+kite,1,S,4
+kite,2,S,4
+kite,3,S,3
+kite,4,S,10
+kite,5,S,3
+kite,6,S,3
+kite,7,S,3
+kite,8,S,3
+kite,9,S,3
+kite,10,S,4
+kite,11,S,3
+kite,12,S,3
+kite,13,S,4
+kite,14,S,3
+kite,15,S,3
+kite,16,S,4
+kite,17,S,3
+kite,18,S,3
+kite,19,S,5
+knife,0,L,5
+knife,1,L,4
+knife,2,L,6
+knife,3,L,3
+knife,4,L,4
+knife,5,L,5
+knife,6,L,4
+knife,7,L,6
+knife,8,L,5
+knife,9,L,4
+knife,10,L,4
+knife,11,L,5
+knife,12,L,5
+knife,13,L,4
+knife,14,L,5
+knife,15,L,5
+knife,16,L,5
+knife,17,L,5
+knife,18,L,6
+knife,19,L,4
+knife,0,M,5
+knife,1,M,4
+knife,2,M,4
+knife,3,M,3
+knife,4,M,5
+knife,5,M,3
+knife,6,M,4
+knife,7,M,3
+knife,8,M,3
+knife,9,M,5
+knife,10,M,4
+knife,11,M,3
+knife,12,M,4
+knife,13,M,5
+knife,14,M,4
+knife,15,M,4
+knife,16,M,3
+knife,17,M,4
+knife,18,M,3
+knife,19,M,6
+knife,0,SML=,4
+knife,1,SML=,5
+knife,2,SML=,6
+knife,3,SML=,4
+knife,4,SML=,6
+knife,5,SML=,5
+knife,6,SML=,7
+knife,7,SML=,5
+knife,8,SML=,4
+knife,9,SML=,7
+knife,10,SML=,7
+knife,11,SML=,5
+knife,12,SML=,6
+knife,13,SML=,6
+knife,14,SML=,5
+knife,15,SML=,6
+knife,16,SML=,4
+knife,17,SML=,4
+knife,18,SML=,4
+knife,19,SML=,7
+knife,0,SMLn,3
+knife,1,SMLn,3
+knife,2,SMLn,5
+knife,3,SMLn,3
+knife,4,SMLn,4
+knife,5,SMLn,4
+knife,6,SMLn,5
+knife,7,SMLn,4
+knife,8,SMLn,4
+knife,9,SMLn,4
+knife,10,SMLn,5
+knife,11,SMLn,3
+knife,12,SMLn,4
+knife,13,SMLn,4
+knife,14,SMLn,4
+knife,15,SMLn,5
+knife,16,SMLn,4
+knife,17,SMLn,5
+knife,18,SMLn,5
+knife,19,SMLn,4
+knife,1,S,1
+knife,3,S,1
+knife,7,S,1
+knife,11,S,1
+knife,13,S,1
+laptop,0,L,7
+laptop,1,L,4
+laptop,2,L,4
+laptop,3,L,3
+laptop,4,L,4
+laptop,5,L,3
+laptop,6,L,4
+laptop,7,L,5
+laptop,8,L,5
+laptop,9,L,3
+laptop,10,L,4
+laptop,11,L,6
+laptop,12,L,4
+laptop,13,L,6
+laptop,14,L,4
+laptop,15,L,3
+laptop,16,L,4
+laptop,17,L,6
+laptop,18,L,3
+laptop,19,L,7
+laptop,0,M,4
+laptop,1,M,3
+laptop,2,M,4
+laptop,3,M,3
+laptop,4,M,3
+laptop,5,M,3
+laptop,6,M,4
+laptop,7,M,4
+laptop,8,M,4
+laptop,9,M,3
+laptop,10,M,5
+laptop,11,M,3
+laptop,12,M,3
+laptop,13,M,3
+laptop,14,M,5
+laptop,15,M,5
+laptop,16,M,4
+laptop,17,M,5
+laptop,18,M,5
+laptop,19,M,4
+laptop,0,SML=,7
+laptop,1,SML=,7
+laptop,2,SML=,6
+laptop,3,SML=,6
+laptop,4,SML=,5
+laptop,5,SML=,5
+laptop,6,SML=,4
+laptop,7,SML=,7
+laptop,8,SML=,7
+laptop,9,SML=,7
+laptop,10,SML=,4
+laptop,11,SML=,8
+laptop,12,SML=,3
+laptop,13,SML=,5
+laptop,14,SML=,4
+laptop,15,SML=,4
+laptop,16,SML=,5
+laptop,17,SML=,4
+laptop,18,SML=,4
+laptop,19,SML=,4
+laptop,0,SMLn,5
+laptop,1,SMLn,5
+laptop,2,SMLn,4
+laptop,3,SMLn,4
+laptop,4,SMLn,4
+laptop,5,SMLn,5
+laptop,6,SMLn,4
+laptop,7,SMLn,5
+laptop,8,SMLn,4
+laptop,9,SMLn,8
+laptop,10,SMLn,5
+laptop,11,SMLn,12
+laptop,12,SMLn,7
+laptop,13,SMLn,5
+laptop,14,SMLn,4
+laptop,15,SMLn,4
+laptop,16,SMLn,4
+laptop,17,SMLn,10
+laptop,18,SMLn,4
+laptop,19,SMLn,4
+laptop,0,S,1
+laptop,1,S,1
+laptop,2,S,1
+laptop,4,S,1
+laptop,5,S,1
+laptop,6,S,2
+laptop,8,S,2
+laptop,9,S,2
+laptop,10,S,1
+laptop,11,S,1
+laptop,12,S,1
+laptop,13,S,1
+laptop,15,S,2
+laptop,16,S,2
+laptop,17,S,3
+laptop,18,S,1
+laptop,19,S,1
+microwave,0,L,4
+microwave,1,L,5
+microwave,2,L,5
+microwave,3,L,3
+microwave,4,L,3
+microwave,5,L,3
+microwave,6,L,6
+microwave,7,L,4
+microwave,8,L,4
+microwave,9,L,8
+microwave,10,L,7
+microwave,11,L,5
+microwave,12,L,4
+microwave,13,L,3
+microwave,14,L,5
+microwave,15,L,8
+microwave,16,L,3
+microwave,17,L,3
+microwave,18,L,5
+microwave,19,L,5
+microwave,0,M,4
+microwave,1,M,4
+microwave,2,M,4
+microwave,3,M,5
+microwave,4,M,3
+microwave,5,M,5
+microwave,6,M,4
+microwave,7,M,3
+microwave,8,M,3
+microwave,9,M,4
+microwave,10,M,3
+microwave,11,M,3
+microwave,12,M,5
+microwave,13,M,4
+microwave,14,M,3
+microwave,15,M,4
+microwave,16,M,4
+microwave,17,M,4
+microwave,18,M,4
+microwave,19,M,3
+microwave,0,SML=,4
+microwave,1,SML=,4
+microwave,2,SML=,4
+microwave,3,SML=,5
+microwave,4,SML=,4
+microwave,5,SML=,4
+microwave,6,SML=,4
+microwave,7,SML=,6
+microwave,8,SML=,3
+microwave,9,SML=,3
+microwave,10,SML=,5
+microwave,11,SML=,4
+microwave,12,SML=,3
+microwave,13,SML=,4
+microwave,14,SML=,3
+microwave,15,SML=,3
+microwave,16,SML=,4
+microwave,17,SML=,4
+microwave,18,SML=,5
+microwave,19,SML=,3
+microwave,0,SMLn,4
+microwave,1,SMLn,4
+microwave,2,SMLn,5
+microwave,3,SMLn,4
+microwave,4,SMLn,4
+microwave,5,SMLn,5
+microwave,6,SMLn,4
+microwave,7,SMLn,4
+microwave,8,SMLn,4
+microwave,9,SMLn,5
+microwave,10,SMLn,4
+microwave,11,SMLn,3
+microwave,12,SMLn,4
+microwave,13,SMLn,5
+microwave,14,SMLn,4
+microwave,15,SMLn,4
+microwave,16,SMLn,3
+microwave,17,SMLn,5
+microwave,18,SMLn,6
+microwave,19,SMLn,3
+microwave,0,S,4
+microwave,1,S,3
+microwave,2,S,2
+microwave,3,S,3
+microwave,4,S,2
+microwave,5,S,2
+microwave,6,S,4
+microwave,7,S,2
+microwave,8,S,4
+microwave,9,S,4
+microwave,10,S,3
+microwave,11,S,3
+microwave,12,S,3
+microwave,13,S,3
+microwave,14,S,3
+microwave,15,S,3
+microwave,16,S,3
+microwave,17,S,3
+microwave,18,S,2
+microwave,19,S,3
+motorcycle,0,L,15
+motorcycle,1,L,3
+motorcycle,2,L,3
+motorcycle,3,L,3
+motorcycle,4,L,3
+motorcycle,5,L,4
+motorcycle,6,L,3
+motorcycle,7,L,3
+motorcycle,8,L,26
+motorcycle,9,L,3
+motorcycle,10,L,12
+motorcycle,11,L,3
+motorcycle,12,L,3
+motorcycle,13,L,35
+motorcycle,14,L,3
+motorcycle,15,L,3
+motorcycle,16,L,15
+motorcycle,17,L,16
+motorcycle,18,L,5
+motorcycle,19,L,12
+motorcycle,0,M,4
+motorcycle,1,M,4
+motorcycle,2,M,3
+motorcycle,3,M,3
+motorcycle,4,M,4
+motorcycle,5,M,5
+motorcycle,6,M,3
+motorcycle,7,M,3
+motorcycle,8,M,5
+motorcycle,9,M,4
+motorcycle,10,M,3
+motorcycle,11,M,4
+motorcycle,12,M,4
+motorcycle,13,M,4
+motorcycle,14,M,4
+motorcycle,15,M,3
+motorcycle,16,M,3
+motorcycle,17,M,3
+motorcycle,18,M,3
+motorcycle,19,M,5
+motorcycle,0,SML=,3
+motorcycle,1,SML=,3
+motorcycle,2,SML=,3
+motorcycle,3,SML=,5
+motorcycle,4,SML=,4
+motorcycle,5,SML=,5
+motorcycle,6,SML=,4
+motorcycle,7,SML=,3
+motorcycle,8,SML=,4
+motorcycle,9,SML=,7
+motorcycle,10,SML=,3
+motorcycle,11,SML=,3
+motorcycle,12,SML=,3
+motorcycle,13,SML=,5
+motorcycle,14,SML=,3
+motorcycle,15,SML=,4
+motorcycle,16,SML=,11
+motorcycle,17,SML=,5
+motorcycle,18,SML=,3
+motorcycle,19,SML=,5
+motorcycle,0,SMLn,3
+motorcycle,1,SMLn,3
+motorcycle,2,SMLn,4
+motorcycle,3,SMLn,3
+motorcycle,4,SMLn,4
+motorcycle,5,SMLn,3
+motorcycle,6,SMLn,7
+motorcycle,7,SMLn,3
+motorcycle,8,SMLn,8
+motorcycle,9,SMLn,4
+motorcycle,10,SMLn,3
+motorcycle,11,SMLn,3
+motorcycle,12,SMLn,3
+motorcycle,13,SMLn,3
+motorcycle,14,SMLn,3
+motorcycle,15,SMLn,4
+motorcycle,16,SMLn,5
+motorcycle,17,SMLn,3
+motorcycle,18,SMLn,4
+motorcycle,19,SMLn,3
+motorcycle,0,S,4
+motorcycle,1,S,3
+motorcycle,2,S,5
+motorcycle,3,S,2
+motorcycle,4,S,4
+motorcycle,5,S,3
+motorcycle,6,S,3
+motorcycle,7,S,3
+motorcycle,8,S,5
+motorcycle,9,S,3
+motorcycle,10,S,4
+motorcycle,11,S,3
+motorcycle,12,S,3
+motorcycle,13,S,4
+motorcycle,14,S,4
+motorcycle,15,S,3
+motorcycle,16,S,5
+motorcycle,17,S,3
+motorcycle,18,S,3
+motorcycle,19,S,3
+mouse,0,L,6
+mouse,1,L,4
+mouse,2,L,3
+mouse,3,L,4
+mouse,4,L,4
+mouse,5,L,5
+mouse,6,L,3
+mouse,7,L,4
+mouse,8,L,4
+mouse,9,L,3
+mouse,10,L,4
+mouse,11,L,3
+mouse,12,L,7
+mouse,13,L,4
+mouse,14,L,4
+mouse,15,L,10
+mouse,16,L,29
+mouse,17,L,13
+mouse,18,L,4
+mouse,19,L,4
+mouse,0,M,3
+mouse,1,M,3
+mouse,2,M,3
+mouse,3,M,3
+mouse,4,M,3
+mouse,5,M,4
+mouse,6,M,4
+mouse,7,M,3
+mouse,8,M,3
+mouse,9,M,3
+mouse,10,M,4
+mouse,11,M,4
+mouse,12,M,4
+mouse,13,M,4
+mouse,14,M,3
+mouse,15,M,4
+mouse,16,M,4
+mouse,17,M,4
+mouse,18,M,5
+mouse,19,M,3
+mouse,0,SML=,4
+mouse,1,SML=,4
+mouse,2,SML=,4
+mouse,3,SML=,4
+mouse,4,SML=,3
+mouse,5,SML=,5
+mouse,6,SML=,9
+mouse,7,SML=,4
+mouse,8,SML=,6
+mouse,9,SML=,5
+mouse,10,SML=,3
+mouse,11,SML=,3
+mouse,12,SML=,4
+mouse,13,SML=,5
+mouse,14,SML=,4
+mouse,15,SML=,3
+mouse,16,SML=,4
+mouse,17,SML=,4
+mouse,18,SML=,12
+mouse,19,SML=,3
+mouse,0,SMLn,6
+mouse,1,SMLn,5
+mouse,2,SMLn,5
+mouse,3,SMLn,4
+mouse,4,SMLn,4
+mouse,5,SMLn,3
+mouse,6,SMLn,3
+mouse,7,SMLn,4
+mouse,8,SMLn,5
+mouse,9,SMLn,4
+mouse,10,SMLn,6
+mouse,11,SMLn,3
+mouse,12,SMLn,4
+mouse,13,SMLn,4
+mouse,14,SMLn,5
+mouse,15,SMLn,4
+mouse,16,SMLn,4
+mouse,17,SMLn,6
+mouse,18,SMLn,4
+mouse,19,SMLn,4
+mouse,0,S,4
+mouse,1,S,3
+mouse,2,S,3
+mouse,3,S,4
+mouse,4,S,3
+mouse,5,S,3
+mouse,6,S,3
+mouse,7,S,4
+mouse,8,S,3
+mouse,9,S,4
+mouse,10,S,3
+mouse,11,S,3
+mouse,12,S,3
+mouse,13,S,3
+mouse,14,S,3
+mouse,15,S,3
+mouse,16,S,3
+mouse,17,S,3
+mouse,18,S,3
+mouse,19,S,3
+orange,0,L,9
+orange,1,L,3
+orange,2,L,18
+orange,3,L,7
+orange,4,L,17
+orange,5,L,6
+orange,6,L,5
+orange,7,L,4
+orange,8,L,16
+orange,9,L,11
+orange,10,L,15
+orange,11,L,8
+orange,12,L,4
+orange,13,L,5
+orange,14,L,28
+orange,15,L,5
+orange,16,L,11
+orange,17,L,5
+orange,18,L,4
+orange,19,L,4
+orange,0,M,4
+orange,1,M,4
+orange,2,M,6
+orange,3,M,3
+orange,4,M,6
+orange,5,M,3
+orange,6,M,4
+orange,7,M,3
+orange,8,M,5
+orange,9,M,5
+orange,10,M,5
+orange,11,M,9
+orange,12,M,7
+orange,13,M,4
+orange,14,M,6
+orange,15,M,5
+orange,16,M,4
+orange,17,M,4
+orange,18,M,8
+orange,19,M,6
+orange,0,SML=,4
+orange,1,SML=,3
+orange,2,SML=,4
+orange,3,SML=,4
+orange,4,SML=,5
+orange,5,SML=,4
+orange,6,SML=,3
+orange,7,SML=,5
+orange,8,SML=,7
+orange,9,SML=,5
+orange,10,SML=,5
+orange,11,SML=,5
+orange,12,SML=,3
+orange,13,SML=,10
+orange,14,SML=,6
+orange,15,SML=,4
+orange,16,SML=,4
+orange,17,SML=,4
+orange,18,SML=,7
+orange,19,SML=,4
+orange,0,SMLn,3
+orange,1,SMLn,4
+orange,2,SMLn,4
+orange,3,SMLn,4
+orange,4,SMLn,4
+orange,5,SMLn,4
+orange,6,SMLn,3
+orange,7,SMLn,6
+orange,8,SMLn,5
+orange,9,SMLn,6
+orange,10,SMLn,4
+orange,11,SMLn,4
+orange,12,SMLn,3
+orange,13,SMLn,3
+orange,14,SMLn,4
+orange,15,SMLn,3
+orange,16,SMLn,5
+orange,17,SMLn,4
+orange,18,SMLn,4
+orange,19,SMLn,5
+parking meter,0,L,3
+parking meter,1,L,3
+parking meter,2,L,3
+parking meter,3,L,3
+parking meter,4,L,4
+parking meter,5,L,3
+parking meter,6,L,3
+parking meter,7,L,3
+parking meter,8,L,3
+parking meter,9,L,3
+parking meter,10,L,3
+parking meter,11,L,3
+parking meter,12,L,3
+parking meter,13,L,3
+parking meter,14,L,3
+parking meter,15,L,3
+parking meter,16,L,3
+parking meter,17,L,3
+parking meter,18,L,3
+parking meter,19,L,3
+parking meter,0,M,5
+parking meter,1,M,4
+parking meter,2,M,4
+parking meter,3,M,3
+parking meter,4,M,5
+parking meter,5,M,3
+parking meter,6,M,4
+parking meter,7,M,3
+parking meter,8,M,3
+parking meter,9,M,4
+parking meter,10,M,5
+parking meter,11,M,3
+parking meter,12,M,3
+parking meter,13,M,4
+parking meter,14,M,5
+parking meter,15,M,4
+parking meter,16,M,5
+parking meter,17,M,3
+parking meter,18,M,3
+parking meter,19,M,3
+parking meter,0,SML=,5
+parking meter,1,SML=,4
+parking meter,2,SML=,4
+parking meter,3,SML=,4
+parking meter,4,SML=,5
+parking meter,5,SML=,7
+parking meter,6,SML=,6
+parking meter,7,SML=,4
+parking meter,8,SML=,4
+parking meter,9,SML=,4
+parking meter,10,SML=,3
+parking meter,11,SML=,4
+parking meter,12,SML=,3
+parking meter,13,SML=,4
+parking meter,14,SML=,4
+parking meter,15,SML=,5
+parking meter,16,SML=,3
+parking meter,17,SML=,3
+parking meter,18,SML=,4
+parking meter,19,SML=,5
+parking meter,0,SMLn,6
+parking meter,1,SMLn,5
+parking meter,2,SMLn,3
+parking meter,3,SMLn,4
+parking meter,4,SMLn,4
+parking meter,5,SMLn,4
+parking meter,6,SMLn,5
+parking meter,7,SMLn,4
+parking meter,8,SMLn,3
+parking meter,9,SMLn,4
+parking meter,10,SMLn,4
+parking meter,11,SMLn,3
+parking meter,12,SMLn,5
+parking meter,13,SMLn,3
+parking meter,14,SMLn,7
+parking meter,15,SMLn,4
+parking meter,16,SMLn,3
+parking meter,17,SMLn,5
+parking meter,18,SMLn,5
+parking meter,19,SMLn,3
+parking meter,0,S,4
+parking meter,1,S,5
+parking meter,2,S,4
+parking meter,3,S,4
+parking meter,4,S,6
+parking meter,5,S,5
+parking meter,6,S,3
+parking meter,7,S,5
+parking meter,8,S,3
+parking meter,9,S,8
+parking meter,10,S,4
+parking meter,11,S,5
+parking meter,12,S,5
+parking meter,13,S,4
+parking meter,14,S,3
+parking meter,15,S,8
+parking meter,16,S,5
+parking meter,17,S,6
+parking meter,18,S,4
+parking meter,19,S,5
+person,0,L,3
+person,1,L,4
+person,2,L,5
+person,3,L,4
+person,4,L,5
+person,5,L,5
+person,6,L,18
+person,7,L,10
+person,8,L,5
+person,9,L,5
+person,10,L,8
+person,11,L,3
+person,12,L,7
+person,13,L,6
+person,14,L,9
+person,15,L,6
+person,16,L,5
+person,17,L,4
+person,18,L,9
+person,19,L,5
+person,0,M,5
+person,1,M,4
+person,2,M,4
+person,3,M,4
+person,4,M,3
+person,5,M,7
+person,6,M,5
+person,7,M,6
+person,8,M,4
+person,9,M,5
+person,10,M,4
+person,11,M,6
+person,12,M,3
+person,13,M,5
+person,14,M,7
+person,15,M,7
+person,16,M,7
+person,17,M,5
+person,18,M,3
+person,19,M,6
+person,0,SML=,7
+person,1,SML=,15
+person,2,SML=,7
+person,3,SML=,6
+person,4,SML=,4
+person,5,SML=,4
+person,6,SML=,4
+person,7,SML=,8
+person,8,SML=,5
+person,9,SML=,10
+person,10,SML=,5
+person,11,SML=,4
+person,12,SML=,5
+person,13,SML=,5
+person,14,SML=,4
+person,15,SML=,4
+person,16,SML=,6
+person,17,SML=,12
+person,18,SML=,9
+person,19,SML=,3
+person,0,SMLn,8
+person,1,SMLn,3
+person,2,SMLn,5
+person,3,SMLn,4
+person,4,SMLn,4
+person,5,SMLn,8
+person,6,SMLn,8
+person,7,SMLn,7
+person,8,SMLn,22
+person,9,SMLn,5
+person,10,SMLn,3
+person,11,SMLn,6
+person,12,SMLn,6
+person,13,SMLn,4
+person,14,SMLn,4
+person,15,SMLn,3
+person,16,SMLn,4
+person,17,SMLn,5
+person,18,SMLn,21
+person,19,SMLn,5
+person,1,S,1
+person,2,S,1
+person,3,S,2
+person,4,S,1
+person,5,S,1
+person,6,S,1
+person,7,S,1
+person,8,S,1
+person,9,S,2
+person,10,S,1
+person,11,S,1
+person,12,S,2
+person,14,S,1
+person,15,S,1
+person,16,S,1
+person,17,S,2
+person,18,S,1
+person,19,S,1
+remote,0,L,3
+remote,1,L,4
+remote,2,L,4
+remote,3,L,5
+remote,4,L,3
+remote,5,L,4
+remote,6,L,3
+remote,7,L,3
+remote,8,L,3
+remote,9,L,5
+remote,10,L,4
+remote,11,L,5
+remote,12,L,3
+remote,13,L,5
+remote,14,L,3
+remote,15,L,3
+remote,16,L,4
+remote,17,L,4
+remote,18,L,5
+remote,19,L,4
+remote,0,M,6
+remote,1,M,6
+remote,2,M,4
+remote,3,M,4
+remote,4,M,3
+remote,5,M,5
+remote,6,M,6
+remote,7,M,4
+remote,8,M,4
+remote,9,M,5
+remote,10,M,7
+remote,11,M,6
+remote,12,M,4
+remote,13,M,5
+remote,14,M,3
+remote,15,M,5
+remote,16,M,4
+remote,17,M,4
+remote,18,M,4
+remote,19,M,5
+remote,0,SML=,6
+remote,1,SML=,4
+remote,2,SML=,4
+remote,3,SML=,3
+remote,4,SML=,3
+remote,5,SML=,5
+remote,6,SML=,4
+remote,7,SML=,4
+remote,8,SML=,5
+remote,9,SML=,3
+remote,10,SML=,4
+remote,11,SML=,6
+remote,12,SML=,5
+remote,13,SML=,5
+remote,14,SML=,5
+remote,15,SML=,4
+remote,16,SML=,4
+remote,17,SML=,5
+remote,18,SML=,4
+remote,19,SML=,5
+remote,0,SMLn,3
+remote,1,SMLn,6
+remote,2,SMLn,4
+remote,3,SMLn,4
+remote,4,SMLn,4
+remote,5,SMLn,4
+remote,6,SMLn,4
+remote,7,SMLn,5
+remote,8,SMLn,5
+remote,9,SMLn,3
+remote,10,SMLn,5
+remote,11,SMLn,6
+remote,12,SMLn,5
+remote,13,SMLn,4
+remote,14,SMLn,5
+remote,15,SMLn,3
+remote,16,SMLn,5
+remote,17,SMLn,4
+remote,18,SMLn,5
+remote,19,SMLn,4
+remote,0,S,5
+remote,1,S,3
+remote,2,S,4
+remote,3,S,3
+remote,4,S,3
+remote,5,S,4
+remote,6,S,3
+remote,7,S,4
+remote,8,S,3
+remote,9,S,5
+remote,10,S,3
+remote,11,S,3
+remote,12,S,3
+remote,13,S,3
+remote,14,S,4
+remote,15,S,3
+remote,16,S,4
+remote,17,S,3
+remote,18,S,4
+remote,19,S,5
+scissors,0,L,30
+scissors,1,L,4
+scissors,2,L,3
+scissors,3,L,4
+scissors,4,L,5
+scissors,5,L,9
+scissors,6,L,5
+scissors,7,L,3
+scissors,8,L,4
+scissors,9,L,13
+scissors,10,L,4
+scissors,11,L,10
+scissors,12,L,5
+scissors,13,L,3
+scissors,14,L,30
+scissors,15,L,3
+scissors,16,L,18
+scissors,17,L,6
+scissors,18,L,5
+scissors,19,L,8
+scissors,0,M,4
+scissors,1,M,3
+scissors,2,M,3
+scissors,3,M,3
+scissors,4,M,3
+scissors,5,M,4
+scissors,6,M,4
+scissors,7,M,3
+scissors,8,M,6
+scissors,9,M,5
+scissors,10,M,4
+scissors,11,M,5
+scissors,12,M,3
+scissors,13,M,3
+scissors,14,M,4
+scissors,15,M,4
+scissors,16,M,3
+scissors,17,M,4
+scissors,18,M,6
+scissors,19,M,3
+scissors,0,SML=,5
+scissors,1,SML=,5
+scissors,2,SML=,4
+scissors,3,SML=,4
+scissors,4,SML=,3
+scissors,5,SML=,4
+scissors,6,SML=,4
+scissors,7,SML=,4
+scissors,8,SML=,8
+scissors,9,SML=,3
+scissors,10,SML=,3
+scissors,11,SML=,4
+scissors,12,SML=,3
+scissors,13,SML=,3
+scissors,14,SML=,4
+scissors,15,SML=,3
+scissors,16,SML=,3
+scissors,17,SML=,4
+scissors,18,SML=,4
+scissors,19,SML=,4
+scissors,0,SMLn,3
+scissors,1,SMLn,5
+scissors,2,SMLn,5
+scissors,3,SMLn,3
+scissors,4,SMLn,4
+scissors,5,SMLn,4
+scissors,6,SMLn,4
+scissors,7,SMLn,3
+scissors,8,SMLn,11
+scissors,9,SMLn,5
+scissors,10,SMLn,4
+scissors,11,SMLn,4
+scissors,12,SMLn,3
+scissors,13,SMLn,4
+scissors,14,SMLn,4
+scissors,15,SMLn,5
+scissors,16,SMLn,5
+scissors,17,SMLn,4
+scissors,18,SMLn,3
+scissors,19,SMLn,5
+scissors,0,S,4
+scissors,1,S,4
+scissors,2,S,3
+scissors,3,S,4
+scissors,4,S,3
+scissors,5,S,4
+scissors,6,S,3
+scissors,7,S,3
+scissors,8,S,4
+scissors,9,S,3
+scissors,10,S,3
+scissors,11,S,4
+scissors,12,S,2
+scissors,13,S,3
+scissors,14,S,3
+scissors,15,S,4
+scissors,16,S,4
+scissors,17,S,4
+scissors,18,S,6
+scissors,19,S,2
+single serving drinking vessel,0,L,6
+single serving drinking vessel,1,L,3
+single serving drinking vessel,2,L,3
+single serving drinking vessel,3,L,3
+single serving drinking vessel,4,L,4
+single serving drinking vessel,5,L,5
+single serving drinking vessel,6,L,3
+single serving drinking vessel,7,L,4
+single serving drinking vessel,8,L,4
+single serving drinking vessel,9,L,5
+single serving drinking vessel,10,L,3
+single serving drinking vessel,11,L,3
+single serving drinking vessel,12,L,4
+single serving drinking vessel,13,L,5
+single serving drinking vessel,14,L,3
+single serving drinking vessel,15,L,4
+single serving drinking vessel,16,L,5
+single serving drinking vessel,17,L,3
+single serving drinking vessel,18,L,3
+single serving drinking vessel,19,L,4
+single serving drinking vessel,0,M,5
+single serving drinking vessel,1,M,4
+single serving drinking vessel,2,M,5
+single serving drinking vessel,3,M,7
+single serving drinking vessel,4,M,4
+single serving drinking vessel,5,M,3
+single serving drinking vessel,6,M,5
+single serving drinking vessel,7,M,5
+single serving drinking vessel,8,M,5
+single serving drinking vessel,9,M,3
+single serving drinking vessel,10,M,5
+single serving drinking vessel,11,M,3
+single serving drinking vessel,12,M,3
+single serving drinking vessel,13,M,4
+single serving drinking vessel,14,M,4
+single serving drinking vessel,15,M,4
+single serving drinking vessel,16,M,3
+single serving drinking vessel,17,M,5
+single serving drinking vessel,18,M,4
+single serving drinking vessel,19,M,3
+single serving drinking vessel,0,SML=,6
+single serving drinking vessel,1,SML=,4
+single serving drinking vessel,2,SML=,4
+single serving drinking vessel,3,SML=,4
+single serving drinking vessel,4,SML=,4
+single serving drinking vessel,5,SML=,5
+single serving drinking vessel,6,SML=,5
+single serving drinking vessel,7,SML=,3
+single serving drinking vessel,8,SML=,4
+single serving drinking vessel,9,SML=,5
+single serving drinking vessel,10,SML=,4
+single serving drinking vessel,11,SML=,4
+single serving drinking vessel,12,SML=,6
+single serving drinking vessel,13,SML=,5
+single serving drinking vessel,14,SML=,5
+single serving drinking vessel,15,SML=,3
+single serving drinking vessel,16,SML=,5
+single serving drinking vessel,17,SML=,4
+single serving drinking vessel,18,SML=,4
+single serving drinking vessel,19,SML=,6
+single serving drinking vessel,0,SMLn,3
+single serving drinking vessel,1,SMLn,5
+single serving drinking vessel,2,SMLn,5
+single serving drinking vessel,3,SMLn,4
+single serving drinking vessel,4,SMLn,5
+single serving drinking vessel,5,SMLn,4
+single serving drinking vessel,6,SMLn,5
+single serving drinking vessel,7,SMLn,3
+single serving drinking vessel,8,SMLn,4
+single serving drinking vessel,9,SMLn,6
+single serving drinking vessel,10,SMLn,5
+single serving drinking vessel,11,SMLn,3
+single serving drinking vessel,12,SMLn,6
+single serving drinking vessel,13,SMLn,3
+single serving drinking vessel,14,SMLn,5
+single serving drinking vessel,15,SMLn,7
+single serving drinking vessel,16,SMLn,3
+single serving drinking vessel,17,SMLn,3
+single serving drinking vessel,18,SMLn,4
+single serving drinking vessel,19,SMLn,4
+single serving drinking vessel,0,S,2
+single serving drinking vessel,1,S,6
+single serving drinking vessel,2,S,3
+single serving drinking vessel,3,S,2
+single serving drinking vessel,4,S,4
+single serving drinking vessel,5,S,6
+single serving drinking vessel,6,S,3
+single serving drinking vessel,7,S,3
+single serving drinking vessel,8,S,3
+single serving drinking vessel,9,S,3
+single serving drinking vessel,10,S,3
+single serving drinking vessel,11,S,5
+single serving drinking vessel,12,S,3
+single serving drinking vessel,13,S,7
+single serving drinking vessel,14,S,3
+single serving drinking vessel,15,S,3
+single serving drinking vessel,16,S,4
+single serving drinking vessel,17,S,5
+single serving drinking vessel,18,S,3
+single serving drinking vessel,19,S,3
+sink,0,L,4
+sink,1,L,3
+sink,2,L,3
+sink,3,L,5
+sink,4,L,3
+sink,5,L,5
+sink,6,L,6
+sink,7,L,5
+sink,8,L,4
+sink,9,L,3
+sink,10,L,5
+sink,11,L,6
+sink,12,L,4
+sink,13,L,6
+sink,14,L,6
+sink,15,L,3
+sink,16,L,3
+sink,17,L,5
+sink,18,L,3
+sink,19,L,4
+sink,0,M,4
+sink,1,M,4
+sink,2,M,10
+sink,3,M,5
+sink,4,M,4
+sink,5,M,3
+sink,6,M,4
+sink,7,M,3
+sink,8,M,5
+sink,9,M,4
+sink,10,M,4
+sink,11,M,5
+sink,12,M,7
+sink,13,M,4
+sink,14,M,3
+sink,15,M,4
+sink,16,M,4
+sink,17,M,3
+sink,18,M,6
+sink,19,M,6
+sink,0,SML=,5
+sink,1,SML=,6
+sink,2,SML=,4
+sink,3,SML=,5
+sink,4,SML=,5
+sink,5,SML=,6
+sink,6,SML=,6
+sink,7,SML=,5
+sink,8,SML=,4
+sink,9,SML=,5
+sink,10,SML=,6
+sink,11,SML=,4
+sink,12,SML=,3
+sink,13,SML=,4
+sink,14,SML=,4
+sink,15,SML=,4
+sink,16,SML=,3
+sink,17,SML=,5
+sink,18,SML=,5
+sink,19,SML=,6
+sink,0,SMLn,4
+sink,1,SMLn,4
+sink,2,SMLn,4
+sink,3,SMLn,7
+sink,4,SMLn,4
+sink,5,SMLn,5
+sink,6,SMLn,8
+sink,7,SMLn,4
+sink,8,SMLn,7
+sink,9,SMLn,5
+sink,10,SMLn,6
+sink,11,SMLn,3
+sink,12,SMLn,6
+sink,13,SMLn,3
+sink,14,SMLn,5
+sink,15,SMLn,5
+sink,16,SMLn,3
+sink,17,SMLn,5
+sink,18,SMLn,4
+sink,19,SMLn,4
+sink,0,S,3
+sink,1,S,4
+sink,2,S,3
+sink,3,S,5
+sink,4,S,4
+sink,5,S,3
+sink,6,S,4
+sink,7,S,3
+sink,8,S,4
+sink,9,S,4
+sink,10,S,4
+sink,11,S,5
+sink,12,S,4
+sink,13,S,4
+sink,14,S,4
+sink,15,S,3
+sink,16,S,3
+sink,17,S,5
+sink,18,S,3
+sink,19,S,3
+skateboard,0,L,3
+skateboard,1,L,6
+skateboard,2,L,30
+skateboard,3,L,4
+skateboard,4,L,4
+skateboard,5,L,18
+skateboard,6,L,33
+skateboard,7,L,19
+skateboard,8,L,8
+skateboard,9,L,23
+skateboard,10,L,8
+skateboard,11,L,4
+skateboard,12,L,3
+skateboard,13,L,13
+skateboard,14,L,3
+skateboard,15,L,35
+skateboard,16,L,14
+skateboard,17,L,33
+skateboard,18,L,4
+skateboard,19,L,23
+skateboard,0,M,31
+skateboard,1,M,19
+skateboard,2,M,4
+skateboard,3,M,4
+skateboard,4,M,15
+skateboard,5,M,22
+skateboard,6,M,12
+skateboard,7,M,5
+skateboard,8,M,17
+skateboard,9,M,5
+skateboard,10,M,6
+skateboard,11,M,3
+skateboard,12,M,3
+skateboard,13,M,25
+skateboard,14,M,15
+skateboard,15,M,5
+skateboard,16,M,3
+skateboard,17,M,12
+skateboard,18,M,4
+skateboard,19,M,17
+skateboard,0,SML=,3
+skateboard,1,SML=,5
+skateboard,2,SML=,3
+skateboard,3,SML=,3
+skateboard,4,SML=,3
+skateboard,5,SML=,19
+skateboard,6,SML=,4
+skateboard,7,SML=,3
+skateboard,8,SML=,3
+skateboard,9,SML=,4
+skateboard,10,SML=,3
+skateboard,11,SML=,3
+skateboard,12,SML=,4
+skateboard,13,SML=,3
+skateboard,14,SML=,3
+skateboard,15,SML=,3
+skateboard,16,SML=,3
+skateboard,17,SML=,3
+skateboard,18,SML=,3
+skateboard,19,SML=,3
+skateboard,0,SMLn,3
+skateboard,1,SMLn,4
+skateboard,2,SMLn,3
+skateboard,3,SMLn,3
+skateboard,4,SMLn,27
+skateboard,5,SMLn,25
+skateboard,6,SMLn,13
+skateboard,7,SMLn,3
+skateboard,8,SMLn,10
+skateboard,9,SMLn,5
+skateboard,10,SMLn,3
+skateboard,11,SMLn,5
+skateboard,12,SMLn,4
+skateboard,13,SMLn,3
+skateboard,14,SMLn,3
+skateboard,15,SMLn,26
+skateboard,16,SMLn,3
+skateboard,17,SMLn,3
+skateboard,18,SMLn,3
+skateboard,19,SMLn,3
+skateboard,0,S,3
+skateboard,1,S,3
+skateboard,2,S,3
+skateboard,3,S,3
+skateboard,4,S,4
+skateboard,5,S,4
+skateboard,6,S,3
+skateboard,7,S,5
+skateboard,8,S,3
+skateboard,9,S,4
+skateboard,10,S,5
+skateboard,11,S,4
+skateboard,12,S,3
+skateboard,13,S,3
+skateboard,14,S,3
+skateboard,15,S,3
+skateboard,16,S,5
+skateboard,17,S,4
+skateboard,18,S,3
+skateboard,19,S,5
+skis,0,L,34
+skis,1,L,13
+skis,2,L,3
+skis,3,L,4
+skis,4,L,24
+skis,5,L,9
+skis,6,L,3
+skis,7,L,3
+skis,8,L,3
+skis,9,L,47
+skis,10,L,43
+skis,11,L,3
+skis,12,L,5
+skis,13,L,17
+skis,14,L,3
+skis,15,L,36
+skis,16,L,32
+skis,17,L,23
+skis,18,L,4
+skis,19,L,3
+skis,0,M,36
+skis,1,M,43
+skis,2,M,29
+skis,3,M,43
+skis,4,M,48
+skis,5,M,17
+skis,6,M,42
+skis,7,M,40
+skis,8,M,40
+skis,9,M,35
+skis,10,M,44
+skis,11,M,36
+skis,12,M,40
+skis,13,M,25
+skis,14,M,29
+skis,15,M,28
+skis,16,M,32
+skis,17,M,32
+skis,18,M,22
+skis,19,M,34
+skis,0,SML=,7
+skis,1,SML=,38
+skis,2,SML=,32
+skis,3,SML=,31
+skis,4,SML=,44
+skis,5,SML=,31
+skis,6,SML=,38
+skis,7,SML=,4
+skis,8,SML=,37
+skis,9,SML=,5
+skis,10,SML=,23
+skis,11,SML=,4
+skis,12,SML=,38
+skis,13,SML=,31
+skis,14,SML=,3
+skis,15,SML=,41
+skis,16,SML=,39
+skis,17,SML=,36
+skis,18,SML=,29
+skis,19,SML=,37
+skis,0,SMLn,27
+skis,1,SMLn,6
+skis,2,SMLn,4
+skis,3,SMLn,26
+skis,4,SMLn,36
+skis,5,SMLn,25
+skis,6,SMLn,36
+skis,7,SMLn,34
+skis,8,SMLn,21
+skis,9,SMLn,18
+skis,10,SMLn,43
+skis,11,SMLn,4
+skis,12,SMLn,5
+skis,13,SMLn,30
+skis,14,SMLn,23
+skis,15,SMLn,42
+skis,16,SMLn,44
+skis,17,SMLn,45
+skis,18,SMLn,4
+skis,19,SMLn,3
+skis,0,S,37
+skis,1,S,8
+skis,2,S,38
+skis,3,S,30
+skis,4,S,16
+skis,5,S,23
+skis,6,S,40
+skis,7,S,24
+skis,8,S,32
+skis,9,S,41
+skis,10,S,23
+skis,11,S,35
+skis,12,S,35
+skis,13,S,26
+skis,14,S,24
+skis,15,S,11
+skis,16,S,31
+skis,17,S,10
+skis,18,S,41
+skis,19,S,24
+snowboard,0,L,4
+snowboard,1,L,10
+snowboard,2,L,4
+snowboard,3,L,8
+snowboard,4,L,8
+snowboard,5,L,11
+snowboard,6,L,3
+snowboard,7,L,26
+snowboard,8,L,5
+snowboard,9,L,16
+snowboard,10,L,3
+snowboard,11,L,6
+snowboard,12,L,9
+snowboard,13,L,21
+snowboard,14,L,4
+snowboard,15,L,4
+snowboard,16,L,6
+snowboard,17,L,35
+snowboard,18,L,3
+snowboard,19,L,4
+snowboard,0,M,20
+snowboard,1,M,10
+snowboard,2,M,11
+snowboard,3,M,9
+snowboard,4,M,6
+snowboard,5,M,10
+snowboard,6,M,9
+snowboard,7,M,26
+snowboard,8,M,5
+snowboard,9,M,12
+snowboard,10,M,24
+snowboard,11,M,14
+snowboard,12,M,9
+snowboard,13,M,8
+snowboard,14,M,11
+snowboard,15,M,15
+snowboard,16,M,10
+snowboard,17,M,10
+snowboard,18,M,10
+snowboard,19,M,5
+snowboard,0,SML=,3
+snowboard,1,SML=,5
+snowboard,2,SML=,4
+snowboard,3,SML=,22
+snowboard,4,SML=,3
+snowboard,5,SML=,3
+snowboard,6,SML=,17
+snowboard,7,SML=,18
+snowboard,8,SML=,27
+snowboard,9,SML=,5
+snowboard,10,SML=,24
+snowboard,11,SML=,3
+snowboard,12,SML=,8
+snowboard,13,SML=,19
+snowboard,14,SML=,11
+snowboard,15,SML=,6
+snowboard,16,SML=,26
+snowboard,17,SML=,8
+snowboard,18,SML=,11
+snowboard,19,SML=,22
+snowboard,0,SMLn,24
+snowboard,1,SMLn,18
+snowboard,2,SMLn,9
+snowboard,3,SMLn,20
+snowboard,4,SMLn,14
+snowboard,5,SMLn,5
+snowboard,6,SMLn,15
+snowboard,7,SMLn,18
+snowboard,8,SMLn,17
+snowboard,9,SMLn,12
+snowboard,10,SMLn,14
+snowboard,11,SMLn,3
+snowboard,12,SMLn,7
+snowboard,13,SMLn,5
+snowboard,14,SMLn,12
+snowboard,15,SMLn,3
+snowboard,16,SMLn,9
+snowboard,17,SMLn,11
+snowboard,18,SMLn,15
+snowboard,19,SMLn,5
+snowboard,0,S,7
+snowboard,1,S,16
+snowboard,2,S,24
+snowboard,3,S,30
+snowboard,4,S,38
+snowboard,5,S,10
+snowboard,6,S,10
+snowboard,7,S,6
+snowboard,8,S,15
+snowboard,9,S,31
+snowboard,10,S,28
+snowboard,11,S,29
+snowboard,12,S,29
+snowboard,13,S,7
+snowboard,14,S,8
+snowboard,15,S,24
+snowboard,16,S,19
+snowboard,17,S,17
+snowboard,18,S,21
+snowboard,19,S,8
+spoon,0,L,6
+spoon,1,L,5
+spoon,2,L,5
+spoon,3,L,6
+spoon,4,L,5
+spoon,5,L,4
+spoon,6,L,5
+spoon,7,L,7
+spoon,8,L,3
+spoon,9,L,4
+spoon,10,L,5
+spoon,11,L,5
+spoon,12,L,4
+spoon,13,L,4
+spoon,14,L,5
+spoon,15,L,6
+spoon,16,L,5
+spoon,17,L,5
+spoon,18,L,5
+spoon,19,L,5
+spoon,0,M,3
+spoon,1,M,3
+spoon,2,M,5
+spoon,3,M,4
+spoon,4,M,5
+spoon,5,M,4
+spoon,6,M,5
+spoon,7,M,3
+spoon,8,M,4
+spoon,9,M,3
+spoon,10,M,3
+spoon,11,M,5
+spoon,12,M,5
+spoon,13,M,5
+spoon,14,M,5
+spoon,15,M,3
+spoon,16,M,5
+spoon,17,M,4
+spoon,18,M,3
+spoon,19,M,6
+spoon,0,SML=,4
+spoon,1,SML=,5
+spoon,2,SML=,6
+spoon,3,SML=,8
+spoon,4,SML=,5
+spoon,5,SML=,4
+spoon,6,SML=,8
+spoon,7,SML=,5
+spoon,8,SML=,4
+spoon,9,SML=,6
+spoon,10,SML=,4
+spoon,11,SML=,4
+spoon,12,SML=,3
+spoon,13,SML=,3
+spoon,14,SML=,4
+spoon,15,SML=,4
+spoon,16,SML=,6
+spoon,17,SML=,4
+spoon,18,SML=,4
+spoon,19,SML=,5
+spoon,0,SMLn,6
+spoon,1,SMLn,5
+spoon,2,SMLn,4
+spoon,3,SMLn,4
+spoon,4,SMLn,4
+spoon,5,SMLn,3
+spoon,6,SMLn,3
+spoon,7,SMLn,4
+spoon,8,SMLn,3
+spoon,9,SMLn,4
+spoon,10,SMLn,5
+spoon,11,SMLn,4
+spoon,12,SMLn,4
+spoon,13,SMLn,4
+spoon,14,SMLn,4
+spoon,15,SMLn,5
+spoon,16,SMLn,5
+spoon,17,SMLn,4
+spoon,18,SMLn,3
+spoon,19,SMLn,3
+spoon,0,S,1
+spoon,1,S,2
+spoon,2,S,1
+spoon,3,S,2
+spoon,4,S,1
+spoon,5,S,1
+spoon,7,S,2
+spoon,8,S,1
+spoon,9,S,2
+spoon,10,S,1
+spoon,11,S,1
+spoon,12,S,1
+spoon,14,S,2
+spoon,15,S,1
+spoon,16,S,1
+spoon,17,S,1
+spoon,18,S,1
+spoon,19,S,1
+stop sign,0,L,3
+stop sign,1,L,5
+stop sign,2,L,3
+stop sign,3,L,3
+stop sign,4,L,4
+stop sign,5,L,3
+stop sign,6,L,13
+stop sign,7,L,4
+stop sign,8,L,4
+stop sign,9,L,4
+stop sign,10,L,3
+stop sign,11,L,4
+stop sign,12,L,3
+stop sign,13,L,3
+stop sign,14,L,4
+stop sign,15,L,12
+stop sign,16,L,3
+stop sign,17,L,5
+stop sign,18,L,4
+stop sign,19,L,3
+stop sign,0,M,5
+stop sign,1,M,4
+stop sign,2,M,4
+stop sign,3,M,5
+stop sign,4,M,6
+stop sign,5,M,7
+stop sign,6,M,5
+stop sign,7,M,4
+stop sign,8,M,4
+stop sign,9,M,4
+stop sign,10,M,3
+stop sign,11,M,4
+stop sign,12,M,5
+stop sign,13,M,3
+stop sign,14,M,5
+stop sign,15,M,4
+stop sign,16,M,3
+stop sign,17,M,3
+stop sign,18,M,4
+stop sign,19,M,3
+stop sign,0,SML=,5
+stop sign,1,SML=,5
+stop sign,2,SML=,4
+stop sign,3,SML=,5
+stop sign,4,SML=,4
+stop sign,5,SML=,4
+stop sign,6,SML=,5
+stop sign,7,SML=,4
+stop sign,8,SML=,6
+stop sign,9,SML=,6
+stop sign,10,SML=,5
+stop sign,11,SML=,8
+stop sign,12,SML=,3
+stop sign,13,SML=,7
+stop sign,14,SML=,6
+stop sign,15,SML=,6
+stop sign,16,SML=,5
+stop sign,17,SML=,4
+stop sign,18,SML=,6
+stop sign,19,SML=,6
+stop sign,0,SMLn,6
+stop sign,1,SMLn,4
+stop sign,2,SMLn,4
+stop sign,3,SMLn,4
+stop sign,4,SMLn,4
+stop sign,5,SMLn,10
+stop sign,6,SMLn,5
+stop sign,7,SMLn,3
+stop sign,8,SMLn,4
+stop sign,9,SMLn,6
+stop sign,10,SMLn,6
+stop sign,11,SMLn,9
+stop sign,12,SMLn,4
+stop sign,13,SMLn,5
+stop sign,14,SMLn,8
+stop sign,15,SMLn,3
+stop sign,16,SMLn,5
+stop sign,17,SMLn,4
+stop sign,18,SMLn,3
+stop sign,19,SMLn,7
+stop sign,0,S,2
+stop sign,1,S,3
+stop sign,2,S,3
+stop sign,3,S,3
+stop sign,4,S,3
+stop sign,5,S,3
+stop sign,6,S,3
+stop sign,7,S,3
+stop sign,8,S,3
+stop sign,9,S,2
+stop sign,10,S,3
+stop sign,11,S,3
+stop sign,12,S,3
+stop sign,13,S,3
+stop sign,14,S,3
+stop sign,15,S,3
+stop sign,16,S,2
+stop sign,17,S,3
+stop sign,18,S,1
+stop sign,19,S,5
+surfboard,0,L,8
+surfboard,1,L,3
+surfboard,2,L,4
+surfboard,3,L,5
+surfboard,4,L,3
+surfboard,5,L,3
+surfboard,6,L,3
+surfboard,7,L,4
+surfboard,8,L,3
+surfboard,9,L,4
+surfboard,10,L,4
+surfboard,11,L,3
+surfboard,12,L,3
+surfboard,13,L,3
+surfboard,14,L,3
+surfboard,15,L,3
+surfboard,16,L,3
+surfboard,17,L,3
+surfboard,18,L,3
+surfboard,19,L,4
+surfboard,0,M,6
+surfboard,1,M,11
+surfboard,2,M,4
+surfboard,3,M,5
+surfboard,4,M,3
+surfboard,5,M,3
+surfboard,6,M,3
+surfboard,7,M,3
+surfboard,8,M,5
+surfboard,9,M,5
+surfboard,10,M,5
+surfboard,11,M,4
+surfboard,12,M,3
+surfboard,13,M,4
+surfboard,14,M,4
+surfboard,15,M,4
+surfboard,16,M,7
+surfboard,17,M,6
+surfboard,18,M,16
+surfboard,19,M,3
+surfboard,0,SML=,3
+surfboard,1,SML=,3
+surfboard,2,SML=,3
+surfboard,3,SML=,3
+surfboard,4,SML=,3
+surfboard,5,SML=,4
+surfboard,6,SML=,3
+surfboard,7,SML=,6
+surfboard,8,SML=,4
+surfboard,9,SML=,3
+surfboard,10,SML=,3
+surfboard,11,SML=,3
+surfboard,12,SML=,3
+surfboard,13,SML=,3
+surfboard,14,SML=,3
+surfboard,15,SML=,3
+surfboard,16,SML=,5
+surfboard,17,SML=,3
+surfboard,18,SML=,3
+surfboard,19,SML=,3
+surfboard,0,SMLn,3
+surfboard,1,SMLn,3
+surfboard,2,SMLn,3
+surfboard,3,SMLn,4
+surfboard,4,SMLn,3
+surfboard,5,SMLn,3
+surfboard,6,SMLn,3
+surfboard,7,SMLn,4
+surfboard,8,SMLn,3
+surfboard,9,SMLn,3
+surfboard,10,SMLn,3
+surfboard,11,SMLn,3
+surfboard,12,SMLn,3
+surfboard,13,SMLn,3
+surfboard,14,SMLn,3
+surfboard,15,SMLn,3
+surfboard,16,SMLn,4
+surfboard,17,SMLn,3
+surfboard,18,SMLn,3
+surfboard,19,SMLn,3
+surfboard,0,S,24
+surfboard,1,S,4
+surfboard,2,S,13
+surfboard,3,S,18
+surfboard,4,S,10
+surfboard,5,S,13
+surfboard,6,S,4
+surfboard,7,S,14
+surfboard,8,S,8
+surfboard,9,S,4
+surfboard,10,S,17
+surfboard,11,S,8
+surfboard,12,S,4
+surfboard,13,S,14
+surfboard,14,S,6
+surfboard,15,S,22
+surfboard,16,S,9
+surfboard,17,S,13
+surfboard,18,S,9
+surfboard,19,S,4
+tennis racket,0,L,36
+tennis racket,1,L,40
+tennis racket,2,L,17
+tennis racket,3,L,37
+tennis racket,4,L,40
+tennis racket,5,L,21
+tennis racket,6,L,33
+tennis racket,7,L,49
+tennis racket,8,L,39
+tennis racket,9,L,12
+tennis racket,10,L,39
+tennis racket,11,L,33
+tennis racket,12,L,40
+tennis racket,13,L,26
+tennis racket,14,L,14
+tennis racket,15,L,45
+tennis racket,16,L,32
+tennis racket,17,L,36
+tennis racket,18,L,46
+tennis racket,19,L,40
+tennis racket,0,M,15
+tennis racket,1,M,29
+tennis racket,2,M,46
+tennis racket,3,M,40
+tennis racket,4,M,3
+tennis racket,5,M,39
+tennis racket,6,M,36
+tennis racket,7,M,37
+tennis racket,8,M,39
+tennis racket,9,M,35
+tennis racket,10,M,41
+tennis racket,11,M,26
+tennis racket,12,M,28
+tennis racket,13,M,36
+tennis racket,14,M,36
+tennis racket,15,M,3
+tennis racket,16,M,11
+tennis racket,17,M,23
+tennis racket,18,M,26
+tennis racket,19,M,37
+tennis racket,0,SML=,27
+tennis racket,1,SML=,12
+tennis racket,2,SML=,25
+tennis racket,3,SML=,29
+tennis racket,4,SML=,20
+tennis racket,5,SML=,3
+tennis racket,6,SML=,15
+tennis racket,7,SML=,26
+tennis racket,8,SML=,42
+tennis racket,9,SML=,5
+tennis racket,10,SML=,35
+tennis racket,11,SML=,4
+tennis racket,12,SML=,37
+tennis racket,13,SML=,3
+tennis racket,14,SML=,19
+tennis racket,15,SML=,3
+tennis racket,16,SML=,42
+tennis racket,17,SML=,18
+tennis racket,18,SML=,3
+tennis racket,19,SML=,30
+tennis racket,0,SMLn,35
+tennis racket,1,SMLn,34
+tennis racket,2,SMLn,34
+tennis racket,3,SMLn,39
+tennis racket,4,SMLn,3
+tennis racket,5,SMLn,3
+tennis racket,6,SMLn,22
+tennis racket,7,SMLn,37
+tennis racket,8,SMLn,50
+tennis racket,9,SMLn,32
+tennis racket,10,SMLn,13
+tennis racket,11,SMLn,3
+tennis racket,12,SMLn,26
+tennis racket,13,SMLn,23
+tennis racket,14,SMLn,3
+tennis racket,15,SMLn,3
+tennis racket,16,SMLn,42
+tennis racket,17,SMLn,39
+tennis racket,18,SMLn,31
+tennis racket,19,SMLn,33
+tennis racket,0,S,48
+tennis racket,1,S,25
+tennis racket,2,S,45
+tennis racket,3,S,42
+tennis racket,4,S,27
+tennis racket,5,S,43
+tennis racket,6,S,27
+tennis racket,7,S,29
+tennis racket,8,S,48
+tennis racket,9,S,28
+tennis racket,10,S,27
+tennis racket,11,S,41
+tennis racket,12,S,28
+tennis racket,13,S,41
+tennis racket,14,S,36
+tennis racket,15,S,36
+tennis racket,16,S,47
+tennis racket,17,S,43
+tennis racket,18,S,34
+tennis racket,19,S,4
+tie,0,L,4
+tie,1,L,4
+tie,2,L,6
+tie,3,L,3
+tie,4,L,4
+tie,5,L,21
+tie,6,L,16
+tie,7,L,11
+tie,8,L,3
+tie,9,L,15
+tie,10,L,3
+tie,11,L,5
+tie,12,L,6
+tie,13,L,3
+tie,14,L,14
+tie,15,L,15
+tie,16,L,3
+tie,17,L,4
+tie,18,L,4
+tie,19,L,3
+tie,0,M,3
+tie,1,M,3
+tie,2,M,3
+tie,3,M,4
+tie,4,M,4
+tie,5,M,4
+tie,6,M,3
+tie,7,M,3
+tie,8,M,4
+tie,9,M,4
+tie,10,M,4
+tie,11,M,3
+tie,12,M,3
+tie,13,M,3
+tie,14,M,3
+tie,15,M,3
+tie,16,M,4
+tie,17,M,3
+tie,18,M,3
+tie,19,M,3
+tie,0,SML=,3
+tie,1,SML=,3
+tie,2,SML=,3
+tie,3,SML=,4
+tie,4,SML=,3
+tie,5,SML=,3
+tie,6,SML=,4
+tie,7,SML=,5
+tie,8,SML=,3
+tie,9,SML=,5
+tie,10,SML=,5
+tie,11,SML=,4
+tie,12,SML=,4
+tie,13,SML=,5
+tie,14,SML=,4
+tie,15,SML=,3
+tie,16,SML=,4
+tie,17,SML=,4
+tie,18,SML=,4
+tie,19,SML=,4
+tie,0,SMLn,5
+tie,1,SMLn,4
+tie,2,SMLn,3
+tie,3,SMLn,4
+tie,4,SMLn,4
+tie,5,SMLn,3
+tie,6,SMLn,3
+tie,7,SMLn,4
+tie,8,SMLn,5
+tie,9,SMLn,4
+tie,10,SMLn,4
+tie,11,SMLn,4
+tie,12,SMLn,5
+tie,13,SMLn,4
+tie,14,SMLn,5
+tie,15,SMLn,6
+tie,16,SMLn,3
+tie,17,SMLn,3
+tie,18,SMLn,3
+tie,19,SMLn,4
+tie,0,S,4
+tie,1,S,3
+tie,2,S,5
+tie,3,S,5
+tie,4,S,3
+tie,5,S,4
+tie,6,S,3
+tie,7,S,3
+tie,8,S,4
+tie,9,S,3
+tie,10,S,3
+tie,11,S,3
+tie,12,S,5
+tie,13,S,4
+tie,14,S,5
+tie,15,S,4
+tie,16,S,6
+tie,17,S,3
+tie,18,S,4
+tie,19,S,2
+toothbrush,0,L,24
+toothbrush,1,L,23
+toothbrush,2,L,3
+toothbrush,3,L,29
+toothbrush,4,L,3
+toothbrush,5,L,3
+toothbrush,6,L,25
+toothbrush,7,L,10
+toothbrush,8,L,3
+toothbrush,9,L,3
+toothbrush,10,L,3
+toothbrush,11,L,18
+toothbrush,12,L,3
+toothbrush,13,L,3
+toothbrush,14,L,3
+toothbrush,15,L,3
+toothbrush,16,L,3
+toothbrush,17,L,4
+toothbrush,18,L,3
+toothbrush,19,L,25
+toothbrush,0,M,3
+toothbrush,1,M,5
+toothbrush,2,M,5
+toothbrush,3,M,3
+toothbrush,4,M,4
+toothbrush,5,M,4
+toothbrush,6,M,4
+toothbrush,7,M,5
+toothbrush,8,M,4
+toothbrush,9,M,3
+toothbrush,10,M,4
+toothbrush,11,M,4
+toothbrush,12,M,5
+toothbrush,13,M,5
+toothbrush,14,M,4
+toothbrush,15,M,4
+toothbrush,16,M,3
+toothbrush,17,M,4
+toothbrush,18,M,3
+toothbrush,19,M,3
+toothbrush,0,SML=,3
+toothbrush,1,SML=,5
+toothbrush,2,SML=,4
+toothbrush,3,SML=,5
+toothbrush,4,SML=,6
+toothbrush,5,SML=,5
+toothbrush,6,SML=,5
+toothbrush,7,SML=,3
+toothbrush,8,SML=,3
+toothbrush,9,SML=,5
+toothbrush,10,SML=,3
+toothbrush,11,SML=,5
+toothbrush,12,SML=,4
+toothbrush,13,SML=,5
+toothbrush,14,SML=,5
+toothbrush,15,SML=,5
+toothbrush,16,SML=,5
+toothbrush,17,SML=,5
+toothbrush,18,SML=,6
+toothbrush,19,SML=,5
+toothbrush,0,SMLn,4
+toothbrush,1,SMLn,4
+toothbrush,2,SMLn,3
+toothbrush,3,SMLn,3
+toothbrush,4,SMLn,3
+toothbrush,5,SMLn,4
+toothbrush,6,SMLn,4
+toothbrush,7,SMLn,4
+toothbrush,8,SMLn,5
+toothbrush,9,SMLn,3
+toothbrush,10,SMLn,5
+toothbrush,11,SMLn,3
+toothbrush,12,SMLn,4
+toothbrush,13,SMLn,3
+toothbrush,14,SMLn,4
+toothbrush,15,SMLn,3
+toothbrush,16,SMLn,3
+toothbrush,17,SMLn,3
+toothbrush,18,SMLn,3
+toothbrush,19,SMLn,3
+toothbrush,0,S,4
+toothbrush,1,S,4
+toothbrush,2,S,3
+toothbrush,3,S,3
+toothbrush,4,S,5
+toothbrush,5,S,3
+toothbrush,6,S,3
+toothbrush,7,S,3
+toothbrush,8,S,4
+toothbrush,9,S,3
+toothbrush,10,S,5
+toothbrush,11,S,3
+toothbrush,12,S,5
+toothbrush,13,S,4
+toothbrush,14,S,5
+toothbrush,15,S,3
+toothbrush,16,S,4
+toothbrush,17,S,3
+toothbrush,18,S,4
+toothbrush,19,S,5
+traffic light,0,L,3
+traffic light,1,L,3
+traffic light,2,L,3
+traffic light,3,L,4
+traffic light,4,L,5
+traffic light,5,L,3
+traffic light,6,L,3
+traffic light,7,L,4
+traffic light,8,L,5
+traffic light,9,L,4
+traffic light,10,L,3
+traffic light,11,L,3
+traffic light,12,L,3
+traffic light,13,L,4
+traffic light,14,L,4
+traffic light,15,L,4
+traffic light,16,L,4
+traffic light,17,L,3
+traffic light,18,L,3
+traffic light,19,L,3
+traffic light,0,M,5
+traffic light,1,M,4
+traffic light,2,M,5
+traffic light,3,M,4
+traffic light,4,M,7
+traffic light,5,M,5
+traffic light,6,M,5
+traffic light,7,M,7
+traffic light,8,M,5
+traffic light,9,M,4
+traffic light,10,M,5
+traffic light,11,M,4
+traffic light,12,M,4
+traffic light,13,M,6
+traffic light,14,M,4
+traffic light,15,M,7
+traffic light,16,M,4
+traffic light,17,M,6
+traffic light,18,M,5
+traffic light,19,M,5
+traffic light,0,SML=,5
+traffic light,1,SML=,4
+traffic light,2,SML=,4
+traffic light,3,SML=,4
+traffic light,4,SML=,3
+traffic light,5,SML=,4
+traffic light,6,SML=,5
+traffic light,7,SML=,3
+traffic light,8,SML=,5
+traffic light,9,SML=,3
+traffic light,10,SML=,4
+traffic light,11,SML=,4
+traffic light,12,SML=,5
+traffic light,13,SML=,3
+traffic light,14,SML=,4
+traffic light,15,SML=,4
+traffic light,16,SML=,4
+traffic light,17,SML=,3
+traffic light,18,SML=,7
+traffic light,19,SML=,3
+traffic light,0,SMLn,4
+traffic light,1,SMLn,5
+traffic light,2,SMLn,7
+traffic light,3,SMLn,4
+traffic light,4,SMLn,5
+traffic light,5,SMLn,4
+traffic light,6,SMLn,6
+traffic light,7,SMLn,4
+traffic light,8,SMLn,4
+traffic light,9,SMLn,6
+traffic light,10,SMLn,5
+traffic light,11,SMLn,4
+traffic light,12,SMLn,4
+traffic light,13,SMLn,5
+traffic light,14,SMLn,6
+traffic light,15,SMLn,5
+traffic light,16,SMLn,5
+traffic light,17,SMLn,6
+traffic light,18,SMLn,4
+traffic light,19,SMLn,5
+traffic light,0,S,3
+traffic light,1,S,4
+traffic light,2,S,4
+traffic light,3,S,4
+traffic light,4,S,5
+traffic light,5,S,4
+traffic light,6,S,3
+traffic light,7,S,5
+traffic light,8,S,5
+traffic light,9,S,5
+traffic light,10,S,4
+traffic light,11,S,3
+traffic light,12,S,6
+traffic light,13,S,4
+traffic light,14,S,4
+traffic light,15,S,4
+traffic light,16,S,5
+traffic light,17,S,3
+traffic light,18,S,6
+traffic light,19,S,3
+tv,0,L,3
+tv,1,L,3
+tv,2,L,3
+tv,3,L,3
+tv,4,L,3
+tv,5,L,3
+tv,6,L,3
+tv,7,L,3
+tv,8,L,3
+tv,9,L,3
+tv,10,L,3
+tv,11,L,3
+tv,12,L,4
+tv,13,L,4
+tv,14,L,3
+tv,15,L,5
+tv,16,L,5
+tv,17,L,3
+tv,18,L,5
+tv,19,L,3
+tv,0,M,5
+tv,1,M,6
+tv,2,M,5
+tv,3,M,5
+tv,4,M,3
+tv,5,M,5
+tv,6,M,3
+tv,7,M,5
+tv,8,M,5
+tv,9,M,3
+tv,10,M,6
+tv,11,M,3
+tv,12,M,3
+tv,13,M,4
+tv,14,M,3
+tv,15,M,3
+tv,16,M,3
+tv,17,M,3
+tv,18,M,4
+tv,19,M,3
+tv,0,SML=,4
+tv,1,SML=,4
+tv,2,SML=,3
+tv,3,SML=,4
+tv,4,SML=,4
+tv,5,SML=,3
+tv,6,SML=,4
+tv,7,SML=,3
+tv,8,SML=,3
+tv,9,SML=,3
+tv,10,SML=,5
+tv,11,SML=,4
+tv,12,SML=,4
+tv,13,SML=,5
+tv,14,SML=,6
+tv,15,SML=,4
+tv,16,SML=,4
+tv,17,SML=,4
+tv,18,SML=,5
+tv,19,SML=,3
+tv,0,SMLn,4
+tv,1,SMLn,3
+tv,2,SMLn,5
+tv,3,SMLn,3
+tv,4,SMLn,7
+tv,5,SMLn,3
+tv,6,SMLn,5
+tv,7,SMLn,6
+tv,8,SMLn,3
+tv,9,SMLn,4
+tv,10,SMLn,4
+tv,11,SMLn,3
+tv,12,SMLn,3
+tv,13,SMLn,4
+tv,14,SMLn,4
+tv,15,SMLn,3
+tv,16,SMLn,5
+tv,17,SMLn,6
+tv,18,SMLn,4
+tv,19,SMLn,4
+tv,0,S,2
+tv,1,S,2
+tv,2,S,1
+tv,3,S,2
+tv,5,S,1
+tv,6,S,3
+tv,7,S,2
+tv,9,S,2
+tv,10,S,1
+tv,11,S,1
+tv,12,S,2
+tv,13,S,1
+tv,14,S,1
+tv,15,S,2
+tv,16,S,2
+tv,17,S,1
+tv,18,S,1
+tv,19,S,2
+umbrella,0,L,3
+umbrella,1,L,5
+umbrella,2,L,3
+umbrella,3,L,5
+umbrella,4,L,4
+umbrella,5,L,3
+umbrella,6,L,3
+umbrella,7,L,3
+umbrella,8,L,5
+umbrella,9,L,4
+umbrella,10,L,4
+umbrella,11,L,3
+umbrella,12,L,3
+umbrella,13,L,3
+umbrella,14,L,3
+umbrella,15,L,3
+umbrella,16,L,5
+umbrella,17,L,4
+umbrella,18,L,4
+umbrella,19,L,3
+umbrella,0,M,3
+umbrella,1,M,5
+umbrella,2,M,3
+umbrella,3,M,4
+umbrella,4,M,5
+umbrella,5,M,3
+umbrella,6,M,4
+umbrella,7,M,5
+umbrella,8,M,3
+umbrella,9,M,3
+umbrella,10,M,3
+umbrella,11,M,3
+umbrella,12,M,7
+umbrella,13,M,4
+umbrella,14,M,5
+umbrella,15,M,3
+umbrella,16,M,4
+umbrella,17,M,5
+umbrella,18,M,3
+umbrella,19,M,3
+umbrella,0,SML=,4
+umbrella,1,SML=,5
+umbrella,2,SML=,3
+umbrella,3,SML=,5
+umbrella,4,SML=,4
+umbrella,5,SML=,5
+umbrella,6,SML=,4
+umbrella,7,SML=,4
+umbrella,8,SML=,4
+umbrella,9,SML=,4
+umbrella,10,SML=,4
+umbrella,11,SML=,4
+umbrella,12,SML=,5
+umbrella,13,SML=,5
+umbrella,14,SML=,3
+umbrella,15,SML=,3
+umbrella,16,SML=,4
+umbrella,17,SML=,4
+umbrella,18,SML=,3
+umbrella,19,SML=,4
+umbrella,0,SMLn,3
+umbrella,1,SMLn,3
+umbrella,2,SMLn,3
+umbrella,3,SMLn,5
+umbrella,4,SMLn,6
+umbrella,5,SMLn,3
+umbrella,6,SMLn,4
+umbrella,7,SMLn,5
+umbrella,8,SMLn,3
+umbrella,9,SMLn,3
+umbrella,10,SMLn,3
+umbrella,11,SMLn,6
+umbrella,12,SMLn,5
+umbrella,13,SMLn,5
+umbrella,14,SMLn,3
+umbrella,15,SMLn,3
+umbrella,16,SMLn,4
+umbrella,17,SMLn,4
+umbrella,18,SMLn,4
+umbrella,19,SMLn,4
+umbrella,0,S,5
+umbrella,1,S,3
+umbrella,2,S,3
+umbrella,3,S,5
+umbrella,4,S,3
+umbrella,5,S,3
+umbrella,6,S,3
+umbrella,7,S,3
+umbrella,8,S,3
+umbrella,9,S,6
+umbrella,10,S,4
+umbrella,11,S,6
+umbrella,12,S,4
+umbrella,13,S,5
+umbrella,14,S,3
+umbrella,15,S,4
+umbrella,16,S,3
+umbrella,17,S,3
+umbrella,18,S,4
+umbrella,19,S,3
+vase or potted plant,0,L,3
+vase or potted plant,1,L,3
+vase or potted plant,2,L,3
+vase or potted plant,3,L,3
+vase or potted plant,4,L,3
+vase or potted plant,5,L,5
+vase or potted plant,6,L,3
+vase or potted plant,7,L,3
+vase or potted plant,8,L,3
+vase or potted plant,9,L,3
+vase or potted plant,10,L,3
+vase or potted plant,11,L,4
+vase or potted plant,12,L,3
+vase or potted plant,13,L,3
+vase or potted plant,14,L,6
+vase or potted plant,15,L,3
+vase or potted plant,16,L,4
+vase or potted plant,17,L,3
+vase or potted plant,18,L,4
+vase or potted plant,19,L,3
+vase or potted plant,0,M,3
+vase or potted plant,1,M,6
+vase or potted plant,2,M,4
+vase or potted plant,3,M,4
+vase or potted plant,4,M,5
+vase or potted plant,5,M,5
+vase or potted plant,6,M,5
+vase or potted plant,7,M,5
+vase or potted plant,8,M,5
+vase or potted plant,9,M,6
+vase or potted plant,10,M,6
+vase or potted plant,11,M,3
+vase or potted plant,12,M,4
+vase or potted plant,13,M,4
+vase or potted plant,14,M,5
+vase or potted plant,15,M,5
+vase or potted plant,16,M,6
+vase or potted plant,17,M,5
+vase or potted plant,18,M,3
+vase or potted plant,19,M,5
+vase or potted plant,0,SML=,4
+vase or potted plant,1,SML=,3
+vase or potted plant,2,SML=,5
+vase or potted plant,3,SML=,3
+vase or potted plant,4,SML=,4
+vase or potted plant,5,SML=,4
+vase or potted plant,6,SML=,3
+vase or potted plant,7,SML=,3
+vase or potted plant,8,SML=,4
+vase or potted plant,9,SML=,3
+vase or potted plant,10,SML=,4
+vase or potted plant,11,SML=,6
+vase or potted plant,12,SML=,5
+vase or potted plant,13,SML=,4
+vase or potted plant,14,SML=,4
+vase or potted plant,15,SML=,4
+vase or potted plant,16,SML=,5
+vase or potted plant,17,SML=,6
+vase or potted plant,18,SML=,4
+vase or potted plant,19,SML=,3
+vase or potted plant,0,SMLn,4
+vase or potted plant,1,SMLn,4
+vase or potted plant,2,SMLn,3
+vase or potted plant,3,SMLn,4
+vase or potted plant,4,SMLn,4
+vase or potted plant,5,SMLn,5
+vase or potted plant,6,SMLn,3
+vase or potted plant,7,SMLn,4
+vase or potted plant,8,SMLn,3
+vase or potted plant,9,SMLn,4
+vase or potted plant,10,SMLn,5
+vase or potted plant,11,SMLn,6
+vase or potted plant,12,SMLn,5
+vase or potted plant,13,SMLn,4
+vase or potted plant,14,SMLn,5
+vase or potted plant,15,SMLn,4
+vase or potted plant,16,SMLn,3
+vase or potted plant,17,SMLn,5
+vase or potted plant,18,SMLn,5
+vase or potted plant,19,SMLn,3
+vase or potted plant,0,S,1
+vase or potted plant,1,S,1
+vase or potted plant,2,S,2
+vase or potted plant,3,S,1
+vase or potted plant,6,S,1
+vase or potted plant,7,S,1
+vase or potted plant,9,S,1
+vase or potted plant,10,S,2
+vase or potted plant,11,S,1
+vase or potted plant,12,S,1
+vase or potted plant,13,S,2
+vase or potted plant,14,S,1
+vase or potted plant,15,S,2
+vase or potted plant,16,S,2
+vase or potted plant,17,S,1
+vase or potted plant,18,S,1
+vase or potted plant,19,S,1

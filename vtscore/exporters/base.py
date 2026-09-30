@@ -163,8 +163,8 @@ class ResultsExporter(PluginBase):
     :meth:`export_find_results` and :meth:`export_labelset` delegate to
     :meth:`export`, so an existing out-of-tree plugin needs no changes.  Such an
     exporter is credited with **both** kinds (there is no way to know which it
-    handles), which is exactly the pre-existing behaviour, and it gets a
-    :class:`DeprecationWarning` pointing at the named methods.
+    handles), which is exactly the pre-existing behaviour, and a warning is
+    logged pointing at the named methods.
 
     Streaming
     ---------
@@ -278,6 +278,7 @@ class ResultsExporter(PluginBase):
                              "<detector_name>": {
                                "detector_name": "...",
                                "threshold": 0.5,
+                               "floor": {...},        # may be absent or None
                                "total_hits": 15,      # positives only
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
@@ -301,6 +302,17 @@ class ResultsExporter(PluginBase):
                      under ``--keep-negatives``), so an exporter that wants the
                      below-threshold items can read it.  ``missing_detectors``
                      is likewise informational.
+
+                     **``floor``** says whether ``threshold`` is a promise
+                     (:func:`vtscore.state.core.detector_floor_state`):
+                     ``{"min_precision", "status", "calibration_positives",
+                     "min_calibration_positives"}``.
+                     A ``status`` of ``"unreachable"`` or
+                     ``"insufficient_evidence"`` means the floor promised
+                     nothing and ``hits`` is the Inclusion 0 cut; ``None``
+                     means no floor is set.  Informational, like
+                     ``missing_detectors``: ``threshold`` stays the float the
+                     hits were cut at, whatever it says.
 
             field_values: Mapping of :attr:`PluginField.key` -> value supplied
                 by the user.
@@ -580,7 +592,8 @@ class ResultsExporter(PluginBase):
         Args:
             header: Metadata known before any hit streams, with keys
                 ``"media_type"`` (str), ``"detectors"`` (a list of
-                ``{"detector_name": str, "threshold": float}`` dicts), and
+                ``{"detector_name": str, "threshold": float, "floor": dict}``
+                dicts; ``floor`` as in :meth:`export_find_results`), and
                 ``"keep_negatives"`` (bool — whether below-threshold hits are
                 included in *records*).
             records: Yields ``(detector_name, hit)`` tuples in chunk order

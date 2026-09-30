@@ -16,6 +16,11 @@ export class DropZoneComponent {
   readonly multiple = input(false);
   readonly directory = input(false);
   readonly disabled = input(false);
+  /** The zone answers a required field that has no files yet.  The parent
+   *  owns the selection (this component forgets each pick once emitted), so
+   *  it decides; the zone then wears the same red well as an unanswered
+   *  required ``.form-input``. */
+  readonly missing = input(false);
   readonly filesSelected = output<File[]>();
 
   readonly fileInput = viewChild<ElementRef<HTMLInputElement>>('fileInput');

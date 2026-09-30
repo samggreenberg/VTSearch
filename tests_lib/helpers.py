@@ -264,3 +264,72 @@ def current_loading_progress() -> dict:
     if errored:
         return errored[0]
     return {"status": "idle", "message": "", "current": 0, "total": 0, "error": None}
+
+
+def planted_fold_anchored_cut(n_pos_per_fold: int):
+    """A fitted fold-anchored cut whose folds hold *n_pos_per_fold* Good votes each.
+
+    Two folds over a sigmoid-scale pool, with held-out votes that separate
+    cleanly (Goods high, Bads low), so the estimate has contrast to fit.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import fit_fold_anchored_cut  # noqa: PLC0415
+
+    rng = np.random.default_rng(7)
+    pool = np.clip(rng.beta(1.0, 4.0, 400), 0.0, 1.0)
+    orderings, haystacks = [], []
+    for _fold in range(2):
+        goods = rng.uniform(0.7, 0.99, n_pos_per_fold)
+        bads = rng.uniform(0.0, 0.4, 20)
+        orderings.append(
+            (np.concatenate([goods, bads]).tolist(), [1.0] * n_pos_per_fold + [0.0] * 20),
+        )
+        haystacks.append(np.clip(pool + rng.normal(0.0, 0.02, pool.size), 0.0, 1.0))
+    cut = fit_fold_anchored_cut(haystacks, orderings, pool)
+    assert cut is not None and len(cut.fold_orderings) == 2
+    return cut
+
+
+def planted_precision_floor_estimate(n_pos_per_fold: int):
+    """The precision-floor estimate a retrain would park beside :func:`planted_fold_anchored_cut`.
+
+    The same folds, haystacks and pool (the rng draws are identical), with every
+    held-out vote allowed to serve as evidence.
+    """
+    from vtscore.training.thresholds import PrecisionFloorEstimate  # noqa: PLC0415
+
+    cut = planted_fold_anchored_cut(n_pos_per_fold)
+    return PrecisionFloorEstimate(
+        cut.final_haystack,
+        [(list(sc), list(lb)) for sc, lb in cut.fold_orderings],
+        list(cut.fold_haystacks),
+    )
+
+
+def planted_spot_check(ctx, min_precision: float, *, right: bool = True, seed: int = 1):
+    """A finished spot check of *ctx*'s floor at *min_precision*, its votes cast on *ctx* (#4272).
+
+    Every pick is voted *right* (the check confirms) or wrong (it ends short).
+    The votes land as the check route lands them - good / bad votes, verified
+    in Find mode - and the result is parked on the context with its
+    fingerprint taken after them, exactly as a real check leaves it.
+    """
+    from vtscore.state.core import human_voted_ids  # noqa: PLC0415
+    from vtscore.training.thresholds import SpotCheck, check_schedule  # noqa: PLC0415
+
+    ranking = ctx.line_ranking
+    assert ranking is not None, "plant a check on a context whose retrain parked a ranking"
+    candidate = ranking.candidate(check_schedule(min_precision).candidate, human_voted_ids(ctx))
+    check = SpotCheck.start(candidate, min_precision, seed=seed)
+    while check.running:
+        votes = {cid: right for cid in check.pending}
+        for cid, ok in votes.items():
+            (ctx.good_votes if ok else ctx.bad_votes)[cid] = None
+            (ctx.bad_votes if ok else ctx.good_votes).pop(cid, None)
+            if ctx.find_mode:
+                ctx.verified_ids[cid] = None
+        check.record(votes)
+    check.fingerprint = ranking.fingerprint(check.k, human_voted_ids(ctx))
+    ctx.precision_check = check
+    return check

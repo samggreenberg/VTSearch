@@ -23,10 +23,17 @@ loss.
 from __future__ import annotations
 
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-from vtscore.config import DATA_DIR, DEFAULT_CALIBRATE_COUNT, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config import (
+    DATA_DIR,
+    DEFAULT_CALIBRATE_COUNT,
+    DEFAULT_MIN_PRECISION,
+    PROJECTION_MIN_DIST,
+    PROJECTION_N_NEIGHBORS,
+)
 
 __all__ = [
     "BROWSE_MOUSE_ZOOMS_PER_LEVEL",
@@ -40,6 +47,7 @@ __all__ = [
     "GridIconSize",
     "ServerSettings",
     "Theme",
+    "UsageBarsMode",
     "UserSettings",
     "VALID_ANIMATION_MODES",
     "VALID_BROWSE_COLORMAPS",
@@ -49,6 +57,7 @@ __all__ = [
     "VALID_GRID_ICON_SIZES",
     "VALID_PANEL_PX",
     "VALID_THEMES",
+    "VALID_USAGE_BARS_MODES",
 ]
 
 
@@ -59,6 +68,13 @@ Theme = Literal["dark", "light", "highviz", "system"]
 # OS asks for reduced motion; ``"hide"`` always suppresses them; ``"os"`` defers
 # to the platform ``prefers-reduced-motion`` preference.
 AnimationMode = Literal["show", "hide", "os"]
+# Visibility of the Dashboard's RAM / Disk usage bars. ``"view"`` always shows
+# them, ``"hide"`` never does, and ``"default"`` shows each one only while it
+# matters: when its free space would hold fewer than a few more datasets the
+# size of the largest one registered (the ``low`` flag on the
+# ``/api/dashboard/*-usage`` probes), so the Dashboard isn't cluttered with
+# server gauges that have nothing to say.
+UsageBarsMode = Literal["hide", "default", "view"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
 # VTSBrowse density colormap preset. ``auto`` follows the active theme (Ocean
@@ -82,6 +98,7 @@ BrowseGraphics = Literal["auto", "full", "reduced"]
 
 VALID_THEMES: tuple[str, ...] = ("dark", "light", "highviz", "system")
 VALID_ANIMATION_MODES: tuple[str, ...] = ("show", "hide", "os")
+VALID_USAGE_BARS_MODES: tuple[str, ...] = ("hide", "default", "view")
 VALID_GRID_ICON_SIZES: tuple[str, ...] = ("XS", "S", "M", "L", "XL")
 VALID_FOCUS_MODES: tuple[str, ...] = ("click", "hover")
 VALID_BROWSE_COLORMAPS: tuple[str, ...] = ("auto", "heat", "ocean", "gray")
@@ -180,6 +197,50 @@ def _normalize_signpost_vocab(v: Any) -> Any:
     return out
 
 
+def _docs_link_url_ok(url: str) -> bool:
+    """True for an absolute ``http``/``https`` URL or a root-relative ``/path``.
+
+    Anything else (``javascript:``, ``data:``, a protocol-relative ``//host``,
+    a bare relative path whose meaning would depend on where the SPA is
+    mounted) is refused, since the value ends up as a link's ``href``.
+    """
+    parts = urlsplit(url)
+    if parts.scheme:
+        return parts.scheme in ("http", "https") and bool(parts.netloc)
+    return not parts.netloc and url.startswith("/")
+
+
+def partition_docs_links(entries: list[Any]) -> tuple[list[dict[str, str]], list[Any]]:
+    """Split a raw ``docs_links`` list into ``(usable links, rejected entries)``.
+
+    An entry is usable when it is an object whose ``label`` and ``url`` are
+    non-blank strings and whose ``url`` passes :func:`_docs_link_url_ok`.
+    Usable entries come back as ``{"label": ..., "url": ...}`` with
+    surrounding whitespace stripped and any other keys dropped, in the order
+    the operator wrote them (the order is the Help modal's order).
+    """
+    kept: list[dict[str, str]] = []
+    rejected: list[Any] = []
+    for entry in entries:
+        label = entry.get("label") if isinstance(entry, dict) else None
+        url = entry.get("url") if isinstance(entry, dict) else None
+        if isinstance(label, str) and isinstance(url, str) and label.strip() and _docs_link_url_ok(url.strip()):
+            kept.append({"label": label.strip(), "url": url.strip()})
+        else:
+            rejected.append(entry)
+    return kept, rejected
+
+
+def _normalize_docs_links(v: Any) -> Any:
+    """Keep only the usable entries of a ``docs_links`` list (see :func:`partition_docs_links`).
+
+    Non-list input is passed through untouched for Pydantic to reject.
+    """
+    if not isinstance(v, list):
+        return v
+    return partition_docs_links(v)[0]
+
+
 def _default_concurrent_downloads() -> int:
     """Lazily resolve the hardware-derived default for parallel downloads.
 
@@ -238,6 +299,17 @@ class ServerSettings(BaseModel):
     # :func:`vtsearch.settings.get_effective_support_email`.
     support_email: str = DEFAULT_SUPPORT_EMAIL
 
+    # This deployment's own documentation, listed in the Help modal beside the
+    # built-in user guide: an ordered list of ``{"label": ..., "url": ...}``
+    # objects, each opened in a new browser tab. It is how an operator who
+    # adds plugins or extensions points users at the docs for them. Shared
+    # across all users and read-only over the API; set it by editing this key
+    # in the settings file. Normalized on read and write (see
+    # :func:`partition_docs_links`): an entry without a label, or whose URL is
+    # not an absolute ``http(s)`` URL or a root-relative ``/path``, is dropped,
+    # and the startup log names each one it drops.
+    docs_links: Annotated[list[dict[str, str]], BeforeValidator(_normalize_docs_links)] = Field(default_factory=list)
+
     # Lock this deployment to **Semantic** embedders only.  The Patch Semantic
     # and Structural embedder types are still prototypes; an operator running a
     # production instance can hide them wholesale rather than naming each
@@ -251,6 +323,18 @@ class ServerSettings(BaseModel):
     # the settings file.  See
     # :func:`vtsearch.settings.get_effective_semantic_only`.
     semantic_only: bool = False
+
+    # Withhold the remaining-time estimate from **ingest** progress bars
+    # (dataset imports, staging imports, a labelset's missing-media fetch).
+    # On a deployment where those jobs are too erratic for any timing profile
+    # to predict, the ETA swings from seconds to most of an hour and misleads
+    # more than it helps (issue #4233); the bar and its counts still show.
+    # Other long-running bars (open, sort, Find, train) keep their ETA.  Set
+    # with the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA``
+    # env var (process-wide, wins for the process lifetime) or by editing this
+    # key in the settings file.  See
+    # :func:`vtsearch.settings.get_effective_hide_ingest_eta`.
+    hide_ingest_eta: bool = False
 
     # Solo-mediaType streamlining. An admin-set restriction: when set, the
     # importer and new-detector flows hide their mediaType pickers and lock to
@@ -310,7 +394,15 @@ class UserSettings(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
-    inclusion: Annotated[int, _clamp(-10, 10)] = 0
+    # The precision floor (#4245): the fraction of what a detector's cut
+    # returns that should be right.  Each detector keeps its own, seeded from
+    # this value the first time it reads one.  One that can promise nothing
+    # falls back to the Inclusion 0 cut.  Every detector has a floor (#4269):
+    # ``None`` is not a value, so a ``null`` left in an older settings file
+    # fails validation and reads as the default.  Clamped to ``[0.01, 1]``: a
+    # floor of zero promises nothing and would read as a floor that is always
+    # met.
+    min_precision: Annotated[float, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a
     # concrete theme to opt out and return to "system" to opt back in.
@@ -331,6 +423,10 @@ class UserSettings(BaseModel):
     # platform ``prefers-reduced-motion`` preference. See the "Show Animations"
     # pulldown in the appearance settings.
     show_animations: AnimationMode = "show"
+    # Dashboard RAM / Disk usage bars: ``"hide"``, ``"view"``, or ``"default"``
+    # (each shown only while its free space is low for your datasets). See the
+    # "RAM / Disk bars" pulldown in the appearance settings.
+    show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"
     # hint that overlays the Good/Bad buttons when a fresh labeling session
@@ -370,6 +466,13 @@ class UserSettings(BaseModel):
     autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)
+    # Whether a web import runs the user's AutoRun detectors on the new dataset
+    # once it is saved. Not a Settings-modal widget: the Add Dataset dialog's
+    # "Run AutoRun" checkbox starts from it and each import that sends the
+    # checkbox writes the choice back, so the box comes up the way the user
+    # left it last time. Defaults on - moving a detector to AutoRun is the
+    # user saying they want it run on what they import.
+    autorun_on_import: bool = True
 
     # VTSBrowse side-panel width (CSS px). The browse view docks a
     # selection panel (selected-item grid + the legend and overview

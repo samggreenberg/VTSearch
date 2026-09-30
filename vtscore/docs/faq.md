@@ -62,36 +62,22 @@ the two.)
 
 ### Why does my `load_dataset_from_folder` call raise `ValueError`?
 
-You probably forgot to import the media-type plugin:
+`ValueError: Invalid media type: <name>` means `media_type` names no
+registered type. You do **not** need to import the media-type plugin first:
+importing `vtscore.datasets.loader` pulls in `vtscore.media`, whose
+sub-package scan registers all six shipped types (`audio`, `image`,
+`text`, `video`, `document`, `face`). So check for a typo, or - for a
+plugin type - for a warning that its sub-package failed to import
+(`python -W default -c "import vtscore.media"` shows it).
 
-```python
-# WRONG - ValueError: unknown media type "audio"
-from vtscore.datasets.loader import load_dataset_from_folder
-
-medias = {}
-load_dataset_from_folder(Path("/data"), media_type="audio", medias=medias)
-```
-
-```python
-# RIGHT
-from vtscore.media import audio  # noqa: F401 - registers MediaType + embedders
-from vtscore.datasets.loader import load_dataset_from_folder
-from vtscore.datasets.stages.embedding import embed_missing
-
-medias = {}
-load_dataset_from_folder(Path("/data"), media_type="audio", medias=medias)
-embed_missing(medias)   # loaders don't embed - see the next question
-```
-
-Importing `vtscore.media.audio` triggers the `MEDIA_TYPE`, `EMBEDDER`,
-and `CLIPPERS` sentinels. The library doesn't import every media-type
-plugin by default - you pay only for what you use.
+`from vtscore.media import audio` in the examples is documentation of
+intent, not a registration step.
 
 ### Why doesn't `load_dataset_from_folder` return the medias dict?
 
-Historical reason: the in-place population pattern predates the
-functional refactor. `medias` is mutated in place; the function returns
-`None`. Pass an empty dict, get a populated dict.
+It populates the `medias` dict you pass in place and returns `None`, the
+same shape as every importer's `run(field_values, medias)`. Pass an empty
+dict, get a populated dict.
 
 ### Why are my loaded medias' embeddings empty?
 
@@ -131,26 +117,12 @@ cannot be re-derived.
 
 ### What's the shape of a media item?
 
-```python
-medias[42] = {
-    "id": 42, "media_type": "audio", "embedder": "clap",
-    "file_size": 318456,
-    "md5": "5d41402abc4b2a76b9719d911017c592",
-    "embeddings": {"clap": np.ndarray},  # {embedder name: (D,) float32}
-    "filename": "barks/poodle.wav",
-    "category": "custom",
-    "origin": {"importer": "server_folder", "params": {...}},
-    "origin_name": "barks/poodle.wav",
-    "media_bytes": None, "media_string": None,
-    "media_path": "/data/audio/barks/poodle.wav",
-    "duration": 2.41,
-}
-```
-
-Vectors live in the plural `embeddings` dict, keyed by embedder name; read
-them with `vtscore.embedding.media_vectors.media_embedding(media)`. There is
-no singular `media["embedding"]`. See
-[concepts.md §1](concepts.md#1-media) for the full description.
+A plain dict keyed by sequential integer IDs; the type key is
+`media_type`, and vectors live in the plural `embeddings` dict keyed by
+embedder name (read them with
+`vtscore.embedding.media_vectors.media_embedding(media)` - there is no
+singular `media["embedding"]`). The full annotated shape is in
+[concepts.md §1](concepts.md#1-media).
 
 ### Can I load datasets from URLs?
 
@@ -163,8 +135,9 @@ so the labelset can be re-resolved later.
 
 See [extending/media-types.md](extending/media-types.md). The contract
 is small: a `MediaType` subclass, an `EMBEDDER` for it, a `CLIPPERS`
-list, and a sub-package under `vtscore/media/<your-type>/` (or
-distributed via entry points).
+list, and a sub-package under `vtscore/media/<your-type>/`. Media types
+have no entry-point group; to ship one out-of-tree, symlink the
+sub-package into `vtscore/media/`.
 
 ## Embedders and embeddings
 
@@ -213,25 +186,28 @@ Verify in your own code via `media_embedding(medias[1]).shape[0]`
 
 ### Are embeddings normalised?
 
-Depends on the embedder. LAION-CLAP and SigLIP return L2-normalised
-vectors out of the box; E5 doesn't (it requires explicit normalisation
-for cosine sim, which the helpers in `vtscore.training.region_similarity`
-do for you). Don't assume - check `np.linalg.norm(embedding)`.
+Yes, always. `MediaEmbedder.embed_media` and `embed_text` L2-normalize
+whatever the subclass's `_embed_media_impl` / `_embed_text_impl` returns,
+so every vector stored in `media["embeddings"]` and every text-query vector
+is unit-norm regardless of the underlying model. A dot product between
+them is their cosine similarity.
 
 ### How does `embed_text_query` know which model to use?
 
-The `media_type` parameter routes the query to the default embedder for
-that media type. If your dataset uses a non-default embedder
-(e.g. CLAP Music instead of CLAP), pass the explicit embedder name via
-`vtscore.media.get_embedder(name).embed_text(query)`.
+`embed_text_query(text, media_type, enrich=False, embedder_name="")`
+uses `embedder_name` when you pass one, and otherwise the default
+embedder for `media_type`. If your dataset was embedded with a
+non-default embedder (e.g. `clap_music`), pass that name - a query
+embedded in a different model's space ranks garbage. Embedders without a
+text tower (`supports_text is False`) return `None`.
 
 ### Where do model weights live?
 
-`CoreConfig.data_dir / "models"` by default (which resolves to
-`./data/models/` unless `$VTSEARCH_DATA_DIR` is set). The cache uses the
-standard HuggingFace layout; you can pre-warm it offline by downloading
-the relevant model IDs (see `vtscore/config/models.py` for the constants like
-`CLAP_MODEL_ID`).
+In `vtscore.config.MODELS_CACHE_DIR`: `$VTSEARCH_MODELS_DIR` if set,
+otherwise `<data dir>/models`, where the data dir is `$VTSEARCH_DATA_DIR`
+or the repository's `data/`. The cache uses the standard HuggingFace
+layout; you can pre-warm it offline by downloading the relevant model IDs
+(see `vtscore/config/models.py` for constants like `CLAP_MODEL_ID`).
 
 ### Can I disable model downloads?
 
@@ -262,22 +238,42 @@ global RNG), and the BCE heads additionally isolate theirs via
 
 It moves the **decision threshold**, not the model. Inclusion never enters
 training: `train_model` is class-balanced regardless, so every item's score
-is identical at every inclusion setting, and only the cut moves. Range
-`[-10, +10]`, applied in
-`vtscore.training.thresholds.conformal_threshold`:
+is identical at every inclusion, and only the cut moves. Range `[-10, +10]`.
 
-- **Positive `k`** buys a false-negative budget that halves per step:
-  `alpha(k) = min(1, 0.25 * 2**-k)` caps the threshold at the
-  `alpha`-quantile of the calibration *positives*, so "+k" means "the
-  fraction of true matches I'm willing to miss". The cap is an upper
-  bound - cleanly separated classes spend none of it.
-- **Negative `k`** walks the cut *up* from the gap midpoint at 0 toward
-  the 0.75 quantile of the positives at -10 ("just the surest matches"),
-  while a false-positive guard keeps it above the negatives' upper tail.
+Under the shipped cut (`FoldAnchoredCut.threshold_at`, see the next answer),
+`k` is a cost ratio: `inclusion_cost_weights(k)` prices a miss at `2**k`
+times a false alarm (or a false alarm at `2**-k` times a miss, below zero).
+The `mid_tilt` rule starts from the fold-anchored midpoint cut at `k = 0`
+and shifts its quantile by however far the rate-optimal cut moves at those
+weights. How far one step moves the line therefore depends on the fitted
+mixtures; it is not a fixed share of misses, and on measured data the steps
+come out shorter than their nominal size (`docs/ML.md`, "The knob
+under-delivers its own steps").
 
-Every component is monotone non-increasing in `k`, so the included sets are
+When a detector has no fitted estimator, the cut falls back to
+`vtscore.training.thresholds.conformal_threshold`, where `k` has a budget
+meaning: positive `k` caps the threshold at the `alpha(k) = min(1, 0.25 *
+2**-k)` quantile of the calibration positives, and negative `k` walks it up
+toward the 0.75 quantile of the positives at -10, above a false-positive
+guard.
+
+Both rules are monotone non-increasing in `k`, so the included sets are
 nested: everything included at `k` is still included at `k + 1`. That is
 what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
+
+Inclusion is no longer a user preference (#4269): the app's control is the
+**precision floor** (#4224), where the user names the share of returns that
+should be right: the line keeps the top of the ranking and a spot check of
+random picks measures how much of it is right
+(`vtscore.training.thresholds.spot_check`, #4272). `k` stays underneath, as
+the unit Autopilot's acquisition offset and the Smart indicator's pricing are
+measured in. The entry points that used to take
+the user's Inclusion (`train_and_score(inclusion_value=...)` and its
+siblings, `vtscore.state.set_inclusion`, `CoreConfig(inclusion=...)`) are
+deprecated: they accept only `0`, with a `DeprecationWarning`. The
+lower-level functions that take `inclusion_value` as a cut position
+(`conformal_threshold`, `threshold_from_folds`, `train_svm`, ...) are
+unchanged.
 
 ### How is the decision threshold chosen?
 
@@ -286,19 +282,13 @@ than picking between them. Per calibration fold, a 2-component mixture
 is fitted to that fold model's scores over the whole collection with the
 fold's *held-out* votes clamped to their labeled component; each fold's
 midpoint cut is carried to the final model as a quantile, the folds are
-averaged in quantile space, and the Inclusion knob shifts that quantile
-by the rate-optimal cut's own displacement from Inclusion 0. See
+averaged in quantile space, and a cut at another inclusion shifts that
+quantile by the rate-optimal cut's own displacement from Inclusion 0. See
 `vtscore/training/thresholds/anchored.py:fold_anchored_gmm_threshold`. It is
 unconditional - there used to be a `safe_thresholds` toggle, but the
 fused estimator measured better at every label count, so the toggle was
 removed. `calculate_safe_threshold` remains the fallback for label sets
 too small to form calibration folds.
-
-### Why is `train_and_threshold` calling `vtsearch.state`?
-
-It's not - that was a Phase-2 seam. Today `train_and_threshold` lives in
-`vtscore.detectors.training` and reads its knobs from `CoreConfig`. If
-you see an old reference somewhere, please update it.
 
 ## Detectors on disk
 
@@ -332,10 +322,13 @@ across remote storage, yes. The hand-roll mitigations:
 1. **Cache files locally.** Don't pull from S3 on every load if you can
    help it. The `vtscore.datasets.sources.http_archive` source already
    does this.
-2. **Pre-warm the dataset.** Load the relevant dataset pickle (which
-   *does* persist embeddings) before constructing the detector; the
-   `train_detector_from_origins` resolver can short-circuit to the
-   cached embedding when origins match.
+2. **Train from a loaded dataset instead of from origins.**
+   `train_detector_from_origins` always resolves and re-embeds every
+   origin. If a dataset pickle (which *does* persist embeddings) already
+   holds the labelled items, load it, match labels to medias by `md5`,
+   and hand those vectors to
+   `vtscore.detectors.training.train_and_threshold` - no file access, no
+   embedding.
 
 ### Can I import an existing detector from another tool?
 
@@ -365,31 +358,22 @@ app-style flows the route layer handles both.)
 ### What's the difference between `DatasetContext` and `DetectorContext`?
 
 `DatasetContext` holds dataset-intrinsic state: the medias dict, the
-diversity tree, the cached embedding matrix. `DetectorContext` holds
+coverage atlas, the cached embedding matrix. `DetectorContext` holds
 detector-intrinsic state: votes, the trained head, the threshold, the
 labelset source. One dataset can be open with multiple detectors active
 against it simultaneously; both contexts are independently registered.
 
 ### How does the library know which context to operate on?
 
-Resolution chain, highest precedence first:
+Through a resolution chain - explicit override, installed resolver hook,
+thread-local binding, then a shared empty fallback - spelled out in
+[architecture.md §Resolution chain](architecture.md#resolution-chain-for-active-context).
 
-1. `override_detector_context()` context manager (detector only - there is
-   no dataset counterpart)
-2. Installed resolver hook (`register_*_context_resolver`)
-3. Thread-local set via `set_thread_*_context()` / `thread_*_context()`
-4. The request-missing sentinel, when a host app says it is inside a
-   request that named no dataset / detector: reads see an empty context and
-   writes raise `RequestMissingContextError`
-5. A process-wide **empty fallback context** for CLI and library callers
-
-`get_active_context()` / `get_active_detector_context()` therefore always
-return a context object - they never return `None`. Outside an app, that
-object is the shared empty fallback, which is a footgun worth knowing
-about: two library callers that both skip step 3 will write into the same
-context. Bind one explicitly with `set_thread_dataset_context(ctx)`.
-
-See [architecture.md §Resolution chain](architecture.md#resolution-chain-for-active-context).
+The part that bites: `get_active_context()` / `get_active_detector_context()`
+never return `None`. Outside an app they return the shared empty fallback,
+so two library callers that both skip binding will write into the same
+context. Bind one explicitly with `set_thread_dataset_context(ctx)` /
+`set_thread_detector_context(ctx)`.
 
 ### Why does my background thread see no active context?
 
@@ -398,9 +382,9 @@ call `set_thread_dataset_context(ctx)` / `set_thread_detector_context(ctx)`
 inside the thread function - the calling thread's binding doesn't
 follow.
 
-The app's `vtsearch.shim` does this automatically when spawning
-worker threads from the job manager; if you're rolling your own thread
-pool, you do it.
+The library's own workers (the dataset-load pipeline and
+`vtscore.concurrency.async_jobs`) bind the context for you; if you're
+rolling your own thread pool, you do it.
 
 ### Are `medias`, `good_votes`, etc. importable?
 
@@ -409,9 +393,11 @@ Not from `vtscore`. Those proxy objects are app-tier - they live in
 Library code uses `DatasetContext.medias` and `DetectorContext.good_votes`
 directly via a resolved context.
 
-If you need to write to vote dicts, use the public ops:
-`vtscore.state.toggle_vote(ctx, cid, label)`, `apply_label(ctx, cid, label)`,
-`clear_votes(ctx)`, etc.
+If you need to write to vote dicts, use the public ops in
+`vtscore.state` - `toggle_vote(media_id, vote)`,
+`apply_label(media_id, label)`, `clear_votes()`, etc. They take no context
+argument: they act on the *active* detector context, so bind one first
+(`set_thread_detector_context(ctx)` or `override_detector_context(ctx)`).
 
 ## Plugins
 
@@ -435,18 +421,21 @@ Check, in order:
 1. Did you declare it in `pyproject.toml` under the right group?
    ```toml
    [project.entry-points."vtscore.importers"]
-   my_importer = "my_pkg.my_module:MyImporter"
+   my_importer = "my_pkg.my_module:IMPORTER"
    ```
-   The group name is `vtscore.<family>` for library plugins,
-   `vtsearch.<family>` for app-tier (settings) plugins.
+   The target must be the **instantiated** plugin (the module's sentinel),
+   not the class. The group name is `vtscore.<family>` for library
+   plugins, `vtsearch.<family>` for app-tier (settings) plugins; media
+   types, embedders, clippers and cleaners have no group at all.
 2. Did you actually `pip install -e .` your package after editing
    `pyproject.toml`?
 3. Is `name` unique among registered plugins? Built-ins win on name
-   clashes; third-party plugins with the same name are silently
-   shadowed.
-4. Does the entry-point target raise on import? Errors are logged as
-   warnings; check `python -W default -c "import vtscore.datasets"`
-   for the warning.
+   clashes; the clashing third-party plugin is skipped with a warning.
+4. Does the entry-point target raise on import? The error is logged as a
+   warning and the plugin becomes a tombstone: absent from `list_*()`,
+   re-raising the original error when `get_*()` hands it out. Check
+   `python -W default -c "import vtscore.datasets.importers"` (or the
+   family's package) for the warning.
 
 ### How are built-ins different from entry-point plugins?
 
@@ -472,11 +461,14 @@ lives only in process memory; clearing it is `invalidate_embedding_matrix(ctx)`.
 
 ### My detector training is using only one CPU core. Why?
 
-`OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set at import time as a
-memory-optimisation default (the project runs in many low-memory
-containers). Override by setting `$VTSEARCH_TORCH_THREADS` before
-importing `vtscore`, or by calling `torch.set_num_threads()` after
-import.
+`VTSEARCH_TORCH_THREADS` defaults to `1` as a memory-saving default (each
+extra thread allocates its own scratch buffers), and
+`vtscore.media.torch_setup.ensure_torch_configured()` applies it with
+`torch.set_num_threads()` when the first embedder loads. Set
+`$VTSEARCH_TORCH_THREADS` before importing `vtscore` to raise it. (The
+VTSearch app additionally exports `OMP_NUM_THREADS` / `MKL_NUM_THREADS`
+from the same value before importing torch; a library script that wants
+the same effect on OpenMP/MKL sets them itself.)
 
 ### How do I parallelise dataset loading?
 
@@ -493,17 +485,18 @@ a pool sized by `cap_workers_by_memory()`.
 
 ### Is `train_model` thread-safe?
 
-Yes. It uses a local `torch.Generator` for weight init and
-`torch.random.fork_rng()` to isolate the dropout RNG. Two parallel
-`train_model` calls produce bit-identical results to two serial calls.
+Yes. The production linear-SVM head is fitted by liblinear, which reads
+no global RNG; the BCE heads use a local `torch.Generator` for weight init
+and `torch.random.fork_rng()` to isolate the dropout RNG. Two parallel
+`train_model` calls produce the same results as two serial calls.
 
 ### Is the embedder cache thread-safe?
 
-Reads are; concurrent first-time loads of the same backbone may
-download the weights twice (the second download overwrites the first
-with identical bytes). The cost is one wasted HTTP request; the result
-is correct. If you're spawning many workers from cold, pre-warm with
-`vtscore.embedding.preload_predicted_embedders(extra_media_types=None,
+Yes. `MediaEmbedder.load_models()` takes a per-class lock, so when several
+threads hit a cold embedder at once, one performs the load and the rest
+wait for it and return. Forward passes are serialised across all embedders
+by a shared embed lock. If you're spawning many workers from cold, pre-warm
+with `vtscore.embedding.preload_predicted_embedders(extra_media_types=None,
 extra_embedders=None)` - with no arguments it warms whatever the registries
 predict this deployment will need.
 

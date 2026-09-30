@@ -1,0 +1,126 @@
+.precision-floor {
+  // The hint's tooltip hangs below this block, as wide as it (`below-block`).
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-width: 0;
+}
+
+// "Threshold", its hint, and any controls a host projects (Find's actions).
+.floor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2xs);
+}
+
+.floor-label {
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+// The spectrum and the three radios under it share one width, so each radio
+// sits centred under its third of the bar.
+.floor-spectrum {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.spectrum-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+// The ends wrap onto a second line in a narrow panel rather than overflow.
+.spectrum-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+
+  span:last-child {
+    text-align: right;
+  }
+}
+
+.spectrum-track {
+  height: var(--space-xs);
+  border-radius: var(--radius-pill);
+  background: var(--border-secondary);
+}
+
+.spectrum-radios {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+// Each label fills its third, so the whole third is the click target.
+.spectrum-radio {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+
+  input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+  }
+}
+
+// The state line under the spectrum: the Smart/Stable/Diverse indicators' dot,
+// in the muted small type of the left panel's `.all-labeled-note`. It wraps:
+// the note keeps a readable width, and where the panel is too narrow for it
+// and the check button side by side, the button drops to the next line.
+.floor-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2xs) var(--space-xs);
+  margin: 0;
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-muted);
+
+  .indicator-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: var(--space-xs);
+    border-radius: 50%;
+    background: var(--indicator-dot);
+    // Sit the dot on the text's x-height rather than its baseline.
+    transform: translateY(-1px);
+  }
+
+  &[data-status="green"] .indicator-dot {
+    background: var(--status-green-dot);
+  }
+
+  &[data-status="yellow"] .indicator-dot {
+    background: var(--status-yellow-dot);
+  }
+
+  &[data-status="red"] .indicator-dot {
+    background: var(--status-red-dot);
+  }
+}
+
+.floor-state-text {
+  // Room for the note on its own; below this the button wraps under it.
+  flex: 1 1 16em;
+  min-width: 0;
+  cursor: help;
+}
+
+// The check affordance rides the state line it measures, in the line's small
+// type rather than the toolbar's, so it reads as part of the sentence.
+.floor-check-btn {
+  flex-shrink: 0;
+  padding: 0 var(--space-sm);
+  font-size: var(--font-2xs);
+  letter-spacing: normal;
+}

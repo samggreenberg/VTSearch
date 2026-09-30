@@ -1,8 +1,8 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
-import { of, throwError } from 'rxjs';
-import { catchError, filter, take, tap } from 'rxjs/operators';
+import { EMPTY, Observable, Subject, of, throwError } from 'rxjs';
+import { catchError, filter, finalize, switchMap, take, takeUntil, tap } from 'rxjs/operators';
 
 import { adaptivePoll } from './adaptive-poll';
 import { ActiveContextService } from './active-context.service';
@@ -17,6 +17,12 @@ import { VoteStateService } from './vote-state.service';
 import { allItemsLabeled } from '../utils/all-labeled';
 import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
+import type { FloorState } from '../generated/api-client/models/floor-state';
+import { lineFloorFrom, type LineFloor } from '../utils/line-floor';
+
+/** What a sort ranks by: the detector's model, a text query, example media, or
+ *  a saved detector's scores. See {@link SortRunnerService.newestSortKind}. */
+export type SortKind = 'learned' | 'text' | 'example' | 'detector';
 
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
@@ -28,7 +34,7 @@ import type { LearnedSortResponse } from '../generated/api-client/models/learned
  * {@link SortStateService} (as issue #3428 originally proposed) would mean
  * either reinventing pair-scoped cancellation inside a singleton or passing a
  * component's scope subject into one; `PairScopeService`'s header records the
- * same trap being declined for `seedInclusion` (#3448).
+ * same trap being declined for `seedMinPrecision` (#3448).
  *
  * ## Why these two things are one service
  *
@@ -42,6 +48,15 @@ import type { LearnedSortResponse } from '../generated/api-client/models/learned
  * `utils/auto-select-next` (digest-pinned against the eval harness by
  * `scripts/check-eval-app-sync.py`'s `autopilot.auto_select_next` mirror);
  * {@link autoSelectNext} below is only the side-effecting half.
+ *
+ * ## A newer sort ends an older one
+ *
+ * The ranking on screen is the answer to the sort asked for *last*, not to the
+ * one answered last: starting a sort tears down whichever is still in flight
+ * (see {@link beginSort}), the same cancellation the pair scope applies across
+ * a pair switch. Without it two sorts in the air install whichever lands
+ * second, which on entry to Train was Autopilot's text seed landing on top of
+ * the learned sort that had already replaced it (#4318).
  *
  * ## What stays with the view
  *
@@ -67,10 +82,37 @@ export class SortRunnerService {
   /** True while a windowed-sort "Load more" page fetch is in flight. */
   readonly loadingMoreSort = signal(false);
 
-  /** Last coverage-atlas probe came back empty. Only meaningful under the `new`
-   *  Select mode, whose pick is a server round-trip rather than a rule over the
-   *  loaded window — see {@link fetchDiversityNext}. */
-  private readonly diversityExhausted = signal(false);
+  /**
+   * The labeled ids the last coverage-atlas probe came back empty for, or
+   * `null` when it found an item (or none has answered). Only meaningful under
+   * the `new` Select mode, whose pick is a server round-trip rather than a rule
+   * over the loaded window — see {@link fetchDiversityNext}.
+   *
+   * The labels rather than a flag, because an empty answer only holds for the
+   * labels it was given (#4312). The atlas runs dry when every node carries a
+   * label, so labeling more cannot bring an unseen node back and the answer
+   * still holds for any superset; un-voting one of them can, so the answer
+   * lapses. {@link queueExhausted} makes that check.
+   */
+  private readonly diversityEmptyFor = signal<ReadonlySet<number> | null>(null);
+
+  /** Coverage-atlas probes still in the air. A count rather than a flag, so an
+   *  older probe finishing cannot clear {@link advancePending} under a newer one. */
+  private readonly diversityProbesInFlight = signal(0);
+
+  /**
+   * True while {@link autoSelectNext} has asked the server for the next item
+   * and not yet heard back — the `new` Select mode's pick, which is the only
+   * advance that is not a rule over the loaded window.
+   *
+   * The centre panel takes this as its `advancePending` input and keeps the
+   * voted item's swipe parked off-screen until it settles. Without it the
+   * panel cannot tell "the next item is on its way" from "there is no next
+   * item", un-pins the swipe either way, and the item just voted on slides
+   * back into view for the length of the round-trip before the next one
+   * replaces it (#4307).
+   */
+  readonly advancePending = computed(() => this.diversityProbesInFlight() > 0);
 
   /**
    * True when the current Sort + Select has nothing left to advance to: every
@@ -87,16 +129,25 @@ export class SortRunnerService {
    *
    * Derived rather than latched so an undo puts the user straight back to work:
    * un-voting a row makes it unlabeled again, which makes this false again with
-   * nothing having to notice. Deliberately false before any sort has landed —
-   * an unranked pair is the placeholder state, not an exhausted one.
+   * nothing having to notice. That holds under `new` too, where the answer
+   * comes from the server: the probe's empty answer is kept with the labels it
+   * was given ({@link diversityEmptyFor}) and lapses once one of them is
+   * un-voted, with no fresh probe (#4312). The undone item, still selected,
+   * comes straight back as it does under `top` / `hard`, and the next vote
+   * probes again. Deliberately false before any sort has landed — an unranked
+   * pair is the placeholder state, not an exhausted one.
    */
   readonly queueExhausted = computed(() => {
     const sortOrder = this.sortState.sortOrder;
     if (!sortOrder || sortOrder.length === 0) return false;
-    if (this.sortState.selectMode === 'new') return this.diversityExhausted();
     const good = this.voteState.goodVotes;
     const bad = this.voteState.badVotes;
-    return !sortOrder.some((s) => !good.has(s.id) && !bad.has(s.id));
+    const labeled = (id: number) => good.has(id) || bad.has(id);
+    if (this.sortState.selectMode === 'new') {
+      const emptyFor = this.diversityEmptyFor();
+      return emptyFor !== null && [...emptyFor].every(labeled);
+    }
+    return sortOrder.every((s) => labeled(s.id));
   });
 
   /**
@@ -157,6 +208,85 @@ export class SortRunnerService {
     this.sortState.stopFindProgressTracking();
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
+    this._newestSortKind.set(null);
+  }
+
+  /** Fires when a sort starts, ending the one before it. See {@link beginSort}. */
+  private readonly sortSuperseded$ = new Subject<void>();
+
+  private readonly _newestSortKind = signal<SortKind | null>(null);
+
+  /**
+   * The kind of the sort started last for this pair: the one still in flight,
+   * or, once it has landed, the one whose ranking is on screen. Null until a
+   * sort starts, and again after a pair switch.
+   *
+   * One value covers both because a newer sort ends an older one (see
+   * {@link beginSort}), so the sort started last is the ranking the view ends
+   * up on. The Train view's seed backstop reads it to tell a ranking the model
+   * produced from Autopilot's text seed, which the retrain correction has to
+   * replace. `sortMode` cannot tell them apart: a `learned` mode carried over
+   * from the last session survives entry while the seed is a text sort (#4326).
+   *
+   * A sort that fails or is cancelled leaves its kind here over whatever an
+   * older sort left on screen, so read it together with `sortBusy` and the
+   * ranking, as the backstop does.
+   */
+  readonly newestSortKind = this._newestSortKind.asReadonly();
+
+  /**
+   * Start a sort: end whichever sort is still in flight, and return the
+   * teardown for this one — the pair scope, and the next sort to start.
+   *
+   * Call it *before* issuing the request, so the supersede it fires cannot
+   * reach the request it scopes. A learned sort pipes both its POST and its
+   * result poll through the one operator it gets back.
+   *
+   * The superseded sort's handlers never run, so it cannot drop the busy flag
+   * the new sort has just raised. What it owned without a handler to reset it
+   * goes here, as in {@link quiesce}: the Find progress feed, which would
+   * otherwise keep writing its status over the new sort, the count it last
+   * reported, and the job id the Cancel button targets. Its learned-sort job
+   * is left to finish on the server rather than cancelled there, because the
+   * server coalesces a burst of learned sorts for one pair into a single job:
+   * cancelling the old id can cancel the new request's.
+   */
+  private beginSort(kind: SortKind): <T>(source: Observable<T>) => Observable<T> {
+    this.sortSuperseded$.next();
+    this.sortState.stopFindProgressTracking();
+    this.sortState.setSortProgress(0, 0);
+    this.currentLearnedSortJobId = null;
+    this._newestSortKind.set(kind);
+    return (source) => source.pipe(this.pairScope.scoped(), takeUntil(this.sortSuperseded$));
+  }
+
+  /**
+   * Precision floors awaiting their `POST /api/min-precision`, one at a time.
+   *
+   * `switchMap`, so a floor the user moved past (arrowing through the picker
+   * fires one change per key) can never land after the newer one. And the
+   * re-sort that follows a floor change is started from the response rather
+   * than beside the request: the learned sort reads the floor at request time
+   * and caches its result by it, so a re-sort that beat the POST to the server
+   * would hand back the old floor's line from that cache.
+   */
+  private readonly minPrecisionRequests$ = new Subject<number>();
+
+  constructor() {
+    this.minPrecisionRequests$
+      .pipe(
+        switchMap((value) =>
+          this.sortingApi.setMinPrecision(value).pipe(
+            // Pair-scoped like every threshold write (see `PairScopeService`).
+            this.pairScope.scoped(),
+            // A failed POST leaves the line where it was; swallowed inside so
+            // it cannot end the long-lived pipeline and silence later picks.
+            catchError(() => EMPTY),
+          ),
+        ),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((resp) => this.afterFloorChange(lineFloorFrom(resp)));
   }
 
   // --- Sort handlers ---
@@ -178,6 +308,7 @@ export class SortRunnerService {
     results?: Array<Record<string, unknown>>;
     threshold?: number;
     acq_threshold?: number | null;
+    floor?: FloorState | null;
     total?: number;
     above_threshold?: number;
     has_more_below?: boolean;
@@ -193,6 +324,7 @@ export class SortRunnerService {
       items,
       threshold,
       acqThreshold: response.acq_threshold ?? null,
+      floor: lineFloorFrom(response.floor),
       total: response.total ?? items.length,
       hasMore: response.has_more_below ?? false,
       token: response.sort_token ?? null,
@@ -212,31 +344,35 @@ export class SortRunnerService {
     const offset = this.sortState.sortOrder?.length ?? 0;
     this.sortingApi
       .getSortPage(token, offset, 200)
-      .pipe(this.pairScope.scoped())
-      .subscribe({
-        next: (page) => {
-          const items = (page.results ?? []).map((r) => ({
-            id: r['id'] as number,
-            score: (r['score'] ?? r['similarity'] ?? 0) as number,
-            bestRegion: r['best_region'] as number[] | undefined,
-          }));
-          this.sortState.appendSortItems(items, page.has_more);
-          this.loadingMoreSort.set(false);
-        },
-        error: () => this.loadingMoreSort.set(false),
+      .pipe(
+        this.pairScope.scoped(),
+        // A page of the ranking a newer sort replaced must not be appended to
+        // the new one; `finalize` then clears the flag however the fetch ends.
+        takeUntil(this.sortSuperseded$),
+        // A failed or expired token just stops paging (the user can re-sort).
+        catchError(() => EMPTY),
+        finalize(() => this.loadingMoreSort.set(false)),
+      )
+      .subscribe((page) => {
+        const items = (page.results ?? []).map((r) => ({
+          id: r['id'] as number,
+          score: (r['score'] ?? r['similarity'] ?? 0) as number,
+          bestRegion: r['best_region'] as number[] | undefined,
+        }));
+        this.sortState.appendSortItems(items, page.has_more);
       });
   }
 
   /**
    * @param autoSelect Whether the finished ranking may move the centre viewer.
    *                   False on the pair-switch path, where the selection is the
-   *                   view's pair-change seed effect to place (#3510).
+   *                   view's centre effect to place (#3510, #4318).
    */
   onTextSort(text: string, autoSelect = true): void {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
-    this.sortingApi.sort({ text }).pipe(this.pairScope.scoped()).subscribe({
+    this.sortingApi.sort({ text }).pipe(this.beginSort('text')).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
@@ -252,15 +388,16 @@ export class SortRunnerService {
 
   onLearnedSort(autoSelect = true): void {
     if (!this.voteState.learnedSortAvailable) return;
+    const scope = this.beginSort('learned');
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training…');
-    this.sortingApi.learnedSort().pipe(this.pairScope.scoped()).subscribe({
+    this.sortingApi.learnedSort().pipe(scope).subscribe({
       next: (response) => {
         if (response.status === 'done') {
           this.applyLearnedSortResult(response, autoSelect);
         } else if (response.status === 'running') {
           this.currentLearnedSortJobId = response.job_id;
-          this.pollLearnedSortJob(response.job_id, autoSelect);
+          this.pollLearnedSortJob(response.job_id, autoSelect, scope);
         } else {
           this.sortState.setSortBusy(false);
           this.sortState.setSortStatus(response.error || 'Training failed');
@@ -294,7 +431,11 @@ export class SortRunnerService {
    * poll down and reported 'Training failed' for a job still running
    * server-side.
    */
-  private pollLearnedSortJob(jobId: string, autoSelect: boolean): void {
+  private pollLearnedSortJob(
+    jobId: string,
+    autoSelect: boolean,
+    scope: <T>(source: Observable<T>) => Observable<T>,
+  ): void {
     let consecutiveErrors = 0;
     const settledWith = (error: string): LearnedSortResponse => ({
       job_id: jobId,
@@ -322,10 +463,11 @@ export class SortRunnerService {
       { fastMs: 500, slowMs: 2000 },
     )
       .pipe(
-        // Pair-scoped: a training job can outlive the pair it was started for,
-        // and its result must not be applied to whatever pair is active when it
-        // finally settles (see `PairScopeService`).
-        this.pairScope.scoped(),
+        // The sort's own scope: a training job can outlive the pair it was
+        // started for, or the sort that asked for it, and its result must not
+        // be applied over either one's successor (see `PairScopeService`,
+        // `beginSort`).
+        scope,
         filter((res) => res.status !== 'running'),
         take(1),
       )
@@ -378,6 +520,8 @@ export class SortRunnerService {
 
   onModelSelected(modelId: string, autoSelect = true): void {
     if (!modelId) return;
+    // Before the progress feed starts: superseding the previous sort stops it.
+    const scope = this.beginSort('detector');
     this.sortState.setSortMode('load');
     this.sortState.setLoadSortSource({ kind: 'detector', detectorId: modelId });
     this.sortState.setSortBusy(true);
@@ -388,7 +532,7 @@ export class SortRunnerService {
 
     // Pair-scoped: scoring runs for minutes on a large dataset, so a pair switch
     // mid-run must kill this before it ranks the new pair with old scores.
-    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(this.pairScope.scoped()).subscribe({
+    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(scope).subscribe({
       next: (raw) => {
         const response = raw as {
           results: { id: number; score: number; best_region?: number[] }[];
@@ -418,6 +562,13 @@ export class SortRunnerService {
    * (#4092); a response without one simply can't be.
    */
   onExampleSortStarted(data: unknown, autoSelect = true): void {
+    // Installed on the spot, but still the newest sort: nothing already in
+    // flight may land on top of it.
+    this.beginSort('example');
+    this.installExampleSort(data, autoSelect);
+  }
+
+  private installExampleSort(data: unknown, autoSelect: boolean): void {
     const response = data as {
       results: { id: number; similarity: number; best_region?: number[] }[];
       threshold: number;
@@ -437,8 +588,8 @@ export class SortRunnerService {
   private uploadExampleSort(file: File, cropParams: Record<string, unknown> | undefined, autoSelect: boolean): void {
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting by example…');
-    this.sortingApi.exampleSort(file, cropParams).pipe(this.pairScope.scoped()).subscribe({
-      next: (response) => this.onExampleSortStarted({ ...response, source: { kind: 'upload', file, cropParams } }, autoSelect),
+    this.sortingApi.exampleSort(file, cropParams).pipe(this.beginSort('example')).subscribe({
+      next: (response) => this.installExampleSort({ ...response, source: { kind: 'upload', file, cropParams } }, autoSelect),
       error: () => {
         this.sortState.setSortBusy(false);
         this.sortState.setSortStatus('Example sort failed');
@@ -467,7 +618,7 @@ export class SortRunnerService {
     this.sortState.setSortStatus('Sorting by example…');
     this.sortingApi
       .exampleSortById({ media_id: mediaId, crop_params: cropParams })
-      .pipe(this.pairScope.scoped())
+      .pipe(this.beginSort('example'))
       .subscribe({
         next: (response) => {
           this.sortState.setSortMode('load');
@@ -498,7 +649,7 @@ export class SortRunnerService {
     if (filenames.length === 0) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
-    this.sortingApi.exampleSortServer({ filenames }).pipe(this.pairScope.scoped()).subscribe({
+    this.sortingApi.exampleSortServer({ filenames }).pipe(this.beginSort('example')).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
@@ -594,15 +745,26 @@ export class SortRunnerService {
     const scores = sortOrder
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
+    // What an empty answer is about. Taken when the probe goes out rather than
+    // when it answers: an undo while it is in the air is one the server may not
+    // have seen yet, and the empty answer must lapse on it all the same.
+    const askedWith: ReadonlySet<number> = new Set([...this.voteState.goodVotes, ...this.voteState.badVotes]);
+    this.diversityProbesInFlight.update((n) => n + 1);
     this.sortingApi
       // The New pick reads the threshold as a sampling position too (it steers
       // the atlas probe by a node's median score), so it takes the acquisition
       // cut alongside the Hard pick.
       .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
-      .pipe(this.pairScope.scoped())
+      .pipe(
+        this.pairScope.scoped(),
+        // Every way out — an answer, an error, a pair switch superseding the
+        // probe — ends the wait. `finalize` runs after `next`, so an answer
+        // lands its selection before the centre panel is told to stop waiting.
+        finalize(() => this.diversityProbesInFlight.update((n) => n - 1)),
+      )
       .subscribe({
         next: (response) => {
-          this.diversityExhausted.set(response.id === null);
+          this.diversityEmptyFor.set(response.id === null ? askedWith : null);
           if (response.id !== null) {
             this.mediaState.selectMedia(response.id);
           }
@@ -613,18 +775,58 @@ export class SortRunnerService {
       });
   }
 
-  // --- Inclusion ---
+  // --- Precision floor ---
 
-  onInclusionChange(value: number): void {
-    this.sortState.setInclusion(value);
-    this.sortingApi.setInclusion(value).pipe(this.pairScope.scoped()).subscribe();
-    this.autoSelectNext();
-    if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
-      this.scheduleLearnedSort(false);
+  onMinPrecisionChange(value: number): void {
+    this.sortState.setMinPrecision(value);
+    this.minPrecisionRequests$.next(value);
+  }
+
+  /**
+   * The server has the new floor. Only a learned ranking draws the detector's
+   * line, so only it can move: every other sort ranks by something else and
+   * keeps its own threshold.
+   *
+   * When the line keeps the same count of items before and after (an
+   * unchecked floor at 50% or above keeps the top 32 either way, #4272), it
+   * is the same line - the count, not the state, decides where it sits - so
+   * it stays put and only its state changes. Otherwise the
+   * learned sort re-runs at the new floor, which brings the line, its state,
+   * the count above it and Autopilot's acquisition cut back together, and
+   * lands on the next pick from them.
+   */
+  private afterFloorChange(floor: LineFloor | null): void {
+    if (this.sortState.sortMode !== 'learned') return;
+    const before = this.sortState.floor;
+    if (before && floor && before.count === floor.count) {
+      this.sortState.setFloor(floor);
+      return;
+    }
+    if (this.voteState.learnedSortAvailable) {
+      this.scheduleLearnedSort();
     }
   }
 
-  /** Coalesce a flurry of re-rank triggers (a vote, an inclusion drag) into one
+  /**
+   * Re-read the line after a spot check ends (#4273). The server has moved it
+   * to the set the check ended on, a new count over the ranking already on
+   * screen, so this moves the line without a re-sort. Only a learned ranking
+   * draws the detector's line.
+   */
+  refreshLine(): void {
+    this.sortingApi
+      .getMinPrecision()
+      .pipe(
+        this.pairScope.scoped(),
+        catchError(() => EMPTY),
+      )
+      .subscribe((resp) => {
+        if (this.sortState.sortMode !== 'learned' || resp.threshold == null) return;
+        this.sortState.setLine(resp.threshold, lineFloorFrom(resp), resp.n_returned ?? null);
+      });
+  }
+
+  /** Coalesce a flurry of re-rank triggers (a vote, a floor change) into one
    *  learned sort 300ms after the last of them. */
   scheduleLearnedSort(autoSelect = true): void {
     if (this.learnedSortPending) return;
@@ -706,12 +908,13 @@ export class SortRunnerService {
     const pick = this.peekNextMedia(excludeId);
     if (pick.kind === 'media') {
       this.mediaState.selectMedia(pick.id);
-      this.diversityExhausted.set(false);
+      this.diversityEmptyFor.set(null);
     } else if (pick.kind === 'diversity') {
-      // The probe below is the only thing that can answer for the `new` mode, so
-      // clear the previous answer rather than letting a stale "empty" latch
-      // across the round-trip.
-      this.diversityExhausted.set(false);
+      // The previous answer is not cleared for the round-trip. If it went stale,
+      // `queueExhausted` has already dropped it. If it still holds, no vote since
+      // has freed a node, so the probe will say "empty" again, and the pane stays
+      // up rather than blinking off until it does. That is the re-vote after an
+      // undo (#4312). An answer that does come back with an item replaces it.
       this.fetchDiversityNext();
     }
   }

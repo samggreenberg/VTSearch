@@ -8,6 +8,7 @@ import { provideHttpTesting } from '../../../testing/test-providers';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
+import { wireFloor } from '../../../testing/line-floor';
 
 describe('FindStatsModalComponent', () => {
   let component: FindStatsModalComponent;
@@ -26,13 +27,22 @@ describe('FindStatsModalComponent', () => {
     agreements: 90,
     corrections: 10,
     agreement_rate: 0.9,
-    precision: 0.85,
-    inclusion: 0,
-    sweep: [
-      { inclusion: -10, false_pos: 1, false_neg: 9 },
-      { inclusion: 0, false_pos: 5, false_neg: 5 },
-      { inclusion: 10, false_pos: 9, false_neg: 1 },
+    verified_precision: 0.7,
+    verified_called_good: 10,
+    verified_kept_good: 7,
+    threshold: 0.5,
+    floor: wireFloor('confirmed'),
+    n_scored: 1000,
+    n_returned: 40,
+    precision_curve: [
+      { n_returned: 1, threshold: 0.99, checked: 0, checked_good: 0, verified_precision: null, estimated_precision: 0.95 },
+      { n_returned: 10, threshold: 0.9, checked: 2, checked_good: 2, verified_precision: 1, estimated_precision: 0.9 },
+      { n_returned: 40, threshold: 0.5, checked: 10, checked_good: 7, verified_precision: 0.7, estimated_precision: 0.62 },
+      { n_returned: 1000, threshold: 0.01, checked: 12, checked_good: 7, verified_precision: 0.5833, estimated_precision: 0.05 },
     ],
+    estimate_status: 'estimated',
+    calibration_positives: 14,
+    min_calibration_positives: 10,
   };
 
   // Evidence-coverage is fetched on init too; the "nothing to measure" reply
@@ -90,7 +100,7 @@ describe('FindStatsModalComponent', () => {
     await settleZoneless(fixture);
 
     expect(fixture.nativeElement.querySelector('.loading-text')).toBeFalsy();
-    expect(fixture.nativeElement.querySelector('.fpfn-chart')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('.precision-chart')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('90%'); // agreement rate
   });
 
@@ -157,6 +167,199 @@ describe('FindStatsModalComponent', () => {
     expect(evidenceChip.textContent).toContain('62%');
     expect(fixture.nativeElement.textContent).toContain('evidence vacuum');
   });
+
+  describe('precision-vs-returned chart (#4242)', () => {
+    async function load(overrides: Record<string, unknown> = {}) {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/find/stats').flush({ ...mockStats, ...overrides });
+      httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('draws both curves, skipping the points each lacks', async () => {
+      const el = await load();
+      const est = el.querySelector('.line-estimate')!.getAttribute('points')!.trim().split(' ');
+      const ver = el.querySelector('.line-verified')!.getAttribute('points')!.trim().split(' ');
+      expect(est.length).toBe(4);
+      expect(ver.length).toBe(3); // the top 1 has nothing checked
+    });
+
+    it('puts counts on a log scale from 1 to the corpus size', async () => {
+      await load();
+      // 320 wide until the ResizeObserver measures it (jsdom has none).
+      expect(component.xFor(1)).toBeCloseTo(40);
+      expect(component.xFor(1000)).toBeCloseTo(304);
+      // 10 and 100 split the three decades evenly.
+      expect(component.xFor(100) - component.xFor(10)).toBeCloseTo(component.xFor(10) - component.xFor(1));
+      expect(component.xTicks.map((t) => t.label)).toEqual(['1', '10', '100', '1k']);
+    });
+
+    it('marks the line and reads both precisions off it', async () => {
+      const el = await load();
+      expect(el.querySelector('.precision-chart .current')).toBeTruthy();
+      const readout = el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ');
+      expect(readout).toContain('At the line (40 returned)');
+      expect(readout).toContain('estimated at least 62%');
+      expect(readout).toContain('checked 70%');
+      expect(readout).toContain('(7 of 10 Good)');
+    });
+
+    it('shows the Kept rate as verified precision with its count', async () => {
+      const el = await load();
+      const text = el.textContent!.replace(/\s+/g, ' ');
+      expect(text).toContain('70% (7 of 10 checked)');
+    });
+
+    it('says so when no match has been checked', async () => {
+      const el = await load({ verified_precision: null, verified_called_good: 0, verified_kept_good: 0 });
+      expect(el.textContent).toContain('(no matches checked yet)');
+    });
+
+    it('follows the pointer to the nearest sampled count', async () => {
+      const el = await load();
+      const svg = el.querySelector('.precision-chart') as SVGSVGElement;
+      vi.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 320 } as DOMRect);
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: component.xFor(10) + 1 }));
+      await settleZoneless(fixture);
+      expect(component.hoverIndex()).toBe(1);
+      expect(el.querySelector('.crosshair')).toBeTruthy();
+      expect(el.querySelector('.chart-readout')!.textContent).toContain('Top 10');
+      // The top 1 has nothing checked in it.
+      svg.dispatchEvent(new MouseEvent('mousemove', { clientX: component.xFor(1) }));
+      await settleZoneless(fixture);
+      expect(el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ')).toContain(
+        'Top 1: estimated at least 95% · nothing checked',
+      );
+      svg.dispatchEvent(new MouseEvent('mouseleave'));
+      await settleZoneless(fixture);
+      expect(el.querySelector('.crosshair')).toBeFalsy();
+    });
+
+    it('explains a withheld estimate below the calibration gate', async () => {
+      const el = await load({
+        estimate_status: 'insufficient_evidence',
+        calibration_positives: 4,
+        precision_curve: mockStats.precision_curve.map((p) => ({ ...p, estimated_precision: null })),
+      });
+      expect(el.querySelector('.line-estimate')!.getAttribute('points')).toBe('');
+      expect(el.querySelector('.chart-note')!.textContent).toContain('needs 10 Good votes');
+      expect(el.querySelector('.chart-note')!.textContent).toContain('has 4');
+      // The readout drops the missing estimate rather than printing a dash for it.
+      const readout = el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ');
+      expect(readout).toContain('(40 returned): checked 70%');
+      expect(readout).not.toContain('estimated');
+    });
+
+    it('draws in its measured width rather than stretching a fixed one', async () => {
+      let notify: ResizeObserverCallback = () => {};
+      class FakeResizeObserver {
+        constructor(cb: ResizeObserverCallback) {
+          notify = cb;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      }
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      try {
+        const el = await load();
+        notify([{ contentRect: { width: 900 } } as ResizeObserverEntry], {} as ResizeObserver);
+        await settleZoneless(fixture);
+        expect(el.querySelector('.precision-chart')!.getAttribute('viewBox')).toBe('0 0 900 170');
+        expect(component.xFor(1000)).toBeCloseTo(884);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('explains a detector with no calibration folds', async () => {
+      const el = await load({ estimate_status: 'unavailable', calibration_positives: 0 });
+      expect(el.textContent).toContain('too few votes to hold any out');
+    });
+  });
+
+  describe('the precision floor on the chart (#4246)', () => {
+    async function load(overrides: Record<string, unknown> = {}) {
+      await fixture.whenStable();
+      httpMock.expectOne('/api/find/stats').flush({ ...mockStats, ...overrides });
+      httpMock.expectOne('/api/find/evidence-coverage').flush(mockEvidenceUnavailable);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    const legend = (el: HTMLElement) => el.querySelector('.chart-legend')!.textContent!.replace(/\s+/g, ' ');
+
+    it('draws the floor across the chart at X, and a confirmed line keeps it with its range', async () => {
+      const el = await load({ floor: wireFloor('confirmed', { minPrecision: 0.9 }) });
+      const floor = el.querySelector('.precision-chart .floor')!;
+      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
+      expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
+      expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
+      // The floor by neither name nor number (#4298, #4317); the check's range and the axis stay numbers.
+      expect(legend(el)).toContain('Threshold');
+      expect(legend(el)).not.toMatch(/Centered|Complete|Correct/);
+      expect(legend(el)).toContain('Line: confirmed (32 kept)');
+      expect(legend(el)).toContain('Likely 55–100% right (checked 5)');
+      expect(legend(el)).not.toContain('90%');
+      // The Inclusion stepper's legend is gone.
+      expect(legend(el)).not.toContain('incl');
+    });
+
+    it('stands the range at the line, from its low end to its high end (#4273)', async () => {
+      const el = await load({ floor: wireFloor('short') });
+      const bar = el.querySelector('.precision-chart .likely-range .range-bar')!;
+      expect(Number(bar.getAttribute('y'))).toBeCloseTo(component.yFor(0.73));
+      expect(Number(bar.getAttribute('height'))).toBeCloseTo(component.yFor(0.11) - component.yFor(0.73));
+      const cut = el.querySelector('.precision-chart .current')!;
+      expect(Number(bar.getAttribute('x')) + 4).toBeCloseTo(Number(cut.getAttribute('x1')));
+      expect(el.querySelector('.precision-chart .likely-range title')!.textContent).toBe(
+        'Likely 11–73% right, from 5 random picks (2 right).',
+      );
+    });
+
+    it('draws a stale range exactly as a current one; only its tooltip differs', async () => {
+      const markup = (el: HTMLElement) =>
+        el.querySelector('.likely-range')!.outerHTML.replace(/<title[^>]*>[^<]*<\/title>/, '').replace(/aria-label="[^"]*"/, '');
+      const fresh = await load({ floor: wireFloor('short') });
+      const freshMarkup = markup(fresh);
+      const freshLegend = legend(fresh);
+      component.stats.set({ ...component.stats()!, floor: wireFloor('short', { range: { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true } }) } as never);
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(markup(el)).toBe(freshMarkup);
+      expect(legend(el)).toBe(freshLegend);
+      expect(el.querySelector('.likely-range title')!.textContent).toContain('Measured before your later votes');
+    });
+
+    it('says how close a short check got, naming no cause, with a plain line', async () => {
+      const el = await load({ floor: wireFloor('short', { minPrecision: 0.9 }) });
+      expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
+      expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
+      expect(legend(el)).toContain('Line: the top 32, fell short');
+      const text = el.textContent!.replace(/\s+/g, ' ');
+      expect(text).toContain('Fell short: a check of 5 random picks found the top 32 the line keeps likely 11–73% right');
+      expect(text).not.toMatch(/sparse|weak model|unpromised/i);
+    });
+
+    it('says an unchecked line keeps its starting candidate, with no range, beside a withheld estimate', async () => {
+      const el = await load({
+        estimate_status: 'insufficient_evidence',
+        calibration_positives: 3,
+        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }),
+      });
+      expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
+      expect(el.querySelector('.likely-range')).toBeNull();
+      expect(legend(el)).toContain('Line: the top 128, unchecked');
+      expect(legend(el)).not.toContain('Likely');
+      const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
+      expect(notes.some((n) => n.includes('has 3'))).toBe(true);
+      expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked'))).toBe(true);
+      // Find tests the threshold it was given: nothing here points at a check (#4317).
+      expect(el.textContent).not.toMatch(/Check \d+ picks/);
+      expect(el.textContent).not.toContain('default cut');
+      expect(el.textContent).not.toContain('unpromised');
+    });
+  });
 });
 
 describe('FindStatsModalComponent — training-domain overlap', () => {
@@ -175,9 +378,17 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
     agreements: 90,
     corrections: 10,
     agreement_rate: 0.9,
-    precision: 0.85,
-    inclusion: 0,
-    sweep: [{ inclusion: 0, false_pos: 5, false_neg: 5 }],
+    verified_precision: 0.7,
+    verified_called_good: 10,
+    verified_kept_good: 7,
+    threshold: 0.5,
+    floor: wireFloor('unchecked'),
+    n_scored: 100,
+    n_returned: 10,
+    precision_curve: [],
+    estimate_status: 'unavailable',
+    calibration_positives: 0,
+    min_calibration_positives: 10,
   };
 
   // Active dataset 'ds-b' (siglip); 'ds-a' is a loaded siglip reference,

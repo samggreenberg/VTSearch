@@ -157,6 +157,7 @@ get_browse_icon_size  # noqa: F821
 get_browse_thumbnail_border  # noqa: F821
 set_audio_playing  # noqa: F821
 set_show_animations  # noqa: F821
+set_show_usage_bars  # noqa: F821
 set_hide_autopilot  # noqa: F821
 set_browse_panel_width  # noqa: F821
 set_browse_colormap  # noqa: F821
@@ -285,13 +286,14 @@ orig_text  # noqa: F821 - vtscore.datasets.importers.combine_datasets binding tr
 cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple
 
 # ---------------------------------------------------------------------------
-# Autouse fixture imported for side effects in both conftests (the ``import``
-# is what registers it with pytest). The local alias goes through ``as
-# _allow_test_tmp_paths`` so a reader immediately sees ``F401`` and knows the
+# Autouse fixtures imported for side effects in both conftests (the ``import``
+# is what registers them with pytest). The local alias goes through ``as
+# _allow_test_tmp_paths`` (likewise ``_isolated_example_media_dir``) so a reader immediately sees ``F401`` and knows the
 # import is deliberate; the ``noqa: F401`` at the import site silences ruff,
 # and this entry silences vulture.
 # ---------------------------------------------------------------------------
 _allow_test_tmp_paths  # noqa: F821
+_isolated_example_media_dir  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``StreamProgress.readable`` overrides ``io.IOBase.readable`` on a stream
@@ -319,16 +321,6 @@ error_code  # noqa: F821
 # there is no in-repo caller.
 # ---------------------------------------------------------------------------
 ERROR_SCHEMA  # noqa: F821
-
-# ---------------------------------------------------------------------------
-# ``StallWatchdog.last_report`` is the read-side accessor on the documented
-# public watchdog (vtscore/docs/packages/concurrency.md): the last stall
-# report the watchdog emitted, populated on every stall in ``_report()`` and
-# initialised to ``None`` in ``__init__``. Out-of-tree callers holding a
-# watchdog instance read it to inspect what the watchdog saw; there is no
-# in-repo reader by design.
-# ---------------------------------------------------------------------------
-last_report  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``AutopilotFlow`` stopping-rule margin attributes read reflectively via

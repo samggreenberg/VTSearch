@@ -26,7 +26,7 @@ from vtscore.training.thresholds.gmm import (
     scored_ordering,
     snap_cut_to_sample,
 )
-from vtscore.training.thresholds.knobs import inclusion_cost_weights
+from vtscore.training.thresholds.knobs import INCLUSION_SEARCH_SPAN, inclusion_cost_weights
 from vtscore.utils.scores import scored_only
 
 
@@ -260,12 +260,12 @@ class FoldAnchoredCut:
     haystack sample (to realize the combined quantile on the scale the
     threshold is applied on).
 
-    Splitting the fit from the cut is what makes the Inclusion knob cheap
-    *and* faithful under this estimator: re-cutting at another inclusion is
+    Splitting the fit from the cut is what makes a re-cut cheap *and*
+    faithful under this estimator: re-cutting at another inclusion is
     arithmetic on the fitted Gaussians plus two array lookups - no EM, no
-    scoring pass - so an Inclusion slide reproduces exactly what a fresh
-    retrain at that inclusion would have stored (see
-    :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+    scoring pass - so the acquisition cut and Smart's pricing reproduce
+    exactly what a fresh retrain at that inclusion would have stored (see
+    :func:`vtscore.state.core.recut_detector_threshold`).
 
     Under the shipped :data:`FOLD_ANCHOR_CUT_RULE` (``"mid_tilt"``) a re-cut
     answers the knob: inclusion 0 reproduces the measured midpoint cut
@@ -298,6 +298,17 @@ class FoldAnchoredCut:
     #: a caller that predates the fields.
     fold_iterations: tuple[int, ...] = ()
     fold_converged: tuple[bool, ...] = ()
+    #: Each kept fold's held-out ``(scores, labels)``, index-aligned with
+    #: :attr:`fits` and :attr:`fold_haystacks`, unscored items dropped.  The
+    #: fit drops a fold that fails both fits, so the calibration cache's
+    #: orderings do *not* line up with :attr:`fold_haystacks`; these do, which
+    #: is what the precision estimate
+    #: (:func:`~vtscore.training.thresholds.precision_lower_bound_curve`) needs
+    #: from a live detector.  A fold that fell back to its unanchored fit still
+    #: records its votes: they are honest evidence about that fold model even
+    #: though the mixture did not use them.  Empty when the cut was built by a
+    #: caller that predates the field.
+    fold_orderings: tuple[tuple[np.ndarray, np.ndarray], ...] = ()
 
     @property
     def n_unconverged(self) -> int:
@@ -506,6 +517,64 @@ class FoldAnchoredCut:
         realized = float(np.quantile(self.final_haystack, min(1.0, max(0.0, q))))
         return snap_cut_to_sample(realized, self.final_haystack)
 
+    def inclusion_for_threshold(
+        self,
+        threshold: float,
+        *,
+        lo: float = -INCLUSION_SEARCH_SPAN,
+        hi: float = INCLUSION_SEARCH_SPAN,
+        tol: float = 1e-3,
+    ) -> float | None:
+        """The inclusion at which this estimator reproduces *threshold*: the inverse of :meth:`threshold_at`.
+
+        The reporting cut does not have to come from the Inclusion knob.  A
+        precision floor (#4224) picks its cut from an estimate of precision
+        above it, and Autopilot's acquisition cut still has to sit
+        :data:`ACQUISITION_INCLUSION_OFFSET` steps *stricter* than wherever that
+        cut landed - an offset needs an origin, and this is how a cut that was
+        not set in inclusion units gets one.  The acquisition cut is then
+        ``threshold_at(inclusion_for_threshold(t) + ACQUISITION_INCLUSION_OFFSET)``.
+
+        Returns the **strictest** inclusion whose cut admits at least what
+        *threshold* admits, ``inf {k : threshold_at(k) <= threshold}``, found by
+        bisection to within *tol* - well defined because :meth:`threshold_at`
+        is non-increasing in ``k``.  Two consequences follow:
+
+        * a threshold this estimator realized round-trips exactly:
+          ``threshold_at(inclusion_for_threshold(threshold_at(k))) ==
+          threshold_at(k)``.  The returned ``k`` may sit below the original
+          one, at the strict end of the plateau the original shares a cut
+          with; the realized threshold is the same, and an offset read from
+          the strict end lands *higher* up the ranking, never lower.
+        * a threshold no inclusion realizes exactly (one set by a different
+          rule) maps to the strictest ``k`` whose cut sits at or below it: the
+          cut at that ``k`` admits everything *threshold* admits, plus as few
+          extra items as the estimator's steps allow.
+
+        The search is confined to ``[lo, hi]``, far wider than the UI's
+        ``[INCLUSION_MIN, INCLUSION_MAX]``: a precision floor can legitimately
+        ask for a cut the slider never reached.  A threshold stricter than
+        every cut in the bracket returns ``lo``; one more lenient than every
+        cut returns ``hi``.  ``None`` means there is nothing to invert - an
+        empty haystack, where :meth:`threshold_at` is the constant 0.5 - or a
+        non-finite *threshold*.
+        """
+        if self.final_haystack.size == 0 or not math.isfinite(threshold):
+            return None
+        if self.threshold_at(lo) <= threshold:
+            return float(lo)
+        if self.threshold_at(hi) > threshold:
+            return float(hi)
+        # Invariant: threshold_at(a) > threshold >= threshold_at(b).
+        a, b = float(lo), float(hi)
+        while b - a > tol:
+            mid = 0.5 * (a + b)
+            if self.threshold_at(mid) <= threshold:
+                b = mid
+            else:
+                a = mid
+        return b
+
 
 def fit_fold_anchored_cut(
     fold_haystack_scores: "list[np.ndarray]",
@@ -549,6 +618,7 @@ def fit_fold_anchored_cut(
     anchor_counts: list[int] = []
     iterations: list[int] = []
     converged: list[bool] = []
+    orderings: list[tuple[np.ndarray, np.ndarray]] = []
     n_anchored = 0
     for hay, ordering in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
         a_scores, a_labels = scored_ordering(ordering)
@@ -574,6 +644,7 @@ def fit_fold_anchored_cut(
         # n_unconverged` reads as "no anchored refit ran here".
         iterations.append(int(stats.get("n_iter", 0.0)) if n_anchors else 0)
         converged.append(bool(stats.get("converged", 0.0)) if n_anchors else True)
+        orderings.append((np.asarray(a_scores, dtype=np.float64), np.asarray(a_labels, dtype=np.float64)))
     if not fits:
         return None
     return FoldAnchoredCut(
@@ -586,6 +657,7 @@ def fit_fold_anchored_cut(
         combine=combine,
         fold_iterations=tuple(iterations),
         fold_converged=tuple(converged),
+        fold_orderings=tuple(orderings),
     )
 
 

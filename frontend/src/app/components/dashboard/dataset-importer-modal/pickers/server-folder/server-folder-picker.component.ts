@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output, viewChild } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { map } from 'rxjs/operators';
@@ -66,6 +66,10 @@ export class ServerFolderPickerComponent {
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
 
+  /** This view's "Advanced" block. The Add Dataset modal reads it to render
+   *  the block's toggle in its footer row (#4305). */
+  readonly importAdvanced = viewChild(ImportAdvancedComponent);
+
   readonly importers = input<ImporterInfo[]>([]);
   readonly mediaTypes = input<MediaTypeInfo[]>([]);
   readonly guessedMediaType = input('');
@@ -75,6 +79,10 @@ export class ServerFolderPickerComponent {
   readonly buildProjectionChange = output<boolean>();
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
+  /** The Add Dataset dialog's "Run AutoRun" choice for this import, sent as
+   *  ``autorun``; ``null`` (the box is hidden) sends nothing, so the user's
+   *  remembered ``autorun_on_import`` setting decides server-side. */
+  readonly autorun = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
 
@@ -467,6 +475,8 @@ export class ServerFolderPickerComponent {
     }
     params['build_projection'] = this.buildProjection() ? 'true' : 'false';
     params['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
+    const autorun = this.autorun();
+    if (autorun !== null) params['autorun'] = autorun ? 'true' : 'false';
 
     this.datasetsCrudApi.runImporter('server_folder', params).subscribe({
       next: () => {

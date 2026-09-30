@@ -3,7 +3,8 @@
 Operates on the active :class:`DatasetContext` (for the atlas itself) and the
 active :class:`DetectorContext` (for the labels that get replayed into it).
 Functions resolve the contexts themselves - no module-level proxy names are
-imported.  See Phase 3 of ``../docs/architecture.md``.
+imported (see "Resolution chain for 'active context'" in
+``vtscore/docs/architecture.md``).
 """
 
 from __future__ import annotations

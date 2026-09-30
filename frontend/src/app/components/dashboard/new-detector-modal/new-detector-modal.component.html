@@ -118,10 +118,11 @@
               <div class="text-input-row">
                 <input
                   class="form-input"
+                  [required]="!hasMediaExample"
                   [ngModel]="pendingText()"
                   (ngModelChange)="onPendingTextInput($event)"
                   name="pendingText"
-                  placeholder="e.g. dog barking sounds"
+                  placeholder="e.g. large books"
                   title="A text description of what this detector should find"
                   (keydown.enter)="$event.preventDefault(); submit()"
                 />
@@ -143,6 +144,7 @@
                 <vt-drop-zone
                   [label]="dropMediaLabel"
                   sublabel="or click to upload from this computer"
+                  [missing]="!hasExample"
                   (filesSelected)="onLocalFileDropped($event)"
                 ></vt-drop-zone>
               }
@@ -150,9 +152,7 @@
           }
 
           @if (!hasExample) {
-            <p class="info-text example-empty-hint">
-              Provide a text or {{ exampleMediaTabLabel.toLowerCase() }} example to create the detector.
-            </p>
+            <p class="info-text example-empty-hint">{{ exampleHint }}</p>
           }
         </div>
       }
@@ -215,6 +215,7 @@
                       [id]="'nmm-' + field.key"
                       type="text"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
                     />
@@ -223,6 +224,7 @@
                       [id]="'nmm-' + field.key"
                       type="file"
                       class="form-input"
+                      [required]="!!field.required"
                       [accept]="field.accept || ''"
                       [title]="field.description || field.label || field.key"
                       (change)="onLabelImporterFileSelected($event, field.key)"
@@ -232,6 +234,7 @@
                       [id]="'nmm-' + field.key"
                       type="password"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -242,6 +245,7 @@
                       [id]="'nmm-' + field.key"
                       type="email"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -252,6 +256,7 @@
                       [id]="'nmm-' + field.key"
                       type="url"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -262,6 +267,7 @@
                       [id]="'nmm-' + field.key"
                       type="text"
                       class="form-input"
+                      [required]="!!field.required"
                       [attr.list]="'nmm-' + field.key + '-list'"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
@@ -282,6 +288,7 @@
                     <select
                       [id]="'nmm-' + field.key"
                       class="form-select"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [title]="field.description || field.label || field.key"
@@ -305,6 +312,7 @@
                       [id]="'nmm-' + field.key"
                       type="number"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -318,6 +326,7 @@
                       [id]="'nmm-' + field.key"
                       type="text"
                       class="form-input"
+                      [required]="!!field.required"
                       [(ngModel)]="labelImporterValues[field.key]"
                       [name]="'nmm-' + field.key"
                       [placeholder]="field.placeholder || field.description || field.label || field.key"
@@ -341,50 +350,41 @@
           [ngModel]="name()"
           (ngModelChange)="onNameInput($event)"
           name="name"
-          placeholder="e.g. Dog Barks"
+          placeholder="e.g. Large book detector"
           title="A short name to identify this detector"
+          (keydown.enter)="onNameEnter($event)"
         />
       </div>
 
-      @if (showAdvancedToggle) {
-        <div class="form-group advanced-group">
-          <button
-            type="button"
-            class="advanced-toggle"
-            (click)="toggleAdvanced()"
-            [attr.aria-expanded]="advancedOpen()"
-            title="Advanced options: the kind of embedder this detector works with."
-          >
-            Advanced {{ advancedOpen() ? '▴' : '▾' }}
-          </button>
-
-          @if (advancedOpen()) {
-            @if (showEmbedderTypePicker) {
-              <label class="form-label" for="detector-embedder-type"
-                title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
-                Detector Embedder Type
-              </label>
-              <select
-                id="detector-embedder-type"
-                class="form-select"
-                name="detectorEmbedderType"
-                [ngModel]="effectiveEmbedderType"
-                (ngModelChange)="onEmbedderTypeChange($event)"
-              >
-                @for (type of embedderTypeOptions; track type) {
-                  <option [value]="type">{{ embedderTypeLabel(type) }}</option>
-                }
-              </select>
-              @if (embedderTypeUnavailable) {
-                <p class="info-text">
-                  The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
-                  this detector won't run here — it'll be available on datasets that bind one.
-                </p>
+      <!-- Opened from the footer's "Advanced" toggle (#4305), so the options
+           land at the foot of the form, just above the toggle. -->
+      @if (showAdvancedToggle && advancedOpen()) {
+        <div class="form-group" id="new-detector-advanced" #advancedFields>
+          @if (showEmbedderTypePicker) {
+            <label class="form-label" for="detector-embedder-type"
+              title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
+              Detector Embedder Type
+            </label>
+            <select
+              id="detector-embedder-type"
+              class="form-select"
+              name="detectorEmbedderType"
+              [ngModel]="effectiveEmbedderType"
+              (ngModelChange)="onEmbedderTypeChange($event)"
+            >
+              @for (type of embedderTypeOptions; track type) {
+                <option [value]="type">{{ embedderTypeLabel(type) }}</option>
               }
+            </select>
+            @if (embedderTypeUnavailable) {
+              <p class="info-text">
+                The current dataset has no {{ embedderTypeLabel(effectiveEmbedderType) }} embedder, so
+                this detector won't run here — it'll be available on datasets that bind one.
+              </p>
             }
-            @if (primaryLicenseNotice; as notice) {
-              <div class="license-warning" role="note">⚠ {{ notice }}</div>
-            }
+          }
+          @if (primaryLicenseNotice; as notice) {
+            <div class="license-warning" role="note">⚠ {{ notice }}</div>
           }
         </div>
       }
@@ -406,6 +406,23 @@
         <p class="error-text">{{ error() }}</p>
       }
     </form>
+  }
+
+  <!-- The collapsed toggle shares the Cancel / Create row instead of taking a
+       half-empty line of its own (#4305). Its own @if, so it projects into the
+       footer's start slot as a single root. -->
+  @if (view() === 'main' && showAdvancedToggle) {
+    <button
+      modal-footer-start
+      type="button"
+      class="link-btn advanced-toggle"
+      (click)="toggleAdvanced()"
+      [attr.aria-expanded]="advancedOpen()"
+      [attr.aria-controls]="advancedOpen() ? 'new-detector-advanced' : null"
+      title="Advanced options: the kind of embedder this detector works with."
+    >
+      Advanced {{ advancedOpen() ? '▴' : '▾' }}
+    </button>
   }
 
   @if (view() === 'main') {

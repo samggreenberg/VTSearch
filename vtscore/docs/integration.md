@@ -46,7 +46,7 @@ The library only requires explicit setup when you want to:
 
 - Read **configuration** (`CoreConfig.from_settings()`)
 - Resolve the **active context** from a request
-- **Persist** detector settings (`set_inclusion`, `set_calibrate_count`,
+- **Persist** detector settings (`set_min_precision`, `set_calibrate_count`,
   etc.) back to your settings store
 - Register **app-side plugins** alongside the library's built-ins
 
@@ -80,7 +80,6 @@ def _build_core_config(settings_path=None) -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 register_core_config_builder(_build_core_config)
@@ -136,31 +135,33 @@ save-and-restore context-manager forms, `thread_dataset_context()` /
 ### Hook 3: `register_setting_persister`
 
 The `vtscore.state` package exposes setter functions like
-`set_inclusion(value)` and `set_calibrate_count(value)`. By default,
+`set_min_precision(value)` and `set_calibrate_count(value)`. By default,
 those update only the in-memory cache. If you want them to persist to
 your settings store, install a persister per key:
 
 ```python
 from vtscore.state import register_setting_persister
 
-def _persist_inclusion(value: int) -> None:
-    my_settings_store["inclusion"] = value
+def _persist_min_precision(value: float | None) -> None:
+    my_settings_store["min_precision"] = value
 
 def _persist_calibrate_count(value: int) -> None:
     my_settings_store["calibrate_count"] = value
 
-register_setting_persister("inclusion", _persist_inclusion)
+register_setting_persister("min_precision", _persist_min_precision)
 register_setting_persister("calibrate_count", _persist_calibrate_count)
 ```
 
-The recognised keys are `inclusion`, `calibrate_count`, and
+The recognised keys are `min_precision`, `calibrate_count`, and
 `calibration_fraction` (`vtscore.state.KNOWN_SETTING_KEYS`); any other key
 raises `ValueError`. Only the setters listed above ever fire a persister, so
 an unrecognised key could only be a typo in your wiring - one that would
-otherwise sit there silently never firing.
+otherwise sit there silently never firing. The one exception is `inclusion`,
+retired as a user preference (#4269): registering it warns and the persister
+never fires.
 
 If you don't install persisters, library code can still call
-`set_inclusion(5)` - the value just won't survive a process restart.
+`set_min_precision(0.75)` - the value just won't survive a process restart.
 That's a fine choice for many apps.
 
 ### Putting the seams back in tests
@@ -213,7 +214,6 @@ register_core_config_builder(lambda _settings_path=None: CoreConfig(
     dataset_max_age_days=None,
     calibrate_count=2, calibration_fraction=0.5,
     enrich_descriptions=False, autopilot_goal_diversity=8,
-    inclusion=0,
 ))
 
 # That's it. Now use the library.
@@ -263,7 +263,6 @@ register_core_config_builder(lambda _settings_path=None: CoreConfig(
     calibration_fraction=settings.calibration_fraction,
     enrich_descriptions=settings.enrich_descriptions,
     autopilot_goal_diversity=settings.autopilot_goal_diversity,
-    inclusion=settings.inclusion,
 ))
 
 
@@ -277,7 +276,7 @@ register_detector_context_resolver(
 
 
 # Hook 3: per-key persisters
-register_setting_persister("inclusion", lambda v: settings.update("inclusion", v))
+register_setting_persister("min_precision", lambda v: settings.update("min_precision", v))
 register_setting_persister("calibrate_count", lambda v: settings.update("calibrate_count", v))
 
 
@@ -367,14 +366,21 @@ that's your code.
 
 ## Persistent storage
 
-`vtscore` writes to disk in three places. All three are
-`CoreConfig`-driven; nothing is hardcoded.
+`vtscore` writes to disk in the places below. Nothing is a hardcoded
+relative path, but the locations come from two different knobs:
 
 | What | Where | Format |
 |------|-------|--------|
-| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Written by `export_dataset_to_file`. |
-| Detector labelsets | `CoreConfig.detectors_dir / "<slug>.json"` | JSON; origins + labels only, never weights. Written by `vtscore.detectors.store.save_detector`. |
-| Embedder model cache | `CoreConfig.data_dir / "models"` | HuggingFace / torch cache layout |
+| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Written by `vtscore.datasets.export_dataset_to_file`. A registered pickle may also get a derived `<stem>.embmat.npy` / `<stem>.embids.npy` matrix sidecar beside it |
+| Detector labelsets | `CoreConfig.detectors_dir / "<slug>.json"` | JSON; origins + labels only, never weights. Written by `vtscore.detectors.store.save_detector` |
+| Dataset / detector registries | `vtscore.config.DATA_DIR / "dataset_registry.json"`, `.../"detector_registry.json"` | JSON manifests maintained by `vtscore.datasets.registry` / `vtscore.detectors.registry` |
+| Embedder model cache | `vtscore.config.MODELS_CACHE_DIR` | HuggingFace / torch cache layout |
+
+`DATA_DIR` and `MODELS_CACHE_DIR` are resolved **at import time** from
+`$VTSEARCH_DATA_DIR` and `$VTSEARCH_MODELS_DIR` (falling back to the
+repository's `data/` and `data/models/`); a `CoreConfig` with a different
+`data_dir` does not move them. To relocate everything, set the
+environment variables before the first `import vtscore`.
 
 If you want a different layout - say, store detectors in your database
 instead of on disk - you have two options:
@@ -384,14 +390,14 @@ instead of on disk - you have two options:
    [extending/labelset-sources.md](extending/labelset-sources.md)).
    The on-disk JSON still exists as a cache, but your store is the
    source of truth.
-2. **Replace `vtscore.detectors.store` calls.** The store module is
-   small (a few `json.load` / `json.dump` calls); replacing it with
-   your DB equivalent is straightforward. This is more invasive but
-   gives full control.
+2. **Replace `vtscore.detectors.store` calls.** `save_detector` /
+   `load_detector` are thin JSON read/write functions; calling your DB
+   equivalent in their place is straightforward. This is more invasive
+   but gives full control.
 
 For datasets, the analogous plugin is `MediaSource` - implement one
 that resolves an `Origin` back to a file pulled from your storage layer
-(S3, GCS, HDFS, …). See [extending/media-types.md](extending/media-types.md).
+(S3, GCS, HDFS, …). See [extending/media-sources.md](extending/media-sources.md).
 
 ## Authentication and per-user data
 
@@ -444,8 +450,11 @@ you can ignore all of the above and just import what you need:
   and its default embedder at import time. Both return `None` rather than
   raising when the media type's embedder has no text tower / can't embed the
   file.
-- `from vtscore.datasets.loader import load_dataset_from_folder` -
-  works if you don't call `CoreConfig.from_settings()` anywhere.
+- `from vtscore.datasets.loader import load_dataset_from_folder` plus
+  `vtscore.datasets.stages.embedding.embed_missing` - no config needed.
+  Saving or reloading detectors (`vtscore.detectors.store`) and the load
+  pipeline's concurrency gates do call `CoreConfig.from_settings()`, so
+  install Hook 1 before using those.
 
 The library is designed to scale from "one-line numpy operation" to "a
 full Flask + Angular app" without any code path being mandatory in

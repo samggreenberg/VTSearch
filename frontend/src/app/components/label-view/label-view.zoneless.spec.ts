@@ -1,12 +1,15 @@
 import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 
 import { LabelViewComponent } from './label-view.component';
+import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
+import { VoteHistoryService } from '../../services/vote-history.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
@@ -16,6 +19,8 @@ import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { lineFloor, wireFloor } from '../../testing/line-floor';
+import { LeftPanelComponent } from '../left-panel/left-panel.component';
 
 /**
  * Zoneless staleness canary for the label view.
@@ -82,7 +87,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
       // Include smart/stable/span: the autopilot panel's ngOnChanges feeds this
@@ -141,7 +146,7 @@ describe('LabelViewComponent', () => {
 
   // Flush the HTTP calls that fire synchronously during the first
   // `fixture.detectChanges()`. label-view's ngOnInit loads medias, votes,
-  // settings, dataset status, inclusion; the left panel loads media-types
+  // settings, dataset status, the precision floor; the left panel loads media-types
   // and embedders. The `/api/labeling-status` and polling `/api/votes`
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
@@ -181,9 +186,9 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
     );
-    // /api/inclusion
-    httpMock.match('/api/inclusion').forEach(req =>
-      req.flush({ inclusion: 0 }),
+    // /api/min-precision
+    httpMock.match('/api/min-precision').forEach(req =>
+      req.flush({ min_precision: 0.5 }),
     );
     // /api/media-types (left panel)
     httpMock.match('/api/media-types').forEach(req =>
@@ -409,6 +414,86 @@ describe('LabelViewComponent', () => {
     });
   });
 
+  /**
+   * #4306: `↑` used to re-run the advance, which picks off the *current*
+   * ranking — and the item on screen was picked off the one before the re-sort
+   * a vote schedules. So `↓` then `↑` routinely landed somewhere new.
+   */
+  describe('↓ then ↑ (#4306)', () => {
+    const allLabeled = { good: [1], bad: [2], click_times: {}, learned_scores: {} };
+    const history = () => TestBed.inject(VoteHistoryService);
+
+    it('returns to the item the walk started from, not the re-ranked pick', async () => {
+      flushInitialRequests(
+        { good: [1], bad: [], click_times: {}, learned_scores: {} },
+        [1, 2, 3].map((id) => ({ id, media_type: 'audio' })),
+      );
+      await settleResource();
+      component.sortState.setSelectMode('top');
+      component.sortState.setSortResults(
+        [{ id: 1, score: 0.9 }, { id: 2, score: 0.8 }, { id: 3, score: 0.7 }],
+        0.5,
+      );
+      // The vote on 1 advanced to 2 ...
+      history().record(1);
+      component.onMediaVoted({ id: 1, vote: 'good' });
+      expect(component.mediaState.selectedId()).toBe(2);
+      // ... and the re-sort it scheduled then landed without moving the selection.
+      component.sortState.setSortResults(
+        [{ id: 1, score: 0.9 }, { id: 3, score: 0.85 }, { id: 2, score: 0.6 }],
+        0.5,
+      );
+      TestBed.tick();
+
+      component.onNavigate('back');
+      expect(component.mediaState.selectedId()).toBe(1);
+      component.onNavigate('forward');
+      expect(component.mediaState.selectedId()).toBe(2);
+
+      // With no walk left to end, `↑` is the advance again.
+      component.onNavigate('forward');
+      expect(component.mediaState.selectedId()).toBe(3);
+    });
+
+    it('lands back on the "nothing left" pane when the walk started there', async () => {
+      flushInitialRequests(allLabeled);
+      await settleResource();
+      history().record(1);
+      history().record(2);
+      // The last item voted on is still the selection behind the pane.
+      component.mediaState.selectMedia(2);
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(true);
+
+      component.onNavigate('back');
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(2);
+      expect(component.centreExhausted()).toBe(false);
+
+      component.onNavigate('forward');
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(true);
+    });
+
+    it('returns to an item picked while the pane was up', async () => {
+      flushInitialRequests(allLabeled);
+      await settleResource();
+      history().record(1);
+      history().record(2);
+      component.onMediaSelect(1);
+      TestBed.tick();
+      expect(component.centreExhausted()).toBe(false);
+
+      component.onNavigate('back');
+      expect(component.mediaState.selectedId()).toBe(2);
+
+      component.onNavigate('forward');
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(1);
+      expect(component.centreExhausted()).toBe(false);
+    });
+  });
+
   it('should load votes on init', () => {
     flushInitialRequests();
     expect(component.voteState.goodVotes.size).toBe(0);
@@ -531,6 +616,32 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
+  /**
+   * #4307: the centre panel keeps the voted item swiped off-screen while this
+   * binding is true, so it has to reach the panel for exactly the round-trip.
+   */
+  it('tells the centre panel while the New-mode advance is in the air', () => {
+    flushInitialRequests();
+    component.sortState.setSortResults(
+      [{ id: 2, score: 0.9 }, { id: 1, score: 0.3 }],
+      0.5,
+    );
+    component.onSelectModeChange('new');
+    TestBed.tick();
+    const centre = fixture.debugElement.query(By.directive(CenterPanelComponent))
+      .componentInstance as CenterPanelComponent;
+    expect(centre.advancePending()).toBe(true);
+
+    // The tick also lets the view's own nothing-selected effect ask for an item,
+    // so a second probe is in the air: the wait ends when every one has answered.
+    const probes = httpMock.match('/api/coverage-atlas/next');
+    expect(probes.length).toBeGreaterThan(0);
+    probes.forEach((probe) => probe.flush({ id: 1, coverage_level: 2.0 }));
+    TestBed.tick();
+    expect(centre.advancePending()).toBe(false);
+    expect(component.mediaState.selectedId()).toBe(1);
+  });
+
   it('should reselect media when switching select mode to top', () => {
     flushInitialRequests();
 
@@ -567,14 +678,96 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should handle inclusion change', () => {
+  it('should handle a precision-floor change', () => {
     flushInitialRequests();
-    component.onInclusionChange(5);
-    expect(component.sortState.inclusion).toBe(5);
+    component.onMinPrecisionChange(0.75);
+    expect(component.sortState.minPrecision).toBe(0.75);
 
-    const req = httpMock.expectOne('/api/inclusion');
-    expect(req.request.body).toEqual({ inclusion: 5 });
-    req.flush({ inclusion: 5 });
+    const req = httpMock.expectOne((r) => r.url === '/api/min-precision' && r.method === 'POST');
+    expect(req.request.body).toEqual({ min_precision: 0.75 });
+    req.flush({ min_precision: 0.75 });
+  });
+
+  /**
+   * The spot check lives in Train alone (#4317): Find tests the threshold set
+   * here. Opened from the Threshold control, the step takes the vote keys, the
+   * list behind it gets none, and a finished check's line is installed.
+   */
+  it('runs the spot check from the Threshold control and installs the line it ends on (#4273, #4317)', async () => {
+    flushInitialRequests();
+    await settleResource();
+    // Manual first: leaving Autopilot hands its sort mode back to the tab.
+    const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
+    left.setTab('manual');
+    await settleResource();
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortMode('learned');
+    sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineFloor('unchecked'));
+    await settleResource();
+    const el = fixture.nativeElement as HTMLElement;
+
+    (el.querySelector('vt-precision-floor .floor-check-btn') as HTMLButtonElement).click();
+    await settleResource();
+    httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
+      floor: wireFloor('unchecked'),
+      check: {
+        status: 'running',
+        min_precision: 0.5,
+        round: 1,
+        rounds: 1,
+        picks_per_round: 1,
+        candidate: 32,
+        start_candidate: 32,
+        picks: [2],
+        labelled: 0,
+        right: 0,
+        range: null,
+      },
+    });
+    await settleResource();
+    expect(el.querySelector('vt-floor-check-modal')).not.toBeNull();
+
+    // → votes the pick in the step; the list behind it gets nothing.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await settleResource();
+    expect(httpMock.match((req) => req.url.startsWith('/api/medias/') && req.url.endsWith('/vote'))).toEqual([]);
+    const votes = httpMock.expectOne((req) => req.url === '/api/precision-check/votes');
+    expect(votes.request.body).toEqual({ votes: [{ id: 2, label: 'good' }] });
+    const range = { lo: 0.55, hi: 1, labelled: 1, right: 1 };
+    votes.flush({
+      floor: { ...wireFloor('confirmed'), range },
+      check: {
+        status: 'confirmed',
+        min_precision: 0.5,
+        round: 1,
+        rounds: 1,
+        picks_per_round: 1,
+        candidate: 32,
+        start_candidate: 32,
+        picks: [],
+        labelled: 1,
+        right: 1,
+        range,
+      },
+    });
+    await settleResource();
+
+    // The finished check moved the line server-side; the view installs it.
+    httpMock
+      .expectOne((req) => req.url === '/api/min-precision' && req.method === 'GET')
+      .flush({ ...wireFloor('confirmed'), threshold: 0.3, n_returned: 2 });
+    await settleResource();
+    expect(sortState.threshold).toBe(0.3);
+    expect(sortState.floor?.status).toBe('confirmed');
+    expect(el.querySelector('vt-precision-floor .floor-state')!.textContent).toContain('Confirmed');
+  });
+
+  it('seeds the floor control from the detector on entry', () => {
+    TestBed.tick();
+    TestBed.tick();
+    httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.9 }));
+    flushInitialRequests();
+    expect(component.sortState.minPrecision).toBe(0.9);
   });
 
   it('should render center panel component', () => {
@@ -651,6 +844,8 @@ describe('LabelViewComponent', () => {
       results: [{ id: 1, similarity: 0.9 }, { id: 2, similarity: 0.3 }],
       threshold: 0.5,
     });
+    // Nobody has acted on the centre yet, so the view places it (#4318).
+    TestBed.tick();
 
     expect(component.sortState.sortOrder).toBeTruthy();
     expect(component.mediaState.selectedId()).toBe(1);
@@ -672,6 +867,10 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/medias/ids').forEach(req =>
       req.flush([{ id: 1, media_type: 'audio' }]),
     );
+    httpMock.match('/api/find/end-session').forEach(req =>
+      req.flush({ ok: true, ended: false }),
+    );
+    TestBed.tick();
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
     );
@@ -681,8 +880,8 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
     );
-    httpMock.match('/api/inclusion').forEach(req =>
-      req.flush({ inclusion: 0 }),
+    httpMock.match('/api/min-precision').forEach(req =>
+      req.flush({ min_precision: 0.5 }),
     );
     httpMock.match('/api/media-types').forEach(req =>
       req.flush({ media_types: [] }),
@@ -702,6 +901,8 @@ describe('LabelViewComponent', () => {
       results: [{ id: 1, similarity: 0.8 }],
       threshold: 0.5,
     });
+    // Nobody has acted on the centre yet, so the view places it (#4318).
+    TestBed.tick();
 
     expect(component.mediaState.selectedId()).toBe(1);
   });
@@ -731,7 +932,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );
-      httpMock.match('/api/inclusion').forEach(req => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/min-precision').forEach(req => req.flush({ min_precision: 0.5 }));
       httpMock.match('/api/media-types').forEach(req => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach(req =>
         req.flush({ embedders: [{ name: 'dinov3', supports_text: false }] }),
@@ -1279,6 +1480,11 @@ describe('LabelViewComponent', () => {
   describe('fresh entry carries the sort over (#4092)', () => {
     async function enterWithVotes(): Promise<void> {
       flushInitialRequests();
+      // Tick so the effect watching `votesLoaded` arms the entry seed *now*.
+      // Left to the scheduled CD it arms a macrotask later, so the seed's
+      // 300ms would start inside the 400ms below and the margin would be
+      // whatever that CD pass took to arrive, which a loaded run can exceed.
+      TestBed.tick();
       // The entry seed is deferred a beat, as the pair-switch one is.
       await new Promise<void>((resolve) => setTimeout(resolve, 400));
     }
@@ -1318,6 +1524,240 @@ describe('LabelViewComponent', () => {
       // does not add a second one on the carried query.
       const bodies = httpMock.match('/api/sort').map((r) => r.request.body);
       expect(bodies).not.toContainEqual({ text: 'aaa' });
+    });
+  });
+
+  /**
+   * #4318: a fresh entry fires more than one sort, and which one lands first
+   * varies from visit to visit. Autopilot activates before the votes load, so
+   * it guesses the detector is untrained and arms its text seed; the votes then
+   * reveal a trained detector, and the retrain correction moves the phase onto
+   * the learned sort. The centre used to be served from whichever ranking
+   * landed first, and the text seed could land last and replace the learned
+   * ranking outright. Every order below must end on the same item: the learned
+   * ranking's Boundary pick.
+   */
+  describe('entry serves from the ranking it settles on (#4318)', () => {
+    const medias = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, media_type: 'audio' }));
+    /** Three Goods and four Bads on this dataset, and a labelset holding both
+     *  classes: Autopilot lands in retrain mode, at the Boundary phase. */
+    const trainedVotes = {
+      good: [1, 2, 3],
+      bad: [4, 5, 6, 7],
+      click_times: {},
+      learned_scores: {},
+      labelset_good_count: 3,
+      labelset_bad_count: 4,
+    };
+    /** Top pick 9, Boundary pick 8. */
+    const textRanking = {
+      results: [9, 10, 8, 1, 2, 3, 4, 5, 6, 7].map((id, i) => ({ id, similarity: 0.9 - i * 0.1 })),
+      threshold: 0.75,
+    };
+    /** Boundary pick 10: the item the entry must settle on. */
+    const learnedRanking = {
+      status: 'done',
+      results: [1, 2, 3, 9, 10, 8, 4, 5, 6, 7].map((id, i) => ({
+        id,
+        score: [0.95, 0.9, 0.85, 0.7, 0.6, 0.4, 0.3, 0.2, 0.1, 0.05][i],
+      })),
+      threshold: 0.5,
+      acq_threshold: 0.65,
+    };
+
+    beforeEach(() => {
+      TestBed.inject(LabelSessionService).textQuery = 'the hint';
+    });
+
+    /** Answer the medias and the embedder registry: what the text seed waits on. */
+    async function landMedias(): Promise<void> {
+      httpMock.match('/api/medias/ids').forEach((req) => req.flush(medias));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      await settleResource();
+      TestBed.tick();
+    }
+
+    /** Answer the Find hand-off and the votes it chains, then let the retrain
+     *  correction and the phase change it causes run. */
+    function landVotes(votes: Record<string, unknown> = trainedVotes): void {
+      httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
+      TestBed.tick();
+      httpMock.match('/api/votes').forEach((req) => req.flush(votes));
+      TestBed.tick();
+    }
+
+    /** Wait out the 300 ms deferral of the seed the votes armed. */
+    async function waitOutSeed(): Promise<void> {
+      TestBed.tick();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
+    }
+
+    function landLearnedSort(): void {
+      httpMock.expectOne('/api/learned-sort').flush(learnedRanking);
+      TestBed.tick();
+    }
+
+    it('drops a text seed still waiting on the medias once the votes show a trained detector', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      landVotes();
+      expect(TestBed.inject(AutopilotStateService).state.phase).toBe('hard');
+      await landMedias();
+
+      httpMock.expectNone('/api/sort');
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    it('lets the learned sort supersede a text seed already in flight', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      const textSeed = httpMock.expectOne('/api/sort');
+      landVotes();
+
+      // Asked for after the seed, so the seed's answer is no longer wanted.
+      expect(textSeed.cancelled).toBe(true);
+      landLearnedSort();
+      expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(learnedRanking.results.map((r) => r.id));
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    it('waits for the votes, then follows the ranking that lands after the first', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      httpMock.expectOne('/api/sort').flush(textRanking);
+      TestBed.tick();
+      // With the votes unread every item looks unlabeled, and the top of this
+      // ranking is one the user labeled long ago: no pick yet.
+      expect(component.mediaState.selectedId()).toBeNull();
+
+      landVotes();
+      // The Boundary phase's pick over the ranking on screen, for now.
+      expect(component.mediaState.selectedId()).toBe(8);
+
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    it('leaves a clicked item where it is when a later ranking lands (#4092)', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      httpMock.expectOne('/api/sort').flush(textRanking);
+      landVotes();
+      expect(component.mediaState.selectedId()).toBe(8);
+
+      component.onMediaSelect(9);
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(9);
+    });
+
+    it('stops re-picking once the user votes', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      landVotes();
+      landLearnedSort();
+      expect(component.mediaState.selectedId()).toBe(10);
+
+      component.onMediaVoted({ id: 10, vote: 'good' });
+      const next = component.mediaState.selectedId();
+      // The re-rank a vote schedules is the user's own labelling moving on,
+      // not the entry: it must not re-place the centre.
+      component.sortState.setSortWindow({
+        items: [{ id: 9, score: 0.9 }, { id: 8, score: 0.1 }],
+        threshold: 0.5,
+        acqThreshold: 0.5,
+        total: 2,
+        hasMore: false,
+        token: null,
+        aboveThreshold: 1,
+      });
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(next);
+    });
+
+    it('trains once when the retrain seed fires during the phase change\'s learned sort (#4326)', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      httpMock.expectOne('/api/sort');
+      landVotes();
+      const learned = httpMock.expectOne('/api/learned-sort');
+
+      // Still training when the retrain seed fires. A second request would be
+      // parked by the server's job manager and trained all over again.
+      await waitOutSeed();
+      httpMock.expectNone('/api/learned-sort');
+
+      learned.flush(learnedRanking);
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    /**
+     * #4326: the same entry, on a detector whose labels come from another
+     * dataset. The labelset holds both classes, so the votes still turn retrain
+     * mode on, but this dataset has no votes and the phase stays at Good. No
+     * phase change sorts, so the retrain seed is the only thing that moves the
+     * run off the text hint. It used to stand down on the text seed when that
+     * was still in flight, or when it had landed under a `learned` mode carried
+     * over from the last session.
+     */
+    describe('when no phase change follows the retrain correction (#4326)', () => {
+      /** Both classes in the labelset, no votes on this dataset. */
+      const otherDatasetVotes = {
+        good: [],
+        bad: [],
+        click_times: {},
+        learned_scores: {},
+        labelset_good_count: 3,
+        labelset_bad_count: 4,
+      };
+
+      it('replaces a text seed still in flight', async () => {
+        TestBed.tick();
+        TestBed.tick();
+        await landMedias();
+        const textSeed = httpMock.expectOne('/api/sort');
+        landVotes(otherDatasetVotes);
+        const autopilot = TestBed.inject(AutopilotStateService);
+        expect(autopilot.state.retrainMode).toBe(true);
+        expect(autopilot.state.phase).toBe('good');
+        httpMock.expectNone('/api/learned-sort');
+
+        await waitOutSeed();
+        const learned = httpMock.expectOne('/api/learned-sort');
+        // Asked for after the seed, so the seed's answer can no longer land,
+        // whichever of the two the server answers first.
+        expect(textSeed.cancelled).toBe(true);
+        learned.flush(learnedRanking);
+        TestBed.tick();
+        expect(component.sortState.sortMode).toBe('learned');
+        expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(learnedRanking.results.map((r) => r.id));
+        // The Good phase's pick: the top of the learned ranking.
+        expect(component.mediaState.selectedId()).toBe(1);
+      });
+
+      it('replaces a landed text seed under a carried-over learned mode', async () => {
+        // The last session ended on the learned sort, and the mode survives entry.
+        component.sortState.setSortMode('learned');
+        TestBed.tick();
+        TestBed.tick();
+        await landMedias();
+        httpMock.expectOne('/api/sort').flush(textRanking);
+        landVotes(otherDatasetVotes);
+        // The Good phase's pick over the text ranking, for now.
+        expect(component.mediaState.selectedId()).toBe(9);
+
+        await waitOutSeed();
+        httpMock.expectOne('/api/learned-sort').flush(learnedRanking);
+        TestBed.tick();
+        expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(learnedRanking.results.map((r) => r.id));
+        expect(component.mediaState.selectedId()).toBe(1);
+      });
     });
   });
 
@@ -1463,6 +1903,8 @@ describe('LabelViewComponent', () => {
       flushInitialRequests();
       flushDetectorRegistry();
       TestBed.inject(AutopilotStateService).clear();
+      // Arm the entry seed now so the wait below reliably outlasts it.
+      TestBed.tick();
       await new Promise<void>((resolve) => setTimeout(resolve, 400));
       httpMock.match('/api/sort');
       // The user's own sort: Text, "aaa". The new detector's hint is different,
@@ -1485,6 +1927,8 @@ describe('LabelViewComponent', () => {
       flushInitialRequests();
       flushDetectorRegistry();
       TestBed.inject(AutopilotStateService).clear();
+      // Arm the entry seed now so the wait below reliably outlasts it.
+      TestBed.tick();
       await new Promise<void>((resolve) => setTimeout(resolve, 400));
       component.sortState.setSortMode('learned');
       component.sortState.setTextQuery('aaa');
@@ -1526,14 +1970,13 @@ describe('LabelViewComponent', () => {
       );
       // A re-rank riding the same vote load (an Autopilot phase change) lands
       // its ranking first. The backstop must not train the same model again.
-      component.sortState.setSortWindow({
-        items: [{ id: 1, score: 0.9 }],
+      // It runs through the view, as the phase change's does: the backstop
+      // goes by the kind of sort that ranked the pair, not by `sortMode` (#4326).
+      component.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.9 }],
         threshold: 0.5,
-        acqThreshold: null,
-        total: 1,
-        hasMore: false,
-        token: null,
-        aboveThreshold: 1,
       });
       TestBed.tick();
       await new Promise<void>((resolve) => setTimeout(resolve, 400));

@@ -119,17 +119,21 @@ MIRRORS: list[Mirror] = [
         note=(
             "The phase ordering and every transition trigger of the simulated Autopilot user. "
             "Lives in TypeScript, so there is nothing to import - it is a hand copy. If you "
-            "add, remove or reorder a phase, or change what gates one, port the same change."
+            "add, remove or reorder a phase, or change what gates one, port the same change. "
+            "The 'more' walk (#4282) keeps history the counts cannot: its run of misses, read "
+            "off which vote count rose. The app keeps it in checkPhaseTransition; the harness "
+            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done."
         ),
     ),
     Mirror(
         id="autopilot.vote_targets",
         app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
-        harness="vtscore/eval/autopilot_flow.py::GOOD_TARGET,BAD_TARGET",
+        harness="vtscore/eval/autopilot_flow.py::GOOD_TARGET,BAD_TARGET,MORE_TARGET,MORE_DRY_RUN",
         kind="ported",
         note=(
-            "goodToStart / badToStart are copied as GOOD_TARGET / BAD_TARGET, which decide how "
-            "many votes the simulation spends before its first learned sort. Pinned literally "
+            "goodToStart / badToStart / moreToStart / moreDryRun are copied as GOOD_TARGET / "
+            "BAD_TARGET / MORE_TARGET / MORE_DRY_RUN, which decide how many votes the simulation "
+            "spends before its first learned sort. Pinned literally "
             "by tests_lib/detectors/test_autopilot_flow.py::TestPortedConstants. Both harness "
             "constants are named here, because the mirror is the pair: watching only GOOD_TARGET "
             "would leave a change to BAD_TARGET alone as silent as the app-side half used to be."
@@ -142,7 +146,7 @@ MIRRORS: list[Mirror] = [
         kind="ported",
         note=(
             "Which Sort and which Select each Autopilot phase drives - good=text+top, "
-            "bad=text+hard, hard=learned+hard, new=learned+new. The simulated user picks the "
+            "bad=text+hard, more=text+top, hard=learned+hard, new=learned+new. The simulated user picks the "
             "next item from exactly this pairing, so re-pointing a phase at a different sort "
             "or select here silently changes what every study's vote order means. The load- "
             "bearing row is `bad`: it is still on the TEXT sort, so the harness must not "
@@ -190,13 +194,127 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="autopilot.pick_provenance",
+        app=f"ts:{LABEL_VIEW_TS}::subscribe(([prev, curr]) =>",
+        harness="vtscore/eval/autopilot_flow.py::_PHASE_PICKS,pick_provenance",
+        kind="ported",
+        note=(
+            "Which ranking each Autopilot phase draws off, and how: the label view sets the sort "
+            "and select mode on every phase change (good: seed sort, top; bad: seed sort, hard; "
+            "more: seed sort, top; "
+            "hard: learned, hard; new: learned, new) and VoteProvenanceService records them with "
+            "each vote. The precision floor calibrates only on votes calibrates_precision accepts "
+            "- learned-sort draws off the ranking itself (#4245) - and the harness decides that "
+            "from pick_provenance's record of each simulated click. If a phase starts drawing off "
+            "a different sort or select mode, the harness's evidence filter has to follow or its "
+            "default arm calibrates the promise on votes the app would not."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's retrain mode (a detector that already had labels) draws good "
+            "and bad off the learned sort too; the harness always starts from an untrained "
+            "detector, so it has no retrain mode to port. The harness's seed sort is a text sort "
+            "or an example sort and is recorded as 'text' either way - calibrates_precision reads "
+            "only whether the sort was the learned one."
+        ),
+    ),
+    Mirror(
+        id="floor.check_schedule",
+        app="py:vtscore.training.thresholds.spot_check.check_schedule",
+        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::schedule_for",
+        kind="ported",
+        note=(
+            "The spot check's schedule (#4272): the starting candidate K(X) = 32 * 2**max(0, "
+            "floor(log2(0.5 / X))), the rounds R = log2(K / 32) + 1, and the picks a round "
+            "m = max(5, ceil(ln(alpha / R) / ln X)). The owner priced this exact rule on the "
+            "#4224 rank frames (docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md); the "
+            "library's check_schedule is a port of the analysis script's schedule_for, and the "
+            "presets must keep resolving to (128, 3, 5), (64, 2, 5), (32, 1, 5), (32, 1, 11) and "
+            "(32, 1, 29) - tests_lib/sorting/test_spot_check.py pins them literally. The eval "
+            "harness itself delegates to the library (voting_iterations calls check_schedule / "
+            "SpotCheck), so the pair pinned here is library vs. the priced reference."
+        ),
+        divergence=(
+            "INTENTIONAL: the library validates X in (0, 1] and, at X >= 1, makes the picks the "
+            "candidate itself (no finite sample bounds a proportion at 1; only a census reaches "
+            "it) where the reference would divide by ln 1 = 0. The reference reads EPS and "
+            "BASE off its sibling module; the library spells them as its own constants."
+        ),
+    ),
+    Mirror(
+        id="floor.likely_range",
+        app="py:vtscore.training.thresholds.spot_check.likely_range",
+        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
+        kind="ported",
+        note=(
+            "The likely range a checked set carries (#4272): a Clopper-Pearson interval from "
+            "the check's labels inside the set, each tail at alpha / R (range_tail - the level "
+            "every round is tested at, so the lower end IS the bound the check tested and a "
+            "check confirms X iff lo >= X), exact (s / K) once the labels cover the set. The "
+            "reference's coverage numbers (99% of sessions) hold only for this tail; a plain "
+            "90% range showed above the truth 11% of the time after a first-round pass. If "
+            "the tail or the census rule moves on either side, move the other."
+        ),
+        divergence=(
+            "INTENTIONAL: the reference is vectorised over frames (numpy arrays, a cached bound "
+            "table); the library bounds one set at a time through scipy's beta quantile, "
+            "clopper_pearson_lower / clopper_pearson_upper, and returns a LikelyRange record. "
+            "range_tail is a separate one-liner on both sides; it is named here because the "
+            "tail is half of what this mirror is about."
+        ),
+    ),
+    Mirror(
+        id="floor.check_rounds",
+        app="py:vtscore.training.thresholds.spot_check.SpotCheck",
+        harness="scripts/experiments/calibration/analyze_random_verification.py::simulate_rounds",
+        kind="ported",
+        note=(
+            "The check's rounds (#4257's rule b, ruled in #4267 and #4272): m fresh picks drawn "
+            "uniformly from the current candidate, the labels already seen inside it kept, a "
+            "round confirming iff the one-sided bound at alpha / R clears X, a failed round "
+            "halving the candidate down to 32, no redraw on the same candidate, and a census "
+            "decided exactly. SpotCheck is the app's live state machine over one fixed candidate; "
+            "simulate_rounds is the vectorised simulation the rule was priced with. If either "
+            "changes what is kept across a halving, how many picks a round draws, or the level "
+            "a round is tested at, the other has to follow or the pricing no longer describes "
+            "the shipped check."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
+            "carries a fingerprint for the stale flag, and reports its state to a client; the "
+            "simulation has none of that, and draws hypergeometrically from planted positive "
+            "ranks rather than asking a user. A candidate smaller than the schedule's K (a "
+            "small corpus) gets the halvings it really has (rounds_for) on the app side; the "
+            "simulation always starts at the rule's K."
+        ),
+    ),
+    Mirror(
+        id="thresholds.min_precision_default",
+        app="py:vtscore.state.__init__.get_min_precision",
+        harness="vtscore/training/thresholds/precision_floor.py::resolve_min_precision",
+        kind="default",
+        note=(
+            "What floor a detector cuts at when nobody set one (#4245): the app seeds each "
+            "detector from the user's setting, whose unset value is DEFAULT_MIN_PRECISION, and "
+            "the harness's min_precision=None resolves to that same constant. The value cannot "
+            "drift - both read one constant, and tests/sorting/test_min_precision_route.py "
+            "pins UserSettings' default against the resolver - so this digest watches the "
+            "*resolution*: if the app's floor starts depending on something else (the dataset, "
+            "the embedder, a per-detector default), that has to reach the harness too."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned floor where "
+            "the app has a per-user setting; the DEFAULT arm passes None and resolves here."
+        ),
+    ),
+    Mirror(
         id="autopilot.startup_default",
         app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
         harness="vtscore/eval/startup_schedule.py::PRODUCTION_STARTUP",
         kind="default",
         note=(
             "issue #3267 made the Autopilot opening a parameter, so the harness now has a "
-            "spelling of the app's own opening - 'g3@top,b4@mid' - that a study's control arm "
+            "spelling of the app's own opening - 'g3@top,b4@mid,g20+dry1/16@top' since #4282 "
+            "(it was 'g3@top,b4@mid') - that a study's control arm "
             "runs. If goodToStart/badToStart move, or the opening stops being 'top of the "
             "seed sort then its cutoff', this constant has to move with them or every #3267 "
             "study measures its deviations from an opening nobody ships. "
@@ -247,7 +365,20 @@ MIRRORS: list[Mirror] = [
             "`scoring_rows_for_snap`, the harness through `score_sim_set_with_model` on the "
             "arm's style - rather than on whole-image vectors a patch head was never fitted "
             "on. Those live in the scorers, not in the flatness rule pinned here, so a change "
-            "to either scorer trips the `progress.eval_geometry` mirror below instead."
+            "to either scorer trips the `progress.eval_geometry` mirror below instead. "
+            "What a cost is priced at is shared too (issue #4243): both sides price at "
+            "`cost_trend.SMART_INCLUSION` and score each model at `cost_trend.smart_cut` of "
+            "its reporting line, not at the arm's or the user's inclusion - and the line's "
+            "own inclusion is the operating point's (none when a promised precision floor "
+            "drew it, #4245), so both sides hand smart_cut the reporting line's inclusion "
+            "rather than the knob's. Only the re-cut "
+            "each side hands `smart_cut` differs. The app passes `recut_detector_threshold`, "
+            "which falls back to the conformal rule over the fold orderings when there is no "
+            "fold-anchored fit; the harness passes its step's fold-anchored fit or nothing "
+            "(`voting_iterations._no_recut`), keeping the reporting line. That matters only "
+            "on an arm reporting at another inclusion with no fold-anchored fit. The default "
+            "arm reports at `SMART_INCLUSION`, so `smart_cut` returns its reporting line "
+            "exactly and never re-cuts."
         ),
     ),
     Mirror(
@@ -260,7 +391,9 @@ MIRRORS: list[Mirror] = [
             "sides must score a head the way that head is served - max-pooled over the rows "
             "it was fitted against - or the indicator measures a geometry nobody ships, which "
             "is half of issue #3757. If you change which rows either side scores, or the "
-            "pooling over them, change both."
+            "pooling over them, change both. The cut each model is scored at is "
+            "`cost_trend.smart_cut`'s on both sides (issue #4243): the app reads it off the "
+            "step (`smart_threshold`), the harness off the window its caller built."
         ),
         divergence=(
             "The app reaches the rows through `scoring_rows_for_snap`, which is bound to the "
@@ -310,10 +443,10 @@ MIRRORS: list[Mirror] = [
         divergence=(
             "The app reads its green target from `CoreConfig.autopilot_goal_diversity`; the "
             "harness takes it per-run so a sweep can vary it, defaulting to the same value. "
-            "The harness also *reports* the resolved bar (`span_target`, on every emitted "
-            "row); the app computes the same quantity and keeps it to itself, spelling it into "
-            "the indicator's reason string instead. That is a reporting addition on the "
-            "harness side, not a difference in the rule."
+            "Both sides *report* the resolved bar: the harness as `span_target` on every "
+            "emitted row, the app as the indicator's `target` key, which the autopilot panel "
+            "paces its Diversity light against (issue #4319). Reporting only, not a difference "
+            "in the rule."
         ),
     ),
     # ----------------------------------------------------------------- default
@@ -331,7 +464,10 @@ MIRRORS: list[Mirror] = [
             "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
             "`resolve_hidden_dim(step_model.PRODUCTION_HEAD, ...)`, which "
             "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
-            "real - so a head change fails the suite as well as tripping this digest."
+            "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
+            "the app reads no stored Inclusion: its conformal cut is at "
+            "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
+            "whose default, 0, is that cut."
         ),
     ),
     Mirror(
@@ -342,7 +478,21 @@ MIRRORS: list[Mirror] = [
         note=(
             "How the cross-calibration cut and the population estimate are fused into the "
             "shipped threshold. The harness's reported operating point is only comparable to "
-            "the app's if this rule matches."
+            "the app's if this rule matches. Since #4272 this is where the line is drawn under "
+            "a floor: the set the floor keeps, through the shared floor_line over a LineRanking "
+            "built from the final model's scores with the voted items marked - delegated, so "
+            "which line a floor draws cannot drift; what this digest watches is the ranking's "
+            "inputs (every scored item, unscorable ones dropped, the trainer's voted set), which "
+            "the harness has to build the same way, and the order of the fallbacks under it "
+            "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no floor, the "
+            "schedule blend with no fitted cut). Since #4245 this is also where the #4220 "
+            "estimate is built (the unvoted remainder as corpus, the WHOLE haystack - votes "
+            "included - as the reference pool, each fold's held-out votes cut down by "
+            "eligible_fold_orderings, each fold's own excluded haystack); it no longer draws "
+            "the line on either side and feeds only the Find Stats curve, but the harness still "
+            "builds it the same way. Since #4269 the app hands reporting_line "
+            "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
+            "hands it the arm's `inclusion`, whose default is that 0."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
@@ -461,9 +611,9 @@ MIRRORS: list[Mirror] = [
             "are inclusion-blind by construction, so they would enter the #2865 frame as arms "
             "that trivially lose the knob-liveness comparison while saying nothing about the cut "
             "rule under test; the sweep skips that anchor weight instead. Fitting once and "
-            "re-cutting is also what production itself does on an Inclusion slide "
-            "(recompute_detector_thresholds_for_inclusion), so the sweep measures the object the "
-            "app re-cuts rather than a chain of independent retrains."
+            "re-cutting is also what production itself does for the acquisition cut and Smart's "
+            "pricing (recut_detector_threshold), so the sweep measures the object the app "
+            "re-cuts rather than a chain of independent retrains."
         ),
     ),
     Mirror(

@@ -2,6 +2,7 @@
   class="drop-zone"
   [class.drop-zone--active]="isDragging"
   [class.drop-zone--disabled]="disabled()"
+  [class.drop-zone--missing]="missing()"
   role="button"
   tabindex="0"
   [attr.aria-disabled]="disabled() ? 'true' : null"

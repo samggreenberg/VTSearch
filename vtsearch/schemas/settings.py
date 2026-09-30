@@ -20,6 +20,7 @@ from vtsearch.settings_models import (
     VALID_FOCUS_MODES,
     VALID_GRID_ICON_SIZES,
     VALID_THEMES,
+    VALID_USAGE_BARS_MODES,
 )
 
 
@@ -58,6 +59,13 @@ class _PerMediaTypeStringListDict(fields.Dict):
         super().__init__(keys=fields.String(), values=fields.List(fields.String()), **kwargs)
 
 
+class DocsLinkSchema(Schema):
+    """One entry of the server's ``docs_links`` list (a Help-modal link)."""
+
+    label = fields.String(required=True)
+    url = fields.String(required=True)
+
+
 class AppSettingsSchema(Schema):
     """Full settings dict returned by ``GET /api/settings`` and ``/defaults``.
 
@@ -68,7 +76,9 @@ class AppSettingsSchema(Schema):
 
     # Per-user, scalar
     volume = fields.Float()
-    inclusion = fields.Integer()
+    # The precision floor (#4245).  Never ``null``: every detector has a floor
+    # (#4269), and a stored ``null`` reads as the default.
+    min_precision = fields.Float()
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -77,6 +87,7 @@ class AppSettingsSchema(Schema):
     calibration_fraction = fields.Float(allow_none=True)
     audio_playing = fields.Boolean()
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
+    show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
     autopilot_enabled = fields.Boolean()
@@ -165,6 +176,12 @@ class AppSettingsSchema(Schema):
     # can build a pre-addressed ``mailto:`` link. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     support_email = fields.String(dump_only=True)
+    # Server-tier list of this deployment's own documentation, rendered in the
+    # Help modal as links that open in a new tab. Set by editing the persisted
+    # settings file; surfaced read-only here, already normalized (entries
+    # without a label or a usable URL are dropped). Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    docs_links = fields.List(fields.Nested(DocsLinkSchema), dump_only=True)
     # Server-tier "Semantic embedders only" lock. Set via the
     # ``--semantic-only`` CLI flag / ``VTSEARCH_SEMANTIC_ONLY`` env var
     # (process-wide, all users) or the persisted settings file; surfaced
@@ -172,6 +189,13 @@ class AppSettingsSchema(Schema):
     # picker and the Server settings tab can report the restriction. Not in
     # ``SettingsUpdateSchema`` - not editable via PUT.
     semantic_only = fields.Boolean(dump_only=True)
+    # Server-tier switch that withholds the ETA from ingest progress bars. Set
+    # via the ``--hide-ingest-eta`` CLI flag / ``VTSEARCH_HIDE_INGEST_ETA`` env
+    # var (process-wide, all users) or the persisted settings file; the
+    # backend enforces it by publishing ``eta_seconds=None``, and it is
+    # surfaced read-only here so the Server settings tab can report it. Not in
+    # ``SettingsUpdateSchema`` - not editable via PUT.
+    hide_ingest_eta = fields.Boolean(dump_only=True)
     # Server-tier solo-mediaType restriction. Set via the
     # ``--solo-media-type`` CLI flag (process-wide, all users) or the
     # persisted settings file; surfaced read-only here as the value actually
@@ -198,6 +222,10 @@ class AppSettingsSchema(Schema):
         keys=fields.String(),
         values=fields.Dict(keys=fields.String(), values=fields.String()),
     )
+    # Whether a web import runs the user's AutoRun detectors once the dataset
+    # is saved; the Add Dataset dialog's "Run AutoRun" checkbox starts from it,
+    # and each import that sends the box remembers its state here.
+    autorun_on_import = fields.Boolean()
     # Effective ``{plugin_family: [name, ...]}`` hide map (the persisted
     # ``hidden_plugins`` server setting unioned with any ``--hide-plugin``
     # CLI flags). Populated by the route from
@@ -244,7 +272,9 @@ class SettingsUpdateSchema(Schema):
     """
 
     volume = fields.Float()
-    inclusion = fields.Integer()
+    # The precision floor (#4245).  Never ``null``: every detector has a floor
+    # (#4269), and a stored ``null`` reads as the default.
+    min_precision = fields.Float()
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -253,6 +283,7 @@ class SettingsUpdateSchema(Schema):
     calibration_fraction = fields.Float(allow_none=True)
     audio_playing = fields.Boolean()
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
+    show_usage_bars = fields.String(validate=validate.OneOf(VALID_USAGE_BARS_MODES))
     show_metadata = fields.Boolean()
     label_hint_dismissed = fields.Boolean()
 
@@ -300,12 +331,16 @@ class SettingsUpdateSchema(Schema):
     # validation runs at export time against the chosen plugin's schema).
     autofind_exporter = fields.String()
     autofind_exporter_field_values = fields.Raw()
+    autorun_on_import = fields.Boolean()
 
     saved_datasets_dir = fields.String()
     detectors_dir = fields.String()
     # NB: dataset_max_age_days is intentionally absent - it is a server-tier
     # retention policy set via --dataset-max-age-days (or the settings file),
     # not editable via PUT /api/settings. It is dump_only in AppSettingsSchema.
+    # NB: docs_links is intentionally absent too - it is the operator's list of
+    # Help-modal doc links, set in the settings file. It is dump_only in
+    # AppSettingsSchema.
 
     last_embedder_per_media_type = fields.Raw()
     import_defaults_by_media_type = fields.Raw()

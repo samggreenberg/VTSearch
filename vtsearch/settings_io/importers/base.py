@@ -41,8 +41,8 @@ class SettingsImporter(PluginBase):
 
         Args:
             field_values: Mapping of field key to value.  Fields with
-                ``field_type="file"`` receive a Werkzeug
-                :class:`~werkzeug.datastructures.FileStorage` object; all
+                ``field_type="file"`` receive an
+                uploaded-file object (``UploadedFile`` / ``CliUploadedFile``); all
                 other fields receive plain strings.
 
         Returns:

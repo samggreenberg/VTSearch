@@ -74,7 +74,7 @@ There is no `--weight-bold` (700). If you find yourself wanting `font-weight: 70
 
 ### 1.5 Colors
 
-All colors are theme-aware CSS variables defined in `_variables.scss`. There are dark (default), light, and high-contrast themes. **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
+All colors are theme-aware CSS variables defined in `_variables.scss`. There are three token blocks: dark (the `:root` base), light, and high-contrast (`highviz`); the default `system` theme setting picks dark or light from the OS (`ThemeService`). **Hex literals in component SCSS are not allowed** - using one means the component will not respond to theme changes, which is a bug.
 
 Canonical roles:
 
@@ -85,6 +85,7 @@ Canonical roles:
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
 - **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
+- **Chart series:** `--chart-estimate` (the app's estimate), `--chart-verified` (what the user checked by hand). A categorical pair, validated per theme for colorblind separation and 3:1 on `--bg-surface`; not status colors, so never reuse `--color-good` / `--color-bad` for a series that isn't Good/Bad.
 - **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). These flip per theme - never hardcode `#fff` on a fill.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
@@ -239,12 +240,14 @@ Rules:
 
 A borderless icon button inside a card row or action cluster is **not** a `.btn` variant - use `.card-icon-btn` (§2.11).
 
+Nor is a muted, link-like text button - a secondary affordance that sits beside real controls without competing with them (the **Advanced ▾** disclosures in the New Detector and Add Dataset footers, the **Details ▸** openers on Add Dataset's Include media rows). Use `.link-btn`: no border or fill, `--font-sm`, `--text-muted` at rest, underlined `--text-primary` on hover. It has no box, so it takes no size modifier. Class names like `advanced-toggle` that ride alongside it are unstyled hooks for specs and the screenshot manifest; add a class of your own only for placement (e.g. `.ssp-details-toggle`'s grid column).
+
 ### 2.3 Forms
 
 ```html
 <div class="form-group">
   <label class="form-label">Dataset name <span class="required">*</span></label>
-  <input class="form-input" />
+  <input class="form-input" required />
   <p class="form-hint">JSON, CSV, or NPZ accepted.</p>
 </div>
 <select class="form-select">...</select>
@@ -256,7 +259,7 @@ A borderless icon button inside a card row or action cluster is **not** a `.btn`
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
 - `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
-- `.required` marks required fields with `--color-bad`.
+- **Required fields are marked twice: on the question and on the answer.** `.required` puts a `--color-bad` `*` after the label; the control itself carries `required` (`[required]="!!field.required"` on a plugin field), and `.form-input` / `.form-select` then give an unanswered required field a red well (`--color-bad` border over a `--bad-bg` tint) via `:required:invalid`. The well clears the moment the field has a value, yields to the accent border while focused, and never shows on a disabled control. A star without `required` on its control is the regression this rule exists to stop. Mark only what the *user* has to supply: a field the app fills in for them is not required of the user, even when submit needs a value, so it gets neither the star nor `required`. New Detector's **Detector name** is the example: it is derived from the example, so an empty form must not flag it. Required answers that aren't native controls opt in explicitly: `<vt-file-browser [required]>` forwards it to its path input, and `<vt-drop-zone [missing]>` takes the parent's "nothing picked yet" flag (the zone forgets each pick once emitted, so it can't tell on its own).
 - **`.browse-row` + `.browse-panel`** are the canonical "type a path, or pick one" field. `.browse-row` lays a `.form-input` and its `Browse` `.btn` on one line (the input flexes, the button hugs its label) so the pair reads as a single control rather than two stacked fields; `.browse-panel` frames the `<vt-folder-browser>` that the button reveals below it as a recessed sub-surface. Both `<vt-file-browser>` (pick a file) and the Add Dataset server-folder field (pick a folder) use them - a new "browse the server" field should too, rather than stacking a bare button under an input.
 
 Focus state is provided globally by `:focus-visible { outline: 2px solid var(--accent); }`. Inputs additionally swap their border to `--accent` on focus. **Do not override focus styling per component.**
@@ -285,13 +288,14 @@ Focus state is provided globally by `:focus-visible { outline: 2px solid var(--a
 | `closed` (output) | Fired by the `×`, a backdrop click, and Escape. Wire it to whatever tears the dialog down. |
 | default `<ng-content>` | Projected into `.modal-body` (the only scrollable region). |
 | `[modal-footer]` slot | Projected into `.modal-footer`. Put the action buttons in a plain `<div modal-footer>`. |
+| `[modal-footer-start]` slot | Projected at the left end of the footer row, with the actions still on the right. For one secondary affordance that would otherwise sit alone on a half-empty line just above the buttons: the **Advanced ▾** disclosure in New Detector and Add Dataset. The block it opens stays at the foot of the body. Put the attribute on the element itself (one root per `@if`), not on a wrapper. |
 
 **Why the component and not the markup.** `vt-modal` supplies `cdkTrapFocus` with auto-capture (focus moves into the dialog on open, Tab cycles inside it, focus returns to the trigger on close), `role="dialog"`, `aria-modal="true"`, the `aria-label`, backdrop-click dismissal, and Escape handling that closes **only the topmost** modal (stacked flows like New Detector → media-crop would otherwise all collapse on one keypress). Hand-copied markup silently drops every one of those - it is an accessibility regression, not a styling shortcut.
 
 Spacing inside modals (the shared classes already do this - do not redo it in your content):
 - `.modal-content` already has `padding: var(--space-2xl)` - **do not** wrap your projected content in a padding div.
 - `.modal-header` and `.modal-body` already have `margin-bottom: var(--space-xl)` - **do not** add it again.
-- `.modal-footer` is a right-aligned flex row with `gap: var(--space-md)`, so buttons projected into `[modal-footer]` need no wrapper layout of their own.
+- `.modal-footer` is a right-aligned, vertically centred flex row with `gap: var(--space-md)`, so buttons projected into `[modal-footer]` need no wrapper layout of their own, and a `[modal-footer-start]` element is pushed to the left end by an auto margin. Give the `<div modal-footer>` no top margin: it would push the buttons off-centre from a start-slot item beside them.
 - `.modal-content` uses `--shadow-lg` and `--radius-xl`, and is a flex column so the body is the only scrolling region - the header and footer stay pinned when content overflows.
 
 **Width scale.** A dialog that needs a fixed width picks one of the three
@@ -607,8 +611,9 @@ status messages, fallback labels).
 
 - **Sentence case**, no trailing ellipsis, no trailing period.
 - For "here's what to type" examples, prefix with `e.g. ` and match the casing
-  of the real value: a free-text query is lowercase (`e.g. dog barking
-  sounds`), a proper name is Title Case (`e.g. Dog Barks`).
+  of the real value: a free-text query is lowercase (`e.g. large books`), a
+  proper name is Title Case (`e.g. Large Book Detector`). Pick an example that
+  fits every media type the field can serve; don't assume audio.
 - For "leave blank to get a default" inputs, state that: `Leave blank to use a
   default name`.
 - For a server/file path, use the shared hint `path/to/file` (or
@@ -653,7 +658,7 @@ detector-stats table (standard ML terminology in that context).
 12. **Designing for mobile.** Desktop only.
 13. **`font: inherit` on a class that combines with `.form-input` / `.form-select`** (or any shared element class whose font-size is set globally). Angular's view-encapsulated component selectors get an attribute-selector specificity bump that beats the global `.form-input` rule, so a component-scoped `font: inherit` silently drops `var(--font-md)` and renders the page-root `1rem` instead - which is why a custom dropdown trigger can render its content larger than the `.form-label` above it. If you need the button to inherit something from the parent, be explicit: `font-family: inherit; font-size: var(--font-md);`. The same trap applies to any shorthand that sets `font-size` (raw `font: 14px ...`, `font: bold 1rem`, etc.) under a component-scoped selector.
 14. **`flex-direction: column` without an explicit `gap`** (and no per-child margins). A stacked-column container has to own its inter-row spacing - either set `gap: var(--space-*)` on the parent, or commit to a child class (`.form-group`, `.section-title`) that carries its own margins. Mixing the two ad-hoc produces uneven rhythms like "no space between drop zone and the input below it, but huge space between the section header and its description." Pick one mechanism per container.
-15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
+15. **Redeclaring shared utility classes locally.** `.info-text`, `.error-text`, `.success-text`, `.status-text`, `.form-label`, `.form-input`, `.form-select`, `.form-group`, `.btn`, `.link-btn`, `.modal-*`, `.back-btn` live in `_components.scss` as the single source of truth. Copying their bodies into a component SCSS file - even with the same property values - causes drift the moment someone tunes the global rule. Need a scoped tweak? Extend with a descendant selector (`.my-panel .info-text { ... }`) instead of redeclaring. As a corollary, **shared `<p>`-based utility classes (`.info-text` etc.) must reset `margin: 0`** so the surrounding layout's flex `gap` owns inter-row spacing - UA `<p>` margins inject ~1em above and below and break the §3.0 rhythm.
 16. **Hand-writing modal markup instead of using `<vt-modal>`.** Copying `.modal-backdrop` / `.modal-content` / `.modal-header` into a component drops focus trapping, `role="dialog"`, `aria-modal`, the Escape stack, and backdrop dismissal. See §2.4.
 
 > A static scan for items 1-3, 6-7, 10, 13-15 lives at
@@ -680,7 +685,7 @@ When you add a new token:
 ## 7. References
 
 - `frontend/src/scss/_variables.scss` - every design token.
-- `frontend/src/scss/_components.scss` - buttons, forms, modal chrome, headings, picker cards, segmented toggle, side/view tabs, entity cards, pane divider, info/error/success text, motion utilities.
+- `frontend/src/scss/_components.scss` - buttons (including `.link-btn`), forms, modal chrome, headings, picker cards, segmented toggle, side/view tabs, entity cards, pane divider, info/error/success text, motion utilities.
 - `frontend/src/scss/_picker-shared.scss` - the horizontal tab strip and its subclasses, picker table deltas, badges.
 - `frontend/src/scss/_data-table.scss` - the `.data-table` core, the interactive grid modifier, and the dashboard/stats variants.
 - `frontend/src/scss/_layout.scss` - 3-panel grid.

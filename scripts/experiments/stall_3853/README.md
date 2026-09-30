@@ -13,17 +13,18 @@ stall"); this directory holds what drives and reads them.
 |---|---|
 | `serve_synthetic.py` | Run the real app over an in-memory synthetic patch dataset (N images, `dinov3_patch` CLS + `14x14x768` grids), for reproducing offline. Patch grids are never pickled, so a VG slate cannot be loaded without the DINOv3 weights and a GPU; this builds the post-load shape directly. |
 | `drive_labeling.py` | Replay the SPA's per-vote request chain against any running VTSearch (a tunnel to the GRID included), timing each request client-side and reporting keypress→panel, sort wait, per-endpoint percentiles, and head-of-line clusters. Stdlib only. |
-| `analyze_app_log.py` | Read the app's JSON log and print the ±15 s window around every `stall:` line, with the `faulthandler` thread dump that fired during it, the per-vote budget, and the thresholds the log was written at. |
-| `sample_host.py` | Sample what the app cannot see, every N seconds, to JSONL: per-op NFS RTT/queue/exec for the mounts the data dir and venv live on (differenced per interval, never a lifetime counter), plus `majflt`/RSS for the app process. `--summarize` prints the tables. Stdlib only, so it runs in a bare shell on a node with no venv. |
+| `analyze_app_log.py` | Read the app's JSON log and print the ±15 s window around every `stall:` line, with the thread stacks the watchdog wrote for it (and a live `faulthandler` dump, if `VTSEARCH_STALL_LIVE_DUMP=1` fired one), the per-vote budget, and the thresholds the log was written at. |
+| `sample_host.py` | Sample what the app cannot see, every N seconds, to JSONL: per-op NFS RTT/queue/exec for the mounts the data dir and venv live on (differenced per interval, never a lifetime counter), plus `majflt`/RSS for the app process. `--summarize` prints the tables, weighted by op count so a quiet interval cannot outvote a burst. Stdlib only, so it runs in a bare shell on a node with no venv. |
 
 ## What the instruments say
 
 On a stall the log carries, at the default WARNING level:
 
 - `stall: heartbeat late by Nms; process cpu X of Y wall (r); top threads: …;
-  majflt +n; gc gen2 pauses +n; rss …; cgroup mem …; thread dump armed …` —
+  majflt +n; gc gen2 pauses +n; rss …; cgroup mem …; thread stacks at wake …` —
   from the watchdog. `r ≈ 1` with one thread on top is a GIL hold; the
-  thread dump written just before this line names its frame. `r ≈ 0` and no
+  `Stall snapshot` written just before this line leads with that thread's
+  stack, taken as the heartbeat woke (#4345). `r ≈ 0` and no
   thread on top means the process was not scheduled (memory pressure,
   swapping, a paged-out cgroup): read `majflt` and the cgroup limit hits.
 - `slow request: … in NNNms cpu=NNms gc=NNms` for each frozen request
@@ -64,7 +65,7 @@ the server.
    travels through `srun`'s environment, so the launcher copy already
    deployed at `~/.local/bin/vtsearch` needs no update. The launcher sets
    `VTSEARCH_LOG_FILE` to `data/logs/app-<node>-<timestamp>.log`, which is
-   also where the thread dump lands.
+   also where the thread stacks land.
 
    Start the host sampler in another pane, so the filesystem and the process
    are on the record for the same minutes::

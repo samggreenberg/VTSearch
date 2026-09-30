@@ -208,4 +208,110 @@ describe('KeyboardService', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
     expect(actions.length).toBe(0);
   });
+
+  describe('a claim on the vote keys (#4273)', () => {
+    const press = (key: string, init: KeyboardEventInit = {}) => {
+      const e = new KeyboardEvent('keydown', { key, cancelable: true, ...init });
+      document.dispatchEvent(e);
+      return e;
+    };
+
+    function claim() {
+      const votes: string[] = [];
+      const navs: string[] = [];
+      const release = service.captureVoteKeys({
+        vote: (d) => votes.push(d),
+        navigate: (d) => navs.push(d),
+      });
+      return { votes, navs, release };
+    }
+
+    it('routes the vote and navigation keys to the holder, and nothing to the list', () => {
+      service.start();
+      const actions: KeyboardAction[] = [];
+      service.action$.subscribe((a) => actions.push(a));
+      const { votes, navs } = claim();
+      expect(press('ArrowRight').defaultPrevented).toBe(true);
+      press('ArrowLeft');
+      press('ArrowDown');
+      press('ArrowUp');
+      expect(votes).toEqual(['good', 'bad']);
+      expect(navs).toEqual(['back', 'forward']);
+      expect(actions).toEqual([]);
+    });
+
+    it('takes the keys from inside a modal, where the list gets none', () => {
+      service.start();
+      const backdrop = document.createElement('div');
+      backdrop.className = 'modal-backdrop';
+      document.body.appendChild(backdrop);
+      try {
+        const { votes } = claim();
+        press('ArrowRight');
+        expect(votes).toEqual(['good']);
+      } finally {
+        backdrop.remove();
+      }
+    });
+
+    it('keeps every other shortcut off while held', () => {
+      service.start();
+      const actions: KeyboardAction[] = [];
+      service.action$.subscribe((a) => actions.push(a));
+      claim();
+      press(' ');
+      press('+');
+      press('[');
+      press('z', { ctrlKey: true });
+      press('ArrowUp', { shiftKey: true });
+      expect(actions).toEqual([]);
+    });
+
+    it('ignores auto-repeat, held modifiers and typing', () => {
+      service.start();
+      const { votes } = claim();
+      press('ArrowRight', { repeat: true });
+      press('ArrowRight', { altKey: true });
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      input.focus();
+      try {
+        press('ArrowRight');
+      } finally {
+        input.remove();
+      }
+      expect(votes).toEqual([]);
+    });
+
+    it('leaves focus where it is, inside the holder\'s focus trap', () => {
+      service.start();
+      const btn = document.createElement('button');
+      document.body.appendChild(btn);
+      btn.focus();
+      try {
+        claim();
+        press('ArrowRight');
+        expect(document.activeElement).toBe(btn);
+      } finally {
+        btn.remove();
+      }
+    });
+
+    it('serves only the newest claim, and gives the keys back on release', () => {
+      service.start();
+      const actions: KeyboardAction[] = [];
+      service.action$.subscribe((a) => actions.push(a));
+      const first = claim();
+      const second = claim();
+      press('ArrowRight');
+      expect(first.votes).toEqual([]);
+      expect(second.votes).toEqual(['good']);
+      second.release();
+      press('ArrowLeft');
+      expect(first.votes).toEqual(['bad']);
+      first.release();
+      press('ArrowRight');
+      expect(actions.map((a) => a.direction)).toEqual(['good']);
+    });
+  });
 });

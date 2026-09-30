@@ -6,6 +6,7 @@ import type { Media } from '../../models/api.models';
 import { settleResource } from '../../testing/settle-resource';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { FLOOR_STATES, lineFloor } from '../../testing/line-floor';
 
 describe('LeftPanelComponent', () => {
   let component: LeftPanelComponent;
@@ -298,5 +299,155 @@ describe('LeftPanelComponent', () => {
       await settleResource();
       expect(component.mediaTypeName()).toBe('Sound Clips');
     });
+  });
+
+  /**
+   * The line always keeps a set, checked or not (#4272): the Find work-queue
+   * actions (Browse / To Dataset / Export) gate on the positives above it in
+   * every state, and the line draws the same in each (#4273). A null cut used
+   * to disable them silently (#4247).
+   */
+  describe('in every floor state (#4272)', () => {
+    const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
+    const ranking = [
+      { id: 1, score: 0.9 },
+      { id: 2, score: 0.6 },
+      { id: 3, score: 0.4 },
+    ];
+
+    function show(panelMode: 'label' | 'find', floor: ReturnType<typeof lineFloor>): HTMLElement {
+      fixture.componentRef.setInput('panelMode', panelMode);
+      fixture.componentRef.setInput('medias', ranking.map(({ id }) => stub(id)));
+      fixture.componentRef.setInput('sortOrder', ranking);
+      fixture.componentRef.setInput('threshold', 0.5);
+      fixture.componentRef.setInput('floor', floor);
+      if (panelMode === 'label') component.setTab('manual');
+      TestBed.tick();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it.each(FLOOR_STATES)('counts the unverified positives above the line when %s', (status) => {
+      show('find', lineFloor(status));
+      expect(component.unverifiedGoodCount).toBe(2);
+    });
+
+    it.each(FLOOR_STATES)('draws the plain line in Find and Label when %s', (status) => {
+      for (const mode of ['find', 'label'] as const) {
+        const line = show(mode, lineFloor(status)).querySelector('.media-threshold-line')!;
+        expect(line.className).toBe('media-threshold-line');
+        expect(line.textContent!.trim().toLowerCase()).toBe('threshold');
+      }
+    });
+
+    it.each(FLOOR_STATES)('offers the check in Train and never in Find (#4317) when %s', (status) => {
+      const emitted = vi.spyOn(component.floorCheck, 'emit');
+      // Find tests the threshold Train set: labelling more to set one is too late there.
+      expect(show('find', lineFloor(status)).querySelector('.floor-check-btn')).toBeNull();
+      const btn = show('label', lineFloor(status)).querySelector('.floor-check-btn') as HTMLButtonElement;
+      expect(btn.textContent!.trim()).toBe('Check 5 picks');
+      btn.click();
+      expect(emitted).toHaveBeenCalledOnce();
+    });
+
+    it('holds the check while a sort is running', () => {
+      fixture.componentRef.setInput('sortBusy', true);
+      const btn = show('label', lineFloor('unchecked')).querySelector('.floor-check-btn') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    });
+  });
+
+  /**
+   * The Find row (#4246): the precision floor beside the unverified-positives
+   * work-queue actions. The actions scope over the unverified items above the
+   * line, so they gate on `unverifiedGoodCount`, which counts exactly those.
+   */
+  describe('the Find row', () => {
+    const stub = (id: number): Media => ({ id, media_type: 'image' }) as Media;
+    const actions = ['Browse unverified positives', 'Unverified positives to dataset', 'Export unverified positives'];
+
+    function find(sortOrder: { id: number; score: number }[] | null, threshold: number | null): HTMLElement {
+      fixture.componentRef.setInput('panelMode', 'find');
+      fixture.componentRef.setInput('medias', (sortOrder ?? []).map(({ id }) => stub(id)));
+      fixture.componentRef.setInput('sortOrder', sortOrder);
+      fixture.componentRef.setInput('threshold', threshold);
+      TestBed.tick();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    const button = (el: HTMLElement, label: string) =>
+      el.querySelector(`.find-floor-row button[aria-label="${label}"]`) as HTMLButtonElement;
+
+    describe('unverifiedGoodCount', () => {
+      it('counts the items at or above the line', () => {
+        find([{ id: 1, score: 0.9 }, { id: 2, score: 0.5 }, { id: 3, score: 0.49 }], 0.5);
+        expect(component.unverifiedGoodCount).toBe(2);
+      });
+
+      it('is zero with no ranking or no line', () => {
+        find(null, 0.5);
+        expect(component.unverifiedGoodCount).toBe(0);
+        find([{ id: 1, score: 0.9 }], null);
+        expect(component.unverifiedGoodCount).toBe(0);
+      });
+
+      it('is zero when nothing clears the line', () => {
+        find([{ id: 1, score: 0.2 }], 0.5);
+        expect(component.unverifiedGoodCount).toBe(0);
+      });
+    });
+
+    it('mounts the floor control, not the Inclusion stepper', () => {
+      const el = find([{ id: 1, score: 0.9 }], 0.5);
+      expect(el.querySelector('.find-floor-row vt-precision-floor')).not.toBeNull();
+      expect(el.querySelector('#inclusion-input')).toBeNull();
+    });
+
+    it('enables the work-queue actions only while an unverified positive exists', () => {
+      let el = find([{ id: 1, score: 0.2 }], 0.5);
+      actions.forEach((label) => expect(button(el, label).disabled).toBe(true));
+      el = find([{ id: 1, score: 0.9 }], 0.5);
+      actions.forEach((label) => expect(button(el, label).disabled).toBe(false));
+    });
+
+    it('disables the work-queue actions while Find is waiting', () => {
+      fixture.componentRef.setInput('disabled', true);
+      const el = find([{ id: 1, score: 0.9 }], 0.5);
+      actions.forEach((label) => expect(button(el, label).disabled).toBe(true));
+    });
+
+    it('emits each work-queue action', () => {
+      const el = find([{ id: 1, score: 0.9 }], 0.5);
+      const browse = vi.spyOn(component.browse, 'emit');
+      const toDataset = vi.spyOn(component.toDataset, 'emit');
+      const exported = vi.spyOn(component.unverifiedExport, 'emit');
+      actions.forEach((label) => button(el, label).click());
+      expect(browse).toHaveBeenCalledOnce();
+      expect(toDataset).toHaveBeenCalledOnce();
+      expect(exported).toHaveBeenCalledOnce();
+    });
+
+    it('shows the floor, its state and the count the line returns', () => {
+      fixture.componentRef.setInput('minPrecision', 0.9);
+      fixture.componentRef.setInput('floor', lineFloor('confirmed', { minPrecision: 0.9 }));
+      fixture.componentRef.setInput('returned', 212);
+      const el = find([{ id: 1, score: 0.9 }], 0.5);
+      const checked = el.querySelector('.find-floor-row input[type="radio"]:checked') as HTMLInputElement;
+      expect(checked.value).toBe('0.9');
+      expect(el.querySelector('.find-floor-row .floor-state')!.textContent).toContain('Confirmed · likely 55–100% right (checked 5) · 32 kept');
+    });
+
+    it('forwards a picked floor as minPrecisionChange', () => {
+      const el = find([{ id: 1, score: 0.9 }], 0.5);
+      const emitted = vi.spyOn(component.minPrecisionChange, 'emit');
+      (el.querySelector('.find-floor-row input[type="radio"][value="0.9"]') as HTMLInputElement).click();
+      expect(emitted).toHaveBeenCalledWith(0.9);
+    });
+  });
+
+  it('mounts the floor control in the Manual tab', () => {
+    component.setTab('manual');
+    TestBed.tick();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.tab-panel-manual vt-precision-floor')).not.toBeNull();
   });
 });

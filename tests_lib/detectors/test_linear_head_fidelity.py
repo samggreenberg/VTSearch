@@ -50,6 +50,7 @@ from vtscore.detectors.portable_bundle import (
 from vtscore.detectors.training import serialize_weights
 from vtscore.training.mlp import (
     LINEAR_HEAD,
+    LINEAR_LOGREG_HEAD,
     LINEAR_SVM_HEAD,
     build_model,
     build_model_from_weights,
@@ -224,6 +225,85 @@ class TestSVMFidelity:
                 hidden_dim=LINEAR_SVM_HEAD,
                 sample_weights=torch.ones(3),
             )
+
+
+class TestConvergedLogregFidelity:
+    """``LINEAR_LOGREG_HEAD`` *is* converged scikit-learn logistic regression (#4114).
+
+    The arm exists to test #3197's finding that the logistic loss ranks as well
+    as the SVM once it is fitted to convergence, so it has to be that fit and
+    not something near it.  Unlike ``LINEAR_HEAD`` it needs no epoch override:
+    lbfgs solves the objective outright, at the unit-norm scale real embeddings
+    have as well as on these Gaussians.  The reference is fitted tighter than
+    sklearn's default ``tol=1e-4`` (which :func:`_sklearn_scores` keeps for the
+    rank test above): at that default two converged fits still differ by ~1e-3.
+    """
+
+    @staticmethod
+    def _converged(X_train, y_train, X_score) -> np.ndarray:
+        from sklearn.linear_model import LogisticRegression  # noqa: PLC0415
+
+        clf = LogisticRegression(C=1.0, class_weight="balanced", max_iter=100000, tol=1e-10)
+        clf.fit(X_train.astype(np.float64), y_train.astype(int))
+        return clf.predict_proba(X_score.astype(np.float64))[:, 1]
+
+    def test_scores_match_sklearn_logistic_regression(self):
+        X, y = _two_class_data(n_per_class=60, seed=12345)
+        X_score, _ = _two_class_data(n_per_class=100, seed=999)
+
+        head = _head_scores(X, y, X_score, hidden_dim=LINEAR_LOGREG_HEAD)
+        ref = self._converged(X, y, X_score)
+        assert np.allclose(head, ref, atol=1e-4), f"max deviation {np.abs(head - ref).max():.3e}"
+
+    def test_scores_match_on_unit_norm_sparse_positives(self):
+        """The regime the loop lives in: unit-norm vectors, 5 Goods to 35 Bads."""
+        X, y = _two_class_data(n_per_class=60, seed=3)
+        X = X / np.linalg.norm(X, axis=1, keepdims=True)
+        keep = np.concatenate([np.arange(5), np.arange(60, 95)])
+        X, y = X[keep], y[keep]
+        X_score, _ = _two_class_data(n_per_class=100, seed=999)
+        X_score = X_score / np.linalg.norm(X_score, axis=1, keepdims=True)
+
+        head = _head_scores(X, y, X_score, hidden_dim=LINEAR_LOGREG_HEAD)
+        ref = self._converged(X, y, X_score)
+        assert np.allclose(head, ref, atol=1e-4), f"max deviation {np.abs(head - ref).max():.3e}"
+
+    def test_it_is_neither_the_svm_nor_the_early_stopped_head(self):
+        X, y = _two_class_data(n_per_class=60, seed=12345)
+        X_score, _ = _two_class_data(n_per_class=100, seed=999)
+
+        logreg = _head_scores(X, y, X_score, hidden_dim=LINEAR_LOGREG_HEAD)
+        assert not np.allclose(logreg, _head_scores(X, y, X_score, hidden_dim=LINEAR_SVM_HEAD), atol=1e-3)
+        assert not np.allclose(logreg, _head_scores(X, y, X_score, hidden_dim=LINEAR_HEAD), atol=1e-3)
+
+    def test_per_row_weights_replace_the_class_balance(self):
+        X, y = _two_class_data(n_per_class=40, seed=7)
+        X_t = torch.from_numpy(X)
+        y_t = torch.from_numpy(y).unsqueeze(1)
+        weights = torch.where(y_t.reshape(-1) == 1.0, 1.0, 0.05)
+
+        plain = train_model(X_t, y_t, DIM, seed=0, hidden_dim=LINEAR_LOGREG_HEAD)
+        weighted = train_model(X_t, y_t, DIM, seed=0, hidden_dim=LINEAR_LOGREG_HEAD, sample_weights=weights)
+        assert not torch.allclose(_weight_of(plain), _weight_of(weighted), atol=1e-4)
+
+    def test_mismatched_weight_length_is_rejected(self):
+        X, y = _two_class_data(n_per_class=8, seed=1)
+        with pytest.raises(ValueError, match="does not match training-set size"):
+            train_model(
+                torch.from_numpy(X),
+                torch.from_numpy(y).unsqueeze(1),
+                DIM,
+                hidden_dim=LINEAR_LOGREG_HEAD,
+                sample_weights=torch.ones(3),
+            )
+
+    def test_round_trips_through_build_model_from_weights(self):
+        X, y = _two_class_data(n_per_class=20, seed=5)
+        model = train_model(torch.from_numpy(X), torch.from_numpy(y).unsqueeze(1), DIM, hidden_dim=LINEAR_LOGREG_HEAD)
+        rebuilt = build_model_from_weights(serialize_weights(model))
+        x = torch.from_numpy(X[:7]).to(next(model.parameters()).device)
+        with torch.no_grad():
+            assert torch.allclose(model(x).cpu(), rebuilt(x.cpu()), atol=1e-6)
 
 
 class TestProductionPathTrainsTheSVMHead:

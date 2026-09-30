@@ -1,5 +1,13 @@
 # Setup Guide
 
+**First install?** Work through the sections from [Prerequisites](#prerequisites)
+to [Running the app](#running-the-app) in order, then open the
+[User Guide](user/USER_GUIDE.md#step-by-step-your-first-search) to load a dataset
+and train your first detector. [Docker](#docker) replaces the Python and Node
+steps if you would rather not install them, and the [SLURM](#running-on-a-slurm-gpu-cluster)
+section is for shared GPU clusters. You will need Python 3.10+, Git, and (for the
+frontend build) Node.js 20.19+.
+
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
@@ -8,12 +16,17 @@
   - [Clone the repository](#clone-the-repository)
 - [Setting up a virtual environment](#setting-up-a-virtual-environment)
 - [Installing dependencies](#installing-dependencies)
+  - [How auto-detection decides](#how-auto-detection-decides)
+  - [Picking the CUDA tag](#picking-the-cuda-tag)
+  - [What gets installed](#what-gets-installed)
 - [Building the frontend](#building-the-frontend)
 - [Running the app](#running-the-app)
 - [Docker](#docker)
   - [Prerequisites](#prerequisites-1)
   - [CPU (default)](#cpu-default)
   - [GPU](#gpu)
+  - [LabBench (SigLIP-only image search)](#labbench-siglip-only-image-search)
+  - [All image embedders](#all-image-embedders)
   - [Data persistence](#data-persistence)
   - [Rebuilding](#rebuilding)
 - [Running on a SLURM GPU cluster](#running-on-a-slurm-gpu-cluster)
@@ -175,26 +188,11 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 
 ## Installing dependencies
 
-Runtime + dev dependencies are declared in `pyproject.toml` (under
-`[project.dependencies]` and `[project.optional-dependencies]`, whose
-`dev` and `agpl` extras hold the dev tools and the two AGPL-3.0 packages).
-`requirements/base.txt` and `requirements/gpu.txt` just forward to it via
-`-e .[dev,agpl]`, so pyproject is the single source of truth and deptry
-catches any drift. The labbench / image-embedders requirements files
-under `requirements/` are deliberately standalone; they pin a minimal
-subset for size-constrained Docker images.
-
-Two dependencies are AGPL-3.0-or-later — `ultralytics` (YOLO) and
-`PyMuPDF` — and a default install includes them. To install without them,
-set `VTSEARCH_NO_AGPL=1` on the install command below (or install
-`requirements/base-no-agpl.txt` directly); the YOLO extractor/clipper, PDF
-import, and the document converters then report themselves as unavailable
-and everything else works unchanged. See
-[DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies).
-
-One script handles both CPU and GPU. With no argument it **auto-detects**
-whether this host has an NVIDIA GPU and installs the matching dependency set,
-so you don't have to know — or tell it — what hardware you have:
+Activate your virtual environment first (if you made one): the script installs
+into whichever `pip` is on your `PATH`. Then run the one installer, which
+handles both CPU and GPU machines. With no argument it **auto-detects** whether
+this host has an NVIDIA GPU and installs the matching dependency set, so you
+don't have to know — or tell it — what hardware you have:
 
 ```bash
 bash scripts/install.sh              # auto-detect CPU vs GPU (recommended)
@@ -209,13 +207,40 @@ bash scripts/install.sh cu118        # force the GPU install with an explicit ta
 bash scripts/install.sh cu128        # ... CUDA 12.8 (Blackwell; drops Volta)
 ```
 
-GPU detection uses `nvidia-smi`: if it's absent or lists no device, you get the
-smaller CPU-only torch wheel (~200 MB vs ~2 GB). When a GPU is present, the
-script further **auto-detects** the right CUDA wheel tag from the GPU's compute
-capability via `scripts/detect_cuda_tag.py`, so you don't have to know your
-hardware; pass an explicit `cuXYZ` tag only to override it. If `nvidia-smi`
-reports a GPU but the tag can't be determined it falls back to `cu124`. You can
-preview the tag choice without installing anything by running
+Expect several minutes either way; pip goes quiet for tens of seconds at a time
+while it resolves versions, which is normal.
+
+### How auto-detection decides
+
+Auto mode makes one of three calls:
+
+- **`nvidia-smi` lists a GPU** → the GPU install, with the CUDA wheel tag
+  picked from the GPU's compute capability (see below).
+- **No NVIDIA device in the machine at all** (no NVIDIA PCI display
+  controller) → the CPU install, with the smaller CPU-only torch wheel
+  (~200 MB vs ~2 GB).
+- **An NVIDIA card is present but `nvidia-smi` can't see it** — the usual state
+  of a fresh cloud GPU instance whose driver isn't installed yet → the script
+  explains the situation and **asks** whether to install the NVIDIA driver
+  (needs `sudo`, may need a reboot), fall back to a CPU-only install, or stop.
+
+That last case matters for **unattended installs** (a provisioning script, a
+Dockerfile, CI, a shell with no terminal): with no one to answer the prompt,
+the script stops with exit code 1 rather than run `sudo` or silently land on
+CPU. Choose ahead of time: `VTSEARCH_AUTO_DRIVER=1` installs the driver,
+`VTSEARCH_ASSUME_CPU=1` goes CPU-only, or pass `cpu` / `gpu` / `cuXYZ`
+explicitly, which skips the check entirely. The installer's other switches
+(DKMS conversion, a pinned driver `.run` file, verbose output) are listed under
+[DEPLOYMENT.md § Install-time](DEPLOYMENT.md#install-time-scriptsinstallsh),
+and install problems on GPU boxes are covered in
+[DEPLOYMENT.md § Troubleshooting](DEPLOYMENT.md#troubleshooting).
+
+### Picking the CUDA tag
+
+When a GPU is visible, `scripts/detect_cuda_tag.py` picks the torch wheel's
+CUDA tag from the GPU's compute capability; pass an explicit `cuXYZ` tag only
+to override it. If the tag can't be determined it falls back to `cu124`. You can
+preview the choice without installing anything:
 `python scripts/detect_cuda_tag.py`.
 
 Behind that detection: the CUDA tag picks a torch wheel that only ships kernels
@@ -232,13 +257,37 @@ A mismatched wheel imports fine and then raises
 runtime and falls back to CPU (with a warning) rather than crashing, but you
 only get GPU acceleration with a matching wheel.
 
-Either path runs `pip install -r requirements/{base,gpu}.txt`, which
-installs every runtime + dev dep and editable-installs the `vtsearch`
-package itself.
+### What gets installed
 
-The CPU `requirements/base.txt` includes `--extra-index-url` for the
-smaller CPU-only PyTorch wheel (~200 MB) instead of the default CUDA
-build (~2 GB).
+Both paths install every runtime and dev dependency from `pyproject.toml`
+(through `requirements/base.txt` or `requirements/gpu.txt`, which forward to
+`-e .[dev,agpl]`), editable-install the `vtsearch` package itself, and add a few
+packages that need special handling: `toponymy` (names regions on the Browse
+map) and `facenet-pytorch` (the face embedder), both installed without their
+over-strict dependency pins. In a git checkout they also install the
+`pre-commit` git hook.
+
+The **GPU** path additionally:
+
+- installs **cuML / RAPIDS** from NVIDIA's package index for GPU-accelerated
+  UMAP and k-means. This is a **multi-GB** download; it is best-effort (a
+  failure leaves the CPU fallback in place) and `VTSEARCH_SKIP_CUML=1` skips it,
+  e.g. on a host that can't reach `pypi.nvidia.com`.
+- runs a **smoke test** at the end (a CUDA op through torch, then a cuML import)
+  and warns if either fails.
+- on a driver that isn't DKMS-managed, offers to convert it so the next kernel
+  update doesn't break the GPU.
+
+The installer does **not** touch Node.js or npm; the frontend is a separate
+step, below.
+
+**Skipping the AGPL dependencies.** Two dependencies are AGPL-3.0-or-later —
+`ultralytics` (YOLO) and `PyMuPDF` — and a default install includes them. To
+install without them, set `VTSEARCH_NO_AGPL=1` on the install command (or
+install `requirements/base-no-agpl.txt` directly); the YOLO extractor/clipper,
+PDF import, and the document converters then report themselves as unavailable
+and everything else works unchanged. See
+[DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies).
 
 ## Building the frontend
 
@@ -285,7 +334,7 @@ Then install dependencies and build:
 cd frontend; npm install; npm run build:prod; cd ..
 ```
 
-This compiles the Angular app into `static/` (index.html, main.js, polyfills.js, styles.css). You must run `npm install` before the first build; it installs the Angular CLI and other tools locally.
+This compiles the Angular app into `static/`, which is what `python app.py` serves. You must run `npm install` before the first build; it installs the Angular CLI and other tools locally under `frontend/node_modules/`. Re-run `npm run build:prod` after pulling new code: the server does not rebuild the frontend itself, and an old bundle against a new server shows a version-mismatch warning.
 
 For development with live reload (proxies API calls to Flask at localhost:5000):
 
@@ -296,19 +345,27 @@ npm start
 
 ## Running the app
 
-For local development, start the Flask dev server:
+For local use, start the Flask dev server:
 
 ```bash
 python app.py
 ```
 
-You should see output like:
+Startup takes a minute or so while it loads the ML libraries. When it is ready
+it prints:
 
 ```
- * Running on http://0.0.0.0:5000
+🌐 Open http://localhost:5000 in your browser
 ```
 
-Open `http://localhost:5000` in your browser. The server binds to `0.0.0.0:5000`, so it is also reachable from other devices on the network.
+Open `http://localhost:5000` in your browser. The server binds to
+`0.0.0.0:5000`, so it is also reachable from other devices on the network. To
+use another port, pass `--port 8080` (or set `VTSEARCH_PORT`). The rest of the
+server flags — login providers, admin restrictions, logging verbosity — are in
+[CLI.md § Web server modes](CLI.md#web-server-modes). Press **Ctrl+C** to stop.
+
+If the first model download or dataset import fails behind a proxy or on an
+offline host, see [DEPLOYMENT.md § Network dependencies](DEPLOYMENT.md#network-dependencies).
 
 `python app.py` uses Flask's built-in dev server (fine for development but **not recommended for production**). For production, run under gunicorn using the bundled config:
 
@@ -391,6 +448,26 @@ docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:labbench
 The model cache lives in `/opt/vtsearch/models` (set via `VTSEARCH_MODELS_DIR`)
 so the baked weights are not masked when `/app/data` is mounted as a volume.
 
+### All image embedders
+
+`docker/Dockerfile.image-embedders` (CPU) and
+`docker/Dockerfile.image-embedders.gpu` (CUDA) are image-only builds that bundle
+every supported image embedder — SigLIP (the default), SigLIP 2, CLIP, DINOv2,
+DINOv3 and EUPE — with their weights baked in. DINOv3 is gated on Hugging Face,
+so to bake it, run the cache script once on the host with your own token before
+building; no token enters the build. Without it the build still succeeds and
+DINOv3 simply stays unavailable. (EUPE's license forbids commercial use; see the
+README's License section.)
+
+```bash
+HF_TOKEN=hf_xxx ./scripts/cache_gated_models.sh      # optional, one-time: populates ./model_cache/
+
+docker build -f docker/Dockerfile.image-embedders -t vtsearch:image-embedders .
+docker run -p 5000:5000 -v vtsearch-data:/app/data vtsearch:image-embedders
+
+docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml up   # GPU variant
+```
+
 ### Data persistence
 
 The `data/` directory inside the container (models, embeddings, settings, media files) is declared as a Docker volume. The commands above mount it as a named volume called `vtsearch-data` so everything persists across container restarts. To use a host directory instead:
@@ -409,6 +486,7 @@ docker compose \
   -f docker/compose/docker-compose.yml \
   -f docker/compose/docker-compose.gpu.yml build                    # GPU
 docker compose -f docker/compose/docker-compose.labbench.yml build  # LabBench (SigLIP-only)
+docker compose -f docker/compose/docker-compose.image-embedders.gpu.yml build  # All image embedders (GPU)
 ```
 
 Add `--no-cache` to force a full rebuild (e.g. after dependency changes).
@@ -490,7 +568,7 @@ with a shared filesystem.
    > [Tuning](#tuning-the-allocation)) so `vtsearch` does this for you:
    > `VTS_MODULE="python/3.12.3" vtsearch` (or `export` it in `~/.bashrc`).
 
-3. **Build the frontend** (needs Node.js 22+; see [Building the
+3. **Build the frontend** (needs Node.js 20.19+; see [Building the
    frontend](#building-the-frontend)):
 
    ```bash
@@ -675,9 +753,10 @@ just the type (`v100`), not the full `gpu:v100:8` spec — the launcher adds the
 
 ## Running the tests
 
-Dependencies (pytest, ruff, and the Angular build tools) are already
-installed if you ran `bash scripts/install.sh` above.  If not,
-`./run-tests.sh` installs them automatically on first run.
+The Python test and lint tools (pytest, ruff, pyright, …) are already
+installed if you ran `bash scripts/install.sh` above, and the frontend's
+build and unit-test tools come from `npm install` in `frontend/`. Whatever is
+missing, `./run-tests.sh` installs on first run.
 
 The recommended way to run tests uses the helper script, which installs
 dependencies automatically and supports grouped test subsets:
@@ -689,9 +768,12 @@ dependencies automatically and supports grouped test subsets:
 ```
 
 Available groups: `core`, `api`, `sorting`, `datasets`, `io`, `detectors`,
-`downloads`, `integration`, `cli`, `converters`, `projection`, `frontend`,
-`slides` (plus `gpu` and `vtscore-clean`, which run separately). See
-[`CLAUDE.md`](../CLAUDE.md) for the full group-to-file mapping.
+`downloads`, `integration`, `cli`, `converters`, `projection`, `meta`,
+`frontend`, `slides`, `docs` (plus `gpu` and `vtscore-clean`, which run
+separately). A bare `./run-tests.sh` on a branch that changes only markdown
+narrows itself to the `docs` gate automatically. See
+[`docs/TESTING.md`](TESTING.md#test-groups) for what each group covers and which
+gates a group run skips.
 
 You can also run pytest directly:
 
@@ -701,7 +783,7 @@ python -m pytest tests/ tests_lib/ -v
 
 This runs fast CPU tests only. Additional test modes:
 
-**Full CPU tests** (includes slow CLI subprocess tests):
+**Full CPU tests** (adds the `slow`-marked tests: a CLI subprocess run and the toponymy fit tests):
 
 ```bash
 python -m pytest tests/ tests_lib/ -v -m 'not gpu'
@@ -721,21 +803,20 @@ python -m pytest tests/ tests_lib/ -v -m ''
 
 ## Environment variables
 
-VTSearch reads several optional environment variables:
+VTSearch reads several optional environment variables. The ones below are the
+ones a first install is most likely to want; the installer's own switches
+(`VTSEARCH_AUTO_DRIVER`, `VTSEARCH_SKIP_CUML`, …) are covered under
+[Installing dependencies](#installing-dependencies).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `VTSEARCH_DATA_DIR` | `<repo root>/data` | Where all runtime state lives (settings, datasets, detectors, model cache, demo downloads). Point it outside the checkout to keep state across re-clones. |
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (set this in production) |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); `INFO`/`DEBUG` also enable the per-request access log. `python app.py -v`/`-vv` is the CLI shortcut. |
-| `VTSEARCH_LOG_FILE` | unset | Also append every log record (and the stall watchdog's thread dump) to this file; the SLURM launcher sets it under `data/logs/`. |
-| `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+| `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | Directory for HuggingFace model cache |
 | `VTSEARCH_PORT` | `5000` | Port for the `python app.py` dev server (also `--port`). Lets several instances share a host, e.g. co-located SLURM jobs. Gunicorn uses `VTSEARCH_BIND` instead. |
-| `VTSEARCH_SERVER_INIT` | unset | Set to `1` when running under gunicorn; triggers model init / settings sync at import time |
-| `VTSEARCH_BIND` | `0.0.0.0:5000` | Gunicorn bind address (`host:port`) |
-| `VTSEARCH_THREADS` | `8` | Threads per gunicorn worker |
-| `VTSEARCH_TIMEOUT` | `0` | Gunicorn worker timeout in seconds (`0` = disabled; long imports / training would otherwise SIGKILL the worker) |
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configuration, including the full env-var reference and gunicorn tuning.
+The full reference — gunicorn (`VTSEARCH_BIND`, `VTSEARCH_THREADS`, `VTSEARCH_TIMEOUT`), log files, threading and offline variables — is [DEPLOYMENT.md § Environment variables](DEPLOYMENT.md#environment-variables).
 
 ## Next steps
 

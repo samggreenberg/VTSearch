@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { EMPTY, Subject, catchError, debounceTime, filter, switchMap } from 'rxjs';
 
@@ -58,6 +58,10 @@ export class GenericFormPickerComponent {
   private importDefaults = inject(ImportDefaultsService);
   private cdr = inject(ChangeDetectorRef);
 
+  /** This view's "Advanced" block. The Add Dataset modal reads it to render
+   *  the block's toggle in its footer row (#4305). */
+  readonly importAdvanced = viewChild(ImportAdvancedComponent);
+
   /** Every registered importer (used to resolve the active importer's
    *  ``available_converters_by_media_type`` for the source-specs picker). */
   readonly importers = input<ImporterInfo[]>([]);
@@ -71,6 +75,10 @@ export class GenericFormPickerComponent {
   readonly buildProjectionChange = output<boolean>();
   readonly mergeNearDuplicates = input(false);
   readonly mergeNearDuplicatesChange = output<boolean>();
+  /** The Add Dataset dialog's "Run AutoRun" choice for this import, sent as
+   *  ``autorun``; ``null`` (the box is hidden) sends nothing, so the user's
+   *  remembered ``autorun_on_import`` setting decides server-side. */
+  readonly autorun = input<boolean | null>(null);
 
   readonly importStarted = output<void>();
 
@@ -459,10 +467,12 @@ export class GenericFormPickerComponent {
     }
     submitValues['build_projection'] = this.buildProjection() ? 'true' : 'false';
     submitValues['merge_near_duplicates'] = this.mergeNearDuplicates() ? 'true' : 'false';
+    const autorun = this.autorun();
+    if (autorun !== null) submitValues['autorun'] = autorun ? 'true' : 'false';
 
     const fileField = importer.fields?.find((f) => f.field_type === 'file');
     if (fileField && this.selectedFile) {
-      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection()).subscribe({
+      this.datasetsCrudApi.loadFile(this.selectedFile, this.buildProjection(), autorun).subscribe({
         next: () => {
           this.submitting.set(false);
           this.offerSaveImportDefaults();

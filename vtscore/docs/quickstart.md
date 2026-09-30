@@ -4,7 +4,7 @@ This guide takes about 15 minutes. You'll load a folder of media, train a
 small detector from a handful of labels, and score a fresh folder against
 it - using only `vtscore` (no Flask, no Angular).
 
-Five short examples follow, in order of increasing depth:
+Six short examples follow, in order of increasing depth:
 
 1. [Set up `CoreConfig`](#1-set-up-coreconfig)
 2. [Load a folder](#2-load-a-folder-of-audio-files)
@@ -13,8 +13,9 @@ Five short examples follow, in order of increasing depth:
 5. [Persist and reload a detector](#5-persist-and-reload-a-detector)
 6. [Run a text query](#6-run-a-text-query-no-training-needed)
 
-If you haven't read [concepts.md](concepts.md), do that first - the
-vocabulary (`Media`, `Origin`, `LabelSet`, `Embedding`) is assumed below.
+The vocabulary (`Media`, `Origin`, `LabelSet`, `Embedding`) is defined
+in [concepts.md](concepts.md); skim it first if the terms are new, or
+come back to it after this walkthrough.
 
 > Every snippet on this page is executed by
 > `tests_lib/integration/test_docs_quickstart.py` against a synthetic audio
@@ -29,9 +30,11 @@ cd vtsearch
 bash scripts/install.sh   # auto-detects CPU vs GPU
 ```
 
-The first time you import an embedder, it downloads its model weights
-into `data/models/` (~500 MB per backbone, cached for next time). Set
-`$VTSEARCH_DATA_DIR` to redirect that cache somewhere else.
+The first time an embedder runs, it downloads its model weights (hundreds
+of MB per backbone, cached for next time) into `vtscore.config.MODELS_CACHE_DIR`:
+`$VTSEARCH_MODELS_DIR` if set, otherwise `models/` under the data directory
+(`$VTSEARCH_DATA_DIR`, default the repository's `data/`). Set these before
+importing `vtscore`; they are read at import time.
 
 ## 1. Set up `CoreConfig`
 
@@ -58,7 +61,6 @@ def _build(settings_path=None) -> CoreConfig:
         calibration_fraction=0.5,
         enrich_descriptions=False,
         autopilot_goal_diversity=8,
-        inclusion=0,
     )
 
 register_core_config_builder(_build)
@@ -72,10 +74,10 @@ that bite:
   the first time a caller supplies a path. Accept it and ignore it if you
   have nowhere to put it.
 - **Every field listed above is required.** `CoreConfig` is a frozen
-  dataclass with defaults only for the four newest optional fields
+  dataclass with defaults only for seven optional fields
   (`autofind_exporter`, `autofind_exporter_field_values`,
-  `signpost_captioner`, `signpost_vocab`) - omitting any of the others is a
-  `TypeError`. See [packages/config.md](packages/config.md) for what each one
+  `projection_n_neighbors`, `projection_min_dist`, `signpost_captioner`,
+  `signpost_vocab`, `hide_ingest_eta`) - omitting any of the others is a `TypeError`. See [packages/config.md](packages/config.md) for what each one
   means.
 
 ## 2. Load a folder of audio files
@@ -381,10 +383,14 @@ backbones mid-process.
 - **Adding new media types or embedders:**
   [extending/media-types.md](extending/media-types.md),
   [extending/embedders.md](extending/embedders.md).
-- **Plugging into your own pipeline:** read
-  [architecture.md](architecture.md) for the resolution chain and the
-  three hooks the app installs (`register_core_config_builder`,
-  `register_*_context_resolver`, `register_plugin_family`).
+- **Vocabulary:** [concepts.md](concepts.md) if you skipped it.
+- **A longer walkthrough:** the
+  [train-and-score tutorial](tutorials/train-and-score.md) adds evaluation
+  and a fresh-process reload.
+- **Plugging into your own application:** [integration.md](integration.md)
+  covers the hooks to install (`register_core_config_builder`,
+  `register_*_context_resolver`, `register_setting_persister`), threading,
+  and where the library writes to disk.
 - **Bulk scoring without writing this script:** use the CLI -
   [packages/cli.md](packages/cli.md) shows the `autodetect` entry points.
 - **Evaluating your detector:** see [packages/eval.md](packages/eval.md)

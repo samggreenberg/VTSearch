@@ -1,17 +1,13 @@
 # `vtscore.utils`
 
-The leftover-helpers package. Most of what used to live here has
-moved to topical homes - state, plugins, sync, concurrency, security,
-and audio helpers all live in their own top-level packages now (see
-`vtscore.state`, `vtscore.plugins`, `vtscore.sync`,
-`vtscore.concurrency`, `vtscore.security`, and
-`vtscore.media.audio`). What's left is genuinely homeless.
+Small cross-cutting helpers with no better topical home. The package
+`__init__` re-exports nothing; import from the submodules.
 
 There is a theme to what stays: each module is a **single chokepoint**
 for something that would otherwise be re-implemented at dozens of call
 sites and drift. One hit-dict shape, one place that declares MD5 as
 non-security, one non-finite score sentinel, one wording for the
-"AGPL extra not installed" error.
+"AGPL extra not installed" error, one stat-free package-metadata walk.
 
 ## Contents
 
@@ -21,14 +17,14 @@ non-security, one non-finite score sentinel, one wording for the
 | `vtscore/utils/hashing.py` | Content fingerprints (`content_md5`, `content_sha1`, `new_md5`, `file_md5`) |
 | `vtscore/utils/scores.py` | Non-finite score sanitisation, so a `NaN` logit can't produce invalid JSON |
 | `vtscore/utils/optional_deps.py` | Actionable errors when an opt-out AGPL dependency isn't installed |
+| `vtscore/utils/import_metadata.py` | `seed_packages_distributions` / `fast_packages_distributions` - a stat-free `importlib.metadata.packages_distributions` |
 | `vtscore/utils/synthetic/` | Offline synthetic media generators (`audio.py`, `images.py`, `video.py`) |
 
 ## `vtscore.utils.hits.build_media_hit`
 
-The single source of truth for the scored-media hit-dict shape.
-Used by `vtscore.cli` when assembling autodetect results and by the
-app's `/api/labels/fill-from-sort` route when materialising scored
-rows for the UI. If you score a media against a detector and want to
+The single source of truth for the scored-media hit-dict shape, used
+wherever scored rows are assembled (e.g. `vtscore.cli` autodetect
+results). If you score a media against a detector and want to
 return the result, build the row through this function rather than
 constructing the dict by hand - that's how new optional fields
 (clip boundaries, MD5, origin) get picked up automatically.
@@ -139,14 +135,9 @@ media's *top-level* keys is not enough, because `custom_metadata_map` lets
 an importer ship a pre-computed vector **nested inside** `custom_metadata`
 (see `vtscore.datasets.loader_folder.load_dataset_from_folder`). That vector
 is consumed at load time and is a numpy array, so left in it breaks
-`json.dumps` in the JSON exporters and the response encoder alike - and
-persisting it would be exactly the vector persistence the no-persisted-vectors
-rule forbids.
-
-In the app this backs `vtsearch.routes._media_response.media_info_for_response`,
-which the detector and processor scoring routes use to strip a media before
-it is serialized, as well as `POST /api/medias/batch` and the label-export
-metadata blob.
+`json.dumps` - and persisting it would be exactly the vector persistence the
+[no-persisted-vectors rule](../architecture.md#the-no-persisted-vectors-rule)
+forbids.
 
 ## `vtscore.utils.hashing` - content fingerprints
 
@@ -194,15 +185,13 @@ optimisation, corrupted input embeddings, AMP overflow on CUDA, an
 extreme class-weight shift. `torch.sigmoid(NaN)` is `NaN`, and
 `json.dumps` will happily emit the bare token `NaN` (and
 `Infinity` / `-Infinity`), which is invalid JSON per RFC 7159 and is
-rejected by every browser's `JSON.parse`. One poisoned response breaks
-the Angular client until the user clears votes.
+rejected by every browser's `JSON.parse`.
 
 So every score-emitting path routes through one sentinel. `-1.0` sits
 *outside* the `[0, 1]` sigmoid range, which buys two things: `score >=
 threshold` is always `False` for a sanitised score, so broken items fall
-deterministically to the bottom of any sort; and the frontend already
-renders a missing score as `-1`, so a sanitised score looks exactly like
-"no score yet" with no UI change.
+deterministically to the bottom of any sort; and a UI that renders a
+missing score as `-1` shows it exactly like "no score yet".
 
 Use `sigmoid_to_finite_scores` in place of
 `torch.sigmoid(model(X)).squeeze(1).cpu().tolist()` at any site whose
@@ -221,8 +210,8 @@ distribution - every threshold estimator in
 `vtscore.training.thresholds` - drops it first. Skipping that step is
 not a rounding error but a sign flip: a spike a full unit below the
 sigmoid range pulls the fitted cut under zero, where every real score
-clears it and the detector reports the whole dataset as a hit (issue
-#3180). `scored_mask` returns the mask rather than the filtered array so
+clears it and the detector reports the whole dataset as a hit.
+`scored_mask` returns the mask rather than the filtered array so
 a caller holding a score list *and* its labels (a calibration ordering)
 drops the same positions from both.
 
@@ -261,6 +250,26 @@ except ImportError as exc:
 
 Raise it `from` the original so a genuinely broken install stays
 distinguishable from a deliberately absent one.
+
+---
+
+## `vtscore.utils.import_metadata` - stat-free package metadata
+
+```python
+def fast_packages_distributions() -> Mapping[str, list[str]]: ...
+def seed_packages_distributions() -> bool: ...
+```
+
+`transformers` calls `importlib.metadata.packages_distributions()` at
+module import time, and the stdlib implementation `stat()`s every file
+recorded by every installed distribution - tens of thousands of calls,
+which on an NFS-mounted venv can stall startup for minutes.
+`fast_packages_distributions` builds the same mapping from each
+distribution's `top_level.txt` (falling back to parsing `RECORD` as text)
+without touching the recorded files. `seed_packages_distributions()`
+installs it over the stdlib function; call it once, early, **before
+anything imports `transformers`**. It is idempotent and best-effort
+(returns `False` when the swap could not be made).
 
 ---
 
@@ -312,17 +321,43 @@ CLAP-family embedders consume the files without resampling.
 
 ### `generate_image_dataset`
 
-`vtscore/utils/synthetic/images.py`. Cycles through two ideas at
-256x256 PNG:
+`vtscore/utils/synthetic/images.py`. A small world of cartoon smiley
+faces at 512x512 PNG, drawn 2x supersampled, in three kinds (six faces,
+two shapes and two scenes in every ten pictures):
 
-- `smiley` - a face on a coloured background, with one of four
-  emotions (happy / sad / neutral / angry), random face / skin
-  colour, size, and position.
-- `shapes` - 1–5 coloured circles, squares, and rotated triangles
-  on a plain background.
+- `face` - one round face, in one of seven colours (yellow the
+  commonest, orange the nearest miss) with one of seven expressions:
+  smile, grin or wink (the `SMILING_EXPRESSIONS`), or frown, flat,
+  surprised or angry.
+- `shapes` - 1–5 circles, squares, triangles and stars in the same
+  colours.
+- `scene` - 3–6 small faces and shapes scattered over one background.
+
+Backgrounds are plain, polka-dotted, striped, checked or a gradient, in
+any of the colours. The mix is built so that "the yellow smiley faces"
+is worth training a detector for: a text query finds the yellow faces
+and is less sure which are smiling.
 
 Requires `PIL` (Pillow), imported lazily. Output filenames:
-`<idea>_<index>.png`.
+`<kind>_<index>.png`. Each picture is seeded on `(seed, index)`, so two
+seeds make two sets that share no picture.
+
+`describe_image_dataset(count, seed=42)` returns what the same call
+draws, without drawing it - one dict per picture:
+
+```python
+from vtscore.utils.synthetic import describe_image_dataset
+
+for picture in describe_image_dataset(10, seed=1):
+    face = picture["objects"][0]
+    if picture["kind"] == "face" and face["color"] == "yellow" and face["smiling"]:
+        print(picture["filename"], face["expression"], face["box"])
+```
+
+Its stable keys are `filename`, `kind`, `background` (`style` and colour
+names) and `objects` (each a `shape`, a `color` name and a `box` as
+fractions of the picture; a face also has `expression` and `smiling`).
+The rest are drawing parameters and may change.
 
 ### `generate_video_dataset`
 
@@ -374,8 +409,7 @@ name alone, and where they actually live:
 | job manager, progress     | `vtscore.concurrency`                         |
 | path / URL / pickle safety | `vtscore.security`                           |
 | audio helpers (wav, resample) | `vtscore.media.audio`                     |
-| settings accessors        | `vtsearch.settings_factory` (app-tier only)   |
+| runtime config            | `vtscore.config`                              |
 
-The "leftover" framing is honest: this package is small on purpose.
-New helpers should land in the topical package they actually belong
-to, not here.
+This package is small on purpose: new helpers should land in the topical
+package they belong to.

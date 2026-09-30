@@ -5,8 +5,8 @@ Run from the repo root, once the study's curve CSV is committed:
 
     python slides/figs/src/make-progression-fig.py
 
-Reads `progression_curve.csv` from the study directory
-(`docs/experiments/2026-09-25-progression-4184/`, written by
+Reads the 5%-prevalence arm's `progression_curve.csv` from the study directory
+(`docs/experiments/2026-09-25-progression-4184/h0.05/`, written by
 `scripts/experiments/calibration/analyze_progression_4184.py`) and writes
 `figs/progression.png` plus one build stage per earlier rung, so the room
 watches the curves arrive in the order the deck argued for them.
@@ -50,7 +50,11 @@ SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 REPO = SRC.parents[2]
 STUDY = REPO / "docs" / "experiments" / "2026-09-25-progression-4184"
-CSV = STUDY / "progression_curve.csv"
+#: The **5%-prevalence** arm (#4201), by the owner's call on #4184: the natural
+#: pool (0.44% positive) is where every midpoint rule over-flags and the ladder
+#: does not descend; the slide draws the regime its ideas were built for, and its
+#: caption and notes say so.  The natural curves are in ``STUDY / "natural"``.
+CSV = STUDY / "h0.05" / "progression_curve.csv"
 
 #: The rungs in the deck's order, and the words each is labelled with at its
 #: right end - the slide's own name for the idea, not the harness's.
@@ -162,7 +166,18 @@ def _figure(curves: dict[str, tuple[np.ndarray, np.ndarray]], layout: dict, k: i
     # The notch every curve leaves from: the typed query, before any vote.
     t0 = layout["t0"]
     ax.plot([0], [t0], marker="o", color=INK, markersize=9, zorder=5, clip_on=False)
-    ax.annotate("typed query", (0, t0), xytext=(14, 8), textcoords="offset points", color=INK, va="bottom")
+    # In the empty corner below the notch, on a leader: the curves climb out of
+    # the notch and fall back across the space either side of it.
+    lo, hi = layout["ylim"]
+    ax.annotate(
+        "typed query",
+        (0, t0),
+        xytext=(t_max * 0.02, lo + 0.12 * (hi - lo)),
+        textcoords="data",
+        color=INK,
+        va="center",
+        arrowprops={"arrowstyle": "-", "color": INK, "lw": 1.0, "shrinkA": 2, "shrinkB": 6, "relpos": (0.0, 0.5)},
+    )
 
     last = RUNGS[-1][0]
     for (rung, name), style, y_lab in list(zip(RUNGS, layout["styles"], layout["label_y"], strict=True))[:k]:
@@ -175,9 +190,19 @@ def _figure(curves: dict[str, tuple[np.ndarray, np.ndarray]], layout: dict, k: i
             textcoords="data",
             color=SHIPPED if rung == last else INK,
             fontweight="bold" if rung == last else "normal",
+            ha="left",
             va="center",
             annotation_clip=False,
-            arrowprops={"arrowstyle": "-", "color": style["color"], "lw": 1.0, "shrinkA": 0, "shrinkB": 4},
+            # The leader leaves the label's left edge, so it never crosses a
+            # neighbouring label on its way down to a converged end.
+            arrowprops={
+                "arrowstyle": "-",
+                "color": style["color"],
+                "lw": 1.0,
+                "shrinkA": 2,
+                "shrinkB": 4,
+                "relpos": (0.0, 0.5),
+            },
         )
     return fig
 

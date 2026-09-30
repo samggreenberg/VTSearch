@@ -188,6 +188,15 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
+  /** Persist the "RAM / Disk bars" pulldown: when the Dashboard shows its
+   *  server usage bars ("Default" = once a detector exists; see
+   *  `DashboardComponent.showUsageBars`). */
+  onUsageBarsModeChange(mode: string): void {
+    const m = mode as AppSettings['show_usage_bars'];
+    this.settings.update((s) => ({ ...s, show_usage_bars: m }));
+    this.save();
+  }
+
   /** Display name of the admin-set solo media type for the read-only
    *  Server settings row. Falls back to the raw type_id when the registry
    *  hasn't loaded (or no longer carries the type), and to "Show

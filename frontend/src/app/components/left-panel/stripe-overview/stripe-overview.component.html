@@ -7,7 +7,7 @@
       title="Minimap unavailable for large sorts — the overview only draws for smaller rankings."
     ></div>
   } @else {
-    <div class="stripe-overview" role="img" aria-label="Media minimap" title="Minimap of all items in sort order. Green = good votes, red = bad votes, white = selected. Click to jump." (click)="onStripeClick($event)" tabindex="0" (keydown.enter)="onStripeKeyboard()" (keydown.space)="onStripeKeyboard()">
+    <div class="stripe-overview" role="img" aria-label="Media minimap" [title]="stripeTitle()" (click)="onStripeClick($event)" tabindex="0" (keydown.enter)="onStripeKeyboard()" (keydown.space)="onStripeKeyboard()">
       <div class="stripe-container">
         @for (dot of cachedDots(); track $index) {
           <div
@@ -20,10 +20,7 @@
         }
 
         @if (cachedThresholdPosition() !== null) {
-          <div
-            class="stripe-threshold"
-            [style.top.%]="cachedThresholdPosition()"
-          ></div>
+          <div class="stripe-threshold" [style.top.%]="cachedThresholdPosition()"></div>
         }
       </div>
     </div>

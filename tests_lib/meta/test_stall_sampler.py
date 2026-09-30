@@ -123,3 +123,69 @@ class TestParseProcStat:
 
     def test_truncated_line_reads_as_unknown(self, sampler):
         assert sampler.parse_proc_stat("1 (sh) S 0 0") is None
+
+
+# Three intervals of bursty READs on /exp, the shape #3884 was filed on: two
+# quiet intervals with a couple of page-ins at 16-20 ms, then a readahead burst
+# of a hundred at 2.5 ms.  One op in 26 was slow, and the whole window cost
+# (2*16 + 2*20 + 100*2.504) / 104 = 3.1 ms per op.  Ranked by interval, the
+# median is 16 ms.  The unparseable last line is a sampler killed mid-write.
+BURSTY_JSONL = """\
+{"ts": "2026-09-16T17:00:05Z", "mounts": {"/exp/sgreenberg": {"READ": {"ops": 2, "exec": 16.0, "queue": 0.05, "rtt": 15.8, "bytes": 8192}}, "/expscratch/sgreenberg": {"error": "not an nfs mount here"}}, "procs": {}}
+{"ts": "2026-09-16T17:00:10Z", "mounts": {"/exp/sgreenberg": {"READ": {"ops": 2, "exec": 20.0, "queue": 0.05, "rtt": 19.8, "bytes": 8192}}}, "procs": {}}
+{"ts": "2026-09-16T17:00:15Z", "mounts": {"/exp/sgreenberg": {"READ": {"ops": 100, "exec": 2.504, "queue": 0.01, "rtt": 2.4, "bytes": 409600}}}, "procs": {}}
+{"ts": "2026-09-16T17:00:2
+"""
+
+
+@pytest.fixture
+def bursty_jsonl(tmp_path):
+    path = tmp_path / "host-rack7n06.jsonl"
+    path.write_text(BURSTY_JSONL, encoding="utf-8")
+    return str(path)
+
+
+class TestSummarize:
+    def test_exec_is_weighted_by_op_count_not_by_interval(self, sampler, bursty_jsonl):
+        """#3884: the summary used to rank the three interval averages, so the
+        two quiet intervals outvoted the burst and it reported "exec p50 16 ms"
+        for a mount that served 104 READs at 3.1 ms each.  A reader then takes
+        16 ms as the cost of a page-in, which is exactly the conclusion the
+        #3853 thread drew from it."""
+        read = sampler.summarize_mounts(sampler.read_rows(bursty_jsonl))["/exp/sgreenberg"]["READ"]
+
+        assert read["ops"] == 104
+        assert read["intervals"] == 3
+        assert read["exec_mean"] == pytest.approx(3.1)
+        # 100 of the 104 ops sat in the fast interval, so both the median op and
+        # the 90th-percentile op are fast ones.
+        assert read["exec_p50"] == 2.504
+        assert read["exec_p90"] == 2.504
+        assert read["queue_p50"] == 0.01
+        assert read["rtt_p50"] == 2.4
+
+    def test_worst_interval_is_not_diluted_by_the_weighting(self, sampler, bursty_jsonl):
+        """The slowest interval is what gets read against the app log by
+        timestamp; weighting must not wash a slow second out of the table."""
+        read = sampler.summarize_mounts(sampler.read_rows(bursty_jsonl))["/exp/sgreenberg"]["READ"]
+        assert read["exec_worst"] == 20.0
+
+    def test_a_mount_that_is_not_nfs_produces_no_table(self, sampler, bursty_jsonl):
+        assert set(sampler.summarize_mounts(sampler.read_rows(bursty_jsonl))) == {"/exp/sgreenberg"}
+
+    def test_printed_table_carries_the_per_op_figure(self, sampler, bursty_jsonl, capsys):
+        """The table is what gets pasted into an issue comment, so check the
+        text too: the per-op cost is on the READ line and 16 ms is nowhere."""
+        sampler.summarize(bursty_jsonl)
+        out = capsys.readouterr().out
+        (line,) = [ln for ln in out.splitlines() if ln.strip().startswith("READ")]
+        assert line.split() == ["READ", "104", "3", "3.10ms", "2.50ms", "2.50ms", "20.00ms", "0.01ms", "2.40ms"]
+        assert "16.00" not in out
+
+    def test_percentile_with_one_op_per_interval_is_plain_nearest_rank(self, sampler):
+        """Weighting only changes anything when counts differ; with one op
+        each it must agree with the unweighted nearest-rank percentile."""
+        pairs = [(float(v), 1) for v in (5, 1, 4, 2, 3)]
+        assert sampler._pct(pairs, 50) == 3.0
+        assert sampler._pct(pairs, 90) == 5.0
+        assert sampler._pct([], 50) == 0.0

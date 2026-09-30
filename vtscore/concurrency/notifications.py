@@ -20,9 +20,16 @@ Usage from anywhere in the library or the app::
     notify(
         "Skipped 3 unreadable files",
         level="warning",
-        detail="page_2.pdf, page_9.pdf, notes.pdf could not be decoded.",
+        detail="They could not be decoded as PDF.",
+        items=["page_2.pdf", "page_9.pdf", "notes.pdf"],
         source="Server Folder",
     )
+
+A notification that names many things - files that were skipped, rows that
+were dropped - passes them as ``items`` rather than packing them into
+``detail``: the app shows the list behind a *Details* toggle with a *Copy
+list* button, so the user can read every entry or paste them somewhere
+useful, where a comma-joined ``detail`` would be cut off at a few dozen.
 
 Plugin subclasses get the same thing with the ``source`` filled in for them —
 see :meth:`vtscore.plugins.PluginBase.notify`.
@@ -51,6 +58,7 @@ import logging
 import threading
 import time
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Optional, get_args
 
@@ -79,6 +87,11 @@ _LOG_LEVEL_FOR: dict[str, int] = {
 #: or a 10k-entry filename list gets it cut off rather than wedging the stream.
 MAX_MESSAGE_CHARS = 300
 MAX_DETAIL_CHARS = 2000
+#: The item list is for "which ones": long enough to hold every file a real
+#: import skips, short enough that one call cannot push megabytes at every
+#: client. Past :data:`MAX_ITEMS` the last slot says how many were left out.
+MAX_ITEMS = 1000
+MAX_ITEM_CHARS = 300
 
 #: Per-process id prefix. Ids only need to be unique among the notifications a
 #: client can hold at once, but a restarted backend re-using ``note_1`` while a
@@ -93,6 +106,33 @@ def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _clip_items(items: Optional[Iterable[Any]]) -> Optional[tuple[str, ...]]:
+    """Normalise *items* to at most :data:`MAX_ITEMS` non-blank strings.
+
+    ``None``, an empty iterable, and one holding only blanks all come back as
+    ``None``. A bare string is one item, not a sequence of characters. An
+    over-long list keeps its first ``MAX_ITEMS - 1`` entries and ends with a
+    "… and N more" line, so the cut is visible in the list itself. Iterating a
+    caller's object can raise; that is logged and the list dropped, per the
+    "never raises" contract.
+    """
+    if items is None:
+        return None
+    if isinstance(items, str):
+        items = [items]
+    try:
+        texts = [t for t in (str(i).strip() for i in items) if t]
+    except Exception:
+        logger.exception("Could not read notification items; sending the notification without them")
+        return None
+    if not texts:
+        return None
+    if len(texts) > MAX_ITEMS:
+        left_out = len(texts) - (MAX_ITEMS - 1)
+        texts = texts[: MAX_ITEMS - 1] + [f"… and {left_out} more"]
+    return tuple(_truncate(t, MAX_ITEM_CHARS) for t in texts)
 
 
 @dataclass(frozen=True)
@@ -110,6 +150,10 @@ class Notification:
     source: Optional[str] = None
     #: Unix seconds, filled in at construction.
     timestamp: float = field(default_factory=time.time)
+    #: The specific things the message is about (skipped files, dropped
+    #: rows), one entry each. Shown behind a *Details* toggle with a *Copy
+    #: list* button rather than inline, so a long list never swamps the toast.
+    items: Optional[tuple[str, ...]] = None
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-serialisable form; the SSE ``notification`` frame payload."""
@@ -120,6 +164,7 @@ class Notification:
             "detail": self.detail,
             "source": self.source,
             "timestamp": self.timestamp,
+            "items": list(self.items) if self.items else None,
         }
 
 
@@ -188,6 +233,7 @@ def notify(
     level: str = DEFAULT_LEVEL,
     detail: Optional[str] = None,
     source: Optional[str] = None,
+    items: Optional[Iterable[str]] = None,
 ) -> Notification:
     """Show *message* to every connected user, and log it.
 
@@ -207,6 +253,11 @@ def notify(
         source: Who is speaking, e.g. a plugin's ``display_name``. Plugin
             subclasses should use :meth:`vtscore.plugins.PluginBase.notify`,
             which fills this in.
+        items: Optional list of the specific things the message is about -
+            one skipped file, dropped row or failed request per entry. The
+            app shows them behind a *Details* toggle with a *Copy list*
+            button. Capped at :data:`MAX_ITEMS` entries of
+            :data:`MAX_ITEM_CHARS` characters each; blank entries are dropped.
 
     Returns:
         The :class:`Notification` that was published. A blank *message*
@@ -221,6 +272,7 @@ def notify(
     text = _truncate(str(message).strip(), MAX_MESSAGE_CHARS)
     detail_text = _truncate(str(detail).strip(), MAX_DETAIL_CHARS) if detail else None
     source_text = str(source).strip() or None if source else None
+    item_texts = _clip_items(items)
 
     notification = Notification(
         id=f"note_{_ID_PREFIX}_{next(_id_counter)}",
@@ -228,15 +280,17 @@ def notify(
         message=text,
         detail=detail_text or None,
         source=source_text,
+        items=item_texts,
     )
 
     prefix = f"[{source_text}] " if source_text else ""
     logger.log(
         _LOG_LEVEL_FOR[level],
-        "%s%s%s",
+        "%s%s%s%s",
         prefix,
         text or "(empty notification)",
         f" - {detail_text}" if detail_text else "",
+        "".join(f"\n  - {item}" for item in item_texts) if item_texts else "",
     )
 
     if text:

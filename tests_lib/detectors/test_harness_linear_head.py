@@ -32,7 +32,7 @@ import vtscore.eval.step_trainers as step_trainers
 import vtscore.eval.voting_iterations as vi
 from vtscore.eval.patch_styles import resolve_style
 from vtscore.eval.voting_columns import IDENT_COLUMNS
-from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
+from vtscore.training.mlp import LINEAR_HEAD, LINEAR_LOGREG_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
 
 from .test_max_patch_style import DIM, _planted_dataset
 
@@ -46,6 +46,7 @@ def _votes(medias, n=6):
 def test_resolve_hidden_dim_maps_heads_to_sentinels():
     assert step_model.resolve_hidden_dim("linear_svm", 40) == LINEAR_SVM_HEAD
     assert step_model.resolve_hidden_dim("linear", 40) == LINEAR_HEAD == 0
+    assert step_model.resolve_hidden_dim("linear_logreg", 40) == LINEAR_LOGREG_HEAD
     assert step_model.resolve_hidden_dim("mlp", 40) == _auto_hidden_dim(40)
     with pytest.raises(ValueError, match="unknown head"):
         step_model.resolve_hidden_dim("logreg", 40)
@@ -109,7 +110,9 @@ def test_head_does_not_apply_to_a_standalone_estimator():
         )
 
 
-@pytest.mark.parametrize("head,sentinel", [("linear_svm", LINEAR_SVM_HEAD), ("linear", LINEAR_HEAD)])
+@pytest.mark.parametrize(
+    "head,sentinel", [("linear_svm", LINEAR_SVM_HEAD), ("linear", LINEAR_HEAD), ("linear_logreg", LINEAR_LOGREG_HEAD)]
+)
 @pytest.mark.parametrize("style", [None, "max_patch"])
 def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, head, sentinel, monkeypatch):
     """A linear head must reach the fit *and* the folds under the same sentinel."""

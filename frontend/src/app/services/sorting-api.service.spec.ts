@@ -72,19 +72,19 @@ describe('SortingApiService', () => {
     req.flush({ ok: true });
   });
 
-  it('getInclusion should GET', () => {
-    service.getInclusion().subscribe(data => expect(data.inclusion).toBe(3));
-    const req = httpMock.expectOne('/api/inclusion');
+  it('getMinPrecision should GET', () => {
+    service.getMinPrecision().subscribe(data => expect(data.min_precision).toBe(0.75));
+    const req = httpMock.expectOne('/api/min-precision');
     expect(req.request.method).toBe('GET');
-    req.flush({ inclusion: 3 });
+    req.flush({ min_precision: 0.75 });
   });
 
-  it('setInclusion should POST', () => {
-    service.setInclusion(5).subscribe();
-    const req = httpMock.expectOne('/api/inclusion');
+  it('setMinPrecision should POST the floor as a fraction', () => {
+    service.setMinPrecision(0.25).subscribe();
+    const req = httpMock.expectOne('/api/min-precision');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ inclusion: 5 });
-    req.flush({ inclusion: 5 });
+    expect(req.request.body).toEqual({ min_precision: 0.25 });
+    req.flush({ min_precision: 0.25 });
   });
 
   it('exportLabels should GET', () => {

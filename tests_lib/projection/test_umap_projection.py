@@ -229,6 +229,9 @@ def test_umap_fit_stamps_params():
     # Compaction is stamped too, or a layout packed under an old default is
     # indistinguishable from one fit under the current one (issue #3056).
     assert proj.compact is True
+    # ...and so is the seed, so a harness that asks for a seeded map can tell
+    # a layout fit under its seed from one fit under any other (issue #4296).
+    assert proj.random_state == 1
 
 
 def test_pca_fallback_leaves_params_none():
@@ -238,6 +241,7 @@ def test_pca_fallback_leaves_params_none():
     assert proj.n_neighbors is None
     assert proj.min_dist is None
     assert proj.compact is None
+    assert proj.random_state is None
 
 
 def test_remove_ids_preserves_stamped_params():
@@ -245,9 +249,10 @@ def test_remove_ids_preserves_stamped_params():
     from vtscore.projection.umap_projection import remove_ids
 
     coords = _matrix(5, 2, seed=1)
-    proj = Projection("pid", [0, 1, 2, 3, 4], coords, "umap", 20, 0.2, False)
+    proj = Projection("pid", [0, 1, 2, 3, 4], coords, "umap", 20, 0.2, False, 9)
     culled = remove_ids(proj, [1, 3])
     assert culled.n_neighbors == 20
     assert culled.min_dist == 0.2
     assert culled.compact is False
+    assert culled.random_state == 9
     assert culled.ids == [0, 2, 4]

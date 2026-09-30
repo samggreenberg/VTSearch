@@ -33,7 +33,8 @@ are the underlying primitives.
   this; you call `set_format("json")` once at startup to flip the
   whole CLI into NDJSON mode.
 
-All three depend on `vtscore.config.CoreConfig.from_settings()`, so
+`vtscore.cli` and `vtscore.cli_pipeline` depend on
+`vtscore.config.CoreConfig.from_settings()`, so
 the app-side builder must be registered before calling them in an
 app context. Library-only callers should construct a `CoreConfig`
 directly and skip these entry points entirely if they don't want the
@@ -57,11 +58,12 @@ builds - i.e. in how it produces media chunks:
 
 All four take optional `settings_path`, `exporter_name`,
 `exporter_field_values`, and the keyword-only `dry_run=False`,
-`stream_results=False` and `keep_negatives=False`. They
-print errors via `cli_progress.emit_error()` and `sys.exit(1)` on
-failure - i.e. they're meant to be called from a `__main__`-style
-wrapper, not as well-behaved library functions. If you want the
-library function shape, call `_run_pipeline` (private but stable).
+`stream_results=False`, `keep_negatives=False`, `save_dataset=False` and
+`override_detectors=None`. They catch every
+exception, report it via `cli_progress.emit_error()`, and
+`sys.exit(1)` - i.e. they're meant to be called from a
+`__main__`-style wrapper, not as well-behaved library functions.
+The raising equivalent is the private `_run_pipeline` (see below).
 
 ### Signatures
 
@@ -75,6 +77,8 @@ def autodetect_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_main_chunked(
@@ -87,6 +91,8 @@ def autodetect_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main(
@@ -99,6 +105,8 @@ def autodetect_importer_main(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
@@ -112,23 +120,33 @@ def autodetect_importer_main_chunked(
     dry_run: bool = False,
     stream_results: bool = False,
     keep_negatives: bool = False,
+    save_dataset: bool = False,
+    override_detectors: list[str] | None = None,
 ) -> None: ...                                                # vtscore/cli.py
 ```
 
 ### Behaviour
 
-- **Pickle variants** load via `vtscore.datasets.loader.load_dataset_from_pickle`
-  (thin load). **Importer variants** resolve *importer_name* in
-  `vtscore.datasets.importers`, validate *field_values* against the
-  importer's declared `fields`, then call `run_cli(...)` or
-  `run_chunked_cli(...)`.
+- **Pickle variants** load the pickle via `vtscore.datasets.loader`.
+  **Importer variants** resolve *importer_name* in
+  `vtscore.datasets.importers`, validate *field_values* with the
+  importer's `validate_cli_field_values`, then call `run_cli(...)` or
+  `run_chunked_cli(...)` (thin when the importer's `reference_files`
+  field asks for it) and embed whatever the load left unembedded.
 - **Chunked variants** stream the source in `chunk_size`-sized
   batches; peak RAM stays at roughly `chunk_size` medias regardless
   of total length. Detectors are trained **once** against the first
   non-empty chunk and reused for every subsequent chunk; the
   exporter sees a single merged results dict at the end.
-- **Default exporter** is `"gui"` (prints to stdout) when
-  `exporter_name` is `None`.
+- **`override_detectors`**: a list of detector names to train and score
+  in place of the settings file's `autofind_detectors` (the file itself is
+  never modified). The app's `--import-labels-into NAME` passes `[NAME]`,
+  and the pipeline YAML passes its `detectors:` list (or, without one,
+  `[import_labels.detector]`). The dry-run plan lists these instead of the
+  Auto-Find list.
+- **Default exporter**: when `exporter_name` is `None`, the settings
+  file's `autofind_exporter` (with its saved field values) is used;
+  if that is unset too, `"gui"` (prints to stdout).
 - **`stream_results=True`** hands the (streaming-capable) exporter a
   lazy record iterator instead of accumulating a merged results dict,
   so nothing proportional to the hit count is held in RAM;
@@ -136,8 +154,10 @@ def autodetect_importer_main_chunked(
   (labelled `"bad"`). Both are accepted by all four entry points -
   they pair naturally with the chunked variants, but a whole-dataset
   run also benefits, since the hits need not accumulate even when the
-  medias already have. The `--stream-results` **CLI flag** is narrower:
-  it requires `--chunk-size N`.
+  medias already have. The `--stream-results` **CLI flag** and the
+  pipeline-YAML `stream_results:` key are narrower: both require a
+  chunk size. The exporter must declare `supports_streaming`, or the
+  run fails with the list of exporters that do.
 
 ```python
 from vtscore.cli import autodetect_main, autodetect_importer_main
@@ -151,7 +171,7 @@ autodetect_main(
 
 autodetect_importer_main(
     importer_name="server_folder",
-    field_values={"folder": "/srv/sounds", "media_type": "audio"},
+    field_values={"path": "/srv/sounds", "media_type": "audio"},
     settings_path="data/settings.json",
     exporter_name="server_csv_file",
     exporter_field_values={"filepath": "out.csv"},
@@ -176,7 +196,7 @@ DRY RUN - no media will be loaded, embedded, scored, or exported.
 Source:
   Importer: server_folder
   Params:
-    folder: /srv/sounds
+    path: /srv/sounds
     media_type: audio
   Chunk size: whole dataset
 
@@ -198,6 +218,8 @@ def import_labels_into_detector(
     det_name: str,
     importer_name: str,
     field_values: dict[str, Any],
+    *,
+    create_media_type: str = "",
 ) -> tuple[int, int]:
 
 def import_labels_into_detector_from_file(
@@ -217,23 +239,51 @@ are checked and values normalized as for the other CLI plugin paths.
 block and `--import-labels-into` (see below); also callable directly
 when you want to ingest labels without running a full autodetect pass.
 
+A detector with no file in the detectors dir raises
+`DetectorNotFoundError` (a `ValueError` subclass carrying `det_name`)
+unless `create_media_type` names a registered media type. In that case the
+detector is **created** from the imported labels: the JSON the Dashboard's
+New Detector writes (no seed examples, `embedder_type` left for the first
+train to resolve), plus a `vtscore.detectors.registry` entry owned by
+`vtscore.state.current_user.get_current_user()`, so it appears in that
+user's Drafts. No entry is added when one already owns the name. Nothing
+is written when the import yields no `good`/`bad` label, and an existing
+detector ignores `create_media_type`. The app's `--create-detector` and the
+YAML's `import_labels.create: true` drive it, taking the media type from
+`--detector-media-type` / `import_labels.media_type`, else from the source:
+a dataset pickle's `meta.json`, or an importer's `media_type` field.
+
 ### What `_run_pipeline` does
 
-All four entry points delegate to `_run_pipeline` (defined at
-`vtscore/cli.py`). The interesting steps:
+All four entry points delegate to `vtscore/cli.py::_run_pipeline`
+(via `_autodetect`). The interesting steps:
 
-1. Build a `CoreConfig` via `CoreConfig.from_settings(settings_path=...)`.
-2. If `dry_run`, validate + emit the plan and return.
-3. Otherwise, iterate the *media_source* iterator chunk by chunk.
-4. On the first non-empty chunk, train each Auto-Find (or override)
-   detector via `_load_and_train_detectors`. Detectors with a
-   `media_type` mismatch or an `input_spec.clipper` mismatch against
-   the loaded dataset are *skipped* with a warning event, not
-   errored.
+1. Build a `CoreConfig` via `CoreConfig.from_settings(settings_path=...)`
+   and resolve the exporter (explicit name, else `autofind_exporter`).
+2. If `dry_run`, validate + emit the plan and return without consuming
+   the source.
+3. If `stream_results`, hand off to the streaming path
+   (`_run_streaming_pipeline`): train on the first chunk, then pass the
+   exporter a header plus a lazy `(detector_name, hit)` iterator via
+   `export_cli_streaming`.
+4. Otherwise iterate the source chunk by chunk. On the first non-empty
+   chunk, train each Auto-Find (or `override_detectors`) detector via
+   `_load_and_train_detectors`. A detector whose `media_type` has no
+   direct or one-hop converter route from the dataset's types is
+   *skipped* with a `detector_skipped` event; one whose
+   `input_spec.clipper` doesn't match the dataset is *re-clipped* at
+   scoring time (a `detector_reclip` event), not skipped. Nobody can
+   vote in a headless run, so a detector's precision floor is never
+   spot-checked: it is scored at the floor's unchecked starting
+   candidate and announced with a `detector_unchecked` event; every
+   result it produces carries the same state under `floor`.
 5. Score each chunk via `_score_medias_with_detectors`, merging hits
    into the accumulated results in place.
 6. Hand the merged `{media_type, detectors_run, results}` dict to
-   the exporter via `_run_exporter`.
+   the exporter via `_run_exporter`. An exporter whose
+   `supported_payloads` include `"detector_bundles"` (the portable
+   detector) gets the trained detectors via `export_cli_detectors`
+   instead.
 
 Detectors whose label origins cannot be resolved from the CLI
 environment (e.g. labels collected through the browser's `local_folder`
@@ -261,21 +311,24 @@ dispatch.
 | `dataset`       | `str` path            | Path to a dataset pickle.                                                |
 | `importer`      | `{name, fields?}`     | Importer name + per-field values. Mutually exclusive with `dataset`.     |
 | `settings`      | `str` path            | Override settings file path.                                             |
-| `detectors`     | `list[str]`           | Override `autofind_detectors` for this run only.                          |
+| `detectors`     | `list[str]`           | Override `autofind_detectors` for this run only. Defaults to `[import_labels.detector]` when `import_labels` is set. |
 | `chunk_size`    | positive `int`        | Stream the source in chunks of this size.                                |
-| `import_labels` | `{detector, file, importer?}` | Run a label importer + merge into a detector before scoring.   |
+| `stream_results` | `bool`               | Stream hits to the exporter (see above). Requires `chunk_size`.          |
+| `keep_negatives` | `bool`               | Also stream below-threshold hits. Requires `stream_results`.             |
+| `import_labels` | `{detector, file, importer?, create?, media_type?}` | Run a label importer + merge into a detector before scoring; `create: true` makes the detector if it is missing (`media_type` overrides the source's). |
 | `exporter`      | `{name, fields?}`     | Exporter name + per-field values.                                        |
 
-Field-key validation happens against the live plugin registry - a
-typo in `importer.name` or any `fields.*` key fails at parse time
-before media touches RAM.
+Unknown top-level keys raise `ValueError`; a missing file raises
+`FileNotFoundError`. Field-key validation happens against the live
+plugin registry - a typo in `importer.name` or any `fields.*` key
+fails at parse time before media touches RAM.
 
 ```yaml
 # pipeline.yaml
 importer:
   name: server_folder
   fields:
-    folder: /srv/sounds
+    path: /srv/sounds
     media_type: audio
 settings: data/settings.json
 detectors:
@@ -297,17 +350,19 @@ run_pipeline_file("pipeline.yaml")
 # Loads + dispatches against vtscore.cli._run_pipeline.
 ```
 
-`run_pipeline_file` (defined in `vtscore/cli_pipeline.py`) is the
-"do everything" wrapper: it calls `load_pipeline_file`, runs the
-optional `import_labels` block, then dispatches to `_run_pipeline`
-with `override_detectors=config["detectors"]` so the YAML file can
-declare a detector list inline without mutating `settings.json`.
+`run_pipeline_file(path)` is the "do everything" wrapper: it calls
+`load_pipeline_file`, runs the optional `import_labels` block, then
+dispatches to `_run_pipeline` with
+`override_detectors=config["detectors"]` so the YAML file can declare
+a detector list inline without mutating `settings.json`. A
+`FileNotFoundError` / `ValueError` becomes `Error: ...` on stderr and
+`sys.exit(1)`.
 
 ## `vtscore.cli_progress` - format-aware output
 
-Source: `vtscore/cli_progress.py`. The whole module is thread-safe by
-construction (writes go straight to `sys.stdout`/`sys.stderr` with
-`flush()`); state is a single module-global `_format` flag.
+Source: `vtscore/cli_progress.py`. Every write goes straight to
+`sys.stdout`/`sys.stderr` with a `flush()`; the only state is a
+single module-global `_format` flag.
 
 ### API
 
@@ -328,6 +383,8 @@ def emit(
 def emit_error(message: str) -> None: ...
 
 def progress_callback(status: str, message: str = "", current: int = 0, total: int = 0) -> None: ...
+
+def notification_subscriber(notification: Notification) -> None: ...
 ```
 
 ### Behaviour
@@ -349,6 +406,13 @@ def progress_callback(status: str, message: str = "", current: int = 0, total: i
   (`vtscore.media.base.ProgressCallback`) that emits `progress`
   events in JSON mode and is a no-op in text mode. Pass it to any
   loader / embedder API that accepts a `progress_callback`.
+- `notification_subscriber(notification)` - subscribe it to
+  `vtscore.concurrency.notifications.notifications` for the life of a
+  run so plugin notifications (GUI toasts) aren't dropped headless.
+  Text mode: one `Note:` / `Done:` / `Warning:` / `Error:` line on
+  **stderr**, followed by one indented `- item` line per entry in the
+  notification's `items`. JSON mode: a `notification` event on stdout.
+  Never ends the run, even at `level="error"`.
 
 ```python
 from vtscore import cli_progress
@@ -364,21 +428,29 @@ cli_progress.emit(
 
 ### Event reference
 
-Events the CLI emits today. Every event includes `event` and `ts`;
-each row lists the extra fields.
+Events emitted by `vtscore.cli` and `vtscore.cli_progress`. Every
+event includes `event` and `ts`; each row lists the extra fields.
 
 | Event              | Fields                                                            | Source                                |
 |--------------------|-------------------------------------------------------------------|---------------------------------------|
 | `chunk_start`      | `chunk_num: int`, `chunk_size: int`                               | `_score_chunk` in `cli.py`            |
 | `chunks_done`      | `total_medias: int`, `chunks: int`                                | `_run_live_pipeline` in `cli.py`      |
 | `detector_skipped` | `detector: str`, plus reason-specific fields                      | `_load_and_train_detectors`           |
-| `export_complete`  | `message: str`                                                    | `_run_exporter` in `cli.py`           |
-| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors`, `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
+| `detector_reclip`  | `detector`, `detector_input_spec`, `dataset_input_spec`           | `_load_and_train_detectors`           |
+| `detector_unchecked` | `detector`, `min_precision`, `status` (`unchecked`), `count` (the exported set's size) | `_record_floor_state` in `cli.py` |
+| `medias_skipped`   | `skipped: int`, `skipped_ids` (first 100), `embedder`             | `_emit_skipped_medias` in `cli.py`    |
+| `medias_unembedded`| `unembedded: int`, `unembedded_ids` (first 100)                   | `_embed_loaded_medias` in `cli.py`    |
+| `export_complete`  | `message: str`, optional `open_url` (validated `http(s)` URL)     | `_run_exporter` in `cli.py`           |
+| `dry_run_plan`     | `source`, `settings_path`, `autofind_detectors` (the detectors the run would score), `detectors_source` (`"autofind"` or `"override"`), `exporter`, `exporter_field_values` | `_emit_dry_run_plan`        |
 | `progress`         | `status: str`, optional `message`, `current`, `total`, `pct`      | `progress_callback`                   |
+| `notification`     | `level`, `message`, `detail`, `source`, `items`                   | `notification_subscriber`             |
 | `error`            | `message: str`                                                    | `emit_error` in JSON mode             |
 
 Progress ticks with no `message` and `total <= 0` are dropped, so
-consumers never see empty `{"status":"idle"}` records.
+consumers never see empty `{"status":"idle"}` records. The app's
+`--import-labels-into` flag also emits `labels_imported`
+(`detector`, `applied`, `skipped`, `created`), but from the app tier, not
+from these modules.
 
 ### Consuming the NDJSON stream
 

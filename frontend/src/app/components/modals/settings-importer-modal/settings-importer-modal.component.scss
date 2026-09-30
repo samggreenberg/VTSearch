@@ -17,10 +17,6 @@
 // `_components.scss`. The parent `.importer-form` provides `gap:
 // var(--space-lg)`, which spaces the back button from the form below.
 
-.required {
-  color: var(--color-bad);
-}
-
 .form-actions {
   display: flex;
   justify-content: flex-end;

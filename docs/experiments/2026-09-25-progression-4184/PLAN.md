@@ -1,7 +1,10 @@
 # The calibration ladder on COCO Better: one cost curve per rung (#4184)
 
-**Status: planned 2026-09-25. The harness, launcher, analyzer and slide figure
-script are in the tree; no cell has run yet, so there is no verdict.** The
+**Status: run 2026-09-27, at the natural pool and at a 5% thinned pool (#4201).
+The verdict is in [REPORT.md](REPORT.md): the ladder does not descend, because the
+strawman r4 beats the shipped fused cut at both prevalences. The slide is on hold
+for the owner's call.** The rest of this file is the plan as it was fixed
+before the first cell. The
 cells need the GRID (the COCO Better pile lives there). Everything below is
 fixed before the first cell, including what the figure does if a rung does
 not come out lower than the one before it.

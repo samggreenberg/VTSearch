@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { StripeOverviewComponent, STRIPE_MAX_ITEMS } from './stripe-overview.component';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { FLOOR_STATES, lineFloor } from '../../../testing/line-floor';
 
 describe('StripeOverviewComponent', () => {
   let component: StripeOverviewComponent;
@@ -124,5 +125,35 @@ describe('StripeOverviewComponent', () => {
     } as unknown as MouseEvent);
     component.onStripeKeyboard();
     expect(emitted).toBe(false);
+  });
+
+  describe('the line marker in every floor state (#4272, #4273)', () => {
+    async function drawWith(floor: ReturnType<typeof lineFloor> | null): Promise<HTMLElement> {
+      fixture.componentRef.setInput('sortOrder', [
+        { id: 1, score: 0.9 },
+        { id: 2, score: 0.3 },
+      ]);
+      fixture.componentRef.setInput('threshold', 0.5);
+      fixture.componentRef.setInput('floor', floor);
+      await settleZoneless(fixture);
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it.each(FLOOR_STATES)('draws the same plain marker when %s, and names the state in the strip tooltip', async (status) => {
+      const el = await drawWith(lineFloor(status));
+      const marker = el.querySelector('.stripe-threshold');
+      expect(marker).not.toBeNull();
+      expect(marker!.className).toBe('stripe-threshold');
+      expect(component.cachedThresholdPosition()).toBe(50);
+      const title = el.querySelector('.stripe-overview')!.getAttribute('title')!;
+      expect(title).toContain('The line: ');
+      expect(title).not.toMatch(/dashed|unpromised/);
+    });
+
+    it('draws a plain marker with no detector behind the sort', async () => {
+      const el = await drawWith(null);
+      expect(el.querySelector('.stripe-threshold')!.className).toBe('stripe-threshold');
+      expect(el.querySelector('.stripe-overview')!.getAttribute('title')).not.toContain('The line: ');
+    });
   });
 });

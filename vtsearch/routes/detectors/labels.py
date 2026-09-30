@@ -207,7 +207,7 @@ def save_detector_labels(name: str):
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
-# raise 422.  See "Routes absent from the spec" in ``docs/API.md``.
+# raise 422.  See "Routes with no typed schema" in ``docs/API.md``.
 # ---------------------------------------------------------------------------
 
 

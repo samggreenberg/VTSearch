@@ -52,6 +52,9 @@ def clear_votes() -> None:
         ctx.verified_ids.clear()
         ctx.find_scores.clear()
         ctx.find_eval_stale = False
+        # A spot check was over these votes' ranking; its result goes with them.
+        ctx.precision_check = None
+        ctx.precision_check_run = None
         # Everything that *made* this a Find session is gone, so the flag that
         # says "these votes are scoring output" must go too.  Leaving it set
         # would keep suppressing labelset write-back
@@ -138,9 +141,9 @@ def get_find_initial_labels() -> dict[int, str]:
 def set_find_scores(scores: dict[int, float]) -> None:
     """Store the frozen per-item detector scores from a find-label run.
 
-    These are the single-pass scores the cutoff (Inclusion) slides over
-    without re-scoring, and the basis for the Stats FP/FN sweep.  In-memory
-    only.
+    These are the single-pass scores the line (the precision floor, or
+    Inclusion) moves over without re-scoring, and the basis for the Stats
+    precision curve.  In-memory only.
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -157,19 +160,18 @@ def get_find_scores() -> dict[int, float]:
 def rethreshold_unverified_find_items() -> None:
     """Re-split *unverified* Find items good/bad at the current cutoff.
 
-    Inclusion is a pure cutoff knob: sliding it moves
+    The precision floor is a pure cutoff knob: moving it moves
     :attr:`DetectorContext.threshold` over the frozen ``find_scores`` with no
     re-scoring.  Every scored item the human has not verified is re-assigned
     good/bad purely by whether its frozen score clears the (already updated)
     threshold; verified items keep their human vote wherever their score
     lands, and ``find_initial_labels`` (the eval baseline at the default
     cutoff) is left untouched.  Existing click-times are preserved so the
-    right-scroll ordering doesn't churn on a slide.
+    right-scroll ordering doesn't churn on a floor change.
 
     No-op outside Find mode or before a scoring pass has frozen ``find_scores``
-    (e.g. Train-mode inclusion changes).  Must run *after*
-    :func:`recompute_detector_thresholds_for_inclusion` has updated the
-    threshold.
+    (e.g. Train-mode floor changes).  Must run *after*
+    :func:`recompute_detector_thresholds` has updated the threshold.
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -334,6 +336,20 @@ def _store_provenance(ctx, media_id: int, provenance: dict[str, Any] | None) -> 
         ctx.vote_provenance.pop(media_id, None)
     else:
         ctx.vote_provenance[media_id] = cleaned
+
+
+def record_vote_provenance(media_id: int, provenance: dict[str, Any] | None) -> None:
+    """Record *media_id*'s surfacing provenance on the active detector, whatever its vote's history.
+
+    :func:`set_vote` keeps an idempotent re-vote's provenance as the original
+    click recorded it, so a stale tab cannot rewrite it.  A spot check's pick
+    (#4272) is a genuine surfacing event even when the vote it draws agrees
+    with the label the item already carries - in Find mode every item carries
+    the machine's call - so the check records its provenance through here after
+    the vote lands.
+    """
+    with _state_lock:
+        _store_provenance(get_active_detector_context(), media_id, provenance)
 
 
 def _current_label_locked(ctx, media_id: int) -> str:

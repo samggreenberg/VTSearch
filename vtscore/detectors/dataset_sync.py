@@ -215,6 +215,7 @@ def ensure_votes_match_active_dataset() -> None:
             det_ctx.find_scores.clear()
             det_ctx.find_eval_stale = False
             det_ctx.training_medias.clear()
+            _drop_line_ranking(det_ctx)
             # The detector now has no votes for the active dataset, so they
             # can't be find/scoring output; let the next vote sync normally.
             det_ctx.find_mode = False
@@ -256,6 +257,7 @@ def ensure_votes_match_active_dataset() -> None:
         det_ctx.verified_ids.clear()
         det_ctx.find_scores.clear()
         det_ctx.training_medias.clear()
+        _drop_line_ranking(det_ctx)
         # Votes are about to be re-derived from the on-disk labelset (the
         # canonical training labels), so any prior find/scoring state is stale.
         det_ctx.find_mode = False
@@ -363,6 +365,13 @@ def _repoint_labelset_cache(det_ctx, path) -> None:
         det_ctx.labelset_bad_count = sum(1 for el in labelset.elements if el.label == "bad")
 
 
+def _drop_line_ranking(det_ctx) -> None:
+    """Forget the ranking the line kept and any spot check over it: media ids are per dataset (#4272)."""
+    det_ctx.line_ranking = None
+    det_ctx.precision_check = None
+    det_ctx.precision_check_run = None
+
+
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:
     """Drop *det_ctx*'s cached MLP when *new_embedder* differs.
 
@@ -373,8 +382,9 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
     the dataset about to be scored uses a different embedder than the one
     the cached MLP was trained on, clear the embedder-tagged scoring
     caches (``model``, ``threshold``, ``last_learned_scores``,
-    ``training_medias``, ``calibration_cache``) so the next scoring /
-    learned-sort call rebuilds against *new_embedder*.
+    ``training_medias``, and the three threshold estimators -
+    ``calibration_cache``, ``anchored_cut_cache``, ``precision_floor_cache``)
+    so the next scoring / learned-sort call rebuilds against *new_embedder*.
 
     Deliberately leaves ``label_embeddings`` and ``embedder`` alone:
 
@@ -414,7 +424,16 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
         det_ctx.threshold = 0.5
         det_ctx.last_learned_scores.clear()
         det_ctx.training_medias.clear()
+        # Every estimator fitted on the old space's scores goes with its model:
+        # a re-cut (a floor change, the acquisition cut) must not read them.
         det_ctx.calibration_cache = None
+        det_ctx.anchored_cut_cache = None
+        det_ctx.precision_floor_cache = None
+        # The ranking the line kept, and any check over its ids, went with
+        # the old space's scores.
+        det_ctx.line_ranking = None
+        det_ctx.precision_check = None
+        det_ctx.precision_check_run = None
     return True
 
 

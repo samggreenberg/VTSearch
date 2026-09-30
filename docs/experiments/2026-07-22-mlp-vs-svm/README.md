@@ -35,11 +35,14 @@ Run on the HLTCOE Grid, image + SigLIP only, 3 datasets × 5 categories ×
 ## Regenerate the report from the CSVs
 
 ```bash
-cd docs/experiments/2026-07-22-mlp-vs-svm && mkdir -p stage_b && \
-  gunzip -c stage_b.csv.gz | ...  # split back per-cell, or point summarize at a dir of CSVs
+cd docs/experiments/2026-07-22-mlp-vs-svm
+mkdir -p stage_b && gunzip -c stage_b.csv.gz > stage_b/task_0.csv   # summarize reads stage_b/task_*.csv
 gunzip -k stage_a.csv.gz
 python ../../../scripts/experiments/mlp_vs_svm/summarize.py --results .
 ```
+
+Delete the unpacked `stage_b/` and `stage_a.csv` afterwards; only the `.gz`
+copies are committed.
 
 `summarize.py` is deterministic from the CSVs, so the write-up can't drift from
 the data.

@@ -3,7 +3,7 @@
 The voting-iterations harness (:mod:`vtscore.eval.voting_iterations`) can run
 each simulated detector under a named **detection style** - the bundle of rules
 that decides (a) which vector a Good vote trains on, (b) which vector(s) a Bad
-vote trains on, (c) how a trained MLP scores an image at inference, and (d) how
+vote trains on, (c) how a trained head scores an image at inference, and (d) how
 a cropped exemplar seeds the startup sort.  The styles are:
 
 * ``whole_image`` - the classic single-vector pipeline (SigLIP et al.): every
@@ -14,7 +14,7 @@ a cropped exemplar seeds the startup sort.  The styles are:
   on the **single raw patch** closest to the voted box
   (:func:`vtscore.media.patch_embed.nearest_patch_to_box`), a Bad vote floods
   the full-image vector + **every raw patch** of the image as negatives, and an
-  image scores by max-pooling the MLP over the full-image vector plus all
+  image scores by max-pooling the head over the full-image vector plus all
   ``H x W`` raw patch vectors.  No region tree is consulted at any point.
 
 * ``max_patch_hac`` / ``max_patch_pca_hac`` - the raw-patch-leaf HAC hybrids.
@@ -298,7 +298,7 @@ class _FlattenedStyle:
     candidate vectors an image is max-pooled over (region-tree nodes for
     tree nodes for the HAC hybrids, raw patches for ``max_patch``).  The flattened
     ``(rows, seg_starts, ids)`` arrays are memoised per media-id set: region
-    and patch vectors never change during a run, only the MLP weights do.
+    and patch vectors never change during a run, only the head weights do.
 
     The memo is **LRU-bounded**, because two of its callers hand it an id set
     that changes every step - the shrinking unlabeled pool, and the growing
@@ -571,7 +571,7 @@ class MaxPatchHacStyle(_FlattenedStyle):
     the tree node whose box best matches** the drawn box (multi-scale, like
     over a raw-patch-leaved tree); a Bad vote floods **every
     tree node** as a negative - symmetric with inference, which max-pools the
-    MLP over every node; an image scores by max-pooling over all nodes.  The
+    head over every node; an image scores by max-pooling over all nodes.  The
     per-image tree is memoised per media id (it depends only on the frozen
     ``patch_grid``), so the 150-step trajectory builds each tree once.
     """

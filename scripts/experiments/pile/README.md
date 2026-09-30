@@ -20,8 +20,11 @@ gap**, and it goes through the launcher so it keeps the rebuild canary and the
 own fingerprint (#3160):
 
 ```bash
-VTS_BUILD_ARGS=--force VTS_GPU_NODE=<node> bash launch_pile.sh vg_scale
+VTS_BUILD_ARGS=--force VTS_GPU_NODE=<node> bash launch_pile.sh <dataset>   # e.g. coco_better
 ```
+
+(`vg_scale` itself can no longer be rebuilt — see the retired-scripts table
+below — so its cells are the ones to copy, never to `--force`.)
 
 Pin the node from the cell's own provenance (`--provenance`). Two things to know
 before you do it, both learned in #3667:
@@ -385,8 +388,7 @@ extent), bare **polysemous** names, and **pervasive** classes. The shortlist
 prints those with reasons rather than dropping them quietly. And
 `scan_name_overlap.py` ([retired](#retired-with-visual-genome-4038)) settled
 whether two names denote one object by box IoU rather than by string similarity
-— the trap that made the benchmark's error report match `bush` for `bus`. See
-[`docs/plans/vg-scale-bands-and-corrections.md`](../../../docs/plans/vg-scale-bands-and-corrections.md).
+— the trap that made the benchmark's error report match `bush` for `bus`.
 
 Verified separation, measured with `--bands`: 38/40 of `vg_box_small`'s
 categories fall in `sub_patch`, 40/40 of `vg_box_medium` in `patch_to_leaf`,

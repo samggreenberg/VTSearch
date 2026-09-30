@@ -107,13 +107,13 @@ class TestSmallLabelSetCrossCalibrates:
 
         good = {400: None, 401: None}
         bad = {402: None, 403: None, 404: None}  # 5 labels < 6
-        _results, threshold, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=det_ctx)
+        _results, threshold, model = train_and_score(clips, good, bad, det_ctx=det_ctx)
 
         assert model is not None
         # Real fold orderings were computed and cached (the <6 skip is gone for
         # safe-off), so an inclusion slide can move the line below 6 labels too.
         assert det_ctx.calibration_cache is not None
-        _key, folds = det_ctx.calibration_cache
+        _key, folds, _holdouts = det_ctx.calibration_cache
         assert folds.fallback is None and folds.orderings, (
             "below 6 labels the path must cross-calibrate, not hard-code 0.5"
         )

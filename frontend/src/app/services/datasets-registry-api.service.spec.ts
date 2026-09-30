@@ -42,6 +42,13 @@ describe('DatasetsRegistryApiService', () => {
     req.flush({});
   });
 
+  it('runAutorun should POST to the dataset autorun route', () => {
+    service.runAutorun('ds1').subscribe();
+    const req = httpMock.expectOne('/api/datasets/registry/ds1/autorun');
+    expect(req.request.method).toBe('POST');
+    req.flush({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' });
+  });
+
   it('deleteRegistered should DELETE', () => {
     service.deleteRegistered('ds1').subscribe();
     const req = httpMock.expectOne('/api/datasets/registry/ds1');

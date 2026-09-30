@@ -157,6 +157,27 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 }
 
+// --- Link button ---
+//
+// A muted, borderless text button that reads as a link: a secondary affordance
+// set beside real controls rather than competing with them. The "Advanced ▾"
+// disclosures at the left of the New Detector and Add Dataset footers, and the
+// "Details ▸" openers on Add Dataset's Include media rows. Not a `.btn` variant:
+// it has no box, so no size modifier applies. (The Advanced toggles also carry
+// `.advanced-toggle`, an unstyled hook the specs and screenshot manifest use to
+// tell them apart from the Details buttons.)
+.link-btn {
+  background: transparent;
+  border: none;
+  padding: var(--space-2xs) 0;
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+
+  &:hover { color: var(--text-primary); text-decoration: underline; }
+  &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}
+
 // --- Segmented toggle ---
 //
 // A connected row of buttons acting as a single-select control: the
@@ -428,6 +449,19 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     outline: none;
     border-color: var(--accent);
   }
+
+  // A required field that is still unanswered: the well itself turns red,
+  // not only the `.required` star on its label.  Keyed off the native
+  // `required` attribute, so it clears the moment the field holds a value,
+  // never shows on a disabled control (those skip constraint validation),
+  // and yields to the accent border while the user is typing in it.  The
+  // tint is layered over `--bg-subtle` so the field still reads as a well.
+  // `<vt-drop-zone>` mirrors this look with its `missing` input, for the
+  // required fields that are a drop target rather than a native control.
+  &:required:invalid:not(:focus) {
+    border-color: var(--color-bad);
+    background-image: linear-gradient(var(--bad-bg), var(--bad-bg));
+  }
 }
 
 .form-select {
@@ -538,7 +572,14 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 .modal-footer {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: var(--space-md);
+
+  // Whatever is projected into `[modal-footer-start]` takes the left end of
+  // the row; the auto margin pushes the actions to the right as before.
+  > [modal-footer-start] {
+    margin-right: auto;
+  }
 }
 
 // --- Drawer slide (side panels) ---
@@ -691,10 +732,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 }
 
 // Extra vertical breathing room above a grouped section inside an
-// importer form (e.g. the Embedder/Clipper "Advanced" block).  Shared
-// by every Add Dataset picker view (generic form / server-folder /
-// local-folder / demo), each of which renders its own
-// `<vt-import-advanced>` wrapped in a `.form-group.form-group--section`.
+// importer form (e.g. the local-folder drop zone in `<vt-source-picker>`).
+// The Add Dataset "Advanced" block gives its own host the same margin
+// while open, since collapsed it must take no box at all.
 .form-group--section { margin-top: var(--space-xl); }
 
 // A text field paired with a "Browse" button that opens an inline
@@ -743,6 +783,9 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   font-family: var(--font-mono);
 }
 
+// The `*` after a required field's label.  It only marks the question; the
+// control that answers it also carries `required`, which highlights its
+// well until it is filled (see `.form-input` above).
 .required {
   color: var(--color-bad);
 }

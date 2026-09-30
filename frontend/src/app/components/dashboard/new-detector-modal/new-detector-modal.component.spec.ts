@@ -110,7 +110,7 @@ describe('NewDetectorModalComponent', () => {
     component.pendingText.set('');
     component.mediaExamples.set([]);
     // Missing example takes precedence in the hint.
-    expect(component.blankSubmitTitle).toContain('Provide a text or image example');
+    expect(component.blankSubmitTitle).toBe('Provide a text description to start the detector.');
 
     // With an example but no name, the blocker becomes the name.
     component.pendingText.set('query');
@@ -130,6 +130,35 @@ describe('NewDetectorModalComponent', () => {
     expect(component.exampleTab()).toBe('media');
     component.setExampleTab('text');
     expect(component.exampleTab()).toBe('text');
+  });
+
+  it('words the empty-example hint for the active tab (#4227)', () => {
+    component.mediaType.set('image');
+    component.setExampleTab('text');
+    expect(component.exampleHint).toBe('Provide a text description to start the detector.');
+    component.setExampleTab('media');
+    expect(component.exampleHint).toBe('Provide an example image to start the detector.');
+    // Mass-noun media types get a countable unit.
+    component.mediaType.set('audio');
+    expect(component.exampleHint).toBe('Provide an example audio clip to start the detector.');
+  });
+
+  it('renders the tab-specific hint under the example tabs', async () => {
+    component.mediaType.set('image');
+    await fixture.whenStable();
+    const hint = (): string =>
+      (fixture.nativeElement as HTMLElement).querySelector('.example-empty-hint')?.textContent?.trim() ?? '';
+    expect(hint()).toBe('Provide a text description to start the detector.');
+    component.setExampleTab('media');
+    await fixture.whenStable();
+    expect(hint()).toBe('Provide an example image to start the detector.');
+  });
+
+  it('uses non-audio placeholders for the text example and the name (#4227)', async () => {
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('input[name="pendingText"]')?.getAttribute('placeholder')).toBe('e.g. large books');
+    expect(el.querySelector('#detector-name')?.getAttribute('placeholder')).toBe('e.g. Large book detector');
   });
 
   it('should label the media tab from the detector media type', () => {
@@ -264,16 +293,63 @@ describe('NewDetectorModalComponent', () => {
     expect(component.mediaTypeLocked).toBe(false);
   });
 
-  it('pre-fills the name from the text seed while the name is untouched', () => {
-    component.onPendingTextInput('dog barking sounds');
-    expect(component.pendingText()).toBe('dog barking sounds');
-    expect(component.name()).toBe('dog barking sounds');
+  it('pre-fills a sentence-case "… detector" name from the text seed while the name is untouched (#4305)', () => {
+    component.onPendingTextInput('large books');
+    expect(component.pendingText()).toBe('large books');
+    expect(component.name()).toBe('Large books detector');
   });
 
   it('sanitises pasted whitespace when mirroring the seed into the name', () => {
     component.onPendingTextInput('   dog   barking\n  sounds   ');
     expect(component.pendingText()).toBe('   dog   barking\n  sounds   ');
-    expect(component.name()).toBe('dog barking sounds');
+    expect(component.name()).toBe('Dog barking sounds detector');
+  });
+
+  it('changes only the first letter of the typed text and never doubles the detector suffix', () => {
+    component.onPendingTextInput('NASA rockets');
+    expect(component.name()).toBe('NASA rockets detector');
+    component.onPendingTextInput('red car on a McLaren poster');
+    expect(component.name()).toBe('Red car on a McLaren poster detector');
+    component.onPendingTextInput('red car detector');
+    expect(component.name()).toBe('Red car detector');
+    component.onPendingTextInput('Red Car Detector');
+    expect(component.name()).toBe('Red Car Detector');
+    component.onPendingTextInput('   ');
+    expect(component.name()).toBe('');
+  });
+
+  it('creates on Enter in the name field once the form is complete (#4227)', () => {
+    component.onPendingTextInput('large books');
+    component.onNameInput('Big Books');
+    const event = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    component.onNameEnter(event);
+    expect(event.defaultPrevented).toBe(true);
+
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.name).toBe('Big Books');
+    expect(req.request.body.text_query).toBe('large books');
+    req.flush({ ok: true, detector: { id: '1', name: 'Big Books' } });
+  });
+
+  it('ignores Enter in the name field while the form is incomplete', () => {
+    component.onNameInput('Big Books');
+    const event = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+    component.onNameEnter(event);
+    // Suppressed so the browser can't implicitly submit, but no create and
+    // no error: the user simply hasn't given an example yet.
+    expect(event.defaultPrevented).toBe(true);
+    expect(component.error()).toBe('');
+    httpMock.expectNone('/api/detectors/registry');
+  });
+
+  it('wires Enter on the rendered name input to Create', async () => {
+    component.onPendingTextInput('large books');
+    await fixture.whenStable();
+    const input = (fixture.nativeElement as HTMLElement).querySelector('#detector-name') as HTMLInputElement;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.name).toBe('Large books detector');
+    req.flush({ ok: true, detector: { id: '1', name: 'Large books detector' } });
   });
 
   it('warns about no-text datasets only for a text-hint-only detector', () => {
@@ -307,7 +383,7 @@ describe('NewDetectorModalComponent', () => {
 
   it('stops mirroring once the user edits the name', () => {
     component.onPendingTextInput('dog');
-    expect(component.name()).toBe('dog');
+    expect(component.name()).toBe('Dog detector');
 
     component.onNameInput('Dog Barks');
     expect(component.name()).toBe('Dog Barks');
@@ -868,6 +944,26 @@ describe('NewDetectorModalComponent (semantic_only server)', () => {
     // Nothing else lives under Advanced for this dataset, so the toggle goes too.
     expect(component.primaryLicenseNotice).toBeNull();
     expect(component.showAdvancedToggle).toBe(false);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeNull();
+  });
+
+  it('puts the Advanced toggle on the Cancel / Create row, and opens the options in the form (#4305)', async () => {
+    await setup(false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const toggle = () => el.querySelector('.modal-footer > [modal-footer-start].advanced-toggle');
+
+    expect(toggle()?.textContent?.trim()).toBe('Advanced ▾');
+    expect(el.querySelector('.modal-body .advanced-toggle')).toBeNull();
+    expect(el.querySelector('#new-detector-advanced')).toBeNull();
+
+    (toggle() as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    expect(toggle()?.textContent?.trim()).toBe('Advanced ▴');
+    expect(toggle()?.getAttribute('aria-controls')).toBe('new-detector-advanced');
+    expect(el.querySelector('.modal-body #new-detector-advanced #detector-embedder-type')).toBeTruthy();
   });
 
   it('pins the created detector to semantic when locked', async () => {

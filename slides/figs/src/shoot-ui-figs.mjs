@@ -39,13 +39,14 @@
  * pictures stacked down one side of it (#3779). It is composed into the same
  * box a screenshot occupies, so the slide's build reveals into the same frame.
  *
- * The corpus is the Book example (`scripts/screenshots/book-example.mjs`),
- * which the user guide's screenshots share: a few hundred COCO val2017
- * photographs filed by subject, with `book` — the deck's running example — as
- * a real concept among real near-misses (a laptop, a monitor, a keyboard:
- * rectangular, printed, shelved). `coco_fixture.py` downloads and materialises
- * it. The detector is trained on books, by voting, exactly as a user would —
- * the ranking in the captured frame is a real ranking from a real trained head.
+ * The corpus is the Book example (`scripts/screenshots/book-example.mjs`): a
+ * few hundred COCO val2017 photographs filed by subject, with `book` — the
+ * deck's running example — as a real concept among real near-misses (a laptop,
+ * a monitor, a keyboard: rectangular, printed, shelved). `coco_fixture.py`
+ * downloads and materialises it. The detector is trained on books, by voting,
+ * exactly as a user would — the ranking in the captured frame is a real
+ * ranking from a real trained head. (The user guide was shot on it too, until
+ * it moved to generated drawings of its own, `smiley-example.mjs`, #4240.)
  *
  * The frames are still shot here rather than taken from the docs harness: a
  * slide wants a narrower window, a different crop, WebP, and a real session's
@@ -61,10 +62,10 @@
  * rebuilt every run, because the first frame's whole subject is an app with
  * nothing in it, and a run that reused last run's votes would be shooting a
  * screen nobody ever sat in front of. That costs one re-embed of both piles
- * (about 470 photographs) per run. It deletes only the Book example's own
- * datasets and detectors (the docs harness rebuilds them on its next run); a
- * dataset of anyone else's would still show on the empty dashboard, and the
- * run says so.
+ * (about 470 photographs) per run. It deletes the Book example's own datasets
+ * and detectors and the user guide's (the docs harness rebuilds those on its
+ * next run); a dataset of anyone else's would still show on the empty
+ * dashboard, and the run says so.
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { clearCallouts, drawCallouts } from '../../../scripts/screenshots/callouts.mjs';
@@ -84,6 +85,7 @@ import {
   TEST_DATASET,
   TRAIN_DATASET,
 } from '../../../scripts/screenshots/book-example.mjs';
+import { FIXTURES as GUIDE_FIXTURES } from '../../../scripts/screenshots/smiley-example.mjs';
 import { execFileSync, spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -419,9 +421,9 @@ async function shootImport(page, name, figure) {
   await openDashboard(page);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
-  await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]')]);
+  await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]:not(.inline-add-btn)')]);
 
-  await page.locator('button[title="Import a new dataset"]').click();
+  await page.locator('button[title="Import a new dataset"]:not(.inline-add-btn)').click();
   await page.waitForSelector('.importer-picker .tab-bar', { timeout: 15000 });
   await page.locator('.importer-picker .tab', { hasText: 'Files' }).click();
   await page.waitForTimeout(500);
@@ -473,10 +475,10 @@ async function shootMakeDetector(page) {
   await page.waitForTimeout(400);
   await shoot(page, 'ui-make-detector.build1');
   await shootNumbered(page, 'ui-steps-make-detector.build1', [
-    step(1, 'button[title="Create a new detector"]'),
+    step(1, 'button[title="Create a new detector"]:not(.inline-add-btn)'),
   ]);
 
-  await page.locator('button[title="Create a new detector"]').click();
+  await page.locator('button[title="Create a new detector"]:not(.inline-add-btn)').click();
   await page.waitForSelector('.new-detector-form', { timeout: 20000 });
   await page.waitForTimeout(900);
   await shoot(page, 'ui-make-detector.build2');
@@ -888,8 +890,9 @@ const intro = INTRO.some(wanted);
  * embedding while nobody was looking.
  */
 async function shootSession(page) {
-  await app.dropDetectors(BOOK_DETECTOR, REGION_DETECTOR);
-  await app.dropDatasets(TRAIN_DATASET, TEST_DATASET, REGION_DATASET);
+  // The user guide's harness drives this same app, so its fixtures go too.
+  await app.dropDetectors(BOOK_DETECTOR, REGION_DETECTOR, ...GUIDE_FIXTURES.detectors);
+  await app.dropDatasets(TRAIN_DATASET, TEST_DATASET, REGION_DATASET, ...GUIDE_FIXTURES.datasets);
   const strangers = (await app.datasets()).map((d) => d.name);
   if (strangers.length) {
     log(`warning: the first frame is meant to show an empty app, but it holds ${strangers.join(', ')}`);
@@ -905,6 +908,13 @@ await ensureApp();
 const browser = await launchChromium();
 try {
   const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: SCALE });
+  // The dashboard's RAM / disk gauges show only while the server is short of
+  // room for its datasets, so whether a frame had them would depend on the
+  // machine shooting it. Report both probes roomy, as a user normally sees it.
+  await page.route(/\/api\/dashboard\/(ram|disk)-usage$/, async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, json: { ...(await res.json()), low: false } });
+  });
   await page.addStyleTag({ content: STILL_CSS }).catch(() => {});
   await page.addInitScript((css) => {
     document.addEventListener('DOMContentLoaded', () => {

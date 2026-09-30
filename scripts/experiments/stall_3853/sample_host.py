@@ -35,7 +35,13 @@ NFS figures come from the kernel's own per-mount RPC accounting
 counters raw gives the average since the mount was made -- 82 days in one
 case, dominated by past bulk writes -- which is how a 75 ms "WRITE average"
 got into this issue's record when the steady-state cost was ~1 ms.  Every
-number this prints is per-interval; none is a lifetime average.
+number this prints is built from per-interval deltas; none is a lifetime
+average.
+
+``--summarize`` then weights each interval by its op count.  Ranking the
+interval averages themselves gives a quiet interval with two slow page-ins the
+same vote as a burst of a hundred fast READs, which is how a mount serving
+3.1 ms per op got reported as "exec p50 16 ms" (#3884).
 """
 
 from __future__ import annotations
@@ -225,51 +231,111 @@ def run(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _pct(values: list[float], pct: float) -> float:
-    if not values:
+def _pct(pairs: list[tuple[float, int]], pct: float) -> float:
+    """Nearest-rank percentile over *operations*, not over intervals.
+
+    Each pair is one interval's per-op average and the op count behind it, and
+    counts once per op.  Unweighted, every interval gets one vote whatever its
+    traffic, so on bursty I/O the quiet intervals set the median: two page-ins
+    at 16 ms outvote a hundred readahead READs at 2.5 ms, and a mount serving
+    3.1 ms per op gets reported as "16 ms" (#3884).
+    """
+    total = sum(n for _, n in pairs)
+    if total <= 0:
         return 0.0
-    ordered = sorted(values)
-    i = min(len(ordered) - 1, int(round(pct / 100.0 * (len(ordered) - 1))))
-    return ordered[i]
+    rank = min(total - 1, int(round(pct / 100.0 * (total - 1))))
+    ordered = sorted(pairs)
+    seen = 0
+    for value, n in ordered:
+        seen += n
+        if rank < seen:
+            return value
+    return ordered[-1][0]
 
 
-def summarize(path: str) -> None:
-    """Per-op percentiles per mount, and the fault/RSS range per process."""
-    per_mount: dict[str, dict[str, dict[str, list[float]]]] = {}
-    totals: dict[str, dict[str, int]] = {}
-    procs: dict[str, list[dict[str, int]]] = {}
+def read_rows(path: str) -> list[dict[str, Any]]:
+    """The JSONL ``run`` wrote; a torn last line (Ctrl-C mid-write) is skipped."""
+    rows = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             try:
-                row = json.loads(line)
+                rows.append(json.loads(line))
             except ValueError:
                 continue
-            for mount, ops in (row.get("mounts") or {}).items():
-                for op, fields in ops.items():
-                    if not isinstance(fields, dict) or "exec" not in fields:
-                        continue
-                    bucket = per_mount.setdefault(mount, {}).setdefault(op, {"exec": [], "queue": [], "rtt": []})
-                    for key in bucket:
-                        bucket[key].append(float(fields.get(key, 0.0)))
-                    totals.setdefault(mount, {}).setdefault(op, 0)
-                    totals[mount][op] += int(fields.get("ops", 0))
-            for pid, fields in (row.get("procs") or {}).items():
-                procs.setdefault(pid, []).append(fields)
+    return rows
 
-    for mount, ops in sorted(per_mount.items()):
-        print(f"\n{mount} - per-interval averages, so no lifetime counter is in here")
-        print(f"  {'op':<10} {'ops':>8} {'exec p50':>10} {'p90':>8} {'max':>8} {'queue p50':>10} {'rtt p50':>9}")
-        for op, fields in sorted(ops.items()):
+
+def summarize_mounts(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, dict[str, float]]]:
+    """``{mount: {OP: figures}}`` for the table ``--summarize`` prints.
+
+    Every figure is weighted by op count.  ``exec_mean`` is the window's cost
+    per operation (each interval's average times its count, summed, over the
+    total), and the percentiles rank operations.  ``exec_worst`` is the one
+    figure that stays per-interval: the slowest interval's average, which is
+    what lines up with a felt stall by timestamp.
+    """
+    samples: dict[str, dict[str, dict[str, list[tuple[float, int]]]]] = {}
+    for row in rows:
+        for mount, ops in (row.get("mounts") or {}).items():
+            for op, fields in ops.items():
+                if not isinstance(fields, dict) or "exec" not in fields:
+                    continue
+                n = int(fields.get("ops", 0))
+                if n <= 0:
+                    continue
+                bucket = samples.setdefault(mount, {}).setdefault(op, {"exec": [], "queue": [], "rtt": []})
+                for key, pairs in bucket.items():
+                    pairs.append((float(fields.get(key, 0.0)), n))
+
+    out: dict[str, dict[str, dict[str, float]]] = {}
+    for mount, ops in samples.items():
+        for op, bucket in ops.items():
+            execs = bucket["exec"]
+            total = sum(n for _, n in execs)
+            out.setdefault(mount, {})[op] = {
+                "ops": total,
+                "intervals": len(execs),
+                "exec_mean": sum(v * n for v, n in execs) / total,
+                "exec_p50": _pct(execs, 50),
+                "exec_p90": _pct(execs, 90),
+                "exec_worst": max(v for v, _ in execs),
+                "queue_p50": _pct(bucket["queue"], 50),
+                "rtt_p50": _pct(bucket["rtt"], 50),
+            }
+    return out
+
+
+def summarize(path: str) -> None:
+    """Per-op figures per mount, and the fault/RSS range per process."""
+    rows = read_rows(path)
+    procs: dict[str, list[dict[str, int]]] = {}
+    for row in rows:
+        for pid, fields in (row.get("procs") or {}).items():
+            procs.setdefault(pid, []).append(fields)
+
+    mounts = summarize_mounts(rows)
+    if mounts:
+        print(
+            "Built from per-interval deltas, never a lifetime counter, and weighted by op count:\n"
+            "exec/op is total exec time over total ops, p50/p90/queue/rtt rank operations, and\n"
+            "'worst ival' is the slowest interval's average (read it against the app log by time)."
+        )
+    for mount, ops in sorted(mounts.items()):
+        print(f"\n{mount}")
+        print(
+            f"  {'op':<10} {'ops':>8} {'intervals':>9} {'exec/op':>9} {'p50':>8} {'p90':>8} "
+            f"{'worst ival':>10} {'queue p50':>10} {'rtt p50':>9}"
+        )
+        for op, f in sorted(ops.items()):
             print(
-                f"  {op:<10} {totals[mount][op]:>8} {_pct(fields['exec'], 50):>9.2f}ms "
-                f"{_pct(fields['exec'], 90):>7.2f}ms {max(fields['exec']):>7.2f}ms "
-                f"{_pct(fields['queue'], 50):>9.2f}ms {_pct(fields['rtt'], 50):>8.2f}ms"
+                f"  {op:<10} {f['ops']:>8} {f['intervals']:>9} {f['exec_mean']:>7.2f}ms {f['exec_p50']:>6.2f}ms "
+                f"{f['exec_p90']:>6.2f}ms {f['exec_worst']:>8.2f}ms {f['queue_p50']:>8.2f}ms {f['rtt_p50']:>7.2f}ms"
             )
-    for pid, rows in sorted(procs.items()):
-        if not rows:
+    for pid, prows in sorted(procs.items()):
+        if not prows:
             continue
-        majflt = [r["majflt"] for r in rows]
-        rss = [r["rss_kb"] for r in rows]
+        majflt = [r["majflt"] for r in prows]
+        rss = [r["rss_kb"] for r in prows]
         print(
             f"\npid {pid}: majflt {majflt[0]} -> {majflt[-1]} (+{majflt[-1] - majflt[0]}), "
             f"rss {min(rss) // 1024}-{max(rss) // 1024} MB"
