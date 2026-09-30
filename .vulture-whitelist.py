@@ -323,16 +323,6 @@ error_code  # noqa: F821
 ERROR_SCHEMA  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# ``StallWatchdog.last_report`` is the read-side accessor on the documented
-# public watchdog (vtscore/docs/packages/concurrency.md): the last stall
-# report the watchdog emitted, populated on every stall in ``_report()`` and
-# initialised to ``None`` in ``__init__``. Out-of-tree callers holding a
-# watchdog instance read it to inspect what the watchdog saw; there is no
-# in-repo reader by design.
-# ---------------------------------------------------------------------------
-last_report  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # ``AutopilotFlow`` stopping-rule margin attributes read reflectively via
 # ``getattr(flow, col) for col in STOPPING_MARGIN_COLUMNS`` in
 # ``vtscore/eval/voting_iterations.py`` when emitting per-step voting rows.

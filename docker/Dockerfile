@@ -80,8 +80,10 @@ RUN rm -rf /app/static
 COPY --from=frontend /static/ /app/static/
 
 # Bake the version into the image. The host computes it from git
-# (e.g. `TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ`)
+# (e.g. `TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ`)
 # and passes it as a build arg, since .git is excluded from the build context.
+# It must be `format-local:`: plain `format:` ignores TZ and prints the
+# commit's own offset with a Z on the end (#4336).
 # Without this, vtsearch.__version__ falls back to "0.0.0-unknown".
 ARG VTSEARCH_VERSION=
 RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_version.txt; fi

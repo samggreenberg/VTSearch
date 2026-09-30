@@ -25,11 +25,6 @@
 # the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an unseeded
 # draw shows the floor-check shot a different pick every time (#4330).
 #
-# It turns the app's stall watchdog off (VTSEARCH_STALL_WATCHDOG_MS=0): a
-# heartbeat it misses during the fixtures' CPU embedding makes it dump every
-# thread's frames while they run, which has segfaulted the app mid-import
-# (#4345), and a harness run has no stall to diagnose.
-#
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's
 # commit, though: one from any other commit is refused, and named (#4324).
@@ -106,7 +101,6 @@ else
             VTSEARCH_TORCH_THREADS=1 \
             VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
             VTSEARCH_SPOT_CHECK_SEED=$SPOT_CHECK_SEED \
-            VTSEARCH_STALL_WATCHDOG_MS=0 \
             exec python app.py --local > "$APP_LOG" 2>&1
     ) &
     started_app=$!
