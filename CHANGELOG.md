@@ -193,13 +193,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
-- **The media list fits its thumbnails the first time you open Manual**
-  (issue #4347). Train opens on the Autopilot tab, which has no thumbnail
-  grid, so the left panel could not be fitted to one as the window opened.
-  The first time you switched to Manual, the panel kept its default width,
-  with an empty strip beside the last column of thumbnails, until you
-  dragged the divider or came back to Train. It now fits the grid as soon as
-  Manual shows it.
+- **The media list no longer leaves a gap beside its last column of
+  thumbnails** (issue #4347). Train fits the left panel to its thumbnail grid
+  as it opens, but it measured the grid before the minimap strip beside it
+  appeared. The strip then took its width from the grid, so the panel often
+  showed one column fewer than it had room for, with empty space where the
+  missing column should be. Dragging the divider fixed it only until your
+  next visit to Train. The minimap now holds its place, as an empty strip,
+  until there is a ranking to draw, and the list keeps room for its
+  scrollbar before it needs one. Separately, the first time you open Manual
+  in a new install (Train starts on Autopilot, which has no grid), the panel
+  is now fitted to the grid as soon as Manual shows it.
 - **Train switches to the detector's own ranking even when the text-hint sort
   is slow** (issue #4326). Entering Train with a detector that already had
   Good and Bad labels, but too few Goods on this dataset to move Autopilot
