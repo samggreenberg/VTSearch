@@ -170,31 +170,17 @@ What follows is the design the remaining slices build on.
 
 <!-- item-sep -->
 
-- [ ] #4245 — Backend: `min_precision` setting, endpoint, detector wiring, eval default arm (Opus 4.8)
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #4247 — When no cut is promised, fall back to today's cut and label it (Opus 4.8)
+<!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #4246 — Frontend control replacing the Inclusion stepper, with its guide section and reshoots (Sonnet 5; Opus 4.8 for the write paths)
-
 <!-- item-sep -->
 
-- [ ] #4272 — Backend: a spot check, not the estimator, decides the line and how close it got (Opus 4.8)
-
 <!-- item-sep -->
-
-- [ ] #4273 — Frontend: the spot-check step, and how close the line got (Sonnet 5; Opus 4.8 for its state and write paths)
-
-<!-- item-sep -->
-
-- [ ] #4242 — Find Stats: estimated precision against the number returned (Sonnet 5)
-
-<!-- item-sep -->
-
-- [ ] #4243 — What the Smart indicator prices once the user sets no Inclusion (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -205,8 +191,6 @@ What follows is the design the remaining slices build on.
 - [ ] #4248 — Precision floor under region voting (Opus 4.8)
 
 <!-- item-sep -->
-
-- [ ] #4244 — Slides: end *Hold the Line*'s "Preference" section on the floor (Sonnet 5)
 
 <!-- item-sep -->
 
