@@ -3,7 +3,7 @@
 The floor *X* is a share of what the line returns that should be right.  The
 owner's ruling on #4267 (2026-09-29) moved the promise off the #4220 estimator
 (:mod:`~vtscore.training.thresholds.precision_floor`, which stays as public
-library API and feeds the Find Stats curve) and onto a **spot check**: the user
+library API that no app path reads since #4360 and #4362) and onto a **spot check**: the user
 votes on uniform random picks from a candidate of the top unvoted items, and a
 Clopper-Pearson bound on those picks decides.  #4256 showed that model-chosen
 votes break 83% of the estimator's X = 50% promises once the reference pool is

@@ -472,19 +472,20 @@ parameters because #4221 is still pricing them.
 One call is `fit_precision_floor_curve(...)` (the costly half: the bootstrap
 refits) followed by `PrecisionFloorCurve.cut(floor)` (a scan), so a caller
 cutting one corpus at several floors keeps the curve.
-`PrecisionFloorEstimate(corpus_scores, fold_orderings, fold_haystacks)` is what
-a detector keeps between retrains: it fits the curve the first time a floor is
-asked for, reads it off a seeded sample above 50k scores, and counts
-`n_returned` on the whole corpus.
+`PrecisionFloorEstimate(corpus_scores, fold_orderings, fold_haystacks)` holds one
+detector's inputs: it fits the curve the first time a floor is asked for,
+reads it off a seeded sample above 50k scores, and counts `n_returned` on the
+whole corpus. The app no longer builds one (#4362); the estimator is library
+API for a caller that wants its reading.
 
-**What may serve as evidence.** Pass `holdout_sink=[]` to the calibration
-(`compute_fold_orderings`, `calibration_folds`, `calibration_folds_cached`) to
-learn which training row backs each held-out score, then
-`eligible_fold_orderings(orderings, holdout_rows, eligible_rows)` keeps only the
-votes that may calibrate a promise. The app keeps the ones
-`vtscore.datasets.vote_provenance.calibrates_precision` accepts: votes drawn off
-the learned sort's own ranking, because the posterior is unbiased only under
-score-only selection.
+**Which row backs each held-out score.** Pass `holdout_sink=[]` to the
+calibration (`compute_fold_orderings`, `calibration_folds`,
+`calibration_folds_cached`) to learn which training row backs each held-out
+score; the sink is read-only. `eligible_fold_orderings(orderings, holdout_rows,
+eligible_rows)`, which cut the app's evidence down to the votes
+`vtscore.datasets.vote_provenance.calibrates_precision` accepted (#4245), is
+deprecated with that filter (#4362): it still answers, with a
+`DeprecationWarning`.
 
 ### `reporting_line(cut, estimate, *, inclusion_value, min_precision)`
 

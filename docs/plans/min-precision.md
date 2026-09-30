@@ -16,8 +16,8 @@ default arm runs the same check. Its frontend, the check step and the likely
 range in the floor control and on the Stats chart, landed with #4273. The
 library also holds:
 - the estimator, `vtscore.training.thresholds.precision_floor_cut`, which is
-  public API and stays, off the promise path (nothing in the app reads it
-  since #4360; #4362 retires its wiring);
+  public API and stays, off the promise path (no app path builds or reads
+  it since #4362);
 - one re-cut seam, `vtscore.state.core.recut_detector_threshold`;
 - the inverse that lets acquisition find its origin off any line,
   `FoldAnchoredCut.inclusion_for_threshold`.
@@ -126,7 +126,7 @@ What follows is the design the remaining slices build on.
   comes only from the check's uniform picks, never from the model. This
   replaces the 2026-09-28 ruling that kept every estimate internal.
 - **Why not the estimator.** Every vote a model chose is a biased sample of
-  that model's scores (#4256). The merged backend (#4245) calibrates only on
+  that model's scores (#4256). The merged backend (#4245) calibrated only on
   learned-sort draws. That filter stops a long text walk from breaking promises,
   but only by keeping the gate shut. It does not make the posterior unbiased.
   With a consistent reference pool, learned-sort evidence alone still breaks 83%

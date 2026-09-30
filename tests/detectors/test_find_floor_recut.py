@@ -67,7 +67,7 @@ def test_find_label_populates_calibration_cache(client):
     ctx = get_active_detector_context()
     assert ctx.calibration_cache is not None
     assert ctx.anchored_cut_cache is not None
-    assert ctx.precision_floor_cache is not None
+    assert ctx.precision_floor_cache is None, "a retrain no longer parks the #4220 estimate (#4362)"
     assert ctx.line_ranking is not None, "the ranking the floor keeps a set of"
 
 

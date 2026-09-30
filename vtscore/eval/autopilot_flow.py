@@ -53,6 +53,7 @@ The phase ordering the app implements, and the harness therefore reproduces:
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any, Literal, Optional
 
 from vtscore.detectors.cost_trend import (
@@ -290,7 +291,8 @@ STOPPING_PHASE: str = "done"
 #: learned sort on screen.  The harness has no retrain mode, where the app draws
 #: ``good`` / ``bad`` off the learned sort instead, and its seed sort is a text
 #: sort or an example sort; both are ``text`` here, which is all a reader of the
-#: record distinguishes (learned or not).
+#: record distinguishes (learned or not).  Read only by the deprecated
+#: :func:`pick_provenance`, and no longer checked against the app (#4362).
 _PHASE_PICKS: dict[str, tuple[str, str]] = {
     "good": ("text", "top"),
     "bad": ("text", "hard"),
@@ -301,13 +303,23 @@ _PHASE_PICKS: dict[str, tuple[str, str]] = {
 
 
 def pick_provenance(phase: Optional[str]) -> Optional[dict[str, str]]:
-    """The surfacing provenance the app would record for a vote Autopilot surfaced in *phase*.
+    """Deprecated (#4362): the surfacing provenance the app would record for a vote Autopilot surfaced in *phase*.
 
-    The shape :mod:`vtscore.datasets.vote_provenance` stores, so the harness
-    decides which votes may calibrate a precision-floor promise with the app's
-    own :func:`~vtscore.datasets.vote_provenance.calibrates_precision` rather
-    than a copy of it (#4245).  ``None`` outside the labelling phases.
+    The harness recorded it on every simulated click so it could filter the
+    #4220 estimate's evidence with the app's own
+    :func:`~vtscore.datasets.vote_provenance.calibrates_precision` (#4245).
+    Neither side builds that estimate any more, so no step records it, and
+    ``scripts/check-eval-app-sync.py`` no longer checks :data:`_PHASE_PICKS`
+    against the label view.  It still answers from that table, with a
+    ``DeprecationWarning``, until the name is removed.  ``None`` outside the
+    labelling phases.
     """
+    warnings.warn(
+        "pick_provenance() is deprecated: the harness no longer records vote provenance, since neither it nor "
+        "the app builds the #4220 precision estimate any more (#4362). It will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if phase not in _PHASE_PICKS:
         return None
     sort_kind, select_mode = _PHASE_PICKS[phase]

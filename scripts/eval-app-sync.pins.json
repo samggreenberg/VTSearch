@@ -11,10 +11,6 @@
     "app": "ca7dd419d094b0b143bc921bd62de8bff8e3a53d7cabfa2d6fb34374e0c6b970",
     "harness": "1616b452a1dceccde4dba4393f86b6229f04639b0bce26bda985729e3e6e84a8"
   },
-  "autopilot.pick_provenance": {
-    "app": "736e0f6e5827977aa04ffd19c1e4e1c5b4f0c912a8b6cb020f922c909bce0a89",
-    "harness": "b60b9d9187200e8f3857275e752100c841aa7c2c8822bf9b5e77ce8b13ece4e2"
-  },
   "autopilot.startup_default": {
     "app": "0895209e8fa0e2c0f2c4f6ec922e5ea17a8cdaf3d0e7f22cf8e57d7fa0792f16",
     "harness": "1e2f0e59ddd85cb3504335ac5259eb202a623ea1d5f939a61ebd2a1ff5d58dc8"
@@ -74,14 +70,14 @@
     "app": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1"
   },
   "training.fused_threshold": {
-    "app": "147f1f5e65275d9fe6a290011b535e313d9e7fd51aaccdae7e7bab451a1d98cc"
+    "app": "41e16cff2f1acd8b22b80aaa80d8d8c35ac5d79164c08ac686be57ef1a33b637"
   },
   "training.split_fraction_default": {
     "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "6ce860559bc7c48dd38a49e0448f114084f48be17ccb414d7c4b9b06cf324d6a",
-    "harness": "232cb298fb7f7ae7991ca8b3391e55964c67de7ef01180fb58599e8b6f8f9025"
+    "app": "ff00fdb5609ae550e04503f3ffdbf731f75c8c2f43c2ba7d85c2112246dfa396",
+    "harness": "9673e37fce15a5fccc1ecbec181807bc4a8367309130b9e952a8799db1d9d651"
   }
 }

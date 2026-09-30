@@ -449,11 +449,9 @@ def _app_train_and_calibrate(
         # is NO_GOOD_THRESHOLD whenever this is set, as production's does
         # (see :func:`_blend_xcal_input`).
         "fold_fallback": folds.fallback,
-        # Which vote each fold held out, as training rows, and the vote behind
-        # each row: the precision floor calibrates only on the votes the
-        # learned sort chose (#4245), exactly as the app filters them.
+        # Which vote each fold held out, as training rows: the precision
+        # frames name each held-out vote's phase from it.
         "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
-        "row_votes": [*good_votes, *bad_votes],
     }
     return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, details
 
@@ -568,9 +566,6 @@ def _style_train_and_calibrate(
             "fold_fallback": folds.fallback,
             "fold_holdout_rows": tuple(tuple(rows) for rows in holdouts),
         }
-    # The vote behind each training row, for the precision floor's evidence
-    # filter (see ``_app_train_and_calibrate``).
-    details["row_votes"] = [vid for _kind, vid in groups]
     xcal_seconds = time.monotonic() - t_xcal
     # Under the #2897 screen this step trained Kmax folds, not ``calibrate_count``
     # of them.  Bill the reported wall clock for the live count only, so the
@@ -931,7 +926,6 @@ def _gp_train_and_calibrate(
             cal_fraction=calibration_fraction,
         )
         details = {"threshold_rule": "xcal_rank"}
-    details["row_votes"] = [*good_votes, *bad_votes]
     xcal_seconds = time.monotonic() - t_xcal
 
     def predict(X_test: Any) -> "np.ndarray":

@@ -1,19 +1,21 @@
-"""The precision floor wired to a detector (#4245, #4272): evidence, operating point, re-cut, state.
+"""The precision floor wired to a detector (#4245, #4272, #4362): operating point, re-cut, state.
 
 ``test_precision_floor.py`` pins the #4220 estimator itself and
 ``test_spot_check.py`` the spot check that draws the line since #4272.  This
 file pins what the wiring adds around them:
 
-* which votes may serve as the estimator's evidence (``calibrates_precision``),
-  and that the fold held-out rows map back to them (``holdout_sink``) - the
-  estimator no longer draws the line, but the Find Stats curve still reads it;
-* that the curve is fitted once and re-cut per floor, with the same answer as
-  a fresh ``precision_floor_cut``;
+* that the fold held-out rows map back to their training rows
+  (``holdout_sink``), which the eval harness's precision frames read;
+* that the estimator's curve is fitted once and re-cut per floor, with the
+  same answer as a fresh ``precision_floor_cut``;
 * ``reporting_line``, the library's own account of the estimator's line, kept
   as public API off the app's path;
 * the detector-state seams: ``recut_detector_threshold`` keeping the set the
   floor keeps, ``detector_floor_state``, per-detector seeding,
-  ``set_min_precision``, and a retrain parking the ranking beside the estimate.
+  ``set_min_precision``, and a retrain parking the ranking (and, since #4362,
+  no estimate);
+* the retired #4245 calibration filter and the estimate's parking: every
+  public name survives, answers as documented, and warns.
 
 Planted sessions come from ``test_precision_floor``: two Gaussians, votes
 picked by score only, fold haystacks the pool with a little noise - squashed
@@ -65,7 +67,7 @@ from vtscore.training.thresholds import (
     resolve_min_precision,
 )
 
-LEARNED_HARD = {"flow": "autopilot", "phase": "hard", "select_mode": "hard", "sort_kind": "learned"}
+LEARNED_HARD: dict[str, object] = {"flow": "autopilot", "phase": "hard", "select_mode": "hard", "sort_kind": "learned"}
 
 
 def _sigmoid(a) -> np.ndarray:
@@ -84,7 +86,9 @@ def _scored_session(seed: int, **kwargs):
     )
 
 
-class TestWhichVotesCalibrate:
+class TestTheRetiredFilterStillAnswers:
+    """``calibrates_precision`` (#4245) is deprecated (#4362) but keeps its rule, with a warning."""
+
     @pytest.mark.parametrize(
         "provenance",
         [
@@ -95,7 +99,8 @@ class TestWhichVotesCalibrate:
         ],
     )
     def test_a_draw_off_the_learned_ranking_calibrates(self, provenance):
-        assert calibrates_precision(provenance)
+        with pytest.deprecated_call(match="calibrates_precision"):
+            assert calibrates_precision(provenance)
 
     @pytest.mark.parametrize(
         "provenance",
@@ -121,8 +126,9 @@ class TestWhichVotesCalibrate:
             {"flow": "list_review", "sort_kind": "learned"},
         ],
     )
-    def test_everything_else_trains_but_does_not_calibrate(self, provenance):
-        assert not calibrates_precision(provenance)
+    def test_everything_else_does_not_calibrate(self, provenance):
+        with pytest.deprecated_call(match="calibrates_precision"):
+            assert not calibrates_precision(provenance)
 
 
 class TestHeldOutRowsMapBackToVotes:
@@ -183,19 +189,16 @@ class TestHeldOutRowsMapBackToVotes:
         )
         assert first and again == first
 
-    def test_only_eligible_rows_survive_and_folds_keep_their_places(self):
+    def test_the_retired_eligibility_filter_still_answers_with_a_warning(self):
+        """``eligible_fold_orderings`` is deprecated (#4362) but keeps its rule."""
         orderings = [([0.9, 0.1, 0.8], [1.0, 0.0, 1.0]), ([0.7, 0.2], [1.0, 0.0])]
-        holdouts = [(0, 1, 2), (3, 4)]
-        eligible = [True, False, False, True, True]
-        kept = eligible_fold_orderings(orderings, holdouts, eligible)
+        with pytest.deprecated_call(match="eligible_fold_orderings"):
+            kept = eligible_fold_orderings(orderings, [(0, 1, 2), (3, 4)], [True, False, False, True, True])
         assert kept == [([0.9], [1.0]), ([0.7, 0.2], [1.0, 0.0])]
-
-    def test_no_provenance_keeps_every_vote_and_untraceable_folds_keep_none(self):
-        orderings = [([0.9, 0.1], [1.0, 0.0])]
-        assert eligible_fold_orderings(orderings, [], None) == [([0.9, 0.1], [1.0, 0.0])]
-        # Rows missing, or not lining up with the ordering: nothing can be shown fair.
-        assert eligible_fold_orderings(orderings, [], [True, True]) == [([], [])]
-        assert eligible_fold_orderings(orderings, [(0,)], [True, True]) == [([], [])]
+        with pytest.deprecated_call():
+            assert eligible_fold_orderings(orderings[:1], [], None) == [([0.9, 0.1, 0.8], [1.0, 0.0, 1.0])]
+        with pytest.deprecated_call():
+            assert eligible_fold_orderings(orderings[:1], [(0,)], [True]) == [([], [])]
 
 
 class TestFittedOnceCutAtAnyFloor:
@@ -326,10 +329,9 @@ def _finished_check(ranking: LineRanking, min_precision: float, *, right: bool =
 
 class TestTheDetectorsLine:
     def _ctx(self, detector_id: str = "det-floor", n: int = 200) -> DetectorContext:
-        cut, estimate = _fitted()
+        cut, _estimate = _fitted()
         ctx = DetectorContext(detector_id)
         ctx.anchored_cut_cache = cut
-        ctx.precision_floor_cache = estimate
         ctx.line_ranking = _planted_ranking(n)
         ctx.threshold = cut.threshold_at(0)
         return ctx
@@ -382,9 +384,17 @@ class TestTheDetectorsLine:
         with pytest.raises(ValueError, match="operating point"):
             recut_detector_threshold(self._ctx())
 
-    def test_the_estimators_verdict_without_an_estimate_is_no_evidence(self):
-        verdict = detector_precision_floor(DetectorContext("det-bare"), 0.5)
+    def test_the_retired_estimators_verdict_is_always_no_evidence(self):
+        """``detector_precision_floor`` is deprecated (#4362): nothing parks an estimate for it to read."""
+        with pytest.deprecated_call(match="detector_precision_floor"):
+            verdict = detector_precision_floor(DetectorContext("det-bare"), 0.5)
         assert verdict.status is PrecisionFloorStatus.INSUFFICIENT_EVIDENCE
+        assert verdict.calibration_positives == 0 and verdict.threshold is None
+        # Even an estimate an old caller planted is no longer read.
+        planted = DetectorContext("det-planted")
+        planted.precision_floor_cache = _fitted()[1]
+        with pytest.deprecated_call():
+            assert detector_precision_floor(planted, 0.5).status is PrecisionFloorStatus.INSUFFICIENT_EVIDENCE
 
     def test_acquisition_origin_under_each_operating_point(self):
         ctx = self._ctx()
@@ -509,8 +519,8 @@ def test_the_default_floor_is_the_one_the_owner_ruled():
     assert not math.isnan(DEFAULT_MIN_PRECISION)
 
 
-class TestARetrainParksTheEstimate:
-    """The whole pipeline: ``train_and_score`` builds the estimate beside the fold-anchored cut."""
+class TestARetrain:
+    """The whole pipeline: ``train_and_score`` parks the fold-anchored cut and the ranking, and no estimate (#4362)."""
 
     def _clips(self) -> dict[int, dict]:
         rng = np.random.default_rng(7)
@@ -524,39 +534,28 @@ class TestARetrainParksTheEstimate:
             for cid in range(500, 530)
         }
 
-    def _train(self, provenance: dict | None, **kwargs):
+    def _train(self, **kwargs):
         from vtscore.detectors.training import train_and_score
 
         good = {cid: None for cid in range(500, 506)}
         bad = {cid: None for cid in range(506, 514)}
         ctx = DetectorContext("det-retrain-floor", media_type="audio")
-        if provenance is not None:
-            ctx.vote_provenance = {cid: provenance for cid in [*good, *bad]}
+        ctx.vote_provenance = {cid: LEARNED_HARD for cid in [*good, *bad]}
         _results, threshold, model = train_and_score(self._clips(), good, bad, det_ctx=ctx, **kwargs)
         assert model is not None and ctx.anchored_cut_cache is not None
         return ctx, threshold
 
-    def test_votes_with_no_provenance_calibrate_nothing(self):
-        ctx, _t = self._train(None)
-        assert ctx.precision_floor_cache is not None
-        assert ctx.precision_floor_cache.calibration_positives == 0
+    def test_a_retrain_parks_no_estimate(self):
+        """The #4220 estimate lost its last reader in #4360, so a retrain no longer builds it.
 
-    def test_learned_sort_votes_are_the_evidence(self):
-        ctx, _t = self._train(LEARNED_HARD)
-        assert ctx.calibration_cache is not None
-        _key, folds, _holdouts = ctx.calibration_cache
-        held_out_positives = int(sum(sum(labels) for _scores, labels in folds.orderings))
-        assert held_out_positives > 0
-        assert ctx.precision_floor_cache.calibration_positives == held_out_positives
-
-    def test_text_sort_votes_train_but_do_not_calibrate(self):
-        text = {"flow": "autopilot", "phase": "good", "select_mode": "top", "sort_kind": "text"}
-        ctx, _t = self._train(text)
-        assert ctx.precision_floor_cache.calibration_positives == 0
+        The votes carry learned-sort provenance, which is what used to make them its evidence.
+        """
+        ctx, _t = self._train()
+        assert ctx.precision_floor_cache is None
 
     def test_a_retrain_parks_the_ranking_and_cuts_at_the_floors_starting_candidate(self):
         """The line keeps the top K unvoted items of the haystack it scored (#4272), voted items marked."""
-        ctx, threshold = self._train(LEARNED_HARD, min_precision=0.5)
+        ctx, threshold = self._train(min_precision=0.5)
         ranking = ctx.line_ranking
         assert ranking is not None and ranking.size == 30
         assert ranking.voted == frozenset(range(500, 514))
@@ -565,13 +564,12 @@ class TestARetrainParksTheEstimate:
         assert (
             threshold == ranking.threshold_for(32) == line_under(min(ranking.score_of(cid) for cid in range(514, 530)))
         )
-        assert ctx.precision_floor_cache is not None, "the #4220 estimate is still parked (until #4362)"
 
     def test_a_retrain_keeps_a_finished_checks_count(self):
-        ctx, _t = self._train(LEARNED_HARD, min_precision=0.5)
+        ctx, _t = self._train(min_precision=0.5)
         check = _finished_check(ctx.line_ranking, 0.5)
         ctx.precision_check = check
-        ctx2, threshold = self._train(LEARNED_HARD, min_precision=0.5)
+        ctx2, threshold = self._train(min_precision=0.5)
         # A fresh context each call: plant the result on it and re-cut.
         ctx2.precision_check = check
         from vtscore.state.core import recut_detector_threshold as recut
@@ -580,52 +578,61 @@ class TestARetrainParksTheEstimate:
         assert threshold == ctx2.line_ranking.threshold_for(32)
 
 
-def test_the_reference_pool_keeps_the_voted_items_the_corpus_drops():
-    """#4220's configuration, which #4221 found the promise's safety rests on.
+class TestTheRetiredTrainingFilter:
+    """The #4245 filter's training-side names are deprecated (#4362): kept, warning, and read by nothing."""
 
-    The corpus is the unvoted remainder (what the promise is about), but the
-    reference it is ranked against is the whole haystack, voted items included:
-    ranked against a "consistent" pool with the votes removed, the same
-    estimator broke ~90% of its X = 50% promises.
-    """
-    from vtscore.detectors.training import train_and_score
-
-    rng = np.random.default_rng(11)
-    # 100 media, 14 voted: the remainder (86) clears the #3308 floor, so the
-    # exclusion applies and the corpus and the pool genuinely differ.
-    clips = {
-        cid: {
-            "embeddings": {"test": (rng.standard_normal(8) + (1.5 if cid < 506 else 0.0)).astype(np.float32)},
-            "embedder": "test",
-            "media_type": "audio",
-            "md5": f"m{cid:031d}",
+    def _xy_snap(self):
+        rng = np.random.default_rng(5)
+        X = [rng.standard_normal(8).astype(np.float32) + (1.5 if i < 6 else 0.0) for i in range(14)]
+        y = [1.0] * 6 + [0.0] * 8
+        snap = {
+            i: {
+                "embeddings": {"test": rng.standard_normal(8).astype(np.float32)},
+                "embedder": "test",
+                "md5": f"m{i:031d}",
+            }
+            for i in range(40)
         }
-        for cid in range(500, 600)
-    }
-    good = {cid: None for cid in range(500, 506)}
-    bad = {cid: None for cid in range(506, 514)}
-    ctx = DetectorContext("det-reference-pool", media_type="audio")
-    _r, _t, model = train_and_score(clips, good, bad, det_ctx=ctx)
-    assert model is not None
-    estimate = ctx.precision_floor_cache
-    assert estimate is not None
-    assert estimate.corpus_size == len(clips) - len(good) - len(bad)
-    assert estimate._pool.size == len(clips)
+        return X, y, snap
 
+    def test_calibrating_groups_warns_and_changes_nothing(self):
+        from vtscore.detectors.training import train_and_threshold
 
-def test_labels_from_outside_a_learned_ranking_calibrate_nothing():
-    """A caller naming no eligible bag (a label file, examples) gives the floor no evidence."""
-    from vtscore.detectors.training import train_and_threshold
+        X, y, snap = self._xy_snap()
+        groups = [("g" if lab else "b", i) for i, lab in enumerate(y)]
+        plain = DetectorContext("det-no-filter")
+        _m, expected = train_and_threshold(X, y, snap=snap, det_ctx=plain, groups=groups)
+        filtered = DetectorContext("det-label-file")
+        with pytest.deprecated_call(match="calibrating_groups"):
+            _m, threshold = train_and_threshold(
+                X, y, snap=snap, det_ctx=filtered, groups=groups, calibrating_groups=set()
+            )
+        assert threshold == expected
+        assert plain.precision_floor_cache is None and filtered.precision_floor_cache is None
 
-    rng = np.random.default_rng(5)
-    X = [rng.standard_normal(8).astype(np.float32) + (1.5 if i < 6 else 0.0) for i in range(14)]
-    y = [1.0] * 6 + [0.0] * 8
-    snap = {
-        i: {"embeddings": {"test": rng.standard_normal(8).astype(np.float32)}, "embedder": "test", "md5": f"m{i:031d}"}
-        for i in range(40)
-    }
-    groups = [("g" if lab else "b", i) for i, lab in enumerate(y)]
-    ctx = DetectorContext("det-label-file")
-    train_and_threshold(X, y, snap=snap, det_ctx=ctx, groups=groups, calibrating_groups=set())
-    assert ctx.precision_floor_cache is not None
-    assert ctx.precision_floor_cache.calibration_positives == 0
+    def test_the_row_and_bag_helpers_still_answer(self):
+        from vtscore.detectors.training import calibration_rows_for, vote_calibrating_groups
+
+        groups = [("g", 1), ("b", 2), ("b", 3)]
+        with pytest.deprecated_call(match="calibration_rows_for"):
+            assert calibration_rows_for(groups, {("g", 1), ("b", 3)}) == [True, False, True]
+        with pytest.deprecated_call():
+            assert calibration_rows_for(groups, None) is None
+        with pytest.deprecated_call():
+            assert calibration_rows_for(None, set()) == []
+        text = {"flow": "autopilot", "phase": "good", "select_mode": "top", "sort_kind": "text"}
+        with pytest.deprecated_call(match="vote_calibrating_groups"):
+            bags = vote_calibrating_groups({1: None, 2: None}, {3: None}, {1: LEARNED_HARD, 2: text, 3: LEARNED_HARD})
+        assert bags == {("g", 1), ("b", 3)}
+
+    def test_the_labelset_helper_still_answers(self):
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+        from vtscore.datasets.vote_provenance import attach_provenance
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import labelset_calibrating_groups
+
+        learned = LabeledElement(md5="a" * 32, label="good", metadata=attach_provenance({}, LEARNED_HARD))
+        unattributed = LabeledElement(md5="b" * 32, label="bad")
+        labelset = LabelSet(elements=[learned, unattributed])
+        with pytest.deprecated_call(match="labelset_calibrating_groups"):
+            assert labelset_calibrating_groups(labelset) == {("g", stable_element_id(learned))}

@@ -11,7 +11,7 @@ Covers:
 
 from __future__ import annotations
 
-from tests.helpers import planted_precision_floor_estimate, setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -260,14 +260,13 @@ class TestFindStats:
         assert [p["verified_precision"] for p in curve] == [1.0, 0.5, 0.5, 0.6667]
 
     def test_the_curve_carries_no_estimate(self, client):
-        """No model-based estimate reaches the chart, even with the #4220 estimate parked (#4360).
+        """No model-based estimate reaches the chart (#4360).
 
-        That estimator breaks most of its "at least" promises once its
+        The #4220 estimator breaks most of its "at least" promises once its
         reference pool is consistent (#4256), so the curve is verified
         precision alone and the only range is the spot check's.
         """
         self._setup()
-        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
         data = client.get("/api/find/stats").get_json()
         assert not {"estimate_status", "calibration_positives", "min_calibration_positives"} & data.keys()
         assert all(
