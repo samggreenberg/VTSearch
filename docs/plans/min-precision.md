@@ -181,11 +181,7 @@ What follows is the design the remaining slices build on.
 
 <!-- item-sep -->
 
-- [ ] #4253 — Measure four ways to price Smart's error cost under the floor (Opus 4.8)
-
 <!-- item-sep -->
-
-- [ ] #4248 — Precision floor under region voting (Opus 4.8)
 
 <!-- item-sep -->
 
