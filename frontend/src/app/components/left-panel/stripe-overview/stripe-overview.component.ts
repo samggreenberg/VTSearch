@@ -75,6 +75,8 @@ export class StripeOverviewComponent {
     this.stripeClick.emit(index);
   }
 
+  /** There is a ranking to draw. Without one the strip still holds its place
+   *  in the layout, as an empty track. */
   get visible(): boolean {
     const sortOrder = this.sortOrder();
     return sortOrder !== null && sortOrder.length > 0;
