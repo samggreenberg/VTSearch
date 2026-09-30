@@ -513,8 +513,29 @@ const MANUAL_WIDEN = 140;
  */
 let savedLeftWidths: unknown = null;
 
-/** The app's Show Animations setting from before `settings-appearance` posed it. */
+/** The app's Show Animations setting from before `openAppearance` posed it. */
 let savedAnimations: string | null = null;
+
+/**
+ * Open Settings on its Appearance pane with the Show Animations pulldown at the
+ * app's default, as a user first meets it. The app refresh.sh starts runs on
+ * "OS Setting", so the pages' reduced motion holds (#4339); a shot that frames
+ * this pane poses the default back and calls `restoreAnimations` in `after`.
+ */
+async function openAppearance(h: Helpers): Promise<void> {
+  savedAnimations = (await h.app.api('/api/settings')).show_animations;
+  const { show_animations } = await h.app.api('/api/settings/defaults');
+  await h.app.api('/api/settings', { method: 'PUT', body: { show_animations } });
+  await h.dashboard();
+  await h.openSettings();
+}
+
+/** Put back the Show Animations setting `openAppearance` posed. */
+async function restoreAnimations(h: Helpers): Promise<void> {
+  if (savedAnimations) {
+    await h.app.api('/api/settings', { method: 'PUT', body: { show_animations: savedAnimations } });
+  }
+}
 
 /**
  * Drag the divider between the label view's left and centre panels by *dx*.
@@ -1072,21 +1093,10 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
     caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
     themes: BOTH,
-    // The app refresh.sh starts runs on Show Animations "OS Setting", so the
-    // pages' reduced motion holds (#4339). This pane shows that pulldown, so pose
-    // it at the app's default, as a user first meets it, and put it back after.
     async recipe(_page, h) {
-      savedAnimations = (await h.app.api('/api/settings')).show_animations;
-      const { show_animations } = await h.app.api('/api/settings/defaults');
-      await h.app.api('/api/settings', { method: 'PUT', body: { show_animations } });
-      await h.dashboard();
-      await h.openSettings();
+      await openAppearance(h);
     },
-    after: async (_page, h) => {
-      if (savedAnimations) {
-        await h.app.api('/api/settings', { method: 'PUT', body: { show_animations: savedAnimations } });
-      }
-    },
+    after: async (_page, h) => restoreAnimations(h),
   },
   {
     id: 'dashboard-manage',
@@ -2186,9 +2196,9 @@ export const SHOTS: Shot[] = [
       { target: '.settings-actions button[aria-label="Export"]', kind: 'step', step: 2, at: 'bottom' },
     ],
     async recipe(_page, h) {
-      await h.dashboard();
-      await h.openSettings();
+      await openAppearance(h);
     },
+    after: async (_page, h) => restoreAnimations(h),
   },
   {
     id: 'settings-export',
