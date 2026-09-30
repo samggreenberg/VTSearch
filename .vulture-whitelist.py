@@ -286,13 +286,14 @@ orig_text  # noqa: F821 - vtscore.datasets.importers.combine_datasets binding tr
 cost_k  # noqa: F821 - vtscore.eval.voting_iterations operating-cost triple
 
 # ---------------------------------------------------------------------------
-# Autouse fixture imported for side effects in both conftests (the ``import``
-# is what registers it with pytest). The local alias goes through ``as
-# _allow_test_tmp_paths`` so a reader immediately sees ``F401`` and knows the
+# Autouse fixtures imported for side effects in both conftests (the ``import``
+# is what registers them with pytest). The local alias goes through ``as
+# _allow_test_tmp_paths`` (likewise ``_isolated_example_media_dir``) so a reader immediately sees ``F401`` and knows the
 # import is deliberate; the ``noqa: F401`` at the import site silences ruff,
 # and this entry silences vulture.
 # ---------------------------------------------------------------------------
 _allow_test_tmp_paths  # noqa: F821
+_isolated_example_media_dir  # noqa: F821
 
 # ---------------------------------------------------------------------------
 # ``StreamProgress.readable`` overrides ``io.IOBase.readable`` on a stream

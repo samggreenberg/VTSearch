@@ -1214,19 +1214,6 @@ def get_effective_semantic_only() -> bool:
     return get_effective_override("semantic_only")
 
 
-def set_cli_hide_ingest_eta(value: bool | None) -> None:
-    """Set the process-level override for the ``hide_ingest_eta`` setting.
-
-    Called once from ``app.py`` startup when ``--hide-ingest-eta`` is passed
-    (or ``VTSEARCH_HIDE_INGEST_ETA`` is set). The value applies server-wide
-    (every user) and is fixed for the process lifetime;
-    :func:`get_effective_hide_ingest_eta` returns it in preference to the
-    persisted server setting. Pass ``None`` to clear the override so reads
-    fall back to the persisted file value.
-    """
-    _admin.set_override("hide_ingest_eta", None if value is None else bool(value))
-
-
 def get_cli_hide_ingest_eta() -> bool | None:
     """Return the process-level CLI / env override (``None`` if unset)."""
     return _admin.get_override("hide_ingest_eta")
@@ -1237,9 +1224,9 @@ def get_effective_hide_ingest_eta() -> bool:
 
     Resolution order:
 
-    1. The process-level override set by :func:`set_cli_hide_ingest_eta`
-       (``--hide-ingest-eta`` / ``VTSEARCH_HIDE_INGEST_ETA``), which applies
-       to every user for the lifetime of the process.
+    1. The process-level override (``--hide-ingest-eta`` /
+       ``VTSEARCH_HIDE_INGEST_ETA``, stored by :mod:`vtsearch.admin_overrides`),
+       which applies to every user for the lifetime of the process.
     2. The persisted server-tier setting (``data/settings.json``), which
        defaults to ``False``.
 
