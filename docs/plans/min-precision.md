@@ -164,6 +164,34 @@ What follows is the design the remaining slices build on.
     stale range drifts from the list it now sits beside, and re-checks after a
     retrain.
 
+- **The line follows the corpus (owner, 2026-09-30, #4383).** The fixed count
+  (the top 32 at P ≥ 50%, 128 at 10%) was right on exactly one corpus, the
+  11k-image bench at 0.44% where every prior pricing was read; on a corpus ten
+  times larger it kept 5% of the positives, and on a 320-image one it returned
+  all 32 at 4% right
+  ([`REPORT.md`](../experiments/2026-09-30-line-estimate-4383/REPORT.md)).
+  Three rulings:
+  - **The check becomes a band walk, in both directions, down to 8.** Five
+    uniform picks in each rank band (the top 8, the next 8, 16, 32, 64, ...),
+    starting at today's count: one band deeper while the band-weighted share
+    of right answers is at or above P, one band shallower while it is not; the
+    line keeps the deepest band that met P. It tracks the oracle's count at
+    every corpus size (15 where the oracle keeps 16, 42 vs 52, 388 vs 514,
+    615 vs 809), and its own reading of the set is within 0.05–0.08 of the
+    truth, so the control shows it. Implementation: #4388.
+  - **The walk's vote cost is accepted:** a median 15–25 picks on corpora up
+    to ~10k items, about 40 on 100k. Those votes also train the model.
+  - **With no votes** (AutoRun, CLI autodetect, cold Find, and before any
+    check) the line is **the smaller of today's count and the vote-anchored
+    mixture's crossing**. The mixture (`fit_anchored_score_gmm` on the
+    corpus's scores) is right-sized on small corpora and at 5% and over-returns
+    5–66× on large sparse ones, where the fixed count is right; the smaller of
+    the two takes each where it is right. Untested as a combination; priced
+    first, then wired: #4389.
+  - The partially-labelled mixture alone is not the line, and five audits
+    recalibrate its level but not its tail. The shipped #4220 estimator's
+    shape is the worst rule everywhere and stays off the line.
+
 ## Open work
 
 <!-- item-sep -->
