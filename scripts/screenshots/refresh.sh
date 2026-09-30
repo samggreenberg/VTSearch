@@ -25,6 +25,12 @@
 # the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an unseeded
 # draw shows the floor-check shot a different pick every time (#4330).
 #
+# And it sets that app's Show Animations to "OS Setting". capture.ts opens every
+# page asking for reduced motion, but the app's default, "Show", overrides that
+# for the motion it drives from JS (the list's smooth scroll to the selected
+# item, the vote swipe, Browse's zoom tweens), so a frame taken soon after one
+# landed somewhere different each run (#4339). "OS Setting" defers to the page.
+#
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's
 # commit, though: one from any other commit is refused, and named (#4324).
@@ -116,6 +122,9 @@ else
         sleep 2
     done
     curl -sf -o /dev/null "$APP/" 2>/dev/null || { echo "The app at $APP never came up; see $APP_LOG" >&2; exit 1; }
+    curl -sf -o /dev/null -X PUT -H 'content-type: application/json' \
+        -d '{"show_animations": "os"}' "$APP/api/settings" \
+        || { echo "Could not set Show Animations to OS Setting on the app at $APP" >&2; exit 1; }
 fi
 
 # Create the deterministic fixtures the recipes need (idempotent).

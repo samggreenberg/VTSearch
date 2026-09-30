@@ -286,11 +286,11 @@ async function verifyServed(page: Page, h: Helpers, n: number): Promise<void> {
 /**
  * Wait for the list holding Find's threshold line to come to rest: the line's
  * place on screen, the list's scroll offset and its loaded thumbnails all
- * unchanged for a second. Serving a picture scrolls the list to it smoothly
- * (the app's own Show Animations setting decides that, not the browser's
- * reduced motion), and the list draws the rows near what it shows once it
- * moves; a frame taken while either is under way lands somewhere different
- * each run (#4325).
+ * unchanged for a second. Serving a picture scrolls the list to it (smoothly
+ * on an app whose Show Animations is "Show"; the one refresh.sh starts is on
+ * "OS Setting", so it jumps, #4339), and the list draws the rows near what it
+ * shows once it moves; a frame taken while either is under way lands somewhere
+ * different each run (#4325).
  */
 async function listAtRest(page: Page): Promise<void> {
   await page.waitForFunction(
@@ -512,6 +512,9 @@ const MANUAL_WIDEN = 140;
  * exactly: a released divider snaps to fit whole columns of thumbnails.
  */
 let savedLeftWidths: unknown = null;
+
+/** The app's Show Animations setting from before `settings-appearance` posed it. */
+let savedAnimations: string | null = null;
 
 /**
  * Drag the divider between the label view's left and centre panels by *dx*.
@@ -1069,9 +1072,20 @@ export const SHOTS: Shot[] = [
     embeddedIn: `${GUIDE}#solo-media-type-streamline-for-one-media-type`,
     caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the RAM / Disk bars pulldown (Hide / Default / View), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
     themes: BOTH,
+    // The app refresh.sh starts runs on Show Animations "OS Setting", so the
+    // pages' reduced motion holds (#4339). This pane shows that pulldown, so pose
+    // it at the app's default, as a user first meets it, and put it back after.
     async recipe(_page, h) {
+      savedAnimations = (await h.app.api('/api/settings')).show_animations;
+      const { show_animations } = await h.app.api('/api/settings/defaults');
+      await h.app.api('/api/settings', { method: 'PUT', body: { show_animations } });
       await h.dashboard();
       await h.openSettings();
+    },
+    after: async (_page, h) => {
+      if (savedAnimations) {
+        await h.app.api('/api/settings', { method: 'PUT', body: { show_animations: savedAnimations } });
+      }
     },
   },
   {

@@ -422,6 +422,8 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
     viewport: VIEWPORT,
     deviceScaleFactor: 2,
     colorScheme: theme,
+    // Holds only while the app's Show Animations defers to it; see
+    // warnIfMotionForced.
     reducedMotion: 'reduce',
   });
   const page = await ctx.newPage();
@@ -467,8 +469,30 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
   }
 }
 
+/**
+ * Say so when the app forces motion on. Every page asks for reduced motion
+ * (`captureShot`), but the app's Show Animations setting outranks the browser
+ * for the motion it drives from JS: on "Show", `prefersReducedMotion()` reports
+ * false whatever the page asked, so the list still scrolls smoothly to the
+ * selected item, a vote still swipes and Browse still tweens its zoom, and a
+ * frame taken while one is under way lands somewhere different each run
+ * (#4339). The app refresh.sh starts runs on "OS Setting", which defers to the
+ * page; one started by hand keeps its own setting, whose default is "Show".
+ */
+async function warnIfMotionForced(): Promise<void> {
+  const settings = await appClient(APP).api('/api/settings').catch(() => null);
+  if (settings?.show_animations === 'show') {
+    console.log(
+      `The app at ${APP} has Show Animations set to Show, which overrides the pages'`
+        + ' reduced motion: frames taken after a JS-driven scroll or tween may drift.'
+        + ' Set it to OS Setting, or let refresh.sh start an app of its own.',
+    );
+  }
+}
+
 async function main() {
   await mkdir(ASSETS, { recursive: true });
+  await warnIfMotionForced();
   const browser: Browser = await launchChromium();
   const results: { id: string; theme: Theme; ok: boolean; err?: string }[] = [];
   try {
