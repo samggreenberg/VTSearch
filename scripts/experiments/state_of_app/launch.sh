@@ -62,6 +62,12 @@ export CALIB_SAFE_THRESHOLDS=1
 export CALIB_REQUIRE_OPENING=text
 export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_EMIT_PICKS=1
+# Where the positives sit in each ranking (#4357): the test half at these clicks
+# and at the last one before the spot check, and the full-label ceiling. Every
+# line metric the report reads (precision of the kept set at each floor X, the
+# oracle's recall at X, whether the check's range covered the truth) comes from
+# it; the metric rows record the line only at the default floor.
+export CALIB_RANK_FRAME_STEPS="${SOTA_RANK_FRAME_STEPS:-10,25,50,100,150}"
 export CALIB_JOB_NAME="${CALIB_JOB_NAME:-sota-$SOTA_DATE}"
 # Sized on the first review (2026-09-23), NOT on vg_scale: a coco_better REGION
 # run peaks at 66-70 GB (the 7.5 GB half-precision patch cell expands several-

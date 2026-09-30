@@ -33,7 +33,7 @@ one.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -929,6 +929,48 @@ def _precision_frame(
     return frame
 
 
+def _rank_frame(
+    kind: str,
+    t: int,
+    test_ids: Sequence[int],
+    test_scores: Any,
+    test_labels: Any,
+    pool_ranking: "LineRanking | None" = None,
+    voted: "Iterable[int]" = (),
+    pool_labels: "dict[int, float] | None" = None,
+) -> dict[str, Any]:
+    """Where the positives sit in the test half's ranking and in the session's unvoted pool (#4357).
+
+    Both rankings are :class:`~vtscore.training.thresholds.LineRanking` orders
+    (score descending, ties by id, unscorable media left out), so the test
+    half's top *K* is the set a floor's line keeps on a fresh corpus, and the
+    pool's top *K* unvoted is the candidate the spot check samples.  Pure read.
+    See :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS`.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    def _ranks(ids: Any, label_of: Any) -> tuple[int, int, str]:
+        pos = np.flatnonzero(np.fromiter((label_of(int(i)) >= 0.5 for i in ids), dtype=bool, count=len(ids)))
+        return len(ids), int(pos.size), " ".join(str(int(r)) for r in pos)
+
+    labels = dict(zip((int(i) for i in test_ids), (float(v) for v in test_labels), strict=True))
+    test = LineRanking.from_scores(list(test_ids), test_scores)
+    n_test, n_test_pos, test_ranks = _ranks(test.ids, labels.__getitem__)
+    n_pool, n_pool_pos, pool_ranks = -1, -1, ""
+    if pool_ranking is not None and pool_labels is not None:
+        n_pool, n_pool_pos, pool_ranks = _ranks(pool_ranking.unvoted_ids(voted), pool_labels.__getitem__)
+    return {
+        "kind": kind,
+        "t": int(t),
+        "n_test": n_test,
+        "n_test_pos": n_test_pos,
+        "test_pos_ranks": test_ranks,
+        "n_pool": n_pool,
+        "n_pool_pos": n_pool_pos,
+        "pool_pos_ranks": pool_ranks,
+    }
+
+
 def _evaluate_on_test(
     step: StepModel,
     threshold: float,
@@ -1057,7 +1099,7 @@ def _calibration_metric_rows(
     style_obj: Any,
     repool_variants: list[str],
     topk: int,
-) -> tuple[list[dict[str, Any]], "np.ndarray", "np.ndarray"]:
+) -> tuple[list[dict[str, Any]], "np.ndarray", "np.ndarray", list[int]]:
     """Per-step metric rows for the base pooling plus each remedial re-pool.
 
     Scores the test set's per-node sigmoids once through *style_obj*, then pools
@@ -1065,7 +1107,8 @@ def _calibration_metric_rows(
     ``fold_node_data`` — ``topk`` / ``pnorm``.  Each remedial variant recalibrates
     its own threshold by re-pooling the same fold models' held-out node scores,
     so every arm has a genuine *trained* cost and an *oracle* cost.  Returns one
-    row dict per pooling, each tagged with ``pool_variant``.
+    row dict per pooling, each tagged with ``pool_variant``, then the base
+    pooling's test scores, their labels and the media ids they belong to.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1162,7 +1205,7 @@ def _calibration_metric_rows(
                 )
             )
 
-    return rows, base_scores, labels
+    return rows, base_scores, labels, [int(i) for i in ids]
 
 
 # ------------------------------------------------------------------
@@ -1246,6 +1289,8 @@ def _skyline_arm_rows(
     calibrate_count: int,
     calibration_fraction: float,
     seed: int,
+    rank_frame_sink: Optional[list[dict[str, Any]]] = None,
+    rank_ident: Optional[dict[str, Any]] = None,
 ) -> list[dict[str, Any]]:
     """One metric row per requested skyline arm (issue #3322), or ``[]``.
 
@@ -1273,7 +1318,9 @@ def _skyline_arm_rows(
       of the cross-fitted *model*.
 
     Returns each row already carrying its ``gmm_variant`` tag and its own timing
-    / backend columns; the caller supplies the identifying columns.
+    / backend columns; the caller supplies the identifying columns.  With a
+    *rank_frame_sink*, each arm also appends its test ranking there as a rank
+    frame of that arm's kind (#4357), under *rank_ident*.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1293,6 +1340,8 @@ def _skyline_arm_rows(
         o_thr, _o_cost, _o_fpr, _o_fnr = cm.oracle_cut(scores, test_labels, wf, wn)
         if not np.isfinite(o_thr):
             return None
+        if rank_frame_sink is not None:
+            rank_frame_sink.append({**(rank_ident or {}), **_rank_frame(name, 0, ordered_test, scores, test_labels)})
         row = operating_metrics(
             scores,
             test_labels,
@@ -1779,6 +1828,8 @@ def simulate_voting_iterations(  # noqa: C901
     pick_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_sink: Optional[list[dict[str, Any]]] = None,
     precision_frame_steps: Optional[Sequence[int]] = None,
+    rank_frame_sink: Optional[list[dict[str, Any]]] = None,
+    rank_frame_steps: Optional[Sequence[int]] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
     live_threshold: Optional[str] = None,
@@ -1957,6 +2008,16 @@ def simulate_voting_iterations(  # noqa: C901
             evidence and truth a precision-floor estimator is priced on (#4220).
             Only the calibration-metrics path fills it.  ``None`` (default) = off.
         precision_frame_steps: The steps (``t``) to record; ignored without a sink.
+        rank_frame_sink: List the
+            :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS` rows are appended
+            to (#4357): where the positives sit in the test half's ranking and
+            in the session's unvoted pool.  One ``step`` row at each step in
+            *rank_frame_steps*, one ``last`` row for the last ordinary step (the
+            ranking the end-of-run spot check draws from, before its votes),
+            and one row per skyline arm.  Only the calibration-metrics path
+            fills it.  ``None`` (default) = off.
+        rank_frame_steps: The ordinary steps (``t``) to record ``step`` rows
+            at; ignored without a sink.
         opening_diversity: ``"<tau>/<k>"`` - an experiment knob (issue #4197),
             not app behaviour.  While the opening walks the top of the seed sort
             (``good`` / ``more``), pass over candidates with cosine >= *tau* to at
@@ -2549,6 +2610,16 @@ def simulate_voting_iterations(  # noqa: C901
     # fixed off and a finished result is fingerprinted against.
     check: SpotCheck | None = None
     line_ranking: LineRanking | None = None
+    # The rank frame's identity, and the inputs of the last ordinary step's
+    # frame (#4357), which is emitted once the loop ends.
+    rank_ident = {
+        "seed": seed,
+        "dataset": dataset_name,
+        "category": target_category,
+        "calibration_seed": calibration_seed,
+        "style": style or "",
+    }
+    last_ordinary: tuple[Any, ...] | None = None
     # ``t`` counts every vote cast, the check's included: one per ordinary
     # step, a round's worth per check round.
     t = 0
@@ -2760,7 +2831,7 @@ def simulate_voting_iterations(  # noqa: C901
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
         # metrics row, but both paths score the same test set here.
-        calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray] | None = None
+        calibration: tuple[list[dict[str, Any]], np.ndarray, np.ndarray, list[int]] | None = None
         metrics: dict[str, float] = {}
         t_test = time.monotonic()
         if emit_calibration_metrics and style_obj is not None:
@@ -2948,7 +3019,21 @@ def simulate_voting_iterations(  # noqa: C901
         }
 
         if calibration is not None:
-            metric_rows, base_scores, base_labels = calibration
+            metric_rows, base_scores, base_labels, base_ids = calibration
+            if rank_frame_sink is not None and picks is None:
+                # Kept by reference and turned into the ``last`` frame after the
+                # loop: nothing here is mutated later, and the voted set is a
+                # snapshot, so it is this step's ranking whatever runs after it.
+                last_ordinary = (
+                    t,
+                    base_ids,
+                    base_scores,
+                    base_labels,
+                    line_ranking,
+                    frozenset(good_votes) | frozenset(bad_votes),
+                )
+                if rank_frame_steps and t in rank_frame_steps:
+                    rank_frame_sink.append({**rank_ident, **_rank_frame("step", *last_ordinary, pool_labels)})
             if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
                 # The trainer builds its rows Goods first, then Bads, in vote order.
                 vote_order = list(good_votes) + list(bad_votes)
@@ -3121,6 +3206,9 @@ def simulate_voting_iterations(  # noqa: C901
         else:
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
 
+    if rank_frame_sink is not None and last_ordinary is not None:
+        rank_frame_sink.append({**rank_ident, **_rank_frame("last", *last_ordinary, pool_labels)})
+
     # --- The supervised skyline (issue #3322), once per run. ---
     #
     # Deliberately **after** the loop rather than before it: every fit here draws
@@ -3144,6 +3232,8 @@ def simulate_voting_iterations(  # noqa: C901
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             seed=seed,
+            rank_frame_sink=rank_frame_sink,
+            rank_ident=rank_ident,
         )
         _apply_skyline_decomposition(rows, skyline_rows)
         # `t=0` and `app_trained=0`: the skyline belongs to no step, so it is
