@@ -57,11 +57,15 @@ measured.
 The curve is fitted once and cut at any floor (:class:`PrecisionFloorCurve`),
 the way a :class:`~vtscore.training.thresholds.FoldAnchoredCut` is fitted once
 and cut at any inclusion; :class:`PrecisionFloorEstimate` holds one detector's
-inputs and fits the curve the first time a floor is asked for.  Which line a
-detector draws - the floor's, or the Inclusion knob's when no floor is set, and
-the Inclusion 0 cut when the floor promises nothing - is
-:func:`reporting_line`, shared by the app and the eval harness's default arm so
-the two cannot disagree about it.
+inputs and fits the curve the first time a floor is asked for.
+
+**This estimate no longer draws a detector's line** (#4272).  Under a floor the
+line keeps a set that a spot check measures
+(:func:`~vtscore.training.thresholds.floor_line`), and the estimate survives
+only for the Find Stats precision curve.  With no floor, or no ranking to keep
+a set of, the line is the Inclusion 0 cut through :func:`reporting_line`,
+shared by the app and the eval harness's default arm so the two cannot
+disagree about it.
 
 Pure numpy + scikit-learn; nothing here reads a detector context.  Wiring it to
 a live detector (which fold orderings, which haystacks, which votes may serve
@@ -113,11 +117,11 @@ PRECISION_COORDINATES = ("percentile", "tail")
 PRECISION_FITS = ("logistic", "isotonic")
 
 
-#: The inclusion a line is drawn at whenever no floor promises one: a floor
-#: that promises nothing (owner, 2026-09-28; #4247), or no floor at all, now
-#: that Inclusion is no longer a user preference (#4269).  A floor that cannot
-#: be met never empties the results: the line stays where Inclusion 0 would
-#: draw it, labelled as unpromised.
+#: The inclusion a line is drawn at whenever no floor draws one: no floor at
+#: all, now that Inclusion is no longer a user preference (#4269), or a floor
+#: with no ranking to keep a set of (#4272: never trained against a haystack,
+#: or nothing left unvoted).  Under a floor with a ranking the line keeps a set
+#: instead, and never falls back here.
 PRECISION_FLOOR_FALLBACK_INCLUSION = 0
 
 #: A 1-D run of scores or labels: a list, or the numpy array a caller already holds.
@@ -684,10 +688,14 @@ def reporting_line(
 ) -> ReportingLine:
     """The reporting cut at an operating point: a precision floor, or an inclusion when no floor is set.
 
-    **The one definition of which line a detector draws**, called by the app's
-    retrain (:func:`vtscore.detectors.training._fused_threshold`), its no-refit
-    re-cut (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
-    harness's default arm, so the three cannot drift apart.
+    **The one definition of the no-floor line**, called by the app's retrain
+    (:func:`vtscore.detectors.training._fused_threshold`), its no-refit re-cut
+    (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
+    harness's default arm, so the three cannot drift apart.  All three pass
+    ``min_precision=None`` since #4272: under a floor they draw the set the
+    floor keeps (:func:`~vtscore.training.thresholds.floor_line`), and come
+    here only when there is no ranking to keep a set of.  The two floor
+    branches below are the #4220 estimator's own line, kept as library API.
 
     * *min_precision* ``None``: no floor, and the line is
       ``cut.threshold_at(inclusion_value)``.  *inclusion_value* is the internal

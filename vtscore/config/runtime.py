@@ -134,10 +134,10 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # single fold yields only ~4 positive scores, i.e. ~4 usable cut positions;
 # a second fold doubles that for one extra fold fit.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
-# The precision floor a user who has set none gets (#4245): the cut returns as
-# much as it can while at least half of it is estimated right, and falls back
-# to the Inclusion 0 cut when it can promise nothing (owner, 2026-09-28).  The
-# app always sets a floor (#4269): a stored ``None`` reads as this default.  A
+# The precision floor a user who has set none gets (#4245): the line keeps the
+# floor's starting candidate (32 items at 50%) until a spot check measures how
+# much of it is right, then the set the check ended on (#4272).  The app
+# always sets a floor (#4269): a stored ``None`` reads as this default.  A
 # library caller's ``None`` is no floor, and the line is the Inclusion 0 cut.
 # Re-exported as
 # ``vtscore.training.thresholds.DEFAULT_MIN_PRECISION``; defined here so the

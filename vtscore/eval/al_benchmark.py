@@ -39,6 +39,7 @@ import numpy as np
 from vtscore.eval.al_strategies import available_strategies
 from vtscore.eval.visualize import plot_voting_iterations
 from vtscore.eval.voting_iterations import run_voting_iterations_eval
+from vtscore.training.thresholds import NO_PRECISION_FLOOR, resolve_min_precision
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -191,6 +192,7 @@ def run_al_benchmark(
     calibrate_count: int = 2,
     atlas_min_node_size: int = _DEFAULT_ATLAS_MIN_NODE_SIZE,
     plot_dir: Optional[str | Path] = None,
+    min_precision: Optional[float | str] = None,
 ) -> "pd.DataFrame":
     """Run *strategies* over *dataset_clips* and return the results frame.
 
@@ -199,6 +201,11 @@ def run_al_benchmark(
     the benchmark's lower coverage-atlas floor and (when *plot_dir* is given)
     renders the charts.  The returned :class:`~pandas.DataFrame` carries the usual
     voting-iterations columns plus ``strategy`` (always ``autopilot``).
+
+    *min_precision* is the precision floor the line is drawn at: ``None`` (the
+    default) is the app's own floor, ``"off"`` the Inclusion arm, a number a
+    pinned floor.  *inclusion* draws the line only on the Inclusion arm; a
+    non-zero value under a floor is refused (#4361).
     """
     df = run_voting_iterations_eval(
         dataset_clips,
@@ -210,6 +217,7 @@ def run_al_benchmark(
         strategies=strategies,
         max_steps=max_steps,
         atlas_min_node_size=atlas_min_node_size,
+        min_precision=min_precision,
     )
     if plot_dir is not None:
         plot_voting_iterations(df, output_dir=plot_dir)
@@ -267,6 +275,21 @@ def _build_source(args: argparse.Namespace) -> DatasetClips:
     raise SystemExit(f"Unknown source {args.source!r}")
 
 
+def _min_precision_arg(value: str) -> float | str:
+    """``--min-precision``: ``off`` for the Inclusion arm, or a floor in ``(0, 1]``."""
+    text = value.strip().lower()
+    if text == NO_PRECISION_FLOOR:
+        return NO_PRECISION_FLOOR
+    try:
+        floor = float(text)
+        resolve_min_precision(floor)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"expected {NO_PRECISION_FLOOR!r} or a floor in (0, 1], got {value!r}"
+        ) from None
+    return floor
+
+
 def main(argv: Optional[list[str]] = None) -> None:
     parser = argparse.ArgumentParser(
         prog="python -m vtscore.eval.al_benchmark",
@@ -299,7 +322,21 @@ def main(argv: Optional[list[str]] = None) -> None:
         help="Vote-order strategies to run, or 'all' (default: autopilot, the only strategy).",
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="Simulation seeds (default: 0 1 2).")
-    parser.add_argument("--inclusion", type=int, default=0, help="Inclusion setting in [-10, 10] (default: 0).")
+    parser.add_argument(
+        "--inclusion",
+        type=int,
+        default=0,
+        help="The Inclusion arm's line in [-10, 10] (default: 0). Needs --min-precision off: "
+        "under a floor it would only re-weight cost, so a non-zero value is refused.",
+    )
+    parser.add_argument(
+        "--min-precision",
+        type=_min_precision_arg,
+        default=None,
+        metavar="X",
+        help="Precision floor the line is drawn at, in (0, 1], or 'off' for the Inclusion arm "
+        "(default: the app's own floor).",
+    )
     parser.add_argument(
         "--sim-fraction", type=float, default=0.5, help="Fraction of items used for simulated voting (default: 0.5)."
     )
@@ -324,6 +361,11 @@ def main(argv: Optional[list[str]] = None) -> None:
     )
 
     args = parser.parse_args(argv)
+    if args.inclusion != 0 and args.min_precision != NO_PRECISION_FLOOR:
+        parser.error(
+            "--inclusion draws the line only with --min-precision off; under a precision floor it would "
+            "only re-weight cost (#4361)"
+        )
     strategies = _resolve_strategies(args.strategies)
     dataset_clips = _build_source(args)
 
@@ -337,6 +379,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         calibrate_count=args.calibrate_count,
         atlas_min_node_size=args.atlas_min_node_size,
         plot_dir=args.plot_dir,
+        min_precision=args.min_precision,
     )
 
     print(f"\n{'=' * 60}")

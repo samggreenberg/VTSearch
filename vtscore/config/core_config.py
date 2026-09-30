@@ -24,7 +24,7 @@ def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) 
     """Refuse a non-zero Inclusion passed to a retired name, and warn about a zero one.
 
     Inclusion is no longer a user preference (#4269): the precision floor is
-    the operating point, and a detector with no promise draws its line at the
+    the operating point, and a detector with no floor draws its line at the
     Inclusion 0 cut.  The names that used to set it (*where*) stay importable
     so an out-of-tree caller keeps working, but only at 0 - the one value that
     still means what it did.  Any other value is refused rather than ignored,

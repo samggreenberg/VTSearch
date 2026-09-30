@@ -292,8 +292,8 @@ def train_and_score_active(
 
     snap = snapshot_medias()
     # External labels were not drawn off a learned ranking, so none of them may
-    # calibrate a precision-floor promise (#4245): under a floor this line is
-    # the Inclusion 0 cut, labelled unpromised.
+    # serve as evidence for the #4220 precision estimate (#4245).  That estimate
+    # no longer draws the line: under a floor the line keeps the floor's set (#4272).
     model, threshold = train_and_threshold(
         X_list, y_list, snap=snap, embedder_name=embedder_name, calibrating_groups=set()
     )
