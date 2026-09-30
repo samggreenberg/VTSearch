@@ -35,7 +35,6 @@ import json
 import os
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Sequence
 
@@ -43,11 +42,19 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-#: The layout #3928 measured as the better of two: 0.25 x 0.18 of a page, stride
-#: half a tile.  A FullMarks mark is ~0.1-0.3 of a page's width.
-TILE_W, TILE_H = 0.25, 0.18
-#: A tile with fewer keypoints than this has nothing to aggregate.
-MIN_TILE_KP = 20
+from vtscore.media.structural_tiles import (  # noqa: E402  (one definition, shared with the app)
+    MIN_TILE_KP,
+    TILE_H,
+    TILE_W,
+    Projection,
+    fit_projection,
+    normalise,
+    starts_from_counts,
+    tile_rows,
+    tile_windows,  # noqa: F401  (re-exported: tests and the probe check read s1.tile_windows)
+)
+from vtscore.media.structural_tiles import page_scores_per_query as page_scores  # noqa: E402
+
 #: Pages sampled to fit the projection.  400 pages is ~20,000 tiles, well over
 #: the 8,192 dimensions being reduced, and costs ~1% of the build.
 SAMPLE_PAGES = 400
@@ -56,118 +63,6 @@ SAMPLE_PAGES = 400
 DEFAULT_DIMS = (0, 512, 256, 128)
 #: Pages per shard file.
 SHARD_PAGES = 2000
-
-
-def tile_windows(width: float = TILE_W, height: float = TILE_H) -> list[tuple[float, float, float, float]]:
-    """Overlapping windows covering the unit square, stride half a tile."""
-    xs = np.arange(0.0, max(1e-9, 1.0 - width) + 1e-9, width / 2)
-    ys = np.arange(0.0, max(1e-9, 1.0 - height) + 1e-9, height / 2)
-    return [(float(x), float(y), float(x + width), float(y + height)) for y in ys for x in xs]
-
-
-def tile_rows(
-    keypoints: np.ndarray,
-    descriptors: np.ndarray,
-    codebook: np.ndarray,
-    aggregate: Callable[[np.ndarray, np.ndarray], np.ndarray],
-    width: float = TILE_W,
-    height: float = TILE_H,
-    min_kp: int = MIN_TILE_KP,
-) -> tuple[np.ndarray, np.ndarray]:
-    """``(vectors, boxes)`` for the tiles of one page that hold enough keypoints.
-
-    ``aggregate`` is injected so the geometry can be tested without the SIFT
-    stack.  A page whose tiles are all too sparse still gets one row -- a VLAD of
-    every descriptor it has -- because a page with no row cannot be retrieved at
-    all, and the probe scored it that way.
-    """
-    rows: list[np.ndarray] = []
-    boxes: list[tuple[float, float, float, float]] = []
-    if keypoints.shape[0]:
-        x, y = keypoints[:, 0], keypoints[:, 1]
-        for x0, y0, x1, y1 in tile_windows(width, height):
-            inside = (x >= x0) & (x < x1) & (y >= y0) & (y < y1)
-            if int(inside.sum()) >= min_kp:
-                rows.append(aggregate(descriptors[inside], codebook))
-                boxes.append((x0, y0, x1, y1))
-    if not rows:
-        rows.append(aggregate(descriptors, codebook))
-        boxes.append((0.0, 0.0, 1.0, 1.0))
-    return np.asarray(rows, dtype=np.float32), np.asarray(boxes, dtype=np.float32)
-
-
-@dataclass
-class Projection:
-    """PCA with whitening, fitted once at the widest width and sliced for the rest.
-
-    Whitening scales each component by its own standard deviation, so the first
-    ``d`` rows of a wider fit *are* the ``d``-wide fit -- which is why one pass
-    over the corpus can write every width.  Rows are L2-normalised after
-    projection, so a dot product is a cosine.
-    """
-
-    mean: np.ndarray
-    components: np.ndarray  # (dim, 8192), already divided by each component's sigma
-
-    @property
-    def dim(self) -> int:
-        return int(self.components.shape[0])
-
-    def slice(self, dim: int) -> "Projection":
-        if dim > self.dim:
-            raise ValueError(f"cannot widen a {self.dim}-dim projection to {dim}")
-        return Projection(self.mean, self.components[:dim])
-
-    def apply(self, rows: np.ndarray) -> np.ndarray:
-        out = (np.asarray(rows, dtype=np.float32) - self.mean) @ self.components.T
-        norm = np.linalg.norm(out, axis=1, keepdims=True)
-        return out / np.maximum(norm, 1e-12)
-
-    def save(self, path: Path) -> None:
-        np.savez(path, mean=self.mean, components=self.components)
-
-    @staticmethod
-    def load(path: Path) -> "Projection":
-        with np.load(path) as z:
-            return Projection(z["mean"].astype(np.float32), z["components"].astype(np.float32))
-
-
-def fit_projection(sample: np.ndarray, dim: int) -> Projection:
-    """Fit a whitened PCA of width ``dim`` on tile vectors ``sample``."""
-    sample = np.asarray(sample, dtype=np.float32)
-    if dim > min(sample.shape):
-        raise ValueError(f"dim {dim} exceeds the sample's rank ({min(sample.shape)})")
-    mean = sample.mean(axis=0)
-    centred = sample - mean
-    # economy SVD: rows are far fewer than 8,192 columns for any sane sample
-    _u, s, vt = np.linalg.svd(centred, full_matrices=False)
-    sigma = np.maximum(s[:dim] / np.sqrt(max(1, centred.shape[0] - 1)), 1e-6)
-    return Projection(mean, (vt[:dim] / sigma[:, None]).astype(np.float32))
-
-
-def normalise(rows: np.ndarray) -> np.ndarray:
-    """L2-normalise float32 rows, so a stored dot product is a cosine."""
-    rows = np.asarray(rows, dtype=np.float32)
-    norm = np.linalg.norm(rows, axis=1, keepdims=True)
-    return rows / np.maximum(norm, 1e-12)
-
-
-def page_scores(tiles: np.ndarray, starts: np.ndarray, query: np.ndarray) -> np.ndarray:
-    """Max over each page's tiles of the dot with ``query``, one score per page.
-
-    ``starts`` holds each page's first row, so the segment max is one
-    ``reduceat`` over a single matmul rather than a Python loop per page.
-    """
-    flat = np.asarray(tiles, dtype=np.float32) @ np.asarray(query, dtype=np.float32)
-    if flat.ndim == 1:
-        return np.maximum.reduceat(flat, starts)
-    return np.maximum.reduceat(flat, starts, axis=0)
-
-
-def starts_from_counts(counts: np.ndarray) -> np.ndarray:
-    """Row index where each page's tiles begin."""
-    counts = np.asarray(counts, dtype=np.int64)
-    return np.concatenate([[0], np.cumsum(counts)[:-1]]).astype(np.int64)
 
 
 def top_k(page_ids: Sequence[str], scores: np.ndarray, k: int) -> list[tuple[str, float]]:
