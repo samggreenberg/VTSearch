@@ -116,6 +116,7 @@ step and writes the profile JSON keyed by those same names.
 | `tracker_steps` | How many step numbers the task reports - the length of the weight vector |
 | `scale` | Human description of what `n` counts |
 | `default_terms` | Shipped fallback pseudo-seconds, parallel to `steps` (may be empty) |
+| `media_default_terms` | Per-media-type overrides of `default_terms` (`{"audio": (...)}`), each parallel to `steps`; read through `defaults_for(media_type)`, which falls back to `default_terms` for any media type not named |
 | `byte_scaled` | Which phases get a per-MB rate instead of a per-item slope |
 | `loads_encoder` | Whether a run can pay a cold encoder load (and so records `cold_model`) |
 
@@ -133,6 +134,12 @@ and `step_weights` sums their predicted seconds back into that slot.
 `dataset_load` deliberately carries **no** default terms: its shipped
 model is the measured affine table in `_load_cost_model`, which is
 already `n`-aware per cell and better than any flat vector.
+
+`dataset_open` is the one task with a per-media override: reading an
+audio pickle is a much larger share of an open than reading an image
+pickle, so audio ships `(0.40, 0.60)` beside the task-wide `(0.15, 0.85)`
+(#4105). The override only replaces the no-profile fallback; a profile
+cell that prices a step still wins.
 
 Adding a long-running task means adding a `TaskSpec` here, then calling
 `step_weights(...)` at the task's entry point instead of writing a

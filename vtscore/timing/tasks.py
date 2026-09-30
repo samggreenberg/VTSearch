@@ -30,11 +30,20 @@ meaningful, because nobody measured them. A profile replaces them with real
 seconds, which is what makes the ETA stop drifting. One vector is no longer a
 transcription — ``dataset_stage``'s was re-derived from measured rows once its
 step boundary was corrected (#3593); its comment below says from which.
+
+**Per-media defaults.** A task whose split genuinely differs by media type may
+carry :attr:`TaskSpec.media_default_terms`, an override vector per media type,
+read with the same pseudo-second semantics. ``dataset_open`` is the one that
+does: an audio pickle's read is a far larger share of an open than an image
+pickle's (#4105). A media type without an override falls back to
+:attr:`TaskSpec.default_terms`, so an unmeasured media type paces exactly as it
+did before any override existed.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -56,6 +65,11 @@ class TaskSpec:
             Empty means "this task has its own richer default model" — only
             ``dataset_load``, whose calibrated table lives in
             :mod:`vtscore.datasets.stages._load_cost_model`.
+        media_default_terms: Per-media-type overrides of ``default_terms``,
+            keyed by media type id (``"audio"``, ``"image"``, …), each parallel
+            to ``steps``. Consulted only when no profile cell prices a step, and
+            only for the media types it names; every other media type keeps
+            ``default_terms``. Read it through :meth:`defaults_for`.
         byte_scaled: Steps whose cost tracks downloaded **bytes** rather than
             item count. The tuning script fits these as a per-MB rate instead of
             regressing them against ``n``, because a 2 GB archive of 500 videos
@@ -80,12 +94,34 @@ class TaskSpec:
     default_terms: tuple[float, ...] = ()
     byte_scaled: tuple[str, ...] = ()
     loads_encoder: bool = False
+    # ``hash=False`` keeps the spec hashable, as it was before this field
+    # existed: a mapping cannot be hashed, and the flat fields already
+    # identify a spec.
+    media_default_terms: Mapping[str, tuple[float, ...]] = field(default_factory=dict, hash=False)
 
     def __post_init__(self) -> None:
         if len(self.step_index) != len(self.steps):
             raise ValueError(f"{self.name}: step_index must be parallel to steps")
         if self.default_terms and len(self.default_terms) != len(self.steps):
             raise ValueError(f"{self.name}: default_terms must be parallel to steps")
+        if self.media_default_terms and not self.default_terms:
+            # An override needs something to override: a task with no flat
+            # default has its own richer model (``dataset_load``), and a
+            # per-media vector beside it would silently replace that model for
+            # one media type only.
+            raise ValueError(f"{self.name}: media_default_terms requires default_terms")
+        for media_type, terms in self.media_default_terms.items():
+            if len(terms) != len(self.steps):
+                raise ValueError(f"{self.name}: media_default_terms[{media_type!r}] must be parallel to steps")
+
+    def defaults_for(self, media_type: str = "") -> tuple[float, ...]:
+        """The shipped fallback terms for *media_type*.
+
+        Its entry in :attr:`media_default_terms` when it has one, otherwise
+        :attr:`default_terms` — so an empty or unrecognised media type gets the
+        task-wide vector, never nothing.
+        """
+        return self.media_default_terms.get(media_type, self.default_terms)
 
 
 def _linear(
@@ -95,6 +131,7 @@ def _linear(
     terms: tuple[float, ...],
     *,
     loads_encoder: bool = False,
+    media_terms: Mapping[str, tuple[float, ...]] | None = None,
 ) -> TaskSpec:
     """Build a spec whose phases map 1:1 onto tracker steps (the common case)."""
     return TaskSpec(
@@ -105,6 +142,7 @@ def _linear(
         scale=scale,
         default_terms=terms,
         loads_encoder=loads_encoder,
+        media_default_terms=dict(media_terms or {}),
     )
 
 
@@ -141,16 +179,25 @@ TASKS: dict[str, TaskSpec] = {
     # COVERAGE_ATLAS_AUTO_THRESHOLD (50 000), where the fit gives ~140 s
     # (docs/experiments/2026-09-22-atlas-rebuild-3595/REPORT.md, #3595).
     #
-    # The 0.85 below is now checked for image: a rebuilding open spends
-    # 0.81-0.94 of its time in the coverage step at every n from 838 to
-    # 36 497. It over-budgets audio, whose rebuild share is 0.52-0.63 because
-    # its items step is heavier (#4105). On a restore the share is <= 0.01, and
-    # that branch is re-weighted by the route once known (#3594).
+    # The 0.85 below is checked for image: a rebuilding open spends 0.81-0.94
+    # of its time in the coverage step at every n from 838 to 36 497. Audio
+    # gets its own vector because reading and converting an audio pickle is a
+    # much larger part of the open (3.5-16 s against a 6-22 s rebuild), so its
+    # measured rebuild share is 0.52-0.63 (n = 1960..8732, mean 0.58). At 0.85
+    # an audio open's bar crawled through the read, reaching 15 % after ~40 %
+    # of the wait, then raced through the atlas (#4105). Its 0.60 sits a
+    # little above that mean on purpose: every row is V100 + cuML, and on a
+    # CPU host sklearn's k-means should make the rebuild heavier while the
+    # read, which no GPU was speeding up, stays about the same. Video and text
+    # are unmeasured and keep the task-wide vector. On a restore the share is
+    # <= 0.01 for both media, and that branch is re-weighted by the route once
+    # known (#3594).
     "dataset_open": _linear(
         "dataset_open",
         ("items", "coverage"),
         "media items in the pkl",
         (0.15, 0.85),
+        media_terms={"audio": (0.40, 0.60)},
     ),
     # Promoting a staged subset into a real dataset. The atlas's hierarchical
     # k-means dominates, then embedding serialization; the registry write is
