@@ -139,8 +139,11 @@ That SVM head scores 0.02–0.14 AP on FullMarks (#4162 `a3_vlad_svm`).
 
 ### 5. Shortlist size, and Stage 2 per vote
 
-- **K:** min(1,000, 2% of the dataset), passed to `structural_rerank` in place
-  of today's 50.
+- **K:** 1,000 when the matcher has CUDA, 500 without, and never more than
+  the dataset. It is passed to `structural_rerank` in place of today's 50.
+  (The first draft said 2% of the dataset. That would verify only 100 pages
+  at 5,000 pages, where M3 measured 1,000. The cost is per page verified,
+  whatever the dataset size, so K follows the hardware (M4), not the size.)
 - **The cost problem:** at 8,192 keypoints a verification costs ~160 ms per
   page per core (#3911: 25 s for 5,000 pages on 32 cores). K = 1,000 is ~160
   CPU-seconds, and today Stage 2 runs on every retrain.

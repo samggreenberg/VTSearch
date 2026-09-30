@@ -130,6 +130,7 @@ canonical persisted form.
 | `label_negative_regions` / `label_score_regions` | `dict[str, list[np.ndarray]]` | Per-element patch stacks on patch datasets (flooded negatives; full score rows) |
 | `model` | `torch.nn.Sequential \| None` | Trained head (process-lifetime only) |
 | `model_labels_sig` | `tuple \| None` | Signature of the labels `model` was trained on, so a stale head is detected |
+| `structural_verification_cache` | `VerificationCache \| None` | Structural detectors on a tiled dataset: every (template, page) geometric fit, reused across retrains (#3928) |
 | `threshold` | `float` | Calibrated decision threshold |
 | `labelset_good_count` / `labelset_bad_count` | `int` | Counts from the on-disk labelset (cross-dataset) |
 | `votes_dataset_id` | `str` | Dataset ID the cid-keyed dicts are valid against |

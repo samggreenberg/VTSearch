@@ -177,9 +177,9 @@ MATCH_STAT_DIM = len(MATCH_STAT_FEATURES)
 class MatchStats:
     """Statistics emitted by one geometric fit of a template against a candidate.
 
-    These are the genuinely-structural learnable signal: stacked into a fixed-D
-    vector by :func:`match_stats_to_features`, they train the verification
-    classifier whose decision boundary *is* the calibrated match threshold.
+    Stage 2 ranks by the inlier count (the inlier gate, #4169);
+    :func:`match_stats_to_features` stacks them into a fixed-D vector for
+    studies of learned scorers.
     """
 
     inlier_count: int = 0
