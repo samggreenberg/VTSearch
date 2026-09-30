@@ -1,7 +1,8 @@
 /**
  * User-docs screenshot capture harness. Reads docs/user/screenshots.manifest.ts
- * and, for each shot × theme, drives a running VTSearch app in headless
- * chromium and writes docs/user/assets/<id>.<theme>.webp.
+ * and, for each shot, drives a running VTSearch app in headless chromium to
+ * the shot's frame and writes docs/user/assets/<id>.<theme>.webp for each of
+ * its themes, flipping the theme on the one frame (`captureShot`).
  *
  * Design notes (see docs/plans/user-docs-screenshots.md): the dev box is
  * RAM-tight (~3.7 GB), so the harness connects to a SINGLE running app rather
@@ -27,7 +28,7 @@ import { appClient, DETECTOR, REGION_DATASET, REPO, TRAIN_DATASET } from './smil
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { execFileSync, execSync } from 'node:child_process';
+import { execFile, execSync } from 'node:child_process';
 import { SHOTS, type Helpers, type Shot, type Theme } from '../../docs/user/screenshots.manifest.ts';
 
 const APP = process.env.APP || 'http://localhost:5000';
@@ -153,7 +154,7 @@ async function maskVolatile(page: Page): Promise<void> {
   }, [REPO, APP_DATA_DIR]);
 }
 
-function makeHelpers(page: Page): Helpers {
+function makeHelpers(page: Page, timing?: Timing): Helpers {
   const wait = (ms: number) => page.waitForTimeout(ms);
   const click = async (sel: string) => { await page.locator(sel).first().click(); };
   // Dashboard rows are <vt-dataset-card>/<vt-detector-card> with a
@@ -223,6 +224,7 @@ function makeHelpers(page: Page): Helpers {
     const overlay = page.locator('vt-progress-indicators .sort-overlay');
     const t0 = Date.now();
     while (sorts.started === mark && Date.now() - t0 < startWindow) await wait(250);
+    if (timing && sorts.started === mark) timing.unstarted += (Date.now() - t0) / 1000;
     const until = Date.now() + 180000;
     let quietSince = Date.now();
     while (sorts.settled < sorts.started && Date.now() < until) {
@@ -231,6 +233,7 @@ function makeHelpers(page: Page): Helpers {
       await wait(250);
     }
     await wait(1500);
+    if (timing) timing.settle += (Date.now() - t0) / 1000;
   };
   const h: Helpers = {
     page,
@@ -397,37 +400,86 @@ async function clipBox(page: Page, clip: NonNullable<Shot['clip']>) {
  * screenshots. Pillow (a project dependency) does the encode, because
  * Playwright writes only PNG and JPEG; the encoder is deterministic, so
  * `check.sh` can still compare bytes.
+ *
+ * An encode takes most of a second at this size, so it runs while the next
+ * shot's recipe does rather than in front of it: each is queued behind the one
+ * before (one encoder at a time), and `main` waits for the queue to drain.
  */
-function encodeWebp(png: Buffer, out: string): void {
-  execFileSync(
-    'python',
-    [
-      '-c',
-      'import sys;from io import BytesIO;from PIL import Image;'
-        + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
-        + '.save(sys.argv[1],"WEBP",quality=90,method=6)',
-      out,
-    ],
-    { input: png, stdio: ['pipe', 'inherit', 'inherit'] },
-  );
+let encodes: Promise<void> = Promise.resolve();
+
+function encodeWebp(png: Buffer, out: string): Promise<void> {
+  const run = () =>
+    new Promise<void>((done, fail) => {
+      const child = execFile(
+        'python',
+        [
+          '-c',
+          'import sys;from io import BytesIO;from PIL import Image;'
+            + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
+            + '.save(sys.argv[1],"WEBP",quality=90,method=6)',
+          out,
+        ],
+        (err, _stdout, stderr) => (err ? fail(new Error(`encode ${out}: ${stderr || err.message}`)) : done()),
+      );
+      child.stdin!.end(png);
+    });
+  const encoded = encodes.then(run);
+  // A failed encode fails its own shot, not every one queued behind it.
+  encodes = encoded.catch(() => {});
+  return encoded;
 }
 
+/**
+ * Put the page in *theme*: the colour scheme the browser reports, which the
+ * app's `ThemeService` follows on its default `system` setting, and the
+ * `data-theme` attribute that setting resolves to, set outright so a stored
+ * theme cannot override it. The Browse canvas, minimap and legend watch that
+ * attribute and repaint.
+ */
 async function applyTheme(page: Page, theme: Theme): Promise<void> {
+  await page.emulateMedia({ colorScheme: theme });
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
   await page.waitForTimeout(250);
 }
 
-async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<string> {
+/** Where a shot's time went, for the log line (seconds). */
+interface Timing {
+  recipe: number;
+  /** Of the recipe, waiting for the label view's sorts (`settleSorts`)... */
+  settle: number;
+  /** ...and of that, start windows that ran out with no sort begun. */
+  unstarted: number;
+  capture: number;
+}
+
+/**
+ * Run *shot*'s recipe once and photograph the frame it reaches in each of
+ * *themes*, flipping the theme between captures rather than replaying the
+ * recipe (#4341): the recipe is most of a shot's time, and the theme is only
+ * the colour scheme and a `data-theme` attribute (`applyTheme`). A shot whose
+ * frame does not survive the flip sets `rerunPerTheme`, and `main` calls this
+ * once per theme instead.
+ *
+ * Each theme's file is queued for encoding as it is taken; the returned
+ * promises settle when they are written. A failure before a theme is taken
+ * fails that theme and every one after it.
+ */
+async function captureShot(
+  browser: Browser,
+  shot: Shot,
+  themes: Theme[],
+  written: Map<Theme, Promise<void>>,
+): Promise<Timing> {
   const ctx: BrowserContext = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor: 2,
-    colorScheme: theme,
+    colorScheme: themes[0],
     reducedMotion: 'reduce',
   });
   const page = await ctx.newPage();
-  const out = resolve(ASSETS, `${shot.id}.${theme}.webp`);
+  const timing: Timing = { recipe: 0, settle: 0, unstarted: 0, capture: 0 };
   try {
-    const h = makeHelpers(page);
+    const h = makeHelpers(page, timing);
     // tsx/esbuild rewrites named functions with a `__name(fn,"name")` helper;
     // when Playwright serialises an evaluate callback into the page that helper
     // is undefined. Shim it (as a raw string so it isn't itself rewritten),
@@ -444,20 +496,28 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
         `(document.head||document.documentElement).appendChild(s);};` +
         `if(document.head){add();}else{document.addEventListener('DOMContentLoaded',add,{once:true});}})();`,
     });
+    const t0 = Date.now();
     await shot.recipe(page, h);
-    await applyTheme(page, theme);
-    await maskVolatile(page);
-    if (shot.annotations?.length) await drawCallouts(page, shot.annotations);
-    await page.waitForTimeout(300);
-    // Re-assert volatile-text masking right before capture: the dashboard usage
-    // gauges poll on an interval and re-render live values into the DOM after
-    // the first mask, so mask again once the frame has settled.
-    await maskVolatile(page);
-    const png = shot.clip
-      ? await page.screenshot({ clip: await clipBox(page, shot.clip) })
-      : await page.screenshot();
-    encodeWebp(png, out);
-    return out;
+    timing.recipe = (Date.now() - t0) / 1000;
+    const t1 = Date.now();
+    for (const theme of themes) {
+      await applyTheme(page, theme);
+      await maskVolatile(page);
+      // Drawn per theme, over the frame as it stands: `drawCallouts` replaces
+      // the layer the theme before drew.
+      if (shot.annotations?.length) await drawCallouts(page, shot.annotations);
+      await page.waitForTimeout(300);
+      // Re-assert volatile-text masking right before capture: the dashboard usage
+      // gauges poll on an interval and re-render live values into the DOM after
+      // the first mask, so mask again once the frame has settled.
+      await maskVolatile(page);
+      const png = shot.clip
+        ? await page.screenshot({ clip: await clipBox(page, shot.clip) })
+        : await page.screenshot();
+      written.set(theme, encodeWebp(png, resolve(ASSETS, `${shot.id}.${theme}.webp`)));
+    }
+    timing.capture = (Date.now() - t1) / 1000;
+    return timing;
   } finally {
     // A recipe that had to change the app to reach its frame (a verified
     // item, a moved Inclusion) puts it back, pass or fail, so no later shot
@@ -467,32 +527,61 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
   }
 }
 
+const firstLine = (e: any) => String(e?.message || e).split('\n')[0];
+const secs = (s: number) => `${s.toFixed(1)}s`;
+
 async function main() {
   await mkdir(ASSETS, { recursive: true });
   const browser: Browser = await launchChromium();
-  const results: { id: string; theme: Theme; ok: boolean; err?: string }[] = [];
+  const started = Date.now();
+  const results: { id: string; theme: Theme; written?: Promise<void>; err?: string }[] = [];
+  const runs: { label: string; total: number }[] = [];
   try {
     for (const shot of shots) {
-      for (const theme of shot.themes) {
-        const before = ramFreeMB();
-        process.stdout.write(`[${shot.id}.${theme}] (free ${before}MB) … `);
+      // One recipe run for every theme, unless the shot's frame cannot take a
+      // theme flip (`rerunPerTheme`).
+      const passes = shot.rerunPerTheme ? shot.themes.map((t) => [t]) : [shot.themes];
+      for (const themes of passes) {
+        const label = `${shot.id}.${themes.join('+')}`;
+        process.stdout.write(`[${label}] (free ${ramFreeMB()}MB) … `);
+        const t0 = Date.now();
+        const written = new Map<Theme, Promise<void>>();
+        let failure: string | undefined;
+        let timing: Timing | undefined;
         try {
-          const out = await captureShot(browser, shot, theme);
-          console.log(`OK -> ${out.split('/').slice(-1)[0]}`);
-          results.push({ id: shot.id, theme, ok: true });
+          timing = await captureShot(browser, shot, themes, written);
         } catch (e: any) {
-          console.log(`FAIL: ${String(e?.message || e).split('\n')[0]}`);
-          results.push({ id: shot.id, theme, ok: false, err: String(e?.message || e).split("\n")[0] });
+          failure = firstLine(e);
           if (process.env.SHOT_DEBUG) console.log(String(e?.stack || e));
+        }
+        const total = (Date.now() - t0) / 1000;
+        runs.push({ label, total });
+        // Per-shot timing, so the long tail can be targeted (#4341): the
+        // recipe, the part of it spent waiting for the label view's sorts,
+        // and the theme flips and screenshots after it.
+        const parts = timing
+          ? ` (recipe ${secs(timing.recipe)}, settle ${secs(timing.settle)}` +
+            `${timing.unstarted ? ` [${secs(timing.unstarted)} no sort]` : ''}, capture ${secs(timing.capture)})`
+          : '';
+        console.log(failure ? `FAIL after ${secs(total)}: ${failure}` : `OK ${secs(total)}${parts}`);
+        for (const theme of themes) {
+          const done = written.get(theme);
+          results.push({ id: shot.id, theme, written: done, err: done ? undefined : failure });
         }
       }
     }
   } finally {
     await browser.close();
   }
-  const ok = results.filter((r) => r.ok).length;
-  console.log(`\n=== ${ok}/${results.length} captured ===`);
-  for (const r of results.filter((r) => !r.ok)) console.log(`  FAIL ${r.id}.${r.theme}: ${r.err}`);
+  // The encodes run behind the captures; a shot is captured once its file is written.
+  for (const r of results) await r.written?.catch((e) => { r.err = firstLine(e); r.written = undefined; });
+  const ok = results.filter((r) => r.written).length;
+  console.log(`\n=== ${ok}/${results.length} captured in ${secs((Date.now() - started) / 1000)} ===`);
+  for (const r of results.filter((r) => !r.written)) console.log(`  FAIL ${r.id}.${r.theme}: ${r.err}`);
+  if (runs.length > 10) {
+    console.log('Slowest:');
+    for (const r of [...runs].sort((a, b) => b.total - a.total).slice(0, 10)) console.log(`  ${secs(r.total).padStart(6)}  ${r.label}`);
+  }
 }
 
 main();

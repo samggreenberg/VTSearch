@@ -118,9 +118,19 @@ else
     curl -sf -o /dev/null "$APP/" 2>/dev/null || { echo "The app at $APP never came up; see $APP_LOG" >&2; exit 1; }
 fi
 
+# How long each phase took, printed at the end so a slow run says where (#4341).
+phase_start=$SECONDS
+app_secs=$phase_start
+
 # Create the deterministic fixtures the recipes need (idempotent).
 node ensure-fixtures.mjs
+fixture_secs=$((SECONDS - phase_start))
+phase_start=$SECONDS
 
 # tsx is a dev dependency in this folder's package.json. capture.ts writes
 # WebP directly (see its encodeWebp), so there is no post-pass here.
 node_modules/.bin/tsx capture.ts "$@"
+capture_secs=$((SECONDS - phase_start))
+
+mmss() { printf '%dm%02ds' $(($1 / 60)) $(($1 % 60)); }
+echo "refresh.sh: $(mmss "$SECONDS") in all (app start $(mmss "$app_secs"), fixtures $(mmss "$fixture_secs"), capture $(mmss "$capture_secs"))"
