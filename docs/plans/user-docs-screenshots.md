@@ -147,7 +147,7 @@ they used to run out in full whenever no sort came, which was most of a run.
 **Timing.** Every shot's log line gives its time, split into recipe, sort
 settling and capture; the run ends with the slowest ten, and `refresh.sh` with
 its phase totals (app start, fixtures, capture). On a 4-vCPU cloud container a
-full run went from ~45 min to ~19: about 6 min of fixture import and 13 of
+full run went from ~45 min to ~18: about 5.5 min of fixture import and 13 of
 capture.
 
 **WebP, not PNG** (#4202). It came in while the shots were photographs behind
