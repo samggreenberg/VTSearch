@@ -3,7 +3,7 @@
 **Background.** The owner's ruling on #4223 replaces the Inclusion knob's
 objective. The user states the precision they will accept ("I'm willing to look
 at X%-positive returns"), and the cut returns as much as it can while keeping at
-least X of it right. #4224 is the umbrella. #4220 measured an estimator for
+least X of it right. #4224 was the umbrella. #4220 measured an estimator for
 that promise
 ([`REPORT.md`](../experiments/2026-09-28-precision-frames-4220/REPORT.md)):
 fold-rank evidence, a logistic posterior, a 10th-percentile bootstrap lower
@@ -132,9 +132,6 @@ What follows is the design the remaining slices build on.
   of X = 50% promises (today's g3 opening). The shipped pool looks safe (5.3%)
   only through its in-sample offset. A spot check's picks are uniform by
   construction, so its bound holds at every prevalence tested (#4257).
-  - The estimator's open questions no longer bear on the promise: #4221's knobs,
-    and #4261's question of whether atlas votes may calibrate. Whether either
-    still earns its run is the owner's call.
 - **The default floor is 50%, and every detector has one** (owner,
   2026-09-28; `null` refused since #4269, which retired Inclusion as a user
   preference).
@@ -194,8 +191,6 @@ What follows is the design the remaining slices build on.
 
 <!-- item-sep -->
 
-- [ ] #4261 — Should Autopilot's New-phase (atlas) votes calibrate the floor? (Sonnet 5)
-
 <!-- item-sep -->
 
 <!-- item-sep -->
@@ -215,13 +210,5 @@ What follows is the design the remaining slices build on.
   verification, so retiring it is the expected outcome.
 
 <!-- item-sep -->
-
-- **Triage the FPR + FNR cut-rule issues against the ruling.** These tune the
-  reporting line under an objective the floor replaces:
-  - #4115, where C = 0.1 ranks better but the shipped cut gives it back;
-  - #4219, the production head decision, read partly through Inclusion.
-
-  Their acquisition-side findings may survive, because acquisition still
-  re-cuts `mid_tilt`. Their reporting-side ones do not.
 
 <!-- item-sep -->
