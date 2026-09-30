@@ -2619,7 +2619,7 @@ def simulate_voting_iterations(  # noqa: C901
         "calibration_seed": calibration_seed,
         "style": style or "",
     }
-    last_ordinary: tuple[Any, ...] | None = None
+    last_ordinary: dict[str, Any] | None = None
     # ``t`` counts every vote cast, the check's included: one per ordinary
     # step, a round's worth per check round.
     t = 0
@@ -3024,16 +3024,17 @@ def simulate_voting_iterations(  # noqa: C901
                 # Kept by reference and turned into the ``last`` frame after the
                 # loop: nothing here is mutated later, and the voted set is a
                 # snapshot, so it is this step's ranking whatever runs after it.
-                last_ordinary = (
-                    t,
-                    base_ids,
-                    base_scores,
-                    base_labels,
-                    line_ranking,
-                    frozenset(good_votes) | frozenset(bad_votes),
-                )
+                last_ordinary = {
+                    "t": t,
+                    "test_ids": base_ids,
+                    "test_scores": base_scores,
+                    "test_labels": base_labels,
+                    "pool_ranking": line_ranking,
+                    "voted": frozenset(good_votes) | frozenset(bad_votes),
+                    "pool_labels": pool_labels,
+                }
                 if rank_frame_steps and t in rank_frame_steps:
-                    rank_frame_sink.append({**rank_ident, **_rank_frame("step", *last_ordinary, pool_labels)})
+                    rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
             if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
                 # The trainer builds its rows Goods first, then Bads, in vote order.
                 vote_order = list(good_votes) + list(bad_votes)
@@ -3207,7 +3208,7 @@ def simulate_voting_iterations(  # noqa: C901
             rows.append({**base_row, **metrics, **band_metrics, **timing_cols})
 
     if rank_frame_sink is not None and last_ordinary is not None:
-        rank_frame_sink.append({**rank_ident, **_rank_frame("last", *last_ordinary, pool_labels)})
+        rank_frame_sink.append({**rank_ident, **_rank_frame("last", **last_ordinary)})
 
     # --- The supervised skyline (issue #3322), once per run. ---
     #

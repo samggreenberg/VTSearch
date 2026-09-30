@@ -209,7 +209,7 @@ def run(tmp_path_factory, rm):
 
 def _main_frame(exp: Path, idx: int) -> pd.DataFrame:
     df = pd.read_csv(exp / "results" / "cells" / f"task_{idx:04d}.csv")
-    return df[df["gmm_variant"].isna() & (df["pool_variant"] == "max")]
+    return df.loc[df["gmm_variant"].isna() & (df["pool_variant"] == "max")]
 
 
 def _frames(exp: Path, idx: int) -> pd.DataFrame:
@@ -229,7 +229,7 @@ def test_no_fpr_fnr_reaches_the_tables(run) -> None:
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:
     for idx, cat in enumerate(CATS):
         main = _main_frame(run["exp"], idx)
-        ordinary = main[main["phase"] != "check"]
+        ordinary = main.loc[main["phase"] != "check"]
         assert (main["phase"] == "check").any() and main.loc[main["phase"] == "check", "t"].min() > MAX_STEPS
         last = ordinary.sort_values("t").iloc[-1]
         row = run["cells"].loc[cat]
@@ -291,9 +291,9 @@ def test_without_rank_frames_the_line_is_known_at_click_0_only(run, tmp_path) ->
         f.unlink()
     out = _analyze(exp, run["exp"] / "text_baseline.csv")
     lines = pd.read_csv(out / "lines.csv", dtype={"point": str})
-    trained = lines[lines["category"].isin(CATS)]
-    assert trained[trained["point"] == "text"]["precision"].notna().all()
-    assert trained[trained["point"] != "text"]["precision"].isna().all()
+    trained = lines.loc[lines["category"].isin(CATS)]
+    assert trained.loc[trained["point"] == "text", "precision"].notna().all()
+    assert trained.loc[trained["point"] != "text", "precision"].isna().all()
     cells = pd.read_csv(out / "cells.csv")
     assert cells["final_ap"].notna().all(), "AP, harvest and the check need no rank frame"
     assert "no rank frames" in (out / "summary.md").read_text()
