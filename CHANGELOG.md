@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Dashboard's RAM / Disk bars appear only when they matter.** On the
+  **Default** setting each bar now stays hidden until its free space is
+  running low *for your datasets*: when it would hold fewer than three more
+  datasets the size of your largest one (1 GB is assumed before you have
+  any). A nearly full but enormous disk no longer raises the bar, and a
+  half-empty small one can. Hovering a bar says how many more datasets fit.
+  The bars no longer wait for your first detector, and **View** / **Hide**
+  still show them always or never.
 - **The precision floor is now the Threshold, a spectrum with three radios**
   (issue #4317). The **Lean: Complete / Centered / Correct** pulldown in Train
   and Find is gone. In its place, **Threshold:** heads a spectrum from **False

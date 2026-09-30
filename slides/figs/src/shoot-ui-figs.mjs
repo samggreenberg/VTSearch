@@ -908,6 +908,13 @@ await ensureApp();
 const browser = await launchChromium();
 try {
   const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: SCALE });
+  // The dashboard's RAM / disk gauges show only while the server is short of
+  // room for its datasets, so whether a frame had them would depend on the
+  // machine shooting it. Report both probes roomy, as a user normally sees it.
+  await page.route(/\/api\/dashboard\/(ram|disk)-usage$/, async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, json: { ...(await res.json()), low: false } });
+  });
   await page.addStyleTag({ content: STILL_CSS }).catch(() => {});
   await page.addInitScript((css) => {
     document.addEventListener('DOMContentLoaded', () => {

@@ -350,8 +350,10 @@
       </button>
       <span class="btn-disabled-reason" [style.visibility]="(!findEnabled && findHint) ? 'visible' : 'hidden'">{{ findHint || '&nbsp;' }}</span>
     </div>
-    @if (showUsageBars) {
+    @if (showUsageBar(ramUsage())) {
       <vt-usage-bar [usage]="ramUsage()" label="RAM" side="left" titlePrefix="System RAM" />
+    }
+    @if (showUsageBar(diskUsage())) {
       <vt-usage-bar [usage]="diskUsage()" label="Disk" side="right" titlePrefix="Server disk" />
     }
 

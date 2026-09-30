@@ -69,9 +69,11 @@ Theme = Literal["dark", "light", "highviz", "system"]
 # to the platform ``prefers-reduced-motion`` preference.
 AnimationMode = Literal["show", "hide", "os"]
 # Visibility of the Dashboard's RAM / Disk usage bars. ``"view"`` always shows
-# them, ``"hide"`` never does, and ``"default"`` shows them only once the user
-# has at least one detector, so a first-time visitor's empty Dashboard isn't
-# cluttered with server gauges before there's anything to run (issue #4227).
+# them, ``"hide"`` never does, and ``"default"`` shows each one only while it
+# matters: when its free space would hold fewer than a few more datasets the
+# size of the largest one registered (the ``low`` flag on the
+# ``/api/dashboard/*-usage`` probes), so the Dashboard isn't cluttered with
+# server gauges that have nothing to say.
 UsageBarsMode = Literal["hide", "default", "view"]
 GridIconSize = Literal["XS", "S", "M", "L", "XL"]
 FocusMode = Literal["click", "hover"]
@@ -422,8 +424,8 @@ class UserSettings(BaseModel):
     # pulldown in the appearance settings.
     show_animations: AnimationMode = "show"
     # Dashboard RAM / Disk usage bars: ``"hide"``, ``"view"``, or ``"default"``
-    # (shown only once a detector exists). See the "RAM / Disk bars" pulldown
-    # in the appearance settings.
+    # (each shown only while its free space is low for your datasets). See the
+    # "RAM / Disk bars" pulldown in the appearance settings.
     show_usage_bars: UsageBarsMode = "default"
     show_metadata: bool = False
     # Set to True once the user dismisses the zero-votes "Use ← / → or click"

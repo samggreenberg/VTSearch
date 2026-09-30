@@ -533,6 +533,15 @@ async function captureShot(
   const page = await ctx.newPage();
   const timing: Timing = { recipe: 0, settle: 0, unstarted: 0, loud: 0, capture: 0 };
   try {
+    // The RAM / disk gauges show on their Default setting only while the
+    // server is short of room for its datasets, so whether a Dashboard shot
+    // had them would depend on the machine running the harness. Report both
+    // probes roomy, the Dashboard a user normally sees; a shot that wants the
+    // gauges sets View, and `STILL_CSS` and `maskVolatile` pin what they read.
+    await page.route(/\/api\/dashboard\/(ram|disk)-usage$/, async (route) => {
+      const res = await route.fetch();
+      await route.fulfill({ response: res, json: { ...(await res.json()), low: false } });
+    });
     const h = makeHelpers(page, timing);
     // tsx/esbuild rewrites named functions with a `__name(fn,"name")` helper;
     // when Playwright serialises an evaluate callback into the page that helper

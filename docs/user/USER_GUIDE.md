@@ -1162,10 +1162,11 @@ The Settings modal (the gear <picture><source media="(prefers-color-scheme: dark
 eight tabs:
 
 - **Appearance** - theme, animations, the Dashboard's **RAM / Disk
-  bars** (**Default** shows them once you have a detector; **View** and
-  **Hide** show them always or never), the metadata panel, the
-  **Enable achievements** toggle, and per-media-type Scroll Style
-  (focus mode and thumbnail size).
+  bars** (**Default** shows each one only when its free space is getting
+  low, meaning it would hold fewer than three more datasets the size of your
+  largest; **View** and **Hide** show them always or never), the metadata
+  panel, the **Enable achievements** toggle, and per-media-type Scroll
+  Style (focus mode and thumbnail size).
 - **Auto-Find** - what exporter to send AutoRun results to. (Which
   detectors run is chosen on the Dashboard's **AutoRun** tab; see
   [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset).)
