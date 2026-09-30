@@ -594,7 +594,7 @@ indicators. It is unrelated to `vtscore.concurrency.progress`
 
 All cache state lives in `_ProgressCache` instances held in `_caches`, an
 LRU-bounded map keyed by `(dataset_id, detector_id)`. Each cache carries
-`inclusion` (rebuild trigger; the app always passes 0), `steps` (one entry per label-history step with
+`steps` (one entry per label-history step with
 `model` / `threshold` / `good_ids` / `bad_ids` / `stability` / `diversity`),
 `good_ids` / `bad_ids` (running label sets), `prev_predictions` (stability
 baseline), `coverage_atlas` (the per-step replay of coverage evidence),
@@ -619,7 +619,7 @@ Every entry point resolves its cache through the active
 | `clear_progress_cache()`                        | Drop *every* cached pair. Call when votes are cleared, medias change, etc. |
 | `invalidate_progress_cache_from(media_id)`      | Truncate the active pair's cache to just before `media_id` first appeared (vote-flip case) |
 | `inject_live_model(good, bad, model, threshold, *, smart_threshold=None)`| Register a model produced by `train_and_score` so the cache can reuse it; `smart_threshold` is the cut Smart scores it at (default: `threshold`) |
-| `recreate_model_at_time(clips_dict, label_history, time_index, inclusion_value=0)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
+| `recreate_model_at_time(clips_dict, label_history, time_index)` | Return `(model, threshold, good_ids, bad_ids)` for step `time_index` |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR + FNR on current votes, at each model's Smart cut          |
 | `calculate_prediction_stability_over_time(...)` | Per-step raw and confident flip counts on unlabeled medias             |
 | `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |

@@ -70,6 +70,7 @@ That ordering is why the score rows this module measures over are built by the
 from __future__ import annotations
 
 import threading
+import warnings
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Optional
@@ -121,12 +122,6 @@ class _ProgressCache:
 
     key: tuple[str, str]
 
-    #: Inclusion value every cached step was trained under.  A different value
-    #: rebuilds the cache in place (see :func:`_ensure_cache`): the served
-    #: thresholds, and the Stable entries measured at them, depend on it.  The
-    #: Smart costs do not, being priced at a fixed inclusion (issue #4243).
-    inclusion: Optional[int] = None
-
     steps: list[dict[str, Any]] = field(default_factory=list)
     good_ids: set[int] = field(default_factory=set)
     bad_ids: set[int] = field(default_factory=set)
@@ -166,26 +161,6 @@ class _ProgressCache:
     #: hit is exactly the answer a recompute would produce.
     smart_memo: Optional[tuple[Any, dict[str, Any]]] = None
 
-    def reset(self) -> None:
-        """Drop everything derived from labels, keeping the pair identity.
-
-        Used by the in-place rebuild (an inclusion change) that keeps the cache
-        bound to the same pair.  Callers that want the cache gone entirely
-        should use :func:`clear_progress_cache`.
-        """
-        self.steps.clear()
-        self.good_ids.clear()
-        self.bad_ids.clear()
-        self.prev_snapshot = None
-        self.inclusion = None
-        self.coverage_atlas = None
-        self.live_models.clear()
-        self.smart_memo = None
-        # Drop the status snapshot too: it belonged to the just-cleared
-        # labelset and would otherwise be served (stale) for the rebuild until
-        # its first background refresh lands.
-        self.status_snapshot = None
-
 
 # Caches keyed by ``(dataset_id, detector_id)``, most-recently-used last.
 # Bounded so that a session cycling through many detectors cannot grow without
@@ -200,9 +175,7 @@ _caches: OrderedDict[tuple[str, str], _ProgressCache] = OrderedDict()
 _MAX_CACHED_PAIRS = 3
 
 # Reentrant lock protecting ``_caches`` and every field of every cache in it.
-# RLock is used because public functions call _ensure_cache which may call
-# ``_ProgressCache.reset`` internally (inclusion change) while already holding
-# the lock.
+# An RLock, so a helper that takes it cannot deadlock a caller already holding it.
 _progress_lock = threading.RLock()
 
 # How many models back the Smart trend regresses.  Counted in *models*, not in
@@ -730,14 +703,12 @@ def _resolve_step_model(
 def _ensure_cache(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
-    inclusion_value: int,
     pool: Optional[_ScoredPool] = None,
 ) -> _ProgressCache:
     """Bring the active pair's cache up to date with *label_history*.
 
-    Only computes steps that are not yet cached.  If *inclusion_value*
-    differs from the value used for existing cache entries the entire cache
-    is rebuilt.  Returns the cache, so callers never have to re-resolve it.
+    Only computes steps that are not yet cached.  Returns the cache, so callers
+    never have to re-resolve it.
 
     *pool* is the stability pool, built by the caller **outside** this module's
     lock (see :func:`_build_pool`); ``None`` means the caller established that
@@ -747,13 +718,6 @@ def _ensure_cache(
     Must be called with ``_progress_lock`` held.
     """
     cache = _active_cache()
-
-    if cache.inclusion is not None and cache.inclusion != inclusion_value:
-        # Same pair, different inclusion: rebuild in place.
-        cache.reset()
-
-    if cache.inclusion is None:
-        cache.inclusion = inclusion_value
 
     start = len(cache.steps)
     if start >= len(label_history):
@@ -814,7 +778,6 @@ def _ensure_cache(
 def _advance_cache(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
-    inclusion_value: int,
 ) -> _ProgressCache:
     """Bring the active pair's cache up to date, building its pool off-lock.
 
@@ -833,8 +796,7 @@ def _advance_cache(
     """
     with _progress_lock:
         cache = _active_cache()
-        rebuilding = cache.inclusion is not None and cache.inclusion != inclusion_value
-        behind = rebuilding or len(cache.steps) < len(label_history)
+        behind = len(cache.steps) < len(label_history)
         needs_pool = behind and bool(cache.live_models)
 
     from vtscore.concurrency.stalls import PhaseClock, timed_lock  # noqa: PLC0415
@@ -850,7 +812,7 @@ def _advance_cache(
     with timed_lock(_progress_lock, "_progress_lock/advance"):
         clock.mark("lock_wait")
         before = len(_active_cache().steps)
-        cache = _ensure_cache(clips_dict, label_history, inclusion_value, pool)
+        cache = _ensure_cache(clips_dict, label_history, pool)
         clock.mark("replay")
     clock.finish(steps=len(cache.steps) - before)
     return cache
@@ -945,11 +907,30 @@ def _eval_cached_models(
 # ---------------------------------------------------------------------------
 
 
+def _ignored_inclusion(where: str, inclusion_value: Optional[int]) -> None:
+    """Warn that *where*'s ``inclusion_value`` is ignored (#4361).
+
+    It used to key the progress cache, but nothing the cache holds depends on
+    an inclusion: every Smart cost is priced at ``SMART_INCLUSION`` (#4243),
+    and the models, lines and Stable entries are the ones the app served.  The
+    argument stays accepted so an out-of-tree caller keeps working, and every
+    value gives the same answer.  ``None`` is "not given" and passes silently.
+    """
+    if inclusion_value is None:
+        return
+    warnings.warn(
+        f"{where}(inclusion_value=...) is deprecated and ignored: Smart prices every cost at "
+        "SMART_INCLUSION, and the progress cache no longer keys on an inclusion.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 def recreate_model_at_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     time_index: int,
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
 ) -> tuple[Optional[nn.Sequential], Optional[float], list[int], list[int]]:
     """Return the cached model for a given labelling step.
 
@@ -961,15 +942,16 @@ def recreate_model_at_time(
         clips_dict: Mapping of media ID to media data dict with ``"embedding"``.
         label_history: Ordered labelling events.
         time_index: Index into *label_history*.
-        inclusion_value: FPR/FNR trade-off in ``[-10, 10]``.
+        inclusion_value: Deprecated and ignored (#4361).
 
     Returns:
         ``(model, threshold, good_ids, bad_ids)`` - same contract as before.
     """
+    _ignored_inclusion("recreate_model_at_time", inclusion_value)
     if time_index < 0 or time_index >= len(label_history):
         return None, None, [], []
 
-    cache = _advance_cache(clips_dict, label_history, inclusion_value)
+    cache = _advance_cache(clips_dict, label_history)
     with _progress_lock:
         step = cache.steps[time_index]
         return step["model"], step["threshold"], step["good_ids"], step["bad_ids"]
@@ -980,7 +962,7 @@ def calculate_error_cost_over_time(
     label_history: list[tuple[int, str, float]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """Calculate classification error cost at each labelling step that had a detector.
 
@@ -990,10 +972,11 @@ def calculate_error_cost_over_time(
 
     The cost is the one the Smart indicator regresses: priced at
     :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION` at each model's own
-    cut for it, so *inclusion_value* only picks which cache is read, never how
-    a model is priced (issue #4243).
+    cut for it (issue #4243).  *inclusion_value* is deprecated and ignored
+    (#4361).
     """
-    cache = _advance_cache(clips_dict, label_history, inclusion_value)
+    _ignored_inclusion("calculate_error_cost_over_time", inclusion_value)
+    cache = _advance_cache(clips_dict, label_history)
     eval_set = _build_eval_rows(clips_dict, current_good_votes, current_bad_votes)
     with _progress_lock:
         return _eval_cached_models(cache, eval_set)
@@ -1002,10 +985,14 @@ def calculate_error_cost_over_time(
 def calculate_prediction_stability_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
 ) -> list[dict[str, Any]]:
-    """Return cached prediction-stability metrics for every step that had a detector."""
-    cache = _advance_cache(clips_dict, label_history, inclusion_value)
+    """Return cached prediction-stability metrics for every step that had a detector.
+
+    *inclusion_value* is deprecated and ignored (#4361).
+    """
+    _ignored_inclusion("calculate_prediction_stability_over_time", inclusion_value)
+    cache = _advance_cache(clips_dict, label_history)
     with _progress_lock:
         return [step["stability"] for step in cache.steps if step["stability"] is not None]
 
@@ -1178,7 +1165,7 @@ def compute_labeling_status(
     label_history: list[tuple[int, str, float]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
     span_info: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Compute per-metric red/yellow/green labeling statuses.
@@ -1193,12 +1180,14 @@ def compute_labeling_status(
     ``status_snapshot`` so the ``/api/labeling-status`` route can serve it
     immediately (marked ``stale``) on subsequent polls while a background worker
     calls this to advance the cache off the request thread (issue #2397).
+    *inclusion_value* is deprecated and ignored (#4361).
     """
+    _ignored_inclusion("compute_labeling_status", inclusion_value)
     good = len(current_good_votes)
     bad = len(current_bad_votes)
     total = good + bad
 
-    cache = _advance_cache(clips_dict, label_history, inclusion_value)
+    cache = _advance_cache(clips_dict, label_history)
 
     # The eval rows are built off-lock (they reach the embedding-matrix layer,
     # which takes ``_state_lock``), which means deciding *before* the build
@@ -1246,7 +1235,7 @@ def cached_indicator_history(
     label_history: list[tuple[int, str, float]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     """Read *metric*'s per-step history **without advancing the cache**.
 
@@ -1272,7 +1261,9 @@ def cached_indicator_history(
     When the cache *is* complete every branch is cheap: ``smart`` runs one
     forward pass per cached model over the (small) labelled set, and ``stable``
     / ``diverse`` are plain reads of values recorded during the cache build.
+    *inclusion_value* is deprecated and ignored (#4361).
     """
+    _ignored_inclusion("cached_indicator_history", inclusion_value)
     # Coverage first, and on its own: while the user is labelling the answer is
     # usually "behind", and the Smart branch below would otherwise have built a
     # row stack over every labelled media only to throw it away.
@@ -1286,7 +1277,7 @@ def cached_indicator_history(
     if not _progress_lock.acquire(timeout=_CACHE_READ_LOCK_TIMEOUT):
         return [], False
     try:
-        if not _cache_covers_history(_active_cache(), label_history, inclusion_value):
+        if not _cache_covers_history(_active_cache(), label_history):
             return [], False
     finally:
         _progress_lock.release()
@@ -1304,7 +1295,7 @@ def cached_indicator_history(
         # Re-checked: the gap above is exactly when a background worker can
         # advance or reset the cache, and a series read off a cache that no
         # longer covers this history would be a truncated plot.
-        if not _cache_covers_history(cache, label_history, inclusion_value):
+        if not _cache_covers_history(cache, label_history):
             return [], False
 
         if metric == "smart":
@@ -1318,26 +1309,18 @@ def cached_indicator_history(
         _progress_lock.release()
 
 
-def _cache_covers_history(
-    cache: _ProgressCache,
-    label_history: list[tuple[int, str, float]],
-    inclusion_value: int,
-) -> bool:
+def _cache_covers_history(cache: _ProgressCache, label_history: list[tuple[int, str, float]]) -> bool:
     """Whether *cache* already holds a step for every event in *label_history*.
 
-    A mismatched ``inclusion_value`` counts as not-covered because
-    :func:`_ensure_cache` would rebuild the cache from scratch.  The length
-    comparison is against the pair's own cache, so another detector's longer
-    history can never be read as covering this one's.
+    The length comparison is against the pair's own cache, so another
+    detector's longer history can never be read as covering this one's.
 
     Must be called with ``_progress_lock`` held.
     """
-    if cache.inclusion is not None and cache.inclusion != inclusion_value:
-        return False
     return len(cache.steps) >= len(label_history)
 
 
-def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion_value: int = 0) -> bool:
+def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion_value: Optional[int] = None) -> bool:
     """Return ``True`` when the per-step cache already covers *label_history*.
 
     A fresh cache means ``compute_labeling_status`` will not advance a step, and
@@ -1349,11 +1332,13 @@ def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion
     after every vote the memo is warm before the next poll arrives; requiring it
     here would only mean a brand-new detector - no votes, no steps, nothing to
     compute - reported its indicators as "computing" for one extra poll.
+    *inclusion_value* is deprecated and ignored (#4361).
     """
     from vtscore.concurrency.stalls import timed_lock  # noqa: PLC0415
 
+    _ignored_inclusion("is_status_cache_fresh", inclusion_value)
     with timed_lock(_progress_lock, "_progress_lock/status_fresh"):
-        return _cache_covers_history(_active_cache(), label_history, inclusion_value)
+        return _cache_covers_history(_active_cache(), label_history)
 
 
 def _pending_labeling_status(
@@ -1411,7 +1396,7 @@ def stale_labeling_status(
 def calculate_diversity_level_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
 ) -> list[dict[str, Any]]:
     """Return cached per-step diversity levels.
 
@@ -1419,9 +1404,11 @@ def calculate_diversity_level_over_time(
     processes each label-history step, so this function ensures the cache is
     current before reading it.  Unlike Smart and Stable this series has a point
     for every step: coverage is a property of the votes, not of a detector, so
-    it does not depend on whether a sort ever ran.
+    it does not depend on whether a sort ever ran.  *inclusion_value* is
+    deprecated and ignored (#4361).
     """
-    cache = _advance_cache(clips_dict, label_history, inclusion_value)
+    _ignored_inclusion("calculate_diversity_level_over_time", inclusion_value)
+    cache = _advance_cache(clips_dict, label_history)
     with _progress_lock:
         return [step["diversity"] for step in cache.steps if step.get("diversity") is not None]
 
@@ -1431,7 +1418,7 @@ def analyze_labeling_progress(
     label_history: list[tuple[int, str, float]],
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
-    inclusion_value: int = 0,
+    inclusion_value: Optional[int] = None,
 ) -> dict[str, Any]:
     """Run a comprehensive analysis of labelling progress.
 
@@ -1439,9 +1426,10 @@ def analyze_labeling_progress(
     cost is recomputed cheaply using cached models (forward passes only).
     The error-cost and stability series cover only the steps the app trained a
     detector for, so they are shorter than ``total_labels``; diversity covers
-    every step.
+    every step.  *inclusion_value* is deprecated and ignored (#4361).
     """
-    cache = _advance_cache(clips_dict, label_history, inclusion_value)
+    _ignored_inclusion("analyze_labeling_progress", inclusion_value)
+    cache = _advance_cache(clips_dict, label_history)
     eval_set = _build_eval_rows(clips_dict, current_good_votes, current_bad_votes)
 
     with _progress_lock:

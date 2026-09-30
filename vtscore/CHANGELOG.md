@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The eval harness refuses a non-zero `inclusion` under a precision floor**
+  (issue #4361). A set floor wins over the knob, so under one `inclusion`
+  only re-weighted the `cost` column and never moved the line.
+  `simulate_voting_iterations`, `run_voting_iterations_eval`,
+  `run_voting_iterations_eval_from_pickles` and `run_al_benchmark` now raise
+  `ValueError` for `inclusion != 0` unless `min_precision="off"` (the
+  Inclusion arm); the grid drivers raise before their first cell. `inclusion=0`
+  and the Inclusion arm are unchanged. `run_al_benchmark` gains
+  `min_precision` (additive, default `None`: the app's own floor), and
+  `python -m vtscore.eval.al_benchmark` gains `--min-precision` (a floor in
+  `(0, 1]`, or `off`), without which `--inclusion` other than 0 is refused.
+
 - **The precision floor's line is a set the spot check measures** (issue
   #4272). Under a floor, `train_and_threshold` / `train_and_score` /
   `labelset_train_and_score` / `run_learned_sort` and
@@ -815,6 +827,17 @@ instead, since every commit on `dev` is effectively a new app release.)
   public API with no in-repo caller, and is documented as such.
 
 ### Deprecated
+
+- **The labeling-progress functions' `inclusion_value` is ignored** (issue
+  #4361). `recreate_model_at_time`, `calculate_error_cost_over_time`,
+  `calculate_prediction_stability_over_time`, `calculate_diversity_level_over_time`,
+  `compute_labeling_status`, `cached_indicator_history`, `is_status_cache_fresh`
+  and `analyze_labeling_progress` still accept it, but it no longer keys the
+  progress cache. Since #4243 that key changed no number: every Smart cost is
+  priced at `SMART_INCLUSION`, and the models, lines and Stable entries are the
+  ones the app served. Any value now gives the same answer and emits a
+  `DeprecationWarning`; the default is `None` (was `0`). Passing a new value no
+  longer rebuilds the cache, a rebuild that had also dropped its live models.
 
 - **Inclusion is retired as a user preference, and pinned to 0** (issue
   #4269). The precision floor (`min_precision`, #4245) is the operating point,

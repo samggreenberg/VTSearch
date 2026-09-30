@@ -26,6 +26,7 @@ from __future__ import annotations
 import threading
 
 import numpy as np
+import pytest
 
 import vtscore.detectors.labeling_progress as lp
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
@@ -86,7 +87,7 @@ class TestCachedIndicatorHistory:
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        data, complete = lp.cached_indicator_history("smart", clips, history, good, bad, 0)
+        data, complete = lp.cached_indicator_history("smart", clips, history, good, bad)
 
         assert complete is False
         assert data == []
@@ -99,26 +100,28 @@ class TestCachedIndicatorHistory:
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        lp.calculate_error_cost_over_time(clips, _history(4), good, bad, 0)
+        lp.calculate_error_cost_over_time(clips, _history(4), good, bad)
         # More votes have landed since the last background refresh.
-        data, complete = lp.cached_indicator_history("smart", clips, _history(8), good, bad, 0)
+        data, complete = lp.cached_indicator_history("smart", clips, _history(8), good, bad)
 
         assert complete is False
         assert data == []
 
-    def test_inclusion_change_reports_incomplete(self):
-        """A cache built for another inclusion value would be rebuilt on read."""
+    def test_inclusion_value_is_ignored_with_a_deprecation_warning(self):
+        """No inclusion keys the cache any more (#4361): another value reads the same complete cache."""
         clips = _clips(60)
         history = _history(8)
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
-        _, complete = lp.cached_indicator_history("smart", clips, history, good, bad, 5)
+        lp.calculate_error_cost_over_time(clips, history, good, bad)
+        cache = _active_cache()
+        with pytest.warns(DeprecationWarning, match="inclusion_value"):
+            _, complete = lp.cached_indicator_history("smart", clips, history, good, bad, 5)
 
-        assert complete is False
-        # The read must not have rebuilt the cache under the new inclusion.
-        assert _active_cache().inclusion == 0
+        assert complete is True
+        assert _active_cache() is cache
+        assert len(cache.steps) == len(history)
 
     def test_does_not_block_on_an_in_flight_cache_build(self, monkeypatch):
         """A click landing mid-refresh falls through instead of hanging.
@@ -132,7 +135,7 @@ class TestCachedIndicatorHistory:
         history = _history(8)
         good, bad = _votes(8)
         lp.clear_progress_cache()
-        lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         holding = threading.Event()
         release = threading.Event()
@@ -148,7 +151,7 @@ class TestCachedIndicatorHistory:
             assert holding.wait(timeout=5)
             # The cache is complete, but the lock is held: report unavailable
             # rather than waiting for the holder.
-            data, complete = lp.cached_indicator_history("smart", clips, history, good, bad, 0)
+            data, complete = lp.cached_indicator_history("smart", clips, history, good, bad)
             assert complete is False
             assert data == []
         finally:
@@ -156,7 +159,7 @@ class TestCachedIndicatorHistory:
             holder.join(timeout=5)
 
         # Once the lock frees up the same read succeeds.
-        _, complete = lp.cached_indicator_history("smart", clips, history, good, bad, 0)
+        _, complete = lp.cached_indicator_history("smart", clips, history, good, bad)
         assert complete is True
 
 
@@ -169,10 +172,10 @@ class TestSeriesCoverTrainedStepsOnly:
         lp.clear_progress_cache()
         _inject_models(history)
 
-        lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         for metric in ("smart", "stable", "diverse"):
-            data, complete = lp.cached_indicator_history(metric, clips, history, good, bad, 0)
+            data, complete = lp.cached_indicator_history(metric, clips, history, good, bad)
             assert complete is True, metric
             assert len(data) > 0, metric
 
@@ -188,13 +191,13 @@ class TestSeriesCoverTrainedStepsOnly:
         good, bad = _votes(8)
         lp.clear_progress_cache()
 
-        lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         for metric in ("smart", "stable"):
-            data, complete = lp.cached_indicator_history(metric, clips, history, good, bad, 0)
+            data, complete = lp.cached_indicator_history(metric, clips, history, good, bad)
             assert complete is True, metric
             assert data == [], metric
-        diverse, complete = lp.cached_indicator_history("diverse", clips, history, good, bad, 0)
+        diverse, complete = lp.cached_indicator_history("diverse", clips, history, good, bad)
         assert complete is True
         assert len(diverse) > 0
 
