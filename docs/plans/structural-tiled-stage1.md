@@ -1,7 +1,16 @@
 # Structural Stage 1 for documents: tiled VLAD in the app (#3928)
 
 **Status:** approved by the owner 2026-09-30. M1–M4 measured the same day
-and all pass (below). The build is next.
+and all pass (below). Build steps 1–4 are done (PR #4378).
+
+**End to end** (`docs/experiments/2026-09-30-fullmarks-tiled-stage1-app-3928/`):
+
+- At 5,000 pages the app's path now matches verifying every page (no
+  resolvable difference at any vote count), where it found 0.17 positives by
+  20 votes before.
+- At 50,000 pages it finds as many (16.5 against 16.2 by 20 votes) and ranks
+  0.04–0.15 AP lower, where large classes outgrow the 1,000-page shortlist.
+- A vote costs 1.4 s at 5,000 pages and 4.0 s at 50,000.
 
 **Owner's decisions (2026-09-30):**
 
@@ -139,8 +148,11 @@ That SVM head scores 0.02–0.14 AP on FullMarks (#4162 `a3_vlad_svm`).
 
 ### 5. Shortlist size, and Stage 2 per vote
 
-- **K:** min(1,000, 2% of the dataset), passed to `structural_rerank` in place
-  of today's 50.
+- **K:** 1,000 when the matcher has CUDA, 500 without, and never more than
+  the dataset. It is passed to `structural_rerank` in place of today's 50.
+  (The first draft said 2% of the dataset. That would verify only 100 pages
+  at 5,000 pages, where M3 measured 1,000. The cost is per page verified,
+  whatever the dataset size, so K follows the hardware (M4), not the size.)
 - **The cost problem:** at 8,192 keypoints a verification costs ~160 ms per
   page per core (#3911: 25 s for 5,000 pages on 32 cores). K = 1,000 is ~160
   CPU-seconds, and today Stage 2 runs on every retrain.

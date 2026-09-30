@@ -50,6 +50,7 @@ from vtscore.media.torch_ops import (
 if TYPE_CHECKING:
     from vtscore.media.patch_embed import PatchEmbedOutput
     from vtscore.media.structural import StructuralFeatures
+    from vtscore.media.structural_tiles import TileVectors
 
 __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
@@ -710,8 +711,8 @@ class MediaEmbedder(ABC):
         Structural embedders (SIFT/VLAD, and learned-local-feature variants
         later) override this to return a
         :class:`~vtscore.media.structural.StructuralFeatures` carrying the
-        per-image keypoints and descriptors used by the geometric re-rank and
-        the match-statistic verification classifier.  All other embedders
+        per-image keypoints and descriptors used by the geometric re-rank.
+        All other embedders
         leave the default in place and the loader skips the structural pass.
 
         The dataset loader gates calls on
@@ -733,6 +734,20 @@ class MediaEmbedder(ABC):
         Default returns ``None``.  Structural embedders override this.
         """
         return None
+
+    @property
+    def supports_tiled_stage1(self) -> bool:
+        """Whether the loader derives ``media["tile_vectors"]`` for this embedder's datasets (#3928).
+
+        Only structural embedders for document pages turn it on; see
+        :mod:`vtscore.media.structural_tiles`.  If you set it ``True`` you must
+        override :meth:`tile_vectors_forward_bulk`.
+        """
+        return False
+
+    def tile_vectors_forward_bulk(self, medias: list[dict]) -> list[Optional["TileVectors"]]:  # noqa: F821
+        """Return each media's tile vectors, derived from its ``local_features``; ``None`` where none."""
+        return [None] * len(medias)
 
     def local_features_forward_bulk(self, medias: list[dict]) -> list[Optional["StructuralFeatures"]]:  # noqa: F821
         """Return local features for every image in *medias*.
