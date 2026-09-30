@@ -421,9 +421,9 @@ async function shootImport(page, name, figure) {
   await openDashboard(page);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
-  await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]')]);
+  await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]:not(.inline-add-btn)')]);
 
-  await page.locator('button[title="Import a new dataset"]').click();
+  await page.locator('button[title="Import a new dataset"]:not(.inline-add-btn)').click();
   await page.waitForSelector('.importer-picker .tab-bar', { timeout: 15000 });
   await page.locator('.importer-picker .tab', { hasText: 'Files' }).click();
   await page.waitForTimeout(500);
@@ -475,10 +475,10 @@ async function shootMakeDetector(page) {
   await page.waitForTimeout(400);
   await shoot(page, 'ui-make-detector.build1');
   await shootNumbered(page, 'ui-steps-make-detector.build1', [
-    step(1, 'button[title="Create a new detector"]'),
+    step(1, 'button[title="Create a new detector"]:not(.inline-add-btn)'),
   ]);
 
-  await page.locator('button[title="Create a new detector"]').click();
+  await page.locator('button[title="Create a new detector"]:not(.inline-add-btn)').click();
   await page.waitForSelector('.new-detector-form', { timeout: 20000 });
   await page.waitForTimeout(900);
   await shoot(page, 'ui-make-detector.build2');
