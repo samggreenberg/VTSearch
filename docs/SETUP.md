@@ -5,7 +5,7 @@ to [Running the app](#running-the-app) in order, then open the
 [User Guide](user/USER_GUIDE.md#step-by-step-your-first-search) to load a dataset
 and train your first detector. [Docker](#docker) replaces the Python and Node
 steps if you would rather not install them, and the [SLURM](#running-on-a-slurm-gpu-cluster)
-section is for shared GPU clusters. You will need Python 3.10+, Git, and (for the
+section is for shared GPU clusters. You will need Python 3.11+, Git, and (for the
 frontend build) Node.js 20.19+.
 
 ## Table of Contents
@@ -40,7 +40,7 @@ frontend build) Node.js 20.19+.
 
 ## Prerequisites
 
-You need **Python 3.10+** installed. Check by running:
+You need **Python 3.11+** installed. Check by running:
 
 ```bash
 python3 --version
@@ -548,12 +548,12 @@ with a shared filesystem.
 
    > **Module-based Python (e.g. the HLTCOE Grid).** Many clusters ship Python
    > only via environment modules, and the system `python3` may be too old
-   > (VTSearch needs 3.10+). Load a recent one first, and build the venv with
+   > (VTSearch needs 3.11+). Load a recent one first, and build the venv with
    > the **versioned** interpreter name so a `pyenv` shim on your `PATH` can't
    > shadow it:
    >
    > ```bash
-   > module avail python                 # find an available 3.10+ module
+   > module avail python                 # find an available 3.11+ module
    > module load python/3.12.3
    > which python3.12                     # should be the module's, not a pyenv shim
    > python3.12 -m venv .venv

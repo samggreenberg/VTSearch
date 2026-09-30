@@ -656,7 +656,7 @@ def _collapse_fstrings(tokens: list[tokenize.TokenInfo], lines: list[str]) -> li
     emitting `FSTRING_START` / `FSTRING_MIDDLE` / `FSTRING_END` around the real
     tokens of each replacement field.  That is a pure tokenizer change - the
     code means the same thing - but it changes the token *text*, so a digest
-    taken on 3.12+ disagreed with one taken on 3.10/3.11 for any mirrored
+    taken on 3.12+ disagreed with one taken on 3.11 for any mirrored
     function containing an f-string, and `--update` just moved the failure to
     the other half of the supported range instead of converging (issue #3117).
 
@@ -699,7 +699,7 @@ def _normalize_python(source: str) -> str:
     """Source text stripped of comments, docstrings and formatting.
 
     Token-based rather than AST-based on purpose: `ast.unparse` output is not
-    guaranteed stable across the Python versions this repo supports (>=3.10),
+    guaranteed stable across the Python versions this repo supports (>=3.11),
     which would make the pins fail for whoever is not on the pinning machine's
     interpreter.  Token text is *nearly* stable - see `_collapse_fstrings` for
     the one place it isn't, and how that is normalized away.

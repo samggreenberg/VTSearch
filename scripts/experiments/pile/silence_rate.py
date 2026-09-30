@@ -465,7 +465,7 @@ def print_table(rows: list[dict], pooled: dict, total_classes: int) -> None:
     print("-" * len(head))
     for r in sorted(rows, key=lambda r: (-r["bound"], r["class"])):
         lo, hi = r["wilson95"]
-        ci = "[{:.2%}, {:.2%}]".format(lo, hi)  # noqa: UP032 - py310 forbids the nested quotes an f-string needs
+        ci = "[{:.2%}, {:.2%}]".format(lo, hi)  # noqa: UP032 - py311 forbids the nested quotes an f-string needs
         why = []
         if not r["answered"]:
             why.append("not started")

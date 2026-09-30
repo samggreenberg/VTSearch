@@ -25,7 +25,7 @@
   // imports `experiment_config` by bare name the way every launcher and
   // `run_cells.py` do. It is the same claim as the two above -- a directory the
   // harness puts on `sys.path` at runtime -- and not a new kind of exception.
-  "pythonVersion": "3.10",
+  "pythonVersion": "3.11",
   "typeCheckingMode": "basic",
   "useLibraryCodeForTypes": true,
   "reportMissingImports": "error",

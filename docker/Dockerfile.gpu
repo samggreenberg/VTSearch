@@ -22,23 +22,34 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build:prod
 
-FROM nvidia/cuda:12.1.1-runtime-ubuntu22.04
+# Ubuntu 24.04 is the first CUDA base whose system Python (3.12) is not EOL;
+# 22.04's is 3.10. 12.5.1 is the oldest CUDA 12 runtime published on 24.04, which
+# keeps the host-driver floor as low as that allows. torch still brings its own
+# cu121 libraries from the wheel index below.
+FROM nvidia/cuda:12.5.1-runtime-ubuntu24.04
 
 # Avoid interactive prompts during apt-get
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Python 3.10 + native libs for opencv, librosa, etc.
+# Python 3.12 + native libs for opencv, librosa, etc.
+#
+# Ubuntu 24.04 marks its system Python externally managed (PEP 668), so pip
+# refuses to install into it; everything goes into a venv on PATH instead. The
+# base also ships an `ubuntu` user holding UID 1000, which the non-root user
+# created below needs.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.10 \
-        python3.10-venv \
-        python3-pip \
+        python3 \
+        python3-venv \
         libsndfile1 \
         ffmpeg \
         libgl1 \
         libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/* && \
-    ln -sf /usr/bin/python3.10 /usr/bin/python
+    python3 -m venv /opt/venv && \
+    userdel --remove ubuntu
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH
 
 WORKDIR /app
 

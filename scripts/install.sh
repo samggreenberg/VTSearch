@@ -920,7 +920,7 @@ vts_install_cpu() {
     echo "for 10-30s at a time while it resolves dependency versions. That silence is"
     echo "normal -- it is working, not frozen."
 
-    vts_progress_step "Checking Python version (>= 3.10)"
+    vts_progress_step "Checking Python version (>= 3.11)"
     # shellcheck source=_check-python.sh
     source "$SCRIPT_DIR/_check-python.sh"
 
@@ -1117,7 +1117,7 @@ vts_install_gpu() {
     vts_maybe_convert_driver_to_dkms
     vts_report_driver_persistence
 
-    vts_progress_step "Checking Python version (>= 3.10)"
+    vts_progress_step "Checking Python version (>= 3.11)"
     # shellcheck source=_check-python.sh
     source "$SCRIPT_DIR/_check-python.sh"
 
