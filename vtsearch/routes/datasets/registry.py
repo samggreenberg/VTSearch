@@ -214,9 +214,11 @@ def load_registered_dataset(dataset_id: str):  # noqa: C901
     # dominant slice keeps a rebuild advancing the bar across its whole span
     # instead of the old equal split, where the instant dedup drove step 2
     # to ~100% and the bar then sat frozen there through the entire rebuild.
-    # That reasoning is the *fallback*; an admin ``VTSEARCH_TIMING_PROFILE``
-    # replaces it with the split this host's disk and clustering backend
-    # actually produce at this dataset's size.
+    # That reasoning is the *fallback*, and it is per media type: an audio
+    # pickle's read runs 3.5-16 s, so audio's fallback gives step 1 0.40 of
+    # the bar where image's gives it 0.15 (#4105). An admin
+    # ``VTSEARCH_TIMING_PROFILE`` replaces either with the split this host's
+    # disk and clustering backend actually produce at this dataset's size.
     #
     # Which of those two the atlas step will be is worth up to the whole bar
     # (#3521 measured a restore and a rebuild of the same 2954-item dataset at

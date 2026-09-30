@@ -573,7 +573,10 @@ def step_terms(
     the task, so the caller can keep its own fallback. When a profile cell
     exists but only names *some* of the task's steps, the unnamed steps fall
     back to their shipped default term — a partial measurement improves the
-    steps it covers without blanking the others.
+    steps it covers without blanking the others. The shipped default is the
+    media type's own vector when the task carries one
+    (:meth:`~vtscore.timing.tasks.TaskSpec.defaults_for`), so *media_type*
+    matters even with no profile at all.
 
     ``n`` is the task's scale variable (see :attr:`TaskSpec.scale`); ``size_mb``
     is the archive size for byte-scaled phases. Both may be zero, which simply
@@ -600,7 +603,8 @@ def step_terms(
     if spec is None:
         return None
     measured, forks = _lookup_cell(task, device, media_type, embedder)
-    defaults = dict(zip(spec.steps, spec.default_terms)) if spec.default_terms else {}
+    shipped = spec.defaults_for(media_type)
+    defaults = dict(zip(spec.steps, shipped)) if shipped else {}
     if not measured and not defaults:
         return None
     skipped = frozenset(skip_steps)

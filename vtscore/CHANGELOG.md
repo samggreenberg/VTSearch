@@ -43,6 +43,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Per-media shipped timing defaults** (issue #4105), additive:
+  `vtscore.timing.TaskSpec.media_default_terms` (a `{media_type: terms}`
+  override of `default_terms`, default empty) and `TaskSpec.defaults_for(media_type)`,
+  which `step_terms` / `step_weights` now read their no-profile fallback
+  through. `dataset_open` is the one task that uses it: with no timing profile,
+  an audio open now paces `(0.40, 0.60)` (measured rebuild share 0.52-0.63)
+  instead of the task-wide `(0.15, 0.85)`, which every other media type keeps.
+  `TaskSpec` stays hashable (the new field is excluded from its hash), and the
+  profile JSON format is unchanged.
+
 - **A seed for the Browse projection** (issue #4296), all additive:
   `vtscore.config.PROJECTION_SEED` (from `VTSEARCH_PROJECTION_SEED`, default
   `None`), `ProjectionParams.random_state`, and a `Projection.random_state`
