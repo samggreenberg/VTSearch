@@ -102,8 +102,8 @@ same edit.
 ```bash
 cd scripts/experiments/state_of_app
 srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too heavy for the login node
-bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band, both paths
-bash launch.sh cells                                  # login node: the full array; SOTA_SEEDS=N for more seeds
+CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band; Binary only unless SOTA_PATH=region|all
+bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
@@ -131,6 +131,13 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   so every cell would have run in duplicate and raced its twin on the same
   output files. Only the `prepare` checks need a compute node. After any
   submission, count the jobs.
+- **A Binary-only review never goes through `cells`,** which queues both paths
+  and sizes every task for region (80 GB). Use `SOTA_PATH`-filtered `subset`
+  for a few classes, and `redo` over each seed's SigLIP block (`s*288` to
+  `s*288+143`) for the full run, with `CALIB_MEM=4G`-`12G`. The 2026-09-26
+  `overnight.sh` does this with a deadline. Measured 2026-09-30 on the floor-era
+  default arm (rank frames plus the end-of-run check): a Binary run takes
+  7.5–12 min and ~1.1 GB at 2 CPUs.
 - **`analyze.sh` needs `results/grid_shape.json`, and only `launch.sh cells`
   writes it.** A run built from `subset` or `redo` (a smoke run, or seeds
   widened by index) has none, and `analyze.sh` then dies inside

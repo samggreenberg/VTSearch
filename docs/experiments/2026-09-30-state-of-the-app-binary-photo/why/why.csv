@@ -1,0 +1,5 @@
+class,text_ap,final_ap,ceiling_ap,positives_found,good_clicks,bad_clicks,bad_holds
+dining table,0.139,0.165,0.168,9.333,28,437,book 2% (x11); chair 12% (x10); couch 11% (x6); oven 4% (x4); refrigerator 4% (x4)
+book,0.24,0.257,0.356,9.333,31,429,teddy bear 8% (x12); keyboard 2% (x9); scissors 2% (x9); laptop 6% (x8); (none of COCO's 80) 5% (x6)
+bag or luggage,0.266,0.311,0.328,11.0,35,430,(none of COCO's 80) 4% (x5); teddy bear 3% (x4); umbrella 3% (x2); bed 6% (x2); car 5% (x2)
+person,0.101,0.451,0.588,16.0,49,411,scissors 3% (x12); (none of COCO's 80) 9% (x10); teddy bear 7% (x9); traffic light 6% (x8); stop sign 4% (x5)
