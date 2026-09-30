@@ -61,7 +61,16 @@ dependencies = [
     # Imported directly by vtscore.media.embedder for the Hub metadata
     # preflight (also a transformers dependency).
     "huggingface_hub",
-    "pandas",
+    # Held on one major everywhere (#4381). pandas 3 needs Python >= 3.11, so
+    # the Python 3.10 Docker images can only get 2.x. A fresh Python 3.11
+    # container got 3.x, and the long-lived GRID venv kept the 2.3.3 it was
+    # built with. The majors differ in their inline annotations, which pyright
+    # reads (`useLibraryCodeForTypes`), and so lines clean in a container were
+    # red on the GRID (#4377). They also differ at runtime: pandas 3 turns on
+    # copy-on-write and the string dtype. Lift this with the Python 3.10 floor,
+    # and lift the matching pins in requirements/labbench.txt and
+    # requirements/image-embedders.txt in the same change.
+    "pandas<3",
     # Read HuggingFace-hosted parquet demo datasets (RICO-Screen2Words, RVL-CDIP)
     # whose screenshots/document-images are stored as an Image-feature column
     # inside parquet shards. Used by vtscore.datasets.downloader._hf_parquet to
