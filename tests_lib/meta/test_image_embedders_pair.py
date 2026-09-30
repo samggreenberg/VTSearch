@@ -41,7 +41,7 @@ REQUIREMENTS = "requirements/image-embedders.txt"
 # The one axis the shared requirements file deliberately leaves to the caller.
 WHEEL_INDEX = {
     CPU.name: "--extra-index-url https://download.pytorch.org/whl/cpu",
-    GPU.name: "--extra-index-url https://download.pytorch.org/whl/cu121",
+    GPU.name: "--extra-index-url https://download.pytorch.org/whl/cu129",
 }
 
 

@@ -3,7 +3,7 @@
 #
 # GPU twin of Dockerfile.image-embedders. Same six embedders, same
 # baked-in weights, but on a CUDA 12 runtime base with PyTorch
-# pulled from the cu121 wheel index so the embedders actually use the
+# pulled from the cu129 wheel index so the embedders actually use the
 # GPU at inference time.
 # The two share requirements/image-embedders.txt (each passes its own
 # --extra-index-url) and a byte-identical BEGIN/END SHARED BODY region
@@ -69,8 +69,8 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build:prod
 
-# Same base as docker/Dockerfile.gpu; see there for why Ubuntu 24.04 / CUDA 12.5.1.
-FROM nvidia/cuda:12.5.1-runtime-ubuntu24.04
+# Same base as docker/Dockerfile.gpu; see there for why Ubuntu 24.04 / CUDA 12.9.1.
+FROM nvidia/cuda:12.9.1-runtime-ubuntu24.04
 
 # Avoid interactive prompts during apt-get
 ENV DEBIAN_FRONTEND=noninteractive
@@ -109,7 +109,7 @@ COPY vtscore/ vtscore/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir --only-binary :all: numpy scipy && \
     pip install --no-cache-dir \
-        --extra-index-url https://download.pytorch.org/whl/cu121 \
+        --extra-index-url https://download.pytorch.org/whl/cu129 \
         --prefer-binary \
         -r requirements/image-embedders.txt && \
     pip install --no-cache-dir --no-deps -e .

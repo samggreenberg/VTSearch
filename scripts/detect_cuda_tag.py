@@ -41,12 +41,17 @@ _CANDIDATES = [
     ("cu121", (12, 1), (5, 0), (9, 0)),
     ("cu124", (12, 4), (5, 0), (9, 0)),
     ("cu128", (12, 8), (7, 5), (12, 0)),
+    ("cu129", (12, 9), (7, 5), (12, 0)),
 ]
 
-# The anchor tag: a safe default that spans Volta through Hopper. We prefer it
-# whenever it's valid and only deviate when the GPU is too new for it
-# (Blackwell -> cu128) or the driver is too old for it (-> cu121/cu118).
-DEFAULT_TAG = "cu124"
+# The anchor tag: preferred whenever it's valid. cu129 is the tag whose torch
+# pins the CUDA 12.9 libraries that RAPIDS >= 26.8 (the first RAPIDS to take
+# the pandas 3 pinned in pyproject.toml, #4390) is built on, so it is the only
+# tag on which ``install.sh`` installs cuML (GPU UMAP / k-means). We deviate
+# only when the GPU is too old for it (Volta -> cu124, which spans Volta through
+# Hopper) or the driver is too old for it (-> the newest tag it can run); both
+# fall back to CPU UMAP / k-means.
+DEFAULT_TAG = "cu129"
 
 
 def select_cuda_tag(
@@ -82,8 +87,8 @@ def select_cuda_tag(
             return min(covering, key=lambda c: c[1])[0]
         covering = gated
 
-    # Prefer the safe anchor when it qualifies; otherwise the newest wheel that
-    # does (the only covering wheel for Blackwell, or the best the driver allows).
+    # Prefer the anchor when it qualifies; otherwise the newest wheel that does
+    # (cu124 for a Volta card, or the best the driver allows).
     for tag, *_ in covering:
         if tag == DEFAULT_TAG:
             return DEFAULT_TAG

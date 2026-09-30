@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The GPU stack moves to CUDA 12.9, RAPIDS 26.8 and pandas 3** (issue
+  #4390). `pyproject.toml` now pins `pandas>=3` (it was `<3`, #4381), and the
+  GPU install moves with it, because cudf, which cuML depends on, only takes
+  pandas 3 from RAPIDS 26.8, and RAPIDS 26.x needs the CUDA 12.9 libraries
+  that only torch's `cu129` wheel pins. `scripts/install.sh` now picks `cu129`
+  on Turing-or-newer cards with a driver at CUDA 12.9 or later, and installs
+  `cuml-cu12>=26.8` on that tag only; on `cu118`..`cu128` the cuML step skips
+  itself with a message and the app runs UMAP / k-means on the CPU. A Volta
+  card (V100) keeps `cu124` torch and loses GPU UMAP / k-means; a venv built
+  before this change keeps working as it is, but its next `install.sh` run
+  needs a driver at CUDA 12.9 to keep cuML. The two CUDA Docker images move to
+  `nvidia/cuda:12.9.1-runtime-ubuntu24.04` with `cu129` torch, which raises
+  their host-driver floor to CUDA 12.9 (575+) or the R535..R570 branches and
+  drops Volta hosts (see [Choosing an image](docs/DEPLOYMENT.md#choosing-an-image)).
+  pandas 3 turns on copy-on-write and the string dtype by default.
 - **Python 3.11 or later is now required** (issue #4385). Python 3.10 reaches
   end of life in October 2026, so `scripts/install.sh` now refuses it, and pip
   will not install VTSearch on it. A 3.10 venv needs rebuilding on 3.11+
