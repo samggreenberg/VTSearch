@@ -19,7 +19,7 @@ tqdm
 scikit-learn
 transformers
 # One pandas major everywhere; see the pandas entry in pyproject.toml (#4381).
-pandas<3
+pandas>=3
 
 # ── Eval / visualization ────────────────────────────────────────────
 matplotlib

@@ -54,7 +54,7 @@ scikit-learn
 # property a floor could never give us in someone's existing environment.
 transformers>=4.49.0
 # One pandas major everywhere; see the pandas entry in pyproject.toml (#4381).
-pandas<3
+pandas>=3
 
 # ── Eval / visualization ────────────────────────────────────────────
 matplotlib

@@ -126,8 +126,8 @@ def test_slim_requirements_include_image_deps(req_file: Path) -> None:
 
 
 # Packages held to the same version bound in every environment. pandas is held
-# below 3 (#4381) because its majors differ in both inline annotations and
-# runtime semantics. The slim files install the app with `--no-deps -e .`, so
+# on one major (#4381; 3 since #4390) because its majors differ in both inline
+# annotations and runtime semantics. The slim files install the app with `--no-deps -e .`, so
 # pyproject.toml's bound never reaches their images, and each file has to repeat
 # it. Otherwise lifting the bound in pyproject.toml alone would silently leave
 # those images on the old major.

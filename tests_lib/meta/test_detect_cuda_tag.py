@@ -3,8 +3,10 @@
 The helper picks the right PyTorch CUDA wheel tag from the GPU's compute
 capability so ``install.sh`` doesn't make the user know their hardware (and
 doesn't fall into the "newest tag is wrong for an old GPU" trap: cu128 dropped
-Volta, so a V100 needs cu124). The selection logic is pure; the nvidia-smi
-parsing is text-only. Both are covered here without a GPU.
+Volta, so a V100 needs cu124). The anchor is cu129, the one tag whose torch
+shares its CUDA 12.9 libraries with RAPIDS >= 26.8, so it is where cuML gets
+installed (#4390). The selection logic is pure; the nvidia-smi parsing is
+text-only. Both are covered here without a GPU.
 """
 
 from __future__ import annotations
@@ -28,23 +30,24 @@ detect_cuda_tag = _load_module()
 
 
 class TestSelectCudaTag:
-    def test_volta_v100_picks_cu124_not_cu128(self):
-        """The motivating case: a V100 (cc 7.0) must NOT get cu128 (drops Volta)."""
+    def test_volta_v100_picks_cu124_not_cu129(self):
+        """The motivating case: a V100 (cc 7.0) must NOT get the anchor (cu128+
+        drop Volta); cu124 is the newest wheel that still covers it."""
         assert detect_cuda_tag.select_cuda_tag([(7, 0)]) == "cu124"
 
     def test_ampere_a100_gets_default(self):
-        assert detect_cuda_tag.select_cuda_tag([(8, 0)]) == "cu124"
+        assert detect_cuda_tag.select_cuda_tag([(8, 0)]) == "cu129"
 
     def test_hopper_h100_gets_default(self):
-        assert detect_cuda_tag.select_cuda_tag([(9, 0)]) == "cu124"
+        assert detect_cuda_tag.select_cuda_tag([(9, 0)]) == "cu129"
 
     def test_turing_gets_default(self):
-        assert detect_cuda_tag.select_cuda_tag([(7, 5)]) == "cu124"
+        assert detect_cuda_tag.select_cuda_tag([(7, 5)]) == "cu129"
 
-    def test_blackwell_requires_cu128(self):
-        """cc 10.0/12.0 is outside cu124's range, so it must bump to cu128."""
-        assert detect_cuda_tag.select_cuda_tag([(10, 0)]) == "cu128"
-        assert detect_cuda_tag.select_cuda_tag([(12, 0)]) == "cu128"
+    def test_blackwell_gets_default(self):
+        """cc 10.0/12.0 is covered by cu128 and cu129; the anchor wins."""
+        assert detect_cuda_tag.select_cuda_tag([(10, 0)]) == "cu129"
+        assert detect_cuda_tag.select_cuda_tag([(12, 0)]) == "cu129"
 
     def test_old_driver_steps_down_from_cu124(self):
         """A V100 on a driver capped at CUDA 12.2 can't run cu124 -> cu121."""
@@ -54,7 +57,13 @@ class TestSelectCudaTag:
         assert detect_cuda_tag.select_cuda_tag([(7, 0)], driver_cuda=(11, 8)) == "cu118"
 
     def test_new_enough_driver_keeps_default(self):
+        assert detect_cuda_tag.select_cuda_tag([(8, 0)], driver_cuda=(12, 9)) == "cu129"
+
+    def test_driver_below_default_steps_down_to_newest_it_runs(self):
+        """An A100 on a CUDA 12.4 driver can't run cu129 (or cu128) -> cu124; on
+        a 12.8 driver -> cu128. Either way the install runs without cuML."""
         assert detect_cuda_tag.select_cuda_tag([(8, 0)], driver_cuda=(12, 4)) == "cu124"
+        assert detect_cuda_tag.select_cuda_tag([(8, 0)], driver_cuda=(12, 8)) == "cu128"
 
     def test_driver_too_old_for_any_covering_wheel_still_returns_best(self):
         """If even the oldest covering wheel out-runs the driver, return it
@@ -62,14 +71,15 @@ class TestSelectCudaTag:
         assert detect_cuda_tag.select_cuda_tag([(7, 0)], driver_cuda=(11, 0)) == "cu118"
 
     def test_blackwell_on_old_driver_still_returns_cu128(self):
-        """Only cu128 covers Blackwell; an old driver can't change that."""
+        """Only cu128/cu129 cover Blackwell; an old driver can't change that, so
+        the oldest of the two (the one most likely to run) comes back."""
         assert detect_cuda_tag.select_cuda_tag([(12, 0)], driver_cuda=(12, 4)) == "cu128"
 
     def test_mixed_fleet_volta_and_blackwell_unsatisfiable(self):
         """No single wheel covers both sm_70 and sm_120 -> None (caller falls back)."""
         assert detect_cuda_tag.select_cuda_tag([(7, 0), (12, 0)]) is None
 
-    def test_mixed_fleet_within_one_wheel_picks_default(self):
+    def test_mixed_fleet_with_volta_picks_cu124(self):
         assert detect_cuda_tag.select_cuda_tag([(7, 0), (8, 6), (9, 0)]) == "cu124"
 
     def test_empty_caps_returns_none(self):

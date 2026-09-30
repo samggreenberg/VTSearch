@@ -236,7 +236,7 @@ def _final_cost_summary(df: "pd.DataFrame") -> "pd.DataFrame":
         return pd.DataFrame(columns=pd.Index(["strategy", "final_cost"]))
     last = df.sort_values("t").groupby(["strategy", "seed", "dataset", "category"]).tail(1)
     records = [
-        {"strategy": strategy, "final_cost": float(group["cost"].mean())}
+        {"strategy": strategy, "final_cost": float(np.mean(group["cost"].to_numpy()))}
         for strategy, group in last.groupby("strategy")
     ]
     summary = pd.DataFrame(records, columns=pd.Index(["strategy", "final_cost"]))

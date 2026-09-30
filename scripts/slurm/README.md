@@ -31,7 +31,8 @@ vtsearch          # allocates a GPU node and starts the app; leave it running
 > e.g. `VTS_MODULE="python/3.12.3" vtsearch`. See
 > [`docs/SETUP.md`](../../docs/SETUP.md#running-on-a-slurm-gpu-cluster) for the
 > full module-based setup. Pick the CUDA wheel to match your GPU — older cards
-> like the V100 need `cu124`, *not* the newest `cu128` (which drops Volta).
+> like the V100 need `cu124`, *not* `cu128`/`cu129` (which drop Volta); `cu129`
+> is the one tag that also installs cuML, and needs a driver at CUDA 12.9+.
 
 On your local machine (after adding a `cluster` host to `~/.ssh/config`):
 

@@ -47,6 +47,19 @@ pip install --upgrade setuptools -q
 #     0.32.0 patches PYSEC-2026-3444. Unused by VTSearch.
 pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 httplib2 -q
 
+# The container also carries a per-user site (/root/.local/lib/python3.11/
+# site-packages, home of the preinstalled MCP tooling) that sits AHEAD of
+# /usr/local on sys.path, with its own urllib3 / pyjwt / anyio. Those copies
+# shadow the fresh ones installed above and are what `pip list` -- and so
+# pip-audit -- sees, so they are upgraded in place, in that site (anyio is
+# also a transitive VTSearch dep, via httpx). Skipped where no user site is
+# enabled, e.g. inside a venv. The advisories that surfaced this:
+# urllib3 < 2.8.0 (CVE-2026-97687..97689), pyjwt < 2.14.0
+# (CVE-2026-101917..102274), anyio < 4.14.2 (CVE-2026-63349..64847).
+if python -c 'import site, sys; sys.exit(0 if site.ENABLE_USER_SITE else 1)'; then
+  pip install --user --upgrade --ignore-installed pyjwt urllib3 anyio -q
+fi
+
 # Work around debian-managed blinker (no RECORD file, so pip cannot
 # uninstall it).  Force-installing a fresh copy lets Flask pick it up.
 pip install --ignore-installed blinker -q
