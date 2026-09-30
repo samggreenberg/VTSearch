@@ -161,11 +161,24 @@ If the run ends with a `note:` line saying no issue carried a `body`, the `exper
 
 Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output (whose `notes` key carries that same warning). The `note:` line deliberately does **not** trip `--check`: it reports that a check could not run, not that an issue needs changing.
 
+## 6c. Sweep the experiment queue for questions answered sideways
+
+Step 6 closes what a PR names. An `experiment` issue is often answered by something that never names it: a sibling study, an owner ruling, or a shipped change that removes the thing it was tuning. Such issues fall through all three of step 6's buckets and stay in `label:experiment` indefinitely. On 2026-09-30, 10 of 41 open experiment issues were already answered or moot; the #4267 ruling alone had mooted five. The `grid-experiments` skill asks each study to close the siblings its result settles ("Close what the study answered"); this step catches what that missed.
+
+1. List the open issues labelled `experiment`, and keep the ones with **no activity in the last 14 days**. A fresh issue is being worked on; answers go unnoticed in the stale ones.
+2. For each one, read its body and comments, then look at what has landed since its last update that bears on it: newer directories in `docs/experiments/` on the same knob or study, `git log origin/main..origin/dev --grep '#<n>'` and the same for the numbers its body names, and the plan file that points at it.
+3. Act only on an answer you can name:
+   - **Answered** by a report, PR or shipped change: comment naming it, then close `completed`, passing `labels` (every label it keeps, minus `solved`) and `assignees: []` as in step 6.
+   - **Moot**, because a ruling or shipped change removed what it was tuning, or a result contradicted its premise: comment naming what mooted it, and close `not_planned`.
+   - **Anything short of that stays open.** Add it to a section of the release PR body headed `Experiment issues that may be stale`, one line each saying what you suspect, so the owner can decide in one read.
+4. List in that same section every open experiment issue whose newest comment asks the owner to decide ("whether it still earns GRID time is the owner's call"). Those issues are waiting on a person, and an issue comment is not where the owner looks for decisions.
+5. Carry every issue this step closes into step 7's plan-pointer prune.
+
 ## 7. Prune plan pointers for the closed issues
 
 Per CLAUDE.md's "Issues vs `docs/plans/`: one item, one home" invariant, plan files reference shipped issues by a one-line checkbox pointer (`- [ ] #N — title`) rather than duplicating their bodies. When an issue closes, its pointer is stale and should go.
 
-For **every** issue closed in step 6, grep `docs/plans/` for its number:
+For **every** issue closed in step 6 or 6c, grep `docs/plans/` for its number:
 
 ```
 grep -rn '#<number>' docs/plans/

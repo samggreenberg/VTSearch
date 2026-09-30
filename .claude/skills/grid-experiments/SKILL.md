@@ -482,6 +482,38 @@ Reports cite only analysis code that is **in the tree**: `scripts/check-docs.py`
 now enforces that for `docs/experiments/`. A report whose script never got
 committed cannot be reproduced or extended, however good its numbers were.
 
+### Close what the study answered
+
+A study rarely settles only the issue it was filed for. Its result also answers,
+narrows or moots sibling questions, and nothing closes those for you: the release
+sweep (`docs/RELEASE.md` step 6) closes an issue only when a PR names it, and a
+sideways answer names nothing. On 2026-09-30, 10 of 41 open `experiment` issues
+were already answered or moot this way, the oldest for a month. The #4267 ruling
+alone had mooted five, and two of those ended on a comment saying "that's the
+owner's call" that no one ever answered.
+
+So before the report's PR opens, list the open `experiment` issues (`list_issues`
+with `labels: ["experiment"]`, `state: OPEN`; the titles are enough to find
+candidates) and read the ones the result bears on: the same knob, the same plan
+file, the same `depends-on` chain, anything the report cites. Then, for each:
+
+- **Answered by this study.** Put `Closes #N` in the PR body next to the study's
+  own issue, comment `Addressed in #M`, and add `solved` with `assignees: []`:
+  the same motion as any fix PR (CLAUDE.md), so the release sweep closes it.
+- **Moot.** The result removed what it was tuning, or contradicted its premise.
+  Close it `not_planned` now, with a one-line comment naming what mooted it, and
+  prune any `docs/plans/` pointer to it in the same PR.
+- **Changed but not settled.** Comment what changed: a new constraint, a
+  narrower question, a lifted blocker. A comment that begins "Before picking
+  this up" is how the next session learns the ground moved.
+- **Only the owner can say.** Whether a question still earns GRID time is a
+  decision: ask it with `AskUserQuestion` in this session. Do not leave it in an
+  issue comment for the owner to find.
+
+The same holds for a session that records an owner ruling or ships a change that
+decides a question, whether or not a GRID run was involved. `docs/RELEASE.md`
+step 6c sweeps the queue at each release for anything this missed.
+
 ## When something breaks
 
 **Add a file to `scripts/experiments/lessons/`**, named `YYYY-MM-DD-short-slug.md` — same day, while
