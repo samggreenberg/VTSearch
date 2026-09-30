@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Find Stats chart no longer claims an "at least"** (issue #4360). Its
+  **Estimated (at least)** curve is gone, with its legend entry, its dot and
+  the *No estimate yet* notes: the estimate behind it could not back the bound
+  it was labelled with. The chart now draws only what you checked by hand, the
+  Threshold, the line, and the spot check's likely range for the set the line
+  keeps. `GET /api/find/stats` drops `estimated_precision` from each curve
+  point and `estimate_status`, `calibration_positives` and
+  `min_calibration_positives` from the response.
 - **The Dashboard's RAM / Disk bars appear only when they matter.** On the
   **Default** setting each bar now stays hidden until its free space is
   running low *for your datasets*: when it would hold fewer than three more

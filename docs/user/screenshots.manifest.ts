@@ -1212,7 +1212,7 @@ export const SHOTS: Shot[] = [
     id: 'find-stats',
     embeddedIn: `${GUIDE}#find-scoring-and-verifying`,
     caption:
-      "The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of estimated and checked precision against how many items are returned",
+      "The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of checked precision against how many items are returned",
     themes: BOTH,
     clip: { target: '.modal-content' },
     async recipe(page, h) {

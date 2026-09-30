@@ -180,35 +180,19 @@
     stroke-width: 1;
   }
 
-  .line-estimate,
   .line-verified {
     fill: none;
+    stroke: var(--chart-verified);
     stroke-width: 2;
     stroke-linejoin: round;
     stroke-linecap: round;
   }
 
-  .line-estimate {
-    stroke: var(--chart-estimate);
-  }
-
-  .line-verified {
-    stroke: var(--chart-verified);
-  }
-
-  // A ring in the surface color keeps a dot legible where it crosses a line.
-  .dot-estimate,
-  .dot-verified {
-    stroke: var(--bg-surface);
-    stroke-width: 2;
-  }
-
-  .dot-estimate {
-    fill: var(--chart-estimate);
-  }
-
+  // A ring in the surface color keeps the dot legible where it crosses a line.
   .dot-verified {
     fill: var(--chart-verified);
+    stroke: var(--bg-surface);
+    stroke-width: 2;
   }
 }
 
@@ -231,10 +215,6 @@
   width: 12px;
   height: 3px;
   border-radius: var(--radius-sm);
-}
-
-.swatch-estimate {
-  background: var(--chart-estimate);
 }
 
 .swatch-verified {

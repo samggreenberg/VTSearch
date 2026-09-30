@@ -1050,18 +1050,17 @@ The verification view's action buttons let you act on the result:
 - **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-stats.dark.webp" /><img src="assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture> - open the results modal: a breakdown of the detector's
   calls plus a chart of precision against how many items are returned,
   reading down the ranked list - the clearest way to see how much you
-  give up in precision for each extra match. It draws two lines:
-  - **Estimated (at least)** - the precision VTSearch estimates for the
-    top N items: a cautious lower bound worked out from the detector's
-    own held-out votes. It appears once those votes include at least 10
-    Good ones; below that, the chart says how many it has.
-  - **Checked by you** - of the items in the top N that you have
-    verified, the share you kept Good. It counts only what you checked,
-    and the items you check tend to sit near the line, where the detector
-    is least sure, so it can read lower than the matches as a whole.
+  give up in precision for each extra match. Its curve, **Checked by
+  you**, is the share you kept Good of the items in the top N that you
+  have verified. It counts only what you checked, and the items you check
+  tend to sit near the line, where the detector is least sure, so it can
+  read lower than the matches as a whole. The chart makes no guess about
+  the items nobody checked: once a spot check has run in Train, its
+  likely range stands on the line as a bar.
 
   The dashed line marks the current cut, and the line under the chart
-  reads both numbers there; hover the chart to read them at any count.
+  reads the checked precision there; hover the chart to read it at any
+  count.
   The count axis is logarithmic, so the top of the ranking, where
   precision changes fastest, gets as much room as the long tail.
 - **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
@@ -1071,7 +1070,7 @@ The verification view's action buttons let you act on the result:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of estimated and checked precision against how many items are returned" width="720" />
+  <img src="assets/find-stats.light.webp" alt="The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of checked precision against how many items are returned" width="720" />
 </picture>
 
 ### How far to trust the score

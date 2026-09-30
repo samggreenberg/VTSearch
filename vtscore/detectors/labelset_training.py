@@ -1059,7 +1059,7 @@ def labelset_train_and_score(
 
     *min_precision* is the precision floor to cut at (the line keeps the set
     the floor keeps, #4272), or ``None`` for no floor (the Inclusion 0 cut);
-    only the elements the learned sort chose calibrate the Find Stats estimate
+    only the elements the learned sort chose calibrate the #4220 estimate
     (:func:`labelset_calibrating_groups`).  *inclusion_value* is deprecated
     (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
     any other value raises ``ValueError``.

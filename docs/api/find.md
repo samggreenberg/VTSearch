@@ -253,9 +253,8 @@ chart draws.
   "floor": {"min_precision": 0.5, "status": "confirmed", "count": 32, "range": {"lo": 0.55, "hi": 1.0, "labelled": 5, "right": 5, "stale": false}, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}},
   "precision_curve": [
     {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
-     "verified_precision": 1.0, "estimated_precision": 0.91}, ...
-  ],
-  "estimate_status": "estimated", "calibration_positives": 14, "min_calibration_positives": 10
+     "verified_precision": 1.0}, ...
+  ]
 }
 ```
 
@@ -266,17 +265,10 @@ chart draws.
   top `n_returned` items, sampled at about 40 log-spaced counts plus the current
   cut's (`n_returned` at the top level). `verified_precision` is
   `checked_good / checked` over the items in it the user verified (`null` when
-  none). `estimated_precision` is the #4220 estimator's lower-bound curve (the
-  detector's `precision_floor_cache`, applied to this Find run's scores as the
-  corpus, sampled to 50,000 above that): the held-out calibration votes the
-  learned sort chose, and the whole haystack the detector trained against,
-  voted items included, as the reference pool. It is a model-based reading of
-  the ranking; the line itself is drawn by the spot check, not by this curve
-  (see [labeling.md](labeling.md#get--set-the-precision-floor)).
-- `estimate_status` says whether the curve carries an estimate: `estimated`;
-  `insufficient_evidence` when those votes hold fewer than
-  `min_calibration_positives` Good ones (the precision floor's own gate); or
-  `unavailable` when the detector has no calibration folds.
+  none). The curve carries no model-based estimate: the #4220 estimator breaks
+  most of its "at least" promises once its reference pool is consistent
+  (#4256), so the only range the chart shows for unchecked items is the spot
+  check's, in `floor` (#4360).
 - `floor` is the [floor state](labeling.md#the-floor-state) of the line at
   `threshold`: the floor it was cut at (the chart draws it across at that
   precision), the set the line keeps, and the spot check's likely range for it.

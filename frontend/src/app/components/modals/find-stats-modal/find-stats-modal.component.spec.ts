@@ -35,14 +35,11 @@ describe('FindStatsModalComponent', () => {
     n_scored: 1000,
     n_returned: 40,
     precision_curve: [
-      { n_returned: 1, threshold: 0.99, checked: 0, checked_good: 0, verified_precision: null, estimated_precision: 0.95 },
-      { n_returned: 10, threshold: 0.9, checked: 2, checked_good: 2, verified_precision: 1, estimated_precision: 0.9 },
-      { n_returned: 40, threshold: 0.5, checked: 10, checked_good: 7, verified_precision: 0.7, estimated_precision: 0.62 },
-      { n_returned: 1000, threshold: 0.01, checked: 12, checked_good: 7, verified_precision: 0.5833, estimated_precision: 0.05 },
+      { n_returned: 1, threshold: 0.99, checked: 0, checked_good: 0, verified_precision: null },
+      { n_returned: 10, threshold: 0.9, checked: 2, checked_good: 2, verified_precision: 1 },
+      { n_returned: 40, threshold: 0.5, checked: 10, checked_good: 7, verified_precision: 0.7 },
+      { n_returned: 1000, threshold: 0.01, checked: 12, checked_good: 7, verified_precision: 0.5833 },
     ],
-    estimate_status: 'estimated',
-    calibration_positives: 14,
-    min_calibration_positives: 10,
   };
 
   // Evidence-coverage is fetched on init too; the "nothing to measure" reply
@@ -177,12 +174,17 @@ describe('FindStatsModalComponent', () => {
       return fixture.nativeElement as HTMLElement;
     }
 
-    it('draws both curves, skipping the points each lacks', async () => {
+    it('draws the checked curve, skipping the counts with nothing checked', async () => {
       const el = await load();
-      const est = el.querySelector('.line-estimate')!.getAttribute('points')!.trim().split(' ');
       const ver = el.querySelector('.line-verified')!.getAttribute('points')!.trim().split(' ');
-      expect(est.length).toBe(4);
       expect(ver.length).toBe(3); // the top 1 has nothing checked
+    });
+
+    it('makes no bound claim: no estimate curve, and no "at least" anywhere (#4360)', async () => {
+      const el = await load();
+      expect(el.querySelectorAll('.precision-chart polyline').length).toBe(1);
+      const chart = el.querySelector('.chart-wrap')!.textContent!.replace(/\s+/g, ' ');
+      expect(chart).not.toMatch(/at least|estimat/i);
     });
 
     it('puts counts on a log scale from 1 to the corpus size', async () => {
@@ -195,13 +197,11 @@ describe('FindStatsModalComponent', () => {
       expect(component.xTicks.map((t) => t.label)).toEqual(['1', '10', '100', '1k']);
     });
 
-    it('marks the line and reads both precisions off it', async () => {
+    it('marks the line and reads the checked precision off it', async () => {
       const el = await load();
       expect(el.querySelector('.precision-chart .current')).toBeTruthy();
       const readout = el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ');
-      expect(readout).toContain('At the line (40 returned)');
-      expect(readout).toContain('estimated at least 62%');
-      expect(readout).toContain('checked 70%');
+      expect(readout).toContain('At the line (40 returned): checked 70%');
       expect(readout).toContain('(7 of 10 Good)');
     });
 
@@ -229,26 +229,11 @@ describe('FindStatsModalComponent', () => {
       svg.dispatchEvent(new MouseEvent('mousemove', { clientX: component.xFor(1) }));
       await settleZoneless(fixture);
       expect(el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ')).toContain(
-        'Top 1: estimated at least 95% · nothing checked',
+        'Top 1: nothing checked',
       );
       svg.dispatchEvent(new MouseEvent('mouseleave'));
       await settleZoneless(fixture);
       expect(el.querySelector('.crosshair')).toBeFalsy();
-    });
-
-    it('explains a withheld estimate below the calibration gate', async () => {
-      const el = await load({
-        estimate_status: 'insufficient_evidence',
-        calibration_positives: 4,
-        precision_curve: mockStats.precision_curve.map((p) => ({ ...p, estimated_precision: null })),
-      });
-      expect(el.querySelector('.line-estimate')!.getAttribute('points')).toBe('');
-      expect(el.querySelector('.chart-note')!.textContent).toContain('needs 10 Good votes');
-      expect(el.querySelector('.chart-note')!.textContent).toContain('has 4');
-      // The readout drops the missing estimate rather than printing a dash for it.
-      const readout = el.querySelector('.chart-readout')!.textContent!.replace(/\s+/g, ' ');
-      expect(readout).toContain('(40 returned): checked 70%');
-      expect(readout).not.toContain('estimated');
     });
 
     it('draws in its measured width rather than stretching a fixed one', async () => {
@@ -270,11 +255,6 @@ describe('FindStatsModalComponent', () => {
       } finally {
         vi.unstubAllGlobals();
       }
-    });
-
-    it('explains a detector with no calibration folds', async () => {
-      const el = await load({ estimate_status: 'unavailable', calibration_positives: 0 });
-      expect(el.textContent).toContain('too few votes to hold any out');
     });
   });
 
@@ -341,10 +321,8 @@ describe('FindStatsModalComponent', () => {
       expect(text).not.toMatch(/sparse|weak model|unpromised/i);
     });
 
-    it('says an unchecked line keeps its starting candidate, with no range, beside a withheld estimate', async () => {
+    it('says an unchecked line keeps its starting candidate, with no range', async () => {
       const el = await load({
-        estimate_status: 'insufficient_evidence',
-        calibration_positives: 3,
         floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }),
       });
       expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
@@ -352,7 +330,6 @@ describe('FindStatsModalComponent', () => {
       expect(legend(el)).toContain('Line: the top 128, unchecked');
       expect(legend(el)).not.toContain('Likely');
       const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
-      expect(notes.some((n) => n.includes('has 3'))).toBe(true);
       expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked'))).toBe(true);
       // Find tests the threshold it was given: nothing here points at a check (#4317).
       expect(el.textContent).not.toMatch(/Check \d+ picks/);
@@ -386,9 +363,6 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
     n_scored: 100,
     n_returned: 10,
     precision_curve: [],
-    estimate_status: 'unavailable',
-    calibration_positives: 0,
-    min_calibration_positives: 10,
   };
 
   // Active dataset 'ds-b' (siglip); 'ds-a' is a loaded siglip reference,

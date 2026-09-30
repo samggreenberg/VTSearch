@@ -221,7 +221,8 @@ outside an app must register a `register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272) and the #4220
-estimate the Find Stats curve reads (`precision_floor_cache`). Under a floor
+estimate (`precision_floor_cache`), which nothing in the app reads since #4360
+(#4362 retires it). Under a floor
 the threshold keeps a set - the top *count* unvoted items of the haystack, the
 set the detector's last spot check ended on or the floor's starting candidate
 - and with no floor it is the Inclusion 0 cut. Pass `calibrating_groups` (the

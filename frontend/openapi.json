@@ -3915,10 +3915,6 @@
           "checked_good": {
             "type": "integer"
           },
-          "estimated_precision": {
-            "nullable": true,
-            "type": "number"
-          },
           "n_returned": {
             "type": "integer"
           },
@@ -3933,7 +3929,6 @@
         "required": [
           "checked",
           "checked_good",
-          "estimated_precision",
           "n_returned",
           "threshold",
           "verified_precision"
@@ -3949,9 +3944,6 @@
           "agreements": {
             "type": "integer"
           },
-          "calibration_positives": {
-            "type": "integer"
-          },
           "confirmed_bad": {
             "type": "integer"
           },
@@ -3964,19 +3956,8 @@
           "culled_false_pos": {
             "type": "integer"
           },
-          "estimate_status": {
-            "enum": [
-              "estimated",
-              "insufficient_evidence",
-              "unavailable"
-            ],
-            "type": "string"
-          },
           "floor": {
             "$ref": "#/components/schemas/FloorState"
-          },
-          "min_calibration_positives": {
-            "type": "integer"
           },
           "n_returned": {
             "type": "integer"
@@ -4022,14 +4003,11 @@
         "required": [
           "agreement_rate",
           "agreements",
-          "calibration_positives",
           "confirmed_bad",
           "confirmed_good",
           "corrections",
           "culled_false_pos",
-          "estimate_status",
           "floor",
-          "min_calibration_positives",
           "n_returned",
           "n_scored",
           "precision_curve",
@@ -12360,7 +12338,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and reports what the\nprecision floor says about the current line (``floor``), so the chart can\nmark the floor and say whether the line keeps it.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items and the\nprecision floor's lower-bound estimate - at log-spaced return counts (see\n:mod:`vtsearch.routes.detectors._find_precision`).\nPure read; no new state.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and reports what the\nprecision floor says about the current line (``floor``), so the chart can\nmark the floor and say whether the line keeps it.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items - at\nlog-spaced return counts (see :mod:`vtsearch.routes.detectors._find_precision`).\nIt carries no model-based estimate (#4360).\nPure read; no new state.",
         "operationId": "find_stats",
         "responses": {
           "200": {

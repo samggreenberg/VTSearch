@@ -267,7 +267,8 @@ def _fused_threshold(
     at all the schedule blend answers as it always has.
 
     **The #4220 estimate is still built**, though it no longer draws the
-    line: the Find Stats precision curve reads it.  A
+    line (#4272) and the Find Stats chart no longer draws it either (#4360);
+    #4362 retires it.  A
     :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` from the same
     populations as the fold-anchored cut.  Its **corpus** is the final model's
     haystack less the voted items when the #3308 exclusion applies; its
@@ -1324,7 +1325,7 @@ def _train_and_score_xy(
 
     *min_precision* is the operating point's floor (``None``: the line is the
     Inclusion 0 cut) and *calibrating_groups* the bags whose vote may calibrate
-    the Find Stats estimate; see :func:`_fused_threshold` and
+    the #4220 estimate; see :func:`_fused_threshold` and
     :func:`calibration_rows_for`.
     """
     import torch  # noqa: PLC0415

@@ -964,10 +964,6 @@ class FindStatsPrecisionPointSchema(Schema):
     checked_good = fields.Integer(required=True)
     # checked_good / checked; null when nothing in the top n was checked.
     verified_precision = fields.Float(required=True, allow_none=True)
-    # Lower-bound estimate from the detector's calibration folds; null unless
-    # ``estimate_status`` is ``"estimated"`` (and for a count too small to read
-    # off a sampled corpus).
-    estimated_precision = fields.Float(required=True, allow_none=True)
 
 
 class FindStatsResponseSchema(Schema):
@@ -1007,17 +1003,8 @@ class FindStatsResponseSchema(Schema):
     # previous detector version.  Drives the "out of date" note in the UI.
     stale = fields.Boolean(required=True)
     # Precision against the number returned, at log-spaced counts plus the
-    # current cut's.
+    # current cut's: verified precision only, no model-based estimate (#4360).
     precision_curve = fields.List(fields.Nested(FindStatsPrecisionPointSchema), required=True)
-    # Whether the curve carries an estimate: ``"estimated"``;
-    # ``"insufficient_evidence"`` (fewer than ``min_calibration_positives``
-    # Good votes among the calibration folds' held-out votes, the precision
-    # floor's own gate); or ``"unavailable"`` (no calibration folds at all).
-    estimate_status = fields.String(
-        required=True, validate=validate.OneOf(["estimated", "insufficient_evidence", "unavailable"])
-    )
-    calibration_positives = fields.Integer(required=True)
-    min_calibration_positives = fields.Integer(required=True)
 
 
 class FindEvidenceCoverageResponseSchema(Schema):

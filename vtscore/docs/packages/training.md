@@ -252,7 +252,7 @@ are summarised in
 | `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
-| `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, read by the Find Stats curve |
+| `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, and off the Find Stats chart since #4360 |
 | `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `floor_line`) |
 | `check_schedule` / `SpotCheck` / `likely_range` | The precision floor's spot check (#4272): the candidate, rounds and picks a floor costs, the check itself, and the likely range a checked set carries |
 | `LineRanking` / `floor_line` / `floor_state` | The ranking a detector's line keeps a set of, the line the floor draws over it, and the state every response carries |
