@@ -9,6 +9,7 @@ source on disk, path-traversal) use ``abort()`` with the standard
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from vtscore.config import DATA_DIR, EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS
 from vtscore.datasets.demo_counts import exact_demo_count
 from vtscore.datasets.loader import read_pkl_clipper, read_pkl_embedder
+from vtscore.datasets.registry import list_datasets
 from vtsearch.routes._http import format_mtime
 from vtsearch.schemas.datasets import (
     BrowseMediaFilesQuerySchema,
@@ -469,10 +471,77 @@ def select_browsed_file(body: dict):
 # ---------------------------------------------------------------------------
 
 
+# The RAM / Disk bars matter only when the machine is short of room for this
+# app's own work, which a used-percentage cannot tell: 1% of a huge disk can
+# still hold dozens of datasets, and half of a small one may not hold one more.
+# So each probe measures its free bytes in datasets — the largest one
+# registered, the size the next import or load could plausibly reach — and
+# reports ``low`` when fewer than ``_HEADROOM_DATASETS`` more would fit. The
+# same footprint serves RAM: a dataset container is stored uncompressed, so it
+# loads to about its size on disk.
+_HEADROOM_DATASETS = 3
+# Stand-in footprint while no dataset is registered: about a median demo
+# dataset.
+_DEFAULT_DATASET_BYTES = 1 << 30
+# Floor on the footprint ``low`` is measured in, so a registry of tiny datasets
+# never lets the machine run nearly dry unannounced: the app's embedders, its
+# scoring passes and the OS need room too.
+_MIN_DATASET_BYTES = 512 << 20
+
+
+def _dataset_footprint() -> tuple[int, str]:
+    """Return ``(bytes, source)`` for the dataset headroom is measured in.
+
+    *bytes* is the largest registered dataset's on-disk footprint: its pkl
+    plus every same-stem sidecar beside it (the convention
+    ``registry.unregister_dataset`` sweeps by). *source* is ``"largest"``, or
+    ``"default"`` with ``_DEFAULT_DATASET_BYTES`` when no registered dataset
+    has a file on disk. Each directory is listed once, however many datasets
+    share it, since the Dashboard polls this every few seconds.
+    """
+    listings: dict[Path, list[os.DirEntry[str]]] = {}
+    largest = 0
+    for entry in list_datasets():
+        pkl = Path(entry.get("pkl_path") or "")
+        if not pkl.name:
+            continue
+        if pkl.parent not in listings:
+            try:
+                with os.scandir(pkl.parent) as it:
+                    listings[pkl.parent] = list(it)
+            except OSError:
+                listings[pkl.parent] = []
+        sidecar_prefix = f"{pkl.stem}."
+        size = 0
+        for f in listings[pkl.parent]:
+            if f.name == pkl.name or f.name.startswith(sidecar_prefix):
+                try:
+                    if f.is_file():
+                        size += f.stat().st_size
+                except OSError:
+                    continue
+        largest = max(largest, size)
+    if largest <= 0:
+        return _DEFAULT_DATASET_BYTES, "default"
+    return largest, "largest"
+
+
+def _headroom(free: int) -> dict:
+    """The ``dataset_bytes`` / ``dataset_bytes_source`` / ``low`` fields for *free*."""
+    dataset_bytes, source = _dataset_footprint()
+    threshold = _HEADROOM_DATASETS * max(dataset_bytes, _MIN_DATASET_BYTES)
+    return {"dataset_bytes": dataset_bytes, "dataset_bytes_source": source, "low": free < threshold}
+
+
 @datasets_ui_bp.route("/api/dashboard/disk-usage")
 @datasets_ui_bp.response(200, DashboardDiskUsageResponseSchema)
 def dashboard_disk_usage():
-    """Return free / used / total bytes for the partition holding ``DATA_DIR``."""
+    """Return free / used / total bytes for the partition holding ``DATA_DIR``.
+
+    Also reports whether that free space is ``low``: short of room for a few
+    more datasets the size of the largest one registered, whatever fraction of
+    the disk that is.
+    """
     probe = DATA_DIR if DATA_DIR.exists() else DATA_DIR.parent
     usage = shutil.disk_usage(str(probe))
     return {
@@ -480,19 +549,12 @@ def dashboard_disk_usage():
         "used": usage.used,
         "free": usage.free,
         "path": str(probe),
+        **_headroom(usage.free),
     }
 
 
-@datasets_ui_bp.route("/api/dashboard/ram-usage")
-@datasets_ui_bp.response(200, DashboardRamUsageResponseSchema)
-def dashboard_ram_usage():
-    """Return free / used / total bytes of system RAM.
-
-    Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).
-    ``free`` is reported as ``MemAvailable`` (memory reclaimable without
-    swapping, which is what an application can actually use), and ``used``
-    is derived as ``total - free`` to match.
-    """
+def _read_meminfo() -> tuple[int, int]:
+    """Return ``(MemTotal, MemAvailable)`` in bytes from ``/proc/meminfo``, or zeros."""
     total = 0
     available = 0
     try:
@@ -506,5 +568,24 @@ def dashboard_ram_usage():
                     break
     except OSError:
         pass
+    return total, available
+
+
+@datasets_ui_bp.route("/api/dashboard/ram-usage")
+@datasets_ui_bp.response(200, DashboardRamUsageResponseSchema)
+def dashboard_ram_usage():
+    """Return free / used / total bytes of system RAM.
+
+    Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).
+    ``free`` is reported as ``MemAvailable`` (memory reclaimable without
+    swapping, which is what an application can actually use), and ``used``
+    is derived as ``total - free`` to match. ``low`` is judged as for disk,
+    in datasets the size of the largest one registered; it stays ``False``
+    when the probe could not read the machine's RAM at all (``total`` of 0).
+    """
+    total, available = _read_meminfo()
     used = max(0, total - available)
-    return {"total": total, "used": used, "free": available}
+    headroom = _headroom(available)
+    if total <= 0:
+        headroom["low"] = False
+    return {"total": total, "used": used, "free": available, **headroom}

@@ -107,7 +107,7 @@
             }
           </div>
           <div class="form-group">
-            <label class="form-label" for="setting-usage-bars" title="Choose when the Dashboard shows the server's RAM and Disk usage bars">RAM / Disk bars<vt-field-hint-icon hint="The server RAM and Disk usage bars beside the Dashboard’s Train and Find buttons. “View” always shows them, “Hide” never does, and “Default” shows them once you have a detector."></vt-field-hint-icon></label>
+            <label class="form-label" for="setting-usage-bars" title="Choose when the Dashboard shows the server's RAM and Disk usage bars">RAM / Disk bars<vt-field-hint-icon hint="The server RAM and Disk usage bars beside the Dashboard’s Train and Find buttons. “View” always shows them, “Hide” never does, and “Default” shows each one only when its free space is getting low for the size of your datasets."></vt-field-hint-icon></label>
             <select id="setting-usage-bars" class="form-select" [ngModel]="settings().show_usage_bars ?? 'default'" (ngModelChange)="onUsageBarsModeChange($event)" title="Choose when the Dashboard shows the RAM and Disk usage bars">
               <option value="hide">Hide</option>
               <option value="default">Default</option>

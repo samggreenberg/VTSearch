@@ -1272,8 +1272,24 @@
       "DashboardDiskUsageResponse": {
         "additionalProperties": false,
         "properties": {
+          "dataset_bytes": {
+            "description": "Footprint of one dataset, the unit headroom is measured in: the largest registered dataset's on-disk size (pkl plus sidecars), or a stand-in when none is registered.",
+            "type": "integer"
+          },
+          "dataset_bytes_source": {
+            "description": "``largest`` when measured from the registry, ``default`` for the stand-in.",
+            "enum": [
+              "largest",
+              "default"
+            ],
+            "type": "string"
+          },
           "free": {
             "type": "integer"
+          },
+          "low": {
+            "description": "True when ``free`` holds fewer than a few more datasets of ``dataset_bytes``; the Dashboard shows the bar on its Default setting only then.",
+            "type": "boolean"
           },
           "path": {
             "type": "string"
@@ -1286,7 +1302,10 @@
           }
         },
         "required": [
+          "dataset_bytes",
+          "dataset_bytes_source",
           "free",
+          "low",
           "path",
           "total",
           "used"
@@ -1296,8 +1315,24 @@
       "DashboardRamUsageResponse": {
         "additionalProperties": false,
         "properties": {
+          "dataset_bytes": {
+            "description": "Footprint of one dataset, the unit headroom is measured in: the largest registered dataset's on-disk size (pkl plus sidecars), or a stand-in when none is registered.",
+            "type": "integer"
+          },
+          "dataset_bytes_source": {
+            "description": "``largest`` when measured from the registry, ``default`` for the stand-in.",
+            "enum": [
+              "largest",
+              "default"
+            ],
+            "type": "string"
+          },
           "free": {
             "type": "integer"
+          },
+          "low": {
+            "description": "True when ``free`` holds fewer than a few more datasets of ``dataset_bytes``; the Dashboard shows the bar on its Default setting only then.",
+            "type": "boolean"
           },
           "total": {
             "type": "integer"
@@ -1307,7 +1342,10 @@
           }
         },
         "required": [
+          "dataset_bytes",
+          "dataset_bytes_source",
           "free",
+          "low",
           "total",
           "used"
         ],
@@ -8537,6 +8575,7 @@
     },
     "/api/dashboard/disk-usage": {
       "get": {
+        "description": "Also reports whether that free space is ``low``: short of room for a few\nmore datasets the size of the largest one registered, whatever fraction of\nthe disk that is.",
         "operationId": "dashboard_disk_usage",
         "responses": {
           "200": {
@@ -8561,7 +8600,7 @@
     },
     "/api/dashboard/ram-usage": {
       "get": {
-        "description": "Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).\n``free`` is reported as ``MemAvailable`` (memory reclaimable without\nswapping, which is what an application can actually use), and ``used``\nis derived as ``total - free`` to match.",
+        "description": "Reads ``MemTotal`` and ``MemAvailable`` from ``/proc/meminfo`` (Linux).\n``free`` is reported as ``MemAvailable`` (memory reclaimable without\nswapping, which is what an application can actually use), and ``used``\nis derived as ``total - free`` to match. ``low`` is judged as for disk,\nin datasets the size of the largest one registered; it stays ``False``\nwhen the probe could not read the machine's RAM at all (``total`` of 0).",
         "operationId": "dashboard_ram_usage",
         "responses": {
           "200": {

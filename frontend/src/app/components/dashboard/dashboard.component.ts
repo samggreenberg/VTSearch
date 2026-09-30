@@ -54,7 +54,7 @@ import { DatasetStatsModalComponent } from '../modals/dataset-stats-modal/datase
 import { DetectorStatsModalComponent } from '../modals/detector-stats-modal/detector-stats-modal.component';
 import { IconComponent } from '../icon/icon.component';
 import { PointerArrowComponent } from '../pointer-arrow/pointer-arrow.component';
-import { UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
+import { toUsageBytes, UsageBarComponent, UsageBytes } from './usage-bar/usage-bar.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -370,7 +370,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         switchMap(() => this.datasetsUiApi.getDiskUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
-        this.diskUsage.set({ total: usage.total, used: usage.used, free: usage.free });
+        this.diskUsage.set(toUsageBytes(usage));
       });
   }
 
@@ -381,7 +381,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         switchMap(() => this.datasetsUiApi.getRamUsage().pipe(catchError(() => EMPTY))),
       )
       .subscribe((usage) => {
-        this.ramUsage.set({ total: usage.total, used: usage.used, free: usage.free });
+        this.ramUsage.set(toUsageBytes(usage));
       });
   }
 
@@ -1262,15 +1262,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return models.length === 1 && (models[0].num_training ?? 0) === 0;
   }
 
-  /** Whether the RAM / Disk usage bars render, per the `show_usage_bars`
+  /** Whether a RAM / Disk usage bar renders, per the `show_usage_bars`
    *  setting: "view" always, "hide" never, and "default" (also the fallback
-   *  before settings load) only once a detector exists, so the first-run
-   *  Dashboard isn't cluttered with server gauges (#4227). */
-  get showUsageBars(): boolean {
+   *  before settings load) only while that bar's probe reports its free space
+   *  `low`: short of room for a few more datasets the size of the largest one,
+   *  however big or small a fraction of the machine that is. */
+  showUsageBar(usage: UsageBytes | null): boolean {
     const mode = this.settingsState.settingsSignal()?.show_usage_bars ?? 'default';
     if (mode === 'view') return true;
     if (mode === 'hide') return false;
-    return this.detectors.length > 0;
+    return usage?.low === true;
   }
 
   get labelEnabled(): boolean {
