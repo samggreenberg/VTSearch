@@ -1,13 +1,14 @@
-# #4347: the left panel fits its grid, minimap included
+# #4347: the left panel fits its grid, minimap and scrollbar included
 
 The label view's left panel used to snap to its grid before the minimap
 appeared, then lose a column to it: every label-view frame from `three-panel`
-on showed one thumbnail column and a gap at 214 px. It now fits two columns
-and the minimap at 238 px, and the first Manual view snaps too.
+on showed one thumbnail column and a gap at 214 px. It now keeps room for the
+minimap and the list's scrollbar and fits two columns at 248 px, and the first
+Manual view snaps too.
 
 - `three-panel` — was framed unsnapped at 260 px, the first Manual view of a fresh app
-- `autopilot-vote` — the left panel widens from 214 to 238 px, and the centre narrows
-- `autopilot-progress` — the Autopilot panel it clips is 24 px wider
+- `autopilot-vote` — the left panel widens from 214 to 248 px, and the centre narrows
+- `autopilot-progress` — the Autopilot panel it clips is wider
 - `manual-controls` — the Manual controls reflow in the wider panel
 - `region-voting` — full window
 - `view-options` — the grid header's controls sit on one line or two by panel width
