@@ -1161,6 +1161,18 @@ def styles_for(dataset: str, embedder: str) -> list[str]:
     return styles_for_embedder(embedder)
 
 
+def cell_styles(dataset: str, embedder: str) -> list[str | None]:
+    """The styles one array task actually runs for ``(dataset, embedder)``.
+
+    :func:`styles_for` under the app pipeline.  A standalone trainer (#3959) has
+    no head for a detection style to drive, so it runs once, style-less, on the
+    whole-image path.  ``run_cells.main`` runs exactly this list and
+    ``run_cells.ab_pair_keys`` counts it, so the A/B sizing gate (#4111) and the
+    run cannot disagree about how many paired cells a grid holds.
+    """
+    return styles_for(dataset, embedder) if TRAINER == "app" else [None]
+
+
 def embedders_for_dataset(dataset: str) -> list[str]:
     return DATASET_EMBEDDERS.get(dataset, [])
 

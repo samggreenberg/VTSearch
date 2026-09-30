@@ -39,6 +39,29 @@ def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]
     return out
 
 
+def ab_pair_keys(cells: list[dict]) -> set[tuple]:
+    """The units ``analyze_ab.py`` pairs a trajectory A/B on, over *cells*.
+
+    ``analyze_ab`` joins two grids on ``(arm, category, seed)`` with ``arm =
+    dataset/embedder/style``.  So every style a task runs is its own paired
+    cell: a patch embedder on a boxed dataset running ``whole_image,max_patch``
+    gives two per ``(category, seed)``.  #3796's calibration-seed draws of one
+    ``(category, seed)`` share a key and are averaged into one.  ``--print-cells``
+    counts array tasks, which is neither.  It sizes the array; this sizes the
+    A/B (preflight ``--resolve-delta``, #4111).
+    """
+    return {
+        (c["dataset"], c["embedder"], style, c["category"], c["seed"])
+        for c in cells
+        for style in cfg.cell_styles(c["dataset"], c["embedder"])
+    }
+
+
+def paired_cell_count(prepare_info: dict) -> int:
+    """How many paired cells an A/B of this grid against a same-shaped one holds."""
+    return len(ab_pair_keys(cfg.array_cells(_categories_by_dataset(prepare_info))))
+
+
 def _seed_query_text(ds: str, cat: str) -> str:
     """The text a user would type to find *cat* in *ds*, or "" if none is known.
 
@@ -239,6 +262,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--index", type=int, default=None, help="Cell index; defaults to $SLURM_ARRAY_TASK_ID.")
     parser.add_argument("--outdir", default=str(common.RESULTS / "cells"))
     parser.add_argument("--print-cells", action="store_true", help="Print the total cell count and exit.")
+    parser.add_argument(
+        "--print-paired-cells",
+        action="store_true",
+        help="Print how many cells analyze_ab.py pairs this grid on (each style its own cell) and exit.",
+    )
     args = parser.parse_args(argv)
 
     prepare_info = json.loads((common.RESULTS / "prepare_info.json").read_text())
@@ -246,6 +274,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.print_cells:
         print(len(cells))
+        return 0
+    if args.print_paired_cells:
+        print(len(ab_pair_keys(cells)))
         return 0
 
     # CALIB_INDEX_OFFSET lets a second array reach cells past SLURM's MaxArraySize
@@ -266,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     cal_seed = cell.get("calibration_seed")
     # A standalone trainer (#3959) has no head for a detection style to drive,
     # so it runs style-less: the whole-image path, which is the only one it has.
-    styles = cfg.styles_for(ds, emb) if cfg.TRAINER == "app" else [None]
+    styles = cfg.cell_styles(ds, emb)
     region_voting = cfg.region_voting_for(ds, emb)
     common.log(
         f"{cell_progress(idx, len(cells))}: dataset={ds} embedder={emb} "

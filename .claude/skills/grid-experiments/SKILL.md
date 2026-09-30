@@ -173,7 +173,26 @@ rather than discovering the floor in the write-up:
 | cells at 2 SE | 16 | 64 | 260 | 400 | 1,600 |
 
 Validated on 399 fresh cells against a pre-registered prediction
-(`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`). What goes with it:
+(`docs/experiments/2026-09-22-ab-resolution-3840/REPORT.md`).
+
+**Preflight enforces it (#4111).** Give it the δ the A/B is meant to resolve:
+
+```bash
+bash scripts/experiments/preflight.sh --exp "$CALIB_EXP" ... --resolve-delta 0.004
+```
+
+It refuses a grid with fewer than (2σ/δ)² paired cells, and prints the δ the grid
+*can* resolve and the `CALIB_N_SEEDS` that would get there. It counts paired
+cells the way `analyze_ab.py` pairs them, one per style (`run_cells.py
+--print-paired-cells`). `--print-cells` gives a different number: it counts array
+tasks, and a `whole_image,max_patch` task is two paired cells (42 tasks vs 57
+paired cells a seed on the #3585 environments). `--sigma` overrides the 0.04
+default. `--paired-cells N` supplies the count for a grid `run_cells.py` does
+not enumerate. `analyze_ab.py` prints the same floor (`resolvable_delta_2se`)
+beside every Δ it writes, including the pooled line, so a report cannot quote a
+Δ without it.
+
+What goes with it:
 
 - **A small change does not get a cheaper A/B.** Trajectories part by vote ~5 and
   σ is 0.034–0.066 whether an arm moves 0.05% of the haystack or 20%. If δ needs
