@@ -1579,11 +1579,17 @@ describe('LabelViewComponent', () => {
 
     /** Answer the Find hand-off and the votes it chains, then let the retrain
      *  correction and the phase change it causes run. */
-    function landVotes(): void {
+    function landVotes(votes: Record<string, unknown> = trainedVotes): void {
       httpMock.match('/api/find/end-session').forEach((req) => req.flush({ ok: true, ended: false }));
       TestBed.tick();
-      httpMock.match('/api/votes').forEach((req) => req.flush(trainedVotes));
+      httpMock.match('/api/votes').forEach((req) => req.flush(votes));
       TestBed.tick();
+    }
+
+    /** Wait out the 300 ms deferral of the seed the votes armed. */
+    async function waitOutSeed(): Promise<void> {
+      TestBed.tick();
+      await new Promise<void>((resolve) => setTimeout(resolve, 400));
     }
 
     function landLearnedSort(): void {
@@ -1671,6 +1677,87 @@ describe('LabelViewComponent', () => {
       });
       TestBed.tick();
       expect(component.mediaState.selectedId()).toBe(next);
+    });
+
+    it('trains once when the retrain seed fires during the phase change\'s learned sort (#4326)', async () => {
+      TestBed.tick();
+      TestBed.tick();
+      await landMedias();
+      httpMock.expectOne('/api/sort');
+      landVotes();
+      const learned = httpMock.expectOne('/api/learned-sort');
+
+      // Still training when the retrain seed fires. A second request would be
+      // parked by the server's job manager and trained all over again.
+      await waitOutSeed();
+      httpMock.expectNone('/api/learned-sort');
+
+      learned.flush(learnedRanking);
+      TestBed.tick();
+      expect(component.mediaState.selectedId()).toBe(10);
+    });
+
+    /**
+     * #4326: the same entry, on a detector whose labels come from another
+     * dataset. The labelset holds both classes, so the votes still turn retrain
+     * mode on, but this dataset has no votes and the phase stays at Good. No
+     * phase change sorts, so the retrain seed is the only thing that moves the
+     * run off the text hint. It used to stand down on the text seed when that
+     * was still in flight, or when it had landed under a `learned` mode carried
+     * over from the last session.
+     */
+    describe('when no phase change follows the retrain correction (#4326)', () => {
+      /** Both classes in the labelset, no votes on this dataset. */
+      const otherDatasetVotes = {
+        good: [],
+        bad: [],
+        click_times: {},
+        learned_scores: {},
+        labelset_good_count: 3,
+        labelset_bad_count: 4,
+      };
+
+      it('replaces a text seed still in flight', async () => {
+        TestBed.tick();
+        TestBed.tick();
+        await landMedias();
+        const textSeed = httpMock.expectOne('/api/sort');
+        landVotes(otherDatasetVotes);
+        const autopilot = TestBed.inject(AutopilotStateService);
+        expect(autopilot.state.retrainMode).toBe(true);
+        expect(autopilot.state.phase).toBe('good');
+        httpMock.expectNone('/api/learned-sort');
+
+        await waitOutSeed();
+        const learned = httpMock.expectOne('/api/learned-sort');
+        // Asked for after the seed, so the seed's answer can no longer land,
+        // whichever of the two the server answers first.
+        expect(textSeed.cancelled).toBe(true);
+        learned.flush(learnedRanking);
+        TestBed.tick();
+        expect(component.sortState.sortMode).toBe('learned');
+        expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(learnedRanking.results.map((r) => r.id));
+        // The Good phase's pick: the top of the learned ranking.
+        expect(component.mediaState.selectedId()).toBe(1);
+      });
+
+      it('replaces a landed text seed under a carried-over learned mode', async () => {
+        // The last session ended on the learned sort, and the mode survives entry.
+        component.sortState.setSortMode('learned');
+        TestBed.tick();
+        TestBed.tick();
+        await landMedias();
+        httpMock.expectOne('/api/sort').flush(textRanking);
+        landVotes(otherDatasetVotes);
+        // The Good phase's pick over the text ranking, for now.
+        expect(component.mediaState.selectedId()).toBe(9);
+
+        await waitOutSeed();
+        httpMock.expectOne('/api/learned-sort').flush(learnedRanking);
+        TestBed.tick();
+        expect(component.sortState.sortOrder?.map((i) => i.id)).toEqual(learnedRanking.results.map((r) => r.id));
+        expect(component.mediaState.selectedId()).toBe(1);
+      });
     });
   });
 
@@ -1883,14 +1970,13 @@ describe('LabelViewComponent', () => {
       );
       // A re-rank riding the same vote load (an Autopilot phase change) lands
       // its ranking first. The backstop must not train the same model again.
-      component.sortState.setSortWindow({
-        items: [{ id: 1, score: 0.9 }],
+      // It runs through the view, as the phase change's does: the backstop
+      // goes by the kind of sort that ranked the pair, not by `sortMode` (#4326).
+      component.onLearnedSort(false);
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.9 }],
         threshold: 0.5,
-        acqThreshold: null,
-        total: 1,
-        hasMore: false,
-        token: null,
-        aboveThreshold: 1,
       });
       TestBed.tick();
       await new Promise<void>((resolve) => setTimeout(resolve, 400));

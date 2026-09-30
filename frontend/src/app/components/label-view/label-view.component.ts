@@ -567,23 +567,31 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *
    * This is deliberately a **backstop**, not a competing trigger: a re-rank
    * that an Autopilot phase change fires off the same vote load gets there
-   * first (hence {@link SEED_DELAY_MS}), and this then stands down. It stands
-   * down on a sort already in flight.
+   * first (hence {@link SEED_DELAY_MS}), and this then stands down.
    *
    * **With Autopilot running**, Autopilot owns the sort. On entry its own
    * activation already fired the seed sort, so there is nothing to add. After a
    * switch or a retrain flip, it stands down on a ranking the *model itself*
-   * produced — but not on a text ranking, which is exactly what a late retrain
-   * correction has to replace — and otherwise picks what Autopilot would:
-   * learned when the detector has both label classes, else its text / example
-   * seed sort. What is left for it is what the phase machinery cannot cover,
-   * because that only ever sorts on a phase *change*: a pair whose phase is the
-   * one we left it in, or which never transitions at all.
+   * produced or is producing. It does not stand down on a text or example
+   * ranking, whether landed or still in flight: that is exactly what a late
+   * retrain correction has to replace (#4326). Otherwise it picks what Autopilot
+   * would: learned when the detector has both label classes, else its text /
+   * example seed sort. What is left for it is what the phase machinery cannot
+   * cover, because that only ever sorts on a phase *change*: a pair whose phase
+   * is the one we left it in, or which never transitions at all.
+   *
+   * Which kind of sort that is comes from
+   * {@link SortRunnerService.newestSortKind}, not from `sortMode`: a `learned`
+   * mode carried over from the last session survives entry while Autopilot's
+   * seed is a text sort. Standing down on a learned sort already in flight also
+   * keeps a second, identical one off the server, whose job manager would park
+   * it as pending and train the model again.
    *
    * **With Autopilot off**, the user's sort carries over and is re-run on this
    * pair — see {@link SortRunnerService.rerunCarriedSort} for the rule, and for
-   * what falls back to Text when the new pair can't run it (#4092). Any ranking
-   * already present means someone sorted since the reset, so it stands down.
+   * what falls back to Text when the new pair can't run it (#4092). A sort in
+   * flight or a ranking already present means someone sorted since the reset,
+   * so it stands down.
    *
    * Every sort runs with `autoSelect: false`. The centre is placed by the
    * centre effect above, which stops placing it once the user has acted — a
@@ -592,19 +600,22 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private seedRankingIfUnranked(): void {
     this.seedTimer = null;
     const trigger = this.seedTrigger;
-    if (this.sortState.sortBusy) return;
+    const busy = this.sortState.sortBusy;
     const ranked = (this.sortState.sortOrder?.length ?? 0) > 0;
     if (!this.autopilotStateService.running) {
-      if (!ranked) this.sortRunner.rerunCarriedSort(this.textSupported);
+      if (!busy && !ranked) this.sortRunner.rerunCarriedSort(this.textSupported);
       return;
     }
     if (trigger === 'entry') return;
-    if (this.sortState.sortMode === 'learned' && ranked) return;
+    if (this.sortRunner.newestSortKind() === 'learned' && (busy || ranked)) return;
     if (this.voteState.learnedSortAvailable) {
+      // Supersedes a text or example seed still in flight (see `beginSort`).
       this.sortState.setSortMode('learned');
       this.sortRunner.onLearnedSort(false);
       return;
     }
+    // Without learned sort, a seed in flight is already the one Autopilot wants.
+    if (busy) return;
     this.onAutopilotStart(false);
   }
 

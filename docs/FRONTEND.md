@@ -196,7 +196,11 @@ answers first (#4318). Starting a sort ends whichever one is still in flight,
 so the ranking on screen is the answer to the sort asked for last. And on entry
 or after a pair switch the centre item is the view's own pick, made again
 against every ranking and Select mode that lands until the user clicks, votes
-or steps; from then on it is theirs, and no re-rank moves it.
+or steps; from then on it is theirs, and no re-rank moves it. The backstop that
+ranks a pair nothing else ranked (`seedRankingIfUnranked`) follows the first
+rule: it reads the kind of the sort started last
+(`SortRunnerService.newestSortKind`), not `sortMode`, and gives way only to a
+learned one, so a text seed still in the air cannot hold it off (#4326).
 
 The three panels are shared with the Find view:
 
