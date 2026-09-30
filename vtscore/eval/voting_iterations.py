@@ -89,7 +89,6 @@ from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
     LineRanking,
     SpotCheck,
-    check_schedule,
     floor_line,
     floor_state,
     ACQUISITION_INCLUSION_OFFSET,
@@ -2151,22 +2150,26 @@ def simulate_voting_iterations(  # noqa: C901
             floor.  No step builds the #4220 estimate: the app stopped
             building it in #4362.
         spot_check: When the simulated user runs the floor's **spot check**
-            (#4272).  ``"end"`` (the default): once the voting steps are spent
-            - *max_steps* reached, or the pool exhausted - the user checks the
-            line the way the app's check step does: the candidate is fixed off
-            the current ranking (the floor's schedule: the top 128 unvoted at
-            10%, 64 at 25%, 32 at 50% and above), each round's picks are
-            answered from ground truth **and cast as votes** (provenance
-            ``check``), the model retrains on them and one row is emitted per
-            round with ``phase == "check"`` and ``t`` still counting every
-            vote cast, so the check's rows sit past *max_steps*.  A failed
-            round halves the candidate down to 32; the check ends
-            ``confirmed`` or ``short``, and the last row's line keeps the set it
-            ended on, its range flagged ``check_stale`` where the retrain moved
-            the set.  Until then every row reports the ``unchecked`` starting
-            candidate, which is exactly what a headless run exports.  ``"off"``
-            never checks: the whole run is the unchecked line.  Ignored on the
-            Inclusion arm, and when nothing is left unvoted to check.
+            (#4272, the band walk of #4388).  ``"end"`` (the default): once the
+            voting steps are spent - *max_steps* reached, or the pool exhausted
+            - the user checks the line the way the app's check step does: the
+            unvoted ranking is fixed off the current one and cut into bands
+            (the top 8, the next 8, 16, 32, ...), the walk starts at the bands
+            holding the floor's schedule (the top 32 at 50% and above, 128 at
+            10%), each band's picks are answered from ground truth **and cast
+            as votes** (provenance ``check``), the model retrains on them and
+            one row is emitted per band with ``phase == "check"`` and ``t``
+            still counting every vote cast, so the check's rows sit past
+            *max_steps*.  The walk goes one band deeper while the set's
+            band-weighted share of right answers meets the floor and one
+            shallower while it does not; the check ends ``confirmed`` on the
+            deepest set that met it or ``short`` on the first band, and the
+            last row's line keeps that set, its range flagged ``check_stale``
+            where the retrain moved it.  Until then every row reports the
+            ``unchecked`` starting candidate, which is exactly what a headless
+            run exports.  ``"off"`` never checks: the whole run is the
+            unchecked line.  Ignored on the Inclusion arm, and when nothing is
+            left unvoted to check.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2601,7 +2604,9 @@ def simulate_voting_iterations(  # noqa: C901
             # checks at all and there is a ranking with something unvoted in it.
             if spot_check != "end" or check is not None or floor is None or line_ranking is None:
                 break
-            candidate = line_ranking.candidate(check_schedule(floor).candidate, set(good_votes) | set(bad_votes))
+            # The whole unvoted ranking, in rank order: the walk's bands are cut
+            # from it (#4388), and it starts at the floor's schedule.
+            candidate = tuple(int(i) for i in line_ranking.unvoted_ids(set(good_votes) | set(bad_votes)))
             if not candidate:
                 break
             # Seeded off the run's own RNG, after every trajectory draw, so a

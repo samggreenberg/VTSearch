@@ -292,20 +292,21 @@ def planted_fold_anchored_cut(n_pos_per_fold: int):
 
 
 def planted_spot_check(ctx, min_precision: float, *, right: bool = True, seed: int = 1):
-    """A finished spot check of *ctx*'s floor at *min_precision*, its votes cast on *ctx* (#4272).
+    """A finished spot check of *ctx*'s floor at *min_precision*, its votes cast on *ctx* (#4272, #4388).
 
-    Every pick is voted *right* (the check confirms) or wrong (it ends short).
+    Every pick is voted *right* (the walk confirms the whole unvoted ranking)
+    or wrong (it ends short on the first band).
     The votes land as the check route lands them - good / bad votes, verified
     in Find mode - and the result is parked on the context with its
     fingerprint taken after them, exactly as a real check leaves it.
     """
     from vtscore.state.core import human_voted_ids  # noqa: PLC0415
-    from vtscore.training.thresholds import SpotCheck, check_schedule  # noqa: PLC0415
+    from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
 
     ranking = ctx.line_ranking
     assert ranking is not None, "plant a check on a context whose retrain parked a ranking"
-    candidate = ranking.candidate(check_schedule(min_precision).candidate, human_voted_ids(ctx))
-    check = SpotCheck.start(candidate, min_precision, seed=seed)
+    unvoted = tuple(int(i) for i in ranking.unvoted_ids(human_voted_ids(ctx)))
+    check = SpotCheck.start(unvoted, min_precision, seed=seed)
     while check.running:
         votes = {cid: right for cid in check.pending}
         for cid, ok in votes.items():

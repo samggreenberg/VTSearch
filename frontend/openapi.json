@@ -968,6 +968,26 @@
         ],
         "type": "object"
       },
+      "CheckBand": {
+        "additionalProperties": false,
+        "properties": {
+          "hi": {
+            "type": "integer"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "lo": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hi",
+          "index",
+          "lo"
+        ],
+        "type": "object"
+      },
       "CheckPhraseRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5371,8 +5391,27 @@
       "PrecisionCheckState": {
         "additionalProperties": false,
         "properties": {
+          "band": {
+            "$ref": "#/components/schemas/CheckBand",
+            "nullable": true
+          },
+          "bands": {
+            "type": "integer"
+          },
           "candidate": {
             "type": "integer"
+          },
+          "direction": {
+            "enum": [
+              "start",
+              "deeper",
+              "shallower"
+            ],
+            "type": "string"
+          },
+          "estimate": {
+            "nullable": true,
+            "type": "number"
           },
           "labelled": {
             "type": "integer"
@@ -5416,7 +5455,11 @@
           }
         },
         "required": [
+          "band",
+          "bands",
           "candidate",
+          "direction",
+          "estimate",
           "labelled",
           "min_precision",
           "picks",
@@ -13757,7 +13800,7 @@
     },
     "/api/precision-check/start": {
       "post": {
-        "description": "The candidate is the top *K* unvoted items of the ranking the detector\nlast scored (*K* from the floor's schedule: 128 at 10%, 64 at 25%, 32 at\n50% and above), fixed for the whole check.  Deals the first round's picks.\nA check already running is replaced.  The last finished result stays in\nforce until this check ends.",
+        "description": "The walk is over the unvoted items of the ranking the detector last\nscored, in rank order, fixed for the whole check, and starts at the bands\nthat hold the floor's starting count (32 at 50% and above, 128 at 10%).\nDeals the first band's picks.  A check already running is replaced.  The\nlast finished result stays in force until this check ends.",
         "operationId": "start_precision_check",
         "responses": {
           "200": {
@@ -13771,7 +13814,7 @@
             "description": "OK"
           },
           "409": {
-            "description": "No ranking to draw from, nothing unvoted in it, or the same candidate as the last check."
+            "description": "No ranking to draw from, nothing unvoted in it, or the same list as the last check."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -13785,7 +13828,7 @@
     },
     "/api/precision-check/votes": {
       "post": {
-        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the round is labelled the round is decided: the\nfloor is confirmed, the candidate halves into the next round and its picks\nare dealt, or the check ends short.  The response carries the check's new\nstate and the floor's, whose line moves to the set a finished check ended\non.",
+        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the band is labelled the walk moves on: the next\nband the set under test still owes is dealt, or the set is decided and the\nwalk goes deeper (a new band is dealt), shallower, or ends.  The response\ncarries the check's new state and the floor's, whose line moves to the set\na finished check ended on.",
         "operationId": "vote_precision_check",
         "requestBody": {
           "content": {
@@ -13809,7 +13852,7 @@
             "description": "OK"
           },
           "400": {
-            "description": "A vote on an item that is not one of this round's picks."
+            "description": "A vote on an item that is not one of this band's picks."
           },
           "409": {
             "description": "No check is running."

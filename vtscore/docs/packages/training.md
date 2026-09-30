@@ -524,17 +524,24 @@ range comes only from those picks, never from a model.
   so the item clears its own line however it is compared), `above(threshold)`
   the count at or above it, and `fingerprint(count, also_voted)` the set's
   identity for the `stale` flag.
-- `SpotCheck.start(candidate_ids, X)` fixes the candidate and deals round one
-  (`draw`); `record({id: right})` takes a round's labels and, once the round is
-  complete, confirms the floor (`FLOOR_CONFIRMED`), halves the candidate into
-  the next round keeping the labels inside it, or ends `FLOOR_SHORT` at 32.
-  `range()` is the current candidate's likely range; `as_dict()` the state a
-  client sees; `is_stale(ranking, also_voted)` whether the set moved since the
-  check. `CHECK_PROVENANCE` is the provenance its votes are recorded with.
+- `SpotCheck.start(ranking_ids, P, start_count=None)` fixes the unvoted
+  ranking, cuts it into bands (`band_edges`: the top 8, the next 8, 16, 32,
+  ...), and deals the first band's picks (`draw`); `record({id: right})` takes
+  a band's labels and, once the band is audited, deals the next band the set
+  under test owes or decides it: one band deeper while the band-weighted share
+  of right picks (`estimate()`) meets the floor, one shallower while it does
+  not, stopping on the first reversal. It ends `FLOOR_CONFIRMED` on the
+  deepest set that met the floor (a band edge) or `FLOOR_SHORT` on the first
+  band (#4388). `range()` is the set's likely range, its bands' intervals
+  weighted by size; `as_dict()` the state a client sees (the band pending, the
+  set's `bands`, the walk's `direction`, the `estimate`);
+  `is_stale(ranking, also_voted)` whether the set moved since the check.
+  `CHECK_PROVENANCE` is the provenance its votes are recorded with.
 - `likely_range(right, labelled, candidate, tail)` is a Clopper-Pearson
-  interval with each tail at `range_tail(rounds)` = alpha / R, exact once the
-  labels cover the candidate; `clopper_pearson_lower` / `_upper` are the
-  bounds.
+  interval with each tail at `range_tail(bands)` = alpha / bands (split over
+  the set's bands, so their size-weighted mean holds by the union bound),
+  exact once the labels cover the band; `clopper_pearson_lower` / `_upper` are
+  the bounds.
 - `floor_count(X, result)`, `floor_line(ranking, X, result, also_voted)` and
   `floor_state(X, result, ranking, also_voted)` are the rule the app's retrain,
   re-cut and the eval harness's default arm share: the set the finished check

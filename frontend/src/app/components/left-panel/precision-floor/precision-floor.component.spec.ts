@@ -179,8 +179,8 @@ describe('PrecisionFloorComponent (#4246, #4317)', () => {
     });
 
     it('prices a check off the schedule, rounds and all, on the check button', async () => {
-      await show(0.1, lineFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }));
-      expect(root().querySelector('.floor-check-btn')!.getAttribute('title')).toContain('5 random picks a round, in up to 3 rounds');
+      await show(0.1, lineFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
+      expect(root().querySelector('.floor-check-btn')!.getAttribute('title')).toContain('5 random picks a band, walking the list from the top 128');
     });
 
     it.each(['short', 'confirmed'] as const)('notes a stale %s range only in the tooltip', async (status) => {
@@ -222,9 +222,9 @@ describe('PrecisionFloorComponent (#4246, #4317)', () => {
       expect(emitted).toHaveBeenCalledOnce();
     });
 
-    it('reads the pick count off the schedule: 29 at the false-negatives end', async () => {
-      await show(0.9, lineFloor('confirmed', { minPrecision: 0.9, schedule: { candidate: 32, rounds: 1, picks: 29 } }));
-      expect(checkBtn()!.textContent!.trim()).toBe('Check 29 picks');
+    it('reads the pick count off the schedule: 5 a band at the false-negatives end too (#4388)', async () => {
+      await show(0.9, lineFloor('confirmed', { minPrecision: 0.9, schedule: { candidate: 32, rounds: 3, picks: 5 } }));
+      expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
     });
 
     it('is held while the host cannot run a check', async () => {

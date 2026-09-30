@@ -20,12 +20,12 @@
     "harness": "c73eed9f2e65df07b0851b2550aaea6a33079b6002674b772387647cbfc177da"
   },
   "floor.check_rounds": {
-    "app": "0753b37b48f46e772f09a84a59ba0f58c7519424f1d5704ba02d069e88f8cb7c",
-    "harness": "e0547c6395666e2f22396fdd86897763848fd2ca05d6d76ecb754f61ccdb1a2b"
+    "app": "0ebba2070196afb6431d7a8f46a5e2c38f1cfd066421862a3ea8f97743ba6c32",
+    "harness": "e82995fce4a29d6b9436348074c518a816b38e1d1a71b8f08943fca3afbd8e65"
   },
   "floor.check_schedule": {
-    "app": "3a95e68bedacda13205d230b0eecdcae9b12b2e13aaecbe9fc7fe8abc1c09000",
-    "harness": "c654a3da3efff65121c7dd74c60c9a1a0853f5ae9ef324618072041ed508020b"
+    "app": "b544782d6f000b3b33276b40b692f77725cbdb5e1fd36f1a42133f9d00147a31",
+    "harness": "5ce41809e4d303953cee061fbd04809ec619575cc2d849d487edba680fe57977"
   },
   "floor.likely_range": {
     "app": "688403ef3258c8411d709a2295f8fc8b7c0af7bcff1002927c81c38cb87e362b",

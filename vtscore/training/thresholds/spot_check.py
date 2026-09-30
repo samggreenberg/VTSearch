@@ -1,53 +1,59 @@
-"""The spot check that decides the precision floor's line, and how close it got (#4272).
+"""The spot check that decides the precision floor's line, and how close it got (#4272, #4388).
 
-The floor *X* is a share of what the line returns that should be right.  The
+The floor *P* is a share of what the line returns that should be right.  The
 owner's ruling on #4267 (2026-09-29) moved the promise off the #4220 estimator
 (:mod:`~vtscore.training.thresholds.precision_floor`, which stays as public
-library API that no app path reads since #4360 and #4362) and onto a **spot check**: the user
-votes on uniform random picks from a candidate of the top unvoted items, and a
-Clopper-Pearson bound on those picks decides.  #4256 showed that model-chosen
-votes break 83% of the estimator's X = 50% promises once the reference pool is
-consistent; a uniform pick has no such bias, so its bound holds at every
-prevalence measured (#4257).
+library API that no app path reads since #4360 and #4362) and onto a **spot
+check**: the user votes on uniform random picks, and their labels decide.
+#4256 showed that model-chosen votes break 83% of the estimator's P = 50%
+promises once the reference pool is consistent; a uniform pick has no such
+bias, so what it says holds at every prevalence measured (#4257).
 
-**Do your best, and say how close we got.**  The promise is not make-or-break:
+**The check walks the ranking in bands (#4383, the owner's ruling of
+2026-09-30).**  The first version of the check (#4272) drew its picks from a
+fixed candidate, the top 32 unvoted at P >= 50% and the top 128 at 10%, and
+could only halve it.  That count was right on exactly one corpus, the 11k-image
+bench it was priced on: on a corpus ten times larger it kept 5% of the
+positives, and on a 320-image Find set it returned all 32 at 4% right
+(``docs/experiments/2026-09-30-line-estimate-4383/REPORT.md``).  The walk lets
+the line follow the corpus:
 
-* The line always keeps a set.  Before any check it keeps the schedule's
-  unchecked starting candidate; after one, the set the check ended on.  Nothing
-  falls back to the old Inclusion 0 cut (this replaces #4247's fallback).
-* A checked set carries a **likely range** for how much of it is right: a
-  Clopper-Pearson interval from the check's labels, with each tail at
-  ``alpha / R``, the level each round is tested at (:func:`range_tail`).  So a
-  check confirms *X* iff the range's lower end clears *X*.
+* **Bands.**  The unvoted ranking is cut into bands from the top: the top 8,
+  the next 8, then 16, 32, 64, ... doubling to the corpus's end
+  (:func:`band_edges`).  A band is audited with :data:`CHECK_MIN_PICKS` items
+  drawn uniformly from it (a census when it holds no more than that), and a
+  band is never drawn from twice.
+* **The union under test** is the top ``b`` bands.  Its estimate is
+  band-stratified: each band's share of right answers weighted by the band's
+  size, which is unbiased for the union whatever the picks per band
+  (:meth:`SpotCheck.estimate`).
+* **The walk** starts at the bands that hold today's count (the floor's
+  schedule: 32 at P >= 50%, 128 at 10%; :func:`check_schedule`), auditing
+  each.  While the union's estimate is at or above *P* it goes one band deeper
+  (drawing that band); while it is below, one band shallower (no new picks).
+  It stops on the first reversal, or at either end, and the line keeps the
+  deepest union that met *P*: ``confirmed``.  When no union met it, the first
+  band, ``short``.
+* **How close.**  A checked set carries a **likely range**: each audited
+  band's Clopper-Pearson interval, exact where the band was censused, with
+  each tail at ``alpha / bands`` (the union bound over the bands in the set),
+  weighted by band size (:meth:`SpotCheck.range`).  The walk decides on the
+  point estimate (the owner's "do your best", #4267, and the rule priced), so
+  a confirmed set's range can straddle *P*; the range says how close.
 
-**The rule**, priced in ``docs/experiments/2026-09-29-floor-candidate-4267/``
-(``scripts/experiments/calibration/analyze_floor_candidate_4267.py`` is the
-reference this module matches; ``scripts/check-eval-app-sync.py`` pins the two
-against each other):
+**Do your best, and say how close we got** (#4267).  The line always keeps a
+set.  Before any check it keeps the schedule's unchecked starting candidate;
+after one, the set the walk ended on.  Nothing falls back to the old Inclusion
+0 cut.  The states a floor reports (:data:`FLOOR_STATES`): ``unchecked``,
+``confirmed`` and ``short``.  A finished result is kept and goes **stale**
+quietly once the ranking under it moves: later votes retrain the model, the
+line follows the new ranking at the result's count, and the range stays with a
+``stale`` flag.
 
-* **Candidate.**  The top ``K = 32 * 2**max(0, floor(log2(0.5 / X)))`` *unvoted*
-  items of the current ranking: the top 128 at 10%, the top 64 at 25%, and the
-  top 32 at 50% and above (:func:`check_schedule`).  Voted items are left out,
-  because a model chose them.  A corpus with fewer unvoted items is its own
-  candidate.  The candidate's ids are fixed when the check starts; its rounds
-  sample that one list while the model retrains behind it.
-* **Rounds.**  ``R = log2(K / 32) + 1``: 3 at 10%, 2 at 25%, 1 at 50% and above.
-* **Picks.**  Each round draws ``m = max(5, ceil(ln(alpha / R) / ln X))`` fresh
-  items uniformly from the current candidate: 5 at 10-50%, 11 at 75% and 29 at
-  90%.  Labels already seen inside the current candidate are kept, which keeps
-  every round's sample uniform (#4257's rule ``b``).
-* **Confirm or halve.**  The round confirms *X* iff the range's lower end is at
-  least *X*.  Otherwise the candidate halves, down to 32, and the next round
-  runs.  A check that ends below *X* is ``short``, and there is no redraw on the
-  same candidate.
-* **The range is exact** (``s / K``) once the labels cover the candidate.
-
-The three states a floor reports (:data:`FLOOR_STATES`): ``unchecked`` (the
-starting candidate, no range), ``confirmed`` (the set the check confirmed) and
-``short`` (the top 32 the check ended on).  A finished result is kept and goes
-**stale** quietly once the ranking under it moves: later votes retrain the
-model, the line follows the new ranking at the result's count, and the range
-stays with a ``stale`` flag.
+The rule the walk implements is ``grow-fine`` in
+``scripts/experiments/calibration/analyze_line_estimate_4383.py``
+(``band_edges``, ``draw_audits``, ``Audits.union_estimate``, ``rule_grow``),
+which ``scripts/check-eval-app-sync.py`` pins against this module.
 
 Everything here is scores, ids and labels - never a vector - so a
 :class:`SpotCheck` and a :class:`LineRanking` may live on a detector context
@@ -63,20 +69,24 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-#: The check's level: a valid rule confirms a set that is really below *X* in at
-#: most this share of sessions (#4257).
+#: The level the likely range is drawn at: each audited band's tail is
+#: ``alpha / bands`` over the bands in the set (#4257's alpha).
 CHECK_ALPHA = 0.05
 
-#: The smallest candidate: the top 32 (#4257's ``a:top32``, the #4267 ruling).
+#: The schedule's base: the starting candidate at P >= 50% is the top 32
+#: (#4257's ``a:top32``, the #4267 ruling); it doubles as the floor falls.
 CHECK_BASE_CANDIDATE = 32
 
-#: The fewest picks a round draws (owner, 2026-09-29: 5 picks a round).
+#: The first band's size, and the smallest set a walk can keep (#4383).
+BAND_BASE = 8
+
+#: The picks a band is audited with (owner, 2026-09-30: 5 picks a band).
 CHECK_MIN_PICKS = 5
 
 #: Floor states.  ``unchecked``: no check has run on the current floor, and the
-#: line is the schedule's starting candidate.  ``confirmed``: the check's range
-#: clears the floor.  ``short``: the check ended with its range below the floor,
-#: and the line keeps the top 32 it ended on.
+#: line is the schedule's starting candidate.  ``confirmed``: the walk ended on
+#: a set whose estimate met the floor.  ``short``: no set met it, and the line
+#: keeps the first band the walk ended on.
 FLOOR_UNCHECKED = "unchecked"
 FLOOR_CONFIRMED = "confirmed"
 FLOOR_SHORT = "short"
@@ -87,10 +97,16 @@ FLOOR_STATES = (FLOOR_UNCHECKED, FLOOR_CONFIRMED, FLOOR_SHORT)
 #: harness both write this one dict, so the two cannot drift.
 CHECK_PROVENANCE: dict[str, str] = {"flow": "check"}
 
-#: A check's status while its rounds are still being voted on, and once it was
+#: A check's status while its bands are still being voted on, and once it was
 #: abandoned (its votes so far stay ordinary votes; the floor's state is as it was).
 CHECK_RUNNING = "running"
 CHECK_CANCELLED = "cancelled"
+
+#: Which way the walk last moved: where it started, one band deeper (the last
+#: union met the floor), or one band shallower (it did not).
+WALK_START = "start"
+WALK_DEEPER = "deeper"
+WALK_SHALLOWER = "shallower"
 
 _EPS = 1e-9
 
@@ -111,6 +127,35 @@ def line_under(score: float) -> float:
     return float(Decimal(repr(float(score))).quantize(quantum, rounding=ROUND_FLOOR))
 
 
+# ------------------------------------------------------------------ the bands
+
+
+def band_edges(n: int, base: int = BAND_BASE) -> tuple[int, ...]:
+    """``(0, 8, 16, 32, 64, ..., n)``: where the bands of a ranking of *n* items start and end.
+
+    Band ``b`` is the ranks ``[edges[b], edges[b + 1])``.  The last band runs
+    to the end of the ranking, however short that leaves it; a ranking of
+    fewer than *base* items is one band.  The reference's ``band_edges``.
+    """
+    if n <= 0:
+        return (0,)
+    edges = [0]
+    e = base
+    while e < n:
+        edges.append(e)
+        e *= 2
+    edges.append(n)
+    return tuple(edges)
+
+
+def bands_for(count: int, edges: Sequence[int]) -> int:
+    """How many bands from the top it takes to hold the top *count*: at least one."""
+    for b in range(1, len(edges)):
+        if edges[b] >= count:
+            return b
+    return max(1, len(edges) - 1)
+
+
 # ------------------------------------------------------------------ the schedule
 
 
@@ -127,46 +172,45 @@ class CheckSchedule:
 
 
 def check_schedule(min_precision: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
-    """``(K, R, m)`` for floor *min_precision*: the reference's ``schedule_for``.
+    """``(K, bands, m)`` for floor *min_precision*: what a walk starts from and costs a band.
 
-    At ``X >= 1`` no finite sample bounds a proportion at 1, so the only check
-    that reaches it is a census of the candidate: ``picks`` is the candidate
-    itself there.
+    *K* is the unchecked starting candidate, the count today's line keeps
+    before any check: ``32 * 2**max(0, floor(log2(0.5 / P)))``, the top 128 at
+    10%, the top 64 at 25%, and the top 32 at 50% and above (the #4267 ruling;
+    the reference's ``schedule_for``).  ``rounds`` is how many bands the walk
+    audits before its first verdict, the bands that hold *K*
+    (:func:`rounds_for`); ``picks`` is what each band costs,
+    :data:`CHECK_MIN_PICKS`.  At ``P >= 1`` no sample can vouch for every
+    item, so each band is censused: ``picks`` is the first band's size.
     """
     x = float(min_precision)
     if not 0.0 < x <= 1.0:
         raise ValueError(f"precision floor must be in (0, 1], got {min_precision!r}")
     doublings = max(0, math.floor(math.log2(0.5 / x) + _EPS))
     candidate = CHECK_BASE_CANDIDATE * 2**doublings
-    rounds = doublings + 1
-    if x >= 1.0 - _EPS:
-        picks = candidate
-    else:
-        picks = max(CHECK_MIN_PICKS, math.ceil(math.log(alpha / rounds) / math.log(x) - _EPS))
-    return CheckSchedule(candidate, rounds, picks)
+    picks = BAND_BASE if x >= 1.0 - _EPS else CHECK_MIN_PICKS
+    return CheckSchedule(candidate, rounds_for(candidate), picks)
 
 
-def rounds_for(candidate: int, base: int = CHECK_BASE_CANDIDATE) -> int:
-    """How many rounds a check starting at *candidate* items can run: halvings down to *base*, plus one.
+def rounds_for(candidate: int, base: int = BAND_BASE) -> int:
+    """How many bands a walk audits before its first verdict: the bands from the top that hold *candidate*.
 
-    The schedule's ``R`` for a schedule-sized candidate; for a corpus too small
-    to hold one (its own candidate), the halvings that candidate really has.
+    3 for the top 32 (8, 8, 16), 4 for 64, 5 for 128; a corpus smaller than
+    the candidate is its own last band.
     """
-    if candidate <= base:
-        return 1
-    return 1 + math.ceil(math.log2(candidate / base) - _EPS)
+    return bands_for(candidate, band_edges(max(candidate, 1), base))
 
 
 def range_tail(rounds: int, alpha: float = CHECK_ALPHA) -> float:
-    """Each tail of the likely range: the level every round of the check is tested at.
+    """Each tail of a band's interval when *rounds* bands make up the set: ``alpha / rounds``.
 
-    So the range's lower end is exactly the bound the check tested, and a check
-    confirms *X* iff that lower end is at least *X*.  A plain 90% range covers
-    too rarely after an early pass: at 10% and 0.44%, a check confirmed in its
-    first round showed a range above the truth 11% of the time (winner's
-    curse), against 4.0% with this tail.
+    The union bound: with every band's interval at this tail, the set's range
+    holds at ``1 - alpha``.  A plain 90% range covers too rarely after an early
+    pass (the same labels decide the walk and draw the range): at 10% and
+    0.44%, a check confirmed at its first verdict showed a range above the
+    truth 11% of the time, against 4.0% with this tail (#4272).
     """
-    return alpha / rounds
+    return alpha / max(1, rounds)
 
 
 # ---------------------------------------------------------------- the bound
@@ -312,64 +356,82 @@ class LineRanking:
 
 @dataclass
 class SpotCheck:
-    """One check of a detector's line at one floor: its fixed candidate, rounds, labels and verdict.
+    """One walk of a detector's line at one floor: its bands, the picks in each, and where it ended.
 
-    Built by :meth:`start` on the candidate the ranking holds at that moment.
-    :meth:`draw` deals a round's picks; :meth:`record` takes the user's labels
-    on them and, once the round is complete, confirms the floor, halves the
-    candidate into the next round, or ends the check ``short``.  The candidate
-    ids never change after :meth:`start`, so every round samples one list
+    Built by :meth:`start` on the unvoted ranking as it stands at that moment
+    (ids in rank order), cut into bands.  :meth:`draw` deals the next band's
+    picks; :meth:`record` takes the user's labels on them and, once the band is
+    audited, either deals the next band the union under test still owes, or
+    decides: the walk goes deeper, shallower, or ends.  The ranking's ids never
+    change after :meth:`start`, so every band samples the one list fixed then,
     however the model moves behind it.
     """
 
     min_precision: float
     alpha: float
-    candidate_ids: tuple[int, ...]
-    rounds: int
+    #: The unvoted ranking the walk is over, in rank order, fixed at the start.
+    ranking_ids: tuple[int, ...]
+    edges: tuple[int, ...]
     picks: int
-    round: int = 1
+    #: The bands the walk started from: those that hold the floor's candidate.
+    start_bands: int
+    #: The union under test: the top *bands* bands, ``edges[bands]`` items.
+    bands: int = 1
+    #: The deepest union whose estimate met the floor, if any.
+    best: int | None = None
+    direction: str = WALK_START
+    #: Bands audited so far (each is one round of picks).
+    round: int = 0
+    #: The union under test's size while running; the kept set's once finished.
     k: int = 0
     labels: dict[int, bool] = field(default_factory=dict)
     pending: tuple[int, ...] = ()
+    #: The band the pending picks were drawn from; ``None`` between bands.
+    band: int | None = None
     status: str = CHECK_RUNNING
     #: The top-*k* unvoted set as it stood when the check finished (its own
     #: votes already cast), for :meth:`is_stale`.  ``None`` while running.
     fingerprint: tuple[int, ...] | None = None
     _generator: Any = field(default=None, repr=False, compare=False)
+    _rank: dict[int, int] = field(default_factory=dict, repr=False, compare=False)
+    _audited: set[int] = field(default_factory=set, repr=False, compare=False)
 
     @classmethod
     def start(
         cls,
-        candidate_ids: Sequence[int],
+        ranking_ids: Sequence[int],
         min_precision: float,
         *,
         alpha: float = CHECK_ALPHA,
         seed: int | None = None,
+        start_count: int | None = None,
     ) -> "SpotCheck":
-        """A running check over *candidate_ids* (the top-K unvoted ids, rank order), with round 1 drawn.
+        """A running walk over *ranking_ids* (the unvoted ranking, rank order), with its first band drawn.
 
-        The rounds and the picks a round follow the floor's schedule, sized to
-        the candidate the corpus really has: a corpus with fewer unvoted items
-        than the schedule's K is its own candidate, with the halvings it has.
+        The walk starts at the bands that hold *start_count* items: the
+        floor's schedule by default (32 at P >= 50%, 128 at 10%), or a
+        caller's own proposal (#4389).  A ranking shorter than that starts at
+        its last band.
         """
-        ids = tuple(int(i) for i in candidate_ids)
+        ids = tuple(int(i) for i in ranking_ids)
         if not ids:
             raise ValueError("a check needs at least one unvoted item to draw from")
+        if len(set(ids)) != len(ids):
+            raise ValueError("the ranking's ids must be distinct")
         schedule = check_schedule(min_precision, alpha)
-        rounds = rounds_for(len(ids))
-        picks = schedule.picks
-        if rounds != schedule.rounds and min_precision < 1.0 - _EPS:
-            # A truncated candidate has fewer rounds, so each is tested at a
-            # looser level and may need fewer picks; the reference's m(X, R).
-            picks = max(CHECK_MIN_PICKS, math.ceil(math.log(alpha / rounds) / math.log(min_precision) - _EPS))
+        edges = band_edges(len(ids))
+        start = bands_for(min(start_count if start_count is not None else schedule.candidate, len(ids)), edges)
         check = cls(
             min_precision=float(min_precision),
             alpha=float(alpha),
-            candidate_ids=ids,
-            rounds=rounds,
-            picks=int(picks),
-            k=len(ids),
+            ranking_ids=ids,
+            edges=edges,
+            picks=int(schedule.picks),
+            start_bands=start,
+            bands=start,
+            k=int(edges[start]),
             _generator=_rng(seed),
+            _rank={cid: i for i, cid in enumerate(ids)},
         )
         check.draw()
         return check
@@ -377,13 +439,18 @@ class SpotCheck:
     # ---- what the check is looking at
 
     @property
+    def n_bands(self) -> int:
+        return len(self.edges) - 1
+
+    @property
     def start_k(self) -> int:
-        return len(self.candidate_ids)
+        """The count the walk started from, as the ranking really has it."""
+        return int(self.edges[self.start_bands])
 
     @property
     def current(self) -> tuple[int, ...]:
-        """The current candidate: the top *k* of the fixed list."""
-        return self.candidate_ids[: self.k]
+        """The union under test: the top *k* of the fixed ranking."""
+        return self.ranking_ids[: self.k]
 
     @property
     def running(self) -> bool:
@@ -395,50 +462,108 @@ class SpotCheck:
 
     @property
     def tail(self) -> float:
-        return range_tail(self.rounds, self.alpha)
+        """Each band's tail in the current set's range: ``alpha`` split over its bands."""
+        return range_tail(self.bands, self.alpha)
+
+    def band_ids(self, b: int) -> tuple[int, ...]:
+        """The ids in band *b*, in rank order."""
+        return self.ranking_ids[self.edges[b] : self.edges[b + 1]]
+
+    def band_counts(self, b: int) -> tuple[int, int, int]:
+        """``(size, labelled, right)`` for band *b*."""
+        lo, hi = self.edges[b], self.edges[b + 1]
+        labelled = right = 0
+        for cid, ok in self.labels.items():
+            r = self._rank.get(cid)
+            if r is not None and lo <= r < hi:
+                labelled += 1
+                right += int(ok)
+        return hi - lo, labelled, right
 
     def counts(self) -> tuple[int, int]:
-        """``(labelled, right)`` inside the current candidate."""
+        """``(labelled, right)`` inside the current set."""
         labelled = right = 0
-        for cid in self.current:
-            if cid in self.labels:
+        for cid, ok in self.labels.items():
+            r = self._rank.get(cid)
+            if r is not None and r < self.k:
                 labelled += 1
-                right += int(self.labels[cid])
+                right += int(ok)
         return labelled, right
 
+    def estimate(self) -> float | None:
+        """The band-stratified share of the current set that is right, or ``None`` before any of it was audited.
+
+        Each band's share of right picks, weighted by the band's size: the
+        reference's ``Audits.union_estimate``.  A band in the set with no
+        picks (only possible while the walk is still auditing its start)
+        leaves the estimate ``None``.
+        """
+        if self.k <= 0:
+            return None
+        total = 0.0
+        for b in range(self.bands):
+            size, labelled, right = self.band_counts(b)
+            if size and not labelled:
+                return None
+            total += size * (right / labelled if labelled else 0.0)
+        return total / self.k
+
     def range(self) -> LikelyRange:
-        """The likely range of the current candidate's precision, from the labels inside it."""
-        labelled, right = self.counts()
-        return likely_range(right, labelled, self.k, self.tail)
+        """The likely range of the current set's precision: its bands' intervals, weighted by band size.
+
+        Each band's interval is Clopper-Pearson at :attr:`tail` (exact where
+        the band was censused); the set's range is their size-weighted mean,
+        which holds at ``1 - alpha`` by the union bound over the bands.
+        """
+        if self.k <= 0:
+            return LikelyRange(0.0, 1.0, 0, 0)
+        lo = hi = 0.0
+        labelled_all = right_all = 0
+        for b in range(self.bands):
+            size, labelled, right = self.band_counts(b)
+            part = likely_range(right, labelled, size, self.tail)
+            lo += size * part.lo
+            hi += size * part.hi
+            labelled_all += labelled
+            right_all += right
+        return LikelyRange(lo / self.k, hi / self.k, labelled_all, right_all)
 
     # ---- the rounds
 
     def draw(self) -> tuple[int, ...]:
-        """Deal this round's picks: fresh items drawn uniformly from the current candidate.
+        """Deal the next band's picks, or decide the walk when the set under test is fully audited.
 
-        Fewer than ``picks`` when the candidate has fewer unlabelled items left
-        (the round is then a census of it).  Returned in draw order, which is
-        random, so a client can show them in that order.
+        The picks are fresh items drawn uniformly from the lowest band of the
+        set that has not been audited yet, in draw order, which is random, so
+        a client can show them in that order.  Fewer than ``picks`` when the
+        band has fewer items (a census of it).  Returns ``()`` once the walk
+        has decided.
         """
         if not self.running:
             raise ValueError("the check has finished")
-        fresh = [cid for cid in self.current if cid not in self.labels]
-        m = min(self.picks, len(fresh))
-        if m <= 0:
-            # Every item is labelled already: the round is decided as a census.
-            self.pending = ()
-            self._evaluate()
-            return ()
-        chosen = self._generator.choice(len(fresh), size=m, replace=False)
-        self.pending = tuple(fresh[int(i)] for i in chosen)
-        return self.pending
+        while self.running:
+            owed = next((b for b in range(self.bands) if b not in self._audited), None)
+            if owed is None:
+                self._evaluate()
+                continue
+            fresh = [cid for cid in self.band_ids(owed) if cid not in self.labels]
+            m = min(self.picks, len(fresh))
+            if m <= 0:
+                # Every item in the band is labelled already: audited as a census.
+                self._audited.add(owed)
+                continue
+            chosen = self._generator.choice(len(fresh), size=m, replace=False)
+            self.pending = tuple(fresh[int(i)] for i in chosen)
+            self.band = owed
+            return self.pending
+        return ()
 
     def record(self, votes: Mapping[int, bool]) -> bool:
-        """Take the user's labels on this round's picks (``True`` = right / Good).
+        """Take the user's labels on this band's picks (``True`` = right / Good).
 
-        Returns ``True`` when the round completed and was evaluated.  A label on
-        an item that was not dealt this round is refused; a partial round waits
-        for the rest of its picks.
+        Returns ``True`` when the band's round completed and the walk moved on
+        (to its next band, or to a decision).  A label on an item that was
+        not dealt is refused; a partial round waits for the rest of its picks.
         """
         if not self.running:
             raise ValueError("the check has finished")
@@ -450,20 +575,43 @@ class SpotCheck:
         self.pending = tuple(cid for cid in self.pending if cid not in self.labels)
         if self.pending:
             return False
-        self._evaluate()
+        if self.band is not None:
+            self._audited.add(self.band)
+        self.band = None
+        self.round += 1
+        self.draw()
         return True
 
     def _evaluate(self) -> None:
-        """Confirm, halve into the next round, or end short."""
-        if self.range().lo >= self.min_precision - _EPS:
-            self.status = FLOOR_CONFIRMED
+        """Deeper while the set meets the floor, shallower while it does not; stop on the first reversal."""
+        est = self.estimate()
+        if est is not None and est >= self.min_precision - _EPS:
+            self.best = self.bands
+            if self.bands >= self.n_bands:
+                self._finish(FLOOR_CONFIRMED, self.bands)
+                return
+            self.direction = WALK_DEEPER
+            self.bands += 1
+            self.k = int(self.edges[self.bands])
             return
-        if self.k > CHECK_BASE_CANDIDATE:
-            self.k = max(CHECK_BASE_CANDIDATE, self.k // 2)
-            self.round += 1
-            self.draw()
+        if self.best is not None:
+            # The set under test fell short: step back to the deepest that did not.
+            self.direction = WALK_SHALLOWER
+            self._finish(FLOOR_CONFIRMED, self.best)
             return
-        self.status = FLOOR_SHORT
+        if self.bands <= 1:
+            self._finish(FLOOR_SHORT, 1)
+            return
+        self.direction = WALK_SHALLOWER
+        self.bands -= 1
+        self.k = int(self.edges[self.bands])
+
+    def _finish(self, status: str, bands: int) -> None:
+        self.status = status
+        self.bands = bands
+        self.k = int(self.edges[bands])
+        self.pending = ()
+        self.band = None
 
     def cancel(self) -> None:
         """Abandon a running check; its votes so far stay ordinary votes."""
@@ -479,17 +627,25 @@ class SpotCheck:
         return ranking.fingerprint(self.k, also_voted) != self.fingerprint
 
     def as_dict(self) -> dict[str, Any]:
-        """The check as a client sees it: the round, its pending picks, the labels so far and the range."""
+        """The check as a client sees it: the band being audited, the set under test, the labels so far and the range."""
         labelled, right = self.counts()
         rng = self.range() if labelled else None
+        est = self.estimate()
+        band = None
+        if self.band is not None:
+            band = {"index": self.band, "lo": int(self.edges[self.band]) + 1, "hi": int(self.edges[self.band + 1])}
         return {
             "status": self.status,
             "min_precision": self.min_precision,
-            "round": self.round,
-            "rounds": self.rounds,
+            "round": self.round + (1 if self.pending else 0),
+            "rounds": self.n_bands,
             "picks_per_round": self.picks,
             "candidate": self.k,
             "start_candidate": self.start_k,
+            "bands": self.bands,
+            "band": band,
+            "direction": self.direction,
+            "estimate": None if est is None else round(est, 4),
             "picks": list(self.pending),
             "labelled": labelled,
             "right": right,
@@ -540,7 +696,7 @@ def applicable_result(min_precision: float, result: SpotCheck | None) -> SpotChe
 
 
 def floor_count(min_precision: float, result: SpotCheck | None) -> int:
-    """The count the line keeps at *min_precision*: the finished check's set, else the starting candidate.
+    """The count the line keeps at *min_precision*: the set the finished walk ended on, else the starting candidate.
 
     The corpus may hold fewer unvoted items; :class:`LineRanking` truncates.
     """
@@ -585,6 +741,7 @@ def floor_state(
 
 
 __all__ = [
+    "BAND_BASE",
     "CHECK_ALPHA",
     "CHECK_BASE_CANDIDATE",
     "CHECK_CANCELLED",
@@ -595,12 +752,17 @@ __all__ = [
     "FLOOR_SHORT",
     "FLOOR_STATES",
     "FLOOR_UNCHECKED",
+    "WALK_DEEPER",
+    "WALK_SHALLOWER",
+    "WALK_START",
     "CheckSchedule",
     "FloorState",
     "LikelyRange",
     "LineRanking",
     "SpotCheck",
     "applicable_result",
+    "band_edges",
+    "bands_for",
     "check_schedule",
     "clopper_pearson_lower",
     "clopper_pearson_upper",

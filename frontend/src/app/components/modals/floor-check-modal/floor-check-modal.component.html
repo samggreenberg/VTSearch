@@ -17,8 +17,8 @@
         </div>
       }
       @default {
-        @if (shorter()) {
-          <p class="check-shorter" role="status">Not there yet: checking a shorter list.</p>
+        @if (walkNote()) {
+          <p class="check-shorter" role="status">{{ walkNote() }}</p>
         }
         <p class="check-brief">{{ brief() }} Is each one a match?</p>
 

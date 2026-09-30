@@ -168,9 +168,9 @@ describe('line-floor (#4272, #4273)', () => {
     it.each<[number, number, string]>([
       [0.1, 5, 'Check 5 picks'],
       [0.5, 5, 'Check 5 picks'],
-      [0.9, 29, 'Check 29 picks'],
+      [0.9, 5, 'Check 5 picks'],
     ])('at %s reads "%s picks" off the schedule', (x, picks, label) => {
-      const floor = lineFloor('unchecked', { minPrecision: x, schedule: { candidate: 32, rounds: 1, picks } });
+      const floor = lineFloor('unchecked', { minPrecision: x, schedule: { candidate: 32, rounds: 3, picks } });
       expect(checkLabel(floor)).toBe(label);
     });
 
@@ -181,8 +181,9 @@ describe('line-floor (#4272, #4273)', () => {
     });
 
     it('says what a check does and that its votes are votes', () => {
-      const title = checkTitle(lineFloor('unchecked', { schedule: { candidate: 64, rounds: 2, picks: 5 } }));
-      expect(title).toContain('5 random picks a round, in up to 2 rounds');
+      const title = checkTitle(lineFloor('unchecked', { schedule: { candidate: 64, rounds: 4, picks: 5 } }));
+      expect(title).toContain('5 random picks a band, walking the list from the top 64');
+      expect(title).toContain('deeper while the list stays right enough');
       expect(title).toContain('ordinary votes');
     });
   });

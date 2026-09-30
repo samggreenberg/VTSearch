@@ -28,9 +28,9 @@ from vtsearch.state import bad_votes, good_votes, set_min_precision, snapshot_me
 
 UNCHECKED = {"status": "unchecked", "range": None}
 SCHEDULES = {
-    0.1: {"candidate": 128, "rounds": 3, "picks": 5},
-    0.5: {"candidate": 32, "rounds": 1, "picks": 5},
-    0.9: {"candidate": 32, "rounds": 1, "picks": 29},
+    0.1: {"candidate": 128, "rounds": 5, "picks": 5},
+    0.5: {"candidate": 32, "rounds": 3, "picks": 5},
+    0.9: {"candidate": 32, "rounds": 3, "picks": 5},
 }
 
 
@@ -141,12 +141,13 @@ class TestLearnedSort:
         client.post("/api/learned-sort", json={"wait": True})
         ctx = get_active_detector_context()
         check = planted_spot_check(ctx, 0.5, right=False)
-        assert check.status == "short" and check.k == 14
+        # 14 unvoted items make two bands (8 and 6); every pick wrong ends short on the first.
+        assert check.status == "short" and check.k == 8
 
         data = client.post("/api/learned-sort", json={"wait": True}).get_json()
-        assert data["floor"]["status"] == "short" and data["floor"]["count"] == 14
+        assert data["floor"]["status"] == "short" and data["floor"]["count"] == 8
         assert data["floor"]["range"]["labelled"] == 5 and data["floor"]["range"]["right"] == 0
-        assert data["threshold"] == round(ctx.line_ranking.threshold_for(14, human_voted_ids(ctx)), 4)
+        assert data["threshold"] == round(ctx.line_ranking.threshold_for(8, human_voted_ids(ctx)), 4)
 
     def test_a_text_sort_has_no_line_and_no_verdict(self, client):
         data = client.post("/api/sort", json={"text": "a dog barking"}).get_json()

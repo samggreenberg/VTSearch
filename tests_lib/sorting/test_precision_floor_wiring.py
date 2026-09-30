@@ -45,6 +45,7 @@ from vtscore.state.core import (
     set_thread_detector_context,
 )
 from vtscore.training.thresholds import (
+    BAND_BASE,
     DEFAULT_MIN_PRECISION,
     FLOOR_CONFIRMED,
     FLOOR_SHORT,
@@ -317,10 +318,12 @@ def _planted_ranking(n: int = 200, voted: set[int] | None = None) -> LineRanking
 
 
 def _finished_check(ranking: LineRanking, min_precision: float, *, right: bool = True) -> SpotCheck:
-    """A check over *ranking*'s candidate at *min_precision*, every pick voted *right* (or every pick wrong)."""
-    from vtscore.training.thresholds import check_schedule
+    """A walk over *ranking*'s unvoted items at *min_precision*, every pick voted *right* (or every pick wrong).
 
-    check = SpotCheck.start(ranking.candidate(check_schedule(min_precision).candidate), min_precision, seed=1)
+    Every pick right walks to the end of the ranking (the whole of it is
+    kept); every pick wrong ends short on the first band (#4388).
+    """
+    check = SpotCheck.start(tuple(int(i) for i in ranking.unvoted_ids()), min_precision, seed=1)
     while check.running:
         check.record({cid: right for cid in check.pending})
     check.fingerprint = ranking.fingerprint(check.k, set(check.labels))
@@ -360,20 +363,21 @@ class TestTheDetectorsLine:
     def test_recut_at_a_floor_keeps_the_set_a_finished_check_ended_on(self):
         ctx = self._ctx()
         ctx.precision_check = _finished_check(ctx.line_ranking, 0.25)
-        assert ctx.precision_check.status == FLOOR_CONFIRMED and ctx.precision_check.k == 64
+        n = ctx.line_ranking.size
+        assert ctx.precision_check.status == FLOOR_CONFIRMED and ctx.precision_check.k == n
         voted = set(ctx.precision_check.labels)
         ctx.good_votes.update({cid: None for cid in voted})
-        assert recut_detector_threshold(ctx, min_precision=0.25) == ctx.line_ranking.threshold_for(64, voted)
+        assert recut_detector_threshold(ctx, min_precision=0.25) == ctx.line_ranking.threshold_for(n, voted)
         # A different floor is unchecked: its own starting candidate.
         assert recut_detector_threshold(ctx, min_precision=0.5) == ctx.line_ranking.threshold_for(32, voted)
 
-    def test_a_short_check_keeps_the_top_thirty_two(self):
+    def test_a_short_check_keeps_the_first_band(self):
         ctx = self._ctx()
         ctx.precision_check = _finished_check(ctx.line_ranking, 0.1, right=False)
-        assert ctx.precision_check.status == FLOOR_SHORT and ctx.precision_check.k == 32
+        assert ctx.precision_check.status == FLOOR_SHORT and ctx.precision_check.k == BAND_BASE
         voted = set(ctx.precision_check.labels)
         ctx.bad_votes.update({cid: None for cid in voted})
-        assert recut_detector_threshold(ctx, min_precision=0.1) == ctx.line_ranking.threshold_for(32, voted)
+        assert recut_detector_threshold(ctx, min_precision=0.1) == ctx.line_ranking.threshold_for(BAND_BASE, voted)
 
     def test_with_no_ranking_a_floor_falls_through_to_the_inclusion_fallbacks(self):
         ctx = self._ctx()
@@ -420,7 +424,7 @@ class TestTheDetectorsLine:
             "status": FLOOR_UNCHECKED,
             "count": 64,
             "range": None,
-            "schedule": {"candidate": 64, "rounds": 2, "picks": 5},
+            "schedule": {"candidate": 64, "rounds": 4, "picks": 5},
         }
         assert detector_floor_state(ctx, None) is None
 
@@ -430,9 +434,12 @@ class TestTheDetectorsLine:
         ctx.good_votes.update({cid: None for cid in ctx.precision_check.labels})
         state = detector_floor_state(ctx, 0.5)
         assert state is not None
-        assert state["status"] == FLOOR_CONFIRMED and state["count"] == 32
-        assert state["range"]["labelled"] == 5 and state["range"]["right"] == 5
-        assert state["range"]["lo"] >= 0.5 and state["range"]["hi"] == 1.0 and state["range"]["stale"] is False
+        assert state["status"] == FLOOR_CONFIRMED and state["count"] == ctx.line_ranking.size
+        # Every pick right walks all six bands of the 200 (8, 8, 16, 32, 64, 72): 30 picks.
+        assert state["range"]["labelled"] == 30 and state["range"]["right"] == 30
+        # The walk decides on the picks' plain share, so the range's lower end can sit
+        # under the floor (each band's bound is at alpha / 6 here); the upper end is 1.
+        assert 0.3 <= state["range"]["lo"] < 0.5 and state["range"]["hi"] == 1.0 and state["range"]["stale"] is False
         # A later vote inside the set moves the set under the result.
         ctx.bad_votes[next(cid for cid in ctx.line_ranking.candidate(32, human_voted_ids(ctx)))] = None
         later, other = detector_floor_state(ctx, 0.5), detector_floor_state(ctx, 0.1)
@@ -447,7 +454,7 @@ class TestTheDetectorsLine:
             "status": FLOOR_UNCHECKED,
             "count": 32,
             "range": None,
-            "schedule": {"candidate": 32, "rounds": 1, "picks": 5},
+            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
         }
 
     def test_each_detector_keeps_its_own_floor(self):
