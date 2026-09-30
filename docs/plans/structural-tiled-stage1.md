@@ -1,7 +1,16 @@
 # Structural Stage 1 for documents: tiled VLAD in the app (#3928)
 
 **Status:** approved by the owner 2026-09-30. M1–M4 measured the same day
-and all pass (below). The build is next.
+and all pass (below). Build steps 1–4 are done (PR #4378).
+
+**End to end** (`docs/experiments/2026-09-30-fullmarks-tiled-stage1-app-3928/`):
+
+- At 5,000 pages the app's path now matches verifying every page (no
+  resolvable difference at any vote count), where it found 0.17 positives by
+  20 votes before.
+- At 50,000 pages it finds as many (16.5 against 16.2 by 20 votes) and ranks
+  0.04–0.15 AP lower, where large classes outgrow the 1,000-page shortlist.
+- A vote costs 1.4 s at 5,000 pages and 4.0 s at 50,000.
 
 **Owner's decisions (2026-09-30):**
 

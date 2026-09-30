@@ -1,0 +1,48 @@
+{
+  "k": 1000,
+  "budget": 8192,
+  "cpus": 8,
+  "cuda": false,
+  "gpu": null,
+  "extract_s": 188.9,
+  "median_candidate_keypoints": 5904,
+  "templates": [
+    {
+      "name": "crop",
+      "keypoints": 1209,
+      "seconds": 20.01
+    },
+    {
+      "name": "box0",
+      "keypoints": 485,
+      "seconds": 9.43
+    },
+    {
+      "name": "box1",
+      "keypoints": 138,
+      "seconds": 3.97
+    },
+    {
+      "name": "box2",
+      "keypoints": 422,
+      "seconds": 9.91
+    },
+    {
+      "name": "box3",
+      "keypoints": 258,
+      "seconds": 5.85
+    },
+    {
+      "name": "box4",
+      "keypoints": 162,
+      "seconds": 4.31
+    },
+    {
+      "name": "box5",
+      "keypoints": 161,
+      "seconds": 4.37
+    }
+  ],
+  "median_s_per_template": 5.85,
+  "crop_ratio_test_s": 19.64
+}
