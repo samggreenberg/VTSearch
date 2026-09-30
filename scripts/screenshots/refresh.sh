@@ -21,7 +21,9 @@
 # costs a few minutes of embedding on a CPU box.
 #
 # It also fits the Browse map under VTSEARCH_PROJECTION_SEED, because an
-# unseeded UMAP fit lays the map out differently every time (#4296).
+# unseeded UMAP fit lays the map out differently every time (#4296), and draws
+# the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an unseeded
+# draw shows the floor-check shot a different pick every time (#4330).
 #
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones.
@@ -31,6 +33,7 @@ cd "$(dirname "$0")"
 APP="${APP:-http://localhost:5000}"
 REPO_ROOT="$(cd ../.. && pwd)"
 PROJECTION_SEED=0
+SPOT_CHECK_SEED=0
 APP_DATA_DIR="$REPO_ROOT/data/.screenshots-app"
 APP_LOG=/tmp/vtshots-refresh-app.log
 
@@ -58,6 +61,7 @@ else
             VTSEARCH_MODELS_DIR="${VTSEARCH_MODELS_DIR:-$REPO_ROOT/data/models}" \
             VTSEARCH_TORCH_THREADS=1 \
             VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
+            VTSEARCH_SPOT_CHECK_SEED=$SPOT_CHECK_SEED \
             exec python app.py --local > "$APP_LOG" 2>&1
     ) &
     started_app=$!

@@ -1186,7 +1186,8 @@ export const SHOTS: Shot[] = [
     // Opens the check from Train's "Check 5 picks" (Find offers none, #4317)
     // and answers the first pick with the keys, which is the step's chromium
     // check (`checkStepKeys`). The server draws the picks at random, by
-    // design, so the pictures differ on every capture.
+    // design; refresh.sh seeds that draw (VTSEARCH_SPOT_CHECK_SEED, #4330),
+    // so the same pick is framed on every capture.
     async recipe(page, h) {
       await h.enterLabelView();
       await h.leftTab('Manual');

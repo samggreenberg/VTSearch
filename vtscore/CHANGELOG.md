@@ -51,6 +51,12 @@ instead, since every commit on `dev` is effectively a new app release.)
   every fit runs under it and a layout persisted under another seed is refit;
   the signposts' clustering UMAP is fit under the layout's stamped seed.
 
+- **A seed for the spot check's picks** (issue #4330), additive:
+  `vtscore.config.SPOT_CHECK_SEED` (from `VTSEARCH_SPOT_CHECK_SEED`, default
+  `None`), which the app passes to `SpotCheck.start(seed=...)`. With no seed
+  set nothing changes: every check draws fresh picks. With one set, a check
+  over the same candidate deals the same picks every time.
+
 - **`vtscore.training.thresholds.spot_check`** (issue #4272): the precision
   floor's spot check. `check_schedule` / `CheckSchedule` / `rounds_for`
   (the candidate, rounds and picks a floor costs, at `CHECK_ALPHA`,
