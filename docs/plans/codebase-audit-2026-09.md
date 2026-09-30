@@ -63,28 +63,28 @@ A genuine removal is a deliberate library break: raise it with the user first.
 
 ## Library tier — duplication
 
-- [ ] #3379 — Collapse the five copies of the clip-dict builder in `image/_demo_sources.py` (Sonnet 5)
-- [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet 5)
-- [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet 5)
+- [ ] #3379 — Collapse the five copies of the clip-dict builder in `image/_demo_sources.py` (Sonnet)
+- [ ] #3383 — Deduplicate the clipper family: tiling math, segment emission, six no-op clippers (Sonnet)
+- [ ] #3386 — Collapse the near-synonymous embedder-resolution wrappers (Sonnet)
 
 ## Library tier — dead code & unkept promises
 
-- [ ] #3401 — Declare `image_response` on the `MediaType` ABC and document both undeclared hooks (Sonnet 5)
-- [ ] #3402 — Apply the sub-output disambiguators in the converted-demo emitter (Sonnet 5)
+- [ ] #3401 — Declare `image_response` on the `MediaType` ABC and document both undeclared hooks (Sonnet)
+- [ ] #3402 — Apply the sub-output disambiguators in the converted-demo emitter (Sonnet)
 
 ## Layering & host seams
 
-- [ ] #3388 — Drive `PluginBase` auto-derivation from family-base opt-in instead of three hardcoded tables (Opus 4.8)
+- [ ] #3388 — Drive `PluginBase` auto-derivation from family-base opt-in instead of three hardcoded tables (Opus)
 
 ## App tier — settings
 
-- [ ] #3413 — Delete the settings migration shims for old persisted formats (Sonnet 5)
-- [ ] #3416 — Give `inclusion` one owner and one clamp (Sonnet 5)
+- [ ] #3413 — Delete the settings migration shims for old persisted formats (Sonnet)
+- [ ] #3416 — Give `inclusion` one owner and one clamp (Sonnet)
 
 ## Tests & tooling
 
-- [ ] #3421 — `tests_lib/` is not the tier it claims; its conftest imports the app tier (Sonnet 5)
-- [ ] #3431 — `Dockerfile.image-embedders` and its GPU twin are a 90% copy (Sonnet 5)
+- [ ] #3421 — `tests_lib/` is not the tier it claims; its conftest imports the app tier (Sonnet)
+- [ ] #3431 — `Dockerfile.image-embedders` and its GPU twin are a 90% copy (Sonnet)
 
 ---
 
@@ -93,7 +93,7 @@ A genuine removal is a deliberate library break: raise it with the user first.
 Four of the five questions this audit raised have been answered by the repo
 owner and became issues (or, for the punch-card, a decision to change nothing):
 
-- [ ] #3452 — Find out who uses the autorun extractor/localizer surface before touching it (Sonnet 5). Kept as-is pending an answer from the external developers; #3441 is scoped so the rest of the frontend dead-code sweep lands without waiting.
+- [ ] #3452 — Find out who uses the autorun extractor/localizer surface before touching it (Sonnet). Kept as-is pending an answer from the external developers; #3441 is scoped so the rest of the frontend dead-code sweep lands without waiting.
 
 The release punch-card stays exactly as it is; that question is closed.
 
