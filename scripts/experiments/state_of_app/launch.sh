@@ -77,8 +77,11 @@ export CALIB_JOB_NAME="${CALIB_JOB_NAME:-sota-$SOTA_DATE}"
 export CALIB_MEM="${CALIB_MEM:-80G}"
 export CALIB_TIME="${CALIB_TIME:-4:00:00}"
 
-# `subset "<class>,<class>,..."`: run only those classes (every band, both
-# paths) out of an already-prepared grid. Indices are the grid's own, so the
+# `subset "<class>,<class>,..."`: run only those classes (every band) out of an
+# already-prepared grid, on the path SOTA_PATH names: `binary` (the default),
+# `region` or `all`. Binary is the default because a review runs Binary Photo
+# only unless the owner asks for Region (2026-09-26); before #4363 this mode
+# queued both paths, so a smoke run silently carried 80 GB region cells. Indices are the grid's own, so the
 # cells land exactly where the full run would put them and a later full run
 # can skip them. The owner's rule: settle the presentation on a few classes,
 # then widen classes and seeds together.
@@ -94,24 +97,32 @@ esac
 
 if [[ "${1:-}" == "subset" ]]; then
   CLASSES="${2:?usage: launch.sh subset \"airplane,dining table,...\"}"
-  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" <<'PYIDX'
+  SUBSET_PATH="${SOTA_PATH:-binary}"
+  IDX=$(python3 - "$CALIB_EXP/results/prepare_info.json" "$CLASSES" "$CALIB_N_SEEDS" "$SUBSET_PATH" <<'PYIDX'
 import json, sys
 info = json.load(open(sys.argv[1]))["datasets"]["coco_better"]
 keep = {c.strip() for c in sys.argv[2].split(",") if c.strip()}
 n_seeds = int(sys.argv[3])
+paths = {"binary": ("siglip",), "region": ("siglip+dinov3_patch",), "all": ("siglip", "siglip+dinov3_patch")}
+if sys.argv[4] not in paths:
+    raise SystemExit(f"SOTA_PATH must be one of {sorted(paths)}, got {sys.argv[4]!r}")
 # array_cells order at CALIB_CELL_ORDER=seed: seed-major, then embedder, then category.
+# Both embedders still count toward the seed's block size, so an index means the
+# same cell whichever path is selected.
 one, per_seed = [], 0
 for emb in ("siglip", "siglip+dinov3_patch"):
     cats = info[emb]["selected_categories"]
     unknown = keep - {c.split("@")[0] for c in cats}
     if unknown:
         raise SystemExit(f"not in the grid: {sorted(unknown)}")
-    one += [per_seed + i for i, c in enumerate(cats) if c.split("@")[0] in keep]
+    if emb in paths[sys.argv[4]]:
+        one += [per_seed + i for i, c in enumerate(cats) if c.split("@")[0] in keep]
     per_seed += len(cats)
 print(",".join(str(s * per_seed + i) for s in range(n_seeds) for i in one))
 PYIDX
   )
   echo "$IDX" > "$CALIB_EXP/subset-indices.txt"
+  echo "subset: path=$SUBSET_PATH, $(tr ',' '\n' <<<"$IDX" | wc -l) runs"
   exec bash "$CALIB/launch_bands.sh" redo "$IDX"
 fi
 

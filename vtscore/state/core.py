@@ -1022,6 +1022,12 @@ class DetectorContext:
         # labelset, because nothing that changes the labels drops ``model``
         # (issue #4204).  In-memory only, never persisted.
         "model_labels_sig",  # tuple | None
+        # Structural detectors on a tiled (document) dataset keep every
+        # (template, page) geometric fit here across retrains, so a vote verifies
+        # one new template instead of the whole shortlist (#3928).  In-memory
+        # only; entries record the features they were computed on, so a dataset
+        # reload misses rather than reusing them.
+        "structural_verification_cache",  # VerificationCache | None
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
         # are independent of ``good_votes``/``bad_votes``, which only count
@@ -1147,6 +1153,7 @@ class DetectorContext:
         self.label_score_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
         self.model_labels_sig: tuple | None = None
+        self.structural_verification_cache: Any = None  # VerificationCache | None
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0

@@ -9,12 +9,16 @@ Reads one State of the App run (``launch.sh``) and writes, under ``--out``:
   found by each checkpoint; and the **spot check** the run ends on: its verdict,
   its likely range and whether that range covered the truth.
 * ``lines.csv`` -- the **line on a fresh corpus**, one row per run x point x
-  floor: at each floor the app offers (``_rank_metrics.FLOORS``), how right the
-  set the line keeps on the test half is, how far short of the floor, whether
-  it meets it, its recall, and the best recall any cut of the same ranking gets
-  at that floor.  Points run left to right: ``text`` (click 0), each checkpoint,
-  ``final`` and ``ceiling``.
-* ``curves.csv`` -- every run's AP and Goods found on a common click grid.
+  floor: at each floor *P* the app offers (``_rank_metrics.FLOORS``), how right
+  the set the line keeps on the test half is, how far short of *P*, whether it
+  meets it, its recall next to the best recall any cut of the same ranking gets
+  at *P*, and its **F1** next to the best F1 any cut gets.  Points run left to
+  right: ``text`` (click 0), each checkpoint, ``final`` and ``ceiling``.
+* ``line_steps.csv`` -- the same line at every click a rank frame was recorded
+  (``CALIB_RANK_FRAME_STEPS``), one row per run x click x floor: what the F1
+  curve is drawn from.
+* ``curves.csv`` -- every run's AP, Goods found, and the line's F1 at the
+  default floor and at 10% (``f1``, ``f1_p10``) on a common click grid.
 * ``influence.csv`` -- one row per click: the change in held-out AP that the
   click is credited with.
 * ``images.csv`` / ``image_detector.csv`` -- the influence rolled up per image,
@@ -26,11 +30,17 @@ Reads one State of the App run (``launch.sh``) and writes, under ``--out``:
 **The metrics (owner, 2026-09-30, #4357).**  #4223 retired FPR + FNR as the
 objective and #4272 made the default arm's line the floor's set: the top *K*
 unvoted at the default floor.  A review scored in cost would read the change of
-objective as a regression, so nothing here is cost: the ranking is AP, the line
-is read at each floor off the rank frames (``task_NNNN__rankframes.csv``,
-``CALIB_RANK_FRAME_STEPS``), and F1 and cost are gone.  A run recorded without
-rank frames still gets every AP, harvest and check column; its line points
-other than ``text`` are blank rather than guessed.
+objective as a regression, so nothing here is cost: the ranking is AP, and the
+line is read at each floor off the rank frames (``task_NNNN__rankframes.csv``,
+``CALIB_RANK_FRAME_STEPS``).  **F1 is back, at the line (owner, 2026-09-30):**
+"Showing AP is nice, but it's entirely about the ranking. Using the
+returned-set threshold, show F1 over time, too."  It is the F1 of the set the
+floor keeps on the test half (its top *K*), from the same rank frames -- never
+the harness rows' ``f1``, which carries the session pool's line *score* over to
+the test half instead of keeping its top *K*.  The precision floor is written
+*P* (owner, 2026-09-30), not *X*.  A run recorded without rank frames still gets
+every AP, harvest and check column; its line points other than ``text`` are
+blank rather than guessed.
 
 **The spot check is not a click.**  The default arm checks the line once the
 voting steps are spent (``spot_check="end"``): its rounds are cast as votes and
@@ -100,7 +110,14 @@ _BUCKET = ["arm", "category", "label", "when"]
 #: The ceiling's arm, and the kind its rank frame carries.
 CEILING = "skyline_train_full"
 #: The line's metrics, as ``_rank_metrics.line_metrics`` names them.
-LINE_METRICS = ("k", "precision", "shortfall", "meets", "recall", "oracle_recall")
+LINE_METRICS = ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
+#: The floor a cell's F1 columns and the headline F1 curve are read at: the app's
+#: default (``DEFAULT_MIN_PRECISION``), which is every session's floor until the
+#: user moves it.
+DEFAULT_FLOOR = 0.5
+#: The floors ``curves.csv`` carries an F1 curve for.  90% keeps the same top 32
+#: as 50% until a check runs, so its unchecked curve would repeat 50%'s.
+CURVE_FLOORS = (0.5, 0.1)
 
 
 def _f(x) -> float:
@@ -227,8 +244,9 @@ def _line_at(frame: dict | None, floor: float) -> dict[str, float]:
 
 def run_tables(
     base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFrame, frames: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """``(cells, lines)``: one row per run, and one per run x point x floor.
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """``(cells, lines, steps)``: one row per run, one per run x point x floor, and
+    one per run x recorded click x floor (every ``step`` rank frame, for the F1 curve).
 
     A run that never found a positive has no scored steps (the head cannot
     train without a Good), and it is the review's most important row, so it is
@@ -253,7 +271,7 @@ def run_tables(
         skyd[(r["dataset"], r["category"], r["embedder"], r["style"], int(r["seed"]))] = _f(r.get("average_precision"))
 
     keys = set(series) | set(clicks_by) | set(skyd)
-    cells, lines = [], []
+    cells, lines, steps_out = [], [], []
     for key in sorted(keys, key=lambda k: tuple(str(x) for x in k)):
         ds, cat, emb, style, seed = key
         text = _text_for(ts, ds, cat, emb, int(seed))
@@ -312,20 +330,49 @@ def run_tables(
         points.append(("final", final_t, last_frame if have_frames else None, have_frames and not trained))
         points.append(("ceiling", np.nan, _frame_dict(sky_frame.iloc[-1]) if sky_frame is not None else None, False))
         ident = {k: row[k] for k in ("arm", "dataset", "category", "class", "band", "seed", "never_trained")}
+        at_default: dict[str, dict[str, float]] = {}
         for point, t, frame, use_text in points:
             for x in FLOORS:
                 m = _text_line(text, x) if use_text else _line_at(frame, x)
                 lines.append({**ident, "point": point, "t": t, "floor": x, **m})
-    return pd.DataFrame(cells), pd.DataFrame(lines)
+                if x == DEFAULT_FLOOR:
+                    at_default[point] = m
+        # The returned set's F1 at the default floor, beside AP (owner, 2026-09-30).
+        row["text_f1"] = at_default["text"]["f1"]
+        for c in CHECKPOINTS:
+            row[f"f1_{c}"] = at_default[str(c)]["f1"]
+        row["final_f1"] = at_default["final"]["f1"]
+        row["final_oracle_f1"] = at_default["final"]["oracle_f1"]
+        row["ceiling_f1"] = at_default["ceiling"]["f1"]
+        # The line at every click a frame was recorded, for the F1 curve.
+        for fr in steps.to_dict("records") if steps is not None else []:
+            ranks = parse_ranks(fr["test_pos_ranks"])
+            for x in FLOORS:
+                m = line_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), x)
+                steps_out.append({**ident, "t": int(fr["t"]), "floor": x, **m})
+    return pd.DataFrame(cells), pd.DataFrame(lines), pd.DataFrame(steps_out)
 
 
-def curves(cells: pd.DataFrame, base: pd.DataFrame, picks: pd.DataFrame) -> pd.DataFrame:
+def curves(
+    cells: pd.DataFrame,
+    base: pd.DataFrame,
+    picks: pd.DataFrame,
+    lines: pd.DataFrame | None = None,
+    steps: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Every run on a common click grid 0..horizon, as the USER would see it.
 
     Click 0 is the text-only AP; until the first scored click the user still
     sees the text sort, so it carries forward; after that the last scored value
     carries forward. A run that never trained stays at its text AP.  Goods found
     count the clicks only, never the spot check's picks.
+
+    The line's F1 (``f1`` at the default floor, ``f1_p10`` at 10%) follows the
+    same rule off the ``step`` rank frames: the text sort's until the first
+    frame, then the last frame's.  Between two recorded frames that is a carried
+    value, not a measurement, so a figure should read the curve only at the
+    clicks ``line_steps.csv`` holds.  A trained run with no frames at all (a
+    run recorded without them) is blank past click 0.
     """
     ordinary = base[~_is_check(base)] if not base.empty else pd.DataFrame(columns=[*RUN_KEY, "t"])
     by_run = {tuple(k): g.groupby("t")["average_precision"].mean() for k, g in ordinary.groupby(RUN_KEY)}
@@ -333,6 +380,15 @@ def curves(cells: pd.DataFrame, base: pd.DataFrame, picks: pd.DataFrame) -> pd.D
     goods_run = {tuple(k): g.sort_values("t") for k, g in pk.groupby(RUN_KEY)} if not pk.empty else {}
     horizon = max(CHECKPOINTS[-1], int(ordinary["t"].max()) if not ordinary.empty else 0)
     grid = np.arange(0, horizon + 1)
+    text_f1: dict[tuple, float] = {}
+    if lines is not None and not lines.empty:
+        for r in lines[lines["point"].astype(str) == "text"].itertuples():
+            text_f1[(r.arm, r.category, int(r.seed), float(r.floor))] = r.f1
+    f1_run: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+    if steps is not None and not steps.empty:
+        for (arm, cat, seed, floor), g in steps.groupby(["arm", "category", "seed", "floor"]):
+            g = g.sort_values("t")
+            f1_run[(arm, cat, int(seed), float(floor))] = (g["t"].to_numpy(), g["f1"].to_numpy(dtype=float))
     rows = []
     for r in cells.itertuples():
         key = (r.dataset, r.category, _emb_of(r.arm), _style_of(r.arm), int(r.seed))
@@ -349,8 +405,23 @@ def curves(cells: pd.DataFrame, base: pd.DataFrame, picks: pd.DataFrame) -> pd.D
             cum = g["picked_label"].cumsum().to_numpy()
             idx = np.searchsorted(g["t"].to_numpy(), grid, side="right") - 1
             goods[idx >= 0] = cum[idx[idx >= 0]]
+        f1_cols = {}
+        for floor in CURVE_FLOORS:
+            start = text_f1.get((r.arm, r.category, int(r.seed), floor), np.nan)
+            f1 = np.full(len(grid), start, dtype=float)
+            have_run = f1_run.get((r.arm, r.category, int(r.seed), floor))
+            if have_run is not None:
+                ft, fv = have_run
+                idx = np.searchsorted(ft, grid, side="right") - 1
+                f1[idx >= 0] = fv[idx[idx >= 0]]
+                f1[0] = start
+            elif not r.never_trained:
+                f1[1:] = np.nan
+            f1_cols["f1" if floor == DEFAULT_FLOOR else f"f1_{floor_tag(floor)}"] = f1
         rows.append(
-            pd.DataFrame({"arm": r.arm, "category": r.category, "seed": r.seed, "t": grid, "ap": ap, "goods": goods})
+            pd.DataFrame(
+                {"arm": r.arm, "category": r.category, "seed": r.seed, "t": grid, "ap": ap, "goods": goods, **f1_cols}
+            )
         )
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
 
@@ -504,7 +575,7 @@ HEADLINE_POINTS = ("text", "25", "50", "final", "ceiling")
 
 
 def line_table(lines: pd.DataFrame, by: list[str]) -> pd.DataFrame:
-    """The line per *by* x point x floor: mean precision, share meeting X, shortfall, recall, oracle recall."""
+    """The line per *by* x point x floor: mean precision, share meeting P, shortfall, recall, oracle recall, F1."""
     lines = lines[lines["point"].isin(HEADLINE_POINTS)].copy()
     lines["point"] = pd.Categorical(lines["point"], HEADLINE_POINTS, ordered=True)
     g = lines.groupby([*by, "floor", "point"], observed=True)
@@ -515,6 +586,8 @@ def line_table(lines: pd.DataFrame, by: list[str]) -> pd.DataFrame:
         shortfall=("shortfall", "mean"),
         recall=("recall", "mean"),
         oracle_recall=("oracle_recall", "mean"),
+        f1=("f1", "mean"),
+        oracle_f1=("oracle_f1", "mean"),
         runs=("precision", "count"),
     )
     return out.round(3)
@@ -555,13 +628,26 @@ def summary(cells: pd.DataFrame, lines: pd.DataFrame, img: pd.DataFrame, out: Pa
             _md(cells.groupby("arm")[rank].mean().round(3)),
             "",
         ]
+        f1s = ["text_f1", *[f"f1_{c}" for c in CHECKPOINTS if c in (25, 50, 100)], "final_f1", "ceiling_f1"]
+        f1s += ["final_oracle_f1"]
+        lines_md += [
+            f"## The returned set: F1 of the line at P = {DEFAULT_FLOOR:.0%}, per path",
+            "",
+            "F1 of the set the default floor keeps on the test half (the top K, unchecked), at click 0 "
+            "(the text sort), at fixed clicks, at the end, and for the full-label model. "
+            "`final_oracle_f1` is the best F1 any cut of the final ranking reaches.",
+            "",
+            _md(cells.groupby("arm")[f1s].mean().round(3)),
+            "",
+        ]
         lines_md += [
             "## The line on a fresh corpus (the test half), per path",
             "",
-            "At each floor X the line keeps the top K of the ranking (the floor's unchecked candidate). "
-            "`precision` is the share of them that is right, `meets` the share of runs at or above X, "
-            "`shortfall` the mean max(0, X - precision), and `oracle_recall` the best recall any cut of "
-            "the same ranking reaches at precision >= X. `ceiling` is the full-label model's ranking.",
+            "At each floor P the line keeps the top K of the ranking (the floor's unchecked candidate). "
+            "`precision` is the share of them that is right, `meets` the share of runs at or above P, "
+            "`shortfall` the mean max(0, P - precision), `oracle_recall` the best recall any cut of "
+            "the same ranking reaches at precision >= P, `f1` the kept set's F1 and `oracle_f1` the best "
+            "F1 any cut reaches. `ceiling` is the full-label model's ranking.",
             "",
         ]
         if lines[lines["point"] != "text"]["precision"].notna().any():
@@ -581,7 +667,7 @@ def summary(cells: pd.DataFrame, lines: pd.DataFrame, img: pd.DataFrame, out: Pa
                 _md(chk),
                 "",
             ]
-        by_band = ["text_ap", "final_ap", "ceiling_ap", "positives_found"]
+        by_band = ["text_ap", "final_ap", "ceiling_ap", "text_f1", "final_f1", "ceiling_f1", "positives_found"]
         lines_md += ["## Per path and band", "", _md(cells.groupby(["arm", "band"])[by_band].mean().round(3)), ""]
         band_line = lines[(lines["point"] == "final") & (lines["floor"] == 0.5)]
         if band_line["precision"].notna().any():
@@ -589,14 +675,16 @@ def summary(cells: pd.DataFrame, lines: pd.DataFrame, img: pd.DataFrame, out: Pa
                 "## The final line at 50%, per path and band",
                 "",
                 _md(
-                    band_line.groupby(["arm", "band"])[["precision", "meets", "recall", "oracle_recall"]]
+                    band_line.groupby(["arm", "band"])[["precision", "meets", "recall", "oracle_recall", "f1"]]
                     .mean()
                     .round(3)
                 ),
                 "",
             ]
         for arm, a in cells.groupby("arm"):
-            by = a.groupby("class")[["text_ap", "final_ap", "ceiling_ap", "clicks_bought", "headroom"]].mean()
+            by = a.groupby("class")[
+                ["text_ap", "final_ap", "ceiling_ap", "clicks_bought", "headroom", "text_f1", "final_f1", "ceiling_f1"]
+            ].mean()
             lines_md += [
                 f"## {arm}: the 10 hardest classes (final AP)",
                 "",
@@ -679,12 +767,13 @@ def main() -> int:
     if base.empty and sky.empty:
         raise SystemExit(f"no cells under {args.exp}/results/cells")
     ts = text_scores(args.baseline)
-    cells, lines = run_tables(base, sky, ts, picks, frames)
+    cells, lines, steps = run_tables(base, sky, ts, picks, frames)
     inf = attribute(base, picks, ts) if not base.empty else pd.DataFrame()
     img, det = roll_up(inf)
     cells.to_csv(args.out / "cells.csv", index=False)
     lines.to_csv(args.out / "lines.csv", index=False)
-    curves(cells, base, picks).to_csv(args.out / "curves.csv", index=False)
+    steps.to_csv(args.out / "line_steps.csv", index=False)
+    curves(cells, base, picks, lines, steps).to_csv(args.out / "curves.csv", index=False)
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)

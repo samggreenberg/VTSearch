@@ -1,0 +1,13 @@
+{
+  "name": "tile_projection_v1",
+  "dim": 512,
+  "fit_on": "FullMarks v5.0 tier s, all sources",
+  "sample_pages": 400,
+  "sample_digest": "3aa009bc4d4934d6",
+  "sample_tiles": 20786,
+  "budget": 8192,
+  "detect_pixels": 2000000,
+  "features": "compact (fp16 keypoints, uint8 descriptors)",
+  "commit": "1cb0a58ac7b69b4a73a1d6a824a866250788a28e",
+  "written": "2026-09-30T14:12:49"
+}

@@ -59,29 +59,38 @@ same edit.
 - **Metrics (owner, 2026-09-30, #4357): no FPR + FNR anywhere.** #4223
   retired that objective, and since #4272 the default arm's line is the
   floor's set (the top 32 unvoted at the default 50%), so a review scored in
-  cost reads the change of objective as a regression. Cost and F1 are gone
-  from the headline, the tables and the figures, not moved to an appendix.
+  cost reads the change of objective as a regression. Cost is gone from the
+  headline, the tables and the figures, not moved to an appendix.
+  **The precision floor is written *P*, not *X*** (owner, 2026-09-30).
   The set, as `analyze.py` reports it:
   - **Ranking:** AP (threshold-free), and Goods found per checkpoint (harvest).
+  - **The returned set's F1, over clicks** (owner, 2026-09-30: "Showing AP is
+    nice, but it's entirely about the ranking. Using the returned-set
+    threshold, show F1 over time, too."). It is the F1 of the set the line
+    keeps on the test half at the default P = 50% (and at 10%), from the rank
+    frames, never the harness rows' `f1`. It sits next to the best F1 any cut
+    of the same ranking reaches (`f1_over_clicks.png`, `line_steps.csv`).
   - **The line on a fresh corpus** (the test half, which is what Find and a
     headless run return), at each floor the app offers (10 / 50 / 90%): the
     precision of the kept set (the top K, the floor's unchecked candidate);
-    the shortfall, max(0, X − precision); the share of sessions meeting X; and
-    recall next to the oracle's recall at precision ≥ X (the best cut of the
-    same ranking).
+    the shortfall, max(0, P − precision); the share of sessions meeting P;
+    recall next to the oracle's recall at precision ≥ P (the best cut of the
+    same ranking); and the kept set's F1.
   - **The Train-time spot check:** confirm rate, the range, and whether the
     range covered the truth (the share right of the check's candidate). What
     the check *should* certify is #4358; report whatever that ruling becomes.
-  - **Ceiling:** the full-label model's AP, and its line and oracle recall at X.
-  - **Click 0:** the text sort's AP and its top K at X.
+  - **Ceiling:** the full-label model's AP, and its line, F1 and oracle recall at P.
+  - **Click 0:** the text sort's AP and its top K at P.
 - **The spot check is not a click.** The default arm checks the line once the
   voting steps are spent (`spot_check="end"`), so every run ends with
   `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
   the check's rows and picks feed only the check's own columns, never a curve,
   a checkpoint or an image's credit.
-- **Rank frames:** the line at every X is read off where the positives sit in
+- **Rank frames:** the line at every P is read off where the positives sit in
   each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
-  checkpoints (`CALIB_RANK_FRAME_STEPS`). A run from before #4357 has none: its
+  checkpoints (`CALIB_RANK_FRAME_STEPS`). For an F1 curve, record them densely:
+  the 2026-09-30 review used every click to 10 and every 5 after, which is
+  ~36 frames and ~10 KB per run at no measurable extra run time. A run from before #4357 has none: its
   AP, harvest and check columns are complete, but its line is known only at
   click 0.
 - **Per-image influence:** each scored step's change in held-out **AP** is
@@ -102,8 +111,8 @@ same edit.
 ```bash
 cd scripts/experiments/state_of_app
 srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too heavy for the login node
-bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band, both paths
-bash launch.sh cells                                  # login node: the full array; SOTA_SEEDS=N for more seeds
+CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band; Binary only unless SOTA_PATH=region|all
+bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
@@ -131,6 +140,13 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   so every cell would have run in duplicate and raced its twin on the same
   output files. Only the `prepare` checks need a compute node. After any
   submission, count the jobs.
+- **A Binary-only review never goes through `cells`,** which queues both paths
+  and sizes every task for region (80 GB). Use `SOTA_PATH`-filtered `subset`
+  for a few classes, and `redo` over each seed's SigLIP block (`s*288` to
+  `s*288+143`) for the full run, with `CALIB_MEM=4G`-`12G`. The 2026-09-26
+  `overnight.sh` does this with a deadline. Measured 2026-09-30 on the floor-era
+  default arm (rank frames plus the end-of-run check): a Binary run takes
+  7.5–12 min and ~1.1 GB at 2 CPUs.
 - **`analyze.sh` needs `results/grid_shape.json`, and only `launch.sh cells`
   writes it.** A run built from `subset` or `redo` (a smoke run, or seeds
   widened by index) has none, and `analyze.sh` then dies inside
@@ -155,9 +171,11 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
 
 1. **Headline:** mean text-only AP, then AP at 25 and 50 clicks, then the
    final AP against the ceiling's, with Goods found at the same points. Then
-   the line at each floor, text → 25 → 50 → final → ceiling: the kept set's
-   precision, the share of sessions meeting X, the shortfall, and recall next
-   to the oracle's recall at X (`summary.md`, `line_at_floors.png`).
+   the returned set's **F1 over clicks** at P = 50% (`f1_over_clicks.png`).
+   Then the line at each floor, text → 25 → 50 → final → ceiling: the kept
+   set's precision, the share of sessions meeting P, the shortfall, recall
+   next to the oracle's recall at P, and F1 (`summary.md`,
+   `line_at_floors.png`).
 2. **The spot check:** how often it confirms, its range, and how often the
    range held the truth.
 3. **Where the app does well and where it does poorly,** by class and by band,

@@ -35,6 +35,14 @@ from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Optional
 
+from vtscore.training.structural_stage1 import (
+    VerificationCache,
+    example_queries,
+    snapshot_has_tiles,
+    tiled_stage1,
+    tiled_top_k,
+    vote_queries,
+)
 from vtscore.media.structural import (
     DEFAULT_MIN_INLIERS,
     MatchStats,
@@ -241,6 +249,8 @@ def structural_rerank(
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
+    template_keys: Optional[Sequence[Any]] = None,
+    cache: Optional[Any] = None,
 ) -> list[dict]:
     """Re-rank Stage-1 *results* by geometric verification of the top-*K*.
 
@@ -258,6 +268,10 @@ def structural_rerank(
     Order and score stay consistent (an item's position matches its reported
     score within each block) so the existing threshold/colouring path needs no
     special-casing.  When there are no templates the input is returned unchanged.
+
+    With a *cache* (a :class:`~vtscore.training.structural_stage1.VerificationCache`)
+    and one *template_keys* entry per template, fits already computed on an
+    earlier retrain are reused and only new (template, page) pairs are verified.
     """
     if not results or not template_features:
         return list(results)
@@ -269,7 +283,14 @@ def structural_rerank(
     # the descriptor matching is the bulk of Stage-2 latency and batches into a
     # single (GPU-able) distance computation per template.
     verifiable = [(i, f) for i, e in enumerate(head) if (f := _local_features(snap.get(e.get("id")))) and f.count > 0]
-    batched = best_match_stats_many([(None, tpl) for tpl in template_features], [f for _, f in verifiable], matcher)
+    if cache is not None and template_keys is not None:
+        batched = cache.best_many(
+            list(zip(template_keys, template_features)),
+            [(head[i].get("id"), f) for i, f in verifiable],
+            matcher,
+        )
+    else:
+        batched = best_match_stats_many([(None, tpl) for tpl in template_features], [f for _, f in verifiable], matcher)
     stats_by_pos = {pos: st for (pos, _), st in zip(verifiable, batched)}
 
     scored: list[tuple[float, int, float, dict]] = []
@@ -357,7 +378,14 @@ def maybe_structural_rerank(
     the patch path gates on ``patch_grid`` - so existing datasets pay zero
     cost and see no behaviour change.  For a structural dataset it builds the
     RegionYes templates, re-ranks the shortlist by the inlier gate, and returns
-    the gate's boundary as the threshold.  Bad votes do not enter Stage 2: the
+    the gate's boundary as the threshold.
+
+    **On a tiled dataset** (``sift_vlad_doc``, pages carrying ``tile_vectors``)
+    Stage 1 is replaced too.  The caller's *results* (the detector head's
+    page-VLAD ranking, near chance on documents) give way to the tiled Stage 1:
+    max over the Good boxes' queries x each page's tiles.  The shortlist grows to
+    :func:`~vtscore.training.structural_stage1.tiled_top_k`, and fits are kept on
+    *det_ctx* across retrains (#3928).  Bad votes do not enter Stage 2: the
     match-statistic MLP that learned from them ranked worse than the gate
     (#4169).
 
@@ -394,6 +422,18 @@ def maybe_structural_rerank(
         except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
             pass
 
+    template_keys = None
+    cache = None
+    if snapshot_has_tiles(snap):
+        queries = vote_queries(good_votes, feat_snap, region_boxes)
+        if queries is not None:
+            results = tiled_stage1(snap, queries, score_key)
+            top_k = tiled_top_k(len(results))
+            template_keys = [
+                (cid, region_boxes.get(cid), id(feat_snap[cid].get("local_features"))) for cid, _ in templates
+            ]
+            cache = _verification_cache(det_ctx)
+
     scorer = VerificationScorer()
     reranked = structural_rerank(
         results,
@@ -403,8 +443,24 @@ def maybe_structural_rerank(
         matcher,
         top_k=top_k,
         score_key=score_key,
+        template_keys=template_keys,
+        cache=cache,
     )
     return reranked, STRUCTURAL_DECISION_THRESHOLD
+
+
+def _verification_cache(det_ctx: Any) -> Optional[VerificationCache]:
+    """The detector's verification cache, created on first use; ``None`` without a context."""
+    if det_ctx is None:
+        return None
+    try:
+        cache = getattr(det_ctx, "structural_verification_cache", None)
+        if cache is None:
+            cache = VerificationCache()
+            det_ctx.structural_verification_cache = cache
+        return cache
+    except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
+        return None
 
 
 def maybe_structural_rerank_example(
@@ -449,6 +505,11 @@ def maybe_structural_rerank_example(
     matcher = _resolve_matcher(snap)
     if matcher is None:
         return results, threshold
+    if snapshot_has_tiles(snap) and (queries := example_queries(templates)) is not None:
+        # Tiled dataset: the crops' VLADs against every page's tiles replace the
+        # page-VLAD cosine, and the shortlist grows (#3928).
+        results = tiled_stage1(snap, queries, score_key)
+        top_k = tiled_top_k(len(results))
     scorer = VerificationScorer()
     reranked = structural_rerank(
         results,

@@ -757,7 +757,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dialog
       .confirmDestructive(
         'Add your corrections to this detector?',
-        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score. " +
+        "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score.\n" +
           'Your current results and evaluation stay as they are — the Stats will be marked out of date — and nothing is re-scored now.',
         'Add Corrections',
       )

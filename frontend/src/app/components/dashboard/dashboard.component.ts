@@ -616,7 +616,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const question =
         targets.length === 1
           ? `Delete dataset ${names} from your list?`
-          : `Delete ${targets.length} datasets from your list: ${names}?`;
+          : `Delete ${targets.length} datasets from your list?\n${names}`;
       const detail = '(Detectors are unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {
@@ -677,7 +677,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       const question =
         targets.length === 1
           ? `Delete detector ${names}?`
-          : `Delete ${targets.length} detectors: ${names}?`;
+          : `Delete ${targets.length} detectors?\n${names}`;
       const detail = '(This deletes your labels. The underlying media is unaffected.)';
       ok = await this.dialog.confirmDestructive(question, detail);
     } finally {

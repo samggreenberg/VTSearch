@@ -13,6 +13,11 @@ interface DialogButton {
  * Provides confirm() and prompt() returning Promises. Pure
  * informational notifications go through ToastService instead of a
  * modal alert.
+ *
+ * A message may contain `\n`; the dialog host renders each one as a line
+ * break. Use them to keep a question on its own line, apart from the list
+ * it enumerates and the detail that explains it, rather than running all
+ * three together into one sentence.
  */
 @Injectable({ providedIn: 'root' })
 export class VtDialogService {
@@ -59,13 +64,16 @@ export class VtDialogService {
    *
    * `question` should name the operation and its target, e.g.
    *   "Delete detector 'cats'?"
+   * When it enumerates several targets, put the list on a line of its own:
+   *   "Delete 2 detectors?\n'cats', 'dogs'"
    * `detail` should explain what is removed and what is unaffected, e.g.
    *   "(This deletes your labels. The underlying media is unaffected.)"
+   * It is shown on its own line below the question.
    * `actionLabel` is the verb on the primary button (default "Delete").
    */
   confirmDestructive(question: string, detail: string, actionLabel = 'Delete'): Promise<boolean> {
     return this.show({
-      message: `${question} ${detail}`,
+      message: VtDialogService.questionWithDetail(question, detail),
       type: 'warning',
       showInput: false,
       buttons: [
@@ -92,7 +100,7 @@ export class VtDialogService {
     escapeLabel: string,
   ): Promise<'confirm' | 'escape' | 'cancel'> {
     return this.show({
-      message: `${question} ${detail}`,
+      message: VtDialogService.questionWithDetail(question, detail),
       type: 'warning',
       showInput: false,
       buttons: [
@@ -114,6 +122,11 @@ export class VtDialogService {
         { label: 'OK', primary: true, value: '__input__' },
       ],
     }) as Promise<string | null>;
+  }
+
+  /** The question on one line, the detail on the next. */
+  private static questionWithDetail(question: string, detail: string): string {
+    return `${question}\n${detail}`;
   }
 
   /** Resolve the current dialog with a value. Called by dialog host component. */

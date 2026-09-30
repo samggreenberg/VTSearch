@@ -5,6 +5,9 @@ spot check whose rows sit past ``max_steps``.  What is pinned here is the part
 a re-run cannot show by looking at it:
 
 * **No FPR + FNR** reaches the analyzer's tables (owner, 2026-09-30).
+* **F1 is the returned set's** (owner, 2026-09-30: "Using the returned-set
+  threshold, show F1 over time, too"): the F1 of the top *K* the floor keeps,
+  read off the rank frames, at every recorded click as well as the checkpoints.
 * **The check is not a click:** "final" is the last ordinary step, and no check
   pick is credited to an image.
 * **The line is read off the rank frames** by one definition
@@ -80,6 +83,17 @@ def test_oracle_recall_is_the_best_cut_by_brute_force(rm) -> None:
             assert rm.oracle_recall(ranks, n_pos, floor) == pytest.approx(best)
 
 
+def test_oracle_f1_is_the_best_cut_by_brute_force(rm) -> None:
+    rng = np.random.default_rng(7)
+    for _ in range(20):
+        n = 200
+        labels = (rng.random(n) < 0.15).astype(int)
+        ranks = rm.ranks_from_scores(list(range(n)), rng.normal(size=n) + labels, labels)
+        n_pos = int(labels.sum())
+        best = max(2 * int(np.count_nonzero(ranks < k)) / (k + n_pos) for k in range(1, n + 1))
+        assert rm.oracle_f1(ranks, n_pos) == pytest.approx(best)
+
+
 def test_the_line_keeps_the_floors_unchecked_candidate(rm) -> None:
     """The top 128 at 10%, 32 at 50% and above (#4272), never more than the corpus."""
     assert [rm.kept_count(x, 10_000) for x in rm.FLOORS] == [128, 32, 32]
@@ -88,6 +102,7 @@ def test_the_line_keeps_the_floors_unchecked_candidate(rm) -> None:
     m = rm.line_metrics(ranks, 1000, 40, 0.5)
     assert (m["k"], m["precision"], m["meets"], m["shortfall"]) == (32, 0.5, 1.0, 0.0)
     assert m["recall"] == pytest.approx(16 / 40)
+    assert m["f1"] == pytest.approx(2 * 0.5 * 0.4 / (0.5 + 0.4)), "F1 of the kept set, its own precision and recall"
     m = rm.line_metrics(ranks, 1000, 40, 0.9)
     assert (m["precision"], m["meets"], m["shortfall"]) == (0.5, 0.0, pytest.approx(0.4))
 
@@ -175,7 +190,9 @@ def _baseline(path: Path, rm) -> dict:
         row = {"dataset": "coco_better", "embedder": "siglip", "category": cat, "seed": 0, "supports_text": 1}
         row["text_AP"] = 0.1 + i / 10
         for x in rm.FLOORS:
-            for j, m in enumerate(("k", "precision", "shortfall", "meets", "recall", "oracle_recall")):
+            for j, m in enumerate(
+                ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
+            ):
                 row[f"text_{m}_{rm.floor_tag(x)}"] = round(0.01 * (i + 1) + j / 100 + x, 6)
         rows.append(row)
         want[cat] = row
@@ -207,6 +224,8 @@ def run(tmp_path_factory, rm):
         "cells": read("cells.csv").set_index("category"),
         "lines": read("lines.csv"),
         "influence": read("influence.csv"),
+        "curves": read("curves.csv"),
+        "steps": read("line_steps.csv"),
         "summary": (out / "summary.md").read_text(),
     }
 
@@ -224,10 +243,31 @@ def _frames(exp: Path, idx: int) -> pd.DataFrame:
 
 
 def test_no_fpr_fnr_reaches_the_tables(run) -> None:
-    for name in ("cells", "lines", "influence"):
-        cols = [c for c in run[name].columns if "cost" in c or "f1" in c or c in ("fpr", "fnr")]
+    for name in ("cells", "lines", "influence", "curves", "steps"):
+        cols = [c for c in run[name].columns if "cost" in c or c in ("fpr", "fnr")]
         assert not cols, f"{name}.csv still carries {cols}"
     assert "cost" not in run["summary"].lower()
+
+
+def test_f1_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
+    """cells, lines, line_steps and curves all read one F1: the kept set's, off the frames."""
+    lines, steps, curves = run["lines"], run["steps"], run["curves"]
+    for idx, cat in enumerate(CATS):
+        frames = _frames(run["exp"], idx)
+        row = run["cells"].loc[cat]
+        final = lines[(lines["category"] == cat) & (lines["point"] == "final") & (lines["floor"] == 0.5)].iloc[0]
+        assert row["final_f1"] == pytest.approx(final["f1"])
+        text = run["text"][cat]
+        assert row["text_f1"] == pytest.approx(text["text_f1_p50"])
+        c = curves[curves["category"] == cat].set_index("t")
+        assert c.loc[0, "f1"] == pytest.approx(text["text_f1_p50"]), "click 0 is the text sort's line"
+        assert c.loc[0, "f1_p10"] == pytest.approx(text["text_f1_p10"])
+        for f in frames.query("kind == 'step'").to_dict("records"):
+            want = rm.line_metrics(rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), 0.5)
+            got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["floor"] == 0.5)].iloc[0]
+            assert got["f1"] == pytest.approx(want["f1"])
+            assert c.loc[int(f["t"]), "f1"] == pytest.approx(want["f1"]), "the curve at a frame IS the frame"
+    assert "F1 of the line at P = 50%" in run["summary"]
 
 
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:
@@ -274,7 +314,7 @@ def test_the_line_is_read_off_the_rank_frames(run, rm) -> None:
                 for m, v in want.items():
                     assert got[m] == pytest.approx(v), (cat, point, x, m)
         text = lines[(lines["category"] == cat) & (lines["point"] == "text") & (lines["floor"] == 0.5)].iloc[0]
-        assert text["precision"] == pytest.approx(run["text"][cat]["text_precision_x50"])
+        assert text["precision"] == pytest.approx(run["text"][cat]["text_precision_p50"])
 
 
 def test_a_run_that_never_trained_reads_the_text_sort_throughout(run) -> None:
@@ -285,7 +325,7 @@ def test_a_run_that_never_trained_reads_the_text_sort_throughout(run) -> None:
     lines = run["lines"]
     at = lines[(lines["category"] == "cat9@small") & (lines["floor"] == 0.5)].set_index("point")
     for point in ("10", "50", "150", "final"):
-        assert at.loc[point, "precision"] == pytest.approx(run["text"]["cat9@small"]["text_precision_x50"])
+        assert at.loc[point, "precision"] == pytest.approx(run["text"]["cat9@small"]["text_precision_p50"])
 
 
 def test_without_rank_frames_the_line_is_known_at_click_0_only(run, tmp_path) -> None:
