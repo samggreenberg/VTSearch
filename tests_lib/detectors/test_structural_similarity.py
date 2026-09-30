@@ -192,7 +192,11 @@ class _StubMatcher:
     def __init__(self, stats_by_candidate: dict[int, MatchStats]):
         self._stats = stats_by_candidate
 
-    def verify(self, _template, candidate):
+    def detect_and_describe(self, image_gray: np.ndarray, *, max_features: int = 0) -> StructuralFeatures:
+        raise NotImplementedError
+
+    def verify(self, template: StructuralFeatures, candidate: StructuralFeatures) -> MatchStats:
+        del template
         return self._stats[id(candidate)]
 
 
