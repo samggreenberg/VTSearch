@@ -5,7 +5,8 @@
  * One entry per *logical* shot. `themes` expands automatically: an entry with
  * `themes: ["light","dark"]` yields two files,
  * `docs/user/assets/<id>.<theme>.webp` (output path is derived from id+theme,
- * never stored, so the manifest can't drift from the filesystem).
+ * never stored, so the manifest can't drift from the filesystem), both taken
+ * from one run of the recipe unless the shot sets `rerunPerTheme`.
  *
  * `recipe` is an async function rather than a step array: several shots need
  * real interaction (canvas drags, waiting on embedding/projection) that a
@@ -129,6 +130,17 @@ export interface Shot {
   /** Alt text + optional figure caption. */
   caption: string;
   themes: Theme[];
+  /**
+   * Run the recipe once per theme, on a page loaded in that theme. By default
+   * the harness runs it once and flips the theme between captures (#4341),
+   * which is right for anything styled by CSS or repainted on a `data-theme`
+   * change (the Browse canvas, minimap and legend). A frame holding something
+   * that paints the theme's colours once, when it draws, and keeps them sets
+   * this: the charts in `vt-progress-modal`, say, or the in-app Help panel's
+   * images, which pick their variant from the theme service rather than the
+   * attribute.
+   */
+  rerunPerTheme?: boolean;
   /**
    * What to frame, grown by `pad` CSS px on every side; omit for the full
    * viewport. A small padded clip of one button is how the guide's inline
@@ -628,7 +640,7 @@ async function checkStepKeys(page: Page): Promise<void> {
  * Check a fixed handful of Find's pictures by hand, each with its true label -
  * five yellow smileys and three of the near-misses that rank beside them - so
  * Detector Stats has a "Checked by you" line to draw. Votes go through the API
- * with absolute targets, so a second run (the dark capture after the light one)
+ * with absolute targets, so running it again (a shot that sets `rerunPerTheme`)
  * changes nothing, and a Find-mode vote never reaches the detector's own
  * labels, so the re-run Find scores exactly as the first did.
  */
