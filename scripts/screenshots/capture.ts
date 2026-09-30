@@ -499,7 +499,7 @@ interface Timing {
   recipe: number;
   /** Of the recipe, waiting for the label view's sorts (`settleSorts`)... */
   settle: number;
-  /** ...and of that, start windows that ran out with no sort begun. */
+  /** ...and of that, start windows that closed with no sort begun. */
   unstarted: number;
   /** Settles that gave up waiting for the page to go quiet (`CALM_CAP_MS`). */
   loud: number;
