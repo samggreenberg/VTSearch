@@ -56,13 +56,41 @@ same edit.
   the clicks, then the **full-label ceiling** (`skyline_train_full`) on the
   right. The region path's ceiling is supervised with each positive's
   ground-truth box (owner ruling on #3321).
-- **Metrics:** F1 and cost, the standard `viewer.html`.
-- **Per-image influence:** each scored step's change in the held-out test
-  score is split **equally among the clicks since the previous scored step**.
-  The first scored step is measured from the text-only score and split among
-  the opening clicks. Then roll the credit up per image, per image × detector,
-  and early (≤30 clicks) vs late (>90). One click's credit includes refit
-  noise, so an image claim needs repeat observations (`n_obs`).
+- **Metrics (owner, 2026-09-30, #4357): no FPR + FNR anywhere.** #4223
+  retired that objective, and since #4272 the default arm's line is the
+  floor's set (the top 32 unvoted at the default 50%), so a review scored in
+  cost reads the change of objective as a regression. Cost and F1 are gone
+  from the headline, the tables and the figures, not moved to an appendix.
+  The set, as `analyze.py` reports it:
+  - **Ranking:** AP (threshold-free), and Goods found per checkpoint (harvest).
+  - **The line on a fresh corpus** (the test half, which is what Find and a
+    headless run return), at each floor the app offers (10 / 50 / 90%): the
+    precision of the kept set (the top K, the floor's unchecked candidate);
+    the shortfall, max(0, X − precision); the share of sessions meeting X; and
+    recall next to the oracle's recall at precision ≥ X (the best cut of the
+    same ranking).
+  - **The Train-time spot check:** confirm rate, the range, and whether the
+    range covered the truth (the share right of the check's candidate). What
+    the check *should* certify is #4358; report whatever that ruling becomes.
+  - **Ceiling:** the full-label model's AP, and its line and oracle recall at X.
+  - **Click 0:** the text sort's AP and its top K at X.
+- **The spot check is not a click.** The default arm checks the line once the
+  voting steps are spent (`spot_check="end"`), so every run ends with
+  `phase == "check"` rows past `max_steps`. "Final" is the last ordinary step;
+  the check's rows and picks feed only the check's own columns, never a curve,
+  a checkpoint or an image's credit.
+- **Rank frames:** the line at every X is read off where the positives sit in
+  each ranking (`task_NNNN__rankframes.csv`), which `launch.sh` records at the
+  checkpoints (`CALIB_RANK_FRAME_STEPS`). A run from before #4357 has none: its
+  AP, harvest and check columns are complete, but its line is known only at
+  click 0.
+- **Per-image influence:** each scored step's change in held-out **AP** is
+  split **equally among the clicks since the previous scored step**, check
+  rows and check picks excluded. The first scored step is measured from the
+  text-only AP and split among the opening clicks. Then roll the credit up per
+  image, per image × detector, and early (≤30 clicks) vs late (>90). One
+  click's credit includes refit noise, so an image claim needs repeat
+  observations (`n_obs`).
 - **An image's own effect:** judge images on `resid_z`, never the raw mean. The
   raw mean mostly says *when* (early positives hurt) and *where* (hard classes)
   an image was clicked. `resid` nets out the cell, label and phase. Report the
@@ -125,22 +153,27 @@ and say what the app gets wrong.
 Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/REPORT.md`
 (e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
 
-1. **Headline:** mean text-only cost, then cost at 25 and 50 clicks,
-   then the final cost against the ceiling. Do the same for F1.
-2. **Where the app does well and where it does poorly,** by class and by band.
-   Name the classes, with numbers.
-3. **Headroom:** final cost minus the ceiling. This is what better clicking
-   could still buy; a large gap marks the loop, not the class.
-4. **What the clicks bought:** text-only cost minus final cost. A class where
+1. **Headline:** mean text-only AP, then AP at 25 and 50 clicks, then the
+   final AP against the ceiling's, with Goods found at the same points. Then
+   the line at each floor, text → 25 → 50 → final → ceiling: the kept set's
+   precision, the share of sessions meeting X, the shortfall, and recall next
+   to the oracle's recall at X (`summary.md`, `line_at_floors.png`).
+2. **The spot check:** how often it confirms, its range, and how often the
+   range held the truth.
+3. **Where the app does well and where it does poorly,** by class and by band,
+   on final AP and on the final line at 50%. Name the classes, with numbers.
+4. **Headroom:** the ceiling's AP minus the final AP. This is what better
+   clicking could still buy; a large gap marks the loop, not the class.
+5. **What the clicks bought:** final AP minus text-only AP. A class where
    clicking barely beats typing is a finding.
-5. **Images:**
-   - the most helpful and most harmful images, with thumbnails;
+6. **Images:**
+   - the most helpful and most harmful images (credit on AP), with thumbnails;
    - images that help many detectors;
    - images whose sign flips between early and late clicks.
-6. **Known regimes to flag, not to fix:** runs that exhaust the positives
+7. **Known regimes to flag, not to fix:** runs that exhaust the positives
    before 150 clicks (#4121, where the fused threshold drifts). The
    preflight warns about this at launch.
-7. **What to A/B next,** filed as issues, per the follow-ups rule.
+8. **What to A/B next,** filed as issues, per the follow-ups rule.
 
 Follow the standing report rules: two significant digits, a figure per claim,
 and literal examples. Every `#N` in a message to the owner is a link.

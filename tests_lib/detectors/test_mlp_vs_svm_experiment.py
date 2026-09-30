@@ -301,6 +301,66 @@ class TestPrecisionFrames:
         assert_same_rows(drop_timing(plain), drop_timing(recorded))
 
 
+class TestRankFrames:
+    """#4357: where the positives sit in the test half and the session's unvoted pool."""
+
+    def _run(self, steps, sink, pframes=None):
+        clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
+        return simulate_voting_iterations(
+            clips,
+            "cat0",
+            seed=0,
+            max_steps=20,
+            style="whole_image",
+            safe_thresholds=True,
+            emit_calibration_metrics=True,
+            skyline_arms=["skyline_train_full"],
+            rank_frame_sink=sink,
+            rank_frame_steps=steps,
+            precision_frame_sink=pframes,
+            precision_frame_steps=steps if pframes is not None else None,
+        )
+
+    def test_step_last_and_skyline_frames(self):
+        sink: list = []
+        rows = self._run((10, 20), sink)
+        assert [(f["kind"], f["t"]) for f in sink] == [
+            ("step", 10),
+            ("step", 20),
+            ("last", 20),
+            ("skyline_train_full", 0),
+        ]
+        for f in sink:
+            ranks = [int(r) for r in f["test_pos_ranks"].split()]
+            assert len(ranks) == f["n_test_pos"] > 0
+            assert ranks == sorted(set(ranks)) and ranks[-1] < f["n_test"]
+        sky = sink[-1]
+        assert (sky["n_pool"], sky["n_pool_pos"], sky["pool_pos_ranks"]) == (-1, -1, ""), "a skyline has no pool"
+        # The ``last`` frame is the ranking the spot check drew from: the last
+        # ordinary step, with every check row after it.
+        ordinary = [r["t"] for r in rows if r["phase"] not in ("check", "")]
+        assert sink[2]["t"] == max(ordinary)
+        assert min(r["t"] for r in rows if r["phase"] == "check") > sink[2]["t"]
+        # The pool is the unvoted remainder: it shrinks by one per vote.
+        n_sim = sink[0]["n_pool"] + 10
+        assert sink[1]["n_pool"] == n_sim - 20
+
+    def test_test_ranks_are_the_test_scores_sorted(self):
+        """The ranks are the #4220 precision frame's own test half, sorted by score."""
+        sink: list = []
+        pframes: list = []
+        self._run((10, 20), sink, pframes)
+        for f, pf in zip([f for f in sink if f["kind"] == "step"], pframes, strict=True):
+            order = np.argsort(-pf["test_scores"].astype(np.float64), kind="stable")
+            expected = np.flatnonzero(pf["test_labels"][order] == 1).tolist()
+            assert [int(r) for r in f["test_pos_ranks"].split()] == expected
+
+    def test_recording_does_not_change_the_run(self):
+        plain = self._run(None, None)
+        recorded = self._run((10, 20), [])
+        assert_same_rows(drop_timing(plain), drop_timing(recorded))
+
+
 class TestHaystackPrevalence:
     """The #4184/#4201 arm: thin the simulation half's negatives, touch nothing else."""
 

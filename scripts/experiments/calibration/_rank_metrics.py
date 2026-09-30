@@ -1,0 +1,114 @@
+"""A precision floor's line, read off where the positives sit in a ranking (#4357).
+
+A floor *X*'s line keeps a **set**: the top *K* of the ranking, where *K* is the
+floor's unchecked starting candidate (``check_schedule(X).candidate``: the top
+128 at 10%, 64 at 25%, 32 at 50% and above; #4272).  So how good the line is,
+and how good the best cut on the same ranking could have been, depends on the
+positives' ranks and on nothing else.  That is what a rank frame records
+(``task_NNNN__rankframes.csv``, ``vtscore.eval.voting_columns.RANK_FRAME_COLUMNS``)
+and what ``text_baseline.py`` builds for the typed query, so the click-0 sort
+and the clicked detector are read by one definition.
+
+Numpy only; *ranks* are 0-based, best first, in the order
+:class:`~vtscore.training.thresholds.LineRanking` sorts (score descending, ties
+by id).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+import numpy as np
+
+#: The floors the app offers, left to right along its control
+#: (``FLOOR_PRESETS`` in ``frontend/src/app/utils/line-floor.ts``, #4298).
+FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
+
+
+def floor_tag(floor: float) -> str:
+    """``x10`` for 10%: the column suffix a floor's metrics carry."""
+    return f"x{round(floor * 100):d}"
+
+
+def parse_ranks(text: object) -> np.ndarray:
+    """A rank frame's space-separated ranks as an int array (empty for a blank or NaN cell)."""
+    if not isinstance(text, str) or not text.strip():
+        return np.zeros(0, dtype=np.int64)
+    return np.sort(np.asarray(text.split(), dtype=np.int64))
+
+
+def ranks_from_scores(ids: Sequence[int], scores: Sequence[float], labels: Sequence[float]) -> np.ndarray:
+    """The positives' ranks in *scores* sorted as a line ranks them: descending, ties by id.
+
+    ``LineRanking``'s order without its sigmoid-range mask: that mask drops
+    anything outside ``[0, 1]`` as unscorable, and a text sort's cosine
+    similarities are legitimately negative.  Only non-finite scores are left out.
+    """
+    id_arr = np.asarray(list(ids), dtype=np.int64)
+    s = np.asarray(scores, dtype=np.float64)
+    y = np.asarray(labels, dtype=np.float64)
+    if not (id_arr.shape == s.shape == y.shape):
+        raise ValueError("ids, scores and labels must align")
+    keep = np.isfinite(s)
+    order = np.lexsort((id_arr[keep], -s[keep]))
+    return np.flatnonzero(y[keep][order] >= 0.5).astype(np.int64)
+
+
+def kept_count(floor: float, n: int) -> int:
+    """How many items the line at *floor* keeps on a corpus of *n*: the unchecked candidate."""
+    from vtscore.training.thresholds import check_schedule  # noqa: PLC0415
+
+    return int(min(check_schedule(floor).candidate, n))
+
+
+def top_k_right(ranks: np.ndarray, k: int) -> int:
+    """How many of the top *k* are positives."""
+    return int(np.count_nonzero(ranks < k))
+
+
+def oracle_recall(ranks: np.ndarray, n_pos: int, floor: float) -> float:
+    """The best recall any top-*k* cut of this ranking reaches while at least *floor* of it is right.
+
+    A cut's precision peaks just after a positive, so only those cuts are
+    candidates; recall only grows with *k*, so the answer is the deepest one
+    that still clears *floor*.  0 when none does.
+    """
+    if n_pos <= 0 or ranks.size == 0:
+        return float("nan") if n_pos <= 0 else 0.0
+    hits = np.arange(1, ranks.size + 1)
+    ok = np.flatnonzero(hits / (ranks + 1) >= floor - 1e-12)
+    return float(hits[ok[-1]] / n_pos) if ok.size else 0.0
+
+
+def average_precision(ranks: np.ndarray, n_pos: int) -> float:
+    """Average precision of the ranking (sklearn's, when no two scores tie)."""
+    if n_pos <= 0:
+        return float("nan")
+    return float(np.sum(np.arange(1, ranks.size + 1) / (ranks + 1)) / n_pos)
+
+
+def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float) -> dict[str, float]:
+    """The line at *floor* on this ranking, as the report reads it.
+
+    * ``k`` - how many the line keeps;
+    * ``precision`` - the share of them that is right;
+    * ``shortfall`` - ``max(0, floor - precision)``, how far short of the promise;
+    * ``meets`` - 1 when ``precision >= floor``;
+    * ``recall`` - the share of the corpus's positives the line keeps;
+    * ``oracle_recall`` - the best recall a cut of the same ranking gets at
+      precision >= *floor* (:func:`oracle_recall`).
+    """
+    nan = float("nan")
+    if n <= 0:
+        return {"k": 0, "precision": nan, "shortfall": nan, "meets": nan, "recall": nan, "oracle_recall": nan}
+    k = kept_count(floor, n)
+    right = top_k_right(ranks, k)
+    precision = right / k if k else nan
+    return {
+        "k": k,
+        "precision": precision,
+        "shortfall": max(0.0, floor - precision),
+        "meets": float(precision >= floor - 1e-12),
+        "recall": right / n_pos if n_pos > 0 else nan,
+        "oracle_recall": oracle_recall(ranks, n_pos, floor),
+    }

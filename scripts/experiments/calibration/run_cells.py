@@ -327,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         FIT_QUALITY_ROW_COLUMNS,
         INCLUSION_SWEEP_COLUMNS,
         PICK_COLUMNS,
+        RANK_FRAME_COLUMNS,
     )
     from vtscore.eval.voting_iterations import simulate_voting_iterations
 
@@ -367,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
     all_fitq: list[dict] = []
     all_picks: list[dict] = []
     all_pframes: list[dict] = []
+    all_rankframes: list[dict] = []
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
@@ -375,6 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         fitq_local: list[dict] = [] if cfg.FIT_QUALITY else None
         picks_local: list[dict] | None = [] if cfg.EMIT_PICKS else None
         pframes_local: list[dict] | None = [] if cfg.PFRAME_STEPS else None
+        rankframes_local: list[dict] | None = [] if cfg.RANK_FRAME_STEPS else None
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -430,6 +433,8 @@ def main(argv: list[str] | None = None) -> int:
             pick_sink=picks_local,
             precision_frame_sink=pframes_local,
             precision_frame_steps=cfg.PFRAME_STEPS or None,
+            rank_frame_sink=rankframes_local,
+            rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
             calibration_seed=cal_seed,
         )
         # The recorded fraction is the one the run actually used: an explicit
@@ -485,6 +490,8 @@ def main(argv: list[str] | None = None) -> int:
             pr["embedder"] = emb
         for fr in fitq_local or []:
             fr["embedder"] = emb
+        for rf in rankframes_local or []:
+            rf["embedder"] = emb
         all_rows.extend(rows)
         all_sweep.extend(sweep_local)
         all_cutdiag.extend(cutdiag_local)
@@ -492,6 +499,7 @@ def main(argv: list[str] | None = None) -> int:
         all_picks.extend(picks_local or [])
         all_pframes.extend({**f, "style": np.array(style or "")} for f in pframes_local or [])
         all_fitq.extend(fitq_local or [])
+        all_rankframes.extend(rankframes_local or [])
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
             f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows, "
@@ -549,6 +557,11 @@ def main(argv: list[str] | None = None) -> int:
     fitq_cols = [*FIT_QUALITY_ROW_COLUMNS, "embedder"]
     fitq_out = cell_file(outdir / f"task_{idx:04d}__fitq.csv")
     pd.DataFrame(all_fitq, columns=pd.Index(fitq_cols)).to_csv(fitq_out, index=False)
+    # The #4357 rank frames: where the positives sit in each ranking.  Same
+    # unconditional-write rule as every CSV frame above.
+    rankframes_cols = [*RANK_FRAME_COLUMNS, "embedder"]
+    rankframes_out = cell_file(outdir / f"task_{idx:04d}__rankframes.csv")
+    pd.DataFrame(all_rankframes, columns=pd.Index(rankframes_cols)).to_csv(rankframes_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means
@@ -563,7 +576,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}, "
         f"{len(all_cutincl)} cut-inclusion rows to {cutincl_out}, "
         f"{len(all_picks)} pick rows to {picks_out}, "
-        f"and {len(all_fitq)} fit-quality rows to {fitq_out}"
+        f"{len(all_fitq)} fit-quality rows to {fitq_out}, "
+        f"and {len(all_rankframes)} rank frames to {rankframes_out}"
     )
     return 0
 

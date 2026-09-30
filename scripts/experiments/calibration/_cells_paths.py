@@ -32,7 +32,7 @@ from pathlib import Path
 #: What the registry is still for is :func:`side_frame_files`, which asks for a
 #: frame by name, and the meta-test that holds it to what the runner writes
 #: (``tests_lib/meta/test_calibration_cells_io.py``).
-SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks", "__fitq")
+SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks", "__fitq", "__rankframes")
 
 
 #: A run under ``CALIB_CELLS_GZIP=1`` writes every frame as ``task_NNNN.csv.gz``

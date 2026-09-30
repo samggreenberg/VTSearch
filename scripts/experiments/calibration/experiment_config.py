@@ -1045,6 +1045,14 @@ HAYSTACK_PREVALENCE = (
 #: estimator reads, and the truth it is graded on.  Unset = off.
 PFRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_PFRAME_STEPS", "").replace(",", " ").split())
 
+#: Record a rank frame (``task_NNNN__rankframes.csv``) at these steps (issue
+#: #4357), e.g. ``10,25,50,100,150``: where the positives sit in the test half's
+#: ranking and in the session's unvoted pool, a few dozen integers a frame.  Any
+#: value also records the ``last`` ordinary step and the skyline arms.  It is
+#: what a floor's line at any *X* is read off, so the State of the App turns it
+#: on.  Unset = off.
+RANK_FRAME_STEPS = tuple(int(x) for x in os.environ.get("CALIB_RANK_FRAME_STEPS", "").replace(",", " ").split())
+
 #: Write every cell frame gzipped, ``task_NNNN.csv.gz`` (issue #4184).  Off by
 #: default.  A COCO Better cell's main frame is ~3.3 MB as text and ~180 KB
 #: gzipped; #4184's 5,040 cells needed ~19 GB plain on a volume with 7 GB free.

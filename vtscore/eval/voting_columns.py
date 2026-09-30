@@ -398,6 +398,44 @@ PICK_COLUMNS: tuple[str, ...] = (
     "n_pool",
 )
 
+#: Column order for the **rank frame** (issue #4357): where the positives sit in
+#: a ranking, emitted only when the caller passes a ``rank_frame_sink``.
+#:
+#: A precision floor's line keeps a *set* - the top *K* of a ranking (#4272) -
+#: so how good the line is at any floor, and how good the best cut on the same
+#: ranking could have been, is a function of the positives' ranks and nothing
+#: else.  That is a few dozen integers a frame, where the #4220 precision frame
+#: carries every score; it is cheap enough to record on every cell of a review.
+#:
+#: Two rankings per frame.  ``test_*`` is the untouched test half sorted by the
+#: model's score: a fresh corpus, which is what Find and a headless run return.
+#: ``pool_*`` is the session's own haystack, **unvoted items only**, in the
+#: order the line and the spot check draw from
+#: (:class:`~vtscore.training.thresholds.LineRanking`): the check's candidate is
+#: the top *K* of exactly this list, so the truth its range describes is too.
+RANK_FRAME_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "calibration_seed",
+    "style",
+    #: ``step`` - an ordinary step the caller asked for; ``last`` - the last
+    #: ordinary step, which is the ranking the end-of-run spot check draws its
+    #: candidate from and the session's line without the check's votes; or the
+    #: skyline arm's name (e.g. ``skyline_train_full``), whose model saw every
+    #: label and so has no pool.
+    "kind",
+    "t",
+    "n_test",
+    "n_test_pos",
+    #: Space-separated 0-based ranks of the positives, best first.
+    "test_pos_ranks",
+    #: -1 / blank where there is no pool ranking (a skyline, or safe thresholds off).
+    "n_pool",
+    "n_pool_pos",
+    "pool_pos_ranks",
+)
+
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
 #: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant

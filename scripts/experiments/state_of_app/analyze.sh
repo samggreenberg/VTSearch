@@ -3,10 +3,12 @@
 #
 #   bash analyze.sh [<exp dir>]          # default: today's run
 #
-#   analysis/text_baseline.csv   click 0: what typing the query alone scores
-#   analysis/viewer.html         cost / F1 / ... over clicks, every cell and path,
-#                                with the click-0 notch and the full-label ceiling
-#   analysis/cells.csv, influence.csv, images.csv, image_detector.csv, summary.md
+#   text_baseline.csv            click 0: what typing the query alone scores,
+#                                AP and the line at each floor (#4357)
+#   analysis/viewer.html         the shared calibration viewer, for browsing
+#                                cells; the report reads the tables below
+#   analysis/cells.csv, lines.csv, curves.csv, influence.csv, images.csv,
+#   image_detector.csv, summary.md
 #   analysis/figures/*.png, analysis/images.md + images/ (thumbnails)
 #
 # Run it on a compute node (srun): text_baseline re-reads every cell.
@@ -30,7 +32,9 @@ cd "$CALIB"
 # One text baseline per run directory, shared by every path's analysis: it is
 # the same text sort whichever path the clicks then take.
 BASELINE="$EXP/text_baseline.csv"
-if [[ ! -s "$BASELINE" ]]; then
+# A baseline from before #4357 has no line columns; rebuild it rather than
+# leave every click-0 line blank.
+if [[ ! -s "$BASELINE" ]] || ! head -1 "$BASELINE" | grep -q text_precision_x50; then
   # SigLIP only: the region path opens on SigLIP's text sort too, so one
   # baseline serves both, and it avoids reading the 7.5 GB patch cell.
   CALIB_COCO_BETTER_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"

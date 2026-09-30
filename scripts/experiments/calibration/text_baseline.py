@@ -14,6 +14,12 @@ first draw.
 Text is only available where the embedder has a text tower: ``dinov3_patch`` is
 vision-only and ``embed_text`` returns None there, which is reported as n/a
 rather than silently skipped.
+
+Besides the GMM cut, each row carries the line a precision floor would keep on
+the text sort's test half, at every floor the app offers (#4357):
+``text_{k,precision,shortfall,meets,recall,oracle_recall}_x{10,50,90}``, read
+off the positives' ranks by ``_rank_metrics.line_metrics`` - the same
+definition the State of the App reads the clicked detector's rank frames with.
 """
 
 from __future__ import annotations
@@ -66,6 +72,7 @@ def main() -> int:
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
+    from _rank_metrics import FLOORS, floor_tag, line_metrics, ranks_from_scores  # noqa: PLC0415
 
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
     wf, wn = inclusion_cost_weights(cfg.INCLUSION)
@@ -188,6 +195,13 @@ def main() -> int:
                     tp = np.cumsum(ys)
                     fp = np.cumsum(1 - ys)
                     ocost = np.min(wf * (fp / max(nneg, 1)) + wn * ((npos - tp) / max(npos, 1)))
+                    # The line each floor would keep on this sort (#4357).
+                    ranks = ranks_from_scores([i for i in ids if i in tset], s, y)
+                    floor_cols = {
+                        f"text_{name}_{floor_tag(x)}": round(float(v), 6)
+                        for x in FLOORS
+                        for name, v in line_metrics(ranks, int(mask.sum()), npos, x).items()
+                    }
                     rows.append(
                         {
                             "dataset": ds,
@@ -209,6 +223,7 @@ def main() -> int:
                             "text_oracle_cost": round(float(ocost), 6),
                             "text_AP": round(float(average_precision_score(y, s)), 6),
                             "text_auroc": round(float(roc_auc_score(y, s)), 6),
+                            **floor_cols,
                         }
                     )
                 common.log(
