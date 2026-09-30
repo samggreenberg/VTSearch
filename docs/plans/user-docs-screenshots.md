@@ -240,4 +240,10 @@ first fit outlasts a recipe's wait on a small CPU box; the Browse recipes find
 a tile by hovering out from the middle rather than clicking a fixed point
 (#4296). The spot check draws its picks at random, so `refresh.sh` also sets
 `VTSEARCH_SPOT_CHECK_SEED` for the same `floor-check` pick every run (#4330).
+Every page asks for reduced motion, but the app's Show Animations setting
+outranks the browser for the motion it drives from JS (smooth scrolls, the vote
+swipe, Browse's zoom tweens), and its default, Show, forces that motion on; so
+`refresh.sh` sets the app it starts to OS Setting, which defers to the page, and
+the shots that frame the Appearance pane pose the pulldown back at the default
+(#4339).
 The rest are DOM and diff cleanly.
