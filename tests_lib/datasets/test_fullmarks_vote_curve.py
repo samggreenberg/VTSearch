@@ -108,3 +108,37 @@ class TestArms:
         assert shared[("a1_max", 1)]["left"] == shared[("a0_exemplar", 1)]["left"] == 2
         assert shared[("a1_max", 1)]["ap"] == pytest.approx(1.0)
         assert shared[("a0_exemplar", 1)]["ap"] < 1.0
+
+
+class TestRerankScorer:
+    """#4169: the production-shaped arms that swap the structural re-rank's scorer."""
+
+    # Stage 1 is page order (zero vectors, no Bad yet). p0's box template fits p1 with 20
+    # inliers and p2 with 35: both past the cold gate's saturation (16), so the cold gate
+    # ties them and Stage 1 decides, while raw inliers put p2 first.
+    INLIERS = [
+        [30, 0, 0, 5, 0],  # crop
+        [99, 20, 35, 9, 0],  # p0's box
+    ]
+    POS = [True, True, True, False, False]
+    TIDS = ["q", "p0"]
+
+    def test_cold_gate_ties_saturated_fits_and_inliers_order_them(self, vc, tmp_path):
+        cd = _class(vc, tmp_path, self.INLIERS, self.POS, self.TIDS)
+        assert vc.rank("a3s_cold", cd, [0], []).tolist()[:3] == [0, 1, 2]
+        assert vc.rank("a3s_inliers", cd, [0], []).tolist()[:3] == [0, 2, 1]
+        # Without a Good there is no template, so both leave Stage 1 alone.
+        stage1 = vc.rank("a3_vlad_svm", cd, [], [])
+        assert vc.rank("a3s_cold", cd, [], []).tolist() == stage1.tolist()
+        assert vc.rank("a3s_inliers", cd, [], []).tolist() == stage1.tolist()
+
+    def test_accept_decision_is_the_inlier_gate_and_f1_scores_the_remainder(self, vc, tmp_path):
+        cd = _class(vc, tmp_path, self.INLIERS, self.POS, self.TIDS)
+        order, accept = vc.rank_and_decide("a1_max", cd, [0], [])
+        # p3 (9 inliers) passes the 8-inlier gate but is a negative; p4 fails it.
+        assert accept.tolist() == [True, True, True, True, False]
+        rest = vc.remainder(order, {0})
+        assert vc.decision_f1(accept, cd.positive, rest) == pytest.approx(2 * 2 / (3 + 2))
+        # The SVM arms make no accept decision.
+        assert vc.rank_and_decide("a3_vlad_svm", cd, [0], [])[1] is None
+        assert np.isnan(vc.decision_f1(None, cd.positive, rest))

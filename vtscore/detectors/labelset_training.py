@@ -902,8 +902,8 @@ def maybe_labelset_structural_rerank(
     The counterpart to the vote-driven re-rank wired into
     :func:`~vtscore.detectors.training.train_and_score`: when a saved structural
     detector is sorted against a (possibly different) loaded dataset, this
-    re-derives the labelset's local features, builds the RegionYes templates and
-    verification classifier from them, and geometrically re-ranks the active
+    re-derives the labelset's local features, builds the RegionYes templates
+    from them, and geometrically re-ranks the active
     dataset's Stage-1 shortlist.  A no-op for non-structural datasets (gated on
     the active snapshot carrying ``local_features``) and when no labelled element
     yields a usable template.
@@ -913,7 +913,7 @@ def maybe_labelset_structural_rerank(
     if not snap or not snapshot_is_structural(snap):
         return results, threshold
     populate_label_local_features(det_ctx, labelset, snap=snap)
-    feature_snap, good_votes, bad_votes, region_boxes = _labelset_feature_snapshot(det_ctx, labelset)
+    feature_snap, good_votes, _bad_votes, region_boxes = _labelset_feature_snapshot(det_ctx, labelset)
     if not good_votes:
         return results, threshold
     return maybe_structural_rerank(
@@ -921,7 +921,6 @@ def maybe_labelset_structural_rerank(
         threshold,
         snap,
         good_votes,
-        bad_votes,
         region_boxes,
         det_ctx,
         feature_snap=feature_snap,
