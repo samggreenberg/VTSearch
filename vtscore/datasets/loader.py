@@ -75,7 +75,7 @@ def _loaded_embedder(name: str | None):
 
 # Pickle protocol 5 (PEP 574) serialises numpy arrays via out-of-band buffers,
 # making it both smaller and faster than the interpreter default (4 on 3.11).
-# Available on every Python we support (>=3.10), so pin it explicitly.
+# Available on every Python we support (>=3.11), so pin it explicitly.
 _PICKLE_PROTOCOL = 5
 
 

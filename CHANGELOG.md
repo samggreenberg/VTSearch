@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Python 3.11 or later is now required** (issue #4385). Python 3.10 reaches
+  end of life in October 2026, so `scripts/install.sh` now refuses it, and pip
+  will not install VTSearch on it. A 3.10 venv needs rebuilding on 3.11+
+  before its next install. The Docker images move with it: the CPU images run
+  on `python:3.12-slim`, and the two CUDA images on
+  `nvidia/cuda:12.5.1-runtime-ubuntu24.04` with Python 3.12, which starts only on
+  a host driver new enough for CUDA 12.5 (555+) or from the R535 or R550
+  branches (see [Choosing an image](docs/DEPLOYMENT.md#choosing-an-image)).
 - **The Find Stats chart no longer claims an "at least"** (issue #4360). Its
   **Estimated (at least)** curve is gone, with its legend entry, its dot and
   the *No estimate yet* notes: the estimate behind it could not back the bound

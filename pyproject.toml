@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vtsearch"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
 # Apache-2.0 covers this repository's source only. Embedding-model weights are
 # downloaded at runtime under their publishers' own terms (some noncommercial),
@@ -22,7 +22,6 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Multimedia",
@@ -61,15 +60,15 @@ dependencies = [
     # Imported directly by vtscore.media.embedder for the Hub metadata
     # preflight (also a transformers dependency).
     "huggingface_hub",
-    # Held on one major everywhere (#4381). pandas 3 needs Python >= 3.11, so
-    # the Python 3.10 Docker images can only get 2.x. A fresh Python 3.11
-    # container got 3.x, and the long-lived GRID venv kept the 2.3.3 it was
-    # built with. The majors differ in their inline annotations, which pyright
-    # reads (`useLibraryCodeForTypes`), and so lines clean in a container were
-    # red on the GRID (#4377). They also differ at runtime: pandas 3 turns on
-    # copy-on-write and the string dtype. Lift this with the Python 3.10 floor,
-    # and lift the matching pins in requirements/labbench.txt and
-    # requirements/image-embedders.txt in the same change.
+    # Held on one major everywhere (#4381). The majors differ in their inline
+    # annotations, which pyright reads (`useLibraryCodeForTypes`), so lines clean
+    # on one were red on the other (#4377). They also differ at runtime: pandas 3
+    # turns on copy-on-write and the string dtype. What holds the line at 2.x is
+    # RAPIDS: every GPU install adds cuml-cu12<26, whose cudf-cu12 pins
+    # pandas<2.4, and cudf only takes pandas 3 from 26.8, past what our torch
+    # CUDA wheels allow (#4390). Lift this with that move, and lift the matching
+    # pins in requirements/labbench.txt and requirements/image-embedders.txt in
+    # the same change.
     "pandas<3",
     # Read HuggingFace-hosted parquet demo datasets (RICO-Screen2Words, RVL-CDIP)
     # whose screenshots/document-images are stored as an Image-feature column
@@ -180,7 +179,7 @@ include = ["vtsearch*", "vtscore*"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 # Default rules (E4, E7, E9, F) + flake8-bandit (S) security checks +

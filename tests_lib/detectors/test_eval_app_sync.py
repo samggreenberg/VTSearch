@@ -133,14 +133,14 @@ def f(a, b):
 
 
 class TestFstringsDigestTheSameOnEveryInterpreter:
-    """A pin must travel between the Python versions the repo supports (>=3.10).
+    """A pin must travel between the Python versions the repo supports (>=3.11).
 
     Python 3.12 (PEP 701) stopped emitting an f-string as one STRING token and
     started splitting it into FSTRING_START / FSTRING_MIDDLE / FSTRING_END plus
     the real tokens of each replacement field.  The normalizer is token-based
     precisely so it would be version-stable, so this went unnoticed: the three
     mirrored `labeling_progress._compute_*_status` functions all contain an
-    f-string, so the gate was red on 3.12+ and green on 3.10/3.11 for the same
+    f-string, so the gate was red on 3.12+ and green on 3.11 for the same
     tree, and `--update` only moved the failure to the other half of the range
     (issue #3117).  These assert the collapsed, <=3.11-shaped form, so they fail
     on an unfixed 3.12+ and pass everywhere once it is normalized away.

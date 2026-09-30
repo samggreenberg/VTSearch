@@ -997,15 +997,20 @@ startup sequence runs at WSGI import time. See
 
 | Dockerfile | Compose file (`docker/compose/`) | Base | What it is for |
 |---|---|---|---|
-| `docker/Dockerfile` | `docker-compose.yml` | `python:3.10-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
-| `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
-| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml` | `python:3.10-slim` | SigLIP-only image search from `requirements/labbench.txt`; SigLIP weights baked in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. |
-| `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.10-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
-| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.1.1-runtime-ubuntu22.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
+| `docker/Dockerfile` | `docker-compose.yml` | `python:3.12-slim` | Full CPU build (all media types). Installs `libsndfile1`, `ffmpeg`, `libgl1`, `libglib2.0-0`. |
+| `docker/Dockerfile.gpu` | `docker-compose.yml` + `docker-compose.gpu.yml` | `nvidia/cuda:12.5.1-runtime-ubuntu24.04` | Full GPU build; needs the NVIDIA Container Toolkit on the host. |
+| `docker/Dockerfile.labbench` | `docker-compose.labbench.yml` | `python:3.12-slim` | SigLIP-only image search from `requirements/labbench.txt`; SigLIP weights baked in at build time under `/opt/vtsearch/models` (`VTSEARCH_MODELS_DIR`), so they survive a volume mounted on `/app/data`. |
+| `docker/Dockerfile.image-embedders` | — (build directly) | `python:3.12-slim` | Every image embedder, with SigLIP, SigLIP 2, CLIP, DINOv2, DINOv3 and EUPE weights baked in (the SO400M models download lazily). |
+| `docker/Dockerfile.image-embedders.gpu` | `docker-compose.image-embedders.gpu.yml` | `nvidia/cuda:12.5.1-runtime-ubuntu24.04` | The same on CUDA. DINOv3 is gated: populate the build cache first with `HF_TOKEN=… scripts/cache_gated_models.sh`. |
 
 All of them persist state in the volume mounted at `/app/data` (named
 `vtsearch-data` in the compose files); a container without that mount loses its
 settings, datasets and detectors on restart.
+
+The two CUDA images start only on a host whose NVIDIA driver the base image
+accepts: one new enough for CUDA 12.5 (driver 555 or later), or one from the
+R535 or R550 long-term branches. Anything else is refused at `docker run` with
+an `unsatisfied condition: cuda>=12.5` error. Check with `nvidia-smi`.
 
 ### Resource considerations
 

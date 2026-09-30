@@ -10,6 +10,10 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Python 3.11 or later is now required** (issue #4385). `requires-python`
+  moves from `>=3.10` to `>=3.11`, since Python 3.10 reaches end of life in
+  October 2026. No API changes.
+
 - **The eval harness refuses a non-zero `inclusion` under a precision floor**
   (issue #4361). A set floor wins over the knob, so under one `inclusion`
   only re-weighted the `cost` column and never moved the line.

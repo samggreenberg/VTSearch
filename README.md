@@ -17,7 +17,7 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 ## Quick start
 
-You need **Python 3.10+**, **Node.js 20.19+** with npm, and Git. Then, from the repository root:
+You need **Python 3.11+**, **Node.js 20.19+** with npm, and Git. Then, from the repository root:
 
 ```bash
 bash scripts/install.sh                            # install Python deps (auto-detects CPU vs GPU)
