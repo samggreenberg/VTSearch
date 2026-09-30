@@ -149,6 +149,9 @@ stub randomness the UI exposes (never rely on unseeded draws).
   starts one on a fresh data dir (`data/.screenshots-app`, emptied every run,
   the model cache shared) and stops it afterwards, so no refresh photographs
   state an earlier one left behind; the fixtures are imported afresh each run.
+  An app already serving is refused, and named, when its `GET /api/version`
+  is not the checkout's: it would shoot another commit's code, and the
+  stale-build toast that would say so is hidden in every shot.
 - `check.sh` — re-render to a temp dir and **pixel-diff** against baselines;
   exits non-zero on drift. Manual pre-release chore (a pixel diff needs a
   browser and a pinned rendering stack); intentionally *not* in `run-tests.sh`.
