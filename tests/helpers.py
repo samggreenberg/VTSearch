@@ -291,22 +291,6 @@ def planted_fold_anchored_cut(n_pos_per_fold: int):
     return cut
 
 
-def planted_precision_floor_estimate(n_pos_per_fold: int):
-    """The precision-floor estimate a retrain would park beside :func:`planted_fold_anchored_cut`.
-
-    The same folds, haystacks and pool (the rng draws are identical), with every
-    held-out vote allowed to serve as evidence.
-    """
-    from vtscore.training.thresholds import PrecisionFloorEstimate  # noqa: PLC0415
-
-    cut = planted_fold_anchored_cut(n_pos_per_fold)
-    return PrecisionFloorEstimate(
-        cut.final_haystack,
-        [(list(sc), list(lb)) for sc, lb in cut.fold_orderings],
-        list(cut.fold_haystacks),
-    )
-
-
 def planted_spot_check(ctx, min_precision: float, *, right: bool = True, seed: int = 1):
     """A finished spot check of *ctx*'s floor at *min_precision*, its votes cast on *ctx* (#4272).
 

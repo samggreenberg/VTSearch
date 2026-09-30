@@ -5,8 +5,7 @@ unchecked starting candidate, or the set its spot check ended on - and the
 default user has a floor, so the harness's default arm has to do the same, or
 every study measures a detector nobody ships.  The rule itself is shared
 (``floor_line`` / ``floor_state`` / ``SpotCheck``); what these tests pin is the
-harness's side of the plumbing: that each simulated click is recorded with the
-provenance the app would record, that the run's spot check draws its candidate
+harness's side of the plumbing: that the run's spot check draws its candidate
 off the ranking, answers its picks from ground truth, casts them as votes and
 retrains on them, and that the arms the knob names behave as named.
 """
@@ -18,11 +17,9 @@ import math
 import numpy as np
 import pytest
 
-from vtscore.datasets.vote_provenance import calibrates_precision
 from vtscore.eval.autopilot_flow import pick_provenance
-from vtscore.eval.voting_iterations import _calibration_rows, simulate_voting_iterations
+from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
-    CHECK_PROVENANCE,
     DEFAULT_MIN_PRECISION,
     FLOOR_CONFIRMED,
     FLOOR_SHORT,
@@ -44,36 +41,22 @@ def _separable(n_per_cat: int = 20, dim: int = 16) -> dict[int, dict]:
     return medias
 
 
-class TestWhatTheAppWouldRecord:
+class TestTheRetiredProvenanceRecord:
+    """``pick_provenance`` fed the #4245 evidence filter, which retired with the estimate (#4362)."""
+
     @pytest.mark.parametrize(
         ("phase", "sort_kind", "select_mode"),
         [("good", "text", "top"), ("bad", "text", "hard"), ("hard", "learned", "hard"), ("new", "learned", "new")],
     )
-    def test_each_phase_draws_off_the_sort_the_label_view_sets(self, phase, sort_kind, select_mode):
-        assert pick_provenance(phase) == {
-            "flow": "autopilot",
-            "phase": phase,
-            "select_mode": select_mode,
-            "sort_kind": sort_kind,
-        }
+    def test_it_still_answers_from_its_table_with_a_warning(self, phase, sort_kind, select_mode):
+        with pytest.deprecated_call(match="pick_provenance"):
+            recorded = pick_provenance(phase)
+        assert recorded == {"flow": "autopilot", "phase": phase, "select_mode": select_mode, "sort_kind": sort_kind}
 
     @pytest.mark.parametrize("phase", [None, "idle", "done", "exhausted"])
     def test_no_labelling_phase_records_nothing(self, phase):
-        assert pick_provenance(phase) is None
-
-    def test_only_the_hard_phase_calibrates_the_estimate(self):
-        calibrating = {p for p in ("good", "bad", "hard", "new") if calibrates_precision(pick_provenance(p))}
-        assert calibrating == {"hard"}
-        assert not calibrates_precision(CHECK_PROVENANCE)
-
-    def test_rows_map_back_to_their_votes(self):
-        provenance = {1: pick_provenance("good"), 2: pick_provenance("hard"), 3: pick_provenance("new")}
-        details = {"row_votes": [1, 2, 3, 2]}
-        assert _calibration_rows(details, provenance) == [False, True, False, True]
-        # No phase machine: no app counterpart to filter on, so every vote serves.
-        assert _calibration_rows(details, None) is None
-        # A trainer that cannot name its rows' votes lets none serve.
-        assert _calibration_rows({}, provenance) == []
+        with pytest.deprecated_call():
+            assert pick_provenance(phase) is None
 
 
 class TestTheArms:

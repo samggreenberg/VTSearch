@@ -20,9 +20,9 @@ keep its promise (``docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`
    information the model's score lacks.  #4222 measured it: with the opening's
    Good round raised to 20, the gate below opened for 60% of COCO Better cells by
    vote 50, and 51-71% of the promises it then made broke (6% on today's 3-Good
-   opening).  The app therefore calibrates only on the learned sort's own draws
-   (:func:`vtscore.datasets.vote_provenance.calibrates_precision`), which keeps
-   that gate shut rather than making the estimate honest.  The learned sort's
+   opening).  The app therefore calibrated only on the learned sort's own
+   draws (#4245, retired with the app's estimate in #4362), which kept that
+   gate shut rather than making the estimate honest.  The learned sort's
    own draws are biased too, by an earlier model's score.  #4256 measured
    learned-only evidence against a *consistent* reference pool (voted items
    removed): 83% of X = 50% promises broke.  The promise holds only through
@@ -59,18 +59,19 @@ the way a :class:`~vtscore.training.thresholds.FoldAnchoredCut` is fitted once
 and cut at any inclusion; :class:`PrecisionFloorEstimate` holds one detector's
 inputs and fits the curve the first time a floor is asked for.
 
-**This estimate no longer draws a detector's line** (#4272).  Under a floor the
-line keeps a set that a spot check measures
-(:func:`~vtscore.training.thresholds.floor_line`), and the estimate survives
-only for the Find Stats precision curve.  With no floor, or no ranking to keep
-a set of, the line is the Inclusion 0 cut through :func:`reporting_line`,
-shared by the app and the eval harness's default arm so the two cannot
-disagree about it.
+**The app no longer builds this estimate.**  It stopped drawing a detector's
+line in #4272: under a floor the line keeps a set that a spot check measures
+(:func:`~vtscore.training.thresholds.floor_line`).  The Find Stats curve, its
+last reader, went in #4360, and a retrain stopped building and parking it in
+#4362.  The estimator stays as public library API, which the calibration
+studies under ``scripts/experiments/calibration/`` still call.  With no floor,
+or no ranking to keep a set of, the line is the Inclusion 0 cut through
+:func:`reporting_line`, shared by the app and the eval harness's default arm so
+the two cannot disagree about it.
 
 Pure numpy + scikit-learn; nothing here reads a detector context.  Wiring it to
-a live detector (which fold orderings, which haystacks, which votes may serve
-as evidence) is the caller's job: see
-:func:`vtscore.detectors.training._fused_threshold`.
+a detector (which fold orderings, which haystacks, which votes may serve as
+evidence) is the caller's job.
 """
 
 from __future__ import annotations
@@ -512,20 +513,25 @@ def eligible_fold_orderings(
     holdout_rows: Sequence[Sequence[int]],
     eligible_rows: Sequence[bool] | None,
 ) -> list[tuple[list[float], list[float]]]:
-    """Each fold's held-out ``(scores, labels)``, kept only where the vote behind it may calibrate a promise.
+    """Deprecated (#4362): each fold's held-out ``(scores, labels)``, kept only where *eligible_rows* marks its row.
 
-    *holdout_rows* is what the calibration's ``holdout_sink`` received
-    (:func:`~vtscore.training.thresholds.compute_fold_orderings`): per fold,
-    the training row behind each held-out score.  *eligible_rows* is
-    indexed by training row.  The folds keep their order and their count, so the
-    result stays aligned with the fold haystacks it will be ranked against.
-
-    ``None`` for *eligible_rows* keeps every held-out vote - the caller has no
-    provenance to filter on.  A fold whose held-out rows are missing or do not
-    line up with its ordering contributes **nothing**: a vote that cannot be
-    traced back cannot be shown to have been drawn fairly, and an empty fold
-    only makes the promise more timid.
+    Part of the retired #4245 calibration filter, which cut the #4220
+    estimate's evidence down to the votes the learned sort chose.  A retrain
+    no longer builds that estimate, so no app path calls this.  It still
+    answers as it always did, with a ``DeprecationWarning``, until the name
+    is removed: *holdout_rows* is what the calibration's ``holdout_sink``
+    received (per fold, the training row behind each held-out score) and
+    *eligible_rows* is indexed by training row.  The folds keep their order
+    and their count.  ``None`` for *eligible_rows* keeps every held-out vote;
+    a fold whose held-out rows are missing or do not line up with its
+    ordering contributes nothing.
     """
+    warnings.warn(
+        "eligible_fold_orderings() is deprecated: it filtered the #4220 precision estimate's evidence, and a "
+        "retrain no longer builds that estimate (#4362). It will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if eligible_rows is None:
         return [([float(v) for v in sc], [float(v) for v in lb]) for sc, lb in fold_orderings]
     out: list[tuple[list[float], list[float]]] = []
@@ -542,17 +548,17 @@ def eligible_fold_orderings(
 class PrecisionFloorEstimate:
     """One detector's precision-floor inputs, with the curve fitted the first time a floor is asked for.
 
-    Built beside the fold-anchored cut on every retrain, from the same
-    populations: *corpus_scores* are the final model's scores over what the cut
-    decides, *fold_orderings* the calibration folds' held-out votes (already cut
-    down to the ones that may serve as evidence, :func:`eligible_fold_orderings`)
-    and *fold_haystacks* those fold models' scores over the pool.  *pool_scores*
+    Built from the fold-anchored cut's populations: *corpus_scores* are the
+    final model's scores over what the cut decides, *fold_orderings* the
+    calibration folds' held-out votes that may serve as evidence, and
+    *fold_haystacks* those fold models' scores over the pool.  *pool_scores*
     is the reference the corpus is ranked against, and defaults to the corpus.
-    The app passes the final model's scores over the whole haystack, voted
-    items included, while its corpus is the unvoted remainder: that is the
-    configuration #4220 measured, and #4221 found the estimator unsafe without
-    it (the voted positives at the top of the reference are a conservative
-    offset the estimate depends on).
+    #4220 measured the final model's scores over the whole haystack, voted
+    items included, as the reference, with the unvoted remainder as the
+    corpus, and #4221 found the estimator unsafe without that configuration
+    (the voted positives at the top of the reference are a conservative
+    offset the estimate depends on).  A retrain built one on every run until
+    #4362; nothing in the app builds one now.
 
     Nothing is fitted in the constructor.  Most detectors never reach the gate,
     and one whose owner cleared the floor never needs the curve, so the
@@ -625,10 +631,10 @@ class PrecisionFloorEstimate:
     def curve_for(self, corpus_scores: ScoreArray) -> PrecisionFloorCurve:
         """The curve over *another* corpus, from this estimate's evidence and reference pool.
 
-        What a chart of a different set's precision reads - the Find Stats
-        curve over a Find run's scores (#4242) - so it is the promise's own
-        estimate applied there: the same eligible votes, the same fold
-        haystacks, the same reference pool, the same gate and knobs.  Fitted
+        What a chart of a different set's precision reads (the Find Stats
+        curve read it over a Find run's scores, #4242, until #4360), so it is
+        the promise's own estimate applied there: the same eligible votes, the
+        same fold haystacks, the same reference pool, the same gate and knobs.  Fitted
         afresh on every call and not kept.  *corpus_scores* is used as given
         apart from dropping unscorable entries; a caller with a very large
         corpus samples it first.

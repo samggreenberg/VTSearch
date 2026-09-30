@@ -189,8 +189,6 @@ def _fused_threshold(
     final_ids: list[int] | None = None,
     voted_ids: "set[int] | None" = None,
     min_precision: float | None = None,
-    calibration_rows: "list[bool] | None" = None,
-    holdout_rows: "list[list[int]] | None" = None,
 ) -> float:
     """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
@@ -266,23 +264,6 @@ def _fused_threshold(
     :func:`~vtscore.training.thresholds.reporting_line`, and with no fitted cut
     at all the schedule blend answers as it always has.
 
-    **The #4220 estimate is still built**, though it no longer draws the
-    line (#4272) and the Find Stats chart no longer draws it either (#4360);
-    #4362 retires it.  A
-    :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` from the same
-    populations as the fold-anchored cut.  Its **corpus** is the final model's
-    haystack less the voted items when the #3308 exclusion applies; its
-    evidence is each fold's held-out votes ranked in that fold's (equally
-    excluded) haystack; and its **reference pool** is the final model's scores
-    over the *whole* haystack, voted items included - the configuration #4220
-    measured, whose safety #4221 found to rest on exactly that asymmetry.  Only
-    the held-out votes whose training row (*holdout_rows*, per fold, from the
-    calibration's ``holdout_sink``) *calibration_rows* marks may serve as
-    evidence - the votes the learned sort chose
-    (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`); ``None``
-    keeps them all.  The estimate is parked on ``det_ctx.precision_floor_cache``;
-    its bootstrap is fitted only when a curve is first asked for.
-
     **Unscorable media never reach the fit.**  A media the head cannot score
     (a broken vector, a destabilised model) is recorded at
     :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`, a full unit below
@@ -295,11 +276,9 @@ def _fused_threshold(
     from vtscore.training.thresholds import (  # noqa: PLC0415
         NO_GOOD_THRESHOLD,
         LineRanking,
-        PrecisionFloorEstimate,
         apply_vote_exclusion,
         calculate_safe_threshold,
         drop_voted,
-        eligible_fold_orderings,
         PRECISION_FLOOR_FALLBACK_INCLUSION,
         fit_fold_anchored_cut,
         floor_line,
@@ -330,7 +309,6 @@ def _fused_threshold(
     exclude: set[int] | None = voted_ids if (excluding and voted_ids) else None
 
     cut = None
-    estimate = None
     if folds.fallback is None and rows is not None:
         n_folds = min(len(folds.models), len(folds.orderings))
         fold_haystacks = []
@@ -338,17 +316,6 @@ def _fused_threshold(
             scores, _best = score_rows_with_model(model, rows)
             fold_haystacks.append(drop_voted(scores, rows.ids, exclude) if exclude else np.asarray(scores, np.float64))
         cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
-        # Every fold's held-out votes stay aligned with its own haystack here,
-        # before the anchored fit drops any fold it could not use.  The corpus
-        # is what the cut decides (the unvoted remainder); the reference pool
-        # is the WHOLE haystack, voted items included, as #4220 measured it -
-        # see the docstring for why that is not a detail.
-        estimate = PrecisionFloorEstimate(
-            fit_final,
-            eligible_fold_orderings(folds.orderings[:n_folds], holdout_rows or [], calibration_rows),
-            fold_haystacks,
-            pool_scores=final_scores,
-        )
 
     # The ranking the line keeps a set of: every scored item, with the voted
     # ones marked so the set is drawn from the unvoted remainder (#4272).  The
@@ -361,7 +328,6 @@ def _fused_threshold(
 
     if det_ctx is not None:
         det_ctx.anchored_cut_cache = cut
-        det_ctx.precision_floor_cache = estimate
         det_ctx.line_ranking = ranking
 
     if cut is not None and cut.n_unconverged:
@@ -388,15 +354,19 @@ def _fused_threshold(
 
 
 def calibration_rows_for(groups: list | None, calibrating_groups: "set | None") -> list[bool] | None:
-    """Per training row, whether the vote behind it may calibrate a precision-floor promise.
+    """Deprecated (#4362): per training row, whether the vote behind it was in *calibrating_groups*.
 
-    *groups* is the per-row bag id the training builders emit (``("g"/"b",
-    key)``); *calibrating_groups* the bags whose vote the learned sort chose
-    (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`).  ``None``
-    for *calibrating_groups* means the caller has no provenance to filter on,
-    and every held-out vote serves as evidence; a caller with provenance but no
-    *groups* cannot map rows to votes, so none does.
+    Part of the retired #4245 calibration filter, which chose the held-out
+    votes the #4220 precision estimate could use as evidence.  A retrain no
+    longer builds that estimate, so nothing reads this answer; it is kept, with
+    a ``DeprecationWarning``, so an out-of-tree caller keeps importing it, and
+    it answers as it always did.  ``None`` for *calibrating_groups* is
+    ``None`` (no filter); with no *groups* no row can be mapped to a vote, so
+    the answer is empty.
     """
+    from vtscore.datasets.vote_provenance import _retired_calibration_filter  # noqa: PLC0415
+
+    _retired_calibration_filter("calibration_rows_for()")
     if calibrating_groups is None:
         return None
     if groups is None:
@@ -409,11 +379,18 @@ def vote_calibrating_groups(
     bad_votes: "dict[int, None] | set[int]",
     provenance: "dict[int, dict[str, Any]]",
 ) -> set:
-    """The ``("g"/"b", media id)`` bags whose vote the learned sort chose, from the live vote provenance."""
-    from vtscore.datasets.vote_provenance import calibrates_precision  # noqa: PLC0415
+    """Deprecated (#4362): the ``("g"/"b", media id)`` bags whose vote the learned sort chose.
 
-    return {("g", cid) for cid in good_votes if calibrates_precision(provenance.get(cid))} | {
-        ("b", cid) for cid in bad_votes if calibrates_precision(provenance.get(cid))
+    Part of the retired #4245 calibration filter (see
+    :func:`calibration_rows_for`); nothing reads its answer.  Kept, with a
+    ``DeprecationWarning``, answering as it always did through
+    :func:`~vtscore.datasets.vote_provenance.calibrates_precision`'s rule.
+    """
+    from vtscore.datasets.vote_provenance import _calibrates_precision, _retired_calibration_filter  # noqa: PLC0415
+
+    _retired_calibration_filter("vote_calibrating_groups()")
+    return {("g", cid) for cid in good_votes if _calibrates_precision(provenance.get(cid))} | {
+        ("b", cid) for cid in bad_votes if _calibrates_precision(provenance.get(cid))
     }
 
 
@@ -594,14 +571,19 @@ def train_and_threshold(
             operation rather than once here and once there; on a patch dataset
             that stack is ~197 float16 rows per media, so the saving is memory
             as much as time.  ``None`` builds it here.
-        calibrating_groups: The bags (per *groups*) whose vote the learned sort
-            chose, the only held-out votes a precision-floor promise may be
-            calibrated on (see :func:`calibration_rows_for`).  ``None`` - a
-            caller with no provenance - lets every held-out vote serve.
+        calibrating_groups: Deprecated and ignored (#4362).  It named the
+            votes the #4220 precision estimate could use as evidence, and a
+            retrain no longer builds that estimate.  Leave it unset; anything
+            else emits a ``DeprecationWarning``.
 
     Returns:
         ``(model, threshold)``
     """
+    if calibrating_groups is not None:
+        from vtscore.datasets.vote_provenance import _retired_calibration_filter  # noqa: PLC0415
+
+        _retired_calibration_filter("train_and_threshold(calibrating_groups=...)")
+
     import torch
 
     from vtscore.state import (
@@ -650,9 +632,6 @@ def train_and_threshold(
     # replaced the schedule needs the fold *models* (it anchors on their
     # held-out scores), so there is nothing left to skip.  Two extra linear-head
     # fits at 4-5 votes is the whole cost.
-    # Which training rows each fold held out: the precision floor maps them back
-    # to their votes to keep only the learned sort's draws as evidence.
-    holdouts: list[list[int]] = []
     if det_ctx is not None:
         # Cache the K folds on the context so a re-cut can re-derive the cutoff
         # without a no-op (the find-label / detector-load paths land here;
@@ -667,7 +646,6 @@ def train_and_threshold(
             det_ctx=det_ctx,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
-            holdout_sink=holdouts,
         )
     else:
         folds = calibration_folds(
@@ -679,7 +657,6 @@ def train_and_threshold(
             hidden_dim=hidden_dim,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
-            holdout_sink=holdouts,
         )
     threshold = threshold_from_folds(folds, PRECISION_FLOOR_FALLBACK_INCLUSION)
 
@@ -738,14 +715,11 @@ def train_and_threshold(
             final_ids=all_ids,
             voted_ids=voted_ids,
             min_precision=min_precision,
-            calibration_rows=calibration_rows_for(groups, calibrating_groups),
-            holdout_rows=holdouts,
         )
     elif det_ctx is not None:
         # Safe thresholds off: no population estimator to re-cut on a slide,
         # and no ranking for a floor to keep a set of.
         det_ctx.anchored_cut_cache = None
-        det_ctx.precision_floor_cache = None
         det_ctx.line_ranking = None
 
     return model, threshold
@@ -1286,7 +1260,6 @@ def _train_and_score_xy(
     voted_ids: "set[int] | None" = None,
     rows: ScoringRows | None = None,
     min_precision: float | None = None,
-    calibrating_groups: "set | None" = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
@@ -1324,9 +1297,7 @@ def _train_and_score_xy(
     detector would restack the corpus.
 
     *min_precision* is the operating point's floor (``None``: the line is the
-    Inclusion 0 cut) and *calibrating_groups* the bags whose vote may calibrate
-    the #4220 estimate; see :func:`_fused_threshold` and
-    :func:`calibration_rows_for`.
+    Inclusion 0 cut); see :func:`_fused_threshold`.
     """
     import torch  # noqa: PLC0415
 
@@ -1375,7 +1346,6 @@ def _train_and_score_xy(
     # below the blend schedule's floor, where the schedule multiplied the
     # cross-cal cut by zero; the schedule is no longer what combines the two
     # estimators.)
-    holdouts: list[list[int]] = []
     folds = calibration_folds_cached(
         X_list,
         y_list,
@@ -1386,7 +1356,6 @@ def _train_and_score_xy(
         det_ctx=det_ctx,
         groups=cal_groups,
         score_rows_by_group=cal_score_rows,
-        holdout_sink=holdouts,
     )
     threshold = threshold_from_folds(folds, PRECISION_FLOOR_FALLBACK_INCLUSION)
     clock.mark("calibration_folds")
@@ -1427,8 +1396,6 @@ def _train_and_score_xy(
         final_ids=all_ids,
         voted_ids=voted_ids,
         min_precision=min_precision,
-        calibration_rows=calibration_rows_for(groups, calibrating_groups),
-        holdout_rows=holdouts,
     )
     clock.mark("fused_threshold")
 
@@ -1516,9 +1483,6 @@ def train_and_score(
         score_rows=score_rows,
         voted_ids=set(good_votes) | set(bad_votes),
         min_precision=min_precision,
-        calibrating_groups=(
-            vote_calibrating_groups(good_votes, bad_votes, det_ctx.vote_provenance) if det_ctx is not None else None
-        ),
     )
 
     # Stage-2 structural re-rank: a no-op for every non-structural dataset

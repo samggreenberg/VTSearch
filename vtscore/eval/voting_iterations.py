@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 from vtscore.detectors.cost_trend import SMART_INCLUSION, smart_cut
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, is_autopilot_strategy, select_next
-from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector, pick_provenance
+from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.arms_anchored import (
     _ANCHORED_FOLD_COMBINES,
@@ -87,7 +87,6 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
-    CHECK_PROVENANCE,
     LineRanking,
     SpotCheck,
     check_schedule,
@@ -353,27 +352,6 @@ def _blend_xcal_input(threshold: float, details: dict[str, Any]) -> float:
     return NO_GOOD_THRESHOLD if details.get("fold_fallback") is not None else threshold
 
 
-def _calibration_rows(details: dict[str, Any], vote_provenance: "dict[int, Any] | None") -> "list[bool] | None":
-    """Per training row, whether its vote may calibrate a precision-floor promise, decided as the app decides it.
-
-    *vote_provenance* is what the app would have recorded for each simulated
-    click (:func:`~vtscore.eval.autopilot_flow.pick_provenance`), and the
-    verdict is the app's own
-    :func:`~vtscore.datasets.vote_provenance.calibrates_precision`.  ``None``
-    keeps every vote: a run with no phase machine has no app counterpart to
-    take provenance from.  A trainer that reported no ``row_votes`` cannot map
-    a held-out row back to its vote, so none calibrates.
-    """
-    from vtscore.datasets.vote_provenance import calibrates_precision  # noqa: PLC0415
-
-    if vote_provenance is None:
-        return None
-    row_votes = details.get("row_votes")
-    if row_votes is None:
-        return []
-    return [calibrates_precision(vote_provenance.get(v)) for v in row_votes]
-
-
 def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, Any]:
     """The precision-floor columns of a step's row: the floor, the set its line keeps, and the check's range.
 
@@ -424,7 +402,6 @@ def _safe_threshold_for_step(
     exclusion_min_remainder: float | None = None,
     cut_rule: str | None = None,
     min_precision: float | None = None,
-    calibration_rows: "list[bool] | None" = None,
     check: "SpotCheck | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
@@ -494,23 +471,13 @@ def _safe_threshold_for_step(
     :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
     rides out in ``details["reporting_line"]`` so the acquisition cut can take
     its origin from it.
-
-    The #4220 estimate is still built, from this step's own populations,
-    exactly as :func:`vtscore.detectors.training._fused_threshold` builds it -
-    the remainder as the corpus, the whole sim set (votes included) as the
-    reference pool, the excluded fold haystacks as the evidence's scale, and
-    *calibration_rows* marking the training rows whose vote may serve - because
-    the app keeps building it for the Find Stats curve; it no longer draws the
-    line on either side.
     """
     import numpy as np  # noqa: PLC0415
 
     from vtscore.training.thresholds import (  # noqa: PLC0415
         FOLD_ANCHOR_CUT_RULE,
-        PrecisionFloorEstimate,
         ReportingLine,
         drop_voted,
-        eligible_fold_orderings,
         fit_fold_anchored_cut,
         reporting_line,
     )
@@ -604,19 +571,6 @@ def _safe_threshold_for_step(
         if fold_haystacks
         else None
     )
-    estimate = (
-        PrecisionFloorEstimate(
-            fit_final,
-            eligible_fold_orderings(fold_orderings[:n_folds], details.get("fold_holdout_rows") or (), calibration_rows),
-            fold_haystacks,
-            # The whole sim set, voted items included, as the app ranks it
-            # (see ``vtscore.detectors.training._fused_threshold``).
-            pool_scores=all_scores,
-        )
-        if fold_haystacks
-        else None
-    )
-    details["precision_floor_estimate"] = estimate
     # The ranking the line keeps a set of: every scored sim item, the voted
     # ones marked, as ``_fused_threshold`` parks it on the detector context.
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
@@ -2194,10 +2148,8 @@ def simulate_voting_iterations(  # noqa: C901
             **Inclusion arm** - the line at *inclusion* - which is what every
             study before #4245 measured; an arm that sweeps *inclusion* has to
             pass it, because a set floor wins over the knob.  A number pins a
-            floor.  The #4220 estimate the Find Stats curve reads is still
-            built each step, its evidence filtered as the app filters it: under
-            the phase machine only the votes Autopilot drew off the learned sort
-            (``hard`` picks) serve; without one every vote does.
+            floor.  No step builds the #4220 estimate: the app stopped
+            building it in #4362.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272).  ``"end"`` (the default): once the voting steps are spent
             - *max_steps* reached, or the pool exhausted - the user checks the
@@ -2512,10 +2464,6 @@ def simulate_voting_iterations(  # noqa: C901
     bad_votes: dict[int, None] = {}
     labeled: dict[int, float] = {}
     rows: list[dict[str, Any]] = []
-    # Per vote, the surfacing provenance the app would have recorded (see
-    # ``pick_provenance``).  Only read under the phase machine: a run without
-    # one has no app counterpart to take provenance from.
-    vote_provenance: dict[int, dict[str, str] | None] = {}
 
     # Voting proceeds one item at a time: the autopilot selector picks the next
     # pool item using the *current* detector (trained at the previous step), the
@@ -2567,11 +2515,10 @@ def simulate_voting_iterations(  # noqa: C901
     # app's ``_eval_cached_models`` does over its per-step cache.
     recent_steps: list[tuple[Any, float]] = []
 
-    def _cast(cid: int, phase_name: str | None, provenance: dict[str, str] | None) -> bool:
-        """Reveal *cid*'s ground truth as a vote, recorded as the app records one; whether it was positive."""
+    def _cast(cid: int, phase_name: str | None) -> bool:
+        """Reveal *cid*'s ground truth as a vote; whether it was positive."""
         pool.remove(cid)
         vote_phase[cid] = phase_name or ""
-        vote_provenance[cid] = provenance
         is_positive = media_is_positive(clips_dict[cid], target_category)
         if is_positive:
             good_votes[cid] = None
@@ -2670,7 +2617,7 @@ def simulate_voting_iterations(  # noqa: C901
             # move what the next round samples.
             phase = "check"
             startup_round, startup_cut = -1, None
-            round_votes = {cid: _cast(cid, phase, dict(CHECK_PROVENANCE)) for cid in picks}
+            round_votes = {cid: _cast(cid, phase) for cid in picks}
             t = len(good_votes) + len(bad_votes)
             for cid in picks:
                 _log_pick(cid, round_votes[cid], phase, startup_round, startup_cut)
@@ -2705,8 +2652,7 @@ def simulate_voting_iterations(  # noqa: C901
                 opening_diversity=diversity,
             )
             cid = select_next(strategy, ctx)
-            # What the app would record for this click (#4245).
-            is_positive = _cast(cid, phase, pick_provenance(phase))
+            is_positive = _cast(cid, phase)
             t = len(good_votes) + len(bad_votes)
             _log_pick(cid, is_positive, phase, startup_round, startup_cut)
 
@@ -2789,7 +2735,6 @@ def simulate_voting_iterations(  # noqa: C901
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
                     min_precision=floor,
-                    calibration_rows=_calibration_rows(details, vote_provenance if flow is not None else None),
                     check=check,
                 )
             )

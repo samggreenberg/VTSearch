@@ -220,14 +220,14 @@ those getters resolve through `CoreConfig`, so library consumers running
 outside an app must register a `register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
-the ranking the line keeps a set of (`line_ranking`, #4272) and the #4220
-estimate (`precision_floor_cache`), which nothing in the app reads since #4360
-(#4362 retires it). Under a floor
+the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
+builds the #4220 estimate (#4362), so `precision_floor_cache` stays `None`.
+Under a floor
 the threshold keeps a set - the top *count* unvoted items of the haystack, the
 set the detector's last spot check ended on or the floor's starting candidate
-- and with no floor it is the Inclusion 0 cut. Pass `calibrating_groups` (the
-bags whose vote the learned sort chose) to keep every other vote out of the
-estimate's evidence.
+- and with no floor it is the Inclusion 0 cut. `calibrating_groups` is
+deprecated and ignored (#4362): it chose the votes that estimate could use as
+evidence. Leave it unset; passing it emits a `DeprecationWarning`.
 
 ### `train_and_score(...)`
 

@@ -291,10 +291,5 @@ def train_and_score_active(
     from vtscore.state import snapshot_medias
 
     snap = snapshot_medias()
-    # External labels were not drawn off a learned ranking, so none of them may
-    # serve as evidence for the #4220 precision estimate (#4245).  That estimate
-    # no longer draws the line: under a floor the line keeps the floor's set (#4272).
-    model, threshold = train_and_threshold(
-        X_list, y_list, snap=snap, embedder_name=embedder_name, calibrating_groups=set()
-    )
+    model, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=embedder_name)
     return score_media_with_model(model, snap, embedder_name), threshold

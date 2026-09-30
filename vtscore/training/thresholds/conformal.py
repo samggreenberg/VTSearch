@@ -853,8 +853,8 @@ def compute_fold_orderings(
     fold-count question (issue #2897) measurable without a second run.
     *holdout_sink* likewise receives, per fold, the training row behind each
     held-out score in ordering order (the first row of each bag on the grouped
-    path), so a caller can tell which votes a fold held out - the precision
-    floor calibrates only on votes the learned sort chose (#4245).  Read-only:
+    path), so a caller can tell which votes a fold held out (the eval
+    harness's precision frames name each held-out vote's phase).  Read-only:
     none of these sinks changes a split, a fit or an ordering.
 
     The folds are **independent repeated splits**, not a partition: every fold

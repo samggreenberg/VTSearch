@@ -194,30 +194,6 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
-        id="autopilot.pick_provenance",
-        app=f"ts:{LABEL_VIEW_TS}::subscribe(([prev, curr]) =>",
-        harness="vtscore/eval/autopilot_flow.py::_PHASE_PICKS,pick_provenance",
-        kind="ported",
-        note=(
-            "Which ranking each Autopilot phase draws off, and how: the label view sets the sort "
-            "and select mode on every phase change (good: seed sort, top; bad: seed sort, hard; "
-            "more: seed sort, top; "
-            "hard: learned, hard; new: learned, new) and VoteProvenanceService records them with "
-            "each vote. The precision floor calibrates only on votes calibrates_precision accepts "
-            "- learned-sort draws off the ranking itself (#4245) - and the harness decides that "
-            "from pick_provenance's record of each simulated click. If a phase starts drawing off "
-            "a different sort or select mode, the harness's evidence filter has to follow or its "
-            "default arm calibrates the promise on votes the app would not."
-        ),
-        divergence=(
-            "INTENTIONAL: the app's retrain mode (a detector that already had labels) draws good "
-            "and bad off the learned sort too; the harness always starts from an untrained "
-            "detector, so it has no retrain mode to port. The harness's seed sort is a text sort "
-            "or an example sort and is recorded as 'text' either way - calibrates_precision reads "
-            "only whether the sort was the learned one."
-        ),
-    ),
-    Mirror(
         id="floor.check_schedule",
         app="py:vtscore.training.thresholds.spot_check.check_schedule",
         harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::schedule_for",
@@ -487,12 +463,9 @@ MIRRORS: list[Mirror] = [
             "inputs (every scored item, unscorable ones dropped, the trainer's voted set), which "
             "the harness has to build the same way, and the order of the fallbacks under it "
             "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no floor, the "
-            "schedule blend with no fitted cut). Since #4245 this is also where the #4220 "
-            "estimate is built (the unvoted remainder as corpus, the WHOLE haystack - votes "
-            "included - as the reference pool, each fold's held-out votes cut down by "
-            "eligible_fold_orderings, each fold's own excluded haystack); it no longer draws "
-            "the line on either side and, since #4360, nothing reads it (#4362 retires it), but "
-            "the harness still builds it the same way. Since #4269 the app hands reporting_line "
+            "schedule blend with no fitted cut). Neither side builds the #4220 precision estimate "
+            "any more (#4362): it stopped drawing the line in #4272 and lost its last reader, "
+            "the Find Stats curve, in #4360. Since #4269 the app hands reporting_line "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
             "hands it the arm's `inclusion`, whose default is that 0."
         ),

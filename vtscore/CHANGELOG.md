@@ -828,6 +828,40 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Deprecated
 
+- **A retrain no longer builds the #4220 precision estimate, and its
+  calibration filter is retired** (issue #4362). `train_and_threshold`,
+  `train_and_score`, `labelset_train_and_score` and `run_learned_sort` stopped
+  building a `PrecisionFloorEstimate` on every run and parking it on the
+  detector context. Its last reader, the Find Stats curve, went in #4360. The
+  public names stay importable, and those that still answer do so by the same
+  rule as before. Each emits a `DeprecationWarning`:
+  - `DetectorContext.precision_floor_cache` stays on the context and is always
+    `None`.
+  - `vtscore.state.core.detector_precision_floor(ctx, min_precision)` always
+    returns `insufficient_evidence` with zero calibration positives, since
+    nothing parks an estimate for it to read.
+  - The #4245 evidence filter answers as it did, but nothing reads the answer:
+    `vtscore.datasets.vote_provenance.calibrates_precision`,
+    `vtscore.training.thresholds.eligible_fold_orderings`,
+    `vtscore.detectors.training.vote_calibrating_groups` and
+    `calibration_rows_for`,
+    `vtscore.detectors.labelset_training.labelset_calibrating_groups`, and
+    `vtscore.eval.autopilot_flow.pick_provenance`.
+    `PRECISION_CALIBRATION_FLOWS` and `PRECISION_CALIBRATION_SELECT_MODES` are
+    unchanged.
+  - `train_and_threshold(calibrating_groups=...)` is ignored.
+
+  The estimator itself is unchanged library API: `precision_floor_cut`,
+  `precision_lower_bound_curve`, `fit_precision_floor_curve`,
+  `PrecisionFloorEstimate` and `reporting_line`. The `holdout_sink=` parameter
+  of `compute_fold_orderings`, `calibration_folds` and
+  `calibration_folds_cached` is unchanged too. Eval: `simulate_voting_iterations`
+  no longer builds the estimate or records each click's provenance, and the
+  step trainers' `details` drop `row_votes`. `fold_holdout_rows` stays, since
+  the precision frames read it. **What changes for a caller that never read
+  the estimate:** nothing. The line, the spot check and every threshold are
+  unchanged. The names above will be removed in a future release.
+
 - **The labeling-progress functions' `inclusion_value` is ignored** (issue
   #4361). `recreate_model_at_time`, `calculate_error_cost_over_time`,
   `calculate_prediction_stability_over_time`, `calculate_diversity_level_over_time`,

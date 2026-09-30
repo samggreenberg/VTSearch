@@ -610,21 +610,23 @@ def build_xy_from_labelset(
 
 
 def labelset_calibrating_groups(labelset: LabelSet) -> set:
-    """The bags of :func:`build_xy_from_labelset` whose vote the learned sort chose.
+    """Deprecated (#4362): the bags of :func:`build_xy_from_labelset` whose vote the learned sort chose.
 
-    Read from each element's recorded surfacing provenance
-    (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`), which
-    rides in its metadata through every save and import.  Only these bags'
-    held-out scores may calibrate a precision-floor promise (#4245); every
-    element still trains the model.
+    Part of the retired #4245 calibration filter, which chose the held-out
+    votes the #4220 precision estimate could use as evidence.  A retrain no
+    longer builds that estimate, so nothing reads this answer.  It still
+    answers by each element's recorded surfacing provenance
+    (:func:`~vtscore.datasets.vote_provenance.calibrates_precision`'s rule),
+    with a ``DeprecationWarning``, until the name is removed.
     """
-    from vtscore.datasets.vote_provenance import calibrates_precision, read_provenance
+    from vtscore.datasets.vote_provenance import _calibrates_precision, _retired_calibration_filter, read_provenance
     from vtscore.detectors.labelset_elements import stable_element_id
 
+    _retired_calibration_filter("labelset_calibrating_groups()")
     return {
         ("g" if elem.label == "good" else "b", stable_element_id(elem))
         for elem in labelset.elements
-        if elem.label in ("good", "bad") and calibrates_precision(read_provenance(elem.metadata))
+        if elem.label in ("good", "bad") and _calibrates_precision(read_provenance(elem.metadata))
     }
 
 
@@ -1005,7 +1007,6 @@ def train_from_labelset(
         score_rows=score_rows,
         voted_ids=voted_ids,
         haystack=haystack.medias if haystack is not None else None,
-        calibrating_groups=labelset_calibrating_groups(labelset),
     )
     from vtscore.detectors.model_loading import labelset_signature
 
@@ -1057,9 +1058,8 @@ def labelset_train_and_score(
     or wanting a cancellation checkpoint - passes it.
 
     *min_precision* is the precision floor to cut at (the line keeps the set
-    the floor keeps, #4272), or ``None`` for no floor (the Inclusion 0 cut);
-    only the elements the learned sort chose calibrate the #4220 estimate
-    (:func:`labelset_calibrating_groups`).  *inclusion_value* is deprecated
+    the floor keeps, #4272), or ``None`` for no floor (the Inclusion 0 cut).
+    *inclusion_value* is deprecated
     (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
     any other value raises ``ValueError``.
     """
@@ -1082,7 +1082,6 @@ def labelset_train_and_score(
         voted_ids=labeled_media_ids(labelset, clips_dict),
         rows=rows,
         min_precision=min_precision,
-        calibrating_groups=labelset_calibrating_groups(labelset),
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

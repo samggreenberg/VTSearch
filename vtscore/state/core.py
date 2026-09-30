@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import math
 import threading
+import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -1051,8 +1052,8 @@ class DetectorContext:
         # labels, calibrate_count, calibration_fraction, hidden_dim), the
         # folds carry the per-fold held-out ``(scores, labels)``, the
         # fallback sentinel, and the trained fold models, and *holdout_rows*
-        # names the training row behind each held-out score (the precision
-        # floor maps them back to votes, #4245).  Because the operating point
+        # names the training row behind each held-out score, for a
+        # ``holdout_sink`` a cache hit must still fill.  Because the operating point
         # is deliberately absent from *key*, a re-cut at another inclusion
         # (the acquisition cut, Smart's pricing) hits the cache and only
         # re-runs the cheap quantile rule (no fold refit); a label/embedder
@@ -1068,14 +1069,12 @@ class DetectorContext:
         # estimator instead of the raw cross-calibration one.  Holds fitted Gaussians and
         # sorted score samples - process-scoped, never serialised.
         "anchored_cut_cache",  # FoldAnchoredCut | None
-        # The #4220 precision estimate (``PrecisionFloorEstimate``): the final
-        # model's haystack and the calibration folds' held-out votes that may
-        # serve as evidence, with the curve fitted on first use.  Written on
-        # every retrain beside ``anchored_cut_cache``.  Since #4272 it no
-        # longer draws the line - the spot check does - and feeds only the Find
-        # Stats precision curve.  Score arrays only - process-scoped, never
-        # serialised.
-        "precision_floor_cache",  # PrecisionFloorEstimate | None
+        # Retired (#4362): always ``None``.  It held the #4220 precision
+        # estimate a retrain parked for the Find Stats curve; the curve went
+        # with #4360 and nothing builds the estimate any more.  Kept so an
+        # out-of-tree reader of the attribute sees "no estimate" rather than
+        # an ``AttributeError``.
+        "precision_floor_cache",  # None
         # The ranking the line is drawn over (``LineRanking``, #4272): the
         # haystack the last retrain scored, sorted, with the items the trainer
         # held as voted.  The floor keeps the top *count* unvoted items of it;
@@ -1159,7 +1158,7 @@ class DetectorContext:
         self.labelset_source: dict[str, Any] | None = None
         self.calibration_cache: tuple[Any, ...] | None = None
         self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
-        self.precision_floor_cache: Any = None  # PrecisionFloorEstimate | None
+        self.precision_floor_cache: Any = None  # retired (#4362): always None
         self.line_ranking: Any = None  # LineRanking | None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
@@ -1662,23 +1661,25 @@ def recut_detector_threshold(
 
 
 def detector_precision_floor(ctx: "DetectorContext", min_precision: float) -> Any:
-    """The #4220 estimator's verdict for *ctx* at *min_precision*: a :class:`~vtscore.training.thresholds.PrecisionFloorCut`.
+    """Deprecated (#4362): always an ``insufficient_evidence`` :class:`~vtscore.training.thresholds.PrecisionFloorCut`.
 
-    Reads the estimate the last retrain cached, fitting its curve on first use.
-    A detector with no estimate - never trained, trained without a haystack, or
-    a structural detector - has no evidence, so the verdict is
-    ``insufficient_evidence`` with zero calibration positives.
-
-    Off the line's path since #4272: the spot check decides the line
-    (:func:`detector_floor_state`).  Kept as library API for callers that want
-    the estimator's own reading.
+    It read the #4220 estimate a retrain parked on ``ctx.precision_floor_cache``.
+    A retrain no longer builds that estimate, so there is never evidence to
+    read: the verdict is ``insufficient_evidence`` with zero calibration
+    positives, as it always was for a detector with no estimate.  The spot
+    check decides the line (:func:`detector_floor_state`).  A caller that
+    wants the estimator's own reading builds a
+    :class:`~vtscore.training.thresholds.PrecisionFloorEstimate` itself.
     """
     from vtscore.training.thresholds import unpromised
 
-    estimate = ctx.precision_floor_cache
-    if estimate is None:
-        return unpromised(min_precision)
-    return estimate.cut(min_precision)
+    warnings.warn(
+        "detector_precision_floor() is deprecated: a retrain no longer builds the #4220 precision estimate "
+        "(#4362), so its verdict is always insufficient_evidence. Read detector_floor_state() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return unpromised(min_precision)
 
 
 def human_voted_ids(ctx: "DetectorContext") -> set[int]:
