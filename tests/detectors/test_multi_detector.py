@@ -662,7 +662,7 @@ class TestProgressCacheKeyedByDetector:
             apply_label(mid, "good")
         for mid in [16, 17, 18, 19, 20]:
             apply_label(mid, "bad")
-        status_a = compute_labeling_status(medias, label_history, good_votes, bad_votes, 0)
+        status_a = compute_labeling_status(medias, label_history, good_votes, bad_votes)
         assert status_a["smart"]["status"] != "red", "A should have a real (non-placeholder) Smart status"
 
         # B has no votes at all: its stale poll must fall back to the transient
