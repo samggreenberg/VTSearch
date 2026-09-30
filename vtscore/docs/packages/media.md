@@ -143,6 +143,7 @@ L2-normalisation, progress); **subclasses override the `_…_impl` hooks**.
 | `_embed_media_bulk_impl(medias)` | optional | Batched forward; default loops `embed_media` |
 | `_patch_forward_impl(media)` / `_patch_forward_bulk_impl` | patch embedders | Return a `vtscore.media.patch_embed.PatchEmbedOutput` (CLS vector, `(H, W, D)` patch grid, saliency) |
 | `_local_features_forward_impl(media)` / `…_bulk_impl` | structural embedders | Return structural features for geometric verification |
+| `supports_tiled_stage1` / `tile_vectors_forward_bulk(medias)` | document structural embedders | Derive `media["tile_vectors"]` (`vtscore.media.structural_tiles.TileVectors`) from the stored local features at load, for the tiled Stage 1 (#3928). Needs the cached projection (`fit_tile_projection.py`), and warns when it is missing |
 | `description_wrappers` | optional | Prompts used by `embed_text_enriched`; `[]` (default) makes it plain `embed_text` |
 | `loaded_backbone()` | optional | `(model, processor)` for the raw backbone; default reads `_model` / `_processor` |
 

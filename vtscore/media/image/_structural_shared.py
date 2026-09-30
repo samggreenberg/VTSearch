@@ -83,6 +83,44 @@ class _StructuralImageBase(MediaEmbedder):
     def max_features(self) -> int:
         return DEFAULT_MAX_FEATURES
 
+    def tile_vectors_forward_bulk(self, medias: list[dict]) -> list:
+        """Each media's :class:`~vtscore.media.structural_tiles.TileVectors`, from its ``local_features``.
+
+        No image is re-read: tiles are aggregated from the stored keypoints. A
+        missing cached projection is logged once as a WARNING that names the
+        rebuild command, and every output is ``None``, so the dataset loads with
+        no tiles and the Stage-1 call sites say so again at sort time.
+        """
+        import logging  # noqa: PLC0415
+        import os  # noqa: PLC0415
+        from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+        from vtscore.media.structural_tiles import (  # noqa: PLC0415
+            TileProjectionMissing,
+            load_tile_projection,
+            tile_vectors,
+        )
+
+        try:
+            projection = load_tile_projection()
+        except TileProjectionMissing as exc:
+            logging.getLogger(__name__).warning("%s: no tiled Stage 1 for this dataset. %s", self.name, exc)
+            return [None] * len(medias)
+
+        def one(media: dict):
+            feats = media.get("local_features")
+            return None if feats is None else tile_vectors(feats, projection)
+
+        total = len(medias)
+        out: list = []
+        # numpy releases the GIL in the matmuls, so threads parallelise the tiling.
+        with ThreadPoolExecutor(max_workers=max(1, min(8, os.cpu_count() or 1))) as pool:
+            for i, tiles in enumerate(pool.map(one, medias)):
+                out.append(tiles)
+                if (i + 1) % 500 == 0 or i + 1 == total:
+                    self._on_progress("embedding", f"Tiling pages for Stage 1: {i + 1}/{total}", i + 1, total)
+        return out
+
     @property
     def structural_matcher(self) -> Optional[StructuralMatcher]:
         """The geometric-verification backend, loading it on first access.

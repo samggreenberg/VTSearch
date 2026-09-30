@@ -136,3 +136,77 @@ class TestVectorisedTiles:
         assert fast.shape == ref.shape
         assert np.allclose(fast_boxes, ref_boxes)
         assert np.allclose(fast, ref, atol=1e-5)
+
+
+def _doc_features(seed: int = 0, n: int = 800) -> StructuralFeatures:
+    rng = np.random.default_rng(seed)
+    kp = np.zeros((n, 4), dtype=np.float32)
+    kp[:, :2] = rng.random((n, 2))
+    return StructuralFeatures(
+        keypoints=kp, descriptors=(rng.random((n, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+    ).compact()
+
+
+def _cache_projection(models_dir, dim: int = 16) -> None:
+    """A small real fit, written where ``load_tile_projection`` looks."""
+    from vtscore.media.structural_tiles import raw_tiles
+
+    rows = np.concatenate([raw_tiles(_doc_features(s))[0] for s in range(3)])
+    write_projection(fit_projection(rows, dim), projection_path(models_dir), {"fit_on": "unit test"})
+
+
+class TestLoadBackfill:
+    """Build step 2: ``sift_vlad_doc`` datasets get ``tile_vectors`` at load, derived from local features."""
+
+    def _use_models_dir(self, monkeypatch, models_dir) -> None:
+        import vtscore.media.structural_tiles as st
+
+        real_load = st.load_tile_projection
+        monkeypatch.setattr(st, "load_tile_projection", lambda *_a, **_k: real_load(models_dir, dim=16))
+        st._load_cached.cache_clear()
+
+    def test_the_document_embedder_opts_in_and_the_photo_one_does_not(self):
+        from vtscore.media.image.embedder_sift_vlad import ImageSiftVladEmbedder
+        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+
+        assert ImageSiftVladDocEmbedder().supports_tiled_stage1 is True
+        assert ImageSiftVladEmbedder().supports_tiled_stage1 is False
+
+    def test_forward_tiles_each_page_from_its_stored_features(self, monkeypatch, tmp_path):
+        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+        from vtscore.media.structural_tiles import TileVectors
+
+        _cache_projection(tmp_path)
+        self._use_models_dir(monkeypatch, tmp_path)
+        out = ImageSiftVladDocEmbedder().tile_vectors_forward_bulk(
+            [{"local_features": _doc_features(1)}, {"local_features": None}]
+        )
+        assert isinstance(out[0], TileVectors) and out[0].vectors.shape[1] == 16
+        assert out[0].vectors.dtype == np.float16 and out[0].count == out[0].boxes.shape[0]
+        assert out[1] is None
+
+    def test_a_missing_projection_warns_and_tiles_nothing(self, monkeypatch, tmp_path, caplog):
+        from vtscore.media.image.embedder_sift_vlad_doc import ImageSiftVladDocEmbedder
+
+        self._use_models_dir(monkeypatch, tmp_path / "empty")
+        with caplog.at_level("WARNING"):
+            out = ImageSiftVladDocEmbedder().tile_vectors_forward_bulk([{"local_features": _doc_features(1)}])
+        assert out == [None]
+        assert "fit_tile_projection.py" in caplog.text and "no tiled Stage 1" in caplog.text
+
+    def test_a_reload_backfills_tiles_without_re_embedding(self, monkeypatch, tmp_path):
+        """A pickle reload carries the VLAD vector but no side channels (they are never persisted)."""
+        from vtscore.datasets.stages.embedding import embed_missing
+
+        _cache_projection(tmp_path)
+        self._use_models_dir(monkeypatch, tmp_path)
+        media = {
+            "media_type": "image",
+            "embedder": "sift_vlad_doc",
+            "embeddings": {"sift_vlad_doc": np.ones(8192, dtype=np.float32)},
+            "local_features": _doc_features(2),
+        }
+        medias = {1: media}
+        embed_missing(medias, "sift_vlad_doc")
+        assert medias[1]["tile_vectors"].vectors.shape[1] == 16
+        np.testing.assert_array_equal(medias[1]["embeddings"]["sift_vlad_doc"], np.ones(8192, dtype=np.float32))
