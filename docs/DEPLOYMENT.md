@@ -1046,7 +1046,7 @@ explicitly, e.g.:
 
 ```bash
 docker compose -f docker/compose/docker-compose.yml build \
-  --build-arg VTSEARCH_VERSION="$(TZ=UTC git log -1 --format=%cd --date=format:%Y-%m-%dT%H:%M:%SZ HEAD)"
+  --build-arg VTSEARCH_VERSION="$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ HEAD)"
 ```
 
 The Dockerfile writes this into `vtsearch/_version.txt`; `__init__.py` reads it
