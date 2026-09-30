@@ -10,6 +10,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The unchecked line is the smaller of the schedule's count and the
+  mixture's** (issue #4389, the owner's ruling on #4383). Before any spot
+  check - AutoRun, the CLI, a cold Find and every session before its first
+  check - `floor_count` / `floor_line` / `floor_state` take a `proposal`,
+  the count the new `mixture_count(ranking, min_precision, labels,
+  also_voted)` reads off a 2-component mixture fitted on the ranking's
+  scores and anchored on the votes (`anchored_gmm_fit`): the deepest top
+  *k* whose mean high-component posterior meets the floor. The count is
+  `min(schedule candidate, proposal)`, never more than before. The fit is
+  memoised on the `LineRanking` (`mixture`), one per ranking, on the first
+  caller's anchors: the retrain's training labels (`train_and_score`,
+  `train_and_threshold`, `_train_and_score_xy` and `_fused_threshold` take
+  `labels=`), or the human votes for a ranking a cold Find built
+  (`vtscore.state.core.detector_line_labels` / `detector_line_proposal`).
+  The eval default arm does the same (`_safe_threshold_for_step(labels=)`).
+  `labeled_media_labels` joins `labeled_media_ids` in `labelset_training`.
+
 - **The precision floor's spot check walks the ranking in bands** (issue
   #4388, the owner's ruling on #4383). `SpotCheck.start` now takes the whole
   unvoted ranking (ids in rank order) rather than a fixed candidate, cuts it

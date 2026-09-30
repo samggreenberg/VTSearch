@@ -52,7 +52,7 @@ def _start(client) -> dict:
 
 
 class TestBeforeAnyCheck:
-    def test_get_reports_the_floor_and_no_check(self, client):
+    def test_get_reports_the_floor_and_no_check(self, client, schedule_only):
         _run_find(client)
         set_min_precision(0.5)
         data = client.get("/api/precision-check").get_json()

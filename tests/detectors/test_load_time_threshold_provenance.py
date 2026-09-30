@@ -50,7 +50,7 @@ def _load_saved_detector(client, name: str):
     return ctx
 
 
-def test_reloaded_detector_starts_on_the_floors_set(client):
+def test_reloaded_detector_starts_on_the_floors_set(client, schedule_only):
     from vtscore.state.core import human_voted_ids
 
     ctx = _load_saved_detector(client, "reload-anchored")

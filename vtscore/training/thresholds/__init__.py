@@ -189,6 +189,7 @@ from vtscore.training.thresholds.spot_check import (
     WALK_START,
     band_edges,
     bands_for,
+    mixture_count,
 )
 from vtscore.training.thresholds.precision_floor import (
     MIN_BOOTSTRAP_FITS,
@@ -252,6 +253,7 @@ __all__ = [
     "WALK_START",
     "band_edges",
     "bands_for",
+    "mixture_count",
     "CHECK_ALPHA",
     "CHECK_BASE_CANDIDATE",
     "CHECK_CANCELLED",

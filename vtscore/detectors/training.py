@@ -16,6 +16,7 @@ pool and origin-based file resolution that are detector-specific.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
@@ -189,6 +190,7 @@ def _fused_threshold(
     final_ids: list[int] | None = None,
     voted_ids: "set[int] | None" = None,
     min_precision: float | None = None,
+    labels: "Mapping[int, bool] | None" = None,
 ) -> float:
     """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
@@ -282,6 +284,7 @@ def _fused_threshold(
         PRECISION_FLOOR_FALLBACK_INCLUSION,
         fit_fold_anchored_cut,
         floor_line,
+        mixture_count,
         reporting_line,
     )
     from vtscore.utils.scores import scored_only  # noqa: PLC0415
@@ -343,7 +346,14 @@ def _fused_threshold(
         )
 
     if min_precision is not None:
-        kept = floor_line(ranking, min_precision, det_ctx.precision_check if det_ctx is not None else None)
+        # The unchecked line is the smaller of the schedule's count and the
+        # vote-anchored mixture's (#4389); *labels* are the anchors, the same
+        # votes the fold cut above anchors on.  The fit is memoised on the
+        # ranking, so the re-cut and the floor state read it back, not refit.
+        proposal = mixture_count(ranking, min_precision, labels or {})
+        kept = floor_line(
+            ranking, min_precision, det_ctx.precision_check if det_ctx is not None else None, proposal=proposal
+        )
         if kept is not None:
             return kept
     line = reporting_line(cut, None, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=None)
@@ -487,6 +497,7 @@ def train_and_threshold(
     haystack: dict | None = None,
     haystack_rows: "ScoringRows | None" = None,
     calibrating_groups: "set | None" = None,
+    labels: "Mapping[int, bool] | None" = None,
 ) -> tuple[Any, float]:
     """Train the detector head and compute a calibrated threshold.
 
@@ -715,6 +726,7 @@ def train_and_threshold(
             final_ids=all_ids,
             voted_ids=voted_ids,
             min_precision=min_precision,
+            labels=labels,
         )
     elif det_ctx is not None:
         # Safe thresholds off: no population estimator to re-cut on a slide,
@@ -1260,6 +1272,7 @@ def _train_and_score_xy(
     voted_ids: "set[int] | None" = None,
     rows: ScoringRows | None = None,
     min_precision: float | None = None,
+    labels: "Mapping[int, bool] | None" = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
@@ -1396,6 +1409,7 @@ def _train_and_score_xy(
         final_ids=all_ids,
         voted_ids=voted_ids,
         min_precision=min_precision,
+        labels=labels,
     )
     clock.mark("fused_threshold")
 
@@ -1483,6 +1497,7 @@ def train_and_score(
         score_rows=score_rows,
         voted_ids=set(good_votes) | set(bad_votes),
         min_precision=min_precision,
+        labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
     )
 
     # Stage-2 structural re-rank: a no-op for every non-structural dataset

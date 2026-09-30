@@ -192,6 +192,9 @@ def test_pipeline_runs_and_is_deterministic() -> None:
         assert (a["k"] >= 1).all()
         full = a[(a["size"] == "full") & (a["floor"] == 0.5)].set_index("rule")
         assert full.loc["fixed", "k"] == 32 and full.loc["fixed", "votes"] == 0
+        # The no-vote line (#4389): the smaller of the two, for no audits.
+        assert full.loc["min-fixed-gmm", "k"] == min(full.loc["fixed", "k"], full.loc["gmm", "k"])
+        assert full.loc["min-fixed-gmm", "votes"] == 0
         assert full.loc["gmm", "votes"] == 0 and full.loc["post", "votes"] == 0
         assert full.loc["gmm+shift5", "votes"] == 5 and full.loc["post+shift", "votes"] > 5
         summ = L.summarise(a)

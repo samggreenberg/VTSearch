@@ -25,9 +25,15 @@ POST /api/min-precision
 
 The precision floor is the share of what the detector returns that should be
 right. The line always keeps a **set**: the top `count` unvoted items of the
-ranking the detector last scored. Before any check that set is the floor's
-**starting candidate** - the top 128 at 10%, the top 64 at 25%, the top 32 at
-50% and above - and nothing has measured how much of it is right. A **spot
+ranking the detector last scored. Before any check that set is the
+**unchecked line**: the smaller of the floor's **starting candidate** - the top
+128 at 10%, the top 64 at 25%, the top 32 at 50% and above - and the count a
+2-component mixture fitted on the detector's scores, anchored on the votes,
+says is at least the floor's share right (#4389; the owner's ruling on
+#4383, priced in
+[`REPORT.md`](../experiments/2026-09-30-line-estimate-4383/REPORT.md)). The
+mixture can only lower the count; nothing has measured how much of the set is
+right. A **spot
 check** ([below](#the-spot-check)) measures it: the user votes on 5 random
 picks from each band of the unvoted ranking (the top 8, the next 8, 16, 32,
 ...), and the check walks, deeper while the band-weighted share of right
@@ -52,8 +58,8 @@ indicator are measured in.
 | Field | Meaning |
 |---|---|
 | `min_precision` | The active detector's floor. |
-| `status` | `unchecked` (no spot check has run at this floor; the line keeps the starting candidate), `confirmed` (the walk ended on a set whose picks met the floor), or `short` (no set met it, and the line keeps the first band, the top 8). |
-| `count` | How many unvoted items the line keeps: the starting candidate (capped by the corpus), the set the walk confirmed (a band edge: 8, 16, 32, 64, ...), or the first band after a short check. |
+| `status` | `unchecked` (no spot check has run at this floor; the line keeps the unchecked line, the smaller of the starting candidate and the mixture's count), `confirmed` (the walk ended on a set whose picks met the floor), or `short` (no set met it, and the line keeps the first band, the top 8). |
+| `count` | How many unvoted items the line keeps: the unchecked line (the starting candidate, or fewer when the mixture says fewer are likely right; capped by the corpus), the set the walk confirmed (a band edge: 8, 16, 32, 64, ...), or the first band after a short check. |
 | `range` | The check's **likely range** for how much of the kept set is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked. Each audited band's Clopper-Pearson interval from its picks, each tail at `alpha / bands` over the set's bands, weighted by band size; exact where the picks cover a band. The walk decides on the picks' plain share, so a confirmed set's range can reach below the floor. `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
 | `schedule` | What a check at this floor costs: `candidate` (the count the walk starts from), `rounds` (the bands it audits before its first verdict) and `picks` a band. |
 | `threshold` | The line: the last item of the kept set. `null` when no detector is active or none has computed a threshold yet. |
@@ -81,7 +87,7 @@ set in every state: every match, count and action keeps working on it, and
 the app draws it the same in all three, with the state and its range in the
 floor control and on the Find Stats chart. It is never
 `null` for want of a check. A headless run (AutoRun, the CLI) has nobody to
-vote, so it exports the `unchecked` starting candidate and records it as such.
+vote, so it exports the `unchecked` line and records it as such.
 
 ### The spot check
 

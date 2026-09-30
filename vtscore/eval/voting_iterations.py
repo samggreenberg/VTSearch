@@ -33,7 +33,7 @@ one.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
@@ -91,6 +91,7 @@ from vtscore.training.thresholds import (
     SpotCheck,
     floor_line,
     floor_state,
+    mixture_count,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -402,6 +403,7 @@ def _safe_threshold_for_step(
     cut_rule: str | None = None,
     min_precision: float | None = None,
     check: "SpotCheck | None" = None,
+    labels: "Mapping[int, bool] | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -575,8 +577,11 @@ def _safe_threshold_for_step(
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
     details["line_ranking"] = ranking
     if min_precision is not None:
-        details["floor_state"] = floor_state(min_precision, check, ranking)
-        kept = floor_line(ranking, min_precision, check)
+        # The app's unchecked line: the smaller of the schedule's count and
+        # the vote-anchored mixture's, anchored on the votes so far (#4389).
+        proposal = mixture_count(ranking, min_precision, labels or {})
+        details["floor_state"] = floor_state(min_precision, check, ranking, proposal=proposal)
+        kept = floor_line(ranking, min_precision, check, proposal=proposal)
         if kept is not None:
             # No inclusion drew this line: acquisition derives its origin from it.
             details["reporting_line"] = ReportingLine(kept, None, None)
@@ -2741,6 +2746,7 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_rule=live_cut_rule,
                     min_precision=floor,
                     check=check,
+                    labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                 )
             )
             line_ranking = details.get("line_ranking")

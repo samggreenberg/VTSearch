@@ -289,6 +289,10 @@ class LineRanking:
     ids: np.ndarray
     scores: np.ndarray
     voted: frozenset[int]
+    #: :func:`mixture_count`'s one-slot memo: the mixture fitted on this
+    #: ranking (``[fit]``, ``[None]`` when none fits), empty until first asked.
+    #: Contents only; the ranking itself stays immutable.
+    mixture: list[Any] = field(default_factory=list, compare=False, repr=False)
 
     @classmethod
     def from_scores(
@@ -653,6 +657,75 @@ class SpotCheck:
         }
 
 
+# ------------------------------------------------------------ the mixture's count
+
+
+def mixture_count(
+    ranking: LineRanking | None,
+    min_precision: float,
+    labels: Mapping[int, bool],
+    also_voted: Iterable[int] = (),
+) -> int | None:
+    """How many unvoted items the vote-anchored mixture says are at least *min_precision* right (#4389).
+
+    The owner's ruling on #4383 for the line with no audit votes: the smaller
+    of today's count and this.  A 2-component mixture is fitted on the
+    ranking's scores (:func:`~vtscore.training.thresholds.gmm.anchored_gmm_fit`,
+    which subsamples a large ranking), anchored by the scores of the items in
+    *labels* (``True`` = Good) that the ranking holds; the high component's
+    posterior is read at each unvoted score, best first, and the count is the
+    deepest top *k* whose mean posterior is at or above the floor (the
+    ``gmm`` rule of ``analyze_line_estimate_4383.py``), or the *k* with the
+    highest mean when none is (best effort, at least one).  ``None`` when
+    there is no ranking, nothing unvoted, or no mixture fits, and the caller
+    keeps today's count.
+
+    Priced in ``docs/experiments/2026-09-30-line-estimate-4383/REPORT.md``
+    (``gmm`` and ``min-fixed-gmm``): right-sized on small corpora and at
+    moderate prevalence, 5-66x too deep on large sparse ones, which is why
+    it only ever *lowers* the count.  **Fitted once per ranking**, on the
+    anchors of the first caller - the retrain's training labels, or the
+    human votes for a ranking a cold Find built - and memoised on it, so
+    the re-cut and every response that reports the floor's state read the
+    same fit; only the unvoted set the count is taken over follows the live
+    votes, as the ranking's own line does.  A retrain parks a new ranking,
+    and with it a new fit on the votes it trained on.
+    """
+    if ranking is None or ranking.size == 0:
+        return None
+    excluded = ranking.voted.union(int(v) for v in also_voted)
+    mask = np.fromiter((int(i) not in excluded for i in ranking.ids), dtype=bool, count=ranking.size)
+    scores = ranking.scores[mask]  # already best first
+    if scores.size == 0:
+        return None
+    from scipy.stats import norm  # noqa: PLC0415
+
+    if not ranking.mixture:
+        from vtscore.training.thresholds.gmm import anchored_gmm_fit  # noqa: PLC0415
+
+        anchor_scores: list[float] = []
+        anchor_labels: list[float] = []
+        if labels:
+            index = {int(cid): i for i, cid in enumerate(ranking.ids.tolist())}
+            for cid, is_good in labels.items():
+                row = index.get(int(cid))
+                if row is not None:
+                    anchor_scores.append(float(ranking.scores[row]))
+                    anchor_labels.append(1.0 if is_good else 0.0)
+        fit, _provenance = anchored_gmm_fit(ranking.scores, anchor_scores, anchor_labels)
+        ranking.mixture.append(fit if (fit is not None and fit.var_hi > 0 and fit.var_lo > 0) else None)
+    fit = ranking.mixture[0]
+    if fit is None:
+        return None
+    hi = fit.w_hi * norm.pdf(scores, fit.mu_hi, math.sqrt(fit.var_hi))
+    lo = fit.w_lo * norm.pdf(scores, fit.mu_lo, math.sqrt(fit.var_lo))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        posterior = np.nan_to_num(hi / (hi + lo), nan=0.5)
+    cum = np.cumsum(posterior) / np.arange(1, scores.size + 1)
+    ok = np.flatnonzero(cum >= float(min_precision) - _EPS)
+    return int(ok.max()) + 1 if ok.size else int(np.argmax(cum)) + 1
+
+
 # ------------------------------------------------------------------- the line
 
 
@@ -695,15 +768,22 @@ def applicable_result(min_precision: float, result: SpotCheck | None) -> SpotChe
     return result
 
 
-def floor_count(min_precision: float, result: SpotCheck | None) -> int:
-    """The count the line keeps at *min_precision*: the set the finished walk ended on, else the starting candidate.
+def floor_count(min_precision: float, result: SpotCheck | None, proposal: int | None = None) -> int:
+    """The count the line keeps at *min_precision*: the set the finished walk ended on, else the unchecked count.
 
-    The corpus may hold fewer unvoted items; :class:`LineRanking` truncates.
+    The unchecked count is the schedule's starting candidate, lowered to
+    *proposal* when the caller has one: the mixture's count
+    (:func:`mixture_count`), the owner's rule for the line before any check
+    (#4389).  The corpus may hold fewer unvoted items; :class:`LineRanking`
+    truncates.
     """
     applicable = applicable_result(min_precision, result)
     if applicable is not None:
         return applicable.k
-    return check_schedule(min_precision).candidate
+    count = check_schedule(min_precision).candidate
+    if proposal is not None:
+        count = max(1, min(count, int(proposal)))
+    return count
 
 
 def floor_line(
@@ -711,15 +791,18 @@ def floor_line(
     min_precision: float,
     result: SpotCheck | None = None,
     also_voted: Iterable[int] = (),
+    proposal: int | None = None,
 ) -> float | None:
     """The threshold the line sits at: the last item of the set the floor keeps.
 
-    ``None`` when there is no ranking, or nothing in it is unvoted; the caller
-    keeps whatever inclusion-blind fallback it has, as it did before the floor.
+    *proposal* is the mixture's count for the unchecked line, if the caller
+    has one (:func:`mixture_count`, #4389).  ``None`` when there is no
+    ranking, or nothing in it is unvoted; the caller keeps whatever
+    inclusion-blind fallback it has, as it did before the floor.
     """
     if ranking is None:
         return None
-    return ranking.threshold_for(floor_count(min_precision, result), also_voted)
+    return ranking.threshold_for(floor_count(min_precision, result, proposal), also_voted)
 
 
 def floor_state(
@@ -727,12 +810,13 @@ def floor_state(
     result: SpotCheck | None = None,
     ranking: LineRanking | None = None,
     also_voted: Iterable[int] = (),
+    proposal: int | None = None,
 ) -> FloorState:
-    """The floor's state at *min_precision*, given the detector's last finished check and its ranking."""
+    """The floor's state at *min_precision*, given the detector's last finished check, its ranking and the mixture's count."""
     schedule = check_schedule(min_precision)
     applicable = applicable_result(min_precision, result)
     if applicable is None:
-        count = schedule.candidate
+        count = floor_count(min_precision, None, proposal)
         if ranking is not None:
             count = min(count, len(ranking.candidate(count, also_voted)))
         return FloorState(float(min_precision), FLOOR_UNCHECKED, count, None, False, schedule)
@@ -771,6 +855,7 @@ __all__ = [
     "floor_state",
     "likely_range",
     "line_under",
+    "mixture_count",
     "range_tail",
     "rounds_for",
 ]

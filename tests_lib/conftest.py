@@ -240,6 +240,25 @@ def no_precision_floor():
     )
 
 
+@pytest.fixture
+def schedule_only(monkeypatch):
+    """The unchecked line at the schedule's count alone: the mixture's proposal (#4389) set aside.
+
+    Before any check the line keeps the smaller of the schedule's count and
+    the vote-anchored mixture's; on a fixture corpus of a few dozen synthetic
+    items the mixture's count is whatever the fit says that day.  For tests
+    whose subject is the schedule, the walk or a carrier of the state, not
+    the mixture - that rule is pinned in
+    ``tests_lib/sorting/test_mixture_count.py``.  Both seams: the package
+    name the app's local imports read, and the harness's module binding.
+    """
+    import vtscore.eval.voting_iterations as harness
+    import vtscore.training.thresholds as thresholds
+
+    monkeypatch.setattr(thresholds, "mixture_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(harness, "mixture_count", lambda *_a, **_k: None)
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_unconfigure(config):
     """Print the run summary and force-exit (see ``tests_shared``).
