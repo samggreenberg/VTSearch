@@ -1,7 +1,7 @@
 """A precision floor's line, read off where the positives sit in a ranking (#4357).
 
-A floor *X*'s line keeps a **set**: the top *K* of the ranking, where *K* is the
-floor's unchecked starting candidate (``check_schedule(X).candidate``: the top
+A floor *P*'s line keeps a **set**: the top *K* of the ranking, where *K* is the
+floor's unchecked starting candidate (``check_schedule(P).candidate``: the top
 128 at 10%, 64 at 25%, 32 at 50% and above; #4272).  So how good the line is,
 and how good the best cut on the same ranking could have been, depends on the
 positives' ranks and on nothing else.  That is what a rank frame records
@@ -26,8 +26,8 @@ FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
 
 
 def floor_tag(floor: float) -> str:
-    """``x10`` for 10%: the column suffix a floor's metrics carry."""
-    return f"x{round(floor * 100):d}"
+    """``p10`` for 10%: the column suffix a floor's metrics carry (P, the precision floor)."""
+    return f"p{round(floor * 100):d}"
 
 
 def parse_ranks(text: object) -> np.ndarray:
@@ -80,6 +80,21 @@ def oracle_recall(ranks: np.ndarray, n_pos: int, floor: float) -> float:
     return float(hits[ok[-1]] / n_pos) if ok.size else 0.0
 
 
+def oracle_f1(ranks: np.ndarray, n_pos: int) -> float:
+    """The best F1 any top-*k* cut of this ranking reaches, whatever its precision.
+
+    F1 at a cut of *k* is ``2 * right / (k + n_pos)``, and between two positives
+    it only falls, so the candidates are the cuts just after each positive.
+    Floor-independent: it is the ranking's own ceiling on the line's F1.
+    """
+    if n_pos <= 0:
+        return float("nan")
+    if ranks.size == 0:
+        return 0.0
+    hits = np.arange(1, ranks.size + 1)
+    return float(np.max(2.0 * hits / (ranks + 1 + n_pos)))
+
+
 def average_precision(ranks: np.ndarray, n_pos: int) -> float:
     """Average precision of the ranking (sklearn's, when no two scores tie)."""
     if n_pos <= 0:
@@ -96,11 +111,24 @@ def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float) -> dict[st
     * ``meets`` - 1 when ``precision >= floor``;
     * ``recall`` - the share of the corpus's positives the line keeps;
     * ``oracle_recall`` - the best recall a cut of the same ranking gets at
-      precision >= *floor* (:func:`oracle_recall`).
+      precision >= *floor* (:func:`oracle_recall`);
+    * ``f1`` - F1 of the kept set, the returned set's own balance of precision
+      and recall (owner, 2026-09-30: AP is all ranking, F1 is the line);
+    * ``oracle_f1`` - the best F1 any cut of the same ranking reaches
+      (:func:`oracle_f1`), whatever the floor.
     """
     nan = float("nan")
     if n <= 0:
-        return {"k": 0, "precision": nan, "shortfall": nan, "meets": nan, "recall": nan, "oracle_recall": nan}
+        return {
+            "k": 0,
+            "precision": nan,
+            "shortfall": nan,
+            "meets": nan,
+            "recall": nan,
+            "oracle_recall": nan,
+            "f1": nan,
+            "oracle_f1": nan,
+        }
     k = kept_count(floor, n)
     right = top_k_right(ranks, k)
     precision = right / k if k else nan
@@ -111,4 +139,6 @@ def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float) -> dict[st
         "meets": float(precision >= floor - 1e-12),
         "recall": right / n_pos if n_pos > 0 else nan,
         "oracle_recall": oracle_recall(ranks, n_pos, floor),
+        "f1": 2.0 * right / (k + n_pos) if n_pos > 0 else nan,
+        "oracle_f1": oracle_f1(ranks, n_pos),
     }

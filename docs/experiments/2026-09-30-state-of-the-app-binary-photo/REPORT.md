@@ -4,7 +4,13 @@
 > "small set of classes at 1 seed" round (#4159's standing rule), run on the new
 > precision-floor recipe (#4357) to settle how it reads before the overnight run.
 > The numbers are **23 runs**, so they are noisy. Read them for shape and
-> presentation. Every number below will be replaced by the overnight run.
+> presentation. Every number below will be replaced by the 2026-09-30
+> 14:00–19:00 run.
+>
+> **Owner's comments (2026-09-30), applied to that run:** the floor is written
+> *P*, not X. The returned set's **F1 over clicks** is back, at the line's set,
+> beside AP. Rank frames are now recorded at every click to 10 and every 5
+> after, so the F1 curve has the resolution to show the early dip.
 
 **Issues:** #4363 (this run), #4357 (the recipe). **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
 **Path:** SigLIP whole-image embedding, binary (Good/Bad) votes, Autopilot's
@@ -26,11 +32,12 @@ training half. There is no FPR + FNR anywhere (owner, #4357).
 
 - **AP** is average precision of the detector's ranking of the held-out test
   half. It needs no threshold.
-- **The line at X** is what the floor keeps on a fresh corpus (the test half),
-  before any check: the top 128 at X = 10%, and the top 32 at 50% and 90%. For
-  each X the tables give the share of that set that is right, the share of
-  runs meeting X, and recall next to the **oracle's** recall (the best recall
-  any cut of the same ranking reaches at precision ≥ X).
+- **The line at P** (the precision floor) is what the floor keeps on a fresh
+  corpus (the test half), before any check: the top 128 at P = 10%, and the
+  top 32 at 50% and 90%. For each P the tables give the share of that set that
+  is right, the share of runs meeting P, and recall next to the **oracle's**
+  recall (the best recall any cut of the same ranking reaches at
+  precision ≥ P).
 
 ## Headline
 
@@ -66,7 +73,7 @@ training half. There is no FPR + FNR anywhere (owner, #4357).
 
 ### The line on a fresh corpus
 
-| floor X (kept) | point | right | runs meeting X | recall | oracle recall at X |
+| floor P (kept) | point | right | runs meeting P | recall | oracle recall at P |
 |---|---|---:|---:|---:|---:|
 | 10% (top 128) | text only | 18% | 61% | 0.47 | 0.51 |
 | | 150 clicks | **22%** | **74%** | 0.56 | 0.61 |
