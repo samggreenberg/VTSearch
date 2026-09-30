@@ -422,7 +422,7 @@ class TestThreadStacks:
         assert here[2] == "capture_thread_stacks"
 
     def test_format_is_faulthandlers_with_the_holder_first(self):
-        stacks = {
+        stacks: dict[int, list[stalls.FrameLine]] = {
             0x1001: [("/app/idle.py", 3, "wait")],
             0x1002: [("/app/embed.py", 42, "encode"), ("/app/importer.py", 7, "run")],
             0x1003: [("/app/unknown.py", None, "mystery")],
@@ -452,7 +452,11 @@ class TestThreadStacks:
         """A thread gone before its CPU was read ran as the stall ended - the
         holder finishing its work is the usual way - so it is not filed with
         the idle threads."""
-        stacks = {1: [("/a.py", 1, "idle")], 2: [("/b.py", 2, "busy")], 3: [("/c.py", 3, "finished")]}
+        stacks: dict[int, list[stalls.FrameLine]] = {
+            1: [("/a.py", 1, "idle")],
+            2: [("/b.py", 2, "busy")],
+            3: [("/c.py", 3, "finished")],
+        }
         text = format_thread_stacks(
             stacks,
             header="h",
@@ -464,7 +468,7 @@ class TestThreadStacks:
         assert '["importer", tid 13, exited before its cpu was read]' in headers[1]
 
     def test_format_marks_a_cut_stack(self):
-        deep = [("/app/r.py", i, "recurse") for i in range(stalls._MAX_FRAMES + 1)]
+        deep: list[stalls.FrameLine] = [("/app/r.py", i, "recurse") for i in range(stalls._MAX_FRAMES + 1)]
         lines = format_thread_stacks({1: deep}, header="h").splitlines()
         frames = [ln for ln in lines if ln.startswith("  File ")]
         assert len(frames) == stalls._MAX_FRAMES
@@ -581,7 +585,7 @@ class TestStallWatchdog:
         watchdog's own thread."""
         samples = iter([_sample({1: 1.0, 2: 0.5}, proc_cpu=1.5), _sample({1: 1.0, 2: 5.4}, proc_cpu=6.4)])
         me = threading.get_ident()
-        stacks = {
+        stacks: dict[int, list[stalls.FrameLine]] = {
             0x1001: [("/app/idle.py", 3, "wait")],
             0x1002: [("/app/embed.py", 42, "encode")],
             me: [("/app/watchdog.py", 1, "beat")],
@@ -636,12 +640,13 @@ class TestStallWatchdog:
         t.start()
         try:
             assert entered.wait(10)
-            assert t.ident is not None
+            ident = t.ident
+            assert ident is not None
             samples = iter([_sample({1: 1.0}, proc_cpu=1.0), _sample({1: 1.0}, proc_cpu=2.0)])
             dump = io.StringIO()
             wd = StallWatchdog(
                 1000,
-                snapshot=lambda: {t.ident: [("/app/importer.py", 9, "encode")]},
+                snapshot=lambda: {ident: [("/app/importer.py", 9, "encode")]},
                 dump_file=dump,
                 sampler=lambda: next(samples),
                 logger=logging.getLogger(LOGGER),
