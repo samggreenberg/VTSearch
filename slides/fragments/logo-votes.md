@@ -2,7 +2,7 @@
 
 ![bg fit](figs/logo-votes.webp)
 
-## Show, Don't<br>Tell
+## Show,<br>Don't Tell
 
 <!-- build: figs/logo-votes.build1.webp -->
 
