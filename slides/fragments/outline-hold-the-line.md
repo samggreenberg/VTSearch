@@ -38,7 +38,8 @@
      smarter cut rule than the midpoint. -->
 
 <!-- **h** — Section 7 is logos: where a concept ends when the room expects a
-     spec sheet, and the document set we built to find them in. -->
+     spec sheet, the document set we built to find them in, and how we find
+     them. -->
 
 <!-- **i** — Section 8 is the tool again, as a how-to: five slides, every
      click numbered, from an empty app to a detector finding books in photos

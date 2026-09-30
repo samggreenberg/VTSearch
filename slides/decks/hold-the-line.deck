@@ -125,6 +125,19 @@ slides:
   data-fullmarks-problems
   data-set-fullmarks
   data-fullmarks-shape
+  # How we find one, on the pile just shown, with the FullMarks zoom's crest
+  # as the running example (`make-sift-figs.py`, the shipped matcher on real
+  # Tobacco800 pages). The background comes first, in the order a page is
+  # checked: keypoints, then matching and RANSAC. Then the three things the
+  # documents changed: the keypoint budget, the shortlist and why a page
+  # vector cannot build one, and the votes. Tiles is the one idea here that
+  # is measured but not shipped, and its notes say so.
+  logo-keypoints
+  logo-match
+  logo-budget
+  logo-stages
+  logo-tiles
+  logo-votes
 
   # 8 — Step by Step: the tool as a how-to (#4202). Section 1 shows the same
   # session as an argument; this shows it as instructions, every click marked
