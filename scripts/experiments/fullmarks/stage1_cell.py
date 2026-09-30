@@ -240,6 +240,9 @@ class Cell:
 
 _BUDGET = 0
 _PROJECTIONS: dict[int, Projection] = {}
+#: Tile from the features as the app stores them (fp16 keypoints, uint8 descriptors via
+#: ``StructuralFeatures.compact``) rather than the float extraction (#3928 M1).
+_COMPACT = False
 
 
 def _init(budget: int, projections: dict[int, Projection]) -> None:
@@ -253,6 +256,8 @@ def _page_tiles(item: tuple[str, str]) -> tuple[str, dict[int, np.ndarray], np.n
 
     page_id, path = item
     feats = SiftMatcher().detect_and_describe(_gray(path), max_features=_BUDGET)
+    if _COMPACT:
+        feats = feats.compact()
     rows, boxes = tile_rows(feats.keypoints_f32(), feats.descriptors_f32(), load_vlad_codebook(), aggregate_vlad)
     out = {
         dim: (normalise(rows) if proj is None else proj.apply(rows)).astype(np.float16)
@@ -270,12 +275,15 @@ def build(
     sample_pages: int = SAMPLE_PAGES,
     log: Callable[[str], None] = print,
     projection: Optional[Path] = None,
+    fit_sources: Optional[set[str]] = None,
 ) -> dict[int, Path]:
     """Build one cell per requested width, in a single pass over the pages.
 
     ``projection`` reuses a fit from an earlier run rather than refitting, which
     is what lets a tier be built in shards that stay comparable: two shards
-    projected by two different fits are not the same cell.
+    projected by two different fits are not the same cell.  ``fit_sources``
+    samples the fit from those sources' pages only (#3928 M2: does a projection
+    transfer to sources it never saw?).
     """
     from multiprocessing import get_context  # noqa: PLC0415
 
@@ -298,7 +306,10 @@ def build(
             if fitted.dim < widest:
                 raise ValueError(f"saved projection is {fitted.dim}-wide, too narrow for {widest}")
         else:
-            sample = _raw_sample(items[:: max(1, len(items) // sample_pages)][:sample_pages], budget, workers, log)
+            pool_items = [(p.page_id, p.path) for p in pages if fit_sources is None or p.source in fit_sources]
+            sample = _raw_sample(
+                pool_items[:: max(1, len(pool_items) // sample_pages)][:sample_pages], budget, workers, log
+            )
             log(f"  fitting PCA {sample.shape[0]} tiles x {sample.shape[1]} -> {widest}")
             fitted = fit_projection(sample, widest)
         for d in dims:
@@ -408,6 +419,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     b.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
     b.add_argument("--out", type=Path, required=True)
     b.add_argument("--projection", type=Path, help="reuse this projection.npz instead of fitting one")
+    b.add_argument(
+        "--from-compact",
+        action="store_true",
+        help="tile the features as the app stores them (fp16 keypoints, uint8 descriptors)",
+    )
+    b.add_argument("--fit-sources", default="", help="comma-separated sources to fit the projection on (default: all)")
 
     s = sub.add_parser("search")
     s.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -422,7 +439,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         dims = [int(d) for d in args.dims.split(",")]
         pages = embed_corpus.pages_for_tier(args.corpus, args.tier)
         print(f"tier {args.tier}: {len(pages)} pages, dims {dims}", flush=True)
-        build(pages, args.out, dims, args.budget, args.workers, args.sample_pages, projection=args.projection)
+        global _COMPACT
+        _COMPACT = args.from_compact
+        fit_sources = {s for s in args.fit_sources.split(",") if s} or None
+        build(
+            pages,
+            args.out,
+            dims,
+            args.budget,
+            args.workers,
+            args.sample_pages,
+            projection=args.projection,
+            fit_sources=fit_sources,
+        )
         return 0
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))
