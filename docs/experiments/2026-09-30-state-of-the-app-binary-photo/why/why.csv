@@ -1,0 +1,8 @@
+class,text_ap,final_ap,ceiling_ap,positives_found,good_clicks,bad_clicks,bad_holds
+chair,0.06,0.04,0.127,5.0,160,4435,bench 16% (x10); couch 18% (x10); tv 5% (x6); toilet 8% (x4); teddy bear 3% (x4)
+bowl,0.042,0.095,0.211,6.6,216,4404,broccoli 6% (x13); toilet 25% (x12); (none of COCO's 80) 4% (x5); banana 2% (x4); pizza 2% (x2)
+knife,0.064,0.143,0.272,8.467,225,3925,scissors 12% (x51); orange 2% (x9); pizza 4% (x5); broccoli 2% (x5); oven 3% (x3)
+dining table,0.113,0.144,0.189,10.467,330,3855,chair 11% (x9); couch 11% (x6); potted plant 4% (x5); oven 5% (x5); refrigerator 5% (x4)
+spoon,0.07,0.195,0.281,13.067,326,3544,knife 3% (x34); toothbrush 2% (x34); broccoli 3% (x6); cake 2% (x4); (none of COCO's 80) 3% (x3)
+book,0.237,0.26,0.314,10.733,340,4305,scissors 3% (x11); keyboard 2% (x10); teddy bear 6% (x9); laptop 6% (x7); (none of COCO's 80) 5% (x6)
+person,0.098,0.411,0.592,12.6,391,3789,teddy bear 8% (x11); (none of COCO's 80) 9% (x10); keyboard 2% (x10); scissors 2% (x9); traffic light 5% (x7)

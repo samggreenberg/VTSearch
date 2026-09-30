@@ -10,7 +10,12 @@
 * ``line_at_floors.png`` -- the line on a fresh corpus, one panel per floor the
   app offers: how right the set the line keeps is, from click 0 to the final
   line, against the floor (dotted) and the full-label ceiling's line (dashed).
-  Each panel's title carries the share of sessions whose final line meets X.
+  Each panel's title carries the share of sessions whose final line meets P.
+* ``f1_over_clicks.png`` -- the F1 of the set the line keeps (the returned set),
+  over clicks, at the default floor P = 50% and at 10%, drawn only at the
+  clicks a rank frame was recorded (``line_steps.csv``), with the text sort's
+  F1 at click 0 and the full-label ceiling's line dashed (owner, 2026-09-30:
+  AP is all ranking; F1 is the returned set).
 * ``compare_ap.png`` (with ``--compare <other analysis dir>``) -- both paths'
   mean AP on the SAME seeds, the ones this analysis has.
 * ``per_cell.png`` -- every class x band: text only (hollow), after the clicks
@@ -137,8 +142,68 @@ def line_at_floors(lines: pd.DataFrame, out: Path) -> bool:
         ax.set_xticklabels(["text", *LINE_POINTS[1:-1], "final"], fontsize=8)
         ax.set_xlabel("clicks", color=INK)
         ax.set_ylim(0, 1.02)
-        ax.set_title(f"X = {x:.0%}: meets X at the end: " + ", ".join(met), color=INK, fontsize=9, loc="left")
+        ax.set_title(f"P = {x:.0%}: meets P at the end: " + ", ".join(met), color=INK, fontsize=9, loc="left")
     axes[0].set_ylabel("share of the kept set that is right", color=INK)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    return True
+
+
+def f1_over_clicks(curves: pd.DataFrame, cells: pd.DataFrame, steps: pd.DataFrame, out: Path) -> bool:
+    """The returned set's F1 over clicks, at the default floor (solid) and at 10% (light).
+
+    Read only at click 0 and at the clicks a rank frame was recorded: between
+    frames ``curves.csv`` carries the last value, which is not a measurement.
+    Returns False (and draws nothing) when the run recorded no rank frames.
+    """
+    if steps is None or steps.empty or "f1" not in curves:
+        return False
+    at = sorted({0, *steps["t"].astype(int).unique().tolist()})
+    fig, ax = plt.subplots(figsize=(7.5, 4.2), facecolor=SURFACE)
+    _axes(ax)
+    for arm, color in COLORS.items():
+        c = curves[(curves["arm"] == arm) & curves["t"].isin(at)]
+        if c.empty:
+            continue
+        for col, floor, lw, alpha in (("f1", "50%", 2.0, 1.0), ("f1_p10", "10%", 1.4, 0.45)):
+            if col not in c:
+                continue
+            m = c.groupby("t")[col].mean()
+            ax.plot(m.index, m.to_numpy(), color=color, linewidth=lw, alpha=alpha, marker="o", markersize=2.5)
+            ax.annotate(
+                f"{arm}, P = {floor}  {m.iloc[-1]:.2f}",
+                (m.index[-1], m.iloc[-1]),
+                xytext=(6, 0),
+                textcoords="offset points",
+                va="center",
+                color=INK,
+                fontsize=8,
+            )
+        ceil = cells[cells["arm"] == arm]["ceiling_f1"].mean() if "ceiling_f1" in cells else float("nan")
+        if pd.notna(ceil):
+            ax.axhline(ceil, color=color, linewidth=1.2, linestyle="--")
+            ax.annotate(
+                f"full labels, P = 50%  {ceil:.2f}", (2, ceil), xytext=(0, 4), textcoords="offset points",
+                color=INK, fontsize=8,
+            )  # fmt: skip
+        t0 = cells[cells["arm"] == arm]["text_f1"].mean()
+        if pd.notna(t0):
+            ax.plot([0], [t0], marker="o", markersize=8, color=INK, zorder=5)
+            ax.annotate(
+                f"text only {t0:.2f}", (0, t0), xytext=(8, 6), textcoords="offset points", color=INK, fontsize=8
+            )
+    ax.set_ylim(0, 1.02)
+    ax.set_xlim(0, max(at) * 1.3)
+    ax.set_xlabel("clicks", color=INK)
+    ax.set_ylabel("F1 of the returned set on the test half", color=INK)
+    n = cells.groupby("arm").size().to_dict()
+    ax.set_title(
+        "Mean F1 of the line's set over clicks  (runs: " + ", ".join(f"{k} {v}" for k, v in n.items()) + ")",
+        color=INK,
+        fontsize=10,
+        loc="left",
+    )
     fig.tight_layout()
     fig.savefig(out, dpi=150, facecolor=SURFACE)
     plt.close(fig)
@@ -216,6 +281,10 @@ def main() -> int:
     over_clicks(curves, cells, "goods", args.out / "goods_over_clicks.png")
     if not line_at_floors(lines, args.out / "line_at_floors.png"):
         print("no rank frames in this run: line_at_floors.png skipped")
+    steps_path = args.analysis / "line_steps.csv"
+    steps = pd.read_csv(steps_path) if steps_path.exists() and steps_path.stat().st_size > 1 else pd.DataFrame()
+    if not f1_over_clicks(curves, cells, steps, args.out / "f1_over_clicks.png"):
+        print("no rank frames in this run: f1_over_clicks.png skipped")
     per_cell(cells, args.out / "per_cell.png")
     if args.compare is not None:
         seeds = set(cells["seed"])
