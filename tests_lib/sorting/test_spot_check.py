@@ -239,7 +239,9 @@ class TestTheWalk:
         assert check.direction == WALK_SHALLOWER, "it stepped back from the set that fell short"
         # Five bands audited (the three it started with, then 64 and 128), 5 picks each.
         assert check.round == 5 and len(check.labels) == 25
-        assert check.estimate() >= 0.5 and check.range().labelled == 20, "the range describes the kept set only"
+        est = check.estimate()
+        assert est is not None and est >= 0.5
+        assert check.range().labelled == 20, "the range describes the kept set only"
 
     def test_it_walks_to_the_end_of_a_ranking_that_is_all_right(self):
         check = _finish(SpotCheck.start(_unvoted(_ranking()), 0.5, seed=7))

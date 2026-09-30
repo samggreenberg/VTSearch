@@ -227,7 +227,7 @@ class TestFindStats:
             "status": "unchecked",
             "count": 32,
             "range": None,
-            "schedule": {"candidate": 32, "rounds": 1, "picks": 11},
+            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
         }
         # The sweep went with the Inclusion stepper.
         assert "sweep" not in data
