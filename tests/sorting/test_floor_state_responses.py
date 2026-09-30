@@ -13,6 +13,9 @@ pinned to report it.
 The fixture's labelset resolves 12 of the 20 media as voted, so the starting
 candidate at any preset is the 8 unvoted items - and the line keeps all of
 them.  A finished check is planted with :func:`~tests.helpers.planted_spot_check`.
+Each carrier is pinned with the mixture's proposal set aside (``schedule_only``);
+:class:`TestTheMixtureLowersTheLine` pins that the live line is the smaller of
+the two (#4389).
 """
 
 from __future__ import annotations
@@ -23,7 +26,7 @@ import pytest
 
 from tests import load_detector_and_wait
 from tests.helpers import planted_spot_check, setup_trainable_model_in_registry
-from vtscore.state.core import get_active_detector_context, human_voted_ids
+from vtscore.state.core import detector_line_proposal, get_active_detector_context, human_voted_ids
 from vtsearch.state import bad_votes, good_votes, set_min_precision, snapshot_medias
 
 UNCHECKED = {"status": "unchecked", "range": None}
@@ -49,7 +52,7 @@ def _run_find(client, name: str = "floor-carrier") -> dict:
 
 class TestTheFloorRoute:
     @pytest.mark.parametrize("min_precision", sorted(SCHEDULES))
-    def test_get_and_post_report_the_unchecked_starting_candidate(self, client, min_precision):
+    def test_get_and_post_report_the_unchecked_starting_candidate(self, client, min_precision, schedule_only):
         _run_find(client)
         set_min_precision(min_precision)
         ctx = get_active_detector_context()
@@ -67,7 +70,7 @@ class TestTheFloorRoute:
             assert data["threshold"] == ctx.threshold == ctx.line_ranking.threshold_for(8, human_voted_ids(ctx))
             assert data["n_returned"] == ctx.line_ranking.above(ctx.threshold)
 
-    def test_a_finished_check_reports_its_set_and_range_and_goes_stale(self, client):
+    def test_a_finished_check_reports_its_set_and_range_and_goes_stale(self, client, schedule_only):
         _run_find(client)
         set_min_precision(0.5)
         ctx = get_active_detector_context()
@@ -98,7 +101,7 @@ class TestTheFloorRoute:
 
 class TestFindLabel:
     @pytest.mark.parametrize("min_precision", [0.5, 1.0])
-    def test_carries_the_unchecked_starting_candidate_and_keeps_it(self, client, min_precision):
+    def test_carries_the_unchecked_starting_candidate_and_keeps_it(self, client, min_precision, schedule_only):
         detector_id = _load_detector(client)
         set_min_precision(min_precision)
 
@@ -117,9 +120,32 @@ class TestFindLabel:
         assert all(r["score"] >= data["threshold"] for r in data["results"] if r["id"] in unvoted)
 
 
+class TestTheMixtureLowersTheLine:
+    """Before any check the live line keeps the smaller of the schedule's count and the mixture's (#4389)."""
+
+    @pytest.mark.parametrize("min_precision", [0.5, 0.9])
+    def test_find_label_keeps_the_smaller_count(self, client, min_precision):
+        detector_id = _load_detector(client)
+        set_min_precision(min_precision)
+
+        data = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+
+        ctx = get_active_detector_context()
+        voted = human_voted_ids(ctx)
+        proposal = detector_line_proposal(ctx, min_precision)
+        assert proposal is not None and 1 <= proposal <= 8
+        count = min(8, proposal)
+        assert data["floor"]["status"] == "unchecked" and data["floor"]["count"] == count
+        assert data["floor"]["schedule"] == SCHEDULES[min_precision], "the walk still starts at the schedule"
+        assert data["threshold"] == round(ctx.line_ranking.threshold_for(count, voted), 4)
+        kept = set(ctx.line_ranking.candidate(count, voted))
+        trained = ctx.line_ranking.voted | voted
+        assert {r["id"] for r in data["results"] if r["id"] not in trained and r["score"] >= data["threshold"]} == kept
+
+
 class TestLearnedSort:
     @pytest.mark.parametrize("min_precision", [0.5, 1.0])
-    def test_the_done_payload_carries_the_state(self, client, min_precision):
+    def test_the_done_payload_carries_the_state(self, client, min_precision, schedule_only):
         set_min_precision(min_precision)
         good_votes.update({k: None for k in [1, 2, 3]})
         bad_votes.update({k: None for k in [18, 19, 20]})
@@ -167,7 +193,7 @@ class TestAutoRun:
         return resp.get_json()["results"]["floor-autorun"]
 
     @pytest.mark.parametrize("min_precision", sorted(SCHEDULES))
-    def test_each_result_exports_the_unchecked_starting_candidate(self, client, caplog, min_precision):
+    def test_each_result_exports_the_unchecked_starting_candidate(self, client, caplog, min_precision, schedule_only):
         """Nobody can vote in a headless run, so it exports the starting candidate and says so."""
         set_min_precision(min_precision)
         with caplog.at_level(logging.INFO, logger="vtsearch.autorun_detectors"):
@@ -190,7 +216,7 @@ class TestAutoRun:
 
 
 class TestFindStats:
-    def test_the_stats_carry_the_state(self, client):
+    def test_the_stats_carry_the_state(self, client, schedule_only):
         _run_find(client)
         set_min_precision(0.5)
         data = client.get("/api/find/stats").get_json()

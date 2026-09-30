@@ -28,7 +28,8 @@ What follows is the design the remaining slices build on.
 
 - **The operating point is X; Inclusion survives only as a unit.**
   - The reporting cut is the set the spot check ended on, or the unchecked
-    starting candidate before any check (#4272).
+    line before any check (#4272): the smaller of the starting candidate and
+    the vote-anchored mixture's count (#4389).
   - Autopilot's acquisition cut stays where #3319 put it: four inclusion steps
     stricter than the line.
   - The "line's inclusion" is now *derived*: `inclusion_for_threshold(line)`,
@@ -105,7 +106,8 @@ What follows is the design the remaining slices build on.
       result.
 - **Three states, and a range.**
   - `unchecked`: no check has run on the current candidate. The line is the
-    starting candidate, with no range.
+    smaller of the starting candidate and the mixture's count (#4389), with
+    no range.
   - `confirmed`: the check's range clears X.
   - `short`: the check ended with its range below X. The line keeps the top 32
     it ended on.
@@ -186,8 +188,12 @@ What follows is the design the remaining slices build on.
     mixture's crossing**. The mixture (`fit_anchored_score_gmm` on the
     corpus's scores) is right-sized on small corpora and at 5% and over-returns
     5–66× on large sparse ones, where the fixed count is right; the smaller of
-    the two takes each where it is right. Untested as a combination; priced
-    first, then wired: #4389.
+    the two takes each where it is right. Priced as `min-fixed-gmm` and
+    wired in #4389 (2026-09-30): never worse than the fixed count on the
+    shortfall below P anywhere; +0.03–0.12 F1 on small and sparse corpora;
+    −0.02 F1 at P = 90% on the 5% corpora, for a better-kept promise. The
+    mixture is fitted once per ranking, on the votes the retrain trained on,
+    and only ever lowers the count.
   - The partially-labelled mixture alone is not the line, and five audits
     recalibrate its level but not its tail. The shipped #4220 estimator's
     shape is the worst rule everywhere and stays off the line.

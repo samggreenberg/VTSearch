@@ -131,6 +131,7 @@ Paired against the fixed count on the same corpus draws (F1, ± cluster SE):
 - **The rest.** `bands-iso-lb` (a monotone curve on every band's audits, 25–65
   votes) is never the best and often far worse; `post` (the shipped #4220
   estimator's shape) is the worst rule everywhere, with or without audits.
+  `min-fixed-gmm`, the no-vote line, is [below](#the-line-with-no-votes-the-smaller-of-todays-count-and-the-mixtures-4389).
 
 ![Shortfall against votes on the test half](figures/shortfall_vs_votes_p50.png)
 
@@ -192,6 +193,45 @@ votes). The mixture alone returns 1,109 items on the 0.44% test half at click 50
 A weak class (tv@small) is where every rule fails together: the mixture believes
 its 405 items are 50% right, the walk keeps its smallest band at 12%, and the
 fixed count keeps 32 at 6%. No cut of that ranking reaches 50%.
+
+## The line with no votes: the smaller of today's count and the mixture's (#4389)
+
+AutoRun, the CLI, a cold Find and every session before its first check draw
+the line with no audit votes. The owner ruled (2026-09-30) that this line is
+**the smaller of today's count and the vote-anchored mixture's crossing**, to
+be priced first. Rule `min-fixed-gmm` below (a third run of the same harness,
+`provenance.json`; the other rules' rows are unchanged).
+
+F1 of the returned set at P = 50% (the share right), click 150:
+
+| corpus | positives | **fixed** | **gmm** | **min** | min − fixed (F1 ± SE) | min − fixed (shortfall) |
+|---|---:|---|---|---|---:|---:|
+| 0.44%, 32 | 0.1 | 0.06 (0%) | 0.58 (6%) | **0.58** (6%) | | |
+| 0.44%, 320 | 1.5 | 0.09 (4%) | 0.46 (39%) | **0.46** (39%) | | |
+| 0.44%, 3,200 | 15 | 0.38 (28%) | 0.42 (46%) | **0.42** (47%) | +0.041 ± 0.005 | −0.091 ± 0.004 |
+| 0.44%, test half | 50 | **0.48** (61%) | 0.35 (27%) | 0.47 (62%) | −0.003 ± 0.001 | −0.003 ± 0.001 |
+| 0.44%, ×10 | 497 | 0.09 (74%) | 0.16 (10%) | 0.09 (74%) | 0 | 0 |
+| 5%, 320 | 16 | 0.57 (44%) | 0.61 (54%) | **0.62** (55%) | +0.043 ± 0.003 | −0.064 ± 0.002 |
+| 5%, 1,000 | 50 | **0.65** (83%) | 0.61 (52%) | 0.65 (84%) | −0.003 ± 0.001 | −0.002 ± 0.001 |
+| 5%, ×10 | 501 | 0.11 (93%) | 0.54 (40%) | 0.11 (93%) | 0 | 0 |
+| 0.1%, test half | 11 | 0.26 (17%) | 0.20 (17%) | **0.29** (24%) | +0.031 ± 0.004 | −0.038 ± 0.004 |
+| 0.1%, ×10 | 112 | 0.25 (55%) | 0.05 (3%) | 0.25 (55%) | 0 | 0 |
+
+- **It is never worse than today's count on the shortfall below P**, at any
+  size, prevalence or floor: every paired difference is at or below zero
+  (`paired_vs_fixed.csv`). Where the mixture is right-sized (small corpora,
+  5%) the shortfall falls by 0.06–0.09; where the mixture over-returns, the
+  count caps it and nothing changes.
+- **On F1 it is never worse beyond noise at P = 50% and 10%** (−0.003 ± 0.001
+  on the bench corpus, 0 on the ×10 ones) and better by 0.03–0.12 on small and
+  sparse corpora, where today's count returns everything.
+- **At P = 90% it gives up a little recall for a better-kept promise** on the
+  5% corpora: 29 kept instead of 32, 85% right instead of 83%, meets P in 55%
+  of sessions instead of 54%, F1 −0.021 ± 0.002. That is the trade the
+  objective asks for.
+- It takes nothing from the band walk: the walk starts at this count.
+
+![F1 of the returned set against corpus size, with the no-vote line](figures/f1_by_size_p50.png)
 
 ## What the band walk costs
 

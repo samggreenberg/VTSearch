@@ -76,8 +76,8 @@ class TestTheRoute:
 
 
 class TestTheLine:
-    def test_an_unchecked_floor_keeps_the_starting_candidate(self, client):
-        """Before any check the line sits at the last of the top K unvoted items (#4272)."""
+    def test_an_unchecked_floor_keeps_the_starting_candidate(self, client, schedule_only):
+        """Before any check the line sits at the last of the top K unvoted items (#4272; the mixture set aside, #4389)."""
         _load_trained_detector(client)
         ctx = get_active_detector_context()
         assert ctx.line_ranking is not None

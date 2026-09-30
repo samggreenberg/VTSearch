@@ -52,9 +52,10 @@ COLORS = {
     "post+shift": "#5a2f99",
     "grow-fine": "#1b4f8f",
     "gmm-grow": "#d62b6b",
+    "min-fixed-gmm": "#b8860b",
 }
 #: The rules the report's figures show; the rest are in ``summary.csv``.
-MAIN_RULES = ("fixed", "check", "grow", "grow-fine", "gmm", "gmm+shift5", "gmm-grow", "bands-iso-lb")
+MAIN_RULES = ("fixed", "check", "grow", "grow-fine", "gmm", "gmm+shift5", "gmm-grow", "min-fixed-gmm", "bands-iso-lb")
 STYLE = {"fixed": "-", "check": "--"}
 
 

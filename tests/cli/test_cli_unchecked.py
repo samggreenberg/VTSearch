@@ -1,9 +1,10 @@
-"""A CLI autodetect run exports the floor's unchecked starting candidate, and says so (#4247, #4272).
+"""A CLI autodetect run exports the floor's unchecked line, and says so (#4247, #4272, #4389).
 
 Nobody can vote in a headless run, so the precision floor's spot check never
-runs: the detector is scored at the floor's starting candidate - the top 128
-unvoted items at 10%, the top 64 at 25%, the top 32 at 50% and above - and
-that set is what gets exported.  The run says so twice: a
+runs: the detector is scored at the floor's unchecked line - the smaller of
+the schedule's starting candidate (the top 128 unvoted items at 10%, the top
+64 at 25%, the top 32 at 50% and above) and the vote-anchored mixture's count
+- and that set is what gets exported.  The run says so twice: a
 ``detector_unchecked`` progress event (a line on the terminal in text mode),
 and a ``floor`` entry beside ``threshold`` in every result the detector
 produces, which the JSON exporters write out verbatim.  ``threshold`` itself
@@ -68,7 +69,7 @@ def _events(capsys) -> list[dict]:
 class TestTrainingRecordsTheState:
     @pytest.mark.parametrize(("min_precision", "candidate", "rounds", "picks"), PRESETS)
     def test_each_preset_exports_its_starting_candidate(
-        self, client, monkeypatch, capsys, min_precision, candidate, rounds, picks
+        self, client, monkeypatch, capsys, schedule_only, min_precision, candidate, rounds, picks
     ):
         set_min_precision(min_precision)
         cli_progress.set_format("json")
@@ -89,7 +90,7 @@ class TestTrainingRecordsTheState:
         assert event["detector"] == "det"
         assert (event["min_precision"], event["status"], event["count"]) == (min_precision, "unchecked", candidate)
 
-    def test_a_small_corpus_is_its_own_candidate(self, client, monkeypatch, capsys):
+    def test_a_small_corpus_is_its_own_candidate(self, client, monkeypatch, capsys, schedule_only):
         set_min_precision(0.1)
         cli_progress.set_format("json")
         out = _train(monkeypatch, 40)
@@ -102,12 +103,34 @@ class TestTrainingRecordsTheState:
         out = _train(monkeypatch, None)
         assert out["det"]["floor"]["status"] == "unchecked" and out["det"]["floor"]["count"] == 32
 
-    def test_text_mode_says_what_the_export_is(self, client, monkeypatch, capsys):
+    def test_text_mode_says_what_the_export_is(self, client, monkeypatch, capsys, schedule_only):
         set_min_precision(0.25)
         _train(monkeypatch, 200)
         out = capsys.readouterr().out
         assert "Detector 'det' exports its top 64 unchecked (aiming at 25% right)" in out
         assert "nobody is here to check it" in out
+
+    def test_the_mixture_lowers_the_exported_count(self, client, monkeypatch, capsys):
+        """The headless line is the smaller of the schedule's count and the mixture's (#4389), recorded as unchecked."""
+        import vtscore.training.thresholds as thresholds
+
+        seen: list[tuple] = []
+
+        def _five(ranking, min_precision, labels, also_voted=()):
+            if ranking is None:  # the floor setting re-cuts every context, ranking or not
+                return None
+            seen.append((ranking.size, min_precision, dict(labels), set(also_voted)))
+            return 5
+
+        monkeypatch.setattr(thresholds, "mixture_count", _five)
+        set_min_precision(0.5)
+        cli_progress.set_format("json")
+        out = _train(monkeypatch, 200)
+        assert seen and seen[0] == (200, 0.5, {}, set()), "anchored on the (here empty) human votes"
+        assert out["det"]["floor"]["status"] == "unchecked" and out["det"]["floor"]["count"] == 5
+        assert out["det"]["floor"]["schedule"]["candidate"] == 32, "the walk would still start at the schedule"
+        event = [e for e in _events(capsys) if e["event"] == "detector_unchecked"][0]
+        assert (event["status"], event["count"]) == ("unchecked", 5)
 
 
 FLOOR = {

@@ -1610,10 +1610,10 @@ def recut_detector_threshold(
 
     **Under a floor the line keeps a set** (#4272): the top *count* unvoted
     items of the ranking the last retrain scored (``ctx.line_ranking``), where
-    *count* is the set the detector's last spot check ended on, or the floor's
-    unchecked starting candidate before any check
-    (:func:`~vtscore.training.thresholds.floor_line`, shared with training and
-    the eval harness).  Nothing falls back to the Inclusion 0 cut any more.
+    *count* is the set the detector's last spot check ended on, or, before any
+    check, the smaller of the floor's schedule and the vote-anchored mixture's
+    count (:func:`~vtscore.training.thresholds.floor_line`, shared with
+    training and the eval harness; #4389).  Nothing falls back to the Inclusion 0 cut any more.
     The unvoted remainder is read against the live votes, so the line follows
     the ranking at the same count as votes come in.  With no ranking to read
     (never trained against a haystack, or a structural detector) the floor
@@ -1645,7 +1645,13 @@ def recut_detector_threshold(
     if min_precision is None and inclusion_value is None:
         raise ValueError("an operating point needs an inclusion or a precision floor")
     if min_precision is not None:
-        kept = floor_line(ctx.line_ranking, min_precision, ctx.precision_check, human_voted_ids(ctx))
+        kept = floor_line(
+            ctx.line_ranking,
+            min_precision,
+            ctx.precision_check,
+            human_voted_ids(ctx),
+            proposal=detector_line_proposal(ctx, min_precision),
+        )
         if kept is not None:
             return kept
     line = reporting_line(
@@ -1700,6 +1706,25 @@ def human_voted_ids(ctx: "DetectorContext") -> set[int]:
     return set(ctx.good_votes) | set(ctx.bad_votes)
 
 
+def detector_line_labels(ctx: "DetectorContext") -> dict[int, bool]:
+    """The human votes as anchors for the line's mixture: ``{media id: is Good}`` over :func:`human_voted_ids`."""
+    return {cid: cid in ctx.good_votes for cid in human_voted_ids(ctx)}
+
+
+def detector_line_proposal(ctx: "DetectorContext", min_precision: float) -> int | None:
+    """The vote-anchored mixture's count on *ctx*'s ranking at *min_precision* (#4389), or ``None``.
+
+    The unchecked line keeps the smaller of the schedule's count and this
+    (:func:`~vtscore.training.thresholds.mixture_count`; the owner's ruling on
+    #4383).  The fit is the ranking's own - the retrain's, on the votes it
+    trained on, or on the human votes when a cold Find built the ranking - so
+    the re-cut, the floor state and the Find path read one fit.
+    """
+    from vtscore.training.thresholds import mixture_count
+
+    return mixture_count(ctx.line_ranking, min_precision, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
 def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any] | None:
     """What the precision floor says about *ctx*'s current line, for a response that carries the line.
 
@@ -1718,7 +1743,13 @@ def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) ->
 
     if min_precision is None:
         return None
-    return floor_state(min_precision, ctx.precision_check, ctx.line_ranking, human_voted_ids(ctx)).as_dict()
+    return floor_state(
+        min_precision,
+        ctx.precision_check,
+        ctx.line_ranking,
+        human_voted_ids(ctx),
+        proposal=detector_line_proposal(ctx, min_precision),
+    ).as_dict()
 
 
 def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:

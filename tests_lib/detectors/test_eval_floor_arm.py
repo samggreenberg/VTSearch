@@ -74,7 +74,7 @@ class TestTheArms:
         assert all(r["min_precision"] == DEFAULT_MIN_PRECISION for r in rows)
         assert {r["floor_status"] for r in rows} <= set(FLOOR_STATES)
 
-    def test_before_the_check_the_line_keeps_the_unchecked_starting_candidate(self):
+    def test_before_the_check_the_line_keeps_the_unchecked_starting_candidate(self, schedule_only):
         """What a headless run exports: the top K unvoted, K from the floor's schedule, capped by the corpus."""
         rows, _picks = self._run()
         steps = [r for r in rows if r["phase"] != "check"]
@@ -83,6 +83,18 @@ class TestTheArms:
         # `n_remainder` is the unvoted sim set after this step's vote: the candidate.
         assert all(r["floor_count"] == min(k, r["n_remainder"]) for r in steps)
         assert all(math.isnan(r["range_lo"]) and r["check_labelled"] == -1 and r["check_stale"] == -1 for r in steps)
+
+    def test_before_the_check_the_mixture_can_only_lower_the_count(self):
+        """The app's unchecked line: the smaller of the schedule's count and the vote-anchored mixture's (#4389).
+
+        The harness hands the votes so far to the same ``mixture_count`` the
+        app anchors on, so a headless study exports what AutoRun would.
+        """
+        rows, _picks = self._run()
+        steps = [r for r in rows if r["phase"] != "check"]
+        k = check_schedule(DEFAULT_MIN_PRECISION).candidate
+        assert steps and all(1 <= r["floor_count"] <= min(k, r["n_remainder"]) for r in steps)
+        assert any(r["floor_count"] < min(k, r["n_remainder"]) for r in steps), "the mixture lowered some line"
 
     def test_the_check_runs_once_the_steps_are_spent_and_its_votes_enter_training(self):
         rows, picks = self._run()
@@ -137,7 +149,7 @@ class TestTheArms:
         assert all(r["floor_status"] == "" and r["floor_count"] == -1 for r in rows)
         assert all(r["phase"] != "check" for r in rows)
 
-    def test_a_pinned_floor_is_recorded_and_sizes_the_candidate(self):
+    def test_a_pinned_floor_is_recorded_and_sizes_the_candidate(self, schedule_only):
         rows, _picks = self._run(min_precision=0.25)
         assert rows and all(r["min_precision"] == 0.25 for r in rows)
         steps = [r for r in rows if r["phase"] != "check"]

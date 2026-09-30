@@ -200,7 +200,8 @@ demand, and returns one result column per detector.
 Each detector's `floor` is the [floor state](labeling.md#the-floor-state) of
 its `threshold` (`null` only when there was no trained context to ask). Nobody
 can vote in a headless run, so every detector exports its floor's `unchecked`
-starting candidate, and the server logs that the set was never checked.
+line (the smaller of the starting candidate and the vote-anchored mixture's
+count, #4389), and the server logs that the set was never checked.
 
 When an exporter is configured for Auto-Find, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific

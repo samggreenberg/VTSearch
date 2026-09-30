@@ -631,7 +631,12 @@ def labelset_calibrating_groups(labelset: LabelSet) -> set:
 
 
 def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None) -> set[int]:
-    """The media ids in *snap* that carry a good/bad label in *labelset*.
+    """The media ids in *snap* that carry a good/bad label in *labelset*: the keys of :func:`labeled_media_labels`."""
+    return set(labeled_media_labels(labelset, snap))
+
+
+def labeled_media_labels(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None) -> dict[int, bool]:
+    """The media in *snap* that carry a good/bad label in *labelset*, as ``{media id: is Good}``.
 
     These are the in-dataset media the detector trains on, and therefore the
     ids the fold-anchored threshold must drop from its haystacks (issue #3308;
@@ -640,7 +645,7 @@ def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None
     already, so they contribute nothing here.
     """
     if not snap:
-        return set()
+        return {}
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid  # noqa: PLC0415
     from vtscore.state import build_media_lookup  # noqa: PLC0415
 
@@ -649,14 +654,14 @@ def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None
     # callers) may not - default it to the key rather than requiring it.
     lookups = build_media_lookup({cid: {**m, "id": m.get("id", cid)} for cid, m in snap.items()})
 
-    ids: set[int] = set()
+    labels: dict[int, bool] = {}
     for elem in labelset.elements:
         if elem.label not in ("good", "bad"):
             continue
         cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
-            ids.add(cid)
-    return ids
+            labels[cid] = elem.label == "good"
+    return labels
 
 
 def labelset_resolution_report(
@@ -992,10 +997,12 @@ def train_from_labelset(
     # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
     # (otherwise a floor change can't move the cutoff — see train_and_threshold).
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
-    voted_ids = labeled_media_ids(labelset, snap)
+    labels = labeled_media_labels(labelset, snap)
+    voted_ids = set(labels)
     if haystack is not None:
         # The haystack's ids are its own; name the labelled items in them.
-        voted_ids = {hid for hid, src in haystack.to_source.items() if src in voted_ids}
+        labels = {hid: labels[src] for hid, src in haystack.to_source.items() if src in labels}
+        voted_ids = set(labels)
 
     mlp, threshold = train_and_threshold(
         X_list,
@@ -1007,6 +1014,7 @@ def train_from_labelset(
         score_rows=score_rows,
         voted_ids=voted_ids,
         haystack=haystack.medias if haystack is not None else None,
+        labels=labels,
     )
     from vtscore.detectors.model_loading import labelset_signature
 
@@ -1079,9 +1087,10 @@ def labelset_train_and_score(
         det_ctx=det_ctx,
         groups=groups,
         score_rows=score_rows,
-        voted_ids=labeled_media_ids(labelset, clips_dict),
+        voted_ids=set(labelset_labels := labeled_media_labels(labelset, clips_dict)),
         rows=rows,
         min_precision=min_precision,
+        labels=labelset_labels,
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

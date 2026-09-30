@@ -220,7 +220,7 @@ class TestVoteExclusionFollowsTheHaystack:
 
         # Two loaded medias carry labels.
         voted_sources = {ID_BASE, ID_BASE + 1}
-        monkeypatch.setattr(lt, "labeled_media_ids", lambda _ls, _snap: set(voted_sources))
+        monkeypatch.setattr(lt, "labeled_media_labels", lambda _ls, _snap: dict.fromkeys(voted_sources, True))
 
         seen: dict = {}
         import vtscore.detectors.training as training_mod

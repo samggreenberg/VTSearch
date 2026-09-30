@@ -23,7 +23,7 @@ import pytest
 
 import vtscore.training.thresholds as thresholds_mod
 from vtscore.datasets.labelset import LabeledElement, LabelSet
-from vtscore.detectors.labelset_training import labeled_media_ids
+from vtscore.detectors.labelset_training import labeled_media_ids, labeled_media_labels
 from vtscore.detectors.training import train_and_score, train_and_threshold
 
 DIM = 32
@@ -173,6 +173,9 @@ class TestLabeledMediaIds:
 
         assert labeled_media_ids(labelset, snap) == {2, 7}
         assert labeled_media_ids(labelset, None) == set()
+        # The same resolution with each label, the anchors of the line's mixture (#4389).
+        assert labeled_media_labels(labelset, snap) == {2: True, 7: False}
+        assert labeled_media_labels(labelset, None) == {}
 
 
 class TestSharedExclusionPolicy:

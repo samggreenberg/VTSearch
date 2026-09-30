@@ -95,8 +95,13 @@ def test_a_floor_change_recuts_and_resplits(client):
     assert _export_good(client) == _votes_good(client)
 
 
-def test_a_find_pass_on_a_reused_head_keeps_the_floors_set(client):
+def test_a_find_pass_on_a_reused_head_keeps_the_floors_set(client, schedule_only):
     """A Find pass that reuses the cached head draws the floor's set, and can be checked (#4273).
+
+    The mixture's proposal (#4389) is set aside so the set is the schedule's
+    whole remainder; the live pass anchors it on the human votes
+    (``vtscore.state.core.detector_line_proposal``, pinned in
+    ``tests/sorting/test_floor_state_responses.py``).
 
     Ending a Find session drops the ranking the line kept a set of; the next
     pass reuses the head as it was (no retrain), so before the fix it came back

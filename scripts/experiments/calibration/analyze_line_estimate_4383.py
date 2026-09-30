@@ -59,6 +59,10 @@ the returned set's precision:
 * ``gmm-grow`` - the band search over the fine bands, **started at the band the
   mixture proposes** (``gmm``'s k) instead of at ``K(P)``: the model sizes the
   first guess, the audits correct it in either direction.
+* ``min-fixed-gmm`` - **the smaller of ``fixed`` and ``gmm``** (the owner's
+  ruling on #4383 for the line with no votes, #4389): the mixture where it is
+  right-sized (small corpora, 5%), today's count where the mixture over-returns
+  (large sparse corpora). No audits.
 
 Where a rule's curve never reaches P, it returns the k with the highest
 estimate (>= 1). ``oracle`` is the deepest k whose true precision is >= P.
@@ -123,6 +127,7 @@ RULES: tuple[str, ...] = (
     "post+shift",
     "grow-fine",
     "gmm-grow",
+    "min-fixed-gmm",
 )
 #: The fine bands' first edge: the smallest set ``grow-fine`` / ``gmm-grow`` can return.
 BASE_FINE = 8
@@ -498,6 +503,12 @@ def cell_rows(job: tuple) -> list[dict]:
                     for name in ("gmm+shift", "post+shift"):
                         k, e = rule_curve(shifted[name], floor, n, fixed_k)
                         outcomes[name] = (k, len(y_all), e)
+                    gmm_k_raw, gmm_e = outcomes["gmm"][0], outcomes["gmm"][2]
+                    outcomes["min-fixed-gmm"] = (
+                        min(fixed_k, gmm_k_raw),
+                        0,
+                        gmm_e if (p_gmm is not None and gmm_k_raw < fixed_k) else float("nan"),
+                    )
                     outcomes["grow-fine"] = rule_grow(fine, floor, n, lb=False)
                     gmm_k = outcomes["gmm"][0] if p_gmm is not None else None
                     outcomes["gmm-grow"] = rule_grow(fine, floor, n, lb=False, start_k=gmm_k)

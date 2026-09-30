@@ -34,6 +34,8 @@ import pytest
 from tests_lib.sorting.test_precision_floor import _session
 from vtscore.datasets.vote_provenance import calibrates_precision
 from vtscore.state.core import (
+    detector_line_labels,
+    detector_line_proposal,
     DetectorContext,
     detector_floor_state,
     detector_line_inclusion,
@@ -63,6 +65,7 @@ from vtscore.training.thresholds import (
     fit_precision_floor_curve,
     line_inclusion,
     line_under,
+    mixture_count,
     precision_floor_cut,
     reporting_line,
     resolve_min_precision,
@@ -343,7 +346,7 @@ class TestTheDetectorsLine:
         ctx = self._ctx()
         assert recut_detector_threshold(ctx, 4) == ctx.anchored_cut_cache.threshold_at(4)
 
-    def test_recut_at_a_floor_keeps_the_starting_candidate(self):
+    def test_recut_at_a_floor_keeps_the_starting_candidate(self, schedule_only):
         """Before any check the line sits at the last of the top K unvoted items (#4272)."""
         ctx = self._ctx()
         r = ctx.line_ranking
@@ -352,13 +355,43 @@ class TestTheDetectorsLine:
         assert recut_detector_threshold(ctx, 4, min_precision=0.1) == r.threshold_for(128)
         assert recut_detector_threshold(ctx, 4, min_precision=1.0) == r.threshold_for(32)
 
-    def test_recut_at_a_floor_reads_the_live_votes(self):
+    def test_recut_at_a_floor_reads_the_live_votes(self, schedule_only):
         """The unvoted remainder is read at re-cut time, so the line follows the ranking at the same count."""
         ctx = self._ctx()
         ctx.good_votes.update({1: None, 2: None})
         ctx.bad_votes[3] = None
         assert recut_detector_threshold(ctx, min_precision=0.5) == ctx.line_ranking.threshold_for(32, {1, 2, 3})
         assert recut_detector_threshold(ctx, min_precision=0.5) == line_under(ctx.line_ranking.score_of(35))
+
+    def test_recut_at_a_floor_keeps_the_smaller_of_the_schedule_and_the_mixture(self):
+        """Before any check the line keeps the smaller of the schedule's count and the mixture's (#4389).
+
+        A two-population ranking (``test_mixture_count``) with 20 unvoted
+        items the mixture puts at ~1: at 90% its count is about them, under
+        the schedule's 32, and the line follows it; at 10% it runs ~200 deep
+        into the low population, and the schedule's 128 caps it.  The human
+        vote dicts are the anchors the state a response carries reads.
+        """
+        from tests_lib.sorting.test_mixture_count import _two_populations
+
+        ctx = self._ctx()
+        r, labels = _two_populations(n_high=28)
+        ctx.line_ranking = r
+        ctx.good_votes.update({cid: None for cid, good in labels.items() if good})
+        ctx.bad_votes.update({cid: None for cid, good in labels.items() if not good})
+        assert detector_line_labels(ctx) == labels
+        proposal = detector_line_proposal(ctx, 0.9)
+        assert proposal == mixture_count(r, 0.9, labels, set(labels))
+        assert proposal is not None and 16 <= proposal < 32, proposal
+        assert recut_detector_threshold(ctx, min_precision=0.9) == r.threshold_for(proposal, human_voted_ids(ctx))
+        state = detector_floor_state(ctx, 0.9)
+        assert state is not None and state["status"] == FLOOR_UNCHECKED and state["count"] == proposal
+        assert state["schedule"]["candidate"] == 32, "the walk still starts at the schedule"
+        deep = detector_line_proposal(ctx, 0.1)
+        assert deep is not None and deep > 128, deep
+        assert recut_detector_threshold(ctx, min_precision=0.1) == r.threshold_for(128, set(labels))
+        capped = detector_floor_state(ctx, 0.1)
+        assert capped is not None and capped["count"] == 128
 
     def test_recut_at_a_floor_keeps_the_set_a_finished_check_ended_on(self):
         ctx = self._ctx()
@@ -415,7 +448,7 @@ class TestTheDetectorsLine:
         ctx.verified_ids[2] = None
         assert human_voted_ids(ctx) == {2}, "every Find item carries a machine label; only the verified are votes"
 
-    def test_the_floor_state_a_response_carries_before_a_check(self):
+    def test_the_floor_state_a_response_carries_before_a_check(self, schedule_only):
         """What rides beside ``threshold`` wherever the line leaves the process (#4247, #4272)."""
         ctx = self._ctx()
         state = detector_floor_state(ctx, 0.25)
@@ -560,7 +593,7 @@ class TestARetrain:
         ctx, _t = self._train()
         assert ctx.precision_floor_cache is None
 
-    def test_a_retrain_parks_the_ranking_and_cuts_at_the_floors_starting_candidate(self):
+    def test_a_retrain_parks_the_ranking_and_cuts_at_the_floors_starting_candidate(self, schedule_only):
         """The line keeps the top K unvoted items of the haystack it scored (#4272), voted items marked."""
         ctx, threshold = self._train(min_precision=0.5)
         ranking = ctx.line_ranking
@@ -572,7 +605,30 @@ class TestARetrain:
             threshold == ranking.threshold_for(32) == line_under(min(ranking.score_of(cid) for cid in range(514, 530)))
         )
 
-    def test_a_retrain_keeps_a_finished_checks_count(self):
+    def test_a_retrain_anchors_the_mixture_on_its_votes_and_cuts_at_the_smaller_count(self):
+        """The unchecked line a retrain draws is the smaller of the schedule's 32 and the mixture's (#4389).
+
+        The mixture is anchored on the votes the retrain trained on, and
+        memoised on the ranking it parks, so the re-cut and the floor state
+        read the same count back without a refit.
+        """
+        ctx, threshold = self._train(min_precision=0.5)
+        ranking = ctx.line_ranking
+        assert ranking is not None
+        labels = {**dict.fromkeys(range(500, 506), True), **dict.fromkeys(range(506, 514), False)}
+        proposal = mixture_count(ranking, 0.5, labels)
+        assert proposal is not None and 1 <= proposal <= 16
+        assert threshold == ranking.threshold_for(min(32, proposal))
+        assert len(ranking.mixture) == 1 and ranking.mixture[0] is not None, "one fit, memoised on the ranking"
+        from vtscore.state.core import recut_detector_threshold as recut
+
+        fit = ranking.mixture[0]
+        assert recut(ctx, min_precision=0.5) == threshold
+        state = detector_floor_state(ctx, 0.5)
+        assert state is not None and state["count"] == min(32, proposal)
+        assert ranking.mixture == [fit], "the re-cut and the state read the retrain's fit"
+
+    def test_a_retrain_keeps_a_finished_checks_count(self, schedule_only):
         ctx, _t = self._train(min_precision=0.5)
         check = _finished_check(ctx.line_ranking, 0.5)
         ctx.precision_check = check

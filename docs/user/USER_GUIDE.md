@@ -117,10 +117,12 @@ more, with more wrong ones in it; toward False Negatives it returns only the
 surest, and misses more. Every detector starts on the middle radio.
 
 The line always keeps a set: the top of the ranking, among the items you
-haven't voted on. How many it keeps depends on the Threshold: the top 128 on
-the False Positives radio, and the top 32 on the middle and False Negatives
-radios. Until you **check** that set, nothing has measured how much of it is
-right, and the note under the Threshold says so: **Top 32 kept, unchecked**.
+haven't voted on. How many it keeps depends on the Threshold: up to the top
+128 on the False Positives radio, and up to the top 32 on the middle and
+False Negatives radios - fewer when the detector's own estimate of its scores,
+anchored on your votes, says fewer are likely right. Until you **check** that
+set, nothing has measured how much of it is right, and the note under the
+Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
 
 **The spot check.** In Train, click **Check 5 picks** beside the note.
 VTSearch cuts the list you haven't voted on into bands from the top (the top
@@ -807,9 +809,10 @@ A spectrum from **False Positives** to **False Negatives**, with three radio
 buttons under it: one under each third. Pick where the detector's line
 falls. The line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
-keeps the top of the ranking, among the items you haven't voted on: the top
-128 on the False Positives radio, and the top 32 on the middle and False
-Negatives radios. Toward False Positives the line returns the most, and more
+keeps the top of the ranking, among the items you haven't voted on: up to the
+top 128 on the False Positives radio, and up to the top 32 on the middle and
+False Negatives radios, fewer when the detector's own estimate says fewer are
+likely right. Toward False Positives the line returns the most, and more
 of it may be wrong; toward False Negatives it returns only the surest, and
 misses more; the middle radio (the default) sits between them. The radios
 carry no numbers because what the line keeps is measured, not promised: a
@@ -821,7 +824,9 @@ Once the list is ranked by the detector (a **Learned** sort, or Find), the
 note under the spectrum says what the Threshold is doing to the line, in one
 of three states:
 
-- **Top 32 kept, unchecked** - nothing has measured the set yet.
+- **Top 32 kept, unchecked** - nothing has measured the set yet (the count
+  is 32 at most; fewer when the detector's estimate says fewer are likely
+  right).
 - **Confirmed · likely 55–100% right (checked 15) · 64 kept** - a check
   found the top 64 right enough, and the line keeps them.
 - **Fell short · likely 19–92% right (checked 15) · top 8 kept** - a check
