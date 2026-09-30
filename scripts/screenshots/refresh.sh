@@ -27,8 +27,8 @@
 #
 # It turns the app's stall watchdog off (VTSEARCH_STALL_WATCHDOG_MS=0): a
 # heartbeat it misses during the fixtures' CPU embedding makes it dump every
-# thread's frames while they run, which has segfaulted the app mid-import, and
-# a harness run has no stall to diagnose.
+# thread's frames while they run, which has segfaulted the app mid-import
+# (#4345), and a harness run has no stall to diagnose.
 #
 # An app you started yourself is used as it is, with its own data and settings,
 # so the shots it gives are not the committed ones. It must run this checkout's

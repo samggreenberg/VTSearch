@@ -18,7 +18,7 @@
  *   APP=http://localhost:5000 tsx capture.ts          # override app URL
  */
 
-import { type Browser, type BrowserContext, type Page } from 'playwright';
+import { type Browser, type BrowserContext, type Page, type Request } from 'playwright';
 // @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
 import { launchChromium } from './launch.mjs';
 // @ts-expect-error - plain .mjs helper, shared with the slide shooter
@@ -42,6 +42,14 @@ const ASSETS = process.env.OUT_DIR
   ? resolve(process.env.OUT_DIR)
   : resolve(HERE, '../../docs/user/assets');
 const VIEWPORT = { width: 1440, height: 900 };
+/**
+ * How long the page must have had nothing in flight, and nothing land, to count
+ * as settled (`settleSorts`): over three times the 300 ms timers the label view
+ * starts its own sorts on, and under the ~1.5 s its polls leave between them.
+ */
+const QUIET_MS = 1000;
+/** The most `settleSorts` waits for quiet once no sort is running. */
+const CALM_CAP_MS = 10000;
 
 const onlyIds = process.argv.slice(2);
 const shots = onlyIds.length ? SHOTS.filter((s) => onlyIds.includes(s.id)) : SHOTS;
@@ -57,8 +65,8 @@ function ramFreeMB(): number {
 
 /**
  * Injected before every capture: kill animations so frames are stable, hide
- * the toast stack, the Settings footer's stale-bundle chip, and the trophy's
- * unseen-achievement dot, and pin the RAM / disk gauges' fill.
+ * the toast stack, the Settings footer's stale-bundle chip and "saved" flash,
+ * and the trophy's unseen-achievement dot, and pin the RAM / disk gauges' fill.
  *
  * The toasts are an artefact of the harness rather than of the product: it
  * drives a dev checkout, where `static/` is a build artefact that goes stale the
@@ -66,6 +74,11 @@ function ramFreeMB(): number {
  * non-dismissing "this page is running an out-of-date build" banner across the
  * top of every frame, and the Settings footer grows a `⚠ bundle v …` chip for
  * the same reason. The slide shooter hides the banner too.
+ *
+ * Settings' "✓ saved" flash is up for 1.8 s after a change saves, so a shot that
+ * changes a setting and one that only looks at the pane (or the same frame a
+ * second later, in its other theme) would disagree on it. It fades by opacity,
+ * so hiding it moves nothing else.
  *
  * The dot on the trophy says the machine's user has achievements they have not
  * looked at yet, which depends on everything that data dir has ever done: a
@@ -82,6 +95,7 @@ function ramFreeMB(): number {
 const STILL_CSS =
   `*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important;scroll-behavior:auto!important}` +
   `vt-toast-container,.toast-stack,.settings-version--stale,.notif-dot{display:none!important}` +
+  `.settings-saved{opacity:0!important}` +
   `vt-usage-bar .progress-fill{width:50%!important;background:var(--text-warning)!important}`;
 
 /**
@@ -214,25 +228,63 @@ function makeHelpers(page: Page, timing?: Timing): Helpers {
       sorts.settled += 1;
     }
   });
+  // The page's traffic, for telling when the label view has done acting on its
+  // own (#4341). It starts a sort of its own only in answer to something the
+  // page received: a response, or a timer of at most 300 ms set as one landed
+  // (the entry seed's `SEED_DELAY_MS`, `scheduleLearnedSort`'s debounce). So
+  // once nothing has been in flight, and nothing has landed, for `QUIET_MS`,
+  // there is no sort to come that the page has not already asked for, and what
+  // the last one served has been fetched. The event stream (`/api/events`)
+  // never finishes and starts no sort, so it is left out.
+  const net = { inflight: new Set<Request>(), last: Date.now() };
+  const counts = (req: Request) => req.url().startsWith(APP) && req.resourceType() !== 'eventsource';
+  page.on('request', (req) => {
+    if (!counts(req)) return;
+    net.inflight.add(req);
+    net.last = Date.now();
+  });
+  const landed = (req: Request) => {
+    if (net.inflight.delete(req)) net.last = Date.now();
+  };
+  page.on('requestfinished', landed);
+  page.on('requestfailed', landed);
   /**
-   * Wait for any sort started since *mark* (given *startWindow* ms to begin)
-   * to settle, then for the view to draw what it served. A sort the view
-   * abandons never answers, so an overlay that has stayed gone for a few
-   * seconds also counts as settled.
+   * Nothing in flight, and nothing sent or landed, for `QUIET_MS` since *from*
+   * as well: a request an action has just made reaches this side a moment
+   * after the action returns, so quiet is counted from the action, not before.
+   */
+  const quiet = (from: number) => net.inflight.size === 0 && Date.now() - Math.max(net.last, from) >= QUIET_MS;
+  /**
+   * Wait for any sort started since *mark* to settle, then for the view to
+   * draw what it served. A sort that has not begun by the time the page goes
+   * quiet is not coming; *startWindow* ms is only the cap on waiting for one.
+   * A sort the view abandons never answers, so one whose overlay is gone with
+   * the page quiet also counts as settled; the overlay stays up for a sort
+   * still running, whose result poll backs off to 2 s once it stops changing.
+   * A sort that begins while the page settles is waited for in turn.
    */
   const settleSorts = async (mark: number, startWindow: number) => {
     const overlay = page.locator('vt-progress-indicators .sort-overlay');
     const t0 = Date.now();
-    while (sorts.started === mark && Date.now() - t0 < startWindow) await wait(250);
+    while (sorts.started === mark && Date.now() - t0 < startWindow && !quiet(t0)) await wait(100);
     if (timing && sorts.started === mark) timing.unstarted += (Date.now() - t0) / 1000;
     const until = Date.now() + 180000;
-    let quietSince = Date.now();
-    while (sorts.settled < sorts.started && Date.now() < until) {
-      if (await overlay.count()) quietSince = Date.now();
-      else if (Date.now() - quietSince >= 5000) break;
-      await wait(250);
+    // With no sort running, a page that never goes quiet (a poll that never
+    // backs off) is photographed after CALM_CAP_MS rather than held for the
+    // full cap; the log names the shot, since its frame may not be at rest.
+    let calmBy = Date.now() + CALM_CAP_MS;
+    while (Date.now() < until) {
+      if (sorts.settled < sorts.started) {
+        if (quiet(t0) && !(await overlay.count())) break;
+        calmBy = Date.now() + CALM_CAP_MS;
+      } else if (quiet(t0)) {
+        break;
+      } else if (Date.now() > calmBy) {
+        if (timing) timing.loud += 1;
+        break;
+      }
+      await wait(100);
     }
-    await wait(1500);
     if (timing) timing.settle += (Date.now() - t0) / 1000;
   };
   const h: Helpers = {
@@ -449,6 +501,8 @@ interface Timing {
   settle: number;
   /** ...and of that, start windows that ran out with no sort begun. */
   unstarted: number;
+  /** Settles that gave up waiting for the page to go quiet (`CALM_CAP_MS`). */
+  loud: number;
   capture: number;
 }
 
@@ -477,7 +531,7 @@ async function captureShot(
     reducedMotion: 'reduce',
   });
   const page = await ctx.newPage();
-  const timing: Timing = { recipe: 0, settle: 0, unstarted: 0, capture: 0 };
+  const timing: Timing = { recipe: 0, settle: 0, unstarted: 0, loud: 0, capture: 0 };
   try {
     const h = makeHelpers(page, timing);
     // tsx/esbuild rewrites named functions with a `__name(fn,"name")` helper;
@@ -561,7 +615,8 @@ async function main() {
         // and the theme flips and screenshots after it.
         const parts = timing
           ? ` (recipe ${secs(timing.recipe)}, settle ${secs(timing.settle)}` +
-            `${timing.unstarted ? ` [${secs(timing.unstarted)} no sort]` : ''}, capture ${secs(timing.capture)})`
+            `${timing.unstarted ? ` [${secs(timing.unstarted)} no sort]` : ''}` +
+            `${timing.loud ? ` [never quiet ${timing.loud}x]` : ''}, capture ${secs(timing.capture)})`
           : '';
         console.log(failure ? `FAIL after ${secs(total)}: ${failure}` : `OK ${secs(total)}${parts}`);
         for (const theme of themes) {
