@@ -5,6 +5,13 @@
   gap: var(--space-md);
 }
 
+// Callers break a message into lines with `\n` (question / list / detail;
+// see VtDialogService). `pre-line` honours those breaks while still
+// collapsing the runs of spaces a multi-line template literal carries.
+.dialog-message__text {
+  white-space: pre-line;
+}
+
 // `.form-input` is global; `width: 100%` is already set there.
 // The dialog needs a top margin so the input sits clear of the
 // message above; scoped via `:host`.
