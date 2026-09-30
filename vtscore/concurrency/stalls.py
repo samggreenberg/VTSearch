@@ -591,6 +591,7 @@ def format_thread_stacks(
     *,
     header: str,
     threads: Optional[dict[int, tuple[str, Optional[int], Optional[float]]]] = None,
+    exited: frozenset[int] = frozenset(),
 ) -> str:
     """Render :func:`capture_thread_stacks` in ``faulthandler``'s layout.
 
@@ -601,21 +602,31 @@ def format_thread_stacks(
     the same.  *threads* maps an ``ident`` to ``(name, native tid, CPU ms
     across the gap)``.  Each header carries those three, and the threads
     are ordered by that CPU, most first, so the GIL holder heads the dump.
+
+    *exited* names threads that were alive for the snapshot but gone before
+    their CPU could be read.  They come right after the threads with a
+    figure, not among the idle ones: to exit in that window a thread must
+    have run as the stall ended, and a holder that finishes its work at
+    that moment is the usual way to get there.
     """
     info = threads or {}
 
-    def cpu_of(ident: int) -> float:
+    def order(ident: int) -> tuple[int, float, int]:
         cpu = info.get(ident, ("", None, None))[2]
-        return cpu if cpu is not None else -1.0
+        if cpu is not None:
+            return (0, -cpu, ident)
+        return (1 if ident in exited else 2, 0.0, ident)
 
     lines = [header]
-    for ident in sorted(stacks, key=lambda i: (-cpu_of(i), i)):
+    for ident in sorted(stacks, key=order):
         name, tid, cpu_ms = info.get(ident, ("?", None, None))
         details = [f'"{name}"']
         if tid is not None:
             details.append(f"tid {tid}")
         if cpu_ms is not None:
             details.append(f"{cpu_ms:.0f}ms cpu across the gap")
+        elif ident in exited:
+            details.append("exited before its cpu was read")
         lines.append(f"Thread 0x{ident:016x} [{', '.join(details)}] (most recent call first):")
         stack = stacks[ident]
         for filename, lineno, func in stack[:_MAX_FRAMES]:
@@ -742,14 +753,14 @@ class StallWatchdog:
         late = lag_s >= self.threshold_s
         # Stacks first: the sampler's /proc reads release the GIL, and the
         # thread that held it would run on and leave the frame it stalled in.
-        stacks = self._take_snapshot() if late else None
+        stacks, names = self._take_snapshot() if late else (None, {})
         sample = self._sampler()
         stalled: float | None = None
         if late:
             stalled = lag_s * 1000.0
             self.stalls += 1
             self.worst_lag_ms = max(self.worst_lag_ms, stalled)
-            self._report(self._last_sample, sample, lag_s, now - self._last_beat, stacks)
+            self._report(self._last_sample, sample, lag_s, now - self._last_beat, stacks, names)
         self._last_beat = now
         self._last_sample = sample
         if self._arm is not None:
@@ -758,32 +769,43 @@ class StallWatchdog:
 
     # -- the stacks ----------------------------------------------------------
 
-    def _take_snapshot(self) -> dict[int, list[FrameLine]] | None:
+    def _take_snapshot(
+        self,
+    ) -> tuple[dict[int, list[FrameLine]] | None, dict[int, tuple[str, Optional[int]]]]:
+        """``(stacks, {ident: (name, native tid)})``, the names read at the same moment."""
         if self._snapshot is None:
-            return None
+            return None, {}
         try:
             stacks = self._snapshot()
         except Exception:  # noqa: BLE001 - a failed snapshot must not cost the report
             self._logger.exception("stall watchdog: taking the thread stacks failed")
-            return None
+            return None, {}
+        # Named now, not when written: the holder may finish and exit before
+        # then, and a stack with no name is half an answer.
+        names = {t.ident: (t.name, getattr(t, "native_id", None)) for t in threading.enumerate() if t.ident is not None}
         # The thread taking the snapshot is not the story.
         stacks.pop(threading.get_ident(), None)
-        return stacks
+        return stacks, names
 
     def _write_stacks(
         self,
         stacks: dict[int, list[FrameLine]],
+        names: dict[int, tuple[str, Optional[int]]],
         before: dict[str, Any] | None,
         after: dict[str, Any],
         lag_s: float,
     ) -> None:
         threads: dict[int, tuple[str, Optional[int], Optional[float]]] = {
-            t.ident: (t.name, getattr(t, "native_id", None), None) for t in threading.enumerate() if t.ident is not None
+            ident: (name, tid, None) for ident, (name, tid) in names.items()
         }
         if before is not None:
             for used, tid, name, ident in self._thread_deltas(before, after):
                 if ident:  # 0 is a native thread with no Python stack
                     threads[ident] = (name, tid, used * 1000.0)
+        sampled: dict[int, Any] = after.get("threads") or {}
+        exited = frozenset(
+            ident for ident, (_name, tid) in names.items() if sampled and tid is not None and tid not in sampled
+        )
         text = format_thread_stacks(
             stacks,
             header=(
@@ -791,6 +813,7 @@ class StallWatchdog:
                 "stacks taken as the watchdog woke, most cpu across the gap first):"
             ),
             threads=threads,
+            exited=exited,
         )
         out = self._dump_file if self._dump_file is not None else sys.stderr
         try:
@@ -808,12 +831,13 @@ class StallWatchdog:
         lag_s: float,
         gap_s: float,
         stacks: dict[int, list[FrameLine]] | None = None,
+        names: dict[int, tuple[str, Optional[int]]] | None = None,
     ) -> None:
         # The stacks go out before the report line, as the faulthandler dump
         # they replace did, so a reader (and analyze_app_log.py) finds them
         # immediately above the stall they belong to.
         if stacks is not None:
-            self._write_stacks(stacks, before, after, lag_s)
+            self._write_stacks(stacks, names or {}, before, after, lag_s)
         parts = [f"stall: heartbeat late by {lag_s * 1000.0:.0f}ms"]
         if before is not None:
             wall_ms = max(gap_s, 1e-6) * 1000.0

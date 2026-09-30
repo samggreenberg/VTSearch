@@ -440,13 +440,28 @@ class TestThreadStacks:
         assert lines[2] == '  File "/app/embed.py", line 42 in encode'
         assert lines[3] == '  File "/app/importer.py", line 7 in run'
         headers = [ln for ln in lines if ln.startswith("Thread 0x")]
-        assert [h[:26] for h in headers] == [
+        assert [h[:25] for h in headers] == [
             "Thread 0x0000000000001002",
             "Thread 0x0000000000001001",
             "Thread 0x0000000000001003",
         ]
         assert 'Thread 0x0000000000001003 ["?"] (most recent call first):' in lines
         assert '  File "/app/unknown.py", line ? in mystery' in lines
+
+    def test_format_puts_an_exited_thread_after_the_measured_ones(self):
+        """A thread gone before its CPU was read ran as the stall ended - the
+        holder finishing its work is the usual way - so it is not filed with
+        the idle threads."""
+        stacks = {1: [("/a.py", 1, "idle")], 2: [("/b.py", 2, "busy")], 3: [("/c.py", 3, "finished")]}
+        text = format_thread_stacks(
+            stacks,
+            header="h",
+            threads={1: ("idle", 11, None), 2: ("busy", 12, 30.0), 3: ("importer", 13, None)},
+            exited=frozenset({3}),
+        )
+        headers = [ln for ln in text.splitlines() if ln.startswith("Thread 0x")]
+        assert [h.split('"')[1] for h in headers] == ["busy", "importer", "idle"]
+        assert '["importer", tid 13, exited before its cpu was read]' in headers[1]
 
     def test_format_marks_a_cut_stack(self):
         deep = [("/app/r.py", i, "recurse") for i in range(stalls._MAX_FRAMES + 1)]
@@ -606,6 +621,37 @@ class TestStallWatchdog:
         assert wd.last_report is not None
         assert "thread stacks at wake -> /logs/app.log" in wd.last_report
         assert "live thread dump" not in wd.last_report
+
+    def test_names_threads_as_the_snapshot_is_taken(self):
+        """A thread alive for the snapshot but gone from the sample after it
+        keeps its name and is marked exited, not left as ``"?"``."""
+        entered = threading.Event()
+        release = threading.Event()
+
+        def importer_body():
+            entered.set()
+            release.wait(10)
+
+        t = threading.Thread(target=importer_body, name="fixture-import")
+        t.start()
+        try:
+            assert entered.wait(10)
+            assert t.ident is not None
+            samples = iter([_sample({1: 1.0}, proc_cpu=1.0), _sample({1: 1.0}, proc_cpu=2.0)])
+            dump = io.StringIO()
+            wd = StallWatchdog(
+                1000,
+                snapshot=lambda: {t.ident: [("/app/importer.py", 9, "encode")]},
+                dump_file=dump,
+                sampler=lambda: next(samples),
+                logger=logging.getLogger(LOGGER),
+            )
+            wd._prime()
+            wd.beat(now=_beat_base(wd) + wd.interval_s + 2.0)
+        finally:
+            release.set()
+            t.join(10)
+        assert f'["fixture-import", tid {t.native_id}, exited before its cpu was read]' in dump.getvalue()
 
     def test_a_failed_snapshot_still_reports(self, caplog):
         samples = iter([_sample({1: 1.0}, proc_cpu=1.0), _sample({1: 3.0}, proc_cpu=3.0)])
