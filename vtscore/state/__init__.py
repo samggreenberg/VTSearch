@@ -275,10 +275,10 @@ def get_min_precision() -> float | None:
     """The active detector's precision floor, or ``None`` when no floor is set.
 
     Seeded from the user's setting (``CoreConfig.min_precision``) the first
-    time it is read for a detector.  A float in ``(0, 1]`` means the cut
-    returns as much as it can while at least that fraction of it is right, and
-    falls back to the Inclusion 0 cut when it can promise nothing (#4245).
-    ``None`` means no floor: the line is the Inclusion 0 cut, with no promise
+    time it is read for a detector.  A float in ``(0, 1]`` is the fraction of
+    what the cut returns that should be right (#4245): the line keeps the
+    floor's starting candidate until a spot check measures it, then the set the
+    check ended on (#4272).  ``None`` means no floor: the line is the Inclusion 0 cut, with no promise
     attempted.  The app always sets a floor; ``None`` survives for library
     callers (#4269).
     """

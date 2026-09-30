@@ -369,16 +369,18 @@ MIRRORS: list[Mirror] = [
             "What a cost is priced at is shared too (issue #4243): both sides price at "
             "`cost_trend.SMART_INCLUSION` and score each model at `cost_trend.smart_cut` of "
             "its reporting line, not at the arm's or the user's inclusion - and the line's "
-            "own inclusion is the operating point's (none when a promised precision floor "
-            "drew it, #4245), so both sides hand smart_cut the reporting line's inclusion "
+            "own inclusion is the operating point's (none when a precision floor kept a "
+            "set, #4272), so both sides hand smart_cut the reporting line's inclusion "
             "rather than the knob's. Only the re-cut "
             "each side hands `smart_cut` differs. The app passes `recut_detector_threshold`, "
             "which falls back to the conformal rule over the fold orderings when there is no "
             "fold-anchored fit; the harness passes its step's fold-anchored fit or nothing "
             "(`voting_iterations._no_recut`), keeping the reporting line. That matters only "
-            "on an arm reporting at another inclusion with no fold-anchored fit. The default "
-            "arm reports at `SMART_INCLUSION`, so `smart_cut` returns its reporting line "
-            "exactly and never re-cuts."
+            "on a step whose folds split but yielded no fold-anchored fit, served at an "
+            "inclusion other than `SMART_INCLUSION` or at none. Since #4272 the default arm's "
+            "floor serves every kept set at no inclusion, so `smart_cut` re-cuts on every "
+            "default-arm step and the difference reaches the default arm, though only on such "
+            "a step: a fold-anchored fit fails only when no fold yields a mixture."
         ),
     ),
     Mirror(

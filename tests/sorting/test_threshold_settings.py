@@ -176,7 +176,8 @@ class TestTrainingSettingsInvalidateLoadedDetector:
     def test_set_min_precision_rethresholds_from_fold_cache(self):
         """With cached fold orderings and no estimator, a floor change re-derives
         the threshold (cheap quantile rule over the cache) without touching the
-        model.  The floor has no evidence, so the line is the Inclusion 0 cut."""
+        model.  There is no ranking for the floor to keep a set of, so the line
+        is the Inclusion 0 cut."""
         from vtsearch.state import set_min_precision
         from vtscore.training.thresholds import CalibrationFolds, threshold_from_fold_orderings
 

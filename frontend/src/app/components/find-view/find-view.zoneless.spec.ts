@@ -626,18 +626,18 @@ describe('FindViewComponent ↓ then ↑ (#4306)', () => {
 });
 
 /**
- * #4247: when the precision floor promises nothing, find-label still returns a
- * cut - the default one (Inclusion 0) - with the floor's verdict beside it. Every
- * consumer of the cut keeps working on it: the boundary walk, the queue-empty
- * state, and the positive sets behind Browse / To Dataset / Export. Only the
- * line's label changes.
+ * #4247, #4272: find-label returns the line of the set the precision floor
+ * keeps, with the floor's state beside it (unchecked, confirmed or short).
+ * Every consumer of the cut works on it the same in every state: the boundary
+ * walk, the queue-empty state, and the positive sets behind Browse / To
+ * Dataset / Export. Only the line's tooltip changes.
  */
-describe('FindViewComponent with no precision promise (#4247)', () => {
+describe('FindViewComponent in every precision-floor state (#4247, #4272)', () => {
   let fixture: ComponentFixture<FindViewComponent>;
   let httpMock: HttpTestingController;
   let sortState: SortStateService;
 
-  // Descending by score; the fallback cut at 0.5 sits between ids 2 and 3.
+  // Descending by score; the line at 0.5 sits between ids 2 and 3.
   const ranking = [
     { id: 1, score: 0.9 },
     { id: 2, score: 0.6 },

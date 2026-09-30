@@ -384,7 +384,7 @@ def find_label(body: dict):
             "ok": True,
             "results": results,
             "threshold": round(threshold, 4),
-            # Whether the line is a promise, or the unpromised Inclusion 0 cut (#4247).
+            # What the floor says about the line: unchecked, confirmed or short (#4272).
             "floor": detector_floor_state(det_ctx, get_min_precision()),
             "good_count": good_count,
             "bad_count": bad_count,

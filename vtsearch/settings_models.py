@@ -396,8 +396,9 @@ class UserSettings(BaseModel):
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
     # The precision floor (#4245): the fraction of what a detector's cut
     # returns that should be right.  Each detector keeps its own, seeded from
-    # this value the first time it reads one.  One that can promise nothing
-    # falls back to the Inclusion 0 cut.  Every detector has a floor (#4269):
+    # this value the first time it reads one.  Under it the line keeps a set:
+    # the floor's unchecked starting candidate, then whatever set a spot check
+    # ended on (#4272).  Every detector has a floor (#4269):
     # ``None`` is not a value, so a ``null`` left in an older settings file
     # fails validation and reads as the default.  Clamped to ``[0.01, 1]``: a
     # floor of zero promises nothing and would read as a floor that is always

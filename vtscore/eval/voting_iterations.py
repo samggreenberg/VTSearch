@@ -98,6 +98,7 @@ from vtscore.training.thresholds import (
     apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
+    NO_PRECISION_FLOOR,
     acquisition_inclusion,
     calculate_safe_threshold,
     line_inclusion,
@@ -280,12 +281,13 @@ def _no_recut(_inclusion: float) -> None:
     """The re-cut of a step with no fold-anchored fit: there is none to re-derive.
 
     Handed to :func:`~vtscore.detectors.cost_trend.smart_cut`, which then keeps
-    the step's reporting line: the schedule blend, a retired rung's cut, or the
-    conformal cut of an arm with safe thresholds off.  Only an arm reporting at
-    an inclusion other than :data:`~vtscore.detectors.cost_trend.SMART_INCLUSION`
-    ever asks, and for the conformal case the app's seam
-    (``recut_detector_threshold``) would re-cut the fold orderings instead - a
-    difference ``progress.smart_status`` declares, off the default arm.
+    the step's reporting line: the floor's kept set, the schedule blend, a
+    retired rung's cut, or the conformal cut of an arm with safe thresholds off.
+    Any line no inclusion drew asks, and on the default arm that is every line
+    the floor keeps (#4272).  Where the step's folds split but none yielded a
+    fold-anchored fit, the app's seam (``recut_detector_threshold``) would
+    re-cut the fold orderings instead - a difference ``progress.smart_status``
+    declares, which reaches the default arm only on such a step.
     """
     return None
 
@@ -1779,6 +1781,23 @@ def _resolve_production_defaults(
     return blend_schedule, calibration_fraction
 
 
+def _check_inclusion_arm(inclusion: float, floor: float | None) -> None:
+    """Refuse a non-zero *inclusion* under a precision floor (#4361).
+
+    A set floor wins over the knob: the line is the set the floor keeps, so
+    *inclusion* would only re-weight the ``cost`` column and never move the
+    line - an arm that looks swept and measures one line.  Only the Inclusion
+    arm (``min_precision="off"``) draws its line at *inclusion*.
+    """
+    if floor is None or inclusion == 0:
+        return
+    raise ValueError(
+        f"inclusion={inclusion!r} draws the line only on the Inclusion arm "
+        f"(min_precision={NO_PRECISION_FLOOR!r}); under a precision floor ({floor:g}) it would only "
+        f"re-weight cost. Pass min_precision={NO_PRECISION_FLOOR!r} to sweep it."
+    )
+
+
 def simulate_voting_iterations(  # noqa: C901
     clips_dict: dict[int, dict[str, Any]],
     target_category: str,
@@ -1849,7 +1868,9 @@ def simulate_voting_iterations(  # noqa: C901
         target_category: Category treated as the positive class.
         seed: Random seed for splitting and vote ordering.
         dataset_name: Label included in result rows.
-        inclusion: Inclusion setting in ``[-10, 10]``.
+        inclusion: The Inclusion arm's line, in ``[-10, 10]``.  A set floor
+            wins over it, so a non-zero value needs ``min_precision="off"``
+            and is refused under a floor (#4361).
         trainer: Which **pipeline** runs at each step.  ``"app"``
             (:data:`APP_TRAINER`, the default) is VTSearch's own — the app's
             ``train_model`` fit plus production fold calibration — and *which
@@ -2275,6 +2296,7 @@ def simulate_voting_iterations(  # noqa: C901
     # does (#4245); ``"off"`` is the Inclusion arm.  Resolved - and so
     # validated - before anything expensive runs.
     floor = resolve_min_precision(min_precision)
+    _check_inclusion_arm(inclusion, floor)
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -2912,7 +2934,7 @@ def simulate_voting_iterations(  # noqa: C901
             # (issue #4243).  A step with no fitted cut to re-derive keeps its
             # reporting line, which is then inclusion-blind.
             # The line was served at the operating point's inclusion - none at
-            # all when a precision floor promised its own cut (#4245).
+            # all when a precision floor kept a set (#4272).
             _line = details.get("reporting_line")
             _served = _line.inclusion if _line is not None else inclusion
             recent_steps.append(
@@ -3325,9 +3347,10 @@ def run_voting_iterations_eval(
             categories.  If ``None`` or a dataset is missing from the dict,
             all unique categories in that dataset are used.
         inclusion: The Inclusion arm's line, in ``[-10, 10]``.  It draws the
-            line only on the Inclusion arm (``min_precision="off"``): a set
-            floor wins.  The app has no such setting (#4269); the default 0 is
-            the cut its unpromised line falls back to.
+            line only on the Inclusion arm (``min_precision="off"``), and a
+            non-zero value under a floor is refused (#4361): a set floor wins,
+            so it would only re-weight ``cost``.  The app has no such setting
+            (#4269); 0 is the cut it draws with no floor.
         sim_fraction: Fraction of medias reserved for simulated voting.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -3389,6 +3412,8 @@ def run_voting_iterations_eval(
     """
     import pandas as pd  # noqa: PLC0415
 
+    # Refused here as well as per cell, so a misconfigured grid fails before its first cell runs.
+    _check_inclusion_arm(inclusion, resolve_min_precision(min_precision))
     strategy_list = strategies if strategies is not None else ["autopilot"]
     trainer_list = trainers if trainers is not None else [APP_TRAINER]
     arm_list = prevalence_arms if prevalence_arms is not None else [None]
@@ -3471,7 +3496,8 @@ def run_voting_iterations_eval_from_pickles(
         dataset_paths: Mapping of dataset name to pickle file path.
         seeds: List of random seeds.
         categories: Optional category filter (see :func:`run_voting_iterations_eval`).
-        inclusion: Inclusion setting in ``[-10, 10]``.
+        inclusion: The Inclusion arm's line, in ``[-10, 10]``; a non-zero value
+            needs ``min_precision="off"`` (see :func:`run_voting_iterations_eval`).
         sim_fraction: Fraction of medias for simulation.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -3502,6 +3528,7 @@ def run_voting_iterations_eval_from_pickles(
     """
     from vtscore.datasets.loader import load_dataset_from_pickle
 
+    _check_inclusion_arm(inclusion, resolve_min_precision(min_precision))
     dataset_clips: dict[str, dict[int, dict[str, Any]]] = {}
     for name, path in dataset_paths.items():
         medias: dict[int, dict[str, Any]] = {}

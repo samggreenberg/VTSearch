@@ -133,7 +133,7 @@ class TestOnlyTrainedModelsArePlotted:
         good, bad = _votes(10)
         lp.clear_progress_cache()
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         assert series == []
         with lp._progress_lock:
@@ -150,7 +150,7 @@ class TestOnlyTrainedModelsArePlotted:
         lp.clear_progress_cache()
         _inject_at(clips, history, sorted_at)
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         assert {e["time_index"] for e in series} == sorted_at
 
@@ -161,7 +161,7 @@ class TestOnlyTrainedModelsArePlotted:
         lp.clear_progress_cache()
         _inject_at(clips, history, {2, 7})
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         assert [(e["time_index"], e["num_labels"]) for e in series] == [(2, 3), (7, 8)]
 
@@ -184,7 +184,7 @@ class TestScoredWhereItIsServed:
         # sigmoid(~0) for anything else.
         _inject_at(clips, history, {7}, threshold=0.9)
 
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        series = lp.calculate_error_cost_over_time(clips, history, good, bad)
 
         assert len(series) == 1
         assert (series[0]["fpr"], series[0]["fnr"]) == (0.0, 0.0)
@@ -203,7 +203,7 @@ class TestScoredWhereItIsServed:
         lp.clear_progress_cache()
         _inject_at(clips, history, {3}, threshold=0.9)
 
-        lp.calculate_prediction_stability_over_time(clips, history, 0)
+        lp.calculate_prediction_stability_over_time(clips, history)
 
         with lp._progress_lock:
             snapshot = lp._active_cache().prev_snapshot
@@ -229,7 +229,7 @@ class TestStabilityPool:
         lp.clear_progress_cache()
         _inject_at(clips, history, {3, 4, 5})
 
-        stability = lp.calculate_prediction_stability_over_time(clips, history, 0)
+        stability = lp.calculate_prediction_stability_over_time(clips, history)
 
         assert stability
         for entry in stability:
@@ -251,7 +251,7 @@ class TestStabilityPool:
         lp.clear_progress_cache()
         _inject_at(clips, history, {1, 5})
 
-        stability = lp.calculate_prediction_stability_over_time(clips, history, 0)
+        stability = lp.calculate_prediction_stability_over_time(clips, history)
 
         assert [e["time_index"] for e in stability] == [5]
         assert stability[0]["num_unlabeled"] == len(clips) - stability[0]["num_labels"]

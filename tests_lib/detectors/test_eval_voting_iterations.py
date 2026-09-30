@@ -365,14 +365,28 @@ class TestSimulateVotingIterations:
         assert isinstance(rows, list)
 
     def test_inclusion_affects_cost(self):
-        """With overlapping data, different inclusion values produce different costs."""
+        """On the Inclusion arm, different inclusion values produce different costs."""
         medias = _make_overlapping_clips(n_per_cat=20)
-        rows_inc0 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0)
-        rows_inc5 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=5)
+        rows_inc0 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0, min_precision="off")
+        rows_inc5 = simulate_voting_iterations(medias, "alpha", seed=42, inclusion=5, min_precision="off")
         # Same splits but different inclusion -> costs should differ
         costs0 = [r["cost"] for r in rows_inc0]
         costs5 = [r["cost"] for r in rows_inc5]
         assert costs0 != costs5
+
+    @pytest.mark.parametrize("min_precision", [None, 0.25])
+    def test_nonzero_inclusion_is_refused_under_a_floor(self, min_precision):
+        """A set floor wins over the knob, so a non-zero inclusion would only re-weight cost (#4361)."""
+        medias = _make_separable_clips(n_per_cat=6)
+        with pytest.raises(ValueError, match="Inclusion arm"):
+            simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, min_precision=min_precision)
+
+    def test_zero_inclusion_under_a_floor_and_any_on_the_inclusion_arm_run(self):
+        medias = _make_separable_clips(n_per_cat=6)
+        assert simulate_voting_iterations(medias, "alpha", seed=42, inclusion=0, calibrate_count=1, max_steps=4)
+        assert simulate_voting_iterations(
+            medias, "alpha", seed=42, inclusion=-3, calibrate_count=1, max_steps=4, min_precision="off"
+        )
 
     def test_elapsed_seconds_non_negative_and_increasing(self):
         """elapsed_seconds should be non-negative and non-decreasing over rows."""
@@ -508,6 +522,17 @@ class TestRunVotingIterationsEval:
 
         assert isinstance(df, pd.DataFrame)
         assert list(df.columns) == list(VOTING_COLUMNS)
+
+    def test_nonzero_inclusion_under_a_floor_is_refused_before_any_cell(self, monkeypatch):
+        """The grid refuses the inert knob up front, not on its first cell (#4361)."""
+        import vtscore.eval.voting_iterations as vi
+
+        def _no_cell(*_args, **_kwargs):
+            raise AssertionError("a cell ran")
+
+        monkeypatch.setattr(vi, "simulate_voting_iterations", _no_cell)
+        with pytest.raises(ValueError, match="Inclusion arm"):
+            run_voting_iterations_eval({"ds1": _make_separable_clips(n_per_cat=6)}, seeds=[42], inclusion=2)
 
     def test_multiple_seeds(self):
         medias = _make_separable_clips(n_per_cat=6)

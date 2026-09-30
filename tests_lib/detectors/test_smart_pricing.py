@@ -88,7 +88,7 @@ class TestProgressCacheScoresAtTheSmartCut:
 
     N_VOTES = 8
 
-    def _series(self, inclusion_value: int, threshold: float, smart_threshold: float | None = None):
+    def _series(self, threshold: float, smart_threshold: float | None = None, **inclusion: int):
         """The Smart series after a sort per vote, each model served at *threshold*."""
         pytest.importorskip("torch")
         clips = _clips(40)
@@ -101,8 +101,8 @@ class TestProgressCacheScoresAtTheSmartCut:
             if good and bad:
                 kwargs = {} if smart_threshold is None else {"smart_threshold": smart_threshold}
                 lp.inject_live_model(dict(good), dict(bad), _linear_model(), threshold, **kwargs)
-        series = lp.calculate_error_cost_over_time(clips, history, good, bad, inclusion_value)
-        cached, complete = lp.cached_indicator_history("smart", clips, history, good, bad, inclusion_value)
+        series = lp.calculate_error_cost_over_time(clips, history, good, bad, **inclusion)
+        cached, complete = lp.cached_indicator_history("smart", clips, history, good, bad, **inclusion)
         assert complete
         assert cached == series
         assert series
@@ -111,17 +111,20 @@ class TestProgressCacheScoresAtTheSmartCut:
     def test_scored_at_the_smart_cut_not_the_served_line(self):
         # Served where nothing clears it, re-cut where everything does: every
         # negative is a false alarm and nothing is missed.
-        for entry in self._series(0, NO_GOOD_THRESHOLD, smart_threshold=0.0):
+        for entry in self._series(NO_GOOD_THRESHOLD, smart_threshold=0.0):
             assert (entry["fpr"], entry["fnr"]) == (1.0, 0.0)
             assert entry["error_cost"] == 1.0
 
     def test_the_smart_cut_defaults_to_the_served_line(self):
-        for entry in self._series(0, NO_GOOD_THRESHOLD):
+        for entry in self._series(NO_GOOD_THRESHOLD):
             assert (entry["fpr"], entry["fnr"]) == (0.0, 1.0)
 
-    def test_priced_at_the_smart_inclusion_whatever_the_users_inclusion(self):
+    def test_priced_at_the_smart_inclusion_whatever_inclusion_is_passed(self):
         # Inclusion 4 would price this all-miss model at 16; Smart prices it at 1.
-        for entry in self._series(4, NO_GOOD_THRESHOLD):
+        # The argument is deprecated and ignored (#4361), so it says so.
+        with pytest.warns(DeprecationWarning, match="inclusion_value"):
+            series = self._series(NO_GOOD_THRESHOLD, inclusion_value=4)
+        for entry in series:
             assert entry["fnr"] == 1.0
             assert entry["error_cost"] == 1.0
 

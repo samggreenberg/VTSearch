@@ -288,13 +288,13 @@ class TestProgressCacheWithLabelChanges:
         """After un-voting, the progress cache should not include the media."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert 1 in _prog_cache().good_ids
         assert 2 in _prog_cache().bad_ids
 
         # Un-vote media 1
         client.post("/api/medias/1/vote", json={"target": "none"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert 1 not in _prog_cache().good_ids
         assert 1 not in _prog_cache().bad_ids
         assert 2 in _prog_cache().bad_ids
@@ -303,12 +303,12 @@ class TestProgressCacheWithLabelChanges:
         """Switching good->bad should update cache running sets correctly."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert 1 in _prog_cache().good_ids
 
         # Switch media 1 from good to bad
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert 1 not in _prog_cache().good_ids
         assert 1 in _prog_cache().bad_ids
 
@@ -320,7 +320,7 @@ class TestProgressCacheWithLabelChanges:
         client.post("/api/medias/1/vote", json={"target": "none"})
         # Revote as bad
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert 1 in _prog_cache().bad_ids
         assert 1 not in _prog_cache().good_ids
 
@@ -383,7 +383,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 4
 
         # Switch media 1 from good to bad; steps 0-1 preserved, 2-3 discarded
@@ -396,7 +396,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "bad"})
         client.post("/api/medias/2/vote", json={"target": "good"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 4
 
         # Switch media 1 from bad to good; steps 0-1 preserved, 2-3 discarded
@@ -407,7 +407,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         """If the switched media was in the very first step, full clear occurs."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 2
 
         # Switch media 1 (present from step 0); full clear
@@ -424,7 +424,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/3/vote", json={"target": "good"})
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 3
 
         # Un-vote media 1 (first appears at step 2); keep 2 earlier steps.
@@ -435,7 +435,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         """If the un-voted media was in step 0, the full cache is cleared."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 2
 
         client.post("/api/medias/1/vote", json={"target": "none"})
@@ -445,7 +445,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         """Adding a brand-new vote (no prior label) should NOT clear the cache."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 2
 
         # Add a new good vote on media 3 (no prior label)
@@ -470,7 +470,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
 
         # Switch media 1; truncates to 2 steps (steps 0-1)
         client.post("/api/medias/1/vote", json={"target": "bad"})
@@ -487,7 +487,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         client.post("/api/medias/4/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 4
 
         # Switch media 1 from good to bad; truncates to 2 steps
@@ -495,7 +495,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         assert len(_prog_cache().steps) == 2
 
         # Rebuild cache; should replay from step 2 onward
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == len(label_history)
         # After replay, media 1 should be in bad_ids (final state)
         assert 1 in _prog_cache().bad_ids
@@ -521,7 +521,7 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         """invalidate_progress_cache_from should be a no-op for unknown media."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         assert len(_prog_cache().steps) == 2
 
         # Invalidate a media that never appeared in the cache
@@ -552,7 +552,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert ctx_atlas is not None
 
         self._vote(client, [(1, "good"), (2, "bad")])
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
 
         prog_atlas = _prog_cache().coverage_atlas
         assert prog_atlas is not None
@@ -570,7 +570,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         build_coverage_atlas()
         # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad); media 1 at step 2.
         self._vote(client, [(3, "good"), (4, "bad"), (1, "good"), (2, "bad")])
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         atlas_before = _prog_cache().coverage_atlas
         assert atlas_before is not None
         assert atlas_before.labeled_ids == {1, 2, 3, 4}
@@ -585,7 +585,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
     def test_step0_invalidate_preserves_atlas_identity(self, client):
         build_coverage_atlas()
         self._vote(client, [(1, "good"), (2, "bad")])
-        _ensure_cache(medias, label_history, 0)
+        _ensure_cache(medias, label_history)
         atlas_before = _prog_cache().coverage_atlas
         assert atlas_before is not None
 
@@ -914,7 +914,7 @@ class TestStabilitySkipsUnchangedModel:
         # unchanged-labelset rule and not the no-detector one.
         _inject_for_history(clips, history)
 
-        _advance_cache(clips, history, 0)
+        _advance_cache(clips, history)
 
         assert len(_prog_cache().steps) == 3
         assert _prog_cache().steps[1]["model"] is not None
@@ -940,7 +940,7 @@ class TestStabilitySkipsUnchangedModel:
         ]
         _inject_for_history(clips, history)
 
-        _advance_cache(clips, history, 0)
+        _advance_cache(clips, history)
 
         assert len(_prog_cache().steps) == 5
         # Step 0: only good votes, no model → stability None
@@ -973,7 +973,7 @@ class TestStabilitySkipsUnchangedModel:
         # Only the sort at step 1 kept up; steps 2 and 3 were coalesced away.
         _inject_for_history(clips, history, steps={1})
 
-        _advance_cache(clips, history, 0)
+        _advance_cache(clips, history)
 
         assert _prog_cache().steps[1]["model"] is not None
         for i in (2, 3):
@@ -1019,7 +1019,7 @@ class TestLiveModelReuse:
             (2, "good", 3.0),
         ]
 
-        _ensure_cache(clips, history, inclusion_value=0)
+        _ensure_cache(clips, history)
 
         # Step 2 should have used the injected model (same label set)
         step = _prog_cache().steps[2]
@@ -1063,7 +1063,7 @@ class TestLiveModelReuse:
             (1, "bad", 2.0),
         ]
 
-        _advance_cache(clips, history, 0)
+        _advance_cache(clips, history)
 
         # Step 1 should NOT use the injected model (different label set)
         step = _prog_cache().steps[1]
@@ -1150,7 +1150,7 @@ class TestLiveModelReuse:
         _inject_for_history(clips, history, steps={3})
         inject_live_model(good, bad, live_model, 0.55)
 
-        _advance_cache(clips, history, 0)
+        _advance_cache(clips, history)
 
         # Step 4 should use the live model
         step4 = _prog_cache().steps[4]

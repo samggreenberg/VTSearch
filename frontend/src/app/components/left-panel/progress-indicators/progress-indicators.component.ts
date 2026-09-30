@@ -70,14 +70,6 @@ export class ProgressIndicatorsComponent {
     return this.labelingStatus()?.span.status || '';
   }
 
-  get smartSubtext(): string {
-    const status = this.labelingStatus();
-    if (!status?.smart) return '';
-    const s = status.smart;
-    if (s['cost'] != null) return `Cost: ${(s['cost'] as number).toFixed(3)}`;
-    return '';
-  }
-
   get stableSubtext(): string {
     const status = this.labelingStatus();
     if (!status?.stable) return '';
@@ -112,7 +104,7 @@ export class ProgressIndicatorsComponent {
     const drift = this.smartDriftWithinNoise
       ? ' The cost still drifts down, but by less than it bounces around between retrains, so the drift is noise rather than progress.'
       : '';
-    return this.smartSubtext ? `${meaning}${drift} ${this.smartSubtext}.` : `${meaning}${drift}`;
+    return `${meaning}${drift}`;
   }
 
   get stableTooltip(): string {
