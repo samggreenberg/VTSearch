@@ -78,6 +78,7 @@ def start_precision_check():
     A check already running is replaced.  The last finished result stays in
     force until this check ends.
     """
+    from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
     from vtscore.training.thresholds import SpotCheck, check_schedule  # noqa: PLC0415
     from vtsearch.state import get_min_precision  # noqa: PLC0415
@@ -95,7 +96,9 @@ def start_precision_check():
     last = det_ctx.precision_check
     if last is not None and last.candidate_ids == candidate:
         abort(409, message="This candidate was already checked; vote on something first, or re-sort.")
-    det_ctx.precision_check_run = SpotCheck.start(candidate, floor)
+    # Unseeded unless VTSEARCH_SPOT_CHECK_SEED is set, which only the
+    # screenshot harness does, so a refresh frames the same picks (#4330).
+    det_ctx.precision_check_run = SpotCheck.start(candidate, floor, seed=SPOT_CHECK_SEED)
     return _payload()
 
 

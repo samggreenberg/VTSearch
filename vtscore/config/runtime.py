@@ -207,3 +207,15 @@ PROJECTION_COMPACT_DEFAULT = False
 _seed = os.environ.get("VTSEARCH_PROJECTION_SEED", "").strip()
 PROJECTION_SEED: int | None = int(_seed) if _seed else None
 del _seed
+
+# Seed for the precision floor's spot check (#4330): the generator its picks
+# are drawn from (``vtscore.training.thresholds.SpotCheck.start(seed=...)``).
+# Unset (``None``, the default) is the shipped behaviour: every check draws
+# fresh uniform picks, which is what makes its bound honest.  Set
+# ``VTSEARCH_SPOT_CHECK_SEED`` to an integer and a check over the same
+# candidate deals the same picks every time.  The user-docs screenshot harness
+# (``scripts/screenshots/refresh.sh``) sets it so the ``floor-check`` shot
+# frames the same pick on every refresh.
+_seed = os.environ.get("VTSEARCH_SPOT_CHECK_SEED", "").strip()
+SPOT_CHECK_SEED: int | None = int(_seed) if _seed else None
+del _seed

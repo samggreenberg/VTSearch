@@ -237,3 +237,32 @@ class TestSeveralRounds:
         check = _start(client)["check"]
         assert (check["candidate"], check["rounds"], check["picks_per_round"]) == expected
         assert len(check["picks"]) == expected[2]
+
+
+class TestSeed:
+    """``VTSEARCH_SPOT_CHECK_SEED`` reaches the draw, so the screenshot harness frames one pick (#4330)."""
+
+    def test_the_draw_is_unseeded_by_default(self, client, monkeypatch):
+        seeds = []
+        start = SpotCheck.start.__func__
+
+        def spy(cls, *args, **kwargs):
+            seeds.append(kwargs.get("seed"))
+            return start(cls, *args, **kwargs)
+
+        monkeypatch.setattr(SpotCheck, "start", classmethod(spy))
+        _run_find(client)
+        _start(client)
+        assert seeds == [None]
+
+    def test_a_seed_deals_the_same_picks_on_every_start(self, client, monkeypatch):
+        # ``SPOT_CHECK_SEED`` is read from the environment at import time; the
+        # route reads the name off ``vtscore.config`` on each start.
+        monkeypatch.setattr("vtscore.config.SPOT_CHECK_SEED", 7)
+        _run_find(client)
+        ranking = _plant_big_ranking()
+        set_min_precision(0.5)
+        first = _start(client)["check"]["picks"]
+        client.post("/api/precision-check/cancel", json={})
+        assert _start(client)["check"]["picks"] == first
+        assert first == list(SpotCheck.start(ranking.candidate(32), 0.5, seed=7).pending)
