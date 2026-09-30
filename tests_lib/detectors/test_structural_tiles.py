@@ -113,3 +113,26 @@ class TestCachedProjection:
             atol=1e-4,
         )
         assert isinstance(fit_projection(sample, 4), Projection)
+
+
+class TestVectorisedTiles:
+    """``raw_tiles`` is the load-time path; ``tile_rows`` + ``aggregate_vlad`` is the measured one."""
+
+    def _features(self, n: int, seed: int) -> StructuralFeatures:
+        rng = np.random.default_rng(seed)
+        kp = np.zeros((n, 4), dtype=np.float32)
+        kp[:, :2] = rng.random((n, 2))
+        desc = (rng.random((n, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+        return StructuralFeatures(keypoints=kp, descriptors=desc).compact()
+
+    @pytest.mark.parametrize("n", [3000, 400, 5])
+    def test_equals_the_reference_aggregation(self, n):
+        from vtscore.media.structural import aggregate_vlad, load_vlad_codebook
+        from vtscore.media.structural_tiles import raw_tiles, tile_rows
+
+        feats = self._features(n, seed=n)
+        fast, fast_boxes = raw_tiles(feats)
+        ref, ref_boxes = tile_rows(feats.keypoints_f32(), feats.descriptors_f32(), load_vlad_codebook(), aggregate_vlad)
+        assert fast.shape == ref.shape
+        assert np.allclose(fast_boxes, ref_boxes)
+        assert np.allclose(fast, ref, atol=1e-5)

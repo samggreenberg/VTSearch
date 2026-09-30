@@ -102,8 +102,52 @@ def tile_rows(
 
 
 def raw_tiles(features: StructuralFeatures) -> tuple[np.ndarray, np.ndarray]:
-    """A page's unprojected 8,192-d tile VLADs and their boxes, from its stored features."""
-    return tile_rows(features.keypoints_f32(), features.descriptors_f32(), load_vlad_codebook(), aggregate_vlad)
+    """A page's unprojected 8,192-d tile VLADs and their boxes, from its stored features.
+
+    Equal to :func:`tile_rows` with :func:`~vtscore.media.structural.aggregate_vlad`
+    (a test pins it), but vectorised so it is cheap enough to run at load time.
+    ``tile_rows`` re-assigns every tile's descriptors to the codebook, so a
+    keypoint in four overlapping tiles is assigned four times. That costs ~100 ms
+    a page, over an hour at 50,000 pages. Here each descriptor is assigned once,
+    and each codeword's residuals are summed into every tile with one
+    membership matmul.
+    """
+    from vtscore.media.structural import rootsift  # noqa: PLC0415
+
+    kp = features.keypoints_f32()
+    desc = features.descriptors_f32()
+    codebook = load_vlad_codebook()
+    k, d = codebook.shape
+    if kp.shape[0] == 0 or desc.size == 0:
+        return (
+            np.zeros((1, k * d), dtype=np.float32),
+            np.asarray([(0.0, 0.0, 1.0, 1.0)], dtype=np.float32),
+        )
+    x, y = kp[:, 0], kp[:, 1]
+    windows = tile_windows()
+    member = np.stack([(x >= x0) & (x < x1) & (y >= y0) & (y < y1) for x0, y0, x1, y1 in windows])
+    keep = member.sum(axis=1) >= MIN_TILE_KP
+    if keep.any():
+        member = member[keep]
+        boxes = np.asarray([w for w, kept in zip(windows, keep) if kept], dtype=np.float32)
+    else:
+        # As tile_rows: a page too sparse to tile gets one row over every keypoint.
+        member = np.ones((1, kp.shape[0]), dtype=bool)
+        boxes = np.asarray([(0.0, 0.0, 1.0, 1.0)], dtype=np.float32)
+
+    desc_r = rootsift(desc)
+    cb_r = rootsift(np.asarray(codebook, dtype=np.float32))
+    assign = np.argmin((cb_r**2).sum(axis=1)[None, :] - 2.0 * (desc_r @ cb_r.T), axis=1)
+    weights = member.astype(np.float32)
+    vlad = np.zeros((member.shape[0], k, d), dtype=np.float32)
+    for j in range(k):
+        idx = np.flatnonzero(assign == j)
+        if idx.size:
+            vlad[:, j, :] = weights[:, idx] @ (desc_r[idx] - cb_r[j])
+    vlad = np.sign(vlad) * np.sqrt(np.abs(vlad))
+    flat = vlad.reshape(vlad.shape[0], -1)
+    norm = np.linalg.norm(flat, axis=1, keepdims=True)
+    return (flat / np.where(norm > 0, norm, 1.0)).astype(np.float32), boxes
 
 
 def box_vlad(features: StructuralFeatures, box: tuple[float, float, float, float]) -> Optional[np.ndarray]:
