@@ -24,7 +24,8 @@
 # unseeded UMAP fit lays the map out differently every time (#4296).
 #
 # An app you started yourself is used as it is, with its own data and settings,
-# so the shots it gives are not the committed ones.
+# so the shots it gives are not the committed ones. It must run this checkout's
+# commit, though: one from any other commit is refused, and named (#4324).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -44,7 +45,45 @@ stop_app() {
 }
 trap stop_app EXIT
 
+# An app already serving from another commit (one an older refresh.sh failed to
+# stop, or one started before the last commit) runs that commit's code, and its
+# shots look normal: capture.ts hides the stale-build toast. So compare its
+# version with the checkout's and refuse on a mismatch. Both are HEAD's commit
+# time (vtsearch/__init__.py), so uncommitted edits move neither, and an app
+# started before them still passes.
+refuse_stale_app() {
+    local ours theirs hostport port="" listeners=""
+    ours=$(cd "$REPO_ROOT" && python -c 'import vtsearch; print(vtsearch.__version__)' 2>/dev/null) || true
+    theirs=$(curl -sf "$APP/api/version" 2>/dev/null \
+        | python -c 'import json, sys; print(json.load(sys.stdin)["version"])' 2>/dev/null) || true
+    # Either side unknown (no git, no baked stamp) is no evidence either way.
+    if [[ -z "$ours" || -z "$theirs" || "$ours" == 0.0.0-unknown || "$theirs" == 0.0.0-unknown \
+        || "$ours" == "$theirs" ]]; then
+        return 0
+    fi
+    # Name the process when it is on this machine, as app.py's port preflight does.
+    hostport="${APP#*://}"
+    hostport="${hostport%%/*}"
+    if [[ "$hostport" =~ ^(localhost|127\.0\.0\.1):([0-9]+)$ ]]; then
+        port="${BASH_REMATCH[2]}"
+        listeners=$(cd "$REPO_ROOT" && python -c '
+import sys
+from vtsearch.port_preflight import _describe_pid, _find_listener_pids
+print(", ".join(_describe_pid(p) for p in _find_listener_pids(int(sys.argv[1]))))' "$port" 2>/dev/null) || true
+    fi
+    {
+        echo "The app at $APP runs a different commit from this checkout, so its shots"
+        echo "would not show this tree:"
+        echo "  app:      $theirs${listeners:+, pid $listeners}"
+        echo "  checkout: $ours"
+        echo "Stop it${port:+ (\`fuser -k $port/tcp\`)} and rerun; with nothing serving,"
+        echo "refresh.sh starts an app of its own on a fresh data dir."
+    } >&2
+    exit 1
+}
+
 if curl -sf -o /dev/null "$APP/" 2>/dev/null; then
+    refuse_stale_app
     echo "Using the app already at $APP, with its own data and settings. For the committed"
     echo "shots, stop it and let refresh.sh start one on a fresh data dir."
 else
