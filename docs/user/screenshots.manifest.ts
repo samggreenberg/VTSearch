@@ -284,6 +284,42 @@ async function verifyServed(page: Page, h: Helpers, n: number): Promise<void> {
 }
 
 /**
+ * Wait for the list holding Find's threshold line to come to rest: the line's
+ * place on screen, the list's scroll offset and its loaded thumbnails all
+ * unchanged for a second. Serving a picture scrolls the list to it smoothly
+ * (the app's own Show Animations setting decides that, not the browser's
+ * reduced motion), and the list draws the rows near what it shows once it
+ * moves; a frame taken while either is under way lands somewhere different
+ * each run (#4325).
+ */
+async function listAtRest(page: Page): Promise<void> {
+  await page.waitForFunction(
+    (call) => {
+      const w = window as unknown as { __listCall?: number; __listKey?: string; __listT?: number };
+      const line = document.querySelector('.media-threshold-line');
+      const list = line?.closest('.media-list');
+      if (!line || !list) return false;
+      const imgs = Array.from(list.querySelectorAll('img'));
+      const key = [
+        Math.round(line.getBoundingClientRect().top),
+        list.scrollTop,
+        imgs.filter((i) => i.complete && i.naturalWidth > 0).length,
+        imgs.length,
+      ].join(' ');
+      // Each call counts its second from its own first look.
+      if (w.__listCall !== call || key !== w.__listKey) {
+        w.__listCall = call;
+        w.__listKey = key;
+        w.__listT = Date.now();
+      }
+      return Date.now() - w.__listT! > 1000;
+    },
+    Date.now(),
+    { timeout: 30000, polling: 100 },
+  );
+}
+
+/**
  * In the region fixture's label view, draw a box round the one yellow smiley
  * in the hero scene with the Marquee, as a user would. The box is the
  * generator's own box for that smiley, so it sits tight on the face rather
@@ -1288,9 +1324,13 @@ export const SHOTS: Shot[] = [
       await line.waitFor({ timeout: 15000 });
       // The served picture lands at the top of the list, with the line just
       // above it under the header; centre the line so the picture shows it.
+      // Centre it only once the scroll to the served picture has finished, or
+      // what is left of that scroll carries the list on past the line; then
+      // let the rows the centring brings into view draw.
+      await listAtRest(page);
       await line.evaluate((el) => el.scrollIntoView({ block: 'center' }));
       await page.mouse.move(700, 60);
-      await h.wait(800);
+      await listAtRest(page);
     },
     after: async (_page, h) => resetFind(h),
   },
