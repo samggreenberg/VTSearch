@@ -258,7 +258,7 @@ def test_f1_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
         c = curves[curves["category"] == cat].set_index("t")
         assert c.loc[0, "f1"] == pytest.approx(text["text_f1_p50"]), "click 0 is the text sort's line"
         assert c.loc[0, "f1_p10"] == pytest.approx(text["text_f1_p10"])
-        for f in frames[frames["kind"] == "step"].to_dict("records"):
+        for f in frames.query("kind == 'step'").to_dict("records"):
             want = rm.line_metrics(rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), 0.5)
             got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["floor"] == 0.5)].iloc[0]
             assert got["f1"] == pytest.approx(want["f1"])
