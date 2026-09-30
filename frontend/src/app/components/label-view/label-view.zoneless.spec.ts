@@ -534,6 +534,58 @@ describe('LabelViewComponent', () => {
     expect(snapSpy).toHaveBeenCalledTimes(1);
   });
 
+  describe('a left snap the Autopilot tab leaves owed (#4347)', () => {
+    // Autopilot is on by default and its tab has no grid, so the on-load snap
+    // has nothing to measure until the user opens Manual. jsdom lays nothing
+    // out, so no poll ever lands here: these count the polls that start.
+    let frames: FrameRequestCallback[];
+    let raf: { mockRestore: () => void };
+    let leftPolls: () => number;
+
+    beforeEach(() => {
+      frames = [];
+      raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb));
+      const snap = vi.spyOn(
+        component as unknown as { snapWhenGridReady: (side: 'left' | 'right', attempt?: number) => void },
+        'snapWhenGridReady',
+      );
+      leftPolls = () => snap.mock.calls.filter(([side, attempt]) => side === 'left' && !attempt).length;
+    });
+
+    afterEach(() => raf.mockRestore());
+
+    const runFrames = () => {
+      while (frames.length) frames.shift()!(0);
+    };
+
+    async function openOnAutopilot(): Promise<LeftPanelComponent> {
+      flushInitialRequests();
+      await settleResource();
+      TestBed.tick();
+      const left = fixture.debugElement.query(By.directive(LeftPanelComponent)).componentInstance as LeftPanelComponent;
+      expect(left.activeTab()).toBe('autopilot');
+      expect(leftPolls()).toBe(1);
+      return left;
+    }
+
+    it('is retried when the Manual grid mounts', async () => {
+      const left = await openOnAutopilot();
+      runFrames(); // the on-load poll runs out with no grid on screen
+
+      left.setTab('manual');
+      await settleResource();
+      expect(leftPolls()).toBe(2);
+    });
+
+    it('is not polled twice while the on-load poll is still running', async () => {
+      const left = await openOnAutopilot();
+
+      left.setTab('manual');
+      await settleResource();
+      expect(leftPolls()).toBe(1);
+    });
+  });
+
   it('should render 3-panel layout', () => {
     flushInitialRequests();
     TestBed.tick();

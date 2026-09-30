@@ -96,6 +96,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
+  private readonly leftPanel = viewChild(LeftPanelComponent);
 
   /** Name of the trainable model owning the labels shown on the right pane.
    *  Empty when no trainable model is active; the right pane then falls
@@ -282,6 +283,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Armed on entry and on each pair reload; consumed once medias first render
    *  to snap both panels tight to the grid (see ``snapPanelsOnLoad``). */
   private pendingSnapOnLoad = false;
+  /** A left-panel snap found no grid to measure, and is still owed: the
+   *  Autopilot tab has none, and it is the tab a fresh app opens on (#4347).
+   *  Paid when the grid next mounts (see the left-grid effect in the
+   *  constructor); cleared by any snap that lands. */
+  private leftSnapOwed = false;
   /** True from entry, and from each pair reload, until the user acts on the
    *  centre: the item on screen is then the view's pick, not the user's, and
    *  every ranking that lands for the pair re-picks it. See the effect in the
@@ -385,6 +391,19 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         if (this.autopilotMediaSortPending && medias.length > 0) {
           this.autopilotMediaSortPending = false;
           if (this.autopilotSeedWanted) this.triggerAutopilotMediaSort(this.pendingSeedAutoSelect);
+        }
+      });
+    });
+
+    // Pay a left-panel snap that found no grid, once the grid mounts. Only the
+    // Manual tab has one, and Autopilot is on by default, so a fresh app's first
+    // Train view opens with nothing for the on-load snap to measure: it gave up,
+    // and the first Manual grid showed the restored width's gap (#4347).
+    effect(() => {
+      const grid = this.leftPanel()?.mediaListComponent();
+      untracked(() => {
+        if (grid && this.leftSnapOwed && this.snapLoadFrames.left === null) {
+          this.snapWhenGridReady('left');
         }
       });
     });
@@ -716,12 +735,14 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  passes `animate = false` so the panel simply appears tight instead of
    *  visibly shrinking as the view opens. No-op for the snap step when the panel
    *  isn't in grid mode; the width is still persisted so drag-release always
-   *  records where the user left the divider. */
+   *  records where the user left the divider, and a left snap is owed until
+   *  the grid mounts (see {@link leftSnapOwed}). */
   private popPanelTight(side: 'left' | 'right', animate = true): void {
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
     const panelEl = this.layoutRef().nativeElement.querySelector(selector) as HTMLElement | null;
     const currentWidth = side === 'left' ? this.leftWidth() : this.rightWidth();
     const snapped = panelEl ? snapPanelWidthToGridColumns(panelEl, currentWidth) : null;
+    if (side === 'left') this.leftSnapOwed = snapped === null;
     if (snapped !== null) {
       const layoutWidth = this.layoutRef().nativeElement.getBoundingClientRect().width;
       const otherWidth = side === 'left' ? this.rightWidth() : this.leftWidth();
@@ -759,7 +780,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  needs the panel at its applied width with a real ``--grid-goal-width`` and a
    *  nonzero client width; on first open those land a frame or two after the
    *  medias arrive, so poll a bounded number of animation frames until it can
-   *  read a column count, then snap without animating. */
+   *  read a column count, then snap without animating. A left poll that runs
+   *  out leaves the snap owed, for the grid's mount to retry. */
   private snapWhenGridReady(side: 'left' | 'right', attempt = 0): void {
     const MAX_ATTEMPTS = 60;
     const selector = side === 'left' ? 'vt-left-panel' : 'vt-right-panel';
@@ -773,6 +795,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
     if (attempt >= MAX_ATTEMPTS) {
       this.snapLoadFrames[side] = null;
+      if (side === 'left') this.leftSnapOwed = true;
       return;
     }
     this.snapLoadFrames[side] = requestAnimationFrame(() => this.snapWhenGridReady(side, attempt + 1));
