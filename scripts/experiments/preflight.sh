@@ -32,6 +32,9 @@ CONC=""
 DIVERGES="${PREFLIGHT_DIVERGES:-}"
 HARVEST_BAR=""
 PILOT_CELLS=""
+RESOLVE_DELTA=""
+RESOLVE_SIGMA=""
+PAIRED_CELLS=""
 
 # This script's own directory, so check 16c can reach its sibling sizing script
 # without depending on VTS_REPO -- which check 4 may already have failed on.
@@ -54,6 +57,9 @@ while [[ $# -gt 0 ]]; do
     --conc) CONC="$2"; shift 2 ;;
     --require-harvest-headroom) HARVEST_BAR="$2"; shift 2 ;;
     --pilot-cells) PILOT_CELLS="$2"; shift 2 ;;
+    --resolve-delta) RESOLVE_DELTA="$2"; shift 2 ;;
+    --sigma) RESOLVE_SIGMA="$2"; shift 2 ;;
+    --paired-cells) PAIRED_CELLS="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -68,6 +74,8 @@ done
   echo "                    [--require-harvest-headroom BAR]  # the pre-registered compression bar," >&2
   echo "                    [--pilot-cells DIR]               # sized off a pilot of the DEEPEST arm" >&2
   echo "                    (or declare both once with CALIB_HARVEST_BAR / CALIB_HARVEST_PILOT)" >&2
+  echo "                    [--resolve-delta D [--sigma S] [--paired-cells N]]" >&2
+  echo "                                               # a trajectory A/B: refuse a grid too small to resolve D" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
@@ -98,6 +106,28 @@ esac
 # loop without the invocation line having to carry it.
 HARVEST_BAR="${HARVEST_BAR:-${CALIB_HARVEST_BAR:-}}"
 PILOT_CELLS="${PILOT_CELLS:-${CALIB_HARVEST_PILOT:-}}"
+
+# Check 17's arguments.  A malformed δ or σ is a usage error rather than a failed
+# check: until the gate knows what was asked it cannot say what the grid resolves,
+# and a FAIL line would read as a verdict on the grid.
+if [[ -z "$RESOLVE_DELTA" && ( -n "$RESOLVE_SIGMA" || -n "$PAIRED_CELLS" ) ]]; then
+  echo "--sigma and --paired-cells size an A/B against --resolve-delta; pass that too" >&2
+  exit 2
+fi
+if [[ -n "$RESOLVE_DELTA" ]]; then
+  RESOLVE_SIGMA="${RESOLVE_SIGMA:-0.04}"
+  for pair in "--resolve-delta=$RESOLVE_DELTA" "--sigma=$RESOLVE_SIGMA"; do
+    v="${pair#*=}"
+    if ! [[ "$v" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$ ]] || ! awk -v x="$v" 'BEGIN { exit !(x + 0 > 0) }'; then
+      echo "${pair%%=*} wants a positive number, got '$v'" >&2
+      exit 2
+    fi
+  done
+  if [[ -n "$PAIRED_CELLS" && ! "$PAIRED_CELLS" =~ ^[0-9]+$ ]]; then
+    echo "--paired-cells wants a whole number of cells, got '$PAIRED_CELLS'" >&2
+    exit 2
+  fi
+fi
 
 FAILED=0
 say_fail() {
@@ -1287,6 +1317,90 @@ PY
       ;;
     *) say_fail "could not check the horizon against the haystack: $HORIZON" ;;
   esac
+  fi
+fi
+
+# --- 17. A trajectory A/B too small to resolve the effect it is for -----------
+# The two arms of a trajectory A/B vote on different items from the first Hard
+# pick at which their thresholds differ, so every cell carries run-to-run noise
+# whatever the arm does.  #3840 measured it: SE of the paired mean Δcost is
+# σ/√n with σ ≈ 0.04, validated on 399 fresh cells against a pre-registered
+# prediction, and σ does NOT shrink with the size of the change (0.034-0.066
+# whether an arm moves 0.05% of the haystack or 20%).  So resolving δ at 2 SE
+# takes n = (2σ/δ)² paired cells: 64 for 0.01, 400 for 0.004, 1600 for 0.002.
+# #3825 ran 114 cells on a question that needed 400, and found its floor in the
+# write-up, after the grid had run.
+#
+# Opt-in with the δ the study means to resolve.  The count is read off the grid
+# the way `analyze_ab.py` pairs it (each style its own cell, via
+# `run_cells.paired_cell_count`), so it cannot drift from what the jobs run.
+# `run_cells.py --print-cells` is the wrong number: it counts array tasks, and a
+# task holding `whole_image,max_patch` is two paired cells.  `--paired-cells N`
+# supplies the count for a grid `run_cells.py` does not enumerate.
+#
+# The default σ is #3840's, for the #3585 environments at 100 votes.  It is not
+# universal (#3796 saw 0.056 on `vg_scale_any` at 150 votes), so a study on
+# another environment set reads σ off its first seeds and passes `--sigma`.  Do
+# not shrink it for a "small" arm: that is the one thing #3840 ruled out.
+if [[ -n "$RESOLVE_DELTA" ]]; then
+  N_PAIRED="$PAIRED_CELLS"
+  N_SEEDS=""
+  if [[ -z "$N_PAIRED" ]]; then
+    INFO17="$(resolve_info)"
+    if [[ -z "$INFO17" ]]; then
+      say_fail "--resolve-delta: no prepare_info.json under ${CALIB_RESULTS:-$EXP/results} to count the grid from"
+      echo "        -> run prepare first, or pass --paired-cells N"
+    elif [[ -z "$REPO" ]]; then
+      say_fail "--resolve-delta: VTS_REPO is unset, so the grid the jobs run cannot be counted"
+      echo "        -> set VTS_REPO, or pass --paired-cells N"
+    elif [[ "$PY_USABLE" == "0" ]]; then
+      say_fail "A/B resolution NOT checked: python cannot import the tree (see above)"
+    else
+      PAIRCHK=$(cd "$REPO/scripts/experiments/calibration" && CALIB_EXP="$EXP" python - "$INFO17" <<'PY' 2>&1
+import json
+import sys
+
+sys.path.insert(0, ".")
+import experiment_config as cfg  # noqa: E402
+import run_cells  # noqa: E402
+
+print("COUNT\t%d\t%d" % (run_cells.paired_cell_count(json.load(open(sys.argv[1]))), len(cfg.SEEDS)))
+PY
+      )
+      PAIRCHK=$(printf '%s\n' "$PAIRCHK" | tail -1)
+      count_re=$'^COUNT\t([0-9]+)\t([0-9]+)$'
+      if [[ "$PAIRCHK" =~ $count_re ]]; then
+        N_PAIRED="${BASH_REMATCH[1]}"
+        N_SEEDS="${BASH_REMATCH[2]}"
+      else
+        say_fail "could not count this grid's paired cells: $PAIRCHK"
+      fi
+    fi
+  fi
+  if [[ -n "$N_PAIRED" ]]; then
+    # (2σ/δ)² lands a hair either side of a whole number in floating point
+    # (2*0.04/0.004 is 20.000000000000004), so round up only past a tolerance -
+    # otherwise the table's own 400 comes back as 401.
+    NEED=$(awk -v s="$RESOLVE_SIGMA" -v d="$RESOLVE_DELTA" \
+      'BEGIN { x = (2 * s / d) ^ 2; n = int(x); if (x - n > 1e-9) n++; if (n < 1) n = 1; print n }')
+    FLOOR=$(awk -v s="$RESOLVE_SIGMA" -v n="$N_PAIRED" 'BEGIN { if (n > 0) printf "%.3g", 2 * s / sqrt(n) }')
+    if (( N_PAIRED < NEED )); then
+      say_fail "this A/B has $N_PAIRED paired cells; resolving δ=$RESOLVE_DELTA at 2 SE (σ=$RESOLVE_SIGMA) needs $NEED"
+      if [[ -n "$FLOOR" ]]; then
+        echo "        -> at $N_PAIRED cells it resolves δ ≈ $FLOOR, so a smaller true effect reads as a null"
+      fi
+      if [[ -n "$N_SEEDS" ]] && (( N_SEEDS > 0 && N_PAIRED > 0 )); then
+        PER_SEED=$(( N_PAIRED / N_SEEDS ))
+        if (( PER_SEED > 0 )); then
+          SEEDS_NEED=$(( (NEED + PER_SEED - 1) / PER_SEED ))
+          echo "        -> grow by seeds: each adds $PER_SEED paired cells, so CALIB_N_SEEDS=$SEEDS_NEED gives $(( SEEDS_NEED * PER_SEED ))"
+        fi
+      fi
+      echo "        -> a small change does not get a smaller σ (#3840); if δ needs more cells than"
+      echo "           you can run, the admitted-set gate is the instrument, not this A/B"
+    else
+      say_ok "A/B resolves δ=$RESOLVE_DELTA at 2 SE: $N_PAIRED paired cells >= $NEED (σ=$RESOLVE_SIGMA; floor δ ≈ $FLOOR)"
+    fi
   fi
 fi
 

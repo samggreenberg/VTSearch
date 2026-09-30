@@ -138,6 +138,9 @@ study that wants either adds it back explicitly (and declares the divergence to
    seed)` cell; runs every style for the embedder, emitting the calibration
    metrics (`CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
    inclusion sweep (`INCLUSION_SWEEP_COLUMNS`) to `task_<idx>__sweep.csv`.
+   `--print-cells` prints the array size. `--print-paired-cells` prints how many
+   cells a trajectory A/B of the grid pairs on, one per style, which is what
+   `../preflight.sh --resolve-delta` sizes against (#4111).
 3. **`analyze.py`** — concatenates the cells, computes the pre-registered
    deliverables, writes `results/summary.json`, `results/agg/*.csv`,
    `results/figures/*.png`, and a `results/REPORT.md` draft.

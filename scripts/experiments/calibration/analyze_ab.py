@@ -22,8 +22,15 @@ Env:
   ``CALIB_AB_OFF``  results dir of the safe_thresholds=0 run (required)
   ``CALIB_AB_OUT``  where the A/B tables land (default the ON run's results dir)
 
-Writes ``agg/ab_window_by_arm.csv``, ``agg/ab_paired_cells.csv``,
+Writes ``agg/ab_window_by_arm.csv``, ``agg/ab_window_pooled.csv`` (the same
+comparison over every paired cell at once), ``agg/ab_paired_cells.csv``,
 ``summary_ab.json`` and a ``REPORT_AB.md`` draft.
+
+Every Δ is written with its **resolvable δ at 2 SE** (``resolvable_delta_2se``,
+2·sd/√n over the paired cells): the smallest effect that line could tell from
+zero.  #3825 read +0.0049 off 114 cells whose floor was ~0.0075, and #3840 made
+the floor a design rule (SE = σ/√n, σ ≈ 0.04), so a Δ is never printed without
+it (#4111).  ``preflight.sh --resolve-delta`` is the same rule before launch.
 """
 
 from __future__ import annotations
@@ -122,6 +129,38 @@ def _wilcoxon(delta: np.ndarray) -> tuple[float, str]:
         return float("nan"), f"{type(exc).__name__}"
 
 
+def _resolution(delta: np.ndarray) -> tuple[float, float]:
+    """``(SE, resolvable δ at 2 SE)`` of the paired mean of *delta*.
+
+    SE is sd/√n over the finite deltas, one per cell.  Twice it is the smallest
+    |Δ| this line can tell from zero.  NaN below two cells, where there is no sd.
+    """
+    d = np.asarray(delta, dtype=float)
+    d = d[np.isfinite(d)]
+    if d.size < 2:
+        return float("nan"), float("nan")
+    se = float(d.std(ddof=1) / np.sqrt(d.size))
+    return se, 2.0 * se
+
+
+def _delta_row(sub: pd.DataFrame, m: str) -> dict:
+    """Mean ON, mean OFF, the paired Δ with its floor, and its test, for metric *m*."""
+    delta = (sub[f"{m}_on"] - sub[f"{m}_off"]).to_numpy(dtype=float)
+    p, note = _wilcoxon(delta)
+    se, floor = _resolution(delta)
+    return {
+        "n_cells": int(len(sub)),
+        "safe_on": float(np.nanmean(sub[f"{m}_on"])),
+        "safe_off": float(np.nanmean(sub[f"{m}_off"])),
+        "delta_on_minus_off": float(np.nanmean(delta)),
+        "se": se,
+        "resolvable_delta_2se": floor,
+        "win_rate_on": float(np.mean(delta < 0)) if np.isfinite(delta).any() else float("nan"),
+        "p_wilcoxon": p,
+        "note": note,
+    }
+
+
 def _scoped(df: pd.DataFrame, scope: str) -> pd.DataFrame:
     """Restrict to the steps *scope* counts (see :data:`SCOPES`)."""
     if scope == "app_visible" and "app_trained" in df.columns:
@@ -129,9 +168,16 @@ def _scoped(df: pd.DataFrame, scope: str) -> pd.DataFrame:
     return df
 
 
-def paired_window_table(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
-    """Mean ON, mean OFF, and paired Δ (ON − OFF) per (scope, arm, window, metric)."""
+def paired_window_table(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Mean ON, mean OFF, and paired Δ (ON − OFF), per arm and pooled.
+
+    Returns ``(by_arm, pooled)``: one row per (scope, arm, window, metric), and
+    one per (scope, window, metric) over every paired cell of every arm - the
+    line an A/B's headline is read from.  Kept apart so :func:`verdict`, which
+    reads per arm, never averages the pooled row in with the arms it pools.
+    """
     rows: list[dict] = []
+    pooled: list[dict] = []
     paired_cells: list[pd.DataFrame] = []
     for scope in SCOPES:
         on_s, off_s = _scoped(on, scope), _scoped(off, scope)
@@ -145,33 +191,43 @@ def paired_window_table(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> p
             j.insert(0, "window", wname)
             j.insert(0, "scope", scope)
             paired_cells.append(j)
+            metrics = [m for m in METRICS if f"{m}_on" in j.columns]
             for arm, sub in j.groupby("arm"):
-                for m in METRICS:
-                    if f"{m}_on" not in sub.columns:
-                        continue
-                    delta = (sub[f"{m}_on"] - sub[f"{m}_off"]).to_numpy(dtype=float)
-                    p, note = _wilcoxon(delta)
-                    rows.append(
-                        {
-                            "scope": scope,
-                            "arm": arm,
-                            "window": wname,
-                            "metric": m,
-                            "n_cells": int(len(sub)),
-                            "safe_on": float(np.nanmean(sub[f"{m}_on"])),
-                            "safe_off": float(np.nanmean(sub[f"{m}_off"])),
-                            "delta_on_minus_off": float(np.nanmean(delta)),
-                            "win_rate_on": float(np.mean(delta < 0)) if np.isfinite(delta).any() else float("nan"),
-                            "p_wilcoxon": p,
-                            "note": note,
-                        }
-                    )
+                for m in metrics:
+                    rows.append({"scope": scope, "arm": arm, "window": wname, "metric": m, **_delta_row(sub, m)})
+            for m in metrics:
+                pooled.append({"scope": scope, "window": wname, "metric": m, **_delta_row(j, m)})
     tbl = pd.DataFrame(rows)
+    pooled_tbl = pd.DataFrame(pooled)
     agg_dir.mkdir(parents=True, exist_ok=True)
     tbl.to_csv(agg_dir / "ab_window_by_arm.csv", index=False)
+    pooled_tbl.to_csv(agg_dir / "ab_window_pooled.csv", index=False)
     if paired_cells:
         pd.concat(paired_cells, ignore_index=True).to_csv(agg_dir / "ab_paired_cells.csv", index=False)
-    return tbl
+    return tbl, pooled_tbl
+
+
+def pooled_line(pooled: pd.DataFrame, scope: str = "app_visible", window: str = "all_steps") -> str:
+    """The headline Δcost with its floor, as one printable line (#4111).
+
+    The pooled paired mean over every cell is what #3825 and #3839 quoted, and
+    #3840 showed it can sit well inside its own noise.  So the line carries the
+    smallest Δ it can resolve, and says when the Δ is below it.
+    """
+    if pooled.empty:
+        return f"pooled Δcost ({scope}, {window}): no paired cells"
+    r = pooled[(pooled["scope"] == scope) & (pooled["window"] == window) & (pooled["metric"] == "cost")]
+    if r.empty:
+        return f"pooled Δcost ({scope}, {window}): no paired cells"
+    row = r.iloc[0]
+    d, se, floor, n = row["delta_on_minus_off"], row["se"], row["resolvable_delta_2se"], int(row["n_cells"])
+    if not np.isfinite(floor):
+        return f"pooled Δcost ({scope}, {window}): {d:+.4f} over {n} cell(s); no SE below two cells"
+    reading = "resolved at 2 SE" if abs(d) >= floor else "inside its floor: not resolved"
+    return (
+        f"pooled Δcost ({scope}, {window}): {d:+.4f} ± {se:.4f} over {n} cells; "
+        f"resolvable δ at 2 SE {floor:.4f} ({reading})"
+    )
 
 
 def curves(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
@@ -272,7 +328,8 @@ def main() -> int:
         return 1
 
     agg_dir = out_dir / "agg"
-    tbl = paired_window_table(on, off, agg_dir)
+    tbl, pooled = paired_window_table(on, off, agg_dir)
+    headline = pooled_line(pooled)
     curve = curves(on, off, agg_dir)
     figures = make_figures(curve, out_dir / "figures")
     verdicts = {scope: verdict(tbl, scope) for scope in SCOPES}
@@ -294,6 +351,7 @@ def main() -> int:
         "n_cells_off": int(off.groupby(list(CELL_KEYS)).ngroups),
         "windows": {k: list(v_) for k, v_ in WINDOWS.items()},
         "first_app_visible_vote_count": first_live,
+        "pooled": headline,
         "verdict": v,
         "verdict_by_scope": verdicts,
     }
@@ -313,6 +371,15 @@ def main() -> int:
         "sorts by text/example cosine, so `scope=app_visible` is what users actually get and",
         "`scope=all_steps` is the purely numerical reading.",
         "",
+        "## Pooled over every paired cell (Δ = ON − OFF)",
+        "",
+        f"**{headline}**",
+        "",
+        "`resolvable_delta_2se` is 2·SE, the smallest Δ each line can tell from zero. A Δ",
+        "inside it is not a finding, whatever its sign.",
+        "",
+        _md(pooled),
+        "",
         "## Per-window paired comparison (Δ = ON − OFF; negative = safe thresholds better)",
         "",
         _md(tbl),
@@ -328,6 +395,7 @@ def main() -> int:
     ]
     (out_dir / "REPORT_AB.md").write_text("\n".join(lines) + "\n")
     common.log(f"wrote {out_dir / 'REPORT_AB.md'}")
+    common.log(headline)
     common.log(json.dumps(v, indent=2))
     return 0
 
