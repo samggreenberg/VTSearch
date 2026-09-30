@@ -127,7 +127,7 @@ export class DetectorsRegistryApiService {
     }
     const { old_path: oldPath, new_path: newPath } = pending as { old_path: string; new_path: string };
     const ok = await dialog.confirm(
-      `Move existing labelset file "${oldPath}" to "${newPath}"?`,
+      `Move existing labelset file?\nFrom: ${oldPath}\nTo: ${newPath}`,
     );
     if (!ok) return;
     this.moveLabelsetSourceFile(detectorId, oldPath, newPath).subscribe();

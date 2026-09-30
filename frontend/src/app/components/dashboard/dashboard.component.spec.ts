@@ -816,6 +816,38 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
+  // #4380: the bulk-delete confirmation ran the question, the enumerated
+  // names and the parenthetical together on one line. The names now sit on
+  // their own line below the question (the detail gets its own line from
+  // confirmDestructive).
+  it('puts the names in a bulk delete confirmation on their own line', async () => {
+    const datasets = [
+      { id: 'd1', name: 'DS1', media_type: 'audio' },
+      { id: 'd2', name: 'DS2', media_type: 'audio' },
+    ];
+    const detectors = [
+      { id: 'm1', name: 'detector1', media_type: 'audio' },
+      { id: 'm2', name: 'detector2', media_type: 'audio' },
+    ];
+    flushInitialRequests(datasets, detectors);
+    selection.selectOnly('dataset', ['d1', 'd2']);
+    selection.selectOnly('detector', ['m1', 'm2']);
+
+    const confirm = vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(false));
+
+    await component.deleteSelectedDetectors();
+    expect(confirm).toHaveBeenLastCalledWith(
+      'Delete 2 detectors?\n"detector1", "detector2"',
+      '(This deletes your labels. The underlying media is unaffected.)',
+    );
+
+    await component.deleteSelectedDatasets();
+    expect(confirm).toHaveBeenLastCalledWith(
+      'Delete 2 datasets from your list?\n"DS1", "DS2"',
+      '(Detectors are unaffected.)',
+    );
+  });
+
   it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();
     const flows = TestBed.inject(NewThingFlowsService);
