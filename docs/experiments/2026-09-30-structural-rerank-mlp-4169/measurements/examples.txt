@@ -1,0 +1,134 @@
+srun: slurm_job_submit: Set partition to cpu
+# /expscratch/sgreenberg/fullmarks/votes-4162/matrix-s
+
+29 classes: MLP below the inliers in 10, above in 0.
+
+## spods__stamp_00716_1: AP inliers 0.94, MLP 0.13 (-0.81); 9 Good / 1 Bad after 10 votes
+Bads trained on: tobacco800/dic45f00_5 (48 inl)
+Top 8 by inliers:
+  POS spods/00720                  inliers   87  MLP p 0.48
+  POS spods/00719                  inliers   85  MLP p 0.48
+  POS spods/00705                  inliers   84  MLP p 0.48
+  POS spods/00714                  inliers   83  MLP p 0.48
+  POS spods/00727                  inliers   80  MLP p 0.48
+  POS spods/00732                  inliers   80  MLP p 0.48
+  POS spods/00731                  inliers   79  MLP p 0.48
+  POS spods/00712                  inliers   79  MLP p 0.48
+Top 8 by MLP:
+  neg tobacco800/btt85f00-page2_1  inliers    0  MLP p 0.49
+  neg ucsf/mybw0228#0              inliers    0  MLP p 0.48
+  neg tobacco800/dic45f00_4        inliers    0  MLP p 0.48
+  neg tobacco800/tkj51f00_9        inliers    0  MLP p 0.48
+  neg tobacco800/zpz83f00_2        inliers    0  MLP p 0.48
+  neg tobacco800/jgs60f00-page03_1 inliers    0  MLP p 0.48
+  neg tobacco800/ixp01f00_1        inliers    0  MLP p 0.48
+  neg spods/00872                  inliers   38  MLP p 0.48
+
+## ucsf__logo_rjr_script: AP inliers 0.75, MLP 0.00 (-0.75); 1 Good / 9 Bad after 10 votes
+Bads trained on: tobacco800/wbo3aa00 (12 inl), ucsf/sqfg0269#0 (10 inl), spods/00316 (10 inl), spods/00785 (10 inl), ucsf/fmbn0254#0 (10 inl), tobacco800/bat60e00 (9 inl), ucsf/yzvg0227#0 (9 inl), tobacco800/ifk79c00 (9 inl), ucsf/ffbh0334#0 (9 inl)
+Top 8 by inliers:
+  POS ucsf/fhhg0188#0              inliers   39  MLP p 0.46
+  neg ucsf/fhhp0268#0              inliers   21  MLP p 0.47
+  neg tobacco800/juo75f00_29       inliers   16  MLP p 0.47
+  POS ucsf/fgwc0087#0              inliers   16  MLP p 0.45
+  neg ucsf/fgdk0430#0              inliers   15  MLP p 0.46
+  neg tobacco800/pti31a00_2        inliers   14  MLP p 0.46
+  neg spods/00376                  inliers   12  MLP p 0.46
+  neg spods/00754                  inliers   12  MLP p 0.46
+Top 8 by MLP:
+  neg tobacco800/btt85f00-page2_1  inliers    0  MLP p 0.48
+  neg ucsf/fkhh0392#0              inliers    0  MLP p 0.48
+  neg ucsf/fhxh0410#0              inliers    0  MLP p 0.48
+  neg tobacco800/qit05f00-page2_9  inliers    0  MLP p 0.48
+  neg tobacco800/qit05f00-page2_5  inliers    0  MLP p 0.48
+  neg tobacco800/bkz54f00_2        inliers    0  MLP p 0.48
+  neg tobacco800/qit05f00-page2_3  inliers    0  MLP p 0.48
+  neg tobacco800/fgx54f00_2        inliers    0  MLP p 0.48
+
+## spods__stamp_00612_1: AP inliers 0.85, MLP 0.11 (-0.74); 6 Good / 4 Bad after 10 votes
+Bads trained on: spods/00674 (52 inl), spods/00680 (52 inl), spods/00701 (52 inl), spods/00554 (51 inl)
+Top 8 by inliers:
+  POS spods/00636                  inliers   80  MLP p 0.49
+  POS spods/00628                  inliers   79  MLP p 0.48
+  POS spods/00629                  inliers   78  MLP p 0.49
+  POS spods/00625                  inliers   75  MLP p 0.48
+  POS spods/00623                  inliers   75  MLP p 0.48
+  POS spods/00640                  inliers   74  MLP p 0.48
+  POS spods/00638                  inliers   70  MLP p 0.48
+  POS spods/00619                  inliers   64  MLP p 0.48
+Top 8 by MLP:
+  neg spods/00678                  inliers   49  MLP p 0.49
+  neg spods/00569                  inliers   35  MLP p 0.49
+  neg spods/00695                  inliers   51  MLP p 0.49
+  neg spods/00676                  inliers   45  MLP p 0.49
+  neg spods/00550                  inliers   47  MLP p 0.49
+  neg spods/00571                  inliers   45  MLP p 0.49
+  neg spods/00572                  inliers   40  MLP p 0.49
+  neg spods/00675                  inliers   51  MLP p 0.49
+
+# /expscratch/sgreenberg/structural-rerank-4169/matrix-belga
+
+18 classes: MLP below the inliers in 12, above in 0.
+
+## VRT: AP inliers 0.50, MLP 0.25 (-0.25); 5 Good / 5 Bad after 10 votes
+Bads trained on: 07664962.jpg (4 inl), 07701242.jpg (4 inl), 07574270.jpg (4 inl), 07588350.jpg (4 inl), 07603320.jpg (4 inl)
+Top 8 by inliers:
+  POS 07607823.jpg                 inliers   19  MLP p 0.47
+  POS 07575593.jpg                 inliers   10  MLP p 0.45
+  neg 07592310.jpg                 inliers    6  MLP p 0.46
+  neg 07703002.jpg                 inliers    5  MLP p 0.46
+  neg 07616143.jpg                 inliers    4  MLP p 0.37
+  neg 07647908.jpg                 inliers    4  MLP p 0.45
+  neg 07663684.jpg                 inliers    4  MLP p 0.32
+  neg 07673217.jpg                 inliers    4  MLP p 0.45
+Top 8 by MLP:
+  POS 07607823.jpg                 inliers   19  MLP p 0.47
+  neg 07663548.jpg                 inliers    0  MLP p 0.47
+  neg 07671492.jpg                 inliers    0  MLP p 0.47
+  neg 07682300.jpg                 inliers    0  MLP p 0.47
+  neg 07705603.jpg                 inliers    0  MLP p 0.47
+  neg 07705615.jpg                 inliers    0  MLP p 0.47
+  neg 07670261.jpg                 inliers    0  MLP p 0.46
+  neg 07674854.jpg                 inliers    0  MLP p 0.46
+
+## Adidas-text: AP inliers 0.75, MLP 0.57 (-0.18); 6 Good / 4 Bad after 10 votes
+Bads trained on: 07591840.jpg (0 inl), 07707112.jpg (0 inl), 07575454.jpg (0 inl), 07589529.jpg (0 inl)
+Top 8 by inliers:
+  POS 07638543.jpg                 inliers   17  MLP p 0.48
+  POS 07706581.jpg                 inliers   13  MLP p 0.47
+  POS 07638545.jpg                 inliers   12  MLP p 0.47
+  POS 07601824.jpg                 inliers   12  MLP p 0.47
+  POS 07682657.jpg                 inliers   11  MLP p 0.47
+  POS 07706745.jpg                 inliers   11  MLP p 0.46
+  POS 07576798.jpg                 inliers   10  MLP p 0.47
+  POS 07602242.jpg                 inliers   10  MLP p 0.46
+Top 8 by MLP:
+  POS 07638517.jpg                 inliers   10  MLP p 0.48
+  POS 07638543.jpg                 inliers   17  MLP p 0.48
+  POS 07706581.jpg                 inliers   13  MLP p 0.47
+  POS 07683665.jpg                 inliers    9  MLP p 0.47
+  POS 07682657.jpg                 inliers   11  MLP p 0.47
+  POS 07601892.jpg                 inliers    8  MLP p 0.47
+  POS 07674618.jpg                 inliers   10  MLP p 0.47
+  POS 07706754.jpg                 inliers    9  MLP p 0.47
+
+## US_President: AP inliers 0.18, MLP 0.00 (-0.18); 9 Good / 1 Bad after 10 votes
+Bads trained on: 07649049.jpg (16 inl)
+Top 8 by inliers:
+  neg 07696844.jpg                 inliers   54  MLP p 0.49
+  neg 07707617.jpg                 inliers   41  MLP p 0.48
+  neg 07674361.jpg                 inliers   41  MLP p 0.48
+  neg 07599377.jpg                 inliers   36  MLP p 0.48
+  neg 07623332.jpg                 inliers   35  MLP p 0.48
+  neg 07704742.jpg                 inliers   30  MLP p 0.48
+  neg 07706631.jpg                 inliers   30  MLP p 0.48
+  POS 07693667.jpg                 inliers   29  MLP p 0.47
+Top 8 by MLP:
+  neg 07573354.jpg                 inliers    0  MLP p 0.49
+  neg 07585036.jpg                 inliers    0  MLP p 0.49
+  neg 07682345.jpg                 inliers    0  MLP p 0.49
+  neg 07675660.jpg                 inliers    0  MLP p 0.49
+  neg 07608787.jpg                 inliers    0  MLP p 0.49
+  neg 07688250.jpg                 inliers    0  MLP p 0.49
+  neg 07696844.jpg                 inliers   54  MLP p 0.49
+  neg 07691153.jpg                 inliers    0  MLP p 0.49

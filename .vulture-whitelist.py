@@ -202,15 +202,6 @@ validate_panel_pct_left  # noqa: F821
 validate_panel_pct_right  # noqa: F821
 
 # ---------------------------------------------------------------------------
-# ``verification_classifier`` is a declared ``DetectorContext`` slot (listed
-# in the context's ``__slots__`` table in ``vtscore/state/core.py``) that the
-# structural-similarity trainer writes. It is an in-memory head cache, so
-# the write is the point and no reader lives in this repo; the slot is part
-# of the context's shape either way.
-# ---------------------------------------------------------------------------
-verification_classifier  # noqa: F821
-
-# ---------------------------------------------------------------------------
 # Third-party protocol members: the framework calls or reads these by name,
 # so the definition here is the whole contract and there is no in-repo
 # caller to find.

@@ -1021,12 +1021,6 @@ class DetectorContext:
         # labelset, because nothing that changes the labels drops ``model``
         # (issue #4204).  In-memory only, never persisted.
         "model_labels_sig",  # tuple | None
-        # Structural (SIFT/VLAD) detectors carry a *second* learned object next
-        # to the retrieval MLP: the match-statistic verification classifier
-        # (None until trained / for non-structural detectors).  In-memory only,
-        # re-derived from votes on every retrain, never persisted.  See
-        # docs/plans/structural-embedder.md.
-        "verification_classifier",  # nn.Sequential | None
         "threshold",  # decision threshold
         # Cross-dataset training-corpus counts (from on-disk labelset).  These
         # are independent of ``good_votes``/``bad_votes``, which only count
@@ -1154,9 +1148,6 @@ class DetectorContext:
         self.label_score_regions: dict[str, list[Any]] = {}
         self.model: Any = None  # nn.Sequential | None
         self.model_labels_sig: tuple | None = None
-        # Match-statistic verification classifier for structural detectors;
-        # None for non-structural detectors and until first trained.
-        self.verification_classifier: Any = None  # nn.Sequential | None
         self.threshold: float = 0.5
         self.labelset_good_count: int = 0
         self.labelset_bad_count: int = 0

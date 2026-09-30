@@ -1524,13 +1524,10 @@ def train_and_score(
     # (gated on media carrying ``local_features``), so existing datasets are
     # untouched.  For a structural (SIFT/VLAD) dataset it geometrically
     # verifies the VLAD shortlist against the RegionYes templates and re-ranks
-    # by the match-statistic classifier (or the cold-start inlier gate).  See
-    # docs/plans/structural-embedder.md.
+    # by the inlier gate.  See docs/plans/structural-embedder.md.
     from vtscore.training.structural_similarity import maybe_structural_rerank  # noqa: PLC0415
 
-    results, threshold = maybe_structural_rerank(
-        results, threshold, clips_dict, good_votes, bad_votes, region_boxes, det_ctx
-    )
+    results, threshold = maybe_structural_rerank(results, threshold, clips_dict, good_votes, region_boxes, det_ctx)
     return results, threshold, model
 
 

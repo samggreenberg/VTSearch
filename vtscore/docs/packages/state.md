@@ -130,7 +130,6 @@ canonical persisted form.
 | `label_negative_regions` / `label_score_regions` | `dict[str, list[np.ndarray]]` | Per-element patch stacks on patch datasets (flooded negatives; full score rows) |
 | `model` | `torch.nn.Sequential \| None` | Trained head (process-lifetime only) |
 | `model_labels_sig` | `tuple \| None` | Signature of the labels `model` was trained on, so a stale head is detected |
-| `verification_classifier` | `torch.nn.Sequential \| None` | Structural detectors' second head: match-statistic verification |
 | `threshold` | `float` | Calibrated decision threshold |
 | `labelset_good_count` / `labelset_bad_count` | `int` | Counts from the on-disk labelset (cross-dataset) |
 | `votes_dataset_id` | `str` | Dataset ID the cid-keyed dicts are valid against |
@@ -144,7 +143,7 @@ canonical persisted form.
 | `precision_check` / `precision_check_run` | `SpotCheck \| None` | The floor's last finished spot check (kept across retrains; its range goes `stale`) and the one running now |
 
 Everything in this table is in-memory only. `model`,
-`verification_classifier`, `label_embeddings`, `label_local_features`
+`label_embeddings`, `label_local_features`
 and the region stacks are all re-derived from the labelset's origins on
 the next process start.
 
