@@ -201,6 +201,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The media list no longer leaves a gap beside its last column of
+  thumbnails** (issue #4347). Train fits the left panel to its thumbnail grid
+  as it opens, but it measured the grid before the minimap strip beside it
+  appeared. The strip then took its width from the grid, so the panel often
+  showed one column fewer than it had room for, with empty space where the
+  missing column should be. Dragging the divider fixed it only until your
+  next visit to Train. The minimap now holds its place, as an empty strip,
+  until there is a ranking to draw, and the list keeps room for its
+  scrollbar before it needs one. Separately, the first time you open Manual
+  in a new install (Train starts on Autopilot, which has no grid), the panel
+  is now fitted to the grid as soon as Manual shows it.
 - **The stall watchdog can no longer crash the app** (issue #4345). When the
   heartbeat missed its 1 s threshold, `faulthandler` dumped every thread's
   frames from a thread that holds no GIL, while those threads kept running.

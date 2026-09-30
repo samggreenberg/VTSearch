@@ -14,6 +14,12 @@
   cursor: pointer;
 }
 
+// Nothing ranked yet: the bare track, inert. It keeps the strip's width in the
+// layout, so the grid beside it doesn't narrow when the first ranking lands.
+.stripe-overview--empty {
+  cursor: default;
+}
+
 // Oversized sorts: the minimap can't honestly represent the full ranking, so
 // the strip stays in the layout (no panel shift) but is inert and visibly
 // disabled, with a tooltip explaining why.

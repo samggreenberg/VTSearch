@@ -27,6 +27,22 @@ describe('StripeOverviewComponent', () => {
     expect(component.visible).toBe(false);
   });
 
+  it('holds its place as an empty, inert track before anything is ranked (#4347)', async () => {
+    // The label view snaps the left panel to its grid before the first ranking
+    // lands; a strip that only appeared then would narrow the grid by a column.
+    const el = fixture.nativeElement as HTMLElement;
+    const track = el.querySelector('.stripe-overview');
+    expect(track).not.toBeNull();
+    expect(track!.classList).toContain('stripe-overview--empty');
+    expect(track!.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('.stripe-container')).toBeNull();
+
+    fixture.componentRef.setInput('sortOrder', [{ id: 1, score: 0.9 }]);
+    await settleZoneless(fixture);
+    expect(el.querySelector('.stripe-overview--empty')).toBeNull();
+    expect(el.querySelector('.stripe-container')).not.toBeNull();
+  });
+
   it('should be visible when sort order exists', () => {
     fixture.componentRef.setInput('sortOrder', [
       { id: 1, score: 0.9 },
