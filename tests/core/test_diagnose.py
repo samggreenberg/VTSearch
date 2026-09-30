@@ -100,6 +100,7 @@ class TestEffectiveSettings:
             "slow_phase_ms",
             "gc_warn_ms",
             "watchdog_ms",
+            "live_dump",
             "gc_freeze",
             "detector_write",
             "log_file",
@@ -125,5 +126,14 @@ class TestStartupLine:
         msg = [r for r in caplog.records if "diagnostics config" in r.getMessage()][0].getMessage()
         assert "slow_request=654ms" in msg
         assert "slow_phase=321ms" in msg
-        for field in ("diagnose=", "log_level=", "gc_warn=", "watchdog=", "gc_freeze=", "detector_write=", "log_file="):
+        for field in (
+            "diagnose=",
+            "log_level=",
+            "gc_warn=",
+            "watchdog=",
+            "live_dump=",
+            "gc_freeze=",
+            "detector_write=",
+            "log_file=",
+        ):
             assert field in msg, f"{field} missing from {msg!r}"

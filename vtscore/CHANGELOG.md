@@ -912,6 +912,28 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **`vtscore.concurrency.stalls`: the stall watchdog no longer arms a dump
+  that can segfault the process it watches** (issue #4345).
+  `start_stall_diagnostics_from_env` used to re-arm
+  `faulthandler.dump_traceback_later` on every beat. That dump walks every
+  thread's frame stack without the GIL while the threads run, and it crashed
+  the app during a CPU import. The watchdog now takes every thread's stack
+  holding the GIL, the moment a late beat wakes and before it samples
+  `/proc`. It writes the stacks in `faulthandler`'s layout just before the
+  report line, the thread that burned the most CPU across the gap first.
+  The live dump is armed only when `VTSEARCH_STALL_LIVE_DUMP` is truthy
+  (`live_dump_enabled()`). All additive:
+  - `StallWatchdog` gains `snapshot=` (called on a late beat, before
+    anything else) and `dump_file=` (where the stacks go; `None` is
+    stderr). `arm=` is unchanged, but the app now passes it only for the
+    live dump.
+  - New `capture_thread_stacks()` and `format_thread_stacks()`, plus the
+    `FrameLine` alias and the `LIVE_DUMP_ENV` constant.
+  - The report line's tail now reads `thread stacks at wake -> <path>`, and
+    `live thread dump armed …` when the live dump is on. It read `thread
+    dump armed …` before, and a watchdog with neither now says `no thread
+    stacks`.
+
 - **An Inclusion slide no longer overwrites a cut the knob cannot move.** Below
   the calibration-fold floor (too few votes, or one class) training stores the
   schedule blend, but `recompute_detector_thresholds_for_inclusion` wrote the

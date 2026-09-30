@@ -201,6 +201,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **The stall watchdog can no longer crash the app** (issue #4345). When the
+  heartbeat missed its 1 s threshold, `faulthandler` dumped every thread's
+  frames from a thread that holds no GIL, while those threads kept running.
+  During a CPU import that read a frame another thread was popping, and the
+  app segfaulted partway through the dump, so a harmless 1 s GC pause became
+  a lost import. The watchdog now takes every thread's stack itself, holding
+  the GIL, the moment the heartbeat wakes. It writes them just above the
+  `stall:` line as before, with the thread that burned the most CPU first,
+  and the stall report is unchanged. `faulthandler`'s dump from *during* the
+  stall is still available as `VTSEARCH_STALL_LIVE_DUMP=1` for a diagnostic
+  session that accepts the risk, and the startup `diagnostics config:` line
+  says whether it is on. The screenshot harness no longer turns the watchdog
+  off.
+
 - **Train switches to the detector's own ranking even when the text-hint sort
   is slow** (issue #4326). Entering Train with a detector that already had
   Good and Bad labels, but too few Goods on this dataset to move Autopilot
