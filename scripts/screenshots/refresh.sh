@@ -25,12 +25,7 @@
 # the spot check's picks under VTSEARCH_SPOT_CHECK_SEED, because an unseeded
 # draw shows the floor-check shot a different pick every time (#4330).
 #
-# It turns the app's stall watchdog off (VTSEARCH_STALL_WATCHDOG_MS=0): a
-# heartbeat it misses during the fixtures' CPU embedding makes it dump every
-# thread's frames while they run, which has segfaulted the app mid-import
-# (#4345), and a harness run has no stall to diagnose.
-#
-# It also sets that app's Show Animations to "OS Setting". capture.ts opens every
+# And it sets that app's Show Animations to "OS Setting". capture.ts opens every
 # page asking for reduced motion, but the app's default, "Show", overrides that
 # for the motion it drives from JS (the list's smooth scroll to the selected
 # item, the vote swipe, Browse's zoom tweens), so a frame taken soon after one
@@ -112,7 +107,6 @@ else
             VTSEARCH_TORCH_THREADS=1 \
             VTSEARCH_PROJECTION_SEED=$PROJECTION_SEED \
             VTSEARCH_SPOT_CHECK_SEED=$SPOT_CHECK_SEED \
-            VTSEARCH_STALL_WATCHDOG_MS=0 \
             exec python app.py --local > "$APP_LOG" 2>&1
     ) &
     started_app=$!

@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Dashboard's RAM / Disk bars appear only when they matter.** On the
+  **Default** setting each bar now stays hidden until its free space is
+  running low *for your datasets*: when it would hold fewer than three more
+  datasets the size of your largest one (1 GB is assumed before you have
+  any). A nearly full but enormous disk no longer raises the bar, and a
+  half-empty small one can. Hovering a bar says how many more datasets fit.
+  The bars no longer wait for your first detector, and **View** / **Hide**
+  still show them always or never.
 - **The precision floor is now the Threshold, a spectrum with three radios**
   (issue #4317). The **Lean: Complete / Centered / Correct** pulldown in Train
   and Find is gone. In its place, **Threshold:** heads a spectrum from **False
@@ -192,6 +200,20 @@ not list every commit. Use `git log` for the full history.
   `import_labels.media_type`.
 
 ### Fixed
+
+- **The stall watchdog can no longer crash the app** (issue #4345). When the
+  heartbeat missed its 1 s threshold, `faulthandler` dumped every thread's
+  frames from a thread that holds no GIL, while those threads kept running.
+  During a CPU import that read a frame another thread was popping, and the
+  app segfaulted partway through the dump, so a harmless 1 s GC pause became
+  a lost import. The watchdog now takes every thread's stack itself, holding
+  the GIL, the moment the heartbeat wakes. It writes them just above the
+  `stall:` line as before, with the thread that burned the most CPU first,
+  and the stall report is unchanged. `faulthandler`'s dump from *during* the
+  stall is still available as `VTSEARCH_STALL_LIVE_DUMP=1` for a diagnostic
+  session that accepts the risk, and the startup `diagnostics config:` line
+  says whether it is on. The screenshot harness no longer turns the watchdog
+  off.
 
 - **Train switches to the detector's own ranking even when the text-hint sort
   is slow** (issue #4326). Entering Train with a detector that already had

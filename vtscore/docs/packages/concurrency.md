@@ -21,7 +21,7 @@ true of `vtscore.security`.
 | `vtscore/concurrency/notifications.py` | `notify()` - one-off user-facing messages, rendered as toasts by the app |
 | `vtscore/concurrency/gate.py` | `ConcurrencyGate` - a semaphore whose limit is re-read on every acquisition |
 | `vtscore/concurrency/memory_budget.py` | Cap fan-out so peak per-worker memory fits a fraction of available RAM |
-| `vtscore/concurrency/stalls.py` | Stall diagnostics: a GIL-aware heartbeat watchdog with `faulthandler` thread dumps, GC-pause logging, `PhaseClock` / `timed_lock` slow-path timers |
+| `vtscore/concurrency/stalls.py` | Stall diagnostics: a GIL-aware heartbeat watchdog that writes every thread's stack when it misses, GC-pause logging, `PhaseClock` / `timed_lock` slow-path timers |
 
 - [Two kinds of "progress"](#two-kinds-of-progress)
 - [Async jobs](#async-jobs)
@@ -627,8 +627,9 @@ picks up a change:
 
 | Name | Description |
 |------|-------------|
-| `StallWatchdog(threshold_ms, *, arm=None, sampler=default_sampler, dump_path="<stderr>", logger=None)` | Heartbeat thread. A beat that wakes `threshold_ms` late logs one WARNING naming the threads whose CPU time grew across the gap (from `/proc/self/task`), the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock |
-| `start_stall_diagnostics_from_env() -> StallWatchdog \| None` | What the app calls: installs GC-pause logging and starts the watchdog with a `faulthandler.dump_traceback_later` armer, re-armed on every beat so a miss dumps every thread's Python frames *during* the stall - GIL-free, because that timer runs on a C thread. `VTSEARCH_STALL_WATCHDOG_MS` (default 1000; `0` disables the watchdog); the dump goes to `VTSEARCH_STALL_DUMP_FILE`, else `VTSEARCH_LOG_FILE`, else stderr |
+| `StallWatchdog(threshold_ms, *, arm=None, snapshot=None, dump_file=None, sampler=default_sampler, dump_path="<stderr>", logger=None)` | Heartbeat thread. A beat that wakes `threshold_ms` late first calls `snapshot` for every thread's stack, before anything that could release the GIL. Then it writes those stacks to `dump_file` (stderr when `None`), the thread that burned the most CPU across the gap first, and logs one WARNING. The WARNING names the threads whose CPU time grew across the gap (from `/proc/self/task`), and gives the process CPU-to-wall ratio, major faults, RSS, cgroup memory counters and GC pauses. `arm` is called with the threshold on every beat; it exists for the opt-in live dump. `beat(now=…)` is the unit of work, so a test drives it with an explicit clock |
+| `capture_thread_stacks() -> dict[int, list[FrameLine]]` / `format_thread_stacks(stacks, *, header, threads=None, exited=frozenset())` | Every Python thread's stack as `(filename, line, function)` tuples keyed by `ident`, taken with `sys._current_frames()` while holding the GIL, so no thread can be changing its frames. The formatter renders them in `faulthandler`'s layout. It orders threads by the CPU they burned across the gap, then threads that exited before their CPU could be read, then the rest |
+| `start_stall_diagnostics_from_env() -> StallWatchdog \| None` | What the app calls. It installs GC-pause logging and starts the watchdog with `snapshot=capture_thread_stacks`. `VTSEARCH_STALL_WATCHDOG_MS` sets the threshold (default 1000; `0` disables the watchdog). The stacks go to `VTSEARCH_STALL_DUMP_FILE`, else `VTSEARCH_LOG_FILE`, else stderr. It arms `faulthandler.dump_traceback_later` only when `live_dump_enabled()` (`VTSEARCH_STALL_LIVE_DUMP=1`). That timer's C thread walks every thread's frames without the GIL while they run, and it has segfaulted the app (issue #4345) |
 | `install_gc_pause_logging()` / `gc_pause_stats()` / `gc_pause_ms_total()` | `gc.callbacks` timer; a pause at or above `gc_warn_threshold_ms()` logs its generation, duration and collected count. The threshold reads `VTSEARCH_GC_WARN_MS`, and unset it tracks `VTSEARCH_SLOW_PHASE_MS` (half of it, capped at the 200 ms default) so a collection can never be below the reporting bar while still being large enough to inflate the phase it lands in. `gc_pause_ms_total()` is the monotonic total a window snapshots at both ends |
 | `freeze_gc_after_preload() -> (objects, ms) \| None` | `gc.collect()` then `gc.freeze()`, moving everything alive into the permanent generation that full collections skip. Called once after the model preload, where the live set is the imported libraries and the embedders (issue #3870). `VTSEARCH_GC_FREEZE` falsey skips it |
 | `thread_cpu_ms()` | This thread's CPU time, or `0.0` where the platform has no `time.thread_time` |
@@ -637,7 +638,7 @@ picks up a change:
 | `stop_stall_diagnostics()` / `active_watchdog()` | Stop / return the watchdog `start_stall_diagnostics_from_env` started |
 
 The watchdog's report is read by its CPU line: process CPU close to wall
-with one thread on top is a GIL hold (the dump names the frame); no CPU
+with one thread on top is a GIL hold (its stack, first in the dump, names the frame); no CPU
 consumed is a process that was not scheduled (memory pressure, a paged-out
 cgroup); CPU spread over threads is contention, which the lock and phase
 lines then locate.

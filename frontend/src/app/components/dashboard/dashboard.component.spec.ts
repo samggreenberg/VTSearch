@@ -937,34 +937,51 @@ describe('DashboardComponent', () => {
       expect(component.showTrainHint).toBe(false);
     });
 
-    it('hides the RAM / Disk bars by default until a detector exists', () => {
-      let el = renderWith();
-      expect(el.querySelectorAll('vt-usage-bar').length).toBe(0);
-
-      component.refresh();
-      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
-      httpMock.expectOne('/api/detectors/registry').flush({ detectors: [{ id: 'm1', name: 'M' }] });
+    /** Set both usage probes' readings, flagging each `low` or not. */
+    function setUsage(ramLow: boolean, diskLow: boolean): void {
+      const gb = 1024 ** 3;
+      component.ramUsage.set({ total: 16 * gb, used: 8 * gb, free: 8 * gb, datasetBytes: gb, low: ramLow });
+      component.diskUsage.set({ total: 500 * gb, used: 499 * gb, free: gb, datasetBytes: gb, low: diskLow });
+      fixture.changeDetectorRef.markForCheck();
       TestBed.tick();
-      el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelectorAll('vt-usage-bar').length).toBe(2);
+    }
+
+    function shownBars(el: HTMLElement): string[] {
+      return [...el.querySelectorAll('vt-usage-bar')].map((b) => (b.classList.contains('side-left') ? 'ram' : 'disk'));
+    }
+
+    it('hides the RAM / Disk bars by default while neither is low, detectors or not', () => {
+      const el = renderWith([], [{ id: 'm1', name: 'M' }]);
+      setUsage(false, false);
+      expect(shownBars(el)).toEqual([]);
+    });
+
+    it('shows by default only the bar whose free space is low for the datasets', () => {
+      const el = renderWith();
+      setUsage(false, true);
+      expect(shownBars(el)).toEqual(['disk']);
+      setUsage(true, false);
+      expect(shownBars(el)).toEqual(['ram']);
+      setUsage(true, true);
+      expect(shownBars(el)).toEqual(['ram', 'disk']);
+    });
+
+    it('hides the bars by default before the first usage poll lands', () => {
+      const el = renderWith([], [{ id: 'm1', name: 'M' }]);
+      expect(shownBars(el)).toEqual([]);
     });
 
     it('always shows the bars on "view" and never on "hide"', async () => {
-      renderWith([], [{ id: 'm1', name: 'M' }]);
+      const el = renderWith([], [{ id: 'm1', name: 'M' }]);
+      setUsage(true, true);
       await loadUsageBarsSetting('hide');
-      const el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelectorAll('vt-usage-bar').length).toBe(0);
+      expect(shownBars(el)).toEqual([]);
 
+      setUsage(false, false);
       TestBed.inject(SettingsStateService).update({ show_usage_bars: 'view' }).subscribe();
       httpMock.expectOne('/api/settings').flush({ show_usage_bars: 'view' });
       TestBed.tick();
-      expect(el.querySelectorAll('vt-usage-bar').length).toBe(2);
-    });
-
-    it('shows the bars on "view" even with no detectors', async () => {
-      renderWith();
-      await loadUsageBarsSetting('view');
-      expect((fixture.nativeElement as HTMLElement).querySelectorAll('vt-usage-bar').length).toBe(2);
+      expect(shownBars(el)).toEqual(['ram', 'disk']);
     });
   });
 

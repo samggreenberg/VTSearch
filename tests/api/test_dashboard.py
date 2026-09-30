@@ -1,8 +1,11 @@
 """Tests for the VTSearch dashboard API endpoint."""
 
+from collections import namedtuple
+
 import pytest
 
 from vtscore.datasets.registry import register_dataset
+from vtsearch.routes.datasets import ui
 from vtscore.detectors.registry import register_detector
 
 
@@ -14,8 +17,9 @@ class TestDashboardDiskUsage:
         resp = client.get("/api/dashboard/disk-usage")
         assert resp.status_code == 200
         data = resp.get_json()
-        for key in ("total", "used", "free", "path"):
+        for key in ("total", "used", "free", "path", "dataset_bytes", "dataset_bytes_source", "low"):
             assert key in data
+        assert isinstance(data["low"], bool)
         assert isinstance(data["total"], int)
         assert isinstance(data["used"], int)
         assert isinstance(data["free"], int)
@@ -23,6 +27,89 @@ class TestDashboardDiskUsage:
         assert data["used"] >= 0
         assert data["free"] >= 0
         assert data["used"] + data["free"] <= data["total"] + 1  # rounding tolerance
+
+
+_DiskUsage = namedtuple("_DiskUsage", "total used free")
+
+
+def _register_sized(tmp_path, name, pkl_bytes, sidecar_bytes=0):
+    """Register a dataset whose pkl (plus an embedding sidecar) has the given sizes."""
+    pkl = tmp_path / f"ds_{name}.pkl"
+    pkl.write_bytes(b"x" * pkl_bytes)
+    if sidecar_bytes:
+        (tmp_path / f"ds_{name}.embmat.npy").write_bytes(b"x" * sidecar_bytes)
+    register_dataset(name=name, media_type="image", num_items=1, pkl_path=str(pkl))
+
+
+class TestDashboardUsageHeadroom:
+    """``low`` measures free space in datasets, not as a fraction of the machine."""
+
+    @pytest.fixture(autouse=True)
+    def _no_floor(self, monkeypatch):
+        # Byte-sized fixture datasets would otherwise sit under the floor.
+        monkeypatch.setattr(ui, "_MIN_DATASET_BYTES", 0)
+
+    def _disk(self, client, monkeypatch, total, free):
+        monkeypatch.setattr(ui.shutil, "disk_usage", lambda _p: _DiskUsage(total, total - free, free))
+        resp = client.get("/api/dashboard/disk-usage")
+        assert resp.status_code == 200
+        return resp.get_json()
+
+    def test_falls_back_to_a_stand_in_dataset_before_any_exists(self, client, monkeypatch):
+        data = self._disk(client, monkeypatch, total=10 * 2**40, free=2 * 2**30)
+        assert data["dataset_bytes"] == ui._DEFAULT_DATASET_BYTES
+        assert data["dataset_bytes_source"] == "default"
+        assert data["low"] is True  # 2 GiB holds fewer than 3 of the 1 GiB stand-in
+
+    def test_measures_the_largest_dataset_with_its_sidecars(self, client, monkeypatch, tmp_path):
+        _register_sized(tmp_path, "small", 100)
+        _register_sized(tmp_path, "big", 1000, sidecar_bytes=500)
+        data = self._disk(client, monkeypatch, total=10**6, free=10**5)
+        assert data["dataset_bytes"] == 1500
+        assert data["dataset_bytes_source"] == "largest"
+
+    def test_a_nearly_full_but_huge_disk_is_not_low(self, client, monkeypatch, tmp_path):
+        # 99% used, yet the free 1% still holds far more than 3 datasets.
+        _register_sized(tmp_path, "a", 1000)
+        data = self._disk(client, monkeypatch, total=10**9, free=10**7)
+        assert data["low"] is False
+
+    def test_a_mostly_empty_disk_is_low_when_few_datasets_fit(self, client, monkeypatch, tmp_path):
+        # 90% free, yet it holds only two more of the largest dataset.
+        _register_sized(tmp_path, "a", 1000)
+        data = self._disk(client, monkeypatch, total=2500, free=2250)
+        assert data["low"] is True
+
+    def test_low_turns_on_below_three_datasets_of_headroom(self, client, monkeypatch, tmp_path):
+        _register_sized(tmp_path, "a", 1000)
+        assert self._disk(client, monkeypatch, total=10**6, free=3000)["low"] is False
+        assert self._disk(client, monkeypatch, total=10**6, free=2999)["low"] is True
+
+    def test_the_floor_keeps_tiny_datasets_from_hiding_a_nearly_dry_disk(self, client, monkeypatch, tmp_path):
+        monkeypatch.setattr(ui, "_MIN_DATASET_BYTES", 10_000)
+        _register_sized(tmp_path, "a", 10)
+        assert self._disk(client, monkeypatch, total=10**6, free=20_000)["low"] is True
+
+    def test_ram_is_measured_in_the_same_datasets(self, client, monkeypatch, tmp_path):
+        _register_sized(tmp_path, "a", 1000)
+        monkeypatch.setattr(ui, "_read_meminfo", lambda: (16_000, 2_000))
+        data = client.get("/api/dashboard/ram-usage").get_json()
+        assert data == {
+            "total": 16_000,
+            "used": 14_000,
+            "free": 2_000,
+            "dataset_bytes": 1000,
+            "dataset_bytes_source": "largest",
+            "low": True,
+        }
+        monkeypatch.setattr(ui, "_read_meminfo", lambda: (16_000, 4_000))
+        assert client.get("/api/dashboard/ram-usage").get_json()["low"] is False
+
+    def test_unreadable_ram_is_never_low(self, client, monkeypatch):
+        monkeypatch.setattr(ui, "_read_meminfo", lambda: (0, 0))
+        data = client.get("/api/dashboard/ram-usage").get_json()
+        assert data["total"] == 0
+        assert data["low"] is False
 
 
 @pytest.mark.usefixtures("angular_bundle")
