@@ -57,9 +57,43 @@ def _cuda() -> bool:
         return False
 
 
+#: How the shortlist is sized (#4391, pre-registered arms): ``"fixed"`` is the
+#: shipped K; ``"adaptive"`` verifies further blocks while the last one keeps
+#: passing the gate (:func:`should_extend`); ``"cap"`` always verifies
+#: :data:`TILED_K_CAP`, the ceiling ``"adaptive"`` can reach.
+K_POLICY = "fixed"
+#: The most pages ``"adaptive"`` / ``"cap"`` verify.
+TILED_K_CAP = 4000
+#: Pages added per extension.
+EXTEND_STEP = 1000
+#: The tail of the verified shortlist that decides an extension ...
+EXTEND_WINDOW = 250
+#: ... and the fraction of it that must pass the gate.
+EXTEND_RATE = 0.10
+#: The shortlist the last re-rank verified (read by the FullMarks replay).
+LAST_TOP_K = 0
+
+
 def tiled_top_k(n_pages: int) -> int:
-    """How many Stage-1 pages Stage 2 verifies after a tiled Stage 1."""
-    return max(0, min(n_pages, TILED_TOP_K if _cuda() else TILED_TOP_K_CPU))
+    """How many Stage-1 pages Stage 2 verifies first after a tiled Stage 1."""
+    base = TILED_K_CAP if K_POLICY == "cap" else (TILED_TOP_K if _cuda() else TILED_TOP_K_CPU)
+    return max(0, min(n_pages, base))
+
+
+def should_extend(stage1_ids: Sequence[Any], verified: dict[Any, float], top_k: int) -> bool:
+    """Whether ``"adaptive"`` verifies the next block: the shortlist's tail still passes the gate.
+
+    *stage1_ids* is the Stage-1 order and *verified* each verified page's gate
+    score. When at least :data:`EXTEND_RATE` of the last :data:`EXTEND_WINDOW`
+    shortlisted pages pass (>= 0.5), the class probably continues past K.
+    """
+    if K_POLICY != "adaptive" or top_k >= min(len(stage1_ids), TILED_K_CAP):
+        return False
+    window = stage1_ids[max(0, top_k - EXTEND_WINDOW) : top_k]
+    if not window:
+        return False
+    passed = sum(1 for mid in window if verified.get(mid, 0.0) >= 0.5)
+    return passed >= EXTEND_RATE * len(window)
 
 
 # --------------------------------------------------------------------------
@@ -86,13 +120,61 @@ def _tile_matrix(snap: dict[Any, dict]) -> tuple[list[Any], np.ndarray, np.ndarr
     matrix = np.concatenate([t.vectors for t in tiles]).astype(np.float16, copy=False)
     starts = np.concatenate([[0], np.cumsum(counts)[:-1]]).astype(np.int64)
     _MATRIX_CACHE.clear()  # one dataset at a time: the matrix is large
+    _GPU_CACHE.clear()  # its device copy goes with it (the key is the matrix's id)
     entry = (ids, matrix, starts)
     _MATRIX_CACHE[key] = entry
     return entry
 
 
+#: The GPU copy of the cached tile matrix: ``(matrix key, fp16 tiles, page index per tile)``.
+_GPU_CACHE: dict[str, Any] = {}
+
+
+def _gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[np.ndarray]:
+    """:func:`_page_scores` on the GPU, or ``None`` when CUDA is absent or short of memory.
+
+    The fp16 tile matrix is copied to the device once per cached matrix and kept
+    there. Each chunk is widened to float32 on the device before the matmul, so
+    the scores equal the CPU path's. At 50,000 pages this is milliseconds against
+    ~3.5 s on the CPU (#4391), which was most of a vote's retrain.
+    """
+    if not _cuda():
+        return None
+    import torch  # noqa: PLC0415
+
+    try:
+        key = (id(matrix), matrix.shape)
+        if _GPU_CACHE.get("key") != key:
+            _GPU_CACHE.clear()
+            free, _total = torch.cuda.mem_get_info()
+            if matrix.nbytes * 3 > free:  # the copy, plus room for a float32 chunk and the models
+                return None
+            counts = np.diff(np.append(starts, matrix.shape[0]))
+            _GPU_CACHE.update(
+                key=key,
+                tiles=torch.from_numpy(matrix).to("cuda"),
+                page=torch.from_numpy(np.repeat(np.arange(len(starts)), counts)).to("cuda"),
+                pages=len(starts),
+            )
+        tiles, page = _GPU_CACHE["tiles"], _GPU_CACHE["page"]
+        q = torch.from_numpy(np.ascontiguousarray(queries, dtype=np.float32)).to("cuda").T  # (dim, Q)
+        best = torch.empty(tiles.shape[0], dtype=torch.float32, device="cuda")
+        for lo in range(0, tiles.shape[0], _CHUNK_ROWS):
+            best[lo : lo + _CHUNK_ROWS] = (tiles[lo : lo + _CHUNK_ROWS].float() @ q).amax(dim=1)
+        out = torch.full((_GPU_CACHE["pages"],), float("-inf"), device="cuda")
+        out.scatter_reduce_(0, page, best, reduce="amax", include_self=True)
+        return out.cpu().numpy()
+    except Exception:  # noqa: BLE001 - any device failure falls back to the CPU path
+        _log.warning("tiled Stage 1: GPU scoring failed; scoring on the CPU", exc_info=True)
+        _GPU_CACHE.clear()
+        return None
+
+
 def _page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> np.ndarray:
     """Each page's best (query, tile) cosine, chunked so float32 never holds the whole matrix."""
+    on_gpu = _gpu_page_scores(matrix, starts, queries)
+    if on_gpu is not None:
+        return on_gpu
     q = np.asarray(queries, dtype=np.float32).T  # (dim, Q)
     best = np.empty(matrix.shape[0], dtype=np.float32)
     for lo in range(0, matrix.shape[0], _CHUNK_ROWS):

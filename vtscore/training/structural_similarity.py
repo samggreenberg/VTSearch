@@ -434,19 +434,62 @@ def maybe_structural_rerank(
             ]
             cache = _verification_cache(det_ctx)
 
-    scorer = VerificationScorer()
-    reranked = structural_rerank(
+    reranked = _rerank_growing(
         results,
         snap,
         [tpl for _, tpl in templates],
-        scorer,
         matcher,
         top_k=top_k,
         score_key=score_key,
         template_keys=template_keys,
         cache=cache,
+        tiled=template_keys is not None,
     )
     return reranked, STRUCTURAL_DECISION_THRESHOLD
+
+
+def _rerank_growing(
+    results: list[dict],
+    snap: dict[Any, dict],
+    templates: list[StructuralFeatures],
+    matcher: StructuralMatcher,
+    *,
+    top_k: int,
+    score_key: str,
+    template_keys: Optional[Sequence[Any]],
+    cache: Optional[VerificationCache],
+    tiled: bool,
+) -> list[dict]:
+    """:func:`structural_rerank`, then, on a tiled dataset, more blocks while the shortlist's tail still verifies.
+
+    Growth follows :data:`~vtscore.training.structural_stage1.K_POLICY` (#4391).
+    Under the shipped ``"fixed"`` policy this is exactly one re-rank.
+    """
+    from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+
+    scorer = VerificationScorer()
+    stage1_ids = [e.get("id") for e in results]
+    if tiled and cache is None:
+        # No detector to keep fits on (a one-off sort): still never verify a page twice while growing.
+        cache = VerificationCache()
+    while True:
+        reranked = structural_rerank(
+            results,
+            snap,
+            templates,
+            scorer,
+            matcher,
+            top_k=top_k,
+            score_key=score_key,
+            template_keys=template_keys,
+            cache=cache,
+        )
+        verified = {e["id"]: float(e.get(score_key, 0.0) or 0.0) for e in reranked[:top_k]}
+        if not (tiled and s1.should_extend(stage1_ids, verified, top_k)):
+            break
+        top_k = min(len(results), top_k + s1.EXTEND_STEP, s1.TILED_K_CAP)
+    s1.LAST_TOP_K = top_k
+    return reranked
 
 
 def _verification_cache(det_ctx: Any) -> Optional[VerificationCache]:
@@ -510,6 +553,9 @@ def maybe_structural_rerank_example(
         # page-VLAD cosine, and the shortlist grows (#3928).
         results = tiled_stage1(snap, queries, score_key)
         top_k = tiled_top_k(len(results))
+        from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+
+        s1.LAST_TOP_K = top_k
     scorer = VerificationScorer()
     reranked = structural_rerank(
         results,

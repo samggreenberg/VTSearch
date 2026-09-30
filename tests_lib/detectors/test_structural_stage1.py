@@ -187,3 +187,43 @@ class TestChokepoint:
         out, _ = maybe_structural_rerank_example(results, 0.3, snap, crop)
         assert matcher.calls == 6
         assert {e["id"] for e in out} == set(snap)
+
+
+class TestShortlistGrowth:
+    """#4391's pre-registered K policies; ``"fixed"`` is what ships until the verdict."""
+
+    def test_only_the_adaptive_policy_extends_and_only_while_the_tail_passes(self, monkeypatch):
+        ids = list(range(3000))
+        monkeypatch.setattr(s1, "EXTEND_WINDOW", 100)
+        passing = {mid: 1.0 for mid in range(900, 1000)}  # the shortlist's last 100 all verify
+        monkeypatch.setattr(s1, "K_POLICY", "fixed")
+        assert not s1.should_extend(ids, passing, 1000)
+        monkeypatch.setattr(s1, "K_POLICY", "adaptive")
+        assert s1.should_extend(ids, passing, 1000)
+        assert not s1.should_extend(ids, {mid: 1.0 for mid in range(900, 905)}, 1000)  # 5% < 10%
+        monkeypatch.setattr(s1, "TILED_K_CAP", 1000)
+        assert not s1.should_extend(ids, passing, 1000)  # at the cap
+
+    def test_the_cap_policy_verifies_the_ceiling_from_the_start(self, monkeypatch):
+        monkeypatch.setattr(s1, "K_POLICY", "cap")
+        assert s1.tiled_top_k(50_000) == s1.TILED_K_CAP
+        assert s1.tiled_top_k(2_000) == 2_000
+
+    def test_adaptive_growth_verifies_more_blocks_on_a_tiled_dataset(self, tiled, monkeypatch):
+        snap = tiled(12)
+        # Every page verifies strongly, so every tail passes and the shortlist grows to the cap.
+        matcher = _CountingMatcher({id(snap[mid]["local_features"]): 30 for mid in snap})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+        monkeypatch.setattr(s1, "_cuda", lambda: False)
+        monkeypatch.setattr(s1, "TILED_TOP_K_CPU", 4)
+        monkeypatch.setattr(s1, "EXTEND_STEP", 4)
+        monkeypatch.setattr(s1, "EXTEND_WINDOW", 2)
+        monkeypatch.setattr(s1, "TILED_K_CAP", 10)
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        monkeypatch.setattr(s1, "K_POLICY", "fixed")
+        maybe_structural_rerank(results, 0.5, snap, {0: None}, {})
+        assert s1.LAST_TOP_K == 4 and matcher.calls == 4
+        monkeypatch.setattr(s1, "K_POLICY", "adaptive")
+        matcher.calls = 0
+        maybe_structural_rerank(results, 0.5, snap, {0: None}, {})
+        assert s1.LAST_TOP_K == 10 and matcher.calls == 10  # 4 -> 8 -> 10 (cap); no page verified twice

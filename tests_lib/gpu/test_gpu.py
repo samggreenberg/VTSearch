@@ -803,3 +803,28 @@ class TestGPUMemoryCleanup:
         final_mem = torch.cuda.memory_allocated(device)
         # Memory should return close to initial (within 5 MB tolerance for E5)
         assert final_mem - initial_mem < 5_000_000
+
+
+# ---------------------------------------------------------------------------
+# Tiled Stage 1 (#4391): GPU scoring equals the CPU path
+# ---------------------------------------------------------------------------
+
+
+class TestTiledStage1GPU:
+    def test_gpu_page_scores_equal_the_cpu_path(self, monkeypatch):
+        from vtscore.training import structural_stage1 as s1
+
+        rng = np.random.default_rng(0)
+        counts = rng.integers(1, 9, size=300)
+        rows = rng.standard_normal((int(counts.sum()), 32)).astype(np.float32)
+        tiles = (rows / np.linalg.norm(rows, axis=1, keepdims=True)).astype(np.float16)
+        starts = np.concatenate([[0], np.cumsum(counts)[:-1]]).astype(np.int64)
+        queries = rng.standard_normal((5, 32)).astype(np.float32)
+        queries /= np.linalg.norm(queries, axis=1, keepdims=True)
+
+        s1._GPU_CACHE.clear()
+        on_gpu = s1._gpu_page_scores(tiles, starts, queries)
+        assert on_gpu is not None and s1._GPU_CACHE  # the device copy is kept
+        monkeypatch.setattr(s1, "_cuda", lambda: False)
+        on_cpu = s1._page_scores(tiles, starts, queries)
+        np.testing.assert_allclose(on_gpu, on_cpu, atol=1e-5)
