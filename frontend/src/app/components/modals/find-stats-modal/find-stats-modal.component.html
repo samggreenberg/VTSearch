@@ -129,7 +129,7 @@
         class="precision-chart"
         [attr.viewBox]="'0 0 ' + chartWidth() + ' ' + chartHeight"
         role="img"
-        aria-label="Estimated and checked precision of the top N items, against N on a log scale"
+        aria-label="Checked precision of the top N items, against N on a log scale"
         (mousemove)="onChartMove($event)"
         (mouseleave)="onChartLeave()"
       >
@@ -163,22 +163,17 @@
             <line class="range-cap" [attr.x1]="cutX - 6" [attr.y1]="yFor(r.lo)" [attr.x2]="cutX + 6" [attr.y2]="yFor(r.lo)" />
           </g>
         }
-        <!-- the two curves -->
-        <polyline class="line-estimate" [attr.points]="estimatedPolyline" />
+        <!-- the checked-precision curve -->
         <polyline class="line-verified" [attr.points]="verifiedPolyline" />
-        <!-- hover crosshair and the points under it -->
+        <!-- hover crosshair and the point under it -->
         @if (hoverPoint; as hp) {
           <line class="crosshair" [attr.x1]="xFor(hp.n_returned)" [attr.y1]="axisTop" [attr.x2]="xFor(hp.n_returned)" [attr.y2]="axisBottom" />
-          @if (hp.estimated_precision != null) {
-            <circle class="dot-estimate" [attr.cx]="xFor(hp.n_returned)" [attr.cy]="yFor(hp.estimated_precision)" r="3" />
-          }
           @if (hp.verified_precision != null) {
             <circle class="dot-verified" [attr.cx]="xFor(hp.n_returned)" [attr.cy]="yFor(hp.verified_precision)" r="3" />
           }
         }
       </svg>
       <div class="chart-legend">
-        <span class="legend-item"><span class="swatch swatch-estimate"></span>Estimated (at least)</span>
         <span class="legend-item"><span class="swatch swatch-verified"></span>Checked by you</span>
         @if (floorY !== null) {
           <span class="legend-item" title="The precision the Threshold asks of what the line keeps"><span class="swatch swatch-floor"></span>Threshold</span>
@@ -199,15 +194,6 @@
           Nothing clears the line.
         }
       </p>
-      @if (stats.estimate_status === 'insufficient_evidence') {
-        <p class="chart-note" role="note">
-          No estimate yet: it needs {{ stats.min_calibration_positives }} Good votes among the detector's held-out calibration votes, and has {{ stats.calibration_positives }}.
-        </p>
-      } @else if (stats.estimate_status === 'unavailable') {
-        <p class="chart-note" role="note">
-          No estimate: the detector has too few votes to hold any out for calibration.
-        </p>
-      }
       @if (lineFloor; as floor) {
         @if (floor.status === 'unchecked') {
           <p class="chart-note" role="note">

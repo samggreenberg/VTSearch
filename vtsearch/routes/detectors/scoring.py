@@ -411,16 +411,13 @@ def find_stats():
     unverified as verified": it counts only the items the user checked, since
     counting every unchecked match as right would read 99% whatever the checks
     found.  The **precision curve** charts how right the returned set is against
-    how much is returned - verified precision on the checked items and the
-    precision floor's lower-bound estimate - at log-spaced return counts (see
-    :mod:`vtsearch.routes.detectors._find_precision`).
+    how much is returned - verified precision on the checked items - at
+    log-spaced return counts (see :mod:`vtsearch.routes.detectors._find_precision`).
+    It carries no model-based estimate (#4360).
     Pure read; no new state.
     """
-    import numpy as np
-
     from vtscore.state.core import detector_floor_state, get_active_detector_context
-    from vtscore.training.thresholds import MIN_CALIBRATION_POSITIVES
-    from vtsearch.routes.detectors._find_precision import curve_counts, estimated_precision_at, verified_precision_at
+    from vtsearch.routes.detectors._find_precision import curve_counts, verified_precision_at
     from vtsearch.state import get_min_precision
 
     det_ctx = get_active_detector_context()
@@ -458,7 +455,6 @@ def find_stats():
     counts = curve_counts(len(ranked), extra=n_returned or None)
     checked_good = {cid: cid in good for cid in verified if cid in scores}
     verified_points = verified_precision_at(ranked_ids, checked_good, counts)
-    estimate = estimated_precision_at(det_ctx, np.fromiter((s for _cid, s in ranked), dtype=np.float64), counts)
     precision_curve = [
         {
             "n_returned": k,
@@ -466,9 +462,8 @@ def find_stats():
             "checked": n_checked,
             "checked_good": n_good,
             "verified_precision": None if v_prec is None else round(v_prec, 4),
-            "estimated_precision": None if e_prec is None else round(e_prec, 4),
         }
-        for k, (n_checked, n_good, v_prec), e_prec in zip(counts, verified_points, estimate.values, strict=True)
+        for k, (n_checked, n_good, v_prec) in zip(counts, verified_points, strict=True)
     ]
 
     return {
@@ -492,9 +487,6 @@ def find_stats():
         "n_returned": n_returned,
         "stale": getattr(det_ctx, "find_eval_stale", False),
         "precision_curve": precision_curve,
-        "estimate_status": estimate.status,
-        "calibration_positives": estimate.calibration_positives,
-        "min_calibration_positives": MIN_CALIBRATION_POSITIVES,
     }
 
 

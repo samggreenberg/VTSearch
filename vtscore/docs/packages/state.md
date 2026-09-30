@@ -138,7 +138,7 @@ canonical persisted form.
 | `labelset_source` | `dict \| None` | Active sync target |
 | `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another floor or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
-| `precision_floor_cache` | `PrecisionFloorEstimate \| None` | The #4220 estimate the Find Stats curve reads; off the line's path since #4272 |
+| `precision_floor_cache` | `PrecisionFloorEstimate \| None` | The #4220 estimate; off the line's path since #4272 and unread by the app since #4360 (#4362 retires it) |
 | `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the floor keeps the top *count* unvoted items of it, and the spot check draws its candidate from it |
 | `precision_check` / `precision_check_run` | `SpotCheck \| None` | The floor's last finished spot check (kept across retrains; its range goes `stale`) and the one running now |
 

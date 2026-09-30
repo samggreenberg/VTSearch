@@ -565,7 +565,7 @@ class TestARetrainParksTheEstimate:
         assert (
             threshold == ranking.threshold_for(32) == line_under(min(ranking.score_of(cid) for cid in range(514, 530)))
         )
-        assert ctx.precision_floor_cache is not None, "the Find Stats estimate is still parked"
+        assert ctx.precision_floor_cache is not None, "the #4220 estimate is still parked (until #4362)"
 
     def test_a_retrain_keeps_a_finished_checks_count(self):
         ctx, _t = self._train(LEARNED_HARD, min_precision=0.5)

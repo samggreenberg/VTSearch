@@ -31,12 +31,12 @@ function compactCount(n: number): string {
  * Detector-evaluation Stats for a Find run: the 2×2 confusion of the adopted
  * label set against the detector's original call, the derived agreement /
  * kept rates, and the headline precision-vs-returned chart (#4242) rendered as
- * a dependency-free inline SVG line chart: the estimated (lower-bound)
- * precision of the top N and the verified precision of the checked items in
- * it, on a log-scale count axis with the line (the current cut) marked, and
- * the precision floor it was cut at drawn across it (#4246). Where the line
- * meets the floor, the spot check's likely range for the set the line keeps
- * stands as a bar (#4273): the check's picks alone, never the estimate.
+ * a dependency-free inline SVG line chart: the verified precision of the
+ * checked items in the top N, on a log-scale count axis with the line (the
+ * current cut) marked, and the precision floor it was cut at drawn across it
+ * (#4246). Where the line meets the floor, the spot check's likely range for
+ * the set the line keeps stands as a bar (#4273). No model-based estimate is
+ * drawn: the #4220 estimator could not back an "at least" (#4360).
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -259,21 +259,13 @@ export class FindStatsModalComponent implements OnInit {
     return ticks;
   }
 
-  private polyline(key: 'estimated_precision' | 'verified_precision'): string {
+  get verifiedPolyline(): string {
     const s = this.stats();
     if (!s) return '';
     return s.precision_curve
-      .filter((p) => p[key] != null)
-      .map((p) => `${this.xFor(p.n_returned).toFixed(1)},${this.yFor(p[key] as number).toFixed(1)}`)
+      .filter((p) => p.verified_precision != null)
+      .map((p) => `${this.xFor(p.n_returned).toFixed(1)},${this.yFor(p.verified_precision as number).toFixed(1)}`)
       .join(' ');
-  }
-
-  get estimatedPolyline(): string {
-    return this.polyline('estimated_precision');
-  }
-
-  get verifiedPolyline(): string {
-    return this.polyline('verified_precision');
   }
 
   get hasVerified(): boolean {
@@ -373,13 +365,10 @@ export class FindStatsModalComponent implements OnInit {
     return p == null ? '-' : `${Math.round(p * 100)}%`;
   }
 
-  /** The readout under the chart for one point: what is known there, and the checked count. */
+  /** The readout under the chart for one point: the checked precision there, and the checked count. */
   readout(p: FindStatsPrecisionPoint): { main: string; detail: string } {
-    const parts: string[] = [];
-    if (p.estimated_precision != null) parts.push(`estimated at least ${this.pct(p.estimated_precision)}`);
-    parts.push(p.checked > 0 ? `checked ${this.pct(p.verified_precision)}` : 'nothing checked');
     return {
-      main: parts.join(' · '),
+      main: p.checked > 0 ? `checked ${this.pct(p.verified_precision)}` : 'nothing checked',
       detail: p.checked > 0 ? `(${p.checked_good.toLocaleString()} of ${p.checked.toLocaleString()} Good)` : '',
     };
   }

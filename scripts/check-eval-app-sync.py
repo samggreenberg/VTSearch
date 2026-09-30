@@ -491,8 +491,8 @@ MIRRORS: list[Mirror] = [
             "estimate is built (the unvoted remainder as corpus, the WHOLE haystack - votes "
             "included - as the reference pool, each fold's held-out votes cut down by "
             "eligible_fold_orderings, each fold's own excluded haystack); it no longer draws "
-            "the line on either side and feeds only the Find Stats curve, but the harness still "
-            "builds it the same way. Since #4269 the app hands reporting_line "
+            "the line on either side and, since #4360, nothing reads it (#4362 retires it), but "
+            "the harness still builds it the same way. Since #4269 the app hands reporting_line "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
             "hands it the arm's `inclusion`, whose default is that 0."
         ),

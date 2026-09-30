@@ -16,7 +16,8 @@ default arm runs the same check. Its frontend, the check step and the likely
 range in the floor control and on the Stats chart, landed with #4273. The
 library also holds:
 - the estimator, `vtscore.training.thresholds.precision_floor_cut`, which is
-  public API and stays, off the promise path (the Find Stats curve reads it);
+  public API and stays, off the promise path (nothing in the app reads it
+  since #4360; #4362 retires its wiring);
 - one re-cut seam, `vtscore.state.core.recut_detector_threshold`;
 - the inverse that lets acquisition find its origin off any line,
   `FoldAnchoredCut.inclusion_for_threshold`.

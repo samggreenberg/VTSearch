@@ -11,8 +11,6 @@ Covers:
 
 from __future__ import annotations
 
-import numpy as np
-
 from tests.helpers import planted_precision_floor_estimate, setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
@@ -251,7 +249,6 @@ class TestFindStats:
     def test_precision_curve_over_the_ranking(self, client):
         """Each point is the top k by score, with verified precision over what was checked in it."""
         self._setup()
-        get_active_detector_context().precision_floor_cache = None
         data = client.get("/api/find/stats").get_json()
         assert data["n_scored"] == 4
         assert data["n_returned"] == 2  # 0.9 and 0.8 clear 0.5
@@ -262,45 +259,21 @@ class TestFindStats:
         assert [(p["checked"], p["checked_good"]) for p in curve] == [(1, 1), (2, 1), (2, 1), (3, 2)]
         assert [p["verified_precision"] for p in curve] == [1.0, 0.5, 0.5, 0.6667]
 
-    def test_no_estimate_without_calibration_folds(self, client):
-        self._setup()
-        get_active_detector_context().precision_floor_cache = None
-        data = client.get("/api/find/stats").get_json()
-        assert data["estimate_status"] == "unavailable"
-        assert data["calibration_positives"] == 0
-        assert data["min_calibration_positives"] == 10
-        assert all(p["estimated_precision"] is None for p in data["precision_curve"])
+    def test_the_curve_carries_no_estimate(self, client):
+        """No model-based estimate reaches the chart, even with the #4220 estimate parked (#4360).
 
-    def test_estimate_is_gated_like_the_floor(self, client):
-        """Below the floor's calibration-positive gate the estimate is withheld, and the count says why."""
+        That estimator breaks most of its "at least" promises once its
+        reference pool is consistent (#4256), so the curve is verified
+        precision alone and the only range is the spot check's.
+        """
         self._setup()
-        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=3)
+        get_active_detector_context().precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
         data = client.get("/api/find/stats").get_json()
-        assert data["estimate_status"] == "insufficient_evidence"
-        assert data["calibration_positives"] == 6
-        assert all(p["estimated_precision"] is None for p in data["precision_curve"])
-
-    def test_estimate_drawn_from_the_detectors_folds(self, client):
-        ctx = get_active_detector_context()
-        ctx.find_mode = True
-        ctx.threshold = 0.5
-        rng = np.random.default_rng(42)
-        ids = sorted(medias)
-        scores = {cid: float(s) for cid, s in zip(ids, rng.beta(1.0, 4.0, len(ids)), strict=False)}
-        scores[ids[0]] = 0.99
-        set_find_scores(scores)
-        set_find_initial_labels({cid: "good" if s >= 0.5 else "bad" for cid, s in scores.items()})
-        ctx.verified_ids.clear()
-        ctx.precision_floor_cache = planted_precision_floor_estimate(n_pos_per_fold=8)
-        data = client.get("/api/find/stats").get_json()
-        assert data["estimate_status"] == "estimated"
-        assert data["calibration_positives"] == 16
-        estimates = [p["estimated_precision"] for p in data["precision_curve"]]
-        assert all(e is not None and 0.0 <= e <= 1.0 for e in estimates)
-        # The top of the ranking is estimated at least as right as the whole corpus.
-        assert estimates[0] >= estimates[-1]
-        # Nothing checked, so no verified precision anywhere.
-        assert all(p["verified_precision"] is None for p in data["precision_curve"])
+        assert not {"estimate_status", "calibration_positives", "min_calibration_positives"} & data.keys()
+        assert all(
+            set(p) == {"n_returned", "threshold", "checked", "checked_good", "verified_precision"}
+            for p in data["precision_curve"]
+        )
 
 
 class TestCorrectionsToDetector:

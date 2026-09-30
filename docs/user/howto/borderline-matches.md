@@ -100,19 +100,14 @@ most it can.
   <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with the Threshold drawn across it, the line marked, and the line under the chart reading it there" width="720" />
 </picture>
 
-The chart has two curves:
+The chart's curve, **Checked by you**, counts only the pictures you have
+checked. You check the ones near the line, where the detector is least sure,
+so it can read lower than the matches as a whole. The chart makes no guess
+about the pictures nobody checked: the bar on the Line is the only measure of
+those, and only a spot check draws it.
 
-- **Estimated (at least)** is VTSearch's cautious estimate, worked out from the
-  detector's own answers. It shows the shape of the trade-off; the line
-  itself is measured by the spot check, never by this curve. It needs enough
-  **Good** answers to test itself on; until then the curve is missing, and
-  the chart says how many more it needs.
-- **Checked by you** counts only the pictures you have checked. You check the
-  ones near the line, where the detector is least sure, so it can read lower
-  than the matches as a whole.
-
-Point at the chart to read both at any count; with the pointer off it, the
-line under the chart reads them at the Line. The chart is drawn when the Stats
+Point at the chart to read the curve at any count; with the pointer off it,
+the line under the chart reads it at the Line. The chart is drawn when the Stats
 window opens, so close it and open it again after you move the Threshold.
 
 ## Where the setting goes
