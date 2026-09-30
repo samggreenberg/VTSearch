@@ -175,7 +175,7 @@ class TestInclusionUnderAFloor:
             atlas_min_node_size=3,
         )
         assert not df.empty
-        assert df["min_precision"].isna().all()
+        assert bool(df["min_precision"].isna().all())
 
     def test_cli_refuses_inclusion_without_min_precision_off(self, capsys):
         with pytest.raises(SystemExit) as exc:

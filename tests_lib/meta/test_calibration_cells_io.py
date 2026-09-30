@@ -557,7 +557,7 @@ def test_a_harness_written_run_ends_at_its_last_click(tmp_path: Path) -> None:
     )
     cells = tmp_path / "arm" / "cells"
     cells.mkdir(parents=True)
-    pd.DataFrame(rows, columns=CALIBRATION_COLUMNS).to_csv(cells / "task_0000.csv", index=False)
+    pd.DataFrame(rows, columns=pd.Index(CALIBRATION_COLUMNS)).to_csv(cells / "task_0000.csv", index=False)
 
     cells_io = _load_cells_io()
     kept, _ = cells_io.load_arm(tmp_path / "arm", keep_check=True)

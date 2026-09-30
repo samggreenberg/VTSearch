@@ -141,25 +141,29 @@ def _write_cells(exp: Path) -> None:
         for table in (rows, picks, frames):
             for r in table:
                 r["embedder"] = "siglip"
-        pd.DataFrame(rows, columns=[*CALIBRATION_COLUMNS, "embedder"]).to_csv(
+        pd.DataFrame(rows, columns=pd.Index([*CALIBRATION_COLUMNS, "embedder"])).to_csv(
             cells / f"task_{idx:04d}.csv", index=False
         )
-        pd.DataFrame(picks, columns=[*PICK_COLUMNS, "embedder"]).to_csv(
+        pd.DataFrame(picks, columns=pd.Index([*PICK_COLUMNS, "embedder"])).to_csv(
             cells / f"task_{idx:04d}__picks.csv", index=False
         )
-        pd.DataFrame(frames, columns=[*RANK_FRAME_COLUMNS, "embedder"]).to_csv(
+        pd.DataFrame(frames, columns=pd.Index([*RANK_FRAME_COLUMNS, "embedder"])).to_csv(
             cells / f"task_{idx:04d}__rankframes.csv", index=False
         )
     # A run that never found a positive: no metric row, only its (all-Bad) clicks.
     idx = len(CATS)
-    pd.DataFrame(columns=[*CALIBRATION_COLUMNS, "embedder"]).to_csv(cells / f"task_{idx:04d}.csv", index=False)
+    pd.DataFrame(columns=pd.Index([*CALIBRATION_COLUMNS, "embedder"])).to_csv(
+        cells / f"task_{idx:04d}.csv", index=False
+    )
     starved = [
         {"seed": 0, "dataset": "coco_better", "category": "cat9@small", "style": "whole_image", "t": t,
          "phase": "good", "picked_id": 1000 + t, "picked_label": 0, "embedder": "siglip"}
         for t in (1, 2, 3)
     ]  # fmt: skip
-    pd.DataFrame(starved, columns=[*PICK_COLUMNS, "embedder"]).to_csv(cells / f"task_{idx:04d}__picks.csv", index=False)
-    pd.DataFrame(columns=[*RANK_FRAME_COLUMNS, "embedder"]).to_csv(
+    pd.DataFrame(starved, columns=pd.Index([*PICK_COLUMNS, "embedder"])).to_csv(
+        cells / f"task_{idx:04d}__picks.csv", index=False
+    )
+    pd.DataFrame(columns=pd.Index([*RANK_FRAME_COLUMNS, "embedder"])).to_csv(
         cells / f"task_{idx:04d}__rankframes.csv", index=False
     )
 
@@ -295,5 +299,5 @@ def test_without_rank_frames_the_line_is_known_at_click_0_only(run, tmp_path) ->
     assert trained.loc[trained["point"] == "text", "precision"].notna().all()
     assert trained.loc[trained["point"] != "text", "precision"].isna().all()
     cells = pd.read_csv(out / "cells.csv")
-    assert cells["final_ap"].notna().all(), "AP, harvest and the check need no rank frame"
+    assert bool(cells["final_ap"].notna().all()), "AP, harvest and the check need no rank frame"
     assert "no rank frames" in (out / "summary.md").read_text()
