@@ -64,6 +64,11 @@ to run from click 0 to the first trained click was the most prominent mark on
 the chart and it stood for a measurement nobody made: between the two there is
 no detector, so there is no level to draw.  A gap says exactly that.
 
+**The axis ends at the last click, not at the spot check.**  A floor-era run
+ends on its spot check (#4272), whose rows sit past ``max_steps`` and come from
+a model retrained on the check's own picks.  ``_cells_io.load_arm`` sets them
+apart (#4364), so the page never draws them as clicks.
+
 The two notches sit in the margins rather than as rules across the panel for the
 same reason: each is a level that holds at *one* x, and a horizontal rule across
 the chart asserts it holds at every x.  The skyline is the sharper case — drawn

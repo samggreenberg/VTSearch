@@ -3,7 +3,7 @@ that loader must describe what it dropped in one vocabulary.
 
 Checks over ``scripts/experiments/calibration/`` — mostly static text, plus a
 handful that load ``_cells_io`` itself by path and run both loaders over a
-four-file fixture.  Nothing here imports an *analyzer* (they need matplotlib
+four-file fixture, and one over a cell the harness writes.  Nothing here imports an *analyzer* (they need matplotlib
 and a real results tree), and nothing here tests shipped
 ``vtsearch``/``vtscore`` behaviour, which is why it lives in the ``meta``
 group.
@@ -495,6 +495,77 @@ def test_a_mis_tagged_cell_still_trips_the_guard(tmp_path: Path) -> None:
     (cells / "task_0000.csv").write_text("t,cost,gmm_variant,schedule,pool_variant\n1,0.5,weird_variant,,\n")
     with pytest.raises(SystemExit, match="check tag columns"):
         cells_io.load_arm(tmp_path / "arm")
+
+
+# --- The spot check is not a click (#4364) ------------------------------------
+#
+# Since #4272 the default arm ends on a spot check whose rows carry no variant
+# tag, so the base-row filter keeps them.  They sit past ``max_steps``, and
+# every caller of ``load_arm`` (``curves.py`` and ``viewer.py`` among them)
+# reads its frame as clicks.
+
+_CHECKED = "t,cost,phase,gmm_variant,schedule,pool_variant\n1,0.5,good,,,max\n2,0.4,more,,,max\n7,0.3,check,,,max\n"
+
+
+def test_load_arm_sets_the_spot_check_apart(tmp_path: Path) -> None:
+    cells_io = _load_cells_io()
+    cells = tmp_path / "arm" / "cells"
+    cells.mkdir(parents=True)
+    (cells / "task_0000.csv").write_text(_CHECKED)
+    frame, prov = cells_io.load_arm(tmp_path / "arm")
+    assert frame["t"].tolist() == [1, 2]
+    assert prov["check_rows"] == 1
+    assert "1 spot-check rows set apart" in cells_io.describe_load(prov)
+    kept, kept_prov = cells_io.load_arm(tmp_path / "arm", keep_check=True)
+    assert kept["t"].tolist() == [1, 2, 7], "a study of the check itself must be able to keep its rows"
+    assert kept_prov["check_rows"] == 0
+    assert "spot-check" not in cells_io.describe_load(kept_prov)
+
+
+def test_a_run_from_before_the_check_loads_unchanged(arm: Path) -> None:
+    """No ``phase`` column at all: nothing to set apart, and nothing else moves."""
+    cells_io = _load_cells_io()
+    frame, prov = cells_io.load_arm(arm)
+    assert len(frame) == 1 and prov["check_rows"] == 0
+    assert "spot-check" not in cells_io.describe_load(prov)
+
+
+def test_a_harness_written_run_ends_at_its_last_click(tmp_path: Path) -> None:
+    """The issue's repro: a 20-step run whose check rows reached ``t = 25``.
+
+    Written by the real harness on synthetic clusters, with the default
+    ``spot_check``, so the cell has the floor-era shape without the GRID.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from vtscore.eval.voting_columns import CALIBRATION_COLUMNS
+    from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+    max_steps = 20
+    rng = np.random.default_rng(42)
+    cats = ["cat0", "other0", "other1", "other2"]
+    centres = np.eye(len(cats), 16, dtype=np.float32)
+    medias = {}
+    for c, name in enumerate(cats):
+        for _ in range(80):
+            mid = len(medias) + 1
+            emb = (centres[c] + rng.normal(0, 0.45, 16)).astype(np.float32)
+            medias[mid] = {"id": mid, "embeddings": {"emb": emb}, "category": name}
+    rows = simulate_voting_iterations(
+        medias, "cat0", seed=0, dataset_name="synthetic", max_steps=max_steps, style="whole_image"
+    )
+    cells = tmp_path / "arm" / "cells"
+    cells.mkdir(parents=True)
+    pd.DataFrame(rows, columns=CALIBRATION_COLUMNS).to_csv(cells / "task_0000.csv", index=False)
+
+    cells_io = _load_cells_io()
+    kept, _ = cells_io.load_arm(tmp_path / "arm", keep_check=True)
+    assert kept["t"].max() > max_steps, "the harness no longer ends on a check; this test proves nothing"
+    frame, prov = cells_io.load_arm(tmp_path / "arm")
+    assert frame["t"].max() == max_steps
+    assert not cells_io.check_rows(frame).any()
+    assert prov["check_rows"] == int(cells_io.check_rows(kept).sum()) > 0
 
 
 # --- Gzipped cells (#4184) ----------------------------------------------------

@@ -97,8 +97,6 @@ RUN_KEY = ["dataset", "category", "embedder", "style", "seed"]
 #: The per-image test: an image needs this many clicks, and flags past this |z|.
 MIN_OBS_Z, Z_FLAG = 10, 3.0
 _BUCKET = ["arm", "category", "label", "when"]
-#: The phase the harness gives the end-of-run spot check's rows and picks.
-CHECK = "check"
 #: The ceiling's arm, and the kind its rank frame carries.
 CEILING = "skyline_train_full"
 #: The line's metrics, as ``_rank_metrics.line_metrics`` names them.
@@ -112,10 +110,8 @@ def _f(x) -> float:
         return float("nan")
 
 
-def _is_check(df: pd.DataFrame) -> pd.Series:
-    if "phase" not in df.columns:
-        return pd.Series(False, index=df.index)
-    return df["phase"].fillna("").astype(str) == CHECK
+#: The check's rows, or picks: the one rule ``_cells_io.load_arm`` sets them apart by.
+_is_check = _cells_io.check_rows
 
 
 def load(exp: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:

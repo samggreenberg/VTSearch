@@ -69,6 +69,11 @@ into a good-looking curve:
    because a hairball with a third of its lines removed looks like a tighter
    arm, not a truncated figure.
 
+**The spot check is not a click.**  A floor-era run ends on its spot check
+(#4272), whose rows sit past ``max_steps`` and come from a model retrained on
+the check's own picks.  ``_cells_io.load_arm`` sets them apart (#4364), so a
+curve ends at the last click.
+
 The per-run lines are coloured by category **prevalence** when a prevalence
 table is supplied, which is what turns the hairball into an explanation: the
 runs sitting along the top are the scarce categories, not random bad luck.
@@ -821,12 +826,18 @@ def _load(results: Path, arms: Sequence[str]) -> pd.DataFrame:
     import _cells_io
 
     parts = []
+    n_check = 0
     for arm in arms:
-        df, _prov = _cells_io.load_arm(results / arm)
+        # `load_arm` sets a floor-era run's spot check apart (#4364): its rows
+        # sit past `max_steps` and are not clicks, so no curve is drawn to them.
+        df, prov = _cells_io.load_arm(results / arm)
+        n_check += prov["check_rows"]
         if not df.empty:
             df = df.copy()
             df["arm"] = arm
             parts.append(df)
+    if n_check:
+        print(f"NOTE: {n_check:,} spot-check rows set apart; the curves end at the last click, not the check.")
     return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
 
 
