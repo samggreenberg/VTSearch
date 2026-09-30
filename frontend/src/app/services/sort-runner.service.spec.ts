@@ -261,6 +261,13 @@ describe('SortRunnerService', () => {
     httpMock.expectOne('/api/find/cancel').flush({ ok: true });
   });
 
+  it('quiesce forgets the kind of the sort it superseded (#4326)', () => {
+    runner.onTextSort('birds');
+    runner.quiesce();
+
+    expect(runner.newestSortKind()).toBeNull();
+  });
+
   // --- a newer sort ends an older one (#4318) -----------------------------------
 
   describe('a newer sort ends an older one (#4318)', () => {
@@ -336,6 +343,28 @@ describe('SortRunnerService', () => {
       expect(httpMock.expectOne('/api/find-label').cancelled).toBe(true);
       expect(sortState.sortProgress).toBe(0);
       expect(sortState.sortProgressTotal).toBe(0);
+    });
+
+    it('names the kind of the newest sort, in flight and once landed (#4326)', () => {
+      enableLearnedSort();
+      expect(runner.newestSortKind()).toBeNull();
+      // A `learned` mode carried over from the last session says nothing about
+      // the sort actually on its way.
+      sortState.setSortMode('learned');
+      runner.onTextSort('seed');
+      expect(runner.newestSortKind()).toBe('text');
+
+      runner.onLearnedSort(false);
+      expect(runner.newestSortKind()).toBe('learned');
+      httpMock.expectOne('/api/learned-sort').flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.9 }],
+        threshold: 0.5,
+      });
+      expect(runner.newestSortKind()).toBe('learned');
+
+      runner.onExampleSortStarted({ results: [{ id: 3, similarity: 0.8 }], threshold: 0.5 }, false);
+      expect(runner.newestSortKind()).toBe('example');
     });
   });
 

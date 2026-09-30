@@ -20,6 +20,10 @@ import type { LearnedSortResponse } from '../generated/api-client/models/learned
 import type { FloorState } from '../generated/api-client/models/floor-state';
 import { lineFloorFrom, type LineFloor } from '../utils/line-floor';
 
+/** What a sort ranks by: the detector's model, a text query, example media, or
+ *  a saved detector's scores. See {@link SortRunnerService.newestSortKind}. */
+export type SortKind = 'learned' | 'text' | 'example' | 'detector';
+
 /**
  * Runs sorts, and lands the user on the next thing to vote on.
  *
@@ -204,10 +208,31 @@ export class SortRunnerService {
     this.sortState.stopFindProgressTracking();
     this.currentLearnedSortJobId = null;
     this.sortState.setSortBusy(false);
+    this._newestSortKind.set(null);
   }
 
   /** Fires when a sort starts, ending the one before it. See {@link beginSort}. */
   private readonly sortSuperseded$ = new Subject<void>();
+
+  private readonly _newestSortKind = signal<SortKind | null>(null);
+
+  /**
+   * The kind of the sort started last for this pair: the one still in flight,
+   * or, once it has landed, the one whose ranking is on screen. Null until a
+   * sort starts, and again after a pair switch.
+   *
+   * One value covers both because a newer sort ends an older one (see
+   * {@link beginSort}), so the sort started last is the ranking the view ends
+   * up on. The Train view's seed backstop reads it to tell a ranking the model
+   * produced from Autopilot's text seed, which the retrain correction has to
+   * replace. `sortMode` cannot tell them apart: a `learned` mode carried over
+   * from the last session survives entry while the seed is a text sort (#4326).
+   *
+   * A sort that fails or is cancelled leaves its kind here over whatever an
+   * older sort left on screen, so read it together with `sortBusy` and the
+   * ranking, as the backstop does.
+   */
+  readonly newestSortKind = this._newestSortKind.asReadonly();
 
   /**
    * Start a sort: end whichever sort is still in flight, and return the
@@ -226,11 +251,12 @@ export class SortRunnerService {
    * server coalesces a burst of learned sorts for one pair into a single job:
    * cancelling the old id can cancel the new request's.
    */
-  private beginSort(): <T>(source: Observable<T>) => Observable<T> {
+  private beginSort(kind: SortKind): <T>(source: Observable<T>) => Observable<T> {
     this.sortSuperseded$.next();
     this.sortState.stopFindProgressTracking();
     this.sortState.setSortProgress(0, 0);
     this.currentLearnedSortJobId = null;
+    this._newestSortKind.set(kind);
     return (source) => source.pipe(this.pairScope.scoped(), takeUntil(this.sortSuperseded$));
   }
 
@@ -346,7 +372,7 @@ export class SortRunnerService {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
-    this.sortingApi.sort({ text }).pipe(this.beginSort()).subscribe({
+    this.sortingApi.sort({ text }).pipe(this.beginSort('text')).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
@@ -362,7 +388,7 @@ export class SortRunnerService {
 
   onLearnedSort(autoSelect = true): void {
     if (!this.voteState.learnedSortAvailable) return;
-    const scope = this.beginSort();
+    const scope = this.beginSort('learned');
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training…');
     this.sortingApi.learnedSort().pipe(scope).subscribe({
@@ -495,7 +521,7 @@ export class SortRunnerService {
   onModelSelected(modelId: string, autoSelect = true): void {
     if (!modelId) return;
     // Before the progress feed starts: superseding the previous sort stops it.
-    const scope = this.beginSort();
+    const scope = this.beginSort('detector');
     this.sortState.setSortMode('load');
     this.sortState.setLoadSortSource({ kind: 'detector', detectorId: modelId });
     this.sortState.setSortBusy(true);
@@ -538,7 +564,7 @@ export class SortRunnerService {
   onExampleSortStarted(data: unknown, autoSelect = true): void {
     // Installed on the spot, but still the newest sort: nothing already in
     // flight may land on top of it.
-    this.beginSort();
+    this.beginSort('example');
     this.installExampleSort(data, autoSelect);
   }
 
@@ -562,7 +588,7 @@ export class SortRunnerService {
   private uploadExampleSort(file: File, cropParams: Record<string, unknown> | undefined, autoSelect: boolean): void {
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting by example…');
-    this.sortingApi.exampleSort(file, cropParams).pipe(this.beginSort()).subscribe({
+    this.sortingApi.exampleSort(file, cropParams).pipe(this.beginSort('example')).subscribe({
       next: (response) => this.installExampleSort({ ...response, source: { kind: 'upload', file, cropParams } }, autoSelect),
       error: () => {
         this.sortState.setSortBusy(false);
@@ -592,7 +618,7 @@ export class SortRunnerService {
     this.sortState.setSortStatus('Sorting by example…');
     this.sortingApi
       .exampleSortById({ media_id: mediaId, crop_params: cropParams })
-      .pipe(this.beginSort())
+      .pipe(this.beginSort('example'))
       .subscribe({
         next: (response) => {
           this.sortState.setSortMode('load');
@@ -623,7 +649,7 @@ export class SortRunnerService {
     if (filenames.length === 0) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
-    this.sortingApi.exampleSortServer({ filenames }).pipe(this.beginSort()).subscribe({
+    this.sortingApi.exampleSortServer({ filenames }).pipe(this.beginSort('example')).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);

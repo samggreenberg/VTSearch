@@ -193,6 +193,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Train switches to the detector's own ranking even when the text-hint sort
+  is slow** (issue #4326). Entering Train with a detector that already had
+  Good and Bad labels, but too few Goods on this dataset to move Autopilot
+  past its first step (labels made on another dataset, say), could leave the
+  list on the text hint's ranking. It happened when the hint's sort was still
+  running as the window noticed the detector was trained, or when the last
+  session had ended on the Learned sort. Both now end on the detector's ranking.
 - **Opening Train shows the same first item every time** (issue #4318).
   Entering Train with a detector that already had labels could show one of
   several items, depending on which of the sorts it starts on entry answered
