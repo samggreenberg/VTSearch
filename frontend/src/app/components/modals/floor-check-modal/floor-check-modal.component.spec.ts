@@ -10,8 +10,19 @@ import { MediaStateService } from '../../../services/media-state.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import type { Media } from '../../../models/api.models';
 
-/** A running check's wire state, round *round* of *rounds*, dealing *picks* from the top *candidate*. */
-function running(picks: number[], round = 1, rounds = 1, candidate = 32, extra: Record<string, unknown> = {}) {
+/**
+ * A running walk's wire state (#4388): round *round* of a ranking of *rounds*
+ * bands, dealing *picks* from band *band* (its 1-based rank positions
+ * *lo*–*hi*) while the set under test is the top *candidate*.
+ */
+function running(
+  picks: number[],
+  round = 1,
+  rounds = 6,
+  candidate = 32,
+  extra: Record<string, unknown> = {},
+  band: { index: number; lo: number; hi: number } | null = { index: 0, lo: 1, hi: 8 },
+) {
   return {
     status: 'running',
     min_precision: 0.5,
@@ -19,7 +30,11 @@ function running(picks: number[], round = 1, rounds = 1, candidate = 32, extra: 
     rounds,
     picks_per_round: 5,
     candidate,
-    start_candidate: 32 * 2 ** (rounds - 1),
+    start_candidate: 32,
+    bands: Math.max(1, Math.ceil(Math.log2(Math.max(candidate, 8) / 8)) + 1),
+    band,
+    direction: 'start',
+    estimate: null,
     picks,
     labelled: 0,
     right: 0,
@@ -30,7 +45,14 @@ function running(picks: number[], round = 1, rounds = 1, candidate = 32, extra: 
 
 /** A finished check's wire state. */
 function finished(status: 'confirmed' | 'short', range: { lo: number; hi: number; labelled: number; right: number }) {
-  return { ...running([], 1, 1), status, labelled: range.labelled, right: range.right, range };
+  return {
+    ...running([], 1, 6, 32, {}, null),
+    status,
+    labelled: range.labelled,
+    right: range.right,
+    range,
+    estimate: range.labelled ? range.right / range.labelled : null,
+  };
 }
 
 describe('FloorCheckModalComponent (#4273)', () => {
@@ -100,7 +122,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
       expect(text()).toContain('Spot check');
       // The floor goes unnamed (#4317): the radio on the Threshold spectrum shows it.
       expect(text()).not.toMatch(/Centered|Complete|Correct|aiming/);
-      expect(text()).toContain('5 picks drawn at random from the top 32. Is each one a match?');
+      expect(text()).toContain('5 picks drawn at random from the top 8, checking the top 32. Is each one a match?');
       expect(dots().length).toBe(5);
       expect(component.picks()).toEqual([17, 4, 29, 8, 11]);
       expect(component.currentId()).toBe(17);
@@ -197,68 +219,93 @@ describe('FloorCheckModalComponent (#4273)', () => {
     });
   });
 
-  describe('a check of several rounds', () => {
-    it('says a short round is not there yet, checks a shorter list, and ends on the result', async () => {
-      // 10%: the top 128, up to three rounds of 5.
+  describe('a walk of several bands (#4388)', () => {
+    it('audits the starting bands in turn, says when it walks deeper or back, and ends on the result', async () => {
+      // 50%: the top 32 in three bands (8, 8, 16), then the walk.
       startReq().flush({
-        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128 }),
-        check: { ...running([90, 3, 51, 7, 64], 1, 3, 128), min_precision: 0.1 },
+        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        check: running([90, 3, 51, 7, 64], 1, 6, 32, {}, { index: 0, lo: 1, hi: 8 }),
       });
       await settleZoneless(fixture);
-      expect(text()).toContain('Round 1 of up to 3: 5 picks drawn at random from the top 128.');
+      expect(text()).toContain('5 picks drawn at random from the top 8, checking the top 32.');
       expect(el().querySelector('.check-shorter')).toBeNull();
-      for (let i = 0; i < 5; i++) await press('ArrowLeft');
-
-      await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128 }),
-        check: { ...running([12, 40, 5, 33, 21], 2, 3, 64), min_precision: 0.1, labelled: 2, right: 0 },
-      });
-      expect(voted.map((v) => v.finished)).toEqual([false]);
-      expect(el().querySelector('.check-shorter')!.textContent).toContain('Not there yet: checking a shorter list');
-      expect(text()).toContain('Round 2 of up to 3: 5 picks drawn at random from the top 64.');
-      expect(component.currentId()).toBe(12);
-      expect(dots().every((d) => d.getAttribute('data-vote') === null)).toBe(true);
-      for (let i = 0; i < 5; i++) await press('ArrowLeft');
-
-      await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128 }),
-        check: { ...running([8, 19, 2, 30, 14], 3, 3, 32), min_precision: 0.1, labelled: 3, right: 0 },
-      });
-      expect(text()).toContain('Round 3 of up to 3: 5 picks drawn at random from the top 32.');
       for (let i = 0; i < 5; i++) await press('ArrowRight');
 
-      const range = { lo: 0.04, hi: 0.67, labelled: 8, right: 5 };
+      // The next band the starting set owes: no verdict yet, so no note.
       await answer(votesReq(), {
-        floor: { ...wireFloor('short', { minPrecision: 0.1, count: 32 }), range },
-        check: { ...finished('short', range), min_precision: 0.1, round: 3, rounds: 3 },
+        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        check: running([12, 40, 5, 33, 21], 2, 6, 32, { labelled: 5, right: 5 }, { index: 1, lo: 9, hi: 16 }),
       });
-      expect(voted.map((v) => v.finished)).toEqual([false, false, true]);
+      expect(voted.map((v) => v.finished)).toEqual([false]);
+      expect(el().querySelector('.check-shorter')).toBeNull();
+      expect(text()).toContain('5 picks drawn at random from items 9–16 of the list, checking the top 32.');
+      expect(component.currentId()).toBe(12);
+      expect(dots().every((d) => d.getAttribute('data-vote') === null)).toBe(true);
+      for (let i = 0; i < 5; i++) await press('ArrowRight');
+      await answer(votesReq(), {
+        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        check: running([8, 19, 2, 30, 14], 3, 6, 32, { labelled: 10, right: 10 }, { index: 2, lo: 17, hi: 32 }),
+      });
+      for (let i = 0; i < 5; i++) await press('ArrowRight');
+
+      // The top 32 met the floor: the walk goes deeper, into the next 32.
+      await answer(votesReq(), {
+        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        check: running(
+          [41, 60, 35, 52, 48],
+          4,
+          6,
+          64,
+          { labelled: 15, right: 15, direction: 'deeper', estimate: 1, bands: 4 },
+          { index: 3, lo: 33, hi: 64 },
+        ),
+      });
+      expect(el().querySelector('.check-shorter')!.textContent).toContain('Looks right so far: checking the next 32.');
+      expect(text()).toContain('5 picks drawn at random from items 33–64 of the list, checking the top 64.');
+      for (let i = 0; i < 5; i++) await press('ArrowLeft');
+
+      // The top 64 fell short: the walk steps back to the top 32 and ends there.
+      const range = { lo: 0.55, hi: 1, labelled: 15, right: 15 };
+      await answer(votesReq(), {
+        floor: { ...wireFloor('confirmed', { minPrecision: 0.5, count: 32 }), range },
+        check: { ...finished('confirmed', range), round: 4, candidate: 32, direction: 'shallower', bands: 3 },
+      });
+      expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
+      expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('confirmed');
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Fell short: likely 4–67% right (checked 8).',
+        'Confirmed: likely 55–100% right (checked 15).',
       );
-      expect(text()).toContain('The line keeps the top 32 the check ended on.');
-      // A short check names no cause: the copy is true of a sparse corpus and a weak model alike.
-      expect(text()).not.toMatch(/sparse|weak|too few|model/i);
+      expect(text()).toContain('The line keeps these 32');
       expect(dots().length).toBe(0);
     });
 
-    it('ends on a confirmed floor with the range and the count the check returned', async () => {
-      // Complete, confirmed in its first round: the line keeps all 128.
-      await start([17, 4, 29, 8, 11], 3, 128);
-      for (let i = 0; i < 5; i++) await press('ArrowRight');
-      const range = { lo: 0.44, hi: 1, labelled: 5, right: 5 };
+    it('says a short set is not there yet, and a short check keeps the first band', async () => {
+      await start([90, 3, 51, 7, 64], 6, 32);
+      for (let i = 0; i < 5; i++) await press('ArrowLeft');
       await answer(votesReq(), {
-        floor: { ...wireFloor('confirmed', { minPrecision: 0.1, count: 128 }), range },
-        check: { ...finished('confirmed', range), min_precision: 0.1, rounds: 3, candidate: 128 },
+        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        check: running([12, 40, 5, 33, 21], 2, 6, 32, { labelled: 5, right: 0 }, { index: 1, lo: 9, hi: 16 }),
       });
-      expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('confirmed');
+      for (let i = 0; i < 5; i++) await press('ArrowLeft');
+      await answer(votesReq(), {
+        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        check: running([8, 19, 2, 30, 14], 3, 6, 32, { labelled: 10, right: 0 }, { index: 2, lo: 17, hi: 32 }),
+      });
+      for (let i = 0; i < 5; i++) await press('ArrowLeft');
+      // Every set fell short, down to the first band: no new picks, the result.
+      const range = { lo: 0, hi: 0.45, labelled: 5, right: 0 };
+      await answer(votesReq(), {
+        floor: { ...wireFloor('short', { minPrecision: 0.5, count: 8 }), range },
+        check: { ...finished('short', range), round: 3, candidate: 8, direction: 'shallower', bands: 1 },
+      });
+      expect(voted.map((v) => v.finished)).toEqual([false, false, true]);
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Confirmed: likely 44–100% right (checked 5).',
+        'Fell short: likely 0–45% right (checked 5).',
       );
-      expect(text()).toContain('The line keeps these 128.');
-      // The floor shows as no number (#4298, #4317); the range stays one.
-      expect(text()).not.toContain('10%');
-      expect(voted.at(-1)!.finished).toBe(true);
+      expect(text()).toContain('No set met the threshold, so the line keeps the top 8.');
+      // A short check names no cause: the copy is true of a sparse corpus and a weak model alike.
+      expect(text()).not.toMatch(/sparse|weak|too few|model/i);
+      expect(dots().length).toBe(0);
     });
   });
 

@@ -10,6 +10,26 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The precision floor's spot check walks the ranking in bands** (issue
+  #4388, the owner's ruling on #4383). `SpotCheck.start` now takes the whole
+  unvoted ranking (ids in rank order) rather than a fixed candidate, cuts it
+  into bands (the top 8, the next 8, 16, 32, ...), audits each band with 5
+  uniform picks, and walks: one band deeper while the band-weighted share of
+  right picks meets the floor, one shallower while it does not, stopping on
+  the first reversal. The line keeps the deepest set that met the floor
+  (`confirmed`, a band edge) or the first band (`short`, 8 items) instead of a
+  halving candidate that bottomed out at 32. New: `BAND_BASE`, `band_edges`,
+  `bands_for`, `WALK_START` / `WALK_DEEPER` / `WALK_SHALLOWER`,
+  `SpotCheck.estimate`, `SpotCheck.band_counts`, `SpotCheck.band_ids`, the
+  `start_count=` keyword, and `bands`, `band`, `direction` and `estimate` in
+  `SpotCheck.as_dict`. Changed: `check_schedule(P).rounds` is the bands the
+  walk audits before its first verdict (5 at 10%, 4 at 25%, 3 at 50% and
+  above) and `.picks` is 5 at every floor below 1; `rounds_for` counts bands;
+  `range_tail` is the tail each band's interval gets over the set's bands;
+  `SpotCheck.range` is the size-weighted mean of the bands' intervals;
+  `SpotCheck.candidate_ids` is `ranking_ids`. The eval default arm runs the
+  same walk (`spot_check="end"`), one row per band.
+
 - **Python 3.11 or later is now required** (issue #4385). `requires-python`
   moves from `>=3.10` to `>=3.11`, since Python 3.10 reaches end of life in
   October 2026. No API changes.

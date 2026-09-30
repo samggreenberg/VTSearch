@@ -330,29 +330,47 @@ class MinPrecisionResponseSchema(FloorStateSchema):
 # ---------------------------------------------------------------------------
 
 
+class CheckBandSchema(Schema):
+    """The band a walk is auditing: its index from the top and its rank positions (1-based, inclusive)."""
+
+    index = fields.Integer(required=True)
+    lo = fields.Integer(required=True)
+    hi = fields.Integer(required=True)
+
+
 class PrecisionCheckStateSchema(Schema):
-    """A spot check of the active detector's floor: its round, picks, labels and range (#4272)."""
+    """A spot check of the active detector's floor: the band being audited, the set under test, labels and range (#4272, #4388)."""
 
     status = fields.String(required=True, validate=validate.OneOf(PRECISION_CHECK_STATES))
     # The floor the check is (or was) measuring.
     min_precision = fields.Float(required=True)
-    # The round being voted on (1-based) and how many the check can run.
+    # The round being voted on (1-based; one round per band audited) and how
+    # many bands the ranking has in all.
     round = fields.Integer(required=True)
     rounds = fields.Integer(required=True)
-    # How many fresh picks each round draws.
+    # How many fresh picks each band is audited with.
     picks_per_round = fields.Integer(required=True)
-    # The current candidate's size, and the size it started at (halved on a
-    # failed round, down to 32).
+    # The set under test's size (the top ``bands`` bands; the kept set's once
+    # the check has finished), and the size the walk started from.
     candidate = fields.Integer(required=True)
     start_candidate = fields.Integer(required=True)
+    # How many bands from the top the set under test spans, the band whose
+    # picks are pending (``null`` between bands), and which way the walk last
+    # moved: ``start``, ``deeper`` or ``shallower``.
+    bands = fields.Integer(required=True)
+    band = fields.Nested(CheckBandSchema, required=True, allow_none=True)
+    direction = fields.String(required=True, validate=validate.OneOf(["start", "deeper", "shallower"]))
+    # The band-weighted share of the set under test that its picks say is
+    # right; ``null`` while a band of it is still unaudited.
+    estimate = fields.Float(required=True, allow_none=True)
     # The picks awaiting the user's vote this round, in draw order (random).
     # They are a check, not the ranking: a client must not show them as the
     # top of the sort.
     picks = fields.List(fields.Integer(), required=True)
-    # Labels inside the current candidate so far, and how many were right.
+    # Labels inside the set under test so far, and how many were right.
     labelled = fields.Integer(required=True)
     right = fields.Integer(required=True)
-    # The candidate's likely range from those labels; ``null`` before any.
+    # The set's likely range from those labels; ``null`` before any.
     range = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
 
 

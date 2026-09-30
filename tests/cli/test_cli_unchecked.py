@@ -26,11 +26,11 @@ from vtscore.detectors.training import scoring_rows_for_snap
 from vtscore.state import set_min_precision
 from vtscore.training.thresholds import LineRanking
 
-#: ``(min_precision, the schedule's starting candidate, rounds, picks)``.
+#: ``(min_precision, the schedule's starting candidate, the bands the walk audits first, picks a band)`` (#4388).
 PRESETS = [
-    pytest.param(0.1, 128, 3, 5, id="10%"),
-    pytest.param(0.5, 32, 1, 5, id="50%"),
-    pytest.param(0.9, 32, 1, 29, id="90%"),
+    pytest.param(0.1, 128, 5, 5, id="10%"),
+    pytest.param(0.5, 32, 3, 5, id="50%"),
+    pytest.param(0.9, 32, 3, 5, id="90%"),
 ]
 
 
@@ -115,7 +115,7 @@ FLOOR = {
     "status": "unchecked",
     "count": 32,
     "range": None,
-    "schedule": {"candidate": 32, "rounds": 1, "picks": 5},
+    "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
 }
 
 

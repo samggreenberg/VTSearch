@@ -190,7 +190,7 @@ class TestStreamingNdjsonExport:
             "status": "unchecked",
             "count": 32,
             "range": None,
-            "schedule": {"candidate": 32, "rounds": 1, "picks": 5},
+            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
         }
         monkeypatch.setattr(
             cli_mod,

@@ -20,6 +20,7 @@ import pytest
 from vtscore.eval.autopilot_flow import pick_provenance
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
+    BAND_BASE,
     DEFAULT_MIN_PRECISION,
     FLOOR_CONFIRMED,
     FLOOR_SHORT,
@@ -102,7 +103,12 @@ class TestTheArms:
         assert 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0
         assert last["check_labelled"] >= 1 and 0 <= last["check_right"] <= last["check_labelled"]
         assert last["check_stale"] in (0, 1)
-        assert (last["floor_status"] == FLOOR_CONFIRMED) == (last["range_lo"] >= DEFAULT_MIN_PRECISION - 1e-9)
+        # The walk decides on the band-weighted share of its picks, not on the
+        # range's lower end (#4388): a confirmed set's range can straddle the
+        # floor, and a short one keeps the first band whatever its range says.
+        assert last["floor_count"] >= 1
+        if last["floor_status"] == FLOOR_SHORT:
+            assert last["floor_count"] <= BAND_BASE
 
     def test_switching_the_check_off_leaves_the_run_unchecked(self):
         rows, picks = self._run(spot_check="off")

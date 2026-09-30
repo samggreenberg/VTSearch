@@ -56,7 +56,7 @@ class TestTheRoute:
         data = client.get("/api/min-precision").get_json()
         assert data["status"] == "unchecked" and data["range"] is None
         assert data["n_returned"] is None
-        assert data["count"] == 32 and data["schedule"] == {"candidate": 32, "rounds": 1, "picks": 5}
+        assert data["count"] == 32 and data["schedule"] == {"candidate": 32, "rounds": 3, "picks": 5}
 
     def test_set_persists_and_null_is_refused(self, client):
         data = client.post("/api/min-precision", json={"min_precision": 0.8}).get_json()

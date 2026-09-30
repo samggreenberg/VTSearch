@@ -1,28 +1,30 @@
 """The precision floor's spot check (#4272): draw picks, take the votes, report the line's state.
 
-The floor *X* is a share of what the line returns that should be right.  A
-**spot check** measures it: the user votes on uniform random picks from a
-candidate of the top unvoted items of the current ranking, and a
-Clopper-Pearson bound on those picks decides whether the set is confirmed at
-*X*, or the candidate halves into another round, down to the top 32.  The rule
-lives in :mod:`vtscore.training.thresholds.spot_check`; this blueprint is its
-lifecycle for the active detector:
+The floor *P* is a share of what the line returns that should be right.  A
+**spot check** measures it by walking the unvoted ranking in bands (#4388):
+the user votes on uniform random picks from each band (the top 8, the next 8,
+then 16, 32, ...), the walk goes deeper while the band-weighted share of right
+answers meets *P* and shallower while it does not, and the line keeps the
+deepest set that met it.  The rule lives in
+:mod:`vtscore.training.thresholds.spot_check`; this blueprint is its lifecycle
+for the active detector:
 
-* ``POST /api/precision-check/start`` fixes the candidate off the detector's
-  current ranking and deals the first round's picks;
+* ``POST /api/precision-check/start`` fixes the unvoted ranking off the
+  detector's current one and deals the first band's picks;
 * ``POST /api/precision-check/votes`` records the user's votes on them as
   ordinary labels (provenance ``check``), so they train the model like any
-  other vote, and either deals the next round or ends the check;
+  other vote, and either deals the next band or ends the check;
 * ``POST /api/precision-check/cancel`` abandons a running check, leaving the
   floor's state as it was (the votes already cast stay votes);
 * ``GET /api/precision-check`` reports the running check, or the last finished
   one, beside the floor's state.
 
 A finished check is kept on the detector and its result decides where the line
-sits - the set it ended on - until a new check replaces it.  Later votes
+sits - the set the walk ended on - until a new check replaces it.  Later votes
 retrain the model and the line follows the new ranking at the same count; the
 result's range then reports ``stale``.  Starting a new check needs a changed
-candidate: there is no redraw on the same one.
+ranking: there is no redraw on the same list (any vote, the check's own
+included, changes it).
 """
 
 from __future__ import annotations
@@ -67,20 +69,20 @@ def get_precision_check():
 @require_detector_header
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
 @precision_check_bp.alt_response(
-    409, description="No ranking to draw from, nothing unvoted in it, or the same candidate as the last check."
+    409, description="No ranking to draw from, nothing unvoted in it, or the same list as the last check."
 )
 def start_precision_check():
     """Start a spot check of the active detector's floor over its current ranking.
 
-    The candidate is the top *K* unvoted items of the ranking the detector
-    last scored (*K* from the floor's schedule: 128 at 10%, 64 at 25%, 32 at
-    50% and above), fixed for the whole check.  Deals the first round's picks.
-    A check already running is replaced.  The last finished result stays in
-    force until this check ends.
+    The walk is over the unvoted items of the ranking the detector last
+    scored, in rank order, fixed for the whole check, and starts at the bands
+    that hold the floor's starting count (32 at 50% and above, 128 at 10%).
+    Deals the first band's picks.  A check already running is replaced.  The
+    last finished result stays in force until this check ends.
     """
     from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
-    from vtscore.training.thresholds import SpotCheck, check_schedule  # noqa: PLC0415
+    from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
     from vtsearch.state import get_min_precision  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
@@ -90,15 +92,15 @@ def start_precision_check():
     floor = get_min_precision()
     if floor is None:
         abort(409, message="The detector has no precision floor to check.")
-    candidate = ranking.candidate(check_schedule(floor).candidate, human_voted_ids(det_ctx))
-    if not candidate:
+    unvoted = tuple(int(i) for i in ranking.unvoted_ids(human_voted_ids(det_ctx)))
+    if not unvoted:
         abort(409, message="Nothing is left unvoted to check.")
     last = det_ctx.precision_check
-    if last is not None and last.candidate_ids == candidate:
-        abort(409, message="This candidate was already checked; vote on something first, or re-sort.")
+    if last is not None and last.ranking_ids == unvoted:
+        abort(409, message="This list was already checked; vote on something first, or re-sort.")
     # Unseeded unless VTSEARCH_SPOT_CHECK_SEED is set, which only the
     # screenshot harness does, so a refresh frames the same picks (#4330).
-    det_ctx.precision_check_run = SpotCheck.start(candidate, floor, seed=SPOT_CHECK_SEED)
+    det_ctx.precision_check_run = SpotCheck.start(unvoted, floor, seed=SPOT_CHECK_SEED)
     return _payload()
 
 
@@ -106,18 +108,18 @@ def start_precision_check():
 @require_detector_header
 @precision_check_bp.arguments(PrecisionCheckVotesRequestSchema)
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
-@precision_check_bp.alt_response(400, description="A vote on an item that is not one of this round's picks.")
+@precision_check_bp.alt_response(400, description="A vote on an item that is not one of this band's picks.")
 @precision_check_bp.alt_response(409, description="No check is running.")
 def vote_precision_check(body: dict):
     """Record votes on the running check's picks.
 
     Each vote is an ordinary label on the item (provenance ``check``): it
     trains the model, persists to the labelset, and in Find mode verifies the
-    item.  Once every pick of the round is labelled the round is decided: the
-    floor is confirmed, the candidate halves into the next round and its picks
-    are dealt, or the check ends short.  The response carries the check's new
-    state and the floor's, whose line moves to the set a finished check ended
-    on.
+    item.  Once every pick of the band is labelled the walk moves on: the next
+    band the set under test still owes is dealt, or the set is decided and the
+    walk goes deeper (a new band is dealt), shallower, or ends.  The response
+    carries the check's new state and the floor's, whose line moves to the set
+    a finished check ended on.
     """
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
     from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
@@ -131,7 +133,7 @@ def vote_precision_check(body: dict):
     votes = {int(v["id"]): v["label"] == "good" for v in body["votes"]}
     stray = [cid for cid in votes if cid not in check.pending]
     if stray:
-        abort(400, message=f"Not this round's picks: {stray}")
+        abort(400, message=f"Not this band's picks: {stray}")
 
     for cid, right in votes.items():
         set_vote(cid, "good" if right else "bad", provenance=dict(CHECK_PROVENANCE))

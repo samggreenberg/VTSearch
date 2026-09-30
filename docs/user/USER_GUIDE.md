@@ -123,11 +123,12 @@ radios. Until you **check** that set, nothing has measured how much of it is
 right, and the note under the Threshold says so: **Top 32 kept, unchecked**.
 
 **The spot check.** In Train, click **Check 5 picks** beside the note.
-VTSearch draws a few items at random from the set the line keeps and shows
-them one at a time. Vote each one Good or Bad with the usual keys: → for
-Good, ← for Bad, and ↓ to go back and change one. The last vote of a round
-sends it. Find offers no check: it is where you test the Threshold you set
-here, not where you set it.
+VTSearch cuts the list you haven't voted on into bands from the top (the top
+8, the next 8, then 16, 32, 64, and so on), draws 5 items at random from a
+band, and shows them one at a time. Vote each one Good or Bad with the usual
+keys: → for Good, ← for Bad, and ↓ to go back and change one. The last vote
+of a round sends it, and the check moves to the next band. Find offers no
+check: it is where you test the Threshold you set here, not where you set it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
@@ -135,28 +136,36 @@ here, not where you set it.
 </picture>
 
 The picks come in the order they were drawn, which is random, with no rank
-and no score. They are a sample from the whole set, not the top of the list.
-A round is 5 picks on the False Positives and middle radios, and 29 on the
-False Negatives radio: a Threshold that asks more takes more evidence to
-reach.
+and no score. They are a sample from the band, not the top of the list. A
+round is 5 picks from one band, whatever the radio.
 
-When a round falls short and the set can still shrink, the check says **Not
-there yet: checking a shorter list**, halves the set and draws a fresh
-round. A check on the False Positives radio can take up to three rounds (the
-top 128, then 64, then 32). It ends on the result, which the note under the
-Threshold then shows:
+The check **walks** the list. It starts with the bands that make up the set
+the line keeps (the top 32 on the middle and False Negatives radios, the top
+128 on False Positives), one round each. Once those are in, it weighs the
+picks by the size of their bands to say how much of the set is right. If
+that meets the Threshold, the check says **Looks right so far: checking the
+next 32** and draws from the next band down; if it does not, **Not there
+yet: checking a shorter list**, and it drops the deepest band without
+drawing again. It stops the first time the answer flips, or at either end of
+the list, and the line keeps the deepest set that met the Threshold. On a
+long list of good matches the line can end up keeping hundreds; on a short
+or sparse one, as few as 8. The note under the Threshold then shows the
+result:
 
-- **Confirmed · likely 55–100% right (checked 5) · 32 kept** - the check
-  confirmed the Threshold for the set it ended on.
-- **Fell short · likely 19–92% right (checked 5) · top 32 kept** - the check
-  fell short, and the line keeps the top 32 it ended on. The note names no
-  cause: a dataset with very few matches and a detector that can't yet tell
-  them apart look the same from here.
+- **Confirmed · likely 55–100% right (checked 15) · 64 kept** - the check
+  found the top 64 right enough, and the line keeps them.
+- **Fell short · likely 19–92% right (checked 15) · top 8 kept** - no set met
+  the Threshold, and the line keeps the top 8. The note names no cause: a
+  dataset with very few matches and a detector that can't yet tell them
+  apart look the same from here.
 
 **The likely range** says how much of the set the line keeps is probably
-right. It comes from your picks alone, never from the detector's own guess.
-With 5 picks it is wide, about 57 points on average on the middle radio;
-that width is the honest answer to "how close did we get?". The range also
+right. It comes from your picks alone, never from the detector's own guess:
+each band's picks bound that band, and the bands are weighed by their size.
+With 5 picks a band it is wide; that width is the honest answer to "how
+close did we get?". The check decides on the picks' plain share, so a
+confirmed set's range can reach below the Threshold: the range says how
+sure the picks are, the state says which way they leaned. The range also
 stands on the Find view's **Stats** chart, at the line where it meets the
 Threshold.
 
@@ -813,15 +822,15 @@ note under the spectrum says what the Threshold is doing to the line, in one
 of three states:
 
 - **Top 32 kept, unchecked** - nothing has measured the set yet.
-- **Confirmed · likely 55–100% right (checked 5) · 32 kept** - a check
-  confirmed the Threshold.
-- **Fell short · likely 19–92% right (checked 5) · top 32 kept** - a check
+- **Confirmed · likely 55–100% right (checked 15) · 64 kept** - a check
+  found the top 64 right enough, and the line keeps them.
+- **Fell short · likely 19–92% right (checked 15) · top 8 kept** - a check
   fell short, and says how close it got.
 
 The range a check measured is a number. In Train, beside the note, **Check 5
-picks** runs a spot check of the set: a few random picks you vote on, which
-measure how much of it is right. The pick count is the one a round takes at
-your Threshold (29 on the False Negatives radio). See
+picks** runs a spot check of the list: 5 random picks from each band of it,
+which you vote on, walking deeper while the list stays right enough and
+shorter while it does not. See
 [How close the line got](#how-close-the-line-got) for the check and its
 likely range. Find shows the same note with no check beside it: there you
 test the Threshold, and it is too late to label more to set it. The **?**

@@ -196,24 +196,25 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="floor.check_schedule",
         app="py:vtscore.training.thresholds.spot_check.check_schedule",
-        harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::schedule_for",
+        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::kept_count,band_edges,BASE_FINE,M_PICKS",
         kind="ported",
         note=(
-            "The spot check's schedule (#4272): the starting candidate K(X) = 32 * 2**max(0, "
-            "floor(log2(0.5 / X))), the rounds R = log2(K / 32) + 1, and the picks a round "
-            "m = max(5, ceil(ln(alpha / R) / ln X)). The owner priced this exact rule on the "
-            "#4224 rank frames (docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md); the "
-            "library's check_schedule is a port of the analysis script's schedule_for, and the "
-            "presets must keep resolving to (128, 3, 5), (64, 2, 5), (32, 1, 5), (32, 1, 11) and "
-            "(32, 1, 29) - tests_lib/sorting/test_spot_check.py pins them literally. The eval "
-            "harness itself delegates to the library (voting_iterations calls check_schedule / "
-            "SpotCheck), so the pair pinned here is library vs. the priced reference."
+            "Where the band walk starts and what a band costs (#4388, the owner's ruling on "
+            "#4383): the starting candidate K(P) = 32 * 2**max(0, floor(log2(0.5 / P))) (the "
+            "#4267 ruling, unchanged), the bands 8 / 16 / 32 / 64 / ... the walk is over "
+            "(band_edges at BASE_FINE), and the 5 picks a band (M_PICKS). The owner priced this "
+            "exact rule (grow-fine) on the #4220 precision frames "
+            "(docs/experiments/2026-09-30-line-estimate-4383/REPORT.md); the presets must keep "
+            "resolving to (128, 5, 5), (64, 4, 5), (32, 3, 5), (32, 3, 5) and (32, 3, 5), where "
+            "the middle number is the bands that hold K - tests_lib/sorting/test_spot_check.py "
+            "pins them literally. The eval harness itself delegates to the library "
+            "(voting_iterations calls check_schedule / SpotCheck), so the pair pinned here is "
+            "library vs. the priced reference."
         ),
         divergence=(
-            "INTENTIONAL: the library validates X in (0, 1] and, at X >= 1, makes the picks the "
-            "candidate itself (no finite sample bounds a proportion at 1; only a census reaches "
-            "it) where the reference would divide by ln 1 = 0. The reference reads EPS and "
-            "BASE off its sibling module; the library spells them as its own constants."
+            "INTENTIONAL: the library validates P in (0, 1] and, at P >= 1, censuses each band "
+            "(no sample can vouch for every item); the reference's kept_count delegates to the "
+            "library's check_schedule for K and reads its bands and picks off its own constants."
         ),
     ),
     Mirror(
@@ -222,13 +223,15 @@ MIRRORS: list[Mirror] = [
         harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
         kind="ported",
         note=(
-            "The likely range a checked set carries (#4272): a Clopper-Pearson interval from "
-            "the check's labels inside the set, each tail at alpha / R (range_tail - the level "
-            "every round is tested at, so the lower end IS the bound the check tested and a "
-            "check confirms X iff lo >= X), exact (s / K) once the labels cover the set. The "
-            "reference's coverage numbers (99% of sessions) hold only for this tail; a plain "
-            "90% range showed above the truth 11% of the time after a first-round pass. If "
-            "the tail or the census rule moves on either side, move the other."
+            "The interval one band of a checked set carries (#4272, #4388): Clopper-Pearson "
+            "from the picks inside the band, each tail at alpha / bands (range_tail, split "
+            "over the bands in the set so the set's size-weighted range holds by the union "
+            "bound), exact (s / K) once the picks cover the band. Since #4388 the walk decides "
+            "on the band-weighted point estimate, not on this lower end, so a confirmed set's "
+            "range can straddle P; the range says how close. The reference's coverage numbers "
+            "(99% of sessions) hold only for this tail; a plain 90% range showed above the "
+            "truth 11% of the time after a first pass. If the tail or the census rule moves on "
+            "either side, move the other."
         ),
         divergence=(
             "INTENTIONAL: the reference is vectorised over frames (numpy arrays, a cached bound "
@@ -241,26 +244,28 @@ MIRRORS: list[Mirror] = [
     Mirror(
         id="floor.check_rounds",
         app="py:vtscore.training.thresholds.spot_check.SpotCheck",
-        harness="scripts/experiments/calibration/analyze_random_verification.py::simulate_rounds",
+        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::rule_grow,draw_audits,Audits",
         kind="ported",
         note=(
-            "The check's rounds (#4257's rule b, ruled in #4267 and #4272): m fresh picks drawn "
-            "uniformly from the current candidate, the labels already seen inside it kept, a "
-            "round confirming iff the one-sided bound at alpha / R clears X, a failed round "
-            "halving the candidate down to 32, no redraw on the same candidate, and a census "
-            "decided exactly. SpotCheck is the app's live state machine over one fixed candidate; "
-            "simulate_rounds is the vectorised simulation the rule was priced with. If either "
-            "changes what is kept across a halving, how many picks a round draws, or the level "
-            "a round is tested at, the other has to follow or the pricing no longer describes "
-            "the shipped check."
+            "The band walk (#4388, the owner's ruling on #4383; grow-fine in the reference): 5 "
+            "picks drawn uniformly from each band, never twice from one band; the set under test "
+            "is the top b bands and its estimate is band-stratified (each band's share weighted "
+            "by its size, Audits.union_estimate); the walk starts at the bands holding K(P), goes "
+            "one band deeper while the estimate meets P and one shallower while it does not, "
+            "stops on the first reversal or at either end, and keeps the deepest set that met P "
+            "(the first band when none did). SpotCheck is the app's live state machine over one "
+            "fixed unvoted ranking; rule_grow is the search the rule was priced with over "
+            "draw_audits' per-band picks. If either changes the bands, the picks a band, the "
+            "estimate or the stopping rule, the other has to follow or the pricing no longer "
+            "describes the shipped check."
         ),
         divergence=(
             "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
-            "carries a fingerprint for the stale flag, and reports its state to a client; the "
-            "simulation has none of that, and draws hypergeometrically from planted positive "
-            "ranks rather than asking a user. A candidate smaller than the schedule's K (a "
-            "small corpus) gets the halvings it really has (rounds_for) on the app side; the "
-            "simulation always starts at the rule's K."
+            "carries a fingerprint for the stale flag, reports its state to a client, draws one "
+            "band at a time as the walk reaches it, and censuses every band at P >= 1; the "
+            "reference draws every band's picks up front from planted labels (the same picks "
+            "the walk would touch) and asks no user. The reference returns the band edge as "
+            "the count; the app keeps the same edge through floor_count."
         ),
     ),
     Mirror(

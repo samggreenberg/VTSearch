@@ -30,7 +30,11 @@ export interface LikelyRange {
   stale: boolean;
 }
 
-/** What a spot check at a floor costs: its starting candidate, its rounds, and the picks a round draws. */
+/**
+ * What a spot check at a floor costs: the count the walk starts from, the
+ * bands it audits before its first verdict, and the picks each band draws
+ * (#4388). Beyond that the walk goes as deep as the list stays right.
+ */
 export interface CheckSchedule {
   candidate: number;
   rounds: number;
@@ -140,11 +144,10 @@ export function staleNote(range: LikelyRange | null): string {
   return range?.stale ? ' Measured before your later votes: the list at the line has changed since.' : '';
 }
 
-/** The picks a check deals, in words: "5 random picks", plus its rounds when it can take more than one. */
+/** The picks a check deals, in words: "5 random picks a band, walking the list from the top 32". */
 function checkCost(schedule: CheckSchedule | null): string {
   if (!schedule) return 'a few random picks';
-  const picks = `${schedule.picks} random picks`;
-  return schedule.rounds > 1 ? `${picks} a round, in up to ${schedule.rounds} rounds` : picks;
+  return `${schedule.picks} random picks a band, walking the list from the top ${schedule.candidate.toLocaleString()}`;
 }
 
 /**
@@ -222,8 +225,8 @@ export function checkLabel(floor: LineFloor | null): string | null {
 export function checkTitle(floor: LineFloor | null): string {
   const cost = checkCost(floor?.schedule ?? null);
   return (
-    `Vote on ${cost} from the set the line keeps, to measure how much of it is right. ` +
-    `Your votes count as ordinary votes.`
+    `Vote on ${cost}: the check goes deeper while the list stays right enough and shorter while it does not, ` +
+    `and the line keeps the deepest set that was. Your votes count as ordinary votes.`
   );
 }
 

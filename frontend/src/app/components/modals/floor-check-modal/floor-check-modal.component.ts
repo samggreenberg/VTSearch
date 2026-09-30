@@ -28,14 +28,18 @@ export interface FloorCheckVoted {
 }
 
 /**
- * The precision floor's spot check (#4273; the rule is #4272's).
+ * The precision floor's spot check (#4273; the rule is #4272's, walking the
+ * ranking in bands since #4388).
  *
  * Opens from the Threshold control's "Check 5 picks", in Train only: Find
- * tests the threshold it was given and offers no check (#4317). The server draws each
- * round's picks uniformly at random from a candidate of the top unvoted items,
- * and the user votes each one Good or Bad. A round that falls short halves the
- * candidate and draws a fresh round, so a check is one to three rounds; it
- * ends on how close the line got - a likely range from the picks alone.
+ * tests the threshold it was given and offers no check (#4317). The server
+ * cuts the unvoted ranking into bands (the top 8, the next 8, then 16, 32, ...)
+ * and draws each band's 5 picks uniformly at random; the user votes each one
+ * Good or Bad. A band at a time, the check walks: deeper while the set so far
+ * meets the threshold ("Looks right so far: checking the next 32"), shallower
+ * while it does not ("Not there yet: checking a shorter list"), and it ends on
+ * the deepest set that met it and how close the line got - a likely range
+ * from the picks alone.
  *
  * - **The picks are a check, not the ranking** (owner, 2026-09-29). They show
  *   one at a time in the order they were drawn, which is random, with no rank
@@ -92,8 +96,8 @@ export class FloorCheckModalComponent implements OnInit {
   readonly votes = signal<ReadonlyMap<number, VoteDirection>>(new Map());
   /** Which pick is on screen. */
   readonly index = signal(0);
-  /** True once a round fell short and a shorter list is being checked. */
-  readonly shorter = signal(false);
+  /** What the last band decided, once the walk has moved: deeper, or back to a shorter list. Empty until then. */
+  readonly walkNote = signal('');
 
   readonly currentId = computed(() => this.picks()[this.index()] ?? null);
   readonly currentVote = computed(() => {
@@ -109,13 +113,27 @@ export class FloorCheckModalComponent implements OnInit {
   });
   readonly mediaType = computed(() => this.currentMedia()?.media_type ?? '');
 
-  /** "Round 2 of up to 3: 5 picks drawn at random from the top 64." */
+  /**
+   * "5 picks drawn at random from the top 8, checking the top 32." then
+   * "5 picks drawn at random from items 33–64 of the list, checking the top 64."
+   * The band is named by its place in the list, never the picks: they are a
+   * check, not the ranking, and carry no rank of their own.
+   */
   readonly brief = computed(() => {
     const c = this.check();
     if (!c) return '';
     const n = this.picks().length;
-    const drawn = `${n} ${n === 1 ? 'pick' : 'picks'} drawn at random from the top ${c.candidate.toLocaleString()}`;
-    return c.rounds > 1 ? `Round ${c.round} of up to ${c.rounds}: ${drawn}.` : `${drawn[0].toUpperCase()}${drawn.slice(1)}.`;
+    const picks = `${n} ${n === 1 ? 'pick' : 'picks'} drawn at random`;
+    const band = c.band;
+    let from = '';
+    if (band) {
+      from =
+        band.lo === 1
+          ? ` from the top ${band.hi.toLocaleString()}`
+          : ` from items ${band.lo.toLocaleString()}–${band.hi.toLocaleString()} of the list`;
+    }
+    const set = `checking the top ${c.candidate.toLocaleString()}`;
+    return `${picks[0].toUpperCase()}${picks.slice(1)}${from}, ${set}.`;
   });
 
   /** The result's headline: the floor held, or how close it got. A short check names no cause. */
@@ -135,8 +153,8 @@ export class FloorCheckModalComponent implements OnInit {
     if (!f) return '';
     const kept = f.count.toLocaleString();
     return f.status === 'confirmed'
-      ? `The line keeps these ${kept}. The range is how much of them the picks say is right.`
-      : `The line keeps the top ${kept} the check ended on. The range is how much of them the picks say is right.`;
+      ? `The line keeps these ${kept}: the deepest set the check found right enough. The range is how much of them the picks say is right.`
+      : `No set met the threshold, so the line keeps the top ${kept}. The range is how much of them the picks say is right.`;
   });
 
   constructor() {
@@ -218,10 +236,19 @@ export class FloorCheckModalComponent implements OnInit {
     // host's to catch up on, which it does on `closed`.
     this.sortingApi.votePrecisionCheck(votes).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (resp) => {
-        const before = this.check()?.round ?? 1;
+        const beforeBands = this.check()?.bands ?? 0;
         this.apply(resp);
         const finished = resp.check?.status === 'confirmed' || resp.check?.status === 'short';
-        if (!finished && (resp.check?.round ?? before) > before) this.shorter.set(true);
+        const c = resp.check;
+        if (!finished && c && c.bands !== beforeBands) {
+          // The walk moved: the set under test grew by a band, or shrank.
+          const next = c.band ? c.band.hi - c.band.lo + 1 : 0;
+          this.walkNote.set(
+            c.direction === 'deeper'
+              ? `Looks right so far: checking the next ${next.toLocaleString()}.`
+              : 'Not there yet: checking a shorter list.',
+          );
+        }
         this.voted.emit({ finished, response: resp });
       },
       error: (err) => {

@@ -181,62 +181,88 @@ class TestOneRound:
         assert first != second or True  # the draw is random; what matters is the old round is gone
 
 
-class TestSeveralRounds:
-    def test_a_check_at_ten_percent_halves_twice_before_ending_short(self, client):
+class TestSeveralBands:
+    """The walk (#4388): one round per band, deeper while the set is right enough, back when it is not."""
+
+    def test_a_walk_whose_every_pick_is_wrong_ends_short_on_the_first_band(self, client):
         _run_find(client)
         ranking = _plant_big_ranking()
         set_min_precision(0.1)
         ctx = get_active_detector_context()
 
         data = _start(client)
-        assert (data["check"]["candidate"], data["check"]["rounds"], data["check"]["picks_per_round"]) == (128, 3, 5)
-        first = data["check"]["picks"]
-        assert set(first) <= set(ranking.candidate(128))
+        check = data["check"]
+        # At 10% the walk starts at the five bands that hold the top 128 (8, 8, 16, 32, 64).
+        assert (check["candidate"], check["start_candidate"], check["bands"], check["picks_per_round"]) == (
+            128,
+            128,
+            5,
+            5,
+        )
+        assert check["rounds"] == 6, "the ranking of 200 has six bands"
+        assert check["band"] == {"index": 0, "lo": 1, "hi": 8} and check["direction"] == "start"
+        seen: list[int] = []
+        for band, (lo, hi) in enumerate(((1, 8), (9, 16), (17, 32), (33, 64), (65, 128))):
+            assert data["check"]["band"] == {"index": band, "lo": lo, "hi": hi}
+            picks = data["check"]["picks"]
+            assert len(picks) == 5 and set(picks) <= set(range(lo, hi + 1)) and not set(picks) & set(seen)
+            seen += picks
+            assert data["floor"]["status"] == "unchecked", "not decided yet"
+            data = client.post("/api/precision-check/votes", json=_votes(picks, False)).get_json()
+        # The fifth band decided the starting set: every set fell short, down to the first band, with no new picks.
+        assert data["check"]["status"] == "short" and data["check"]["direction"] == "shallower"
+        assert data["check"]["round"] == 5 and data["check"]["picks"] == []
+        assert data["floor"]["status"] == "short" and data["floor"]["count"] == 8
+        assert data["floor"]["range"]["labelled"] == 5 and data["floor"]["range"]["right"] == 0
+        assert ctx.threshold == ranking.threshold_for(8, human_voted_ids(ctx))
+        assert ranking.candidate(8, human_voted_ids(ctx))[-1] > 8, "the line follows the ranking past the votes"
 
-        data = client.post("/api/precision-check/votes", json=_votes(first, False)).get_json()
-        second = data["check"]["picks"]
-        assert data["check"]["status"] == "running" and data["check"]["round"] == 2
-        assert data["check"]["candidate"] == 64 and len(second) == 5
-        assert set(second) <= set(ranking.candidate(64)) and not set(second) & set(first)
-        # Labels already seen inside the halved candidate are kept.
-        assert data["check"]["labelled"] == len([cid for cid in first if cid <= 64])
-        assert data["floor"]["status"] == "unchecked", "not decided yet"
-
-        data = client.post("/api/precision-check/votes", json=_votes(second, False)).get_json()
-        third = data["check"]["picks"]
-        assert data["check"]["round"] == 3 and data["check"]["candidate"] == 32 and len(third) == 5
-        assert set(third) <= set(ranking.candidate(32))
-
-        data = client.post("/api/precision-check/votes", json=_votes(third, False)).get_json()
-        assert data["check"]["status"] == "short"
-        assert data["floor"]["status"] == "short" and data["floor"]["count"] == 32
-        assert data["floor"]["range"]["labelled"] == len([cid for cid in first + second + third if cid <= 32])
-        assert data["floor"]["range"]["right"] == 0
-        assert ctx.threshold == ranking.threshold_for(32, human_voted_ids(ctx))
-        assert ranking.candidate(32, human_voted_ids(ctx))[-1] > 32, "the line follows the ranking past the votes"
-
-    def test_a_check_confirmed_in_round_two_keeps_sixty_four(self, client):
+    def test_a_walk_that_grows_then_falls_short_keeps_the_deepest_set_that_met_the_floor(self, client):
         _run_find(client)
         ranking = _plant_big_ranking()
-        set_min_precision(0.1)
+        set_min_precision(0.5)
         ctx = get_active_detector_context()
-        first = _start(client)["check"]["picks"]
-        second = client.post("/api/precision-check/votes", json=_votes(first, False)).get_json()["check"]["picks"]
-        data = client.post("/api/precision-check/votes", json=_votes(second, True)).get_json()
-        assert data["check"]["status"] == "confirmed" and data["check"]["round"] == 2
+        data = _start(client)
+        assert (data["check"]["candidate"], data["check"]["bands"]) == (32, 3)
+        # The three starting bands are all right: the walk goes deeper.
+        for _ in range(3):
+            data = client.post("/api/precision-check/votes", json=_votes(data["check"]["picks"], True)).get_json()
+        check = data["check"]
+        assert check["status"] == "running" and check["direction"] == "deeper"
+        # ``round`` is the one being voted on: the fourth band, after three audited.
+        assert (check["candidate"], check["bands"], check["round"]) == (64, 4, 4)
+        assert check["band"] == {"index": 3, "lo": 33, "hi": 64} and check["estimate"] is None
+        assert data["floor"]["status"] == "unchecked"
+        # Items 33-64 are all wrong: the top 64 is exactly half right, which meets 50%, so deeper again.
+        data = client.post("/api/precision-check/votes", json=_votes(check["picks"], False)).get_json()
+        check = data["check"]
+        assert check["status"] == "running" and (check["candidate"], check["bands"]) == (128, 5)
+        assert check["band"] == {"index": 4, "lo": 65, "hi": 128}
+        # Items 65-128 are all wrong too: the top 128 falls short, and the walk steps back to the 64.
+        data = client.post("/api/precision-check/votes", json=_votes(check["picks"], False)).get_json()
+        check = data["check"]
+        assert check["status"] == "confirmed" and check["direction"] == "shallower" and check["round"] == 5
         assert data["floor"]["status"] == "confirmed" and data["floor"]["count"] == 64
-        assert data["floor"]["range"]["lo"] >= 0.1
+        assert data["floor"]["range"]["labelled"] == 20 and data["floor"]["range"]["right"] == 15
+        assert check["estimate"] == 0.5
         assert ctx.threshold == ranking.threshold_for(64, human_voted_ids(ctx))
         assert client.get("/api/min-precision").get_json()["count"] == 64
 
-    @pytest.mark.parametrize(("floor", "expected"), [(0.25, (64, 2, 5)), (0.75, (32, 1, 11)), (0.9, (32, 1, 29))])
-    def test_the_schedule_sizes_the_check(self, client, floor, expected):
+    @pytest.mark.parametrize(("floor", "start", "bands"), [(0.25, 64, 4), (0.75, 32, 3), (0.9, 32, 3)])
+    def test_the_schedule_says_where_the_walk_starts(self, client, floor, start, bands):
         _run_find(client)
         _plant_big_ranking()
         set_min_precision(floor)
-        check = _start(client)["check"]
-        assert (check["candidate"], check["rounds"], check["picks_per_round"]) == expected
-        assert len(check["picks"]) == expected[2]
+        data = _start(client)
+        check = data["check"]
+        assert (check["candidate"], check["start_candidate"], check["bands"], check["picks_per_round"]) == (
+            start,
+            start,
+            bands,
+            5,
+        )
+        assert check["rounds"] == 6 and len(check["picks"]) == 5
+        assert data["floor"]["schedule"] == {"candidate": start, "rounds": bands, "picks": 5}
 
 
 class TestSeed:
