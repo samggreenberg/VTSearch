@@ -118,8 +118,9 @@ documented workarounds; this section describes the code as it stands.
 | `VTSEARCH_LOG_FILE` | unset | Also append every log record to this file (the terminal stream stays). The SLURM launcher sets it to `data/logs/app-<node>-<timestamp>.log` so a stall nobody was watching still leaves a trace; see [Diagnosing a stall](#the-app-freezes-for-seconds-during-labeling-diagnosing-a-stall). |
 | `VTSEARCH_DIAGNOSE` | unset | Truthy turns on the whole diagnostic bar set at once: `VTSEARCH_LOG_LEVEL=INFO`, `VTSEARCH_SLOW_REQUEST_MS=400`, `VTSEARCH_SLOW_PHASE_MS=150` (and, by the coupling below, a 75 ms GC bar). Each is a default, so any variable you set yourself still wins. It deliberately does **not** pin `VTSEARCH_GC_WARN_MS`, because pinning it would bypass that coupling. |
 | `VTSEARCH_SLOW_REQUEST_MS` | `1000` | A request whose handler takes at least this long is logged at WARNING with its method, path, status, duration, thread CPU time, GC time and `request_id` (the same id the browser sees as `X-Request-Id`). Below the bar, and only at `VTSEARCH_LOG_LEVEL=INFO`, the same figures are logged as `request trace:` so a diagnostic run has the whole chain to add up. |
-| `VTSEARCH_STALL_WATCHDOG_MS` | `1000` | Heartbeat-miss threshold for the stall watchdog: when the interpreter cannot run the heartbeat thread for this long, a WARNING names the thread that burned the wall clock (or reports that none did) and `faulthandler` dumps every thread's frames from inside the stall. `0` disables the watchdog. |
-| `VTSEARCH_STALL_DUMP_FILE` | `VTSEARCH_LOG_FILE`, else stderr | Where the watchdog's thread dump is written. |
+| `VTSEARCH_STALL_WATCHDOG_MS` | `1000` | Heartbeat-miss threshold for the stall watchdog: when the interpreter cannot run the heartbeat thread for this long, a WARNING names the thread that burned the wall clock (or reports that none did), just after every thread's stack, taken the moment the heartbeat wakes. `0` disables the watchdog. |
+| `VTSEARCH_STALL_DUMP_FILE` | `VTSEARCH_LOG_FILE`, else stderr | Where the watchdog writes the thread stacks. |
+| `VTSEARCH_STALL_LIVE_DUMP` | unset | **Can crash the app; off by default** (issue #4345). Set to `1` to also have `faulthandler` dump every thread's frames *during* a stall. That dump reads other threads' frames without the GIL while they run, and has segfaulted the app mid-import. Use it only for a diagnostic session chasing a GIL hold that the stacks taken at wake do not explain. |
 | `VTSEARCH_GC_WARN_MS` | half `VTSEARCH_SLOW_PHASE_MS`, capped at `200` | A garbage-collection pause at least this long is logged at WARNING with its generation and duration. Unset it tracks the phase threshold, so a collection can never be too small to report while still being large enough to inflate the phase it lands in. |
 | `VTSEARCH_GC_FREEZE` | `1` | After the model preload, `gc.freeze()` moves the imported ML libraries and the loaded embedders into the permanent generation, which full collections skip (issue #3870: gen-2 pauses of ~300 ms every ~2 minutes, each freezing every in-flight request, measured to zero with this on). Datasets and detectors load lazily afterwards and stay collectable. Set falsey to skip it. |
 | `VTSEARCH_SLOW_PHASE_MS` | `500` | Threshold for the internal phase breakdowns (learned-sort retrain, per-vote labelset rewrite, labeling-status replay, vote rehydrate) and for waits on the locks those paths share; each logs one WARNING line at or above it. |
@@ -1139,10 +1140,15 @@ instruments that can, all on at the default log level:
   logs `stall: heartbeat late by …ms` with the process's CPU time over the
   gap, the threads that consumed it, major page faults, RSS, the cgroup memory
   counters and GC activity. Read it like this:
-  - *process cpu ≈ wall, one thread on top* → that thread held the GIL. The
-    `faulthandler` dump the watchdog armed (written to `VTSEARCH_STALL_DUMP_FILE`,
-    which defaults to the log file) shows every thread's Python frames from
-    inside the stall; find the thread by its `ident` and read its top frame.
+  - *process cpu ≈ wall, one thread on top* → that thread held the GIL.
+    Just above the `stall:` line, the watchdog writes every thread's Python
+    stack (`Stall snapshot …`, to `VTSEARCH_STALL_DUMP_FILE`, which defaults
+    to the log file), with the thread that burned the most CPU first. Read
+    that thread's top frames. They are taken the moment the heartbeat wakes,
+    and a thread holding the GIL in C code can only give it up at the call
+    that stalled, so that is where it still is. `VTSEARCH_STALL_LIVE_DUMP=1`
+    adds `faulthandler`'s dump from *during* the stall, which can crash the
+    app (#4345).
   - *no thread consumed cpu* → the process was not running: look at `majflt`
     and the cgroup `limit hits` (memory pressure), or at the node.
   - *cpu spread across threads* → contention rather than one holder; the lock

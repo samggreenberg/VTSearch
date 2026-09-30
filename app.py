@@ -390,7 +390,7 @@ def initialize_server(mode_label: str = "PRODUCTION") -> None:
     _report_docs_links()
 
     # Stall diagnostics (issue #3853): GC-pause logging plus a heartbeat
-    # watchdog that dumps every thread's frames when the interpreter freezes.
+    # watchdog that writes every thread's stack when the interpreter freezes.
     # Started before the model loads so a stall during startup is caught too;
     # ``VTSEARCH_STALL_WATCHDOG_MS=0`` turns the watchdog off.
     from vtscore.concurrency.stalls import start_stall_diagnostics_from_env

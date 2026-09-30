@@ -14,20 +14,38 @@ leaves a trace at the default log level:
   longer than the threshold has been kept off the interpreter, and the report
   says by what: it samples every thread's CPU time from ``/proc`` on each
   beat, so across the gap it can name the thread that burned the wall clock
-  (a GIL hold - ``faulthandler`` has by then written that thread's frames,
-  see below), or show that *no* thread ran (the process itself was stalled:
-  memory pressure, a descheduled cgroup, a page fault storm - the report
-  carries RSS, major faults and the cgroup memory counters for that case).
+  (a GIL hold - the thread stacks below show where it was), or show that *no*
+  thread ran (the process itself was stalled: memory pressure, a descheduled
+  cgroup, a page fault storm - the report carries RSS, major faults and the
+  cgroup memory counters for that case).
 
-  Each beat also re-arms :func:`faulthandler.dump_traceback_later`.  That
-  timer runs on a C thread that needs no GIL, so when the heartbeat misses it
-  dumps every thread's Python frames *during* the stall, to a file the
-  watchdog names.  This is the one decisive datum: the frame the GIL holder
-  was in when everything else froze.
+  A beat that finds it woke late first takes every thread's Python stack
+  (:func:`capture_thread_stacks`), before it reads ``/proc`` or anything else
+  that could let go of the GIL, and writes them to a file the watchdog names,
+  the thread that burned the most CPU across the gap first.  That is the one
+  decisive datum: the frame the GIL holder was in when everything else froze.
+  The stacks are taken as the stall *ends*, but that is where the holder
+  still is.  A thread holding the GIL in C code can give it up only by
+  returning to the eval loop, which checks for a waiting thread at the
+  instruction after the call, or by releasing it inside the call.  Either
+  way its stack still shows the call that stalled.  The heartbeat thread has
+  been waiting for the GIL the longest, so it usually runs first.
+
+  Until issue #4345 the watchdog re-armed
+  :func:`faulthandler.dump_traceback_later` on every beat instead, so a miss
+  dumped the frames *during* the stall from a C thread that holds no GIL.
+  That C thread walks other threads' frame stacks while those threads keep
+  running.  CPython built that walk for the fatal-error path, where the other
+  threads are about to die anyway.  On a live process it can read a frame
+  that its thread is pushing or popping at that moment, and during a CPU
+  import it segfaulted the app partway through a dump (``segfault at 70`` is
+  ``co_filename`` read through a NULL code pointer).  The live dump is still
+  there for a diagnostic session that accepts that risk
+  (``VTSEARCH_STALL_LIVE_DUMP=1``), and is off by default.
 
 * :func:`install_gc_pause_logging` - ``gc.callbacks`` timing, logged at
   WARNING above ``VTSEARCH_GC_WARN_MS``.  A full collection holds the GIL for
-  its whole duration and shows up in a ``faulthandler`` dump only as an
+  its whole duration and shows up in a thread dump only as an
   arbitrary allocation site, so it is named here explicitly.  Unset, that
   threshold *tracks* ``VTSEARCH_SLOW_PHASE_MS`` (half of it, capped at the
   200 ms default): a collection shorter than the phase bar is invisible but
@@ -80,9 +98,13 @@ log = logging.getLogger(__name__)
 WATCHDOG_MS_ENV = "VTSEARCH_STALL_WATCHDOG_MS"
 _DEFAULT_WATCHDOG_MS = 1000.0
 
-#: Env var: file the ``faulthandler`` thread dump is written to when the
-#: heartbeat misses.  Defaults to ``VTSEARCH_LOG_FILE`` when set, else stderr.
+#: Env var: file the thread stacks are written to when the heartbeat misses.
+#: Defaults to ``VTSEARCH_LOG_FILE`` when set, else stderr.
 DUMP_FILE_ENV = "VTSEARCH_STALL_DUMP_FILE"
+
+#: Env var: truthy also arms ``faulthandler``'s live dump, which can crash the
+#: process (issue #4345); see :func:`live_dump_enabled`.
+LIVE_DUMP_ENV = "VTSEARCH_STALL_LIVE_DUMP"
 
 #: Env var: GC pauses at least this long are logged at WARNING.
 GC_WARN_MS_ENV = "VTSEARCH_GC_WARN_MS"
@@ -96,6 +118,7 @@ _DEFAULT_SLOW_PHASE_MS = 500.0
 GC_FREEZE_ENV = "VTSEARCH_GC_FREEZE"
 
 _FALSEY = {"0", "false", "no", "off"}
+_TRUTHY = {"1", "true", "yes", "on"}
 
 
 def _env_ms(name: str, default: float) -> float:
@@ -128,6 +151,19 @@ def slow_phase_threshold_ms() -> float:
 def watchdog_threshold_ms() -> float:
     """Heartbeat-miss threshold; ``0`` means the watchdog is off."""
     return _env_ms(WATCHDOG_MS_ENV, _DEFAULT_WATCHDOG_MS)
+
+
+def live_dump_enabled() -> bool:
+    """Whether the watchdog also arms ``faulthandler``'s dump *during* a stall.
+
+    **Off by default, because it can kill the process** (issue #4345).  That
+    dump walks every thread's frame stack from a C thread without the GIL,
+    while those threads keep running, and reading a frame as its thread
+    pushes or pops it is a segfault.  Turn it on only for a diagnostic session
+    chasing a GIL hold that the stacks taken at wake do not explain, and
+    expect the session may die.
+    """
+    return os.environ.get(LIVE_DUMP_ENV, "").strip().lower() in _TRUTHY
 
 
 def thread_cpu_ms() -> float:
@@ -518,7 +554,81 @@ def default_sampler() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+#: ``(filename, line, function)``; ``line`` is ``None`` where CPython has none.
+FrameLine = tuple[str, Optional[int], str]
+
+#: Frames kept per thread, the same cap ``faulthandler`` uses.
+_MAX_FRAMES = 100
+
+
+def capture_thread_stacks() -> dict[int, list[FrameLine]]:
+    """Every Python thread's stack, innermost frame first, keyed by ``ident``.
+
+    This is safe on a live process, and ``faulthandler``'s dump is not
+    (issue #4345).  :func:`sys._current_frames` runs holding the GIL, and a
+    thread cannot push or pop a Python frame without the GIL, so every stack
+    it returns is one no thread is changing.  The walk after it holds a
+    reference to each frame it reads, so a frame that returns meanwhile stays
+    readable.  Each frame is reduced to plain values at once: a live frame
+    object's ``f_lineno`` moves as its thread runs on, and formatting it later
+    would report where the thread went, not where it was.
+    """
+    stacks: dict[int, list[FrameLine]] = {}
+    for ident, frame in sys._current_frames().items():
+        stack: list[FrameLine] = []
+        f = frame
+        # One past the cap, so the formatter can say the stack was cut.
+        while f is not None and len(stack) <= _MAX_FRAMES:
+            code = f.f_code
+            stack.append((code.co_filename, f.f_lineno, code.co_name))
+            f = f.f_back
+        stacks[ident] = stack
+    return stacks
+
+
+def format_thread_stacks(
+    stacks: dict[int, list[FrameLine]],
+    *,
+    header: str,
+    threads: Optional[dict[int, tuple[str, Optional[int], Optional[float]]]] = None,
+) -> str:
+    """Render :func:`capture_thread_stacks` in ``faulthandler``'s layout.
+
+    The layout is the one ``faulthandler`` writes: one ``Thread 0x…
+    (most recent call first):`` block per thread, then ``  File "…", line N
+    in f`` per frame.  It is kept so the dumps from before issue #4345 and
+    ``scripts/experiments/stall_3853/analyze_app_log.py`` still read
+    the same.  *threads* maps an ``ident`` to ``(name, native tid, CPU ms
+    across the gap)``.  Each header carries those three, and the threads
+    are ordered by that CPU, most first, so the GIL holder heads the dump.
+    """
+    info = threads or {}
+
+    def cpu_of(ident: int) -> float:
+        cpu = info.get(ident, ("", None, None))[2]
+        return cpu if cpu is not None else -1.0
+
+    lines = [header]
+    for ident in sorted(stacks, key=lambda i: (-cpu_of(i), i)):
+        name, tid, cpu_ms = info.get(ident, ("?", None, None))
+        details = [f'"{name}"']
+        if tid is not None:
+            details.append(f"tid {tid}")
+        if cpu_ms is not None:
+            details.append(f"{cpu_ms:.0f}ms cpu across the gap")
+        lines.append(f"Thread 0x{ident:016x} [{', '.join(details)}] (most recent call first):")
+        stack = stacks[ident]
+        for filename, lineno, func in stack[:_MAX_FRAMES]:
+            lines.append(f'  File "{filename}", line {"?" if lineno is None else lineno} in {func}')
+        if len(stack) > _MAX_FRAMES:
+            lines.append("  ...")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def _faulthandler_armer(dump_file: IO[Any]) -> Callable[[float], None]:
+    """The live dump behind ``VTSEARCH_STALL_LIVE_DUMP`` (see :func:`live_dump_enabled`)."""
+
     def arm(timeout_s: float) -> None:
         # Re-arming replaces the previous timer; ``repeat=False`` so a stall
         # produces one dump, not one per timeout for as long as it lasts.
@@ -535,13 +645,22 @@ class StallWatchdog:
     threshold_ms:
         A beat that wakes at least this late is a stall.
     arm:
-        Called with the threshold in seconds on every beat; the production
-        armer re-arms ``faulthandler.dump_traceback_later``.  ``None`` arms
-        nothing (tests, or a caller that only wants the CPU accounting).
+        Called with the threshold in seconds on every beat.  Set only for the
+        live dump (``VTSEARCH_STALL_LIVE_DUMP``), where it re-arms
+        ``faulthandler.dump_traceback_later``, which can crash the process
+        (issue #4345).  ``None`` arms nothing, and is the default.
+    snapshot:
+        Called on a late beat, before anything else, for the stacks the
+        report writes; production passes :func:`capture_thread_stacks`.
+        ``None`` takes none (tests, or a caller that only wants the CPU
+        accounting).
+    dump_file:
+        Where the stacks are written, just before the report line is logged;
+        ``None`` is stderr.
     sampler:
         Returns the per-beat sample (see :func:`default_sampler`).
     dump_path:
-        Where the armed dump lands, for the report line only.
+        What the report line calls *dump_file*.
     """
 
     def __init__(
@@ -549,6 +668,8 @@ class StallWatchdog:
         threshold_ms: float,
         *,
         arm: Callable[[float], None] | None = None,
+        snapshot: Callable[[], dict[int, list[FrameLine]]] | None = None,
+        dump_file: IO[str] | None = None,
         sampler: Callable[[], dict[str, Any]] = default_sampler,
         dump_path: str = "<stderr>",
         logger: logging.Logger | None = None,
@@ -558,6 +679,8 @@ class StallWatchdog:
         # threshold, but never faster than 20 Hz (the sample reads /proc).
         self.interval_s = max(self.threshold_s / 4.0, 0.05)
         self._arm = arm
+        self._snapshot = snapshot
+        self._dump_file = dump_file
         self._sampler = sampler
         self.dump_path = dump_path
         self._logger = logger or log
@@ -616,18 +739,65 @@ class StallWatchdog:
         now = time.monotonic() if now is None else now
         assert self._last_beat is not None
         lag_s = now - self._last_beat - self.interval_s
+        late = lag_s >= self.threshold_s
+        # Stacks first: the sampler's /proc reads release the GIL, and the
+        # thread that held it would run on and leave the frame it stalled in.
+        stacks = self._take_snapshot() if late else None
         sample = self._sampler()
         stalled: float | None = None
-        if lag_s >= self.threshold_s:
+        if late:
             stalled = lag_s * 1000.0
             self.stalls += 1
             self.worst_lag_ms = max(self.worst_lag_ms, stalled)
-            self._report(self._last_sample, sample, lag_s, now - self._last_beat)
+            self._report(self._last_sample, sample, lag_s, now - self._last_beat, stacks)
         self._last_beat = now
         self._last_sample = sample
         if self._arm is not None:
             self._arm(self.threshold_s)
         return stalled
+
+    # -- the stacks ----------------------------------------------------------
+
+    def _take_snapshot(self) -> dict[int, list[FrameLine]] | None:
+        if self._snapshot is None:
+            return None
+        try:
+            stacks = self._snapshot()
+        except Exception:  # noqa: BLE001 - a failed snapshot must not cost the report
+            self._logger.exception("stall watchdog: taking the thread stacks failed")
+            return None
+        # The thread taking the snapshot is not the story.
+        stacks.pop(threading.get_ident(), None)
+        return stacks
+
+    def _write_stacks(
+        self,
+        stacks: dict[int, list[FrameLine]],
+        before: dict[str, Any] | None,
+        after: dict[str, Any],
+        lag_s: float,
+    ) -> None:
+        threads: dict[int, tuple[str, Optional[int], Optional[float]]] = {
+            t.ident: (t.name, getattr(t, "native_id", None), None) for t in threading.enumerate() if t.ident is not None
+        }
+        if before is not None:
+            for used, tid, name, ident in self._thread_deltas(before, after):
+                if ident:  # 0 is a native thread with no Python stack
+                    threads[ident] = (name, tid, used * 1000.0)
+        text = format_thread_stacks(
+            stacks,
+            header=(
+                f"Stall snapshot (heartbeat late by {lag_s * 1000.0:.0f}ms; "
+                "stacks taken as the watchdog woke, most cpu across the gap first):"
+            ),
+            threads=threads,
+        )
+        out = self._dump_file if self._dump_file is not None else sys.stderr
+        try:
+            out.write(text)
+            out.flush()
+        except (OSError, ValueError):  # ValueError: the file was closed under us
+            self._logger.exception("stall watchdog: writing the thread stacks to %s failed", self.dump_path)
 
     # -- the report ----------------------------------------------------------
 
@@ -637,7 +807,13 @@ class StallWatchdog:
         after: dict[str, Any],
         lag_s: float,
         gap_s: float,
+        stacks: dict[int, list[FrameLine]] | None = None,
     ) -> None:
+        # The stacks go out before the report line, as the faulthandler dump
+        # they replace did, so a reader (and analyze_app_log.py) finds them
+        # immediately above the stall they belong to.
+        if stacks is not None:
+            self._write_stacks(stacks, before, after, lag_s)
         parts = [f"stall: heartbeat late by {lag_s * 1000.0:.0f}ms"]
         if before is not None:
             wall_ms = max(gap_s, 1e-6) * 1000.0
@@ -656,17 +832,21 @@ class StallWatchdog:
         if rss_kb is not None:
             parts.append(f"rss {rss_kb / 1024.0:.0f}MB")
         parts.append(self._cgroup_part(before, after))
-        parts.append(
-            f"thread dump armed at {self.threshold_s * 1000.0:.0f}ms into the gap -> {self.dump_path}"
-            if self._arm is not None
-            else "no thread dump armed"
-        )
+        if stacks is not None:
+            parts.append(f"thread stacks at wake -> {self.dump_path}")
+        if self._arm is not None:
+            parts.append(
+                f"live thread dump armed at {self.threshold_s * 1000.0:.0f}ms into the gap -> {self.dump_path}"
+            )
+        if stacks is None and self._arm is None:
+            parts.append("no thread stacks")
         message = "; ".join(p for p in parts if p)
         self.last_report = message
         self._logger.warning("%s", message)
 
     @staticmethod
-    def _top_threads(before: dict[str, Any], after: dict[str, Any], n: int = 3) -> str:
+    def _thread_deltas(before: dict[str, Any], after: dict[str, Any]) -> list[tuple[float, int, str, int]]:
+        """``(cpu seconds, tid, name, ident)`` per thread that ran across the gap, most first."""
         prev: dict[int, tuple[str, int, float]] = before.get("threads") or {}
         cur: dict[int, tuple[str, int, float]] = after.get("threads") or {}
         deltas: list[tuple[float, int, str, int]] = []
@@ -675,9 +855,14 @@ class StallWatchdog:
             used = cpu - base[2] if base is not None else cpu
             if used > 0:
                 deltas.append((used, tid, name, ident))
+        deltas.sort(reverse=True)
+        return deltas
+
+    @staticmethod
+    def _top_threads(before: dict[str, Any], after: dict[str, Any], n: int = 3) -> str:
+        deltas = StallWatchdog._thread_deltas(before, after)
         if not deltas:
             return "no thread consumed cpu across the gap"
-        deltas.sort(reverse=True)
         items = ", ".join(
             f"{name} (tid {tid}, ident 0x{ident:x}) {used * 1000.0:.0f}ms" for used, tid, name, ident in deltas[:n]
         )
@@ -729,22 +914,29 @@ def start_stall_diagnostics_from_env() -> Optional[StallWatchdog]:
     if path:
         try:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-            dump_file = open(path, "a", encoding="utf-8")  # noqa: SIM115 - faulthandler needs it open for the process lifetime
+            dump_file = open(path, "a", encoding="utf-8")  # noqa: SIM115 - the watchdog writes to it for the process lifetime
         except OSError:
-            log.exception("stall watchdog: cannot open %s for the thread dump; using stderr", path)
+            log.exception("stall watchdog: cannot open %s for the thread stacks; using stderr", path)
             dump_file, path = sys.stderr, None
     else:
         dump_file = sys.stderr
     _dump_file = dump_file
+    live = live_dump_enabled()
     _active = StallWatchdog(
         threshold_ms,
-        arm=_faulthandler_armer(dump_file),
+        # Never by default: faulthandler's live dump can segfault the process
+        # it watches (issue #4345).
+        arm=_faulthandler_armer(dump_file) if live else None,
+        snapshot=capture_thread_stacks,
+        # stderr is looked up per write, not pinned here.
+        dump_file=dump_file if path else None,
         dump_path=path or "<stderr>",
     ).start()
     log.info(
-        "stall watchdog armed: threshold %.0fms, thread dump -> %s",
+        "stall watchdog armed: threshold %.0fms, thread stacks -> %s%s",
         threshold_ms,
         _active.dump_path,
+        " (live faulthandler dump ON, which can crash the process)" if live else "",
     )
     return _active
 
