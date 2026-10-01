@@ -40,12 +40,21 @@ from vtscore.media.structural import StructuralFeatures, aggregate_vlad, load_vl
 TILE_W, TILE_H = 0.25, 0.18
 #: A tile with fewer keypoints than this has nothing to aggregate.
 MIN_TILE_KP = 20
+#: The tile layers a page is cut into, as ``(width, height)``; a page scores its best
+#: tile across all of them. The 0.25 x 0.18 layer is #3928's. The 0.125 x 0.09 layer
+#: was added by #4415 for small marks in text-dense tiles: +0.02 AP overall at 50,000
+#: pages, and the weakest classes +0.10-0.20, for ~3x the tiles (178 a page).
+TILE_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H), (TILE_W / 2, TILE_H / 2))
 #: The stored width.  512 beat 256 at 50,000 pages (#3928, 2026-09-18: 0.73 against
 #: 0.70 after SIFT at K = 1,000) for 46 KiB a page.
 TILE_DIM = 512
 #: The cached projection's name.  A refit that changes the numbers takes the next
 #: version, so a cached file never changes meaning.
 PROJECTION_NAME = "tile_projection_v1"
+#: The layers the cached projection is *fit* on, which need not be the layers it is
+#: applied to. v1 is fit on the coarse layer and applied to both. A v2 fit on both
+#: layers' tiles scored 0.006 AP lower at 25 clicks (#4415 arm C), so v1 stays.
+FIT_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H),)
 #: Pages sampled to fit the projection: ~20,000 tiles, well over the 8,192
 #: dimensions being reduced.
 FIT_SAMPLE_PAGES = 400
@@ -124,7 +133,7 @@ def raw_tiles(features: StructuralFeatures) -> tuple[np.ndarray, np.ndarray]:
             np.asarray([(0.0, 0.0, 1.0, 1.0)], dtype=np.float32),
         )
     x, y = kp[:, 0], kp[:, 1]
-    windows = tile_windows()
+    windows = [w for width, height in TILE_LAYERS for w in tile_windows(width, height)]
     member = np.stack([(x >= x0) & (x < x1) & (y >= y0) & (y < y1) for x0, y0, x1, y1 in windows])
     keep = member.sum(axis=1) >= MIN_TILE_KP
     if keep.any():

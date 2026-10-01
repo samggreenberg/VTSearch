@@ -18,7 +18,10 @@ Writes ``<models dir>/structural/tile_projection_v1.npz`` and its provenance
 ``.json``. The models dir is ``$VTSEARCH_MODELS_DIR``; on the GRID, source
 ``scripts/experiments/pile/pile_env.sh`` first so it lands in the pile's cache.
 
-    OMP_NUM_THREADS=1 python fit_tile_projection.py --tier s [--workers 32] [--out <path>]
+    python fit_tile_projection.py --tier s [--workers 32] [--out <path>]
+
+Pool workers tile with one BLAS thread each (``threadpoolctl``); the SVD keeps every
+thread, which matters once two tile layers triple the sample (#4415).
 """
 
 from __future__ import annotations
@@ -40,6 +43,16 @@ import fullmarks_config as cfg  # noqa: E402
 import embed_corpus  # noqa: E402
 
 
+def _one_thread() -> None:
+    """Pool workers tile the FIT layers with one BLAS thread each; the fit itself keeps every thread."""
+    from threadpoolctl import threadpool_limits  # noqa: PLC0415
+
+    import vtscore.media.structural_tiles as st  # noqa: PLC0415
+
+    threadpool_limits(1)
+    st.TILE_LAYERS = st.FIT_LAYERS  # the projection is fit on these, whatever the app applies it to
+
+
 def _tiles(path: str) -> np.ndarray:
     from eval_splg_rank import _gray  # noqa: PLC0415
     from vtscore.media.structural import DOCUMENT_MAX_FEATURES, SiftMatcher  # noqa: PLC0415
@@ -54,6 +67,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.media.structural import DOCUMENT_MAX_FEATURES  # noqa: PLC0415
     from vtscore.media.structural_tiles import (  # noqa: PLC0415
         FIT_SAMPLE_PAGES,
+        FIT_LAYERS,
         TILE_DIM,
         fit_projection,
         fit_sample_ids,
@@ -68,8 +82,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
     ap.add_argument("--out", type=Path, help="default: the models cache (projection_path())")
     args = ap.parse_args(argv)
-    if os.environ.get("OMP_NUM_THREADS") != "1":
-        print("WARNING: OMP_NUM_THREADS is not 1; BLAS threads will oversubscribe the pool (#3928)", flush=True)
 
     pages = {p.page_id: p for p in embed_corpus.pages_for_tier(args.corpus, args.tier)}
     sample = fit_sample_ids(list(pages), FIT_SAMPLE_PAGES)
@@ -77,7 +89,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"tier {args.tier}: {len(pages)} pages, fitting on {len(sample)} -> {out}", flush=True)
 
     t0 = time.time()
-    with get_context("fork").Pool(args.workers) as pool:
+    with get_context("fork").Pool(args.workers, initializer=_one_thread) as pool:
         rows = pool.map(_tiles, [pages[p].path for p in sample], chunksize=4)
     stacked = np.concatenate(rows)
     print(f"  {stacked.shape[0]} tiles from {len(sample)} pages in {time.time() - t0:.0f}s", flush=True)
@@ -106,6 +118,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "budget": DOCUMENT_MAX_FEATURES,
             "detect_pixels": MAX_STRUCTURAL_DETECT_PIXELS,
             "features": "compact (fp16 keypoints, uint8 descriptors)",
+            "fit_layers": [list(layer) for layer in FIT_LAYERS],
             "commit": commit,
             "written": time.strftime("%Y-%m-%dT%H:%M:%S"),
         },

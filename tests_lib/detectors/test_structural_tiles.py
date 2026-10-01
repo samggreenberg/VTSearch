@@ -126,10 +126,13 @@ class TestVectorisedTiles:
         return StructuralFeatures(keypoints=kp, descriptors=desc).compact()
 
     @pytest.mark.parametrize("n", [3000, 400, 5])
-    def test_equals_the_reference_aggregation(self, n):
+    def test_equals_the_reference_aggregation(self, n, monkeypatch):
+        from vtscore.media import structural_tiles as st
         from vtscore.media.structural import aggregate_vlad, load_vlad_codebook
         from vtscore.media.structural_tiles import raw_tiles, tile_rows
 
+        # The reference (tile_rows) cuts one layer, so compare on the coarse layer alone.
+        monkeypatch.setattr(st, "TILE_LAYERS", ((st.TILE_W, st.TILE_H),))
         feats = self._features(n, seed=n)
         fast, fast_boxes = raw_tiles(feats)
         ref, ref_boxes = tile_rows(feats.keypoints_f32(), feats.descriptors_f32(), load_vlad_codebook(), aggregate_vlad)
@@ -210,3 +213,31 @@ class TestLoadBackfill:
         embed_missing(medias, "sift_vlad_doc")
         assert medias[1]["tile_vectors"].vectors.shape[1] == 16
         np.testing.assert_array_equal(medias[1]["embeddings"]["sift_vlad_doc"], np.ones(8192, dtype=np.float32))
+
+
+class TestTileLayers:
+    """#4415: the shipped tiling is two layers, the measured coarse one and a fine one."""
+
+    def test_the_shipped_layers_and_projection(self):
+        from vtscore.media import structural_tiles as st
+
+        assert st.TILE_LAYERS == ((st.TILE_W, st.TILE_H), (st.TILE_W / 2, st.TILE_H / 2))
+        # v1, fit on the coarse layer, is applied to both: a both-layer refit scored lower (#4415 arm C).
+        assert st.PROJECTION_NAME == "tile_projection_v1"
+        assert st.FIT_LAYERS == ((st.TILE_W, st.TILE_H),)
+
+    def test_a_fine_layer_adds_tiles_on_a_dense_page(self, monkeypatch):
+        from vtscore.media import structural_tiles as st
+
+        rng = np.random.default_rng(3)
+        kp = np.zeros((6000, 4), dtype=np.float32)
+        kp[:, :2] = rng.random((6000, 2))
+        feats = StructuralFeatures(
+            keypoints=kp, descriptors=(rng.random((6000, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+        ).compact()
+        both, boxes = st.raw_tiles(feats)
+        monkeypatch.setattr(st, "TILE_LAYERS", ((st.TILE_W, st.TILE_H),))
+        coarse, _ = st.raw_tiles(feats)
+        assert both.shape[0] > coarse.shape[0]
+        assert np.allclose(both[: coarse.shape[0]], coarse, atol=1e-6)  # the coarse layer comes first, unchanged
+        assert boxes[-1][2] - boxes[-1][0] == pytest.approx(st.TILE_W / 2, abs=1e-6)
