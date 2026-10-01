@@ -237,16 +237,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument(
         "--tile-layers",
         default="",
-        help="#4415 arm: 'fine' adds a 0.125 x 0.09 tile layer to the shipped 0.25 x 0.18 one",
+        help="#4415 arms: 'coarse' cuts only the 0.25 x 0.18 layer (default: the shipped layers)",
     )
+    ap.add_argument("--projection", default="", help="#4415 arms: a cached projection name, e.g. tile_projection_v1")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
-    if args.tile_layers == "fine":
-        import vtscore.media.structural_tiles as st  # noqa: PLC0415
+    import vtscore.media.structural_tiles as st  # noqa: PLC0415
 
-        st.TILE_LAYERS = ((st.TILE_W, st.TILE_H), (st.TILE_W / 2, st.TILE_H / 2))
+    if args.tile_layers == "coarse":
+        st.TILE_LAYERS = ((st.TILE_W, st.TILE_H),)
     elif args.tile_layers:
         ap.error(f"unknown --tile-layers {args.tile_layers!r}")
+    if args.projection:
+        st.PROJECTION_NAME = args.projection
     args.out.mkdir(parents=True, exist_ok=True)
     frame_at = {int(x) for x in args.frames.split(",") if x}
 
@@ -276,7 +279,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "corpus_version": cfg.CORPUS_VERSION,
                 "max_v": args.max_v,
                 "tiled_top_k": s1.TILED_TOP_K,
-                "tile_layers": args.tile_layers or "shipped",
+                "tile_layers": [list(layer) for layer in st.TILE_LAYERS],
+                "projection": st.PROJECTION_NAME,
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
             },

@@ -41,15 +41,17 @@ TILE_W, TILE_H = 0.25, 0.18
 #: A tile with fewer keypoints than this has nothing to aggregate.
 MIN_TILE_KP = 20
 #: The tile layers a page is cut into, as ``(width, height)``; a page scores its best
-#: tile across all of them. The shipped app uses the one measured layer. #4415's
-#: arm B adds a finer layer for small marks in text-dense tiles.
-TILE_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H),)
+#: tile across all of them. The 0.25 x 0.18 layer is #3928's. The 0.125 x 0.09 layer
+#: was added by #4415 for small marks in text-dense tiles: +0.02 AP overall at 50,000
+#: pages, and the weakest classes +0.10-0.20, for ~3x the tiles (178 a page).
+TILE_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H), (TILE_W / 2, TILE_H / 2))
 #: The stored width.  512 beat 256 at 50,000 pages (#3928, 2026-09-18: 0.73 against
 #: 0.70 after SIFT at K = 1,000) for 46 KiB a page.
 TILE_DIM = 512
 #: The cached projection's name.  A refit that changes the numbers takes the next
-#: version, so a cached file never changes meaning.
-PROJECTION_NAME = "tile_projection_v1"
+#: version, so a cached file never changes meaning.  v1 was fit on one tile layer;
+#: v2 on both (#4415).
+PROJECTION_NAME = "tile_projection_v2"
 #: Pages sampled to fit the projection: ~20,000 tiles, well over the 8,192
 #: dimensions being reduced.
 FIT_SAMPLE_PAGES = 400
