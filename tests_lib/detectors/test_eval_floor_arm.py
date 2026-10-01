@@ -196,3 +196,56 @@ class TestTheBalanceArm:
     def test_a_balance_outside_the_range_kills_the_cell_before_it_runs(self):
         with pytest.raises(ValueError, match="beta must be in"):
             self._run(beta=9.0)
+
+
+class TestThePAwareAcquisitionArm:
+    """#4409: the acquisition cut at the depth where the session's mixture says the ranking stops being P right."""
+
+    def _run(self, min_precision, **kwargs):
+        picks: list[dict] = []
+        rows = simulate_voting_iterations(
+            _separable(), "alpha", seed=0, max_steps=15, calibrate_count=2, pick_sink=picks,
+            min_precision=min_precision, spot_check="off", **kwargs,
+        )  # fmt: skip
+        return rows, picks
+
+    def test_a_higher_floor_samples_higher_up_the_ranking(self):
+        hi, _ = self._run(0.9, acq_inclusion_offset=0, acq_p_crossing=1.0)
+        lo, _ = self._run(0.1, acq_inclusion_offset=0, acq_p_crossing=1.0)
+        a_hi = [r["acq_threshold"] for r in hi if r["t"] >= 5]
+        a_lo = [r["acq_threshold"] for r in lo if r["t"] >= 5]
+        assert a_hi and len(a_hi) == len(a_lo)
+        assert sum(a_hi) / len(a_hi) > sum(a_lo) / len(a_lo), "90% samples above 10%"
+
+    def test_it_is_a_live_arm_not_the_shipped_cut(self):
+        shipped, picks_shipped = self._run(0.5)
+        aware, picks_aware = self._run(0.5, acq_inclusion_offset=0, acq_p_crossing=0.5)
+        # The cut differs; on a 40-item fixture the opening takes every pick, so
+        # whether the picks follow is for the bench run to show.
+        assert [r["acq_threshold"] for r in shipped] != [r["acq_threshold"] for r in aware]
+        assert len(picks_shipped) == len(picks_aware)
+
+    @pytest.mark.parametrize(
+        ("kwargs", "match"),
+        [
+            ({"acq_p_crossing": 1.0}, "acq_inclusion_offset=0"),
+            ({"acq_inclusion_offset": 0, "acq_p_crossing": 0.0}, "must be > 0"),
+            ({"acq_inclusion_offset": 0, "acq_rank_percentile": 0.9, "acq_p_crossing": 1.0}, "acq_inclusion_offset=0"),
+        ],
+    )
+    def test_a_malformed_arm_dies_before_it_runs(self, kwargs, match):
+        with pytest.raises(ValueError, match=match):
+            self._run(0.5, **kwargs)
+
+    def test_it_needs_a_preference(self):
+        with pytest.raises(ValueError, match="needs a preference"):
+            self._run(NO_PRECISION_FLOOR, acq_inclusion_offset=0, acq_p_crossing=1.0)
+
+    def test_under_a_balance_it_samples_at_the_f_beta_argmax(self):
+        """#4413: a precision-leaning balance samples higher than a recall-leaning one."""
+        hi, _ = self._run(NO_PRECISION_FLOOR, beta=0.5, acq_inclusion_offset=0, acq_p_crossing=1.0)
+        lo, _ = self._run(NO_PRECISION_FLOOR, beta=2.0, acq_inclusion_offset=0, acq_p_crossing=1.0)
+        a_hi = [r["acq_threshold"] for r in hi if r["t"] >= 5 and r["phase"] != "check"]
+        a_lo = [r["acq_threshold"] for r in lo if r["t"] >= 5 and r["phase"] != "check"]
+        assert a_hi and len(a_hi) == len(a_lo)
+        assert sum(a_hi) / len(a_hi) >= sum(a_lo) / len(a_lo)

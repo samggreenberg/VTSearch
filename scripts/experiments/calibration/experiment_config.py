@@ -1005,6 +1005,12 @@ if ACQ_INCLUSION_OFFSET is None:
 #: ``CALIB_ACQ_INCLUSION_OFFSET=0``; the two name the same cut.
 ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 
+#: The P-aware acquisition arm (#4409): the acquisition cut at this multiple of
+#: the depth where the session's mixture says the unvoted ranking stops being
+#: P right (1.0 = at the crossing).  Requires ``CALIB_ACQ_INCLUSION_OFFSET=0``
+#: and a floor.  Unset is the shipped cut.
+ACQ_P_CROSSING = _opt_float("CALIB_ACQ_P_CROSSING")
+
 #: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
 #: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.
 #:
