@@ -133,12 +133,14 @@ band's picks: 5 drawn uniformly from the band, a census of a band smaller
 than that. The ids never change after this, so every band samples one list
 however the model retrains behind it. A balance walk also fixes `n_pos`, the
 mixture's count of positives in the unvoted ranking, which its recall is
-read against. The walk starts at the bands that hold `schedule.candidate`
-items. **409** when there is no ranking yet, nothing in it is unvoted, the
-list is the one the last finished check already walked (there is no redraw
-on the same list: any vote, the check's own included, changes it), or, on a
-balance walk, no mixture fits the ranking to read recall against. A check
-already running is replaced.
+read against; when no mixture fits the ranking, or the fit collapsed onto a
+few near-duplicate scores (#4419), `n_pos` is the balance's cap
+(`schedule.candidate`) lowered to the unvoted count - the set the unchecked
+line would have kept - so the check still starts. The walk starts at the
+bands that hold `schedule.candidate` items. **409** when there is no ranking
+yet, nothing in it is unvoted, or the list is the one the last finished check
+already walked (there is no redraw on the same list: any vote, the check's
+own included, changes it). A check already running is replaced.
 
 **`votes`** takes `{"votes": [{"id": 12, "label": "good"}, ...]}` on the round's
 picks. Each is an ordinary vote on the item - it trains the model, persists to

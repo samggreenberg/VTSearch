@@ -25,6 +25,7 @@ from vtscore.training.thresholds import (
     floor_line,
     floor_state,
     mixture_count,
+    mixture_posterior,
 )
 
 N_HIGH, N_LOW = 60, 940
@@ -105,6 +106,42 @@ class TestWhatTheMixtureCounts:
         monkeypatch.setattr(gmm, "anchored_gmm_fit", lambda *_a, **_k: (None, "gmm_failed:test"))
         assert mixture_count(bare, 0.5, {}) is None and bare.mixture == [None]
         assert mixture_count(bare, 0.5, {}) is None
+
+
+#: Twenty scores shaped like a learned sort over the app's 20-item test
+#: corpus after two Good and two Bad votes (#4419): two near-duplicates at the
+#: top, a tight middle, two at the bottom.  The anchored fit lands its high
+#: component on the top two alone (``var_hi`` ~3e-7 against a 0.32 spread).
+COLLAPSING_SCORES = [
+    0.66, 0.659, 0.515, 0.512, 0.511, 0.51, 0.509, 0.506, 0.501, 0.495,
+    0.492, 0.491, 0.49, 0.489, 0.488, 0.486, 0.486, 0.476, 0.343, 0.34,
+]  # fmt: skip
+
+
+def _collapsing() -> tuple[LineRanking, dict[int, bool]]:
+    labels = {1: True, 2: True, 19: False, 20: False}
+    return LineRanking.from_scores(list(range(1, 21)), COLLAPSING_SCORES, set(labels)), labels
+
+
+class TestACollapsedFitIsNoEstimate:
+    """#4419: a component that lands on a few near-duplicate scores says nothing about the rest."""
+
+    def test_the_posterior_and_the_count_are_none(self):
+        ranking, labels = _collapsing()
+        assert mixture_posterior(ranking, labels) is None
+        assert mixture_count(ranking, 0.5, labels) is None
+        assert ranking.mixture == [None], "memoised as no fit, not refitted"
+
+    def test_so_the_unchecked_line_keeps_the_schedules_count(self):
+        ranking, labels = _collapsing()
+        unvoted = ranking.unvoted_ids().size
+        assert floor_count(0.5, None, proposal=mixture_count(ranking, 0.5, labels)) == check_schedule(0.5).candidate
+        assert floor_line(ranking, 0.5, None, proposal=None) == ranking.threshold_for(min(32, unvoted))
+
+    def test_a_sound_fit_still_counts(self):
+        ranking, labels = _two_populations()
+        assert mixture_posterior(ranking, labels) is not None
+        assert mixture_count(ranking, 0.5, labels) is not None
 
 
 class TestTheCountItLowers:

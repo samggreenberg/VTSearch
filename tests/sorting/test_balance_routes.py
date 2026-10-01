@@ -16,7 +16,7 @@ from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.state.core import detector_balance_state, get_active_detector_context, human_voted_ids
 from vtscore.training.thresholds import BALANCE_CHECKED, balance_line
-from vtsearch.state import get_beta, get_line_preference, snapshot_medias
+from vtsearch.state import bad_votes, get_beta, get_line_preference, good_votes, snapshot_medias
 
 
 def _load_detector(client, name: str = "balance-carrier") -> str:
@@ -104,6 +104,20 @@ class TestTheLineUnderTheBalance:
         assert data["balance"]["fbeta"] is not None and data["balance"]["recall"] is not None
         assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
         assert data["floor"]["status"] == "unchecked", "the floor's own state is untouched by a balance walk"
+
+    def test_a_check_starts_when_the_mixture_has_no_estimate(self, client):
+        """#4419: on the 20-item corpus the fit collapses onto the top two scores; the walk reads recall against the cap."""
+        from vtscore.state.core import detector_balance_positives, detector_walk_positives
+
+        good_votes.update({k: None for k in [1, 2]})
+        bad_votes.update({k: None for k in [3, 4]})
+        assert client.post("/api/learned-sort", json={"wait": True}).get_json()["status"] == "done"
+        ctx = get_active_detector_context()
+        assert detector_balance_positives(ctx) is None, "the fixture: no estimate"
+        assert detector_walk_positives(ctx, 1.0) == len(ctx.line_ranking.unvoted_ids(human_voted_ids(ctx)))
+        start = client.post("/api/precision-check/start", json={})
+        assert start.status_code == 200, start.get_json()
+        assert start.get_json()["check"]["status"] == "running" and start.get_json()["check"]["beta"] == 1.0
 
     def test_under_the_floor_a_check_is_still_the_floors(self, client, floor_preference):
         detector_id = _load_detector(client)

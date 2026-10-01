@@ -82,7 +82,7 @@ def start_precision_check():
     last finished result stays in force until this check ends.
     """
     from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
-    from vtscore.state.core import detector_balance_positives, get_active_detector_context, human_voted_ids  # noqa: PLC0415
+    from vtscore.state.core import detector_walk_positives, get_active_detector_context, human_voted_ids  # noqa: PLC0415
     from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
@@ -104,10 +104,9 @@ def start_precision_check():
     # screenshot harness does, so a refresh frames the same picks (#4330).
     if beta is not None:
         # The balance walk (#4413): the same bands and picks, stopped at the
-        # F-beta peak, its recall read against the mixture's count of positives.
-        n_pos = detector_balance_positives(det_ctx)
-        if n_pos is None or not n_pos > 0:
-            abort(409, message="No score model to read recall against: run a learned sort or a Find pass first.")
+        # F-beta peak, its recall read against the mixture's count of positives
+        # - or the balance's cap when the mixture has no estimate (#4419).
+        n_pos = detector_walk_positives(det_ctx, beta)
         det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED)
     else:
         det_ctx.precision_check_run = SpotCheck.start(unvoted, floor, seed=SPOT_CHECK_SEED)  # type: ignore[arg-type]

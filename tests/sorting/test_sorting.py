@@ -714,17 +714,13 @@ class TestLearnedSortAsync:
 
         learned_sort_jobs.reset_for_tests()
 
-    def test_a_dropped_line_ranking_retrains_rather_than_reusing_the_cache(self, client, floor_preference):
+    def test_a_dropped_line_ranking_retrains_rather_than_reusing_the_cache(self, client):
         """A cached sort must not outlive the ranking its line was drawn over (#4317).
 
         A dataset switch drops ``line_ranking`` (media ids are per dataset), and
         coming back with the same votes used to hit the signature cache: the
         response drew a line and a floor state while the detector held no
         ranking, so Train's spot check refused with "No ranking to check".
-        The probe is the floor's check: on this 20-item corpus the mixture's
-        high component collapses onto the top two scores, so a balance check
-        refuses for a reason of its own (no positives to read recall against,
-        #4413) and would not tell the two apart.
         """
         from vtscore.concurrency.async_jobs import learned_sort_jobs
         from vtscore.state.core import get_active_detector_context

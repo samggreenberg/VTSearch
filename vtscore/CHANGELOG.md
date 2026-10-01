@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A collapsed mixture fit is no estimate, and a balance check always
+  starts** (issue #4419). On a tiny ranking the vote-anchored mixture can
+  land its high component on the top two scores alone (a standard deviation
+  under 1% of the score range, `MIXTURE_MIN_STD_SHARE`); its posterior then
+  puts no mass on anything else, and both the floor's and the balance's
+  unchecked line kept one item. `mixture_posterior` now treats such a fit as
+  none, so the unchecked line keeps the schedule's cap as #4389 intended. The
+  balance walk's recall denominator comes from the new `walk_positives`: the
+  mixture's count when it has one, else the balance's cap lowered to the
+  unvoted count, so `POST /api/precision-check/start` no longer refuses with
+  "No score model to read recall against" and the harness's end-of-run check
+  runs in the same cases.
 - **The line's default preference is the balance** (issue #4413).
   `DEFAULT_LINE_PREFERENCE` is `"balance"`: `vtscore.state.line_knobs()` hands
   every retrain and re-cut the detector's beta (`DEFAULT_BETA`, 1.0, until
