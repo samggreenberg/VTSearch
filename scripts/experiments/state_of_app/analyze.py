@@ -91,7 +91,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "calibration"))
 
 import _cells_io  # noqa: E402
-from _rank_metrics import FLOORS, floor_tag, line_metrics, parse_ranks  # noqa: E402
+from _rank_metrics import FLOORS, floor_tag, frame_k, line_metrics, parse_ranks  # noqa: E402
 
 #: The two production paths, as the harness names them.
 ARMS = {("siglip", "whole_image"): "SigLIP binary", ("siglip+dinov3_patch", "max_patch"): "DINOv3 region"}
@@ -239,7 +239,13 @@ def _run_frames(frames: pd.DataFrame) -> dict[tuple, dict[str, pd.DataFrame]]:
 def _line_at(frame: dict | None, floor: float) -> dict[str, float]:
     if frame is None:
         return {m: np.nan for m in LINE_METRICS}
-    return line_metrics(parse_ranks(frame["test_pos_ranks"]), int(frame["n_test"]), int(frame["n_test_pos"]), floor)
+    return line_metrics(
+        parse_ranks(frame["test_pos_ranks"]),
+        int(frame["n_test"]),
+        int(frame["n_test_pos"]),
+        floor,
+        frame_k(frame, floor),
+    )
 
 
 def run_tables(
@@ -348,7 +354,7 @@ def run_tables(
         for fr in steps.to_dict("records") if steps is not None else []:
             ranks = parse_ranks(fr["test_pos_ranks"])
             for x in FLOORS:
-                m = line_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), x)
+                m = line_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), x, frame_k(fr, x))
                 steps_out.append({**ident, "t": int(fr["t"]), "floor": x, **m})
     return pd.DataFrame(cells), pd.DataFrame(lines), pd.DataFrame(steps_out)
 

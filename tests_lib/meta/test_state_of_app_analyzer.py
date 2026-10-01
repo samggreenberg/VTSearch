@@ -107,6 +107,19 @@ def test_the_line_keeps_the_floors_unchecked_candidate(rm) -> None:
     assert (m["precision"], m["meets"], m["shortfall"]) == (0.5, 0.0, pytest.approx(0.4))
 
 
+def test_a_frame_that_recorded_the_shipped_line_is_read_at_its_count(rm) -> None:
+    """#4389: the unchecked line keeps the smaller of the schedule's count and the mixture's; frames record it."""
+    ranks = np.array([0, 1, 2, 3, 10, 20])
+    frame = {"test_line_k_p50": 4, "test_line_k_p10": -1}
+    assert rm.frame_k(frame, 0.5) == 4
+    assert rm.frame_k(frame, 0.1) is None, "-1: no session drew a line here"
+    assert rm.frame_k({}, 0.9) is None, "a run before the column reads the schedule's count"
+    m = rm.line_metrics(ranks, 1000, 6, 0.5, rm.frame_k(frame, 0.5))
+    assert (m["k"], m["precision"], m["recall"]) == (4, 1.0, 4 / 6)
+    assert rm.line_metrics(ranks, 1000, 6, 0.5)["k"] == 32
+    assert rm.line_metrics(ranks, 3, 3, 0.5, 40)["k"] == 3, "never more than the corpus"
+
+
 def test_ties_break_by_id_as_the_line_does(rm) -> None:
     # Two items tie; the lower id ranks first, as LineRanking sorts.
     assert rm.ranks_from_scores([7, 3], [0.5, 0.5], [1.0, 0.0]).tolist() == [1]
@@ -263,7 +276,9 @@ def test_f1_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
         assert c.loc[0, "f1"] == pytest.approx(text["text_f1_p50"]), "click 0 is the text sort's line"
         assert c.loc[0, "f1_p10"] == pytest.approx(text["text_f1_p10"])
         for f in frames.query("kind == 'step'").to_dict("records"):
-            want = rm.line_metrics(rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), 0.5)
+            want = rm.line_metrics(
+                rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), 0.5, rm.frame_k(f, 0.5)
+            )
             got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["floor"] == 0.5)].iloc[0]
             assert got["f1"] == pytest.approx(want["f1"])
             assert c.loc[int(f["t"]), "f1"] == pytest.approx(want["f1"]), "the curve at a frame IS the frame"
@@ -309,7 +324,9 @@ def test_the_line_is_read_off_the_rank_frames(run, rm) -> None:
         for point, kind in (("final", "last"), ("ceiling", "skyline_train_full")):
             f = frames[frames["kind"] == kind].iloc[0]
             for x in rm.FLOORS:
-                want = rm.line_metrics(rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), x)
+                want = rm.line_metrics(
+                    rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), x, rm.frame_k(f, x)
+                )
                 got = lines[(lines["category"] == cat) & (lines["point"] == point) & (lines["floor"] == x)].iloc[0]
                 for m, v in want.items():
                     assert got[m] == pytest.approx(v), (cat, point, x, m)

@@ -889,6 +889,34 @@ def _precision_frame(
     return frame
 
 
+def _fresh_corpus_line(test: "LineRanking", pool: "LineRanking", vote_labels: "dict[int, bool]") -> dict[float, int]:
+    """What the shipped unchecked line keeps on the test half at each preset floor (#4389).
+
+    A cold Find over a corpus holding the session's votes: the test half plus
+    the voted items at the final model's scores (read off *pool*, the
+    session's ranking), the votes marked voted and anchoring the mixture, and
+    the line at :func:`~vtscore.training.thresholds.floor_count` with the
+    mixture's proposal - the smaller of the schedule's count and the
+    mixture's.  Capped at the test half's size.  Pure read.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_FLOORS  # noqa: PLC0415
+    from vtscore.training.thresholds import floor_count  # noqa: PLC0415
+
+    in_test = set(test.ids.tolist())
+    keep, scores = [], []
+    for v in vote_labels:
+        if int(v) in in_test:
+            continue
+        try:
+            scores.append(pool.score_of(int(v)))
+        except KeyError:  # an unscorable vote is out of the ranking, as it is out of the app's
+            continue
+        keep.append(int(v))
+    corpus = LineRanking.from_scores([*test.ids.tolist(), *keep], [*test.scores.tolist(), *scores], keep)
+    labels = {v: bool(vote_labels[v]) for v in keep}
+    return {p: int(min(floor_count(p, None, mixture_count(corpus, p, labels)), test.size)) for p in RANK_FRAME_FLOORS}
+
+
 def _rank_frame(
     kind: str,
     t: int,
@@ -898,16 +926,22 @@ def _rank_frame(
     pool_ranking: "LineRanking | None" = None,
     voted: "Iterable[int]" = (),
     pool_labels: "dict[int, float] | None" = None,
+    vote_labels: "dict[int, bool] | None" = None,
 ) -> dict[str, Any]:
     """Where the positives sit in the test half's ranking and in the session's unvoted pool (#4357).
 
     Both rankings are :class:`~vtscore.training.thresholds.LineRanking` orders
     (score descending, ties by id, unscorable media left out), so the test
     half's top *K* is the set a floor's line keeps on a fresh corpus, and the
-    pool's top *K* unvoted is the candidate the spot check samples.  Pure read.
+    pool's top *K* unvoted is the candidate the spot check samples.  With the
+    session's votes (*vote_labels*, ``True`` = Good) it also records how many
+    the shipped unchecked line keeps on the test half at each preset floor
+    (:func:`_fresh_corpus_line`, #4389); -1 without them.  Pure read.
     See :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS`.
     """
     import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.voting_columns import RANK_FRAME_FLOORS  # noqa: PLC0415
 
     def _ranks(ids: Any, label_of: Any) -> tuple[int, int, str]:
         pos = np.flatnonzero(np.fromiter((label_of(int(i)) >= 0.5 for i in ids), dtype=bool, count=len(ids)))
@@ -919,6 +953,9 @@ def _rank_frame(
     n_pool, n_pool_pos, pool_ranks = -1, -1, ""
     if pool_ranking is not None and pool_labels is not None:
         n_pool, n_pool_pos, pool_ranks = _ranks(pool_ranking.unvoted_ids(voted), pool_labels.__getitem__)
+    line_k = dict.fromkeys(RANK_FRAME_FLOORS, -1)
+    if pool_ranking is not None and vote_labels:
+        line_k = _fresh_corpus_line(test, pool_ranking, vote_labels)
     return {
         "kind": kind,
         "t": int(t),
@@ -928,6 +965,7 @@ def _rank_frame(
         "n_pool": n_pool,
         "n_pool_pos": n_pool_pos,
         "pool_pos_ranks": pool_ranks,
+        **{f"test_line_k_p{round(p * 100):d}": k for p, k in line_k.items()},
     }
 
 
@@ -3010,6 +3048,7 @@ def simulate_voting_iterations(  # noqa: C901
                     "pool_ranking": line_ranking,
                     "voted": frozenset(good_votes) | frozenset(bad_votes),
                     "pool_labels": pool_labels,
+                    "vote_labels": {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                 }
                 if rank_frame_steps and t in rank_frame_steps:
                     rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
