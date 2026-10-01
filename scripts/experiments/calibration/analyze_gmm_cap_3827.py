@@ -180,7 +180,10 @@ def cell_rows(job: tuple) -> tuple[list[dict], list[dict]]:
         half_s, half_y = thinned(fr["test_s"], fr["test_y"], THIN_TO.get(world), rng0)
         if len(half_y) == 0 or half_y.sum() == 0:
             continue
-        hay_len = min(len(h) for h in fr["haystacks"])
+        # A frame whose folds fell back (too few votes, or one class) has no fold
+        # haystacks: its no-vote line is still read, its cut is not.
+        has_folds = bool(fr["haystacks"]) and min(len(h) for h in fr["haystacks"]) > 0
+        hay_len = min(len(h) for h in fr["haystacks"]) if has_folds else 0
         orderings = [(list(map(float, a)), list(map(float, b))) for a, b in fr["orderings"]]
         n_cal = min(len(a) for a, _b in orderings) if orderings else 0
         for n in SIZES:
@@ -188,14 +191,16 @@ def cell_rows(job: tuple) -> tuple[list[dict], list[dict]]:
             if n == 0:  # the bench half as it is: the reference, where the shipped cap does not bind
                 order = np.argsort(-half_s, kind="stable")
                 s, y = half_s[order].astype(np.float64), half_y[order].astype(np.int64)
-                hays = [np.asarray(h[:hay_len], dtype=np.float64) for h in fr["haystacks"]]
+                hays = [np.asarray(h[:hay_len], dtype=np.float64) for h in fr["haystacks"]] if has_folds else []
                 final = fr["pool_ref"]
             else:
                 s, y = bootstrap(half_s, n, rng, half_y)
-                hay_idx = rng.integers(0, hay_len, size=n)  # one draw for every fold: the folds score one pool
-                hays = [np.asarray(h[:hay_len])[hay_idx] for h in fr["haystacks"]]
+                hays = []
+                if has_folds:
+                    hay_idx = rng.integers(0, hay_len, size=n)  # one draw for every fold: the folds score one pool
+                    hays = [np.asarray(h[:hay_len])[hay_idx] for h in fr["haystacks"]]
                 final = bootstrap(fr["pool_ref"], n, rng)
-            n_corpus, n_hay, n_votes = len(y), len(hays[0]), len(fr["vote_y"])
+            n_corpus, n_hay, n_votes = len(y), (len(hays[0]) if hays else 0), len(fr["vote_y"])
             orc = {f: oracle(y, f) for f in FLOORS}
             ident = {
                 "world": world,
@@ -232,6 +237,19 @@ def cell_rows(job: tuple) -> tuple[list[dict], list[dict]]:
                                 "fit_seconds": mix_s,
                             }
                         )
+                if not hays:
+                    cuts.append(
+                        {
+                            **ident,
+                            "cap": cap,
+                            "anchor_share_mix": share_mix,
+                            "mix_seconds": mix_s,
+                            "cut_ok": False,
+                            "cut_skip": "no_folds",
+                            **params,
+                        }
+                    )
+                    continue
                 t0 = time.perf_counter()
                 cut = fit_fold_anchored_cut(hays, orderings, final)
                 cut_s = time.perf_counter() - t0
