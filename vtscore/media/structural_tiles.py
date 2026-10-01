@@ -49,9 +49,12 @@ TILE_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H), (TILE_W / 2, T
 #: 0.70 after SIFT at K = 1,000) for 46 KiB a page.
 TILE_DIM = 512
 #: The cached projection's name.  A refit that changes the numbers takes the next
-#: version, so a cached file never changes meaning.  v1 was fit on one tile layer;
-#: v2 on both (#4415).
-PROJECTION_NAME = "tile_projection_v2"
+#: version, so a cached file never changes meaning.
+PROJECTION_NAME = "tile_projection_v1"
+#: The layers the cached projection is *fit* on, which need not be the layers it is
+#: applied to. v1 is fit on the coarse layer and applied to both. A v2 fit on both
+#: layers' tiles scored 0.006 AP lower at 25 clicks (#4415 arm C), so v1 stays.
+FIT_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H),)
 #: Pages sampled to fit the projection: ~20,000 tiles, well over the 8,192
 #: dimensions being reduced.
 FIT_SAMPLE_PAGES = 400

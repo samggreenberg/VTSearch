@@ -44,10 +44,13 @@ import embed_corpus  # noqa: E402
 
 
 def _one_thread() -> None:
-    """Pool workers tile with one BLAS thread each; the fit itself keeps every thread."""
+    """Pool workers tile the FIT layers with one BLAS thread each; the fit itself keeps every thread."""
     from threadpoolctl import threadpool_limits  # noqa: PLC0415
 
+    import vtscore.media.structural_tiles as st  # noqa: PLC0415
+
     threadpool_limits(1)
+    st.TILE_LAYERS = st.FIT_LAYERS  # the projection is fit on these, whatever the app applies it to
 
 
 def _tiles(path: str) -> np.ndarray:
@@ -64,8 +67,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.media.structural import DOCUMENT_MAX_FEATURES  # noqa: PLC0415
     from vtscore.media.structural_tiles import (  # noqa: PLC0415
         FIT_SAMPLE_PAGES,
+        FIT_LAYERS,
         TILE_DIM,
-        TILE_LAYERS,
         fit_projection,
         fit_sample_ids,
         projection_path,
@@ -115,7 +118,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "budget": DOCUMENT_MAX_FEATURES,
             "detect_pixels": MAX_STRUCTURAL_DETECT_PIXELS,
             "features": "compact (fp16 keypoints, uint8 descriptors)",
-            "tile_layers": [list(layer) for layer in TILE_LAYERS],
+            "fit_layers": [list(layer) for layer in FIT_LAYERS],
             "commit": commit,
             "written": time.strftime("%Y-%m-%dT%H:%M:%S"),
         },

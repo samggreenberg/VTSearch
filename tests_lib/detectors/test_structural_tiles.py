@@ -222,7 +222,9 @@ class TestTileLayers:
         from vtscore.media import structural_tiles as st
 
         assert st.TILE_LAYERS == ((st.TILE_W, st.TILE_H), (st.TILE_W / 2, st.TILE_H / 2))
-        assert st.PROJECTION_NAME == "tile_projection_v2"  # v1 was fit on the coarse layer alone
+        # v1, fit on the coarse layer, is applied to both: a both-layer refit scored lower (#4415 arm C).
+        assert st.PROJECTION_NAME == "tile_projection_v1"
+        assert st.FIT_LAYERS == ((st.TILE_W, st.TILE_H),)
 
     def test_a_fine_layer_adds_tiles_on_a_dense_page(self, monkeypatch):
         from vtscore.media import structural_tiles as st
