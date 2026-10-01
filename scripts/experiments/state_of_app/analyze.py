@@ -137,6 +137,24 @@ CEILING = "skyline_train_full"
 LINE_METRICS = ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
 #: The balance's metrics, as ``_rank_metrics.balance_metrics`` names them (#4413).
 BALANCE_METRICS = ("k", "precision", "recall", "fbeta", "oracle_fbeta", "fb_share")
+#: A diagnostic, not the objective (#4427; owner 2026-10-01: the goal is the F-beta of what the line keeps,
+#: scored on the withheld test half).  The user's own corpus: the line the app actually kept over the
+#: session's UNVOTED pool at that click (``pool_k``, the harness's ``floor_count``), what it holds, and the
+#: positives IN HAND - the Goods voted so far plus the positives inside that kept set.  It explains what the
+#: withheld half cannot see: a harvesting acquisition strips the unvoted top, so the walk, which only sees
+#: the user's pool, ends shallow (``docs/experiments/2026-10-01-acquisition-fbeta-4409``).
+POOL_METRICS = (
+    "pool_k",
+    "pool_positives",
+    "pool_tp",
+    "pool_precision",
+    "pool_recall",
+    "pool_fbeta",
+    "pool_oracle_fbeta",
+    "pool_fb_share",
+    "goods",
+    "in_hand",
+)
 #: The floor a cell's F1 columns and the headline F1 curve are read at: the app's
 #: default (``DEFAULT_MIN_PRECISION``), which is every session's floor until the
 #: user moves it.
@@ -283,6 +301,50 @@ def _check_columns(check: pd.DataFrame | None, last_frame: dict | None, check_pi
     }
 
 
+def _pool_at(frame: dict | None, count: float, goods: int, beta: float) -> dict[str, float]:
+    """The line over the session's unvoted pool at *count* (the app's own kept set), and the positives in hand (#4427)."""
+    nan = float("nan")
+    if frame is None or not np.isfinite(count) or count < 1 or int(frame.get("n_pool", -1)) <= 0:
+        return {**{m: nan for m in POOL_METRICS}, "goods": goods, "in_hand": nan}
+    n_pool, n_pos = int(frame["n_pool"]), int(frame["n_pool_pos"])
+    ranks = parse_ranks(frame["pool_pos_ranks"])
+    m = balance_metrics(ranks, n_pool, n_pos, beta, int(count))
+    tp = int(round(m["precision"] * m["k"])) if np.isfinite(m["precision"]) else 0
+    return {
+        "pool_k": m["k"],
+        "pool_positives": n_pos,
+        "pool_tp": tp,
+        "pool_precision": m["precision"],
+        "pool_recall": m["recall"],
+        "pool_fbeta": m["fbeta"],
+        "pool_oracle_fbeta": m["oracle_fbeta"],
+        "pool_fb_share": m["fb_share"],
+        "goods": goods,
+        "in_hand": goods + tp,
+    }
+
+
+def _counts_by_t(ordinary: pd.DataFrame | None, check: pd.DataFrame | None) -> tuple[dict[int, float], float]:
+    """``(the line's kept count at each ordinary click, the count at the end)``: the harness's ``floor_count``.
+
+    The end is the check's end when the session ran one (the set the app keeps
+    once the walk has finished, over the ranking the ``last`` frame recorded),
+    else the last ordinary click's.
+    """
+    out: dict[int, float] = {}
+    if ordinary is not None and not ordinary.empty and "floor_count" in ordinary:
+        for t, g in ordinary.groupby("t"):
+            v = pd.to_numeric(g["floor_count"], errors="coerce").dropna()
+            if len(v) and v.iloc[-1] >= 1:
+                out[int(t)] = float(v.iloc[-1])
+    end = out[max(out)] if out else float("nan")
+    if check is not None and not check.empty and "floor_count" in check:
+        v = pd.to_numeric(check.sort_values("t")["floor_count"], errors="coerce").dropna()
+        if len(v) and v.iloc[-1] >= 1:
+            end = float(v.iloc[-1])
+    return out, end
+
+
 def _frame_dict(r: pd.Series | None) -> dict | None:
     return None if r is None else r.to_dict()
 
@@ -311,10 +373,11 @@ def _line_at(frame: dict | None, floor: float) -> dict[str, float]:
 
 def run_tables(
     base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFrame, frames: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """``(cells, lines, steps, balances, balance_steps)``: one row per run, one per run x point x floor,
-    one per run x recorded click x floor (every ``step`` rank frame, for the F1 curve), and the same two
-    per balance (#4413: the returned set's F-beta over the best cut, at each preset beta).
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """``(cells, lines, steps, balances, balance_steps, pools, pool_steps)``: one row per run, one per run x
+    point x floor, one per run x recorded click x floor (every ``step`` rank frame, for the F1 curve), the
+    same two per balance (#4413: the returned set's F-beta over the best cut, at each preset beta), and the
+    same two over the session's own unvoted pool at the line the app kept (#4427: the positives in hand).
 
     A run that never found a positive has no scored steps (the head cannot
     train without a Good), and it is the review's most important row, so it is
@@ -328,6 +391,7 @@ def run_tables(
         base = pd.DataFrame(columns=[*RUN_KEY, "t", "phase", "average_precision"])
     ordinary = base[~_is_check(base)]
     checks = {tuple(k): g for k, g in base[_is_check(base)].groupby(RUN_KEY)}
+    ordinary_by = {tuple(k): g for k, g in ordinary.groupby(RUN_KEY)}
     pk_all = picks if not picks.empty else pd.DataFrame(columns=[*RUN_KEY, "t", "picked_label", "phase"])
     pk_click = pk_all[~_is_check(pk_all)]
     pk_check = pk_all[_is_check(pk_all)]
@@ -352,7 +416,7 @@ def run_tables(
         skyd[(r["dataset"], r["category"], r["embedder"], r["style"], int(r["seed"]))] = _f(r.get("average_precision"))
 
     keys = set(series) | set(clicks_by) | set(skyd)
-    cells, lines, steps_out, balances, balance_steps = [], [], [], [], []
+    cells, lines, steps_out, balances, balance_steps, pools, pool_steps = [], [], [], [], [], [], []
     for key in sorted(keys, key=lambda k: tuple(str(x) for x in k)):
         ds, cat, emb, style, seed = key
         text = _text_for(ts, ds, cat, emb, int(seed))
@@ -389,6 +453,9 @@ def run_tables(
         row["clicks_bought"] = row["final_ap"] - row["text_ap"]
         row["headroom"] = row["ceiling_ap"] - row["final_ap"]
         row.update(_check_columns(checks.get(key), last_frame, check_picks_by.get(key)))
+        # The session's own preference, for the pool-side line (#4427): its beta, or F1 under a floor.
+        own_beta = beta_of.get(key, 1.0)
+        counts, end_count = _counts_by_t(ordinary_by.get(key), checks.get(key))
         cells.append(row)
 
         # The line, left to right.  Without rank frames only click 0 is known.
@@ -414,6 +481,7 @@ def run_tables(
         points.append(("ceiling", np.nan, _frame_dict(sky_frame.iloc[-1]) if sky_frame is not None else None, False))
         ident = {k: row[k] for k in ("arm", "dataset", "category", "class", "band", "seed", "never_trained")}
         at_default: dict[str, dict[str, float]] = {}
+        in_hand_at: dict[str, dict[str, float]] = {}
         for point, t, frame, use_text in points:
             for x in FLOORS:
                 m = _text_line(text, x) if use_text else _line_at(frame, x)
@@ -423,6 +491,20 @@ def run_tables(
             for b in BETAS:  # the returned set at each balance (#4413)
                 mb = _text_balance(text, b) if use_text else _balance_at(frame, b)
                 balances.append({**ident, "point": point, "t": t, "beta": b, **mb})
+            # The user's own corpus at that click (#4427): the ceiling has no session, the text sort no line.
+            if point != "ceiling":
+                count = (
+                    float("nan") if use_text else (end_count if point == "final" else counts.get(int(t), float("nan")))
+                )
+                mp = _pool_at(None if use_text else frame, count, _goods_by(clicks, t), own_beta)
+                pools.append({**ident, "point": point, "t": t, "beta": own_beta, **mp})
+                in_hand_at[point] = mp
+        for c in CHECKPOINTS:
+            row[f"in_hand_{c}"] = in_hand_at[str(c)]["in_hand"]
+        row["final_in_hand"] = in_hand_at["final"]["in_hand"]
+        row["final_pool_k"] = in_hand_at["final"]["pool_k"]
+        row["final_pool_precision"] = in_hand_at["final"]["pool_precision"]
+        row["final_pool_positives"] = in_hand_at["final"]["pool_positives"]
         # The returned set's F1 at the default floor, beside AP (owner, 2026-09-30).
         row["text_f1"] = at_default["text"]["f1"]
         for c in CHECKPOINTS:
@@ -439,12 +521,17 @@ def run_tables(
             for b in BETAS:
                 mb = balance_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), b, frame_beta_k(fr, b))
                 balance_steps.append({**ident, "t": int(fr["t"]), "beta": b, **mb})
+            t_fr = int(fr["t"])
+            mp = _pool_at(fr, counts.get(t_fr, float("nan")), _goods_by(clicks, t_fr), own_beta)
+            pool_steps.append({**ident, "t": t_fr, "beta": own_beta, **mp})
     return (
         pd.DataFrame(cells),
         pd.DataFrame(lines),
         pd.DataFrame(steps_out),
         pd.DataFrame(balances),
         pd.DataFrame(balance_steps),
+        pd.DataFrame(pools),
+        pd.DataFrame(pool_steps),
     )
 
 
@@ -789,6 +876,69 @@ def check_table(cells: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     ).round(3)
 
 
+def in_hand_table(pools: pd.DataFrame, balances: pd.DataFrame | None, by: list[str]) -> pd.DataFrame:
+    """Positives in hand per *by* x point (#4427): Goods + the kept set's positives on the session's own pool.
+
+    Beside them the kept set on that pool (size, precision, recall, F-beta
+    share of its best cut) and, read off the same frames, the fresh test
+    half's F-beta share at the session's own beta.
+    """
+    pts = [p for p in HEADLINE_POINTS if p != "ceiling"]
+    p = pools[pools["point"].isin(pts)].copy()
+    p["point"] = pd.Categorical(p["point"], pts, ordered=True)
+    out = (
+        p.groupby([*by, "point"], observed=True)
+        .agg(
+            goods=("goods", "mean"),
+            pool_tp=("pool_tp", "mean"),
+            in_hand=("in_hand", "mean"),
+            pool_k=("pool_k", "mean"),
+            pool_precision=("pool_precision", "mean"),
+            pool_recall=("pool_recall", "mean"),
+            pool_fb_share=("pool_fb_share", "mean"),
+            pool_positives=("pool_positives", "mean"),
+            runs=("goods", "count"),
+        )
+        .round(3)
+    )
+    if balances is not None and not balances.empty:
+        own = p[[*by, "point", "beta", "category", "seed"]].drop_duplicates()
+        b = balances.merge(own, on=[*by, "point", "beta", "category", "seed"], how="inner")
+        if not b.empty:
+            b["point"] = pd.Categorical(b["point"], pts, ordered=True)
+            fresh = b.groupby([*by, "point"], observed=True)["fb_share"].mean().round(3).rename("fresh_fb_share")
+            out = out.join(fresh, how="left")
+    return out
+
+
+def in_hand_md(cells: pd.DataFrame, pools: pd.DataFrame | None, balances: pd.DataFrame | None) -> list[str]:
+    """The diagnostic section (#4427): the user's own corpus, beside the withheld half's reading."""
+    own = session_betas(cells)
+    aim = ("beta = " + ", ".join(f"{x:g}" for x in own)) if own else "a floor (scored as F1 here)"
+    if pools is None or pools.empty or not pools[pools["point"] != "text"]["in_hand"].notna().any():
+        return [
+            "## Diagnostic: the user's own corpus and the positives in hand",
+            "",
+            "*No rank frames: nothing to read.*",
+            "",
+        ]
+    return [
+        "## Diagnostic: the user's own corpus and the positives in hand",
+        "",
+        "Not the objective (that is the F-beta of the kept set on the withheld test half, above), but what "
+        "the screen shows at each click on the session's own corpus: the Goods voted so far plus the "
+        "positives inside the set the line keeps over the UNVOTED ranking (`in_hand` = `goods` + `pool_tp`), "
+        "with that kept set's size, precision, recall and F-beta share of its best cut there (`pool_*`), and "
+        "beside it the withheld half's share (`fresh_fb_share`). A harvesting acquisition strips the unvoted "
+        "top, and the walk only sees the user's pool, so this is where a shallow line gets explained. The "
+        "line keeps what the app kept (the unchecked count, then the check's end at the last click). These "
+        f"sessions aimed at {aim}.",
+        "",
+        _md(in_hand_table(pools, balances, ["arm"])),
+        "",
+    ]
+
+
 def returned_at_beta(balances: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     """The returned set per *by* x beta x point under the balance (#4413): F-beta over the best cut."""
     b = balances[balances["point"].isin(HEADLINE_POINTS)].copy()
@@ -845,6 +995,7 @@ def summary(
     out: Path,
     null: tuple | None = None,
     balances: pd.DataFrame | None = None,
+    pools: pd.DataFrame | None = None,
 ) -> None:
     lines_md = ["# State of the App -- summary tables", ""]
     if not cells.empty and cells["never_trained"].any():
@@ -860,6 +1011,7 @@ def summary(
         ]
         lines_md += returned_at_p_md(cells, lines)
         lines_md += returned_at_beta_md(cells, balances)
+        lines_md += in_hand_md(cells, pools, balances)
         f1s = ["text_f1", *[f"f1_{c}" for c in CHECKPOINTS if c in (25, 50, 100)], "final_f1", "ceiling_f1"]
         f1s += ["final_oracle_f1"]
         lines_md += [
@@ -999,7 +1151,7 @@ def main() -> int:
     if base.empty and sky.empty:
         raise SystemExit(f"no cells under {args.exp}/results/cells")
     ts = text_scores(args.baseline)
-    cells, lines, steps, balances, balance_steps = run_tables(base, sky, ts, picks, frames)
+    cells, lines, steps, balances, balance_steps, pools, pool_steps = run_tables(base, sky, ts, picks, frames)
     inf = attribute(base, picks, ts) if not base.empty else pd.DataFrame()
     img, det = roll_up(inf)
     cells.to_csv(args.out / "cells.csv", index=False)
@@ -1007,13 +1159,15 @@ def main() -> int:
     steps.to_csv(args.out / "line_steps.csv", index=False)
     balances.to_csv(args.out / "balances.csv", index=False)
     balance_steps.to_csv(args.out / "balance_steps.csv", index=False)
+    pools.to_csv(args.out / "pools.csv", index=False)
+    pool_steps.to_csv(args.out / "pool_steps.csv", index=False)
     curves(cells, base, picks, lines, steps, balances, balance_steps).to_csv(args.out / "curves.csv", index=False)
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)
     if not inf.empty:
         harmful_pairs(inf).to_csv(args.out / "harmful_pairs.csv", index=False)
-    summary(cells, lines, img, args.out, image_null(inf) if not inf.empty else None, balances=balances)
+    summary(cells, lines, img, args.out, image_null(inf) if not inf.empty else None, balances=balances, pools=pools)
     n_frames = "no rank frames" if frames.empty else f"{len(frames)} rank frames"
     print(f"{len(cells)} runs, {len(inf)} credited clicks, {len(img)} images, {n_frames} -> {args.out}")
     return 0

@@ -249,6 +249,8 @@ def run(tmp_path_factory, rm):
         "steps": read("line_steps.csv"),
         "balances": read("balances.csv"),
         "balance_steps": read("balance_steps.csv"),
+        "pools": read("pools.csv"),
+        "pool_steps": read("pool_steps.csv"),
         "summary": (out / "summary.md").read_text(),
     }
 
@@ -353,6 +355,42 @@ def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> No
     assert "## The returned set at each balance: F-beta over the best cut" in run["summary"]
     assert "These sessions aimed at a floor, not a balance" in run["summary"]
     assert run["cells"]["session_beta"].isna().all(), "a floor run records no session beta"
+
+
+def test_positives_in_hand_are_the_goods_plus_the_kept_sets_on_the_users_own_corpus(run, rm) -> None:
+    """#4427 (a diagnostic, not the objective): at each recorded click, Goods voted so far + the positives
+    inside the line the app kept over the session's unvoted pool, the line being the harness's own
+    ``floor_count`` at that click."""
+    cells, pools, steps = run["cells"], run["pools"], run["pool_steps"]
+    for idx, cat in enumerate(CATS):
+        frames = _frames(run["exp"], idx)
+        main = _main_frame(run["exp"], idx)
+        picks = pd.read_csv(run["exp"] / "results" / "cells" / f"task_{idx:04d}__picks.csv")
+        clicks = picks[picks["phase"].astype(str) != "check"] if "phase" in picks else picks
+        own_beta = 1.0  # a floor run: the pool-side set is scored as F1
+        for f in frames.query("kind == 'step'").to_dict("records"):
+            t = int(f["t"])
+            got = steps[(steps["category"] == cat) & (steps["t"] == t)].iloc[0]
+            count = main.loc[(main["t"] == t) & (main["phase"].astype(str) != "check"), "floor_count"].iloc[-1]
+            want = rm.balance_metrics(
+                rm.parse_ranks(f["pool_pos_ranks"]), int(f["n_pool"]), int(f["n_pool_pos"]), own_beta, int(count)
+            )
+            goods = int(clicks.loc[clicks["t"] <= t, "picked_label"].sum())
+            assert got["beta"] == own_beta and got["pool_k"] == want["k"]
+            assert got["pool_precision"] == pytest.approx(want["precision"])
+            assert got["pool_fb_share"] == pytest.approx(want["fb_share"], nan_ok=True)
+            assert got["goods"] == goods
+            assert got["in_hand"] == goods + round(want["precision"] * want["k"])
+        final = pools[(pools["category"] == cat) & (pools["point"] == "final")].iloc[0]
+        assert cells.loc[cat, "final_in_hand"] == final["in_hand"]
+        assert cells.loc[cat, "final_pool_positives"] == final["pool_positives"]
+        text = pools[(pools["category"] == cat) & (pools["point"] == "text")].iloc[0]
+        assert text["goods"] == 0 and np.isnan(text["in_hand"]), "nothing is in hand before the first click"
+    assert "## Diagnostic: the user's own corpus and the positives in hand" in run["summary"]
+    assert run["summary"].index("## Diagnostic: the user's own corpus") > run["summary"].index(
+        "## The returned set at each balance"
+    ), "a diagnostic, after the withheld half's reading (the objective)"
+    assert "fresh_fb_share" in run["summary"]
 
 
 def test_the_balance_metric_peaks_at_the_balance_by_construction(rm) -> None:
