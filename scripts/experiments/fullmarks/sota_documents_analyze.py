@@ -137,7 +137,7 @@ def _curve(ax, steps: list[dict[str, Any]], key: str, color: str, label: str) ->
 def figures(steps: list[dict[str, Any]], out: Path) -> None:
     out.mkdir(exist_ok=True)
     fig, axes = plt.subplots(1, 2, figsize=(10.4, 3.8), dpi=DPI)
-    for ax, (key, ylabel) in zip(axes, (("ap", "AP on the unlabelled remainder"), ("found", "Goods found"))):
+    for ax, (key, ylabel) in zip(axes, (("ap", "AP on the held-out test half"), ("found", "Goods found"))):
         _style(ax)
         _curve(ax, steps, key, BLUE, "mean (thin: each class)")
         ax.set_xlabel("clicks", color=INK, fontsize=9)
@@ -155,7 +155,7 @@ def figures(steps: list[dict[str, Any]], out: Path) -> None:
     _curve(ax, steps, "best_f1", GREEN, "the best cut of the same ranking")
     ax.set_ylim(0, 1)
     ax.set_xlabel("clicks", color=INK, fontsize=9)
-    ax.set_ylabel("F1 on the unlabelled remainder", color=INK, fontsize=9)
+    ax.set_ylabel("F1 on the held-out test half", color=INK, fontsize=9)
     ax.set_title("F1 over clicks", loc="left", color=INK, fontsize=10)
     ax.legend(frameon=False, fontsize=8.5, labelcolor=INK)
     fig.tight_layout()
@@ -169,7 +169,7 @@ def figures(steps: list[dict[str, Any]], out: Path) -> None:
     _curve(ax, steps, "gate_recall", ORANGE, "the gate's recall")
     ax.set_ylim(0, 1)
     ax.set_xlabel("clicks", color=INK, fontsize=9)
-    ax.set_ylabel("recall on the unlabelled remainder", color=INK, fontsize=9)
+    ax.set_ylabel("recall on the held-out test half", color=INK, fontsize=9)
     ax.set_title("The line at each floor P, and the gate", loc="left", color=INK, fontsize=10)
     ax.legend(frameon=False, fontsize=8, labelcolor=INK)
     fig.tight_layout()
@@ -185,7 +185,7 @@ def figures(steps: list[dict[str, Any]], out: Path) -> None:
     ax.scatter([zero[r["class_id"]]["ap"] for r in finals], ys, color=INK, zorder=3, s=18, label="click-0 AP")
     ax.set_yticks(ys, [r["class_id"] for r in finals], fontsize=8, color=INK)
     ax.set_xlim(0, 1)
-    ax.set_xlabel("AP on the unlabelled remainder", color=INK, fontsize=9)
+    ax.set_xlabel("AP on the held-out test half", color=INK, fontsize=9)
     ax.set_title("Per class: click 0 and final", loc="left", color=INK, fontsize=10)
     ax.legend(frameon=False, fontsize=8.5, labelcolor=INK, loc="lower right")
     fig.tight_layout()

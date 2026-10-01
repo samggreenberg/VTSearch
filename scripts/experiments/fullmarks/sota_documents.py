@@ -2,20 +2,28 @@
 
 The closed loop of ``app_replay_tiled.py`` through the app's own
 ``maybe_structural_rerank(_example)``, recording what the review reports at
-**every** click (the skill's Document Logo decisions, owner 2026-10-01):
+**every** click (the skill's Document Logo decisions, owner 2026-10-01).
 
-* ranking: AP on the unlabelled remainder, P@10, Goods found;
+**Clicks and scores use different pages**, as in the photo reviews. Each
+class's pool is split in half by a hash of the page id: the user clicks only
+in the **click half**, and every readout is on the **test half**, which no
+click ever touches. A metric on the unlabelled remainder would instead fall as
+clicking used up the positives. (Round 1 did that: a 31-positive stamp class
+"fell" to AP 0 once 30 were found.) The app still ranks the whole pool, as it
+does for a user.
+
+* ranking: AP on the test half, P@10, Goods found (in the click half);
 * the returned set, as the app ships it: the inlier gate (score >= 0.5),
-  with its precision, recall and F1 on the remainder;
+  with its precision, recall and F1 on the test half;
 * the best F1 any cut of the same ranking reaches;
 * floor-style cuts at P = 10 / 50 / 90%: the deepest cut of the ranking whose
   precision is >= P, with its recall and K. This is an oracle, since the
   structural path has no floor estimator;
 * the retrain's wall clock and shortlist K.
 
-``clicks.csv`` logs every click (page, label, AP before and after) for the
-per-image credit; every step is scored, so a click's credit is its own step's
-change in AP.
+``clicks.csv`` logs every click (page, label, test AP before and after) for
+the per-image credit; every step is scored, so a click's credit is its own
+step's change in test AP.
 
 Features are cached per tier under ``--feature-cache`` (compact keypoints and
 descriptors, ~170 KB a page), so a re-run skips the hour of SIFT at tier ``m``.
@@ -47,6 +55,13 @@ import vote_curve as vc  # noqa: E402
 from app_replay_tiled import _extract  # noqa: E402
 
 FLOORS = (0.1, 0.5, 0.9)
+
+
+def in_test_half(page_id: str, salt: str = "sota-documents") -> bool:
+    """A fixed, class-independent half of the pages: the review scores here and never clicks here."""
+    import hashlib  # noqa: PLC0415
+
+    return hashlib.sha256(f"{salt}:{page_id}".encode()).digest()[0] % 2 == 1
 
 
 # --------------------------------------------------------------------------
@@ -95,7 +110,7 @@ def load_or_extract(ids: list[str], paths: dict[str, str], cache: Optional[Path]
 
 
 def set_metrics(accept: np.ndarray, positive: np.ndarray) -> tuple[float, float, float, int]:
-    """Precision, recall, F1 and size of an accepted set on the remainder."""
+    """Precision, recall, F1 and size of an accepted set on the scored pages."""
     k, tp, pos = int(accept.sum()), int((accept & positive).sum()), int(positive.sum())
     precision = tp / k if k else float("nan")
     recall = tp / pos if pos else float("nan")
@@ -153,9 +168,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     t0 = time.time()
     feats = load_or_extract(ids, {p: pages[p].path for p in ids}, args.feature_cache, args.tier, args.workers)
     projection = load_tile_projection()
+    from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:  # numpy releases the GIL while tiling
+        tiles = dict(zip(ids, pool.map(lambda p: tile_vectors(feats[p], projection), ids)))
     snap_all = {
-        pid: {"embedder": "sift_vlad_doc", "local_features": f, "tile_vectors": tile_vectors(f, projection)}
-        for pid, f in feats.items()
+        pid: {"embedder": "sift_vlad_doc", "local_features": feats[pid], "tile_vectors": tiles[pid]} for pid in ids
     }
     print(f"tier {args.tier}: {len(ids)} pages featured + tiled in {time.time() - t0:.0f}s", flush=True)
     (args.out / "run.json").write_text(
@@ -189,6 +207,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if not positive.any():
             continue
         col = {p: i for i, p in enumerate(pool_ids)}
+        test = np.array([in_test_half(p) for p in pool_ids])
+        if not (positive & test).any() or not (positive & ~test).any():
+            print(f"  {cid}: skipped, no positive in one half", flush=True)
+            continue
         snap = {p: snap_all[p] for p in pool_ids}
         crop = _extract(classes[cid]["query_crop"])
         placeholder = [{"id": p, "score": 0.0} for p in pool_ids]
@@ -208,7 +230,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             order = np.array([col[e["id"]] for e in ranked])
             score = np.array([float(e["score"]) for e in ranked])
             labelled = {col[p] for p in (*goods, *bads)}
-            keep = np.array([i not in labelled for i in order])
+            keep = test[order]
             rest, rest_score = order[keep], score[keep]
             hits = positive[rest]
             ap_now = vc.average_precision(rest, positive)
@@ -219,8 +241,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "source": cid.split("/", 1)[0],
                     "v": v,
                     "found": len(goods),
-                    "left": int(hits.sum()),
+                    "left": int((positive & ~test).sum()) - len(goods),
                     "n_positive": int(positive.sum()),
+                    "n_test_positive": int(hits.sum()),
                     "n_pool": len(pool_ids),
                     "ap": ap_now,
                     "p10": float(hits[:10].mean()) if len(hits) else float("nan"),
@@ -239,7 +262,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             prev_ap = ap_now
             if v == args.max_v:
                 break
-            nxt = next((int(i) for i in order if int(i) not in labelled), None)
+            nxt = next((int(i) for i in order if not test[int(i)] and int(i) not in labelled), None)
             if nxt is None:
                 break
             pid = pool_ids[nxt]
