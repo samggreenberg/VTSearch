@@ -434,7 +434,18 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     "n_pool",
     "n_pool_pos",
     "pool_pos_ranks",
+    #: How many items the shipped unchecked line keeps on the test half at each
+    #: floor in :data:`RANK_FRAME_FLOORS` (#4389: the smaller of the schedule's
+    #: count and the vote-anchored mixture's, on a corpus that also holds the
+    #: session's votes, as a cold Find draws it).  -1 where no session drew a
+    #: line: a skyline, or no pool ranking.
+    "test_line_k_p10",
+    "test_line_k_p50",
+    "test_line_k_p90",
 )
+
+#: The floors the rank frame records the shipped line's count at (the presets).
+RANK_FRAME_FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
 
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;

@@ -355,6 +355,28 @@ class TestRankFrames:
             expected = np.flatnonzero(pf["test_labels"][order] == 1).tolist()
             assert [int(r) for r in f["test_pos_ranks"].split()] == expected
 
+    def test_step_frames_record_the_shipped_lines_count_on_the_test_half(self):
+        """#4389: a cold Find over the test half plus the votes; the skyline drew no line."""
+        from vtscore.training.thresholds import LineRanking, floor_count, mixture_count
+
+        sink: list = []
+        pframes: list = []
+        self._run((10, 20), sink, pframes)
+        for f, pf in zip([f for f in sink if f["kind"] == "step"], pframes, strict=True):
+            test_s = pf["test_scores"].astype(np.float64)
+            vote_s = pf["vote_scores"].astype(np.float64)
+            n_test = len(test_s)
+            votes = list(range(n_test, n_test + len(vote_s)))
+            corpus = LineRanking.from_scores([*range(n_test), *votes], [*test_s, *vote_s], votes)
+            labels = {v: bool(lab >= 0.5) for v, lab in zip(votes, pf["vote_labels"], strict=True)}
+            for p in (0.1, 0.5, 0.9):
+                want = min(floor_count(p, None, mixture_count(corpus, p, labels)), n_test)
+                got = f[f"test_line_k_p{round(p * 100):d}"]
+                assert got == want, (f["t"], p)
+                assert 1 <= got <= min(floor_count(p, None), n_test), "the mixture only lowers the count"
+        sky = sink[-1]
+        assert [sky[f"test_line_k_p{q}"] for q in (10, 50, 90)] == [-1, -1, -1]
+
     def test_recording_does_not_change_the_run(self):
         plain = self._run(None, None)
         recorded = self._run((10, 20), [])

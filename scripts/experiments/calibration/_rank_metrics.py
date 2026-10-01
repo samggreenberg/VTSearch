@@ -102,10 +102,27 @@ def average_precision(ranks: np.ndarray, n_pos: int) -> float:
     return float(np.sum(np.arange(1, ranks.size + 1) / (ranks + 1)) / n_pos)
 
 
-def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float) -> dict[str, float]:
+def frame_k(frame: dict, floor: float) -> int | None:
+    """How many the shipped line keeps on this frame's test half at *floor*, when the frame recorded it.
+
+    ``test_line_k_p50`` and its siblings (#4389: the smaller of the schedule's
+    count and the vote-anchored mixture's). ``None`` - read the schedule's
+    count - for a frame without the column (a run before it), a skyline, or
+    the text sort, which no session drew a line on.
+    """
+    v = frame.get(f"test_line_k_{floor_tag(floor)}")
+    try:
+        k = int(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return k if k >= 1 else None
+
+
+def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float, k: int | None = None) -> dict[str, float]:
     """The line at *floor* on this ranking, as the report reads it.
 
-    * ``k`` - how many the line keeps;
+    * ``k`` - how many the line keeps: *k* when the frame recorded the shipped
+      line's count (:func:`frame_k`), else the schedule's (:func:`kept_count`);
     * ``precision`` - the share of them that is right;
     * ``shortfall`` - ``max(0, floor - precision)``, how far short of the promise;
     * ``meets`` - 1 when ``precision >= floor``;
@@ -129,7 +146,7 @@ def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float) -> dict[st
             "f1": nan,
             "oracle_f1": nan,
         }
-    k = kept_count(floor, n)
+    k = kept_count(floor, n) if k is None else int(max(1, min(k, n)))
     right = top_k_right(ranks, k)
     precision = right / k if k else nan
     return {
