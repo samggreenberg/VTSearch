@@ -27,6 +27,9 @@ from vtscore.detectors.training import scoring_rows_for_snap
 from vtscore.state import set_min_precision
 from vtscore.training.thresholds import LineRanking
 
+#: The floor draws the line here (#4413): these are the deprecated floor's own tests, and the balance is the default.
+pytestmark = pytest.mark.usefixtures("floor_preference")
+
 #: ``(min_precision, the schedule's starting candidate, the bands the walk audits first, picks a band)`` (#4388).
 PRESETS = [
     pytest.param(0.1, 128, 5, 5, id="10%"),

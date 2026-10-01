@@ -1,18 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpTestingController, type TestRequest } from '@angular/common/http/testing';
-import { FloorCheckModalComponent, type FloorCheckVoted } from './floor-check-modal.component';
+import { SpotCheckModalComponent, type SpotCheckVoted } from './spot-check-modal.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
-import { wireFloor } from '../../../testing/line-floor';
+import { wireBalance } from '../../../testing/line-balance';
 import { KeyboardService, type KeyboardAction } from '../../../services/keyboard.service';
 import { MediaStateService } from '../../../services/media-state.service';
 import { MediaMetadataCacheService } from '../../../services/media-metadata-cache.service';
 import type { Media } from '../../../models/api.models';
 
 /**
- * A running walk's wire state (#4388): round *round* of a ranking of *rounds*
- * bands, dealing *picks* from band *band* (its 1-based rank positions
+ * A running walk's wire state (#4388, #4413): round *round* of a ranking of
+ * *rounds* bands, dealing *picks* from band *band* (its 1-based rank positions
  * *lo*–*hi*) while the set under test is the top *candidate*.
  */
 function running(
@@ -25,7 +25,7 @@ function running(
 ) {
   return {
     status: 'running',
-    min_precision: 0.5,
+    beta: 1,
     round,
     rounds,
     picks_per_round: 5,
@@ -35,6 +35,8 @@ function running(
     band,
     direction: 'start',
     estimate: null,
+    fbeta: null,
+    recall: null,
     picks,
     labelled: 0,
     right: 0,
@@ -43,29 +45,41 @@ function running(
   };
 }
 
-/** A finished check's wire state. */
-function finished(status: 'confirmed' | 'short', range: { lo: number; hi: number; labelled: number; right: number }) {
+/** A finished check's wire state: the walk ended on the peak. */
+function finished(range: { lo: number; hi: number; labelled: number; right: number }, recall: { lo: number; hi: number }) {
   return {
     ...running([], 1, 6, 32, {}, null),
-    status,
+    status: 'checked',
     labelled: range.labelled,
     right: range.right,
     range,
+    recall: { ...recall, labelled: range.labelled, right: range.right },
     estimate: range.labelled ? range.right / range.labelled : null,
+    fbeta: 0.7,
   };
 }
 
-describe('FloorCheckModalComponent (#4273)', () => {
-  let fixture: ComponentFixture<FloorCheckModalComponent>;
-  let component: FloorCheckModalComponent;
+/** The wire `balance` of a checked line, with its two ranges. */
+function checkedBalance(count: number, range: { lo: number; hi: number; labelled: number; right: number }, recall: { lo: number; hi: number }) {
+  return wireBalance('checked', {
+    count,
+    precision: { ...range, stale: false },
+    recall: { ...recall, labelled: range.labelled, right: range.right, stale: false },
+    fbeta: 0.7,
+  });
+}
+
+describe('SpotCheckModalComponent (#4413, #4273)', () => {
+  let fixture: ComponentFixture<SpotCheckModalComponent>;
+  let component: SpotCheckModalComponent;
   let httpMock: HttpTestingController;
   let keyboard: KeyboardService;
-  let voted: FloorCheckVoted[];
+  let voted: SpotCheckVoted[];
   let closed: number;
 
   beforeEach(async () => {
     await configureZoneless({
-      imports: [FloorCheckModalComponent],
+      imports: [SpotCheckModalComponent],
       providers: [...provideHttpTesting()],
     }).compileComponents();
     httpMock = TestBed.inject(HttpTestingController);
@@ -77,7 +91,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
     );
     vi.spyOn(TestBed.inject(MediaMetadataCacheService), 'ensureLoaded').mockImplementation(() => undefined);
 
-    fixture = TestBed.createComponent(FloorCheckModalComponent);
+    fixture = TestBed.createComponent(SpotCheckModalComponent);
     component = fixture.componentInstance;
     voted = [];
     closed = 0;
@@ -106,7 +120,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
   const votesReq = () => httpMock.expectOne((req) => req.url === '/api/precision-check/votes');
 
   async function start(picks: number[], rounds = 1, candidate = 32): Promise<void> {
-    startReq().flush({ floor: wireFloor('unchecked'), check: running(picks, 1, rounds, candidate) });
+    startReq().flush({ balance: wireBalance('unchecked'), check: running(picks, 1, rounds, candidate) });
     await settleZoneless(fixture);
   }
 
@@ -120,8 +134,8 @@ describe('FloorCheckModalComponent (#4273)', () => {
       expect(text()).toContain('Drawing picks');
       await start([17, 4, 29, 8, 11]);
       expect(text()).toContain('Spot check');
-      // The floor goes unnamed (#4317): the radio on the Threshold spectrum shows it.
-      expect(text()).not.toMatch(/Centered|Complete|Correct|aiming/);
+      // The balance goes unnamed (#4317): the radio on the Threshold spectrum shows it.
+      expect(text()).not.toMatch(/Centered|Complete|Correct|aiming|beta|F1/);
       expect(text()).toContain('5 picks drawn at random from the top 8, checking the top 32. Is each one a match?');
       expect(dots().length).toBe(5);
       expect(component.picks()).toEqual([17, 4, 29, 8, 11]);
@@ -130,7 +144,7 @@ describe('FloorCheckModalComponent (#4273)', () => {
 
     it('presents them as a check, not the ranking: no rank numbers and no scores', async () => {
       await start([17, 4, 29, 8, 11]);
-      const stage = el().querySelector('.floor-check')!;
+      const stage = el().querySelector('.spot-check')!;
       expect(stage.querySelector('.media-score')).toBeNull();
       expect(stage.textContent).not.toMatch(/#\s*\d|rank|score/i);
       dots().forEach((d) => expect(d.textContent!.trim()).toBe(''));
@@ -219,93 +233,116 @@ describe('FloorCheckModalComponent (#4273)', () => {
     });
   });
 
-  describe('a walk of several bands (#4388)', () => {
-    it('audits the starting bands in turn, says when it walks deeper or back, and ends on the result', async () => {
-      // 50%: the top 32 in three bands (8, 8, 16), then the walk.
+  describe('a walk of several bands (#4388, #4413)', () => {
+    it('audits the starting bands in turn, says when it walks deeper or back past the peak, and ends on the peak', async () => {
+      // Balanced: the top 32 in three bands (8, 8, 16), then the walk.
       startReq().flush({
-        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        balance: wireBalance('unchecked', { count: 32 }),
         check: running([90, 3, 51, 7, 64], 1, 6, 32, {}, { index: 0, lo: 1, hi: 8 }),
       });
       await settleZoneless(fixture);
       expect(text()).toContain('5 picks drawn at random from the top 8, checking the top 32.');
-      expect(el().querySelector('.check-shorter')).toBeNull();
+      expect(el().querySelector('.check-walk')).toBeNull();
       for (let i = 0; i < 5; i++) await press('ArrowRight');
 
-      // The next band the starting set owes: no verdict yet, so no note.
+      // The next band the starting set owes: the walk has not moved, so no note.
       await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        balance: wireBalance('unchecked', { count: 32 }),
         check: running([12, 40, 5, 33, 21], 2, 6, 32, { labelled: 5, right: 5 }, { index: 1, lo: 9, hi: 16 }),
       });
       expect(voted.map((v) => v.finished)).toEqual([false]);
-      expect(el().querySelector('.check-shorter')).toBeNull();
+      expect(el().querySelector('.check-walk')).toBeNull();
       expect(text()).toContain('5 picks drawn at random from items 9–16 of the list, checking the top 32.');
       expect(component.currentId()).toBe(12);
       expect(dots().every((d) => d.getAttribute('data-vote') === null)).toBe(true);
       for (let i = 0; i < 5; i++) await press('ArrowRight');
       await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        balance: wireBalance('unchecked', { count: 32 }),
         check: running([8, 19, 2, 30, 14], 3, 6, 32, { labelled: 10, right: 10 }, { index: 2, lo: 17, hi: 32 }),
       });
       for (let i = 0; i < 5; i++) await press('ArrowRight');
 
-      // The top 32 met the floor: the walk goes deeper, into the next 32.
+      // The estimate did not fall: the walk goes deeper, into the next 32.
       await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        balance: wireBalance('unchecked', { count: 32 }),
         check: running(
           [41, 60, 35, 52, 48],
           4,
           6,
           64,
-          { labelled: 15, right: 15, direction: 'deeper', estimate: 1, bands: 4 },
+          { labelled: 15, right: 15, direction: 'deeper', estimate: 1, fbeta: 0.6, bands: 4 },
           { index: 3, lo: 33, hi: 64 },
         ),
       });
-      expect(el().querySelector('.check-shorter')!.textContent).toContain('Looks right so far: checking the next 32.');
+      expect(el().querySelector('.check-walk')!.textContent).toContain('Better so far: checking the next 32.');
       expect(text()).toContain('5 picks drawn at random from items 33–64 of the list, checking the top 64.');
       for (let i = 0; i < 5; i++) await press('ArrowLeft');
 
-      // The top 64 fell short: the walk steps back to the top 32 and ends there.
+      // The top 64 fell: the walk steps back to the top 32, the peak, and ends there.
       const range = { lo: 0.55, hi: 1, labelled: 15, right: 15 };
+      const recall = { lo: 0.3, hi: 0.7 };
       await answer(votesReq(), {
-        floor: { ...wireFloor('confirmed', { minPrecision: 0.5, count: 32 }), range },
-        check: { ...finished('confirmed', range), round: 4, candidate: 32, direction: 'shallower', bands: 3 },
+        balance: checkedBalance(32, range, recall),
+        check: { ...finished(range, recall), round: 4, candidate: 32, direction: 'shallower', bands: 3 },
       });
       expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
-      expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('confirmed');
+      expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('checked');
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Confirmed: likely 55–100% right (checked 15).',
+        'Checked: likely 55–100% right, about half of them found (checked 15).',
       );
-      expect(text()).toContain('The line keeps these 32');
+      expect(text()).toContain(
+        "The line keeps these 32: the set where the check's balance peaked. The ranges are what the picks say about them.",
+      );
       expect(dots().length).toBe(0);
     });
 
-    it('says a short set is not there yet, and a short check keeps the first band', async () => {
+    it('says the walk is past the peak when it turns back, and ends checked on a short set too', async () => {
       await start([90, 3, 51, 7, 64], 6, 32);
       for (let i = 0; i < 5; i++) await press('ArrowLeft');
       await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        balance: wireBalance('unchecked', { count: 32 }),
         check: running([12, 40, 5, 33, 21], 2, 6, 32, { labelled: 5, right: 0 }, { index: 1, lo: 9, hi: 16 }),
       });
       for (let i = 0; i < 5; i++) await press('ArrowLeft');
       await answer(votesReq(), {
-        floor: wireFloor('unchecked', { minPrecision: 0.5, count: 32 }),
+        balance: wireBalance('unchecked', { count: 32 }),
         check: running([8, 19, 2, 30, 14], 3, 6, 32, { labelled: 10, right: 0 }, { index: 2, lo: 17, hi: 32 }),
       });
       for (let i = 0; i < 5; i++) await press('ArrowLeft');
-      // Every set fell short, down to the first band: no new picks, the result.
-      const range = { lo: 0, hi: 0.45, labelled: 5, right: 0 };
+      // The first deeper step fell: the walk turns back to a shorter list.
       await answer(votesReq(), {
-        floor: { ...wireFloor('short', { minPrecision: 0.5, count: 8 }), range },
-        check: { ...finished('short', range), round: 3, candidate: 8, direction: 'shallower', bands: 1 },
+        balance: wireBalance('unchecked', { count: 32 }),
+        check: running([1, 2, 3, 4, 5], 4, 6, 16, { labelled: 15, right: 0, direction: 'shallower', bands: 2 }, { index: 1, lo: 9, hi: 16 }),
       });
-      expect(voted.map((v) => v.finished)).toEqual([false, false, true]);
+      expect(el().querySelector('.check-walk')!.textContent).toContain('Past the peak: checking a shorter list.');
+      for (let i = 0; i < 5; i++) await press('ArrowLeft');
+      // It ends on the first band: no new picks, the result, with no verdict of short or met.
+      const range = { lo: 0, hi: 0.45, labelled: 5, right: 0 };
+      const recall = { lo: 0, hi: 0.2 };
+      await answer(votesReq(), {
+        balance: checkedBalance(8, range, recall),
+        check: { ...finished(range, recall), round: 5, candidate: 8, direction: 'shallower', bands: 1 },
+      });
+      expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Fell short: likely 0–45% right (checked 5).',
+        'Checked: likely 0–45% right, few of them found (checked 5).',
       );
-      expect(text()).toContain('No set met the threshold, so the line keeps the top 8.');
-      // A short check names no cause: the copy is true of a sparse corpus and a weak model alike.
+      expect(text()).toContain("The line keeps these 8: the set where the check's balance peaked.");
+      expect(text()).not.toMatch(/\bshort\b|\bfell\b|\bmet\b|confirmed|threshold/i);
+      // The copy names no cause: it is true of a sparse corpus and a weak model alike.
       expect(text()).not.toMatch(/sparse|weak|too few|model/i);
       expect(dots().length).toBe(0);
+    });
+
+    it('reads a checked result with no ranges as checked', async () => {
+      await start([17]);
+      await press('ArrowRight');
+      await answer(votesReq(), {
+        balance: wireBalance('checked', { precision: null, recall: null, fbeta: null }),
+        check: { ...running([], 1, 1, 32, {}, null), status: 'checked' },
+      });
+      expect(el().querySelector('.check-result-headline')!.textContent!.trim()).toBe('Checked.');
+      expect(voted.map((v) => v.finished)).toEqual([true]);
     });
   });
 
@@ -332,7 +369,8 @@ describe('FloorCheckModalComponent (#4273)', () => {
       await start([17]);
       await press('ArrowRight');
       const range = { lo: 0.55, hi: 1, labelled: 1, right: 1 };
-      await answer(votesReq(), { floor: { ...wireFloor('confirmed'), range }, check: finished('confirmed', range) });
+      const recall = { lo: 0.5, hi: 1 };
+      await answer(votesReq(), { balance: checkedBalance(32, range, recall), check: finished(range, recall) });
       const done = el().querySelector('.modal-footer .btn') as HTMLButtonElement;
       expect(done.textContent!.trim()).toBe('Done');
       done.click();

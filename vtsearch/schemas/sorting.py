@@ -268,8 +268,10 @@ class LearnedSortResponseSchema(Schema):
     # The acquisition cut Autopilot samples around; this is the only sort with a
     # detector behind it, so the only one that carries one.
     acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
-    # What the precision floor says about ``threshold`` (#4247), on ``done``.
+    # What the precision floor says about ``threshold`` (#4247), on ``done``,
+    # and what the balance says (#4413).
     floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
+    balance = fields.Nested(BalanceStateSchema, required=False, allow_none=True)
 
 
 class LearnedSortCancelResponseSchema(Schema):
@@ -340,7 +342,7 @@ def _validate_numeric(value):
 
 
 class MinPrecisionResponseSchema(FloorStateSchema):
-    """Response for ``GET|POST /api/min-precision``: the floor state, plus the line it draws."""
+    """Response for the deprecated ``GET|POST /api/min-precision``: the floor state, plus the line it draws (#4413)."""
 
     # The line the detector draws: the last item of the set the floor keeps.
     # ``null`` when no detector has a threshold.
@@ -452,7 +454,7 @@ class BalanceRequestSchema(Schema):
 
 
 class MinPrecisionRequestSchema(Schema):
-    """Body for ``POST /api/min-precision``."""
+    """Body for the deprecated ``POST /api/min-precision`` (#4413)."""
 
     # A fraction in ``(0, 1]``, clamped to ``[0.01, 1]``.  ``null`` is refused:
     # every detector has a floor (#4269).  ``fields.Raw`` plus a numeric check

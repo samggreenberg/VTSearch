@@ -19,7 +19,7 @@ import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
-import { lineFloor, wireFloor } from '../../testing/line-floor';
+import { lineBalance, wireBalance } from '../../testing/line-balance';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 
 /**
@@ -87,7 +87,7 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
       httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 0.8 }));
-      httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.5 }));
+      httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach((req) => req.flush([]));
       // Include smart/stable/span: the autopilot panel's ngOnChanges feeds this
@@ -146,7 +146,7 @@ describe('LabelViewComponent', () => {
 
   // Flush the HTTP calls that fire synchronously during the first
   // `fixture.detectChanges()`. label-view's ngOnInit loads medias, votes,
-  // settings, dataset status, the precision floor; the left panel loads media-types
+  // settings, dataset status, the balance; the left panel loads media-types
   // and embedders. The `/api/labeling-status` and polling `/api/votes`
   // requests are driven by `timer(0, …)`, which only fires on a real macrotask
   // after the synchronous test body returns, so they are NOT flushed here —
@@ -186,9 +186,9 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
     );
-    // /api/min-precision
-    httpMock.match('/api/min-precision').forEach(req =>
-      req.flush({ min_precision: 0.5 }),
+    // /api/balance
+    httpMock.match('/api/balance').forEach(req =>
+      req.flush({ beta: 1 }),
     );
     // /api/media-types (left panel)
     httpMock.match('/api/media-types').forEach(req =>
@@ -730,22 +730,22 @@ describe('LabelViewComponent', () => {
     expect(component.mediaState.selectedId()).toBe(1);
   });
 
-  it('should handle a precision-floor change', () => {
+  it('should handle a balance change', () => {
     flushInitialRequests();
-    component.onMinPrecisionChange(0.75);
-    expect(component.sortState.minPrecision).toBe(0.75);
+    component.onBetaChange(0.5);
+    expect(component.sortState.beta).toBe(0.5);
 
-    const req = httpMock.expectOne((r) => r.url === '/api/min-precision' && r.method === 'POST');
-    expect(req.request.body).toEqual({ min_precision: 0.75 });
-    req.flush({ min_precision: 0.75 });
+    const req = httpMock.expectOne((r) => r.url === '/api/balance' && r.method === 'POST');
+    expect(req.request.body).toEqual({ beta: 0.5 });
+    req.flush({ ...wireBalance('unchecked', { beta: 0.5 }), threshold: null, n_returned: null, line_preference: 'balance' });
   });
 
   /**
-   * The spot check lives in Train alone (#4317): Find tests the threshold set
+   * The spot check lives in Train alone (#4317): Find tests the balance set
    * here. Opened from the Threshold control, the step takes the vote keys, the
    * list behind it gets none, and a finished check's line is installed.
    */
-  it('runs the spot check from the Threshold control and installs the line it ends on (#4273, #4317)', async () => {
+  it('runs the spot check from the Threshold control and installs the line where it peaked (#4273, #4317, #4413)', async () => {
     flushInitialRequests();
     await settleResource();
     // Manual first: leaving Autopilot hands its sort mode back to the tab.
@@ -754,17 +754,17 @@ describe('LabelViewComponent', () => {
     await settleResource();
     const sortState = TestBed.inject(SortStateService);
     sortState.setSortMode('learned');
-    sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineFloor('unchecked'));
+    sortState.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.4 }], 0.5, lineBalance('unchecked'));
     await settleResource();
     const el = fixture.nativeElement as HTMLElement;
 
-    (el.querySelector('vt-precision-floor .floor-check-btn') as HTMLButtonElement).click();
+    (el.querySelector('vt-balance .balance-check-btn') as HTMLButtonElement).click();
     await settleResource();
     httpMock.expectOne((req) => req.url === '/api/precision-check/start').flush({
-      floor: wireFloor('unchecked'),
+      balance: wireBalance('unchecked'),
       check: {
         status: 'running',
-        min_precision: 0.5,
+        beta: 1,
         round: 1,
         rounds: 1,
         picks_per_round: 1,
@@ -774,10 +774,12 @@ describe('LabelViewComponent', () => {
         labelled: 0,
         right: 0,
         range: null,
+        recall: null,
+        fbeta: null,
       },
     });
     await settleResource();
-    expect(el.querySelector('vt-floor-check-modal')).not.toBeNull();
+    expect(el.querySelector('vt-spot-check-modal')).not.toBeNull();
 
     // → votes the pick in the step; the list behind it gets nothing.
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -786,11 +788,12 @@ describe('LabelViewComponent', () => {
     const votes = httpMock.expectOne((req) => req.url === '/api/precision-check/votes');
     expect(votes.request.body).toEqual({ votes: [{ id: 2, label: 'good' }] });
     const range = { lo: 0.55, hi: 1, labelled: 1, right: 1 };
+    const recall = { lo: 0.3, hi: 0.7, labelled: 1, right: 1 };
     votes.flush({
-      floor: { ...wireFloor('confirmed'), range },
+      balance: wireBalance('checked', { precision: { ...range, stale: false }, recall: { ...recall, stale: false } }),
       check: {
-        status: 'confirmed',
-        min_precision: 0.5,
+        status: 'checked',
+        beta: 1,
         round: 1,
         rounds: 1,
         picks_per_round: 1,
@@ -800,26 +803,28 @@ describe('LabelViewComponent', () => {
         labelled: 1,
         right: 1,
         range,
+        recall,
+        fbeta: 0.7,
       },
     });
     await settleResource();
 
     // The finished check moved the line server-side; the view installs it.
     httpMock
-      .expectOne((req) => req.url === '/api/min-precision' && req.method === 'GET')
-      .flush({ ...wireFloor('confirmed'), threshold: 0.3, n_returned: 2 });
+      .expectOne((req) => req.url === '/api/balance' && req.method === 'GET')
+      .flush({ ...wireBalance('checked'), threshold: 0.3, n_returned: 2, line_preference: 'balance' });
     await settleResource();
     expect(sortState.threshold).toBe(0.3);
-    expect(sortState.floor?.status).toBe('confirmed');
-    expect(el.querySelector('vt-precision-floor .floor-state')!.textContent).toContain('Confirmed');
+    expect(sortState.balance?.status).toBe('checked');
+    expect(el.querySelector('vt-balance .balance-state')!.textContent).toContain('Checked');
   });
 
-  it('seeds the floor control from the detector on entry', () => {
+  it('seeds the balance control from the detector on entry', () => {
     TestBed.tick();
     TestBed.tick();
-    httpMock.match('/api/min-precision').forEach((req) => req.flush({ min_precision: 0.9 }));
+    httpMock.match('/api/balance').forEach((req) => req.flush({ beta: 0.5 }));
     flushInitialRequests();
-    expect(component.sortState.minPrecision).toBe(0.9);
+    expect(component.sortState.beta).toBe(0.5);
   });
 
   it('should render center panel component', () => {
@@ -932,8 +937,8 @@ describe('LabelViewComponent', () => {
     httpMock.match('/api/dataset/status').forEach(req =>
       req.flush({ display_name: 'Test dataset' }),
     );
-    httpMock.match('/api/min-precision').forEach(req =>
-      req.flush({ min_precision: 0.5 }),
+    httpMock.match('/api/balance').forEach(req =>
+      req.flush({ beta: 1 }),
     );
     httpMock.match('/api/media-types').forEach(req =>
       req.flush({ media_types: [] }),
@@ -984,7 +989,7 @@ describe('LabelViewComponent', () => {
       httpMock.match('/api/dataset/status').forEach(req =>
         req.flush({ display_name: 'DINOv3 dataset' }),
       );
-      httpMock.match('/api/min-precision').forEach(req => req.flush({ min_precision: 0.5 }));
+      httpMock.match('/api/balance').forEach(req => req.flush({ beta: 1 }));
       httpMock.match('/api/media-types').forEach(req => req.flush({ media_types: [] }));
       httpMock.match('/api/embedders').forEach(req =>
         req.flush({ embedders: [{ name: 'dinov3', supports_text: false }] }),

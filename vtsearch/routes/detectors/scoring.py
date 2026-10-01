@@ -394,15 +394,17 @@ def find_label(body: dict):
         # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
         # frontend onto them + windowing this response is the remaining slice (see
         # docs/plans/scalability.md S3/S17/S19).
-        from vtscore.state.core import detector_floor_state  # noqa: PLC0415
-        from vtsearch.state import get_min_precision  # noqa: PLC0415
+        from vtscore.state.core import detector_balance_state, detector_floor_state  # noqa: PLC0415
+        from vtsearch.state import get_beta, get_min_precision  # noqa: PLC0415
 
         return {
             "ok": True,
             "results": results,
             "threshold": round(threshold, 4),
-            # What the floor says about the line: unchecked, confirmed or short (#4272).
+            # What the floor says about the line (#4272) and what the balance
+            # says (#4413); the line_preference setting names the one that drew it.
             "floor": detector_floor_state(det_ctx, get_min_precision()),
+            "balance": detector_balance_state(det_ctx, get_beta()),
             "good_count": good_count,
             "bad_count": bad_count,
             "detector_name": d.get("name", ""),
@@ -433,9 +435,9 @@ def find_stats():
     It carries no model-based estimate (#4360).
     Pure read; no new state.
     """
-    from vtscore.state.core import detector_floor_state, get_active_detector_context
+    from vtscore.state.core import detector_balance_state, detector_floor_state, get_active_detector_context
     from vtsearch.routes.detectors._find_precision import curve_counts, verified_precision_at
-    from vtsearch.state import get_min_precision
+    from vtsearch.state import get_beta, get_min_precision
 
     det_ctx = get_active_detector_context()
     good = det_ctx.good_votes
@@ -498,8 +500,10 @@ def find_stats():
         "verified_called_good": len(verified_called_good),
         "verified_kept_good": verified_kept,
         "threshold": round(det_ctx.threshold, 4),
-        # The floor the line was cut at, and whether it keeps it (#4246).
+        # The floor the line was cut at, and whether it keeps it (#4246); the
+        # balance, and what its check found (#4413).
         "floor": detector_floor_state(det_ctx, get_min_precision()),
+        "balance": detector_balance_state(det_ctx, get_beta()),
         "n_scored": len(ranked),
         "n_returned": n_returned,
         "stale": getattr(det_ctx, "find_eval_stale", False),

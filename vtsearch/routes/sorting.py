@@ -305,6 +305,7 @@ def _learned_sort_done_payload(job) -> dict:
         "threshold": result.get("threshold", 0.0),
         "acq_threshold": result.get("acq_threshold"),
         "floor": result.get("floor"),
+        "balance": result.get("balance"),
         "sort_token": result.get("sort_token"),
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
@@ -352,6 +353,7 @@ def learned_sort(body: dict):
     )
     from vtscore.state.core import (
         detector_acquisition_threshold,
+        detector_balance_state,
         detector_floor_state,
         detector_line_inclusion,
         get_active_context,
@@ -430,11 +432,13 @@ def learned_sort(body: dict):
         # carries one.  It sits four inclusion steps stricter than the line:
         # under a promised floor no inclusion drew that line, so none is passed
         # and it is derived from the line itself (#4245).
-        line_incl = detector_line_inclusion(det_ctx, min_precision_value if beta_value is None else beta_value)
+        line_incl = detector_line_inclusion(det_ctx, min_precision_value, beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl)
-        # Whether the line is a promise rides with it (#4247).
+        # What the floor and the balance say about the line ride with it
+        # (#4247, #4413); the preference that drew it is the one the knobs name.
         floor = detector_floor_state(det_ctx, min_precision_value)
-        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), floor=floor)
+        balance = detector_balance_state(det_ctx, get_beta() if beta_value is None else beta_value)
+        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), floor=floor, balance=balance)
 
     job = learned_sort_jobs.start(
         signature,
@@ -582,24 +586,35 @@ def add_textsort_suggestion_route(body: dict):
 
 
 @sorting_bp.route("/api/min-precision", methods=["GET"])
+@sorting_bp.doc(deprecated=True)
 @sorting_bp.response(200, MinPrecisionResponseSchema)
 def get_min_precision_route():
-    """Get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws."""
+    """Deprecated (#4413): get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws.
+
+    The floor draws the line only under ``line_preference: "floor"`` (``PUT
+    /api/settings``); the balance (``/api/balance``) is the preference since
+    #4413.  Kept for one release.
+    """
     return _min_precision_payload()
 
 
 @sorting_bp.route("/api/min-precision", methods=["POST"])
+@sorting_bp.doc(deprecated=True)
 @sorting_bp.arguments(MinPrecisionRequestSchema)
 @sorting_bp.response(200, MinPrecisionResponseSchema)
 def set_min_precision_route(body: dict):
-    """Set the precision floor, a fraction clamped to ``[0.01, 1]``.
+    """Deprecated (#4413): set the precision floor, a fraction clamped to ``[0.01, 1]``.
 
-    A pure cutoff knob: the active detector's line moves to the set the new
-    floor keeps (no retrain) and, in Find mode, the unverified items re-split
-    over the frozen scores.  The new line comes back in the same round trip,
-    with the floor's state: ``unchecked`` until a spot check runs at this
-    floor (``/api/precision-check``), then ``confirmed`` or ``short`` with the
-    check's likely range.  Every detector has a floor, so ``null`` is refused.
+    The floor is the preference only under ``line_preference: "floor"``
+    (``PUT /api/settings``); ``/api/balance`` is the control since #4413, and
+    this route goes next release.  Under the floor it is a pure cutoff knob:
+    the active detector's line moves to the set the new floor keeps (no
+    retrain) and, in Find mode, the unverified items re-split over the frozen
+    scores.  The new line comes back in the same round trip, with the floor's
+    state: ``unchecked`` until a spot check runs at this floor
+    (``/api/precision-check``), then ``confirmed`` or ``short`` with the
+    check's likely range.  Under the balance the value is stored and draws
+    nothing.  Every detector has a floor, so ``null`` is refused.
     """
     # The clamp is not spelled out here: ``settings.validate_min_precision`` is
     # generated from the bound declared once on ``UserSettings.min_precision``,

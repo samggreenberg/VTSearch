@@ -287,9 +287,10 @@ def run_learned_sort(
             # Smart scores every model at its own Inclusion 0 cut, not at the
             # line it was served with (issue #4243).  The re-cut reads the
             # estimator this training run just parked on *det_ctx*.  The line
-            # was served at Inclusion 0 with no floor, and at no inclusion at
-            # all under one, where it keeps a set (#4272).
-            served_inclusion = detector_line_inclusion(det_ctx, min_precision_value)
+            # was served at Inclusion 0 with no preference, and at no inclusion
+            # at all under a floor or a balance, where it keeps a set (#4272,
+            # #4413).
+            served_inclusion = detector_line_inclusion(det_ctx, min_precision_value, beta_value)
             smart_threshold = smart_cut(threshold, served_inclusion, lambda k: recut_detector_threshold(det_ctx, k))
             inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold)
         clock.mark("inject_live_model")

@@ -10,6 +10,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The line's default preference is the balance** (issue #4413).
+  `DEFAULT_LINE_PREFERENCE` is `"balance"`: `vtscore.state.line_knobs()` hands
+  every retrain and re-cut the detector's beta (`DEFAULT_BETA`, 1.0, until
+  set) and the floor only under `line_preference="floor"`, which is
+  deprecated with `min_precision` and goes next release. The eval harness's
+  default arm follows: `simulate_voting_iterations(min_precision=None,
+  beta=None)` now draws the line at the balance (the new
+  `vtscore.training.thresholds.resolve_line_knobs`, the harness's counterpart
+  of `line_knobs` and the `thresholds.line_preference_default` mirror of
+  `scripts/check-eval-app-sync.py`); `min_precision=<P>` is the floor arm and
+  `"off"` the Inclusion arm as before, and a non-zero `inclusion` is refused
+  under a balance as it was under a floor. `aim_words(state)` says which
+  preference an unchecked set was exported at ("aiming at 25% right" / "at
+  F1") for the CLI's and AutoRun's log lines, whose results now carry
+  `balance` beside `floor`.
 - **The unchecked line is the smaller of the schedule's count and the
   mixture's** (issue #4389, the owner's ruling on #4383). Before any spot
   check - AutoRun, the CLI, a cold Find and every session before its first

@@ -252,16 +252,23 @@ fix. The first chunk is prepared once and handed to both passes, so the
 correction costs no extra conversion or embedding work.
 
 **The exported set is unchecked, and the run says so.** Each detector's line
-keeps the top of its ranking at its precision floor (the `min_precision`
-setting, 50% unless you change it): the top 128 unvoted items at 10%, the top
-64 at 25%, the top 32 at 50% and above. In the app a spot check measures how
-much of that set is right; nobody can vote in a headless run, so the run
-exports the floor's starting candidate as it is. The run prints a line naming
-the detector and the size of the set (a `detector_unchecked` event under
-`--progress-format json`), and every result the detector produces carries a
-`floor` object beside its `threshold` (`status` `unchecked`, with `count`),
-which the JSON exporters write out with the hits. See
-[the floor state](api/labeling.md#the-floor-state).
+keeps the top of its ranking at its balance (the `beta` setting, F-beta's
+beta: 1 unless you change it; 2 leans toward recall, 0.5 toward precision):
+the count at which the vote-anchored mixture's F-beta peaks, capped at the
+top 32 unvoted items for beta 1 and 0.5 and the top 128 for beta 2. In the
+app a spot check measures how much of that set is right and how much it
+found; nobody can vote in a headless run, so the run exports the unchecked
+set as it is. The run prints a line naming the detector and the size of the
+set - `Detector 'det' exports its top 32 unchecked (at F1); nobody is here to
+check it.` - which is a `detector_unchecked` event under
+`--progress-format json` carrying `beta` beside `min_precision`, and every
+result the detector produces carries a `balance` object beside its
+`threshold` (`status` `unchecked`, with `count`), which the JSON exporters
+write out with the hits. See [the line state](api/labeling.md#the-line-state).
+The deprecated precision floor (`min_precision`; the `floor` object, which
+still rides beside `balance` for one release) draws the line instead only
+when the `line_preference` setting is `floor`, and the event then reads
+`(aiming at 25% right)`.
 
 **How to get the files:**
 

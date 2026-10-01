@@ -113,16 +113,23 @@ A detector draws its line at a **Threshold**: which of the two mistakes it
 leans toward. You set it at the top of the left panel, on a spectrum from
 **False Positives** to **False Negatives** with three radio buttons under
 it (see [Threshold](#3-threshold)). Toward False Positives the line returns
-more, with more wrong ones in it; toward False Negatives it returns only the
-surest, and misses more. Every detector starts on the middle radio.
+the most, with more wrong ones in it; toward False Negatives it returns only
+the surest, and misses more. Every detector starts on the middle radio. Each
+radio is a **balance** of precision and recall - how many wrong items you
+will take in the results against how many right ones you will accept
+missing - and the line is drawn where that balance is best: the middle radio
+weighs the two mistakes equally, the False Positives radio counts a miss as
+the dearer mistake, the False Negatives radio a wrong item. (For the
+statisticians: the three are F-beta at 2, 1 and 0.5.)
 
 The line always keeps a set: the top of the ranking, among the items you
 haven't voted on. How many it keeps depends on the Threshold: up to the top
 128 on the False Positives radio, and up to the top 32 on the middle and
 False Negatives radios - fewer when the detector's own estimate of its scores,
-anchored on your votes, says fewer are likely right. Until you **check** that
-set, nothing has measured how much of it is right, and the note under the
-Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
+anchored on your votes, says the balance peaks sooner. Until you **check**
+that set, nothing has measured how much of it is right or how much of what
+is there it found, and the note under the Threshold says so: **Top 32 kept,
+unchecked** (or however many it kept).
 
 **The spot check.** In Train, click **Check 5 picks** beside the note.
 VTSearch cuts the list you haven't voted on into bands from the top (the top
@@ -144,32 +151,42 @@ round is 5 picks from one band, whatever the radio.
 The check **walks** the list. It starts with the bands that make up the set
 the line keeps (the top 32 on the middle and False Negatives radios, the top
 128 on False Positives), one round each. Once those are in, it weighs the
-picks by the size of their bands to say how much of the set is right. If
-that meets the Threshold, the check says **Looks right so far: checking the
-next 32** and draws from the next band down; if it does not, **Not there
-yet: checking a shorter list**, and it drops the deepest band without
-drawing again. It stops the first time the answer flips, or at either end of
-the list, and the line keeps the deepest set that met the Threshold. On a
-long list of good matches the line can end up keeping hundreds; on a short
-or sparse one, as few as 8. The note under the Threshold then shows the
-result:
+picks by the size of their bands to estimate how many of the set are right,
+reads that against the detector's own count of how many matches the whole
+list holds to estimate how many it found, and scores the set on the balance
+your radio asks for. While a longer list scores better, the check says
+**Better so far: checking the next 32** and draws from the next band down;
+the first time a longer list scores worse it says **Past the peak: checking
+a shorter list** and steps back without drawing again. It ends on the set
+where the balance peaked, or at either end of the list, and the line keeps
+that set. On a long list of good matches the line can end up keeping
+hundreds; on a short or sparse one, as few as 8. The check's last screen
+says what it found - **Checked: likely 55–80% right, about half of them
+found (checked 15).** and **The line keeps these 48: the set where the
+check's balance peaked. The ranges are what the picks say about them.** -
+and the note under the Threshold then shows the same result:
 
-- **Confirmed · likely 55–100% right (checked 15) · 64 kept** - the check
-  found the top 64 right enough, and the line keeps them.
-- **Fell short · likely 19–92% right (checked 15) · top 8 kept** - no set met
-  the Threshold, and the line keeps the top 8. The note names no cause: a
-  dataset with very few matches and a detector that can't yet tell them
-  apart look the same from here.
+- **Checked · likely 55–80% right, about half of them found (checked 15) ·
+  48 kept** - the check ended on the top 48, and the line keeps them. The
+  range is how much of the set is likely right; the phrase after it is how
+  much of what the list holds the set likely found (**few of them**, **about
+  a quarter**, **about half**, **about three quarters** or **nearly all of
+  them**). The note names no cause for a poor result: a dataset with very few
+  matches and a detector that can't yet tell them apart look the same from
+  here.
 
 **The likely range** says how much of the set the line keeps is probably
 right. It comes from your picks alone, never from the detector's own guess:
 each band's picks bound that band, and the bands are weighed by their size.
 With 5 picks a band it is wide; that width is the honest answer to "how
-close did we get?". The check decides on the picks' plain share, so a
-confirmed set's range can reach below the Threshold: the range says how
-sure the picks are, the state says which way they leaned. The range also
-stands on the Find view's **Stats** chart, at the line where it meets the
-Threshold.
+close did we get?". The **found** phrase is the rougher of the two: it reads
+the same picks against the detector's own estimate of how many matches the
+list holds, which is the one thing the picks cannot measure. The check
+decides where to stop on the picks' plain share, so the range says how sure
+the picks are, and the count says where the balance peaked. The range also
+stands on the Find view's **Stats** chart, at the line, whose legend says
+whether the line was checked (**Line: checked (48 kept)**, or **Line: the
+top 32, unchecked**).
 
 **A range measures the list as it was when you checked it.** Your check
 votes are ordinary votes, so they train the detector like any other. Later
@@ -177,7 +194,9 @@ votes retrain it, and the line then follows the new ranking at the same
 count, so the items at the line change. The range stays on screen as it
 was, and hovering it says it was measured before your later votes. **Check**
 again for a fresh one: a check needs something to have changed since the
-last, and any vote does that.
+last, and any vote does that. A check belongs to the radio it was run on:
+move to another radio and the line is unchecked there until you check it
+too; move back and the earlier check shows again.
 
 Cancelling or closing the check leaves the Threshold as it was. The rounds you
 finished stay as votes.
@@ -187,7 +206,7 @@ Everything that uses the matches works on the line in every state: the
 and **Browse** all act on the items above it. An AutoRun or command-line run
 has nobody to vote, so it can't be checked: it exports the unchecked
 starting set and records it as unchecked, with a line in the run's log and a
-`floor` entry beside the threshold in exports that carry the full results
+`balance` entry beside the threshold in exports that carry the full results
 (see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
 
 ---
@@ -806,47 +825,50 @@ but in Manual mode you choose directly.
 ### 3. Threshold
 
 A spectrum from **False Positives** to **False Negatives**, with three radio
-buttons under it: one under each third. Pick where the detector's line
-falls. The line (see
+buttons under it: one under each third. Pick which way the detector's line
+should lean. Each radio is a **balance** of precision and recall - how many
+wrong items you will take in the results against how many right ones you
+will accept missing - and the line (see
 [Matches, the line, precision and recall](#matches-the-line-precision-and-recall))
-keeps the top of the ranking, among the items you haven't voted on: up to the
-top 128 on the False Positives radio, and up to the top 32 on the middle and
-False Negatives radios, fewer when the detector's own estimate says fewer are
-likely right. Toward False Positives the line returns the most, and more
-of it may be wrong; toward False Negatives it returns only the surest, and
-misses more; the middle radio (the default) sits between them. The radios
-carry no numbers because what the line keeps is measured, not promised: a
-check says how close it got. Hover a radio for what it does. Changing the
-Threshold moves the line over the scores the detector already has; the
-ranking itself does not change.
+is drawn where that balance is best. It keeps the top of the ranking, among
+the items you haven't voted on: up to the top 128 on the False Positives
+radio, and up to the top 32 on the middle and False Negatives radios, fewer
+when the detector's own estimate says the balance peaks sooner. Toward False
+Positives the line returns the most, and more of it may be wrong; toward
+False Negatives it returns only the surest, and misses more; the middle
+radio (the default) weighs the two mistakes equally. The radios carry no
+numbers because what the line keeps is measured, not promised: a check says
+how close it got. Hover a radio for what it does. Changing the Threshold
+moves the line over the scores the detector already has; the ranking itself
+does not change.
 
 Once the list is ranked by the detector (a **Learned** sort, or Find), the
 note under the spectrum says what the Threshold is doing to the line, in one
-of three states:
+of two states:
 
 - **Top 32 kept, unchecked** - nothing has measured the set yet (the count
-  is 32 at most; fewer when the detector's estimate says fewer are likely
-  right).
-- **Confirmed · likely 55–100% right (checked 15) · 64 kept** - a check
-  found the top 64 right enough, and the line keeps them.
-- **Fell short · likely 19–92% right (checked 15) · top 8 kept** - a check
-  fell short, and says how close it got.
+  is 32 at most; fewer when the detector's estimate says the balance peaks
+  sooner).
+- **Checked · likely 55–80% right, about half of them found (checked 15) ·
+  48 kept** - a check walked the list and ended where the balance peaked;
+  the line keeps that set, and the note says how much of it is likely right
+  and how much of what the list holds it likely found.
 
 The range a check measured is a number. In Train, beside the note, **Check 5
 picks** runs a spot check of the list: 5 random picks from each band of it,
-which you vote on, walking deeper while the list stays right enough and
-shorter while it does not. See
+which you vote on, walking deeper while a longer list scores better on the
+balance and stopping where it peaks. See
 [How close the line got](#how-close-the-line-got) for the check and its
 likely range. Find shows the same note with no check beside it: there you
 test the Threshold, and it is too late to label more to set it. The **?**
 beside **Threshold:** explains it in two short sentences.
 
 A Threshold toward False Positives keeps a longer list, and the lists nest:
-everything the line keeps on the False Negatives radio it still keeps on the
-False Positives radio, plus a band of borderline items. That makes a
-two-pass workflow natural: work toward False Negatives first, then move
-toward False Positives and review the newly admitted band - the items just
-above the moved line (see
+the line always keeps the top of one ranking, so everything it keeps on the
+False Negatives radio it still keeps on the False Positives radio, plus a
+band of borderline items. That makes a two-pass workflow natural: work
+toward False Negatives first, then move toward False Positives and review
+the newly admitted band - the items just above the moved line (see
 [Catch the borderline matches](howto/borderline-matches.md)).
 
 Each detector keeps its own Threshold while VTSearch runs, and one you
@@ -1043,7 +1065,7 @@ runs).
   confirmed on yet, ranked by score, under the same
   [Threshold](#3-threshold) you set while labeling. The line through it
   keeps the set the Threshold keeps, and the note under the Threshold says
-  how close it got; see
+  what a check found on it; see
   [How close the line got](#how-close-the-line-got).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.
@@ -1109,8 +1131,7 @@ a one-line verdict and a line of supporting numbers:
   handed-over detector is least reliable.
 
 If either share is large, the fastest fix is usually to label a few items
-from the flagged region and retrain, rather than to move the precision
-floor.
+from the flagged region and retrain, rather than to move the Threshold.
 
 ---
 
@@ -1128,8 +1149,8 @@ controls, remembered per media type:
 - **Thumbnail size** - the two image icons shrink or grow the
   thumbnails. Larger thumbnails = fewer per screen but more readable.
   After training, the list ranks the thumbnails by the detector's score,
-  with a threshold line marking the good/bad cut (where it sits, and how
-  close it got to the Threshold, is in
+  with a threshold line marking the good/bad cut (where it sits, and what a
+  check found on the set it keeps, is in
   [How close the line got](#how-close-the-line-got)):
 
   <picture>

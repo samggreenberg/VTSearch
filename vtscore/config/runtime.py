@@ -149,10 +149,11 @@ DEFAULT_MIN_PRECISION = 0.5
 #: the floor, ``vtscore.training.thresholds.DEFAULT_BETA`` re-exports it.
 DEFAULT_BETA = 1.0
 
-#: Which preference draws the line (#4413): ``"floor"`` (the precision floor,
-#: ``min_precision``) or ``"balance"`` (F-beta, ``beta``).  The floor until
-#: the switch's last step flips it; the balance's machinery ships beside it.
-DEFAULT_LINE_PREFERENCE = "floor"
+#: Which preference draws the line (#4413): ``"balance"`` (F-beta, ``beta``,
+#: the default since the switch's last step) or ``"floor"`` (the precision
+#: floor, ``min_precision``; deprecated, kept one release for the API and the
+#: CLI, then removed).
+DEFAULT_LINE_PREFERENCE = "balance"
 LINE_PREFERENCES = ("floor", "balance")
 MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32

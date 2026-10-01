@@ -16,7 +16,7 @@
     .media-list-container,
     vt-sort-bar,
     vt-select-mode,
-    vt-precision-floor,
+    vt-balance,
     .label-divider,
     vt-autopilot-panel {
       opacity: 0.45;
@@ -159,10 +159,10 @@
   margin-left: var(--space-xs);
 }
 
-// Find mode: the precision floor, with the unverified-positives work-queue
-// actions projected onto its picker line (`floorActions`) and pushed to the
-// right edge, so the floor's state line keeps the full width underneath.
-.find-floor-row {
+// Find mode: the balance, with the unverified-positives work-queue actions
+// projected onto its picker line (`balanceActions`) and pushed to the right
+// edge, so the balance's state line keeps the full width underneath.
+.find-balance-row {
   padding: 0 var(--space-xs);
   flex-shrink: 0;
 }
@@ -175,7 +175,7 @@
 }
 
 // The buttons themselves are the shared `.card-icon-btn` primitive (see
-// `_components.scss`); this cluster just lays them out in the floor row.
+// `_components.scss`); this cluster just lays them out in the balance row.
 .goods-actions {
   display: flex;
   align-items: center;

@@ -3924,6 +3924,9 @@
           "bad_count": {
             "type": "integer"
           },
+          "balance": {
+            "$ref": "#/components/schemas/BalanceState"
+          },
           "detector_name": {
             "type": "string"
           },
@@ -3948,6 +3951,7 @@
         },
         "required": [
           "bad_count",
+          "balance",
           "detector_name",
           "floor",
           "good_count",
@@ -4084,6 +4088,9 @@
           "agreements": {
             "type": "integer"
           },
+          "balance": {
+            "$ref": "#/components/schemas/BalanceState"
+          },
           "confirmed_bad": {
             "type": "integer"
           },
@@ -4143,6 +4150,7 @@
         "required": [
           "agreement_rate",
           "agreements",
+          "balance",
           "confirmed_bad",
           "confirmed_good",
           "corrections",
@@ -4860,6 +4868,10 @@
           "acq_threshold": {
             "nullable": true,
             "type": "number"
+          },
+          "balance": {
+            "$ref": "#/components/schemas/BalanceState",
+            "nullable": true
           },
           "current": {
             "type": "integer"
@@ -6920,6 +6932,10 @@
       "_AutoDetectResult": {
         "additionalProperties": false,
         "properties": {
+          "balance": {
+            "$ref": "#/components/schemas/BalanceState",
+            "nullable": true
+          },
           "detector_name": {
             "type": "string"
           },
@@ -13900,6 +13916,8 @@
     },
     "/api/min-precision": {
       "get": {
+        "deprecated": true,
+        "description": "The floor draws the line only under ``line_preference: \"floor\"`` (``PUT\n/api/settings``); the balance (``/api/balance``) is the preference since\n#4413.  Kept for one release.",
         "operationId": "get_min_precision_route",
         "responses": {
           "200": {
@@ -13916,13 +13934,14 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws.",
+        "summary": "Deprecated (#4413): get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws.",
         "tags": [
           "sorting"
         ]
       },
       "post": {
-        "description": "A pure cutoff knob: the active detector's line moves to the set the new\nfloor keeps (no retrain) and, in Find mode, the unverified items re-split\nover the frozen scores.  The new line comes back in the same round trip,\nwith the floor's state: ``unchecked`` until a spot check runs at this\nfloor (``/api/precision-check``), then ``confirmed`` or ``short`` with the\ncheck's likely range.  Every detector has a floor, so ``null`` is refused.",
+        "deprecated": true,
+        "description": "The floor is the preference only under ``line_preference: \"floor\"``\n(``PUT /api/settings``); ``/api/balance`` is the control since #4413, and\nthis route goes next release.  Under the floor it is a pure cutoff knob:\nthe active detector's line moves to the set the new floor keeps (no\nretrain) and, in Find mode, the unverified items re-split over the frozen\nscores.  The new line comes back in the same round trip, with the floor's\nstate: ``unchecked`` until a spot check runs at this floor\n(``/api/precision-check``), then ``confirmed`` or ``short`` with the\ncheck's likely range.  Under the balance the value is stored and draws\nnothing.  Every detector has a floor, so ``null`` is refused.",
         "operationId": "set_min_precision_route",
         "requestBody": {
           "content": {
@@ -13952,7 +13971,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Set the precision floor, a fraction clamped to ``[0.01, 1]``.",
+        "summary": "Deprecated (#4413): set the precision floor, a fraction clamped to ``[0.01, 1]``.",
         "tags": [
           "sorting"
         ]

@@ -216,6 +216,31 @@ def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
     return check_schedule(0.5 if float(beta) <= 1.0 + _EPS else 0.1, alpha)
 
 
+def resolve_line_knobs(min_precision: float | str | None, beta: float | None) -> tuple[float | None, float | None]:
+    """The preference an eval arm draws its line at, as ``(floor, beta)``; neither pinned is the app's default (#4413).
+
+    The harness's counterpart of :func:`vtscore.state.line_knobs`, which is
+    what the app hands every retrain and re-cut: a pinned *beta* is the
+    balance arm (``(None, beta)``; the floor is unused whatever it says);
+    neither pinned resolves to the app's default preference
+    (:data:`~vtscore.config.runtime.DEFAULT_LINE_PREFERENCE`) - the balance
+    at :data:`DEFAULT_BETA`, or the floor at
+    :data:`~vtscore.training.thresholds.DEFAULT_MIN_PRECISION`; a pinned floor
+    is the floor arm (deprecated with the floor); ``"off"`` is the Inclusion
+    arm (``(None, None)``).  Validated here, so a malformed arm fails before
+    anything expensive runs.
+    """
+    from vtscore.config.runtime import DEFAULT_LINE_PREFERENCE  # noqa: PLC0415
+    from vtscore.training.thresholds.precision_floor import resolve_min_precision  # noqa: PLC0415
+
+    if beta is not None:
+        balance_schedule(beta)
+        return None, float(beta)
+    if min_precision is None and DEFAULT_LINE_PREFERENCE == "balance":
+        return None, DEFAULT_BETA
+    return resolve_min_precision(min_precision), None
+
+
 def fbeta_score(tp: float, k: float, n_pos: float, beta: float) -> float:
     """F-beta of a set of *k* items holding *tp* positives, out of *n_pos* in the corpus."""
     denominator = beta * beta * n_pos + k
@@ -1035,6 +1060,19 @@ def floor_state(
         return FloorState(float(min_precision), FLOOR_UNCHECKED, count, None, False, schedule)
     stale = ranking is not None and applicable.is_stale(ranking, also_voted)
     return FloorState(float(min_precision), applicable.status, applicable.k, applicable.range(), stale, schedule)
+
+
+def aim_words(state: Mapping[str, Any]) -> str:
+    """The preference a line's state was drawn at, in words for a log line (#4413).
+
+    ``aiming at 25% right`` for a floor's state (one that carries
+    ``min_precision``), ``at F1`` for a balance's (one that carries ``beta``):
+    what a headless run says beside the unchecked set it exports.
+    """
+    beta = state.get("beta")
+    if beta is not None:
+        return f"at F{beta:g}"
+    return f"aiming at {100 * state['min_precision']:.0f}% right"
 
 
 @dataclass(frozen=True)

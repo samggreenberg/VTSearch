@@ -29,6 +29,9 @@ from tests.helpers import planted_spot_check, setup_trainable_model_in_registry
 from vtscore.state.core import detector_line_proposal, get_active_detector_context, human_voted_ids
 from vtsearch.state import bad_votes, good_votes, set_min_precision, snapshot_medias
 
+#: The floor draws the line here (#4413): these are the deprecated floor's own tests, and the balance is the default.
+pytestmark = pytest.mark.usefixtures("floor_preference")
+
 UNCHECKED = {"status": "unchecked", "range": None}
 SCHEDULES = {
     0.1: {"candidate": 128, "rounds": 5, "picks": 5},

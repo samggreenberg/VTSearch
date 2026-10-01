@@ -443,7 +443,7 @@ class TestEveryMediaGetsAVerdict:
 
 
 class TestColdFindTrainsUnderTheUsersSettings:
-    def test_it_cuts_at_the_users_floor_and_calibration(self, monkeypatch):
+    def test_it_cuts_at_the_users_floor_and_calibration(self, monkeypatch, floor_preference):
         """A cold detector is trained the way the load and learned-sort paths train it.
 
         The cold path called ``labelset_train_and_score`` with its defaults, so

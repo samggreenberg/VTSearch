@@ -24,6 +24,9 @@ from vtscore.state.core import get_active_detector_context, human_voted_ids
 from vtscore.training.thresholds import LineRanking, SpotCheck
 from vtsearch.state import set_min_precision, snapshot_medias
 
+#: The floor draws the line here (#4413): these are the deprecated floor's own tests, and the balance is the default.
+pytestmark = pytest.mark.usefixtures("floor_preference")
+
 
 def _run_find(client) -> None:
     detector_id = setup_trainable_model_in_registry(

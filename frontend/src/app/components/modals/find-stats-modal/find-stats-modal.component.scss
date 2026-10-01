@@ -149,7 +149,7 @@
     font-size: var(--font-xs);
   }
 
-  // The line: the last item of the set the floor keeps, drawn the same in
+  // The line: the last item of the set the balance keeps, drawn the same in
   // every state.
   .current {
     stroke: var(--text-muted);
@@ -166,13 +166,6 @@
   .range-cap {
     stroke: var(--chart-verified);
     stroke-width: 2;
-  }
-
-  // The floor: the precision the line is asked to keep. Solid, and a shade
-  // darker than the fainter grid under it.
-  .floor {
-    stroke: var(--text-secondary);
-    stroke-width: 1;
   }
 
   .crosshair {
@@ -228,11 +221,6 @@
 .swatch-range {
   background: var(--chart-verified);
   opacity: var(--opacity-dim);
-}
-
-.swatch-floor {
-  height: 1px;
-  background: var(--text-secondary);
 }
 
 .chart-readout {

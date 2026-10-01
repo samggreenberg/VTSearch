@@ -16,6 +16,9 @@ from vtscore.state.core import get_active_detector_context, human_voted_ids
 from vtscore.training.thresholds import DEFAULT_MIN_PRECISION, FLOOR_STATES, resolve_min_precision
 from vtsearch.state import snapshot_medias
 
+#: The floor draws the line here (#4413): these are the deprecated floor's own tests, and the balance is the default.
+pytestmark = pytest.mark.usefixtures("floor_preference")
+
 _STATES = set(FLOOR_STATES)
 
 

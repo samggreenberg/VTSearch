@@ -10,16 +10,16 @@
            items above the line — the above-threshold items the human hasn't
            acted on yet. Find tests the threshold Train set, so it offers no
            spot check (#4317). -->
-      <div class="find-floor-row">
-        <vt-precision-floor
-          [value]="minPrecision()"
-          [floor]="floor()"
+      <div class="find-balance-row">
+        <vt-balance
+          [value]="beta()"
+          [balance]="balance()"
           [returned]="returned()"
           [busy]="sortBusy()"
           [offerCheck]="false"
-          (valueChange)="minPrecisionChange.emit($event)"
+          (valueChange)="betaChange.emit($event)"
         >
-          <div class="goods-actions find-queue-actions" floorActions>
+          <div class="goods-actions find-queue-actions" balanceActions>
             <button
               class="card-icon-btn"
               [disabled]="disabled() || unverifiedGoodCount === 0"
@@ -48,7 +48,7 @@
               <vt-icon type="export" [size]="14"></vt-icon>
             </button>
           </div>
-        </vt-precision-floor>
+        </vt-balance>
       </div>
 
       <div class="images-header">
@@ -81,7 +81,7 @@
           [medias]="medias()"
           [sortOrder]="sortOrder()"
           [threshold]="threshold()"
-          [floor]="floor()"
+          [balance]="balance()"
           [selectedId]="selectedId()"
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
@@ -98,7 +98,7 @@
         <vt-stripe-overview
           [sortOrder]="sortOrder()"
           [threshold]="threshold()"
-          [floor]="floor()"
+          [balance]="balance()"
           [selectedId]="selectedId()"
           [goodVotes]="goodVotes()"
           [badVotes]="badVotes()"
@@ -167,14 +167,14 @@
           (cancel)="sortCancel.emit()"
         />
 
-        <vt-precision-floor
-          [value]="minPrecision()"
-          [floor]="floor()"
+        <vt-balance
+          [value]="beta()"
+          [balance]="balance()"
           [returned]="returned()"
           [busy]="sortBusy()"
           [checkable]="!disabled() && !sortBusy()"
-          (valueChange)="minPrecisionChange.emit($event)"
-          (check)="floorCheck.emit()"
+          (valueChange)="betaChange.emit($event)"
+          (check)="check.emit()"
         />
 
         <div class="label-divider"></div>
@@ -202,7 +202,7 @@
             [medias]="medias()"
             [sortOrder]="sortOrder()"
             [threshold]="threshold()"
-            [floor]="floor()"
+            [balance]="balance()"
             [selectedId]="selectedId()"
             [goodVotes]="goodVotes()"
             [badVotes]="badVotes()"
@@ -220,7 +220,7 @@
           <vt-stripe-overview
             [sortOrder]="sortOrder()"
             [threshold]="threshold()"
-            [floor]="floor()"
+            [balance]="balance()"
             [selectedId]="selectedId()"
             [goodVotes]="goodVotes()"
             [badVotes]="badVotes()"

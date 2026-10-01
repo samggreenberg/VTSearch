@@ -181,7 +181,7 @@ class TestStreamingNdjsonExport:
         assert not out.with_name(out.name + ".tmp").exists()
 
     def test_the_header_carries_each_detectors_floor_verdict(self, client, tmp_path, monkeypatch, _stub_split_training):
-        """Each detector's floor state reaches the NDJSON ``_meta``; its hits still stream (#4247, #4272)."""
+        """Each detector's floor and balance states reach the NDJSON ``_meta``; its hits still stream (#4247, #4272, #4413)."""
         import vtscore.cli as cli_mod
 
         stub = cli_mod._load_and_train_detectors
@@ -192,10 +192,21 @@ class TestStreamingNdjsonExport:
             "range": None,
             "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
         }
+        balance = {
+            "beta": 1.0,
+            "status": "unchecked",
+            "count": 32,
+            "precision": None,
+            "recall": None,
+            "fbeta": None,
+            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
+        }
         monkeypatch.setattr(
             cli_mod,
             "_load_and_train_detectors",
-            lambda *a, **k: {name: {**info, "floor": floor} for name, info in stub(*a, **k).items()},
+            lambda *a, **k: {
+                name: {**info, "floor": floor, "balance": balance} for name, info in stub(*a, **k).items()
+            },
         )
         _write_pretrained_detector("stream-floor")
         settings_path = _settings_file_with_detector(tmp_path, "stream-floor")
@@ -215,7 +226,10 @@ class TestStreamingNdjsonExport:
         )
 
         meta, hits = _read_ndjson(out)
-        assert meta["detectors"] == [{"detector_name": "stream-floor", "threshold": 0.5, "floor": floor}]
+        # The balance's state rides beside the floor's (#4413).
+        assert meta["detectors"] == [
+            {"detector_name": "stream-floor", "threshold": 0.5, "floor": floor, "balance": balance}
+        ]
         assert sorted(h["id"] for h in hits) == [1, 2, 3]
 
     def test_keep_negatives_streams_both(self, client, tmp_path, _stub_split_training):

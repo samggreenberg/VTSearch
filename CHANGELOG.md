@@ -17,6 +17,31 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold control is a balance, not a precision floor** (issue #4413,
+  the owner's ruling of 2026-10-01 after #4411 priced it). The three radios
+  under the False Positives … False Negatives spectrum now pick how to weigh
+  precision against recall - F-beta's beta 2 (lean to recall), 1 (balanced,
+  the default) or 0.5 (lean to precision) - and the line keeps the set with
+  the best estimated F-beta: before any spot check the vote-anchored
+  mixture's F-beta argmax, capped at the top 128 (beta 2) or 32 (beta 1 and
+  0.5); after one, the band where the check's F-beta estimate peaked. The
+  check walks the ranking in bands as before but ends at the peak instead of
+  at a floor, and reports the kept set's likely precision *and* recall
+  ("Checked · likely 55–80% right, about half of them found (checked 15) ·
+  48 kept"); nothing is "confirmed" or "short" any more. The Find Stats chart
+  no longer draws a floor line. Wire: `GET|POST /api/balance` (`beta`,
+  `status` unchecked | checked, `count`, `precision`, `recall`, `fbeta`,
+  `schedule`, `threshold`, `n_returned`, `line_preference`); every response
+  that carries a detector's line carries `balance` beside `floor`; a
+  `/api/precision-check` under the balance finishes `checked` and carries
+  `beta`, `fbeta` and `recall`. Settings: `beta` (0.25–4, default 1) and
+  `line_preference` (`balance`, the default, or `floor`). **Deprecated:** the
+  `min_precision` setting, `GET|POST /api/min-precision` and the floor's
+  `confirmed` / `short` states draw the line only under
+  `line_preference: "floor"`; they stay for one release and then go. Headless
+  runs (the CLI and AutoRun) export the balance's unchecked set and say so
+  ("exports its top 32 unchecked (at F1)"), with `beta` on the
+  `detector_unchecked` event and `balance` beside `floor` in their results.
 - **The GPU stack moves to CUDA 12.9, RAPIDS 26.8 and pandas 3** (issue
   #4390). `pyproject.toml` now pins `pandas>=3` (it was `<3`, #4381), and the
   GPU install moves with it, because cudf, which cuML depends on, only takes

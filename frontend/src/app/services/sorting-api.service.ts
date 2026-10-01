@@ -11,7 +11,7 @@ import type { EvalTrainAndScoreResponse } from '../generated/api-client/models/e
 import type { ExampleSortResponse } from '../generated/api-client/models/example-sort-response';
 import type { FillFromSortRequest } from '../generated/api-client/models/fill-from-sort-request';
 import type { FillFromSortResponse } from '../generated/api-client/models/fill-from-sort-response';
-import type { MinPrecisionResponse } from '../generated/api-client/models/min-precision-response';
+import type { BalanceResponse } from '../generated/api-client/models/balance-response';
 import type { PrecisionCheckResponse } from '../generated/api-client/models/precision-check-response';
 import type { PrecisionCheckVote } from '../generated/api-client/models/precision-check-vote';
 import type { IndicatorScoreHistoryResponse } from '../generated/api-client/models/indicator-score-history-response';
@@ -29,8 +29,8 @@ import type { SortResponse } from '../generated/api-client/models/sort-response'
 import type { TextsortSuggestionsResponse } from '../generated/api-client/models/textsort-suggestions-response';
 import type { VotesResponse } from '../generated/api-client/models/votes-response';
 import { coverageAtlasNextGet } from '../generated/api-client/fn/sorting/coverage-atlas-next-get';
-import { getMinPrecisionRoute } from '../generated/api-client/fn/sorting/get-min-precision-route';
-import { setMinPrecisionRoute } from '../generated/api-client/fn/sorting/set-min-precision-route';
+import { getBalanceRoute } from '../generated/api-client/fn/sorting/get-balance-route';
+import { setBalanceRoute } from '../generated/api-client/fn/sorting/set-balance-route';
 import { cancelPrecisionCheck } from '../generated/api-client/fn/precision-check/cancel-precision-check';
 import { getPrecisionCheck } from '../generated/api-client/fn/precision-check/get-precision-check';
 import { startPrecisionCheck } from '../generated/api-client/fn/precision-check/start-precision-check';
@@ -131,25 +131,23 @@ export class SortingApiService {
     return clearVotesRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** The active detector's precision floor, its verdict, and the line it draws. */
-  getMinPrecision(): Observable<MinPrecisionResponse> {
-    return getMinPrecisionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  /** The active detector's balance (#4413), the state of its line, and the line it draws. */
+  getBalance(): Observable<BalanceResponse> {
+    return getBalanceRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
-  /** Set the active detector's precision floor (a fraction); the new line comes back in the same round trip. */
-  setMinPrecision(value: number): Observable<MinPrecisionResponse> {
-    return setMinPrecisionRoute(this.http, this.config.rootUrl, { body: { min_precision: value } }).pipe(
-      map((r) => r.body),
-    );
+  /** Set the active detector's balance (F-beta's beta); the new line comes back in the same round trip. */
+  setBalance(beta: number): Observable<BalanceResponse> {
+    return setBalanceRoute(this.http, this.config.rootUrl, { body: { beta } }).pipe(map((r) => r.body));
   }
 
-  /** The active detector's spot check (running, else the last finished one) and the floor's state (#4272). */
+  /** The active detector's spot check (running, else the last finished one) and the balance's state (#4272, #4413). */
   getPrecisionCheck(): Observable<PrecisionCheckResponse> {
     return getPrecisionCheck(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /**
-   * Start a spot check of the active detector's floor, which deals its first
+   * Start a spot check of the active detector's line, which deals its first
    * round of picks. The caller shows a refusal (a 409: nothing to check, or
    * the candidate already checked) in its own step, so no global toast.
    */
@@ -172,7 +170,7 @@ export class SortingApiService {
     ).pipe(map((r) => r.body));
   }
 
-  /** Abandon the running check; the votes already sent stay votes, and the floor's state is as it was. */
+  /** Abandon the running check; the votes already sent stay votes, and the balance's state is as it was. */
   cancelPrecisionCheck(): Observable<PrecisionCheckResponse> {
     return cancelPrecisionCheck(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }

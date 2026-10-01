@@ -991,7 +991,9 @@ def _opt_float(name: str) -> float | None:
 #: half-step grid rather than fail, so it is a float.
 #: The balance arm (#4413): draw the line at F-beta's beta instead of the floor
 #: (``CALIB_BETA=1`` is the balanced preset; 0.5 and 2 the leaning ones).  Unset
-#: is the floor arm.  A given beta makes CALIB_MIN_PRECISION unused.
+#: with CALIB_MIN_PRECISION unset is the app's default preference, the balance
+#: at beta 1 (#4413); CALIB_MIN_PRECISION=<P> is the floor arm.  A given beta
+#: makes CALIB_MIN_PRECISION unused.
 BETA = _opt_float("CALIB_BETA")
 
 ACQ_INCLUSION_OFFSET = _opt_float("CALIB_ACQ_INCLUSION_OFFSET")

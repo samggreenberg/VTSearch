@@ -90,7 +90,6 @@ from vtscore.training.thresholds import (
     LineRanking,
     SpotCheck,
     balance_line,
-    balance_schedule,
     balance_state,
     fbeta_count,
     floor_line,
@@ -106,7 +105,7 @@ from vtscore.training.thresholds import (
     acquisition_inclusion,
     calculate_safe_threshold,
     line_inclusion,
-    resolve_min_precision,
+    resolve_line_knobs,
     threshold_from_fold_orderings,
 )
 
@@ -1839,19 +1838,20 @@ def _resolve_production_defaults(
     return blend_schedule, calibration_fraction
 
 
-def _check_inclusion_arm(inclusion: float, floor: float | None) -> None:
-    """Refuse a non-zero *inclusion* under a precision floor (#4361).
+def _check_inclusion_arm(inclusion: float, floor: float | None, beta: float | None = None) -> None:
+    """Refuse a non-zero *inclusion* under a precision floor or a balance (#4361, #4413).
 
-    A set floor wins over the knob: the line is the set the floor keeps, so
-    *inclusion* would only re-weight the ``cost`` column and never move the
-    line - an arm that looks swept and measures one line.  Only the Inclusion
-    arm (``min_precision="off"``) draws its line at *inclusion*.
+    A set preference wins over the knob: the line is the set the floor or the
+    balance keeps, so *inclusion* would only re-weight the ``cost`` column and
+    never move the line - an arm that looks swept and measures one line.  Only
+    the Inclusion arm (``min_precision="off"``) draws its line at *inclusion*.
     """
-    if floor is None or inclusion == 0:
+    if (floor is None and beta is None) or inclusion == 0:
         return
+    under = f"a precision floor ({floor:g})" if floor is not None else f"a balance (beta {beta:g})"
     raise ValueError(
         f"inclusion={inclusion!r} draws the line only on the Inclusion arm "
-        f"(min_precision={NO_PRECISION_FLOOR!r}); under a precision floor ({floor:g}) it would only "
+        f"(min_precision={NO_PRECISION_FLOOR!r}); under {under} it would only "
         f"re-weight cost. Pass min_precision={NO_PRECISION_FLOOR!r} to sweep it."
     )
 
@@ -2255,22 +2255,24 @@ def simulate_voting_iterations(  # noqa: C901
             against the held-out negatives (``auroc_<band>``, #4160).  Off by
             default because it scores the negatives a second time each step.
         min_precision: The precision floor the reporting line is drawn at
-            (#4245), resolved by
-            :func:`~vtscore.training.thresholds.resolve_min_precision`.
-            ``None`` (the default) is the app's own default floor, so the
-            default arm reports the line a live detector draws: the set the
-            floor keeps (#4272) - the top *count* unvoted items of the sim set,
-            where *count* is the floor's starting candidate until the run's
-            spot check ends, then the set the check ended on.  ``"off"`` is the
-            **Inclusion arm** - the line at *inclusion* - which is what every
-            study before #4245 measured; an arm that sweeps *inclusion* has to
-            pass it, because a set floor wins over the knob.  A number pins a
-            floor.  No step builds the #4220 estimate: the app stopped
-            building it in #4362.
-        beta: The **balance** arm (#4413): draw the line at F-beta's beta
-            instead of a floor - the mixture's F-beta argmax under the
-            balance's cap, and the end-of-run check is the F-beta walk.  A
-            given beta makes the floor unused.  ``None`` is the floor arm.
+            (#4245; deprecated with the floor, #4413), resolved with *beta*
+            by :func:`~vtscore.training.thresholds.resolve_line_knobs`.
+            A number pins the **floor arm**: the set the floor keeps (#4272)
+            - the top *count* unvoted items of the sim set, where *count* is
+            the floor's starting candidate until the run's spot check ends,
+            then the set the check ended on.  ``"off"`` is the **Inclusion
+            arm** - the line at *inclusion* - which is what every study before
+            #4245 measured; an arm that sweeps *inclusion* has to pass it,
+            because a set preference wins over the knob.  ``None`` (the
+            default) with *beta* ``None`` is the app's own default preference,
+            the balance at ``DEFAULT_BETA``.  No step builds the #4220
+            estimate: the app stopped building it in #4362.
+        beta: The **balance** arm (#4413): draw the line at F-beta's beta -
+            the mixture's F-beta argmax under the balance's cap, and the
+            end-of-run check is the F-beta walk.  A given beta makes the floor
+            unused.  ``None`` with *min_precision* ``None`` (the default) is
+            the app's default balance, so the default arm reports the line a
+            live detector draws.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272, the band walk of #4388).  ``"end"`` (the default): once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
@@ -2369,17 +2371,13 @@ def simulate_voting_iterations(  # noqa: C901
     # Normalised once, at the top: the retired ``"mlp"`` spelling never reaches
     # the dispatch, the guards, or the result rows (issue #3764).
     trainer = knobs.trainer
-    # The precision floor the reporting line is drawn at: ``None`` resolves to
-    # the app's default floor, so the default arm cuts where a live detector
-    # does (#4245); ``"off"`` is the Inclusion arm.  Resolved - and so
-    # validated - before anything expensive runs.
-    floor = resolve_min_precision(min_precision)
-    if beta is not None:
-        # The balance arm (#4413): the line is drawn at beta, and the floor is
-        # unused, whatever it resolved to.
-        balance_schedule(beta)
-        floor = None
-    _check_inclusion_arm(inclusion, floor)
+    # The preference the reporting line is drawn at (#4245, #4413): neither
+    # pinned is the app's default (the balance at DEFAULT_BETA), so the default
+    # arm cuts where a live detector does; a floor pins the floor arm, ``"off"``
+    # the Inclusion arm, and a beta the balance arm whatever the floor says.
+    # Resolved - and so validated - before anything expensive runs.
+    floor, beta = resolve_line_knobs(min_precision, beta)
+    _check_inclusion_arm(inclusion, floor, beta)
     if acq_p_crossing is not None and floor is None and beta is None:
         raise ValueError(
             "acq_p_crossing needs a preference: it places the acquisition cut at the floor's crossing, or at the "
@@ -3531,7 +3529,7 @@ def run_voting_iterations_eval(
     import pandas as pd  # noqa: PLC0415
 
     # Refused here as well as per cell, so a misconfigured grid fails before its first cell runs.
-    _check_inclusion_arm(inclusion, resolve_min_precision(min_precision))
+    _check_inclusion_arm(inclusion, *resolve_line_knobs(min_precision, beta))
     strategy_list = strategies if strategies is not None else ["autopilot"]
     trainer_list = trainers if trainers is not None else [APP_TRAINER]
     arm_list = prevalence_arms if prevalence_arms is not None else [None]
@@ -3641,7 +3639,7 @@ def run_voting_iterations_eval_from_pickles(
         min_precision: The precision floor the line is drawn at (see
             :func:`simulate_voting_iterations`); ``"off"`` for the Inclusion arm.
         beta: The balance arm (#4413): draw the line at F-beta's beta; the floor is then unused.
-            ``None`` is the floor arm.
+            ``None`` with *min_precision* ``None`` is the app's default balance.
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -3650,7 +3648,7 @@ def run_voting_iterations_eval_from_pickles(
     """
     from vtscore.datasets.loader import load_dataset_from_pickle
 
-    _check_inclusion_arm(inclusion, resolve_min_precision(min_precision))
+    _check_inclusion_arm(inclusion, *resolve_line_knobs(min_precision, beta))
     dataset_clips: dict[str, dict[int, dict[str, Any]]] = {}
     for name, path in dataset_paths.items():
         medias: dict[int, dict[str, Any]] = {}

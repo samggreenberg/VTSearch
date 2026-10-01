@@ -1853,18 +1853,20 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
     return candidate if math.isfinite(candidate) else ctx.threshold
 
 
-def detector_line_inclusion(ctx: "DetectorContext", min_precision: float | None) -> float | None:
+def detector_line_inclusion(
+    ctx: "DetectorContext", min_precision: float | None, beta: float | None = None
+) -> float | None:
     """The inclusion *ctx*'s reporting line sits at, for Autopilot's acquisition offset.
 
-    Under a floor the line keeps a set rather than an inclusion, so it is
-    ``None`` and :func:`detector_acquisition_threshold` recovers it from the
-    line itself (owner, 2026-09-28: acquisition sits at *X - 4*, where *X* is
-    the derived inclusion of the production cut).  With no floor it is
-    Inclusion 0, the line's own cut (#4269).
+    Under a floor or a balance (#4413) the line keeps a set rather than an
+    inclusion, so it is ``None`` and :func:`detector_acquisition_threshold`
+    recovers it from the line itself (owner, 2026-09-28: acquisition sits at
+    *X - 4*, where *X* is the derived inclusion of the production cut).  With
+    no preference it is Inclusion 0, the line's own cut (#4269).
     """
     from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 
-    if min_precision is not None:
+    if min_precision is not None or beta is not None:
         return None
     return float(PRECISION_FLOOR_FALLBACK_INCLUSION)
 

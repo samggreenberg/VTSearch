@@ -245,7 +245,7 @@ def score_detector(
         )
         if mlp is None:
             return None
-        floor = _floor_state(name, trained[0] if trained else None)
+        floor, balance = _line_states(name, trained[0] if trained else None)
 
         scores, _best_row = score_rows_with_model(mlp, rows)
 
@@ -265,8 +265,10 @@ def score_detector(
         return name, {
             "detector_name": name,
             "threshold": round(threshold, 4),
-            # The floor's state on that cut: unchecked, headless (#4247, #4272).
+            # The floor's and the balance's state on that cut: unchecked,
+            # headless (#4247, #4272, #4413).
             "floor": floor,
+            "balance": balance,
             "total_hits": len(positive_hits),
             "hits": positive_hits,
             "negative_hits": negative_hits,
@@ -276,30 +278,32 @@ def score_detector(
         return None
 
 
-def _floor_state(name: str, det_ctx: Any) -> dict | None:
-    """What the precision floor says about *name*'s cut in an AutoRun: unchecked, because nobody can vote.
+def _line_states(name: str, det_ctx: Any) -> tuple[dict | None, dict | None]:
+    """What the floor and the balance say about *name*'s cut in an AutoRun: unchecked, because nobody can vote.
 
-    Read at the floor its training read (the same thread's
-    :func:`vtsearch.state.get_min_precision`), off the context that drew the
-    line.  A headless run cannot spot-check its floor (#4272), so the cut
-    exported is the floor's starting candidate, and the log line is the
-    record that it was never checked.
+    Both ride with the cut (``floor`` and ``balance``); which of the two drew
+    the line is the ``line_preference`` setting (#4413), read on the thread
+    that trained it, like the floor and the beta.  A headless run cannot
+    spot-check its line (#4272), so the cut exported is the preference's
+    unchecked set, and the log line is the record that it was never checked.
     """
-    from vtscore.state.core import detector_floor_state  # noqa: PLC0415
-    from vtscore.training.thresholds import FLOOR_UNCHECKED  # noqa: PLC0415
-    from vtsearch.state import get_min_precision  # noqa: PLC0415
+    from vtscore.state.core import detector_balance_state, detector_floor_state  # noqa: PLC0415
+    from vtscore.training.thresholds import FLOOR_UNCHECKED, aim_words  # noqa: PLC0415
+    from vtsearch.state import get_beta, get_line_preference, get_min_precision  # noqa: PLC0415
 
     if det_ctx is None:
-        return None
-    state = detector_floor_state(det_ctx, get_min_precision())
-    if state is not None and state["status"] == FLOOR_UNCHECKED:
+        return None, None
+    floor = detector_floor_state(det_ctx, get_min_precision())
+    balance = detector_balance_state(det_ctx, get_beta())
+    drawn = balance if get_line_preference() == "balance" else floor
+    if drawn is not None and drawn["status"] == FLOOR_UNCHECKED:
         logger.info(
-            "Auto-detect: detector %s exports its top %d unchecked (aiming at %.0f%% right); nobody is here to check it",
+            "Auto-detect: detector %s exports its top %d unchecked (%s); nobody is here to check it",
             name,
-            state["count"],
-            100 * state["min_precision"],
+            drawn["count"],
+            aim_words(drawn),
         )
-    return state
+    return floor, balance
 
 
 def score_autorun(

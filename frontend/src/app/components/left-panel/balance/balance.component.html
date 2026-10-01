@@ -1,11 +1,11 @@
-<div class="precision-floor">
-  <div class="floor-head">
-    <span class="floor-label" [id]="labelId">Threshold:</span>
+<div class="balance">
+  <div class="balance-head">
+    <span class="balance-label" [id]="labelId">Threshold:</span>
     <vt-field-hint-icon [hint]="hint" ariaLabel="What the threshold means" placement="below-block" />
     <!-- Controls that belong on the heading's line (Find's work-queue actions). -->
-    <ng-content select="[floorActions]" />
+    <ng-content select="[balanceActions]" />
   </div>
-  <div class="floor-spectrum" role="radiogroup" [attr.aria-labelledby]="labelId">
+  <div class="balance-spectrum" role="radiogroup" [attr.aria-labelledby]="labelId">
     <!-- The spectrum: its two ends over a track. Each radio's own label says
          where it sits, so the picture is hidden from assistive tech. -->
     <div class="spectrum-bar" aria-hidden="true">
@@ -35,14 +35,14 @@
   @if (summary(); as text) {
     <!-- The dot rides inside the note, so a narrow panel wraps the check
          button below the note rather than squeezing the note beside it. -->
-    <p class="floor-state" [attr.data-status]="dot()">
-      <span class="floor-state-text" role="status" [title]="explanation() ?? ''"
+    <p class="balance-state" [attr.data-status]="dot()">
+      <span class="balance-state-text" role="status" [title]="explanation() ?? ''"
         ><span class="indicator-dot" aria-hidden="true"></span>{{ text }}</span
       >
       @if (checkText(); as label) {
         <button
           type="button"
-          class="btn btn--toolbar floor-check-btn"
+          class="btn btn--toolbar balance-check-btn"
           [disabled]="!checkable()"
           [title]="checkHint()"
           (click)="check.emit()"

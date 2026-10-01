@@ -211,49 +211,69 @@ The three panels are shared with the Find view:
   audio, document) plus the voting overlay.
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
 
-**The Threshold** (`vt-precision-floor`, the precision floor, in the Manual
-tab and Find's top row) is the one knob on the detector's line. Two values
-back it, and they travel separately: `SortStateService.minPrecision` is the
-floor the radios show, seeded per pair by `PairScopeService.seedMinPrecision`; `floor` is the
-verdict on the line on screen, and only ever arrives *with* that line (a sort,
-a Find pass, or the floor POST's own response). Each view has one write path,
-both `switchMap`-ed and pair-scoped so a floor the user moved past can never
-land last. Find's (`minPrecisionRequests$`, debounced) installs the returned
-line straight over the frozen scores. Label's (in `SortRunnerService`) re-runs
-the learned sort, but only from the POST's response: the learned sort reads
-the floor server-side and caches by it, so a re-sort that beat the POST would
-come back at the old floor. When the floor keeps the same count of items
-before and after (an unchecked middle and right radio both keep the top 32),
-the line stays put and only its state is swapped: the count, not the state,
+**The Threshold** (`vt-balance`, the balance, in the Manual tab and Find's
+top row; #4413, replacing the precision floor of #4246) is the one knob on the
+detector's line. The balance is F-beta's beta: which way to lean between false
+positives and false negatives. The line is the set with the best estimated
+F-beta, and nothing is "met" or "short" any more: a spot check just says what
+it estimated. Two values back the control, and they travel separately:
+`SortStateService.beta` is the balance the radios show, seeded per pair by
+`PairScopeService.seedBeta` (`GET /api/balance`); `balance` is the state of
+the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked` or
+`checked`, the count kept, the check's two likely ranges and its F-beta
+estimate), and only ever arrives *with* that line (a sort, a Find pass, or the
+balance POST's own response). Every response that carries a line carries both
+`floor` (the old object, kept one release) and `balance`; the frontend reads
+only `balance`. Each view has one write path, both `switchMap`-ed and
+pair-scoped so a balance the user moved past can never land last. Find's
+(`betaRequests$`, debounced) installs the returned line straight over the
+frozen scores. Label's (in `SortRunnerService`) re-runs the learned sort, but
+only from the POST's response: the learned sort reads the balance server-side
+and caches by it, so a re-sort that beat the POST would come back at the old
+balance. When the balance keeps the same count of items before and after, the
+line stays put and only its state is swapped: the count, not the state,
 decides where the line sits. The control is a False Positives - False
-Negatives spectrum with three radios under its thirds (`FLOOR_PRESETS` in
-`utils/line-floor.ts`, 0.1 / 0.5 / 0.9), and never shows a floor as a word or
-a number: each radio's tooltip says where it sits (#4298, #4317). The radios
-show the host's floor, never the click: a pick puts the DOM back on `value()`
-before emitting, so a pick the host drops (Find, mid-pass) leaves them where
-they were. A stored floor off the list is shown on the nearest radio and
-snapped to it through the control's own `valueChange`, once `busy` (the
-host's `sortBusy`) is false, because Find drops a floor change while a pass is
-running.
+Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
+`utils/line-balance.ts`: beta 2 toward false positives, 1 balanced, 0.5 toward
+false negatives), and never shows a balance as a word or a number: each
+radio's tooltip says where it sits (#4298, #4317). The radios show the host's
+balance, never the click: a pick puts the DOM back on `value()` before
+emitting, so a pick the host drops (Find, mid-pass) leaves them where they
+were. A stored balance off the list is shown on the nearest radio (nearest in
+log space, a tie to the higher beta) and snapped to it through the control's
+own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Find
+drops a balance change while a pass is running. Under the spectrum the state
+line reads "Checked · likely 55–100% right, about half of them found (checked
+5) · 32 kept" or "Top 32 kept, unchecked" (`balanceSummary`; the recall range
+is in words, `foundWords`, and as a number only in the tooltip,
+`balanceExplanation`), with a green dot when checked and a yellow one when
+not; there is no red.
 
-**The spot check** (`vt-floor-check-modal`, #4273) measures that line, in
-Train only. The control's "Check N picks" emits `check`; the left panel
-forwards it as `floorCheck`, and the label view hosts the modal behind a
-`showFloorCheck` signal. Find sets the control's `offerCheck` false and hosts
-no modal: it tests the threshold Train set, and labelling more to set one is
-too late there (#4317).
+**The spot check** (`vt-spot-check-modal`, #4273, walking to the balance's
+peak since #4413) measures that line, in Train only. The control's "Check N
+picks" emits `check`; the left panel forwards it as `check`, and the label
+view hosts the modal behind a `showSpotCheck` signal. Find sets the control's
+`offerCheck` false and hosts no modal: it tests the balance Train set, and
+labelling more to set one is too late there (#4317).
 The modal owns the check's lifecycle against `/api/precision-check` and holds a
 round's votes locally until every pick has one, then sends the round whole. It
 takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
 routes ←/→ and ↓/↑ to its holder even with a modal open and sends nothing to
-`action$`, so the ranked list behind it never votes. Each round's `voted` event
-refreshes the piles; a finished check has moved the line server-side, so the
-view re-reads it with `GET /api/min-precision` and installs it over the
-ranking on screen through `SortRunnerService.refreshLine`. No re-sort follows: a retrain moves the list
-under the result, which is what reports it `stale`, and the owner's model is
-that *later* votes do that. The line draws the same in every state; the state
-and its likely range live in the floor control and on the Stats chart, and a
-stale range differs only in its tooltip.
+`action$`, so the ranked list behind it never votes. The walk goes deeper
+while its F-beta estimate does not fall ("Better so far: checking the next
+32.") and turns back once it does ("Past the peak: checking a shorter list."),
+and the check is finished when `check.status` is `checked`; the result reads
+"Checked: likely 55–100% right, about half of them found (checked 15)." over
+"The line keeps these 32: the set where the check's balance peaked." Each
+round's `voted` event refreshes the piles; a finished check has moved the line
+server-side, so the view re-reads it with `GET /api/balance` and installs it
+over the ranking on screen through `SortRunnerService.refreshLine`. No re-sort
+follows: a retrain moves the list under the result, which is what reports it
+`stale`, and the owner's model is that *later* votes do that. The line draws
+the same in every state; the state and its likely range live in the balance
+control and on the Stats chart (which draws no horizontal line any more: a
+balance is a preference, not a precision to keep), and a stale range differs
+only in its tooltip.
 
 ### Find view (`components/find-view/`)
 

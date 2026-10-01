@@ -106,7 +106,7 @@ export interface Helpers {
   /**
    * Wait for the sorts the label view is running, or is about to start, to
    * settle. The view re-sorts on entry (once its votes load) and on a tab
-   * switch, and what it serves and the floor line it shows follow that sort,
+   * switch, and what it serves and the line it shows follow that sort,
    * so a fixed wait photographs whichever side of it the clock lands on
    * (#4299). `enterLabelView` and `leftTab` already do this.
    */
@@ -153,7 +153,7 @@ export interface Shot {
   recipe: (page: Page, h: Helpers) => Promise<void>;
   /**
    * Undo whatever the recipe changed in the app to reach its frame (items
-   * verified in Find, a moved precision floor, a detector moved to AutoRun). Runs
+   * verified in Find, a moved balance, a detector moved to AutoRun). Runs
    * after the capture, pass or fail, so no later shot inherits the change.
    * A recipe that only *poses* the app — a form filled in but not submitted,
    * a menu opened — needs none.
@@ -238,7 +238,7 @@ async function trainPair(h: Helpers): Promise<{ dataset: string; detector: strin
 
 /**
  * End the detector's live Find session (its verified pictures) and put its
- * precision floor back to the middle radio, so the next Find shot starts from a fresh scoring run
+ * balance back to the middle radio, so the next Find shot starts from a fresh scoring run
  * whatever an earlier recipe did. Find verifications live in server memory and
  * survive leaving Find, so without this one shot's checked pictures would show
  * up in the next.
@@ -246,7 +246,7 @@ async function trainPair(h: Helpers): Promise<{ dataset: string; detector: strin
 async function resetFind(h: Helpers): Promise<void> {
   const pair = await findPair(h);
   await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
-  await h.app.api('/api/min-precision', { method: 'POST', body: { min_precision: 0.5 }, ...pair });
+  await h.app.api('/api/balance', { method: 'POST', body: { beta: 1 }, ...pair });
 }
 
 /** The example's category for each picture of *dataset*, by file name. */
@@ -1046,7 +1046,7 @@ export const SHOTS: Shot[] = [
     annotations: [
       { target: '.sort-mode-group, vt-sort-bar', kind: 'box', label: 'Sort mode', at: 'right' },
       { target: '.select-mode-group, vt-select-mode', kind: 'box', label: 'Selection strategy', at: 'right' },
-      { target: 'vt-precision-floor', kind: 'box', label: 'Threshold', at: 'right' },
+      { target: 'vt-balance', kind: 'box', label: 'Threshold', at: 'right' },
     ],
     async recipe(_page, h) {
       await h.enterLabelView();
@@ -1264,9 +1264,9 @@ export const SHOTS: Shot[] = [
       await h.enterLabelView();
       await h.leftTab('Manual');
       await h.serveItem();
-      await page.locator('vt-precision-floor .floor-check-btn').first().click();
+      await page.locator('vt-balance .balance-check-btn').first().click();
       await page.locator('.pick-dot').first().waitFor({ timeout: 20000 });
-      await page.locator('vt-floor-check-modal img.image-element').first().waitFor({ timeout: 20000 });
+      await page.locator('vt-spot-check-modal img.image-element').first().waitFor({ timeout: 20000 });
       await checkStepKeys(page);
       await page.mouse.move(5, 5);
       await h.wait(1200);
@@ -1293,7 +1293,7 @@ export const SHOTS: Shot[] = [
   //
   // Each picks up where the guide's Step by step ends. A recipe that has to
   // change the app to reach its frame (verify pictures in Find, move
-  // the floor) says how to put it back in `after`; one that only poses a form
+  // the balance) says how to put it back in `after`; one that only poses a form
   // or a menu needs none.
 
   // check-and-correct.md
@@ -1343,15 +1343,15 @@ export const SHOTS: Shot[] = [
     caption: 'Step 2: (1) the Threshold moved toward False Positives, (2) the note under it, which says how many pictures the line keeps now, (3) the line in the list',
     themes: BOTH,
     annotations: [
-      { target: '.find-floor-row .floor-spectrum', kind: 'step', step: 1, at: 'top' },
-      { target: '.find-floor-row .floor-state-text', kind: 'step', step: 2, at: 'right' },
+      { target: '.find-balance-row .balance-spectrum', kind: 'step', step: 1, at: 'top' },
+      { target: '.find-balance-row .balance-state-text', kind: 'step', step: 2, at: 'right' },
       { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
     // Unchecked, as a reader meets it first: the left radio keeps the top 128, so the line
     // moves down and the note says how many it keeps now.
     async recipe(page, h) {
       await openFind(page, h);
-      await page.locator('.find-floor-row input[type="radio"][value="0.1"]').click();
+      await page.locator('.find-balance-row input[type="radio"][value="2"]').click();
       await h.wait(1500);
       // The list only draws the pictures near what it shows. Answer the next
       // picture, as Step 1 has the reader do: Find then serves from the line
@@ -1375,13 +1375,13 @@ export const SHOTS: Shot[] = [
     id: 'borderline-chart',
     embeddedIn: `${HOWTO}/borderline-matches.md#step-4-see-the-trade-off`,
     caption:
-      'The Precision by Number Returned chart for the top N pictures, with the floor drawn across it, the line marked, and the line under the chart reading it there',
+      'The Precision by Number Returned chart for the top N pictures, with the line marked and the line under the chart reading it there',
     themes: BOTH,
     clip: { target: '.chart-wrap', pad: 6 },
     async recipe(page, h) {
       await openFind(page, h);
       await verifyServed(page, h, 12);
-      await page.locator('.find-floor-row input[type="radio"][value="0.1"]').click();
+      await page.locator('.find-balance-row input[type="radio"][value="2"]').click();
       await h.wait(1500);
       await page.locator('button[aria-label="Stats"]').first().click();
       await page.waitForSelector('.chart-wrap', { timeout: 20000 });

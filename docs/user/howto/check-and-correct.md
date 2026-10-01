@@ -90,7 +90,8 @@ before you move on.
 ## Where next
 
 - [Catch the borderline matches](borderline-matches.md): review the pictures
-  either side of the line, and lower the floor to let more in.
+  either side of the line, and move the **Threshold** toward **False
+  Positives** to let more in.
 - [Decide how far to trust a detector](trust-a-detector.md): the **Stats**
   behind these calls.
 - [Send your matches somewhere](export-matches.md): export the matches, checked

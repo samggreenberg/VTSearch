@@ -188,7 +188,10 @@ class TestTrainerPluggableVoting:
 
     def test_svm_trajectory_learns(self):
         clips = _separable_clips(seed=2, n_per_cat=50)
-        rows = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=40, trainer="svm_rbf")
+        # The Inclusion arm: the cost at the model's own Inclusion 0 cut is the
+        # trainer's measure.  The default arm's line is the balance's (#4413),
+        # and on a 100-item pool the end-of-run walk keeps whatever is left.
+        rows = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=40, trainer="svm_rbf", min_precision="off")
         assert rows
         # On well-separated data the SVM should reach a low cost by the end.
         assert rows[-1]["cost"] < 0.5

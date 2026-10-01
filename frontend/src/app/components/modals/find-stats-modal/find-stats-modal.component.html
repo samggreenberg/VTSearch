@@ -145,16 +145,12 @@
           <text class="tick" [attr.x]="t.x" [attr.y]="axisBottom + 14" text-anchor="middle">{{ t.label }}</text>
         }
         <text class="axis-caption" [attr.x]="(axisLeft + axisRight) / 2" [attr.y]="axisBottom + 29" text-anchor="middle">Items returned (log scale)</text>
-        <!-- the floor: the precision the line is asked to keep -->
-        @if (floorY !== null) {
-          <line class="floor" [attr.x1]="axisLeft" [attr.y1]="floorY" [attr.x2]="axisRight" [attr.y2]="floorY" />
-        }
-        <!-- the line (current cut): the last item of the set the floor keeps -->
+        <!-- the line (current cut): the last item of the set the balance keeps -->
         @if (cutX !== null) {
           <line class="current" [attr.x1]="cutX" [attr.y1]="axisTop" [attr.x2]="cutX" [attr.y2]="axisBottom" />
         }
-        <!-- the check's likely range for that set, standing at the line where it
-             meets the floor; a stale range differs only in its tooltip -->
+        <!-- the check's likely range for that set's share right, standing at
+             the line; a stale range differs only in its tooltip -->
         @if (cutX !== null && lineRange; as r) {
           <g class="likely-range" role="img" [attr.aria-label]="rangeTooltip">
             <title>{{ rangeTooltip }}</title>
@@ -175,9 +171,6 @@
       </svg>
       <div class="chart-legend">
         <span class="legend-item"><span class="swatch swatch-verified"></span>Checked by you</span>
-        @if (floorY !== null) {
-          <span class="legend-item" title="The precision the Threshold asks of what the line keeps"><span class="swatch swatch-floor"></span>Threshold</span>
-        }
         <span class="legend-item"><span class="swatch swatch-current"></span>{{ lineLegend }}</span>
         @if (lineRange) {
           <span class="legend-item" [title]="rangeTooltip"><span class="swatch swatch-range"></span>{{ rangeLegend }}</span>
@@ -194,15 +187,13 @@
           Nothing clears the line.
         }
       </p>
-      @if (lineFloor; as floor) {
-        @if (floor.status === 'unchecked') {
+      @if (lineBalance; as balance) {
+        @if (balance.status === 'unchecked') {
           <p class="chart-note" role="note">
-            The line keeps the top {{ floor.count | number }}, unchecked: no check has measured how much of it is right.
+            The line keeps the top {{ balance.count | number }}, unchecked: no check has measured how much of it is right.
           </p>
-        } @else if (floor.status === 'short' && floor.range) {
-          <p class="chart-note" role="note" [title]="rangeTooltip">
-            Fell short: a check of {{ floor.range.labelled }} random picks found the top {{ floor.count | number }} the line keeps likely {{ rangeText(floor.range) }} right.
-          </p>
+        } @else if (checkedNote; as note) {
+          <p class="chart-note" role="note" [title]="rangeTooltip">{{ note }}</p>
         }
       }
       @if (!hasVerified) {

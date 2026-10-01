@@ -273,22 +273,26 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
-        id="thresholds.min_precision_default",
-        app="py:vtscore.state.__init__.get_min_precision",
-        harness="vtscore/training/thresholds/precision_floor.py::resolve_min_precision",
+        id="thresholds.line_preference_default",
+        app="py:vtscore.state.__init__.line_knobs",
+        harness="vtscore/training/thresholds/spot_check.py::resolve_line_knobs",
         kind="default",
         note=(
-            "What floor a detector cuts at when nobody set one (#4245): the app seeds each "
-            "detector from the user's setting, whose unset value is DEFAULT_MIN_PRECISION, and "
-            "the harness's min_precision=None resolves to that same constant. The value cannot "
-            "drift - both read one constant, and tests/sorting/test_min_precision_route.py "
-            "pins UserSettings' default against the resolver - so this digest watches the "
-            "*resolution*: if the app's floor starts depending on something else (the dataset, "
-            "the embedder, a per-detector default), that has to reach the harness too."
+            "What preference a detector's line is drawn at when nobody pinned one (#4245, #4413): "
+            "the app's line_knobs reads the line_preference setting (DEFAULT_LINE_PREFERENCE, the "
+            "balance since #4413's last step) and hands the trainer the beta it names (DEFAULT_BETA "
+            "when unset) or, under the deprecated floor, the floor (DEFAULT_MIN_PRECISION when unset); "
+            "the harness's resolve_line_knobs resolves min_precision=None, beta=None to the same "
+            "constants. The values cannot drift - both sides read the same constants, and "
+            "tests/sorting/test_balance_routes.py pins UserSettings' defaults against the wire - so "
+            "this digest watches the *resolution*: if the app's preference starts depending on "
+            "something else (the dataset, the embedder, a per-detector default), that has to reach "
+            "the harness too."
         ),
         divergence=(
-            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned floor where "
-            "the app has a per-user setting; the DEFAULT arm passes None and resolves here."
+            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm), a pinned floor and a pinned "
+            "beta where the app has per-user settings; the DEFAULT arm passes None for both and "
+            "resolves here."
         ),
     ),
     Mirror(
@@ -455,9 +459,9 @@ MIRRORS: list[Mirror] = [
             "the app reads no stored Inclusion: its conformal cut is at "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
             "whose default, 0, is that cut. Since #4413 the app draws the line at whichever preference "
-            "`line_knobs` names - the floor (the default until the switch's last step) or the balance "
-            "(beta) - and hands both to _fused_threshold; the harness's default arm is the floor's until "
-            "step 3 of #4413 adds the balance arm."
+            "`line_knobs` names - the balance (beta, the default since the switch's last step) or the "
+            "deprecated floor - and hands both to _fused_threshold; the harness's default arm is the "
+            "balance's at DEFAULT_BETA (resolve_line_knobs, the thresholds.line_preference_default mirror)."
         ),
     ),
     Mirror(

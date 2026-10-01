@@ -1,4 +1,4 @@
-.precision-floor {
+.balance {
   // The hint's tooltip hangs below this block, as wide as it (`below-block`).
   position: relative;
   display: flex;
@@ -8,14 +8,14 @@
 }
 
 // "Threshold", its hint, and any controls a host projects (Find's actions).
-.floor-head {
+.balance-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2xs);
 }
 
-.floor-label {
+.balance-label {
   font-size: var(--font-sm);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -23,7 +23,7 @@
 
 // The spectrum and the three radios under it share one width, so each radio
 // sits centred under its third of the bar.
-.floor-spectrum {
+.balance-spectrum {
   display: flex;
   flex-direction: column;
   gap: var(--space-2xs);
@@ -75,7 +75,7 @@
 // in the muted small type of the left panel's `.all-labeled-note`. It wraps:
 // the note keeps a readable width, and where the panel is too narrow for it
 // and the check button side by side, the button drops to the next line.
-.floor-state {
+.balance-state {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -96,6 +96,7 @@
     transform: translateY(-1px);
   }
 
+  // Checked is green, unchecked yellow; nothing falls short any more (#4413).
   &[data-status="green"] .indicator-dot {
     background: var(--status-green-dot);
   }
@@ -103,13 +104,9 @@
   &[data-status="yellow"] .indicator-dot {
     background: var(--status-yellow-dot);
   }
-
-  &[data-status="red"] .indicator-dot {
-    background: var(--status-red-dot);
-  }
 }
 
-.floor-state-text {
+.balance-state-text {
   // Room for the note on its own; below this the button wraps under it.
   flex: 1 1 16em;
   min-width: 0;
@@ -118,7 +115,7 @@
 
 // The check affordance rides the state line it measures, in the line's small
 // type rather than the toolbar's, so it reads as part of the sentence.
-.floor-check-btn {
+.balance-check-btn {
   flex-shrink: 0;
   padding: 0 var(--space-sm);
   font-size: var(--font-2xs);

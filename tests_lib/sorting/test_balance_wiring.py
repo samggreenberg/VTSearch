@@ -1,7 +1,8 @@
 """The balance as a setting and a per-detector preference (#4413, step 2).
 
 ``beta`` is per detector and seeded from the user's setting on first read,
-as the floor is; ``line_preference`` says which of the two draws the line.
+as the floor is; ``line_preference`` says which of the two draws the line (the
+balance by default since the switch's last step; the floor is deprecated).
 Under the balance a change of beta re-cuts every loaded detector at its own
 beta without a retrain; under the floor it moves nothing.  The detector's
 balance state is the wire shape beside ``threshold``.
@@ -54,7 +55,7 @@ class TestTheSetting:
         set_thread_detector_context(ctx)
         assert get_beta() == DEFAULT_BETA == 1.0
         assert ctx.beta_seeded and ctx.beta == DEFAULT_BETA
-        assert get_line_preference() == DEFAULT_LINE_PREFERENCE == "floor"
+        assert get_line_preference() == DEFAULT_LINE_PREFERENCE == "balance"
 
     @pytest.mark.parametrize("bad", [0.0, 0.2, 5.0, -1.0])
     def test_a_balance_outside_the_range_is_refused(self, bad):
@@ -66,7 +67,7 @@ class TestTheSetting:
         with pytest.raises(ValueError, match="line_preference must be one of"):
             set_line_preference("inclusion")
 
-    def test_under_the_floor_a_balance_change_moves_no_line(self):
+    def test_under_the_floor_a_balance_change_moves_no_line(self, floor_preference):
         ctx = _ctx("det-beta-under-floor")
         set_thread_detector_context(ctx)
         register_detector_context(ctx)
@@ -76,6 +77,16 @@ class TestTheSetting:
 
 
 class TestTheLine:
+    def test_a_balance_serves_no_inclusion_so_smart_recuts_at_its_own(self):
+        """Under a balance the line keeps a set, not an inclusion (#4243, #4413): Smart re-cuts at Inclusion 0."""
+        from vtscore.state.core import detector_line_inclusion
+        from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
+
+        ctx = _ctx("det-line-inclusion")
+        assert detector_line_inclusion(ctx, None) == PRECISION_FLOOR_FALLBACK_INCLUSION
+        assert detector_line_inclusion(ctx, None, 1.0) is None
+        assert detector_line_inclusion(ctx, 0.5, None) is None
+
     def test_the_recut_under_a_balance_keeps_the_mixtures_argmax_under_the_cap(self):
         ctx = _ctx()
         voted = human_voted_ids(ctx)
