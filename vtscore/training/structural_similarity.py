@@ -218,21 +218,26 @@ def best_match_stats_many(
 
 @dataclass
 class VerificationScorer:
-    """Maps a :class:`MatchStats` to a match score in ``[0, 1]``: the inlier gate.
+    """Maps a :class:`MatchStats` to a match score in ``[0, 1)``: ``n / (n + min_inliers)``.
 
-    Continuous, crossing :data:`STRUCTURAL_DECISION_THRESHOLD` exactly at
-    *min_inliers* (so ``MatchStats.is_match`` and "score >= 0.5" agree) and
-    saturating at 1.0 by ``2 * min_inliers``.  :func:`structural_rerank` orders
-    fits past saturation by their raw inlier count.
+    Monotone in the inlier count *n*, crossing :data:`STRUCTURAL_DECISION_THRESHOLD`
+    exactly at *min_inliers* (so ``MatchStats.is_match`` and "score >= 0.5" agree).
+    It never saturates, so a threshold above the gate (the Bad ceiling, #4367) is
+    still a threshold on this scale (:meth:`threshold_for`).
     """
 
     min_inliers: int = DEFAULT_MIN_INLIERS
 
     def score(self, stats: MatchStats) -> float:
-        """The gate's score for *stats*; 0 when RANSAC found no sane model."""
+        """The score for *stats*; 0 when RANSAC found no sane model."""
         if not stats.model_ok:
             return 0.0
-        return float(min(1.0, stats.inlier_count / (2.0 * self.min_inliers)))
+        return self.threshold_for(stats.inlier_count)
+
+    def threshold_for(self, inliers: float) -> float:
+        """The score at which a fit has exactly *inliers* inliers."""
+        n = max(0.0, float(inliers))
+        return float(n / (n + self.min_inliers)) if n > 0 else 0.0
 
 
 # --------------------------------------------------------------------------
@@ -370,6 +375,7 @@ def maybe_structural_rerank(
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
     feature_snap: Optional[dict[Any, dict]] = None,
+    bad_votes: Any = None,
 ) -> tuple[list[dict], float]:
     """Apply the Stage-2 re-rank when the active dataset is structural.
 
@@ -379,6 +385,11 @@ def maybe_structural_rerank(
     cost and see no behaviour change.  For a structural dataset it builds the
     RegionYes templates, re-ranks the shortlist by the inlier gate, and returns
     the gate's boundary as the threshold.
+
+    On a tiled dataset with Bad votes (*bad_votes*), the returned threshold is
+    the Bad ceiling instead: a page must fit better than every Bad did
+    (:func:`_bad_ceiling_threshold`, #4367). Bads still never enter the ranking
+    (#4169).
 
     **On a tiled dataset** (``sift_vlad_doc``, pages carrying ``tile_vectors``)
     Stage 1 is replaced too.  The caller's *results* (the detector head's
@@ -434,6 +445,11 @@ def maybe_structural_rerank(
             ]
             cache = _verification_cache(det_ctx)
 
+    threshold_out = STRUCTURAL_DECISION_THRESHOLD
+    if template_keys is not None and cache is not None and bad_votes:
+        threshold_out = _bad_ceiling_threshold(
+            list(zip(template_keys, [tpl for _, tpl in templates])), bad_votes, feat_snap, matcher, cache
+        )
     reranked = _rerank_growing(
         results,
         snap,
@@ -445,7 +461,31 @@ def maybe_structural_rerank(
         cache=cache,
         tiled=template_keys is not None,
     )
-    return reranked, STRUCTURAL_DECISION_THRESHOLD
+    return reranked, threshold_out
+
+
+def _bad_ceiling_threshold(
+    templates: list[tuple[Any, StructuralFeatures]],
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> float:
+    """The returned set's line on a tiled dataset: above the best fit any Bad vote reached (#4367).
+
+    The fixed 8-inlier gate passes hard negatives on a document page at 8,192
+    keypoints. A Bad vote tells us how well a page that is not the mark can fit
+    these templates, so a page is accepted only if it fits better than every Bad.
+    That took the returned set's F1 from 0.43 to 0.85 at 25 clicks on FullMarks
+    (#4367's pre-registered R1). With no Bads, or none that fit, it is the gate.
+    """
+    bads = [(b, f) for b in bad_votes if (f := _local_features(feature_snap.get(b))) is not None and f.count > 0]
+    scorer = VerificationScorer()
+    if not bads:
+        return STRUCTURAL_DECISION_THRESHOLD
+    fits = cache.best_many(templates, bads, matcher)
+    ceiling = max((s.inlier_count if s.model_ok else 0) for s in fits)
+    return scorer.threshold_for(max(scorer.min_inliers, ceiling + 1))
 
 
 def _rerank_growing(

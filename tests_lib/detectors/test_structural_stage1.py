@@ -227,3 +227,44 @@ class TestShortlistGrowth:
         matcher.calls = 0
         maybe_structural_rerank(results, 0.5, snap, {0: None}, {})
         assert s1.LAST_TOP_K == 10 and matcher.calls == 10  # 4 -> 8 -> 10 (cap); no page verified twice
+
+
+class TestBadCeiling:
+    """#4367 (pre-registered R1): on a tiled dataset the line sits above the best fit any Bad reached."""
+
+    def _setup(self, tiled, monkeypatch, inliers_by_page):
+        snap = tiled(6)
+        matcher = _CountingMatcher({id(snap[mid]["local_features"]): n for mid, n in inliers_by_page.items()})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = line_ranking = None
+
+        return snap, Ctx()
+
+    def test_the_line_rises_above_the_best_fitting_bad(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        # Page 3 is a Bad that fits with 30 inliers: only pages with >= 31 may be returned.
+        out, thresh = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None})
+        assert thresh == pytest.approx(31 / (31 + 8))
+        assert {e["id"] for e in out if e["score"] >= thresh} == {0, 1, 2}
+        # Without the Bad it is the shipped 8-inlier gate.
+        _out, gate = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx)
+        assert gate == 0.5
+
+    def test_a_bad_that_does_not_fit_leaves_the_gate(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        _out, thresh = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={5: None})
+        assert thresh == 0.5  # 3 inliers is below the gate: max(8, 3 + 1) = 8
+
+    def test_an_untiled_dataset_keeps_the_gate_whatever_the_bads(self, monkeypatch):
+        feats = {mid: _features(mid, 30) for mid in range(6)}
+        snap = {mid: {"embedder": "sift_vlad", "local_features": f} for mid, f in feats.items()}
+        matcher = _CountingMatcher({id(f): 40 for f in feats.values()})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        _out, thresh = maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, bad_votes={3: None})
+        assert thresh == 0.5

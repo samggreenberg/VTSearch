@@ -920,7 +920,7 @@ def maybe_labelset_structural_rerank(
     if not snap or not snapshot_is_structural(snap):
         return results, threshold
     populate_label_local_features(det_ctx, labelset, snap=snap)
-    feature_snap, good_votes, _bad_votes, region_boxes = _labelset_feature_snapshot(det_ctx, labelset)
+    feature_snap, good_votes, bad_votes, region_boxes = _labelset_feature_snapshot(det_ctx, labelset)
     if not good_votes:
         return results, threshold
     return maybe_structural_rerank(
@@ -931,6 +931,7 @@ def maybe_labelset_structural_rerank(
         region_boxes,
         det_ctx,
         feature_snap=feature_snap,
+        bad_votes=bad_votes,
     )
 
 
