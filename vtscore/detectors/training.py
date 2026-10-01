@@ -1527,7 +1527,9 @@ def train_and_score(
     # by the inlier gate.  See docs/plans/structural-embedder.md.
     from vtscore.training.structural_similarity import maybe_structural_rerank  # noqa: PLC0415
 
-    results, threshold = maybe_structural_rerank(results, threshold, clips_dict, good_votes, region_boxes, det_ctx)
+    results, threshold = maybe_structural_rerank(
+        results, threshold, clips_dict, good_votes, region_boxes, det_ctx, bad_votes=bad_votes
+    )
     return results, threshold, model
 
 

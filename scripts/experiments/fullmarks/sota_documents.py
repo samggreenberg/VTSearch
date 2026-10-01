@@ -142,12 +142,81 @@ def cut_metrics(hits: np.ndarray) -> dict[str, float]:
     return out
 
 
+def save_frame(
+    out: Path,
+    cid: str,
+    v: int,
+    pool_ids: list[str],
+    positive: np.ndarray,
+    test: np.ndarray,
+    snap: dict,
+    goods: dict,
+    bads: dict,
+    boxes: dict,
+    det_ctx: Any,
+) -> None:
+    """Everything an accept rule may read at click *v*, per pool page and per vote (#4367).
+
+    Per page: the Stage-1 score against the current queries, whether the page is in the
+    verified shortlist, and its best inliers over the current templates (from the app's
+    own verification cache). Per Good: its leave-one-out inliers (its own template
+    excluded) and leave-one-out Stage-1 score (its own query excluded). Per Bad: its best
+    inliers.
+    """
+    from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+
+    cache = det_ctx.structural_verification_cache
+    col = {p: i for i, p in enumerate(pool_ids)}
+    keys = [(g, boxes.get(g), id(snap[g].get("local_features"))) for g in goods]
+
+    def best(page: str, exclude: Optional[str] = None) -> float:
+        fits = [cache.fit(k, page) for k in keys if k[0] != exclude]
+        fits = [f for f in fits if f is not None]
+        return float(max((f.inlier_count if f.model_ok else 0) for f in fits)) if fits else float("nan")
+
+    def stage1(queries_from: dict) -> np.ndarray:
+        q = s1.vote_queries(queries_from, snap, boxes)
+        scores = np.zeros(len(pool_ids), dtype=np.float32)
+        if q is None:
+            return scores
+        for e in s1.tiled_stage1(snap, q):
+            scores[col[e["id"]]] = e["score"]
+        return scores
+
+    s1_all = stage1(goods)
+    order = np.argsort(-s1_all, kind="stable")
+    shortlisted = np.zeros(len(pool_ids), dtype=bool)
+    shortlisted[order[: s1.LAST_TOP_K]] = True
+    inliers = np.array([best(p) if shortlisted[i] else np.nan for i, p in enumerate(pool_ids)], dtype=np.float32)
+    good_ids = list(goods)
+    good_loo_inl = np.array([best(g, exclude=g) for g in good_ids], dtype=np.float32)
+    good_loo_s1 = np.array(
+        [stage1({o: None for o in goods if o != g})[col[g]] if len(goods) > 1 else np.nan for g in good_ids],
+        dtype=np.float32,
+    )
+    bad_ids = list(bads)
+    bad_inl = np.array([best(b) for b in bad_ids], dtype=np.float32)
+    out.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        out / f"{cid.replace('/', '__')}__v{v:03d}.npz",
+        positive=positive,
+        test=test,
+        stage1=s1_all,
+        shortlisted=shortlisted,
+        inliers=inliers,
+        good_ids=np.array(good_ids),
+        good_loo_inliers=good_loo_inl,
+        good_loo_stage1=good_loo_s1,
+        bad_ids=np.array(bad_ids),
+        bad_inliers=bad_inl,
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.media.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
     from vtscore.state.core import DetectorContext  # noqa: PLC0415
     from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
     from vtscore.training.structural_similarity import (  # noqa: PLC0415
-        STRUCTURAL_DECISION_THRESHOLD,
         maybe_structural_rerank,
         maybe_structural_rerank_example,
     )
@@ -160,9 +229,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--max-v", type=int, default=50)
     ap.add_argument("--feature-cache", type=Path)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
+    ap.add_argument(
+        "--frames",
+        default="",
+        help="clicks at which to save per-page frames for accept-rule studies (#4367), e.g. 10,25,50",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
+    frame_at = {int(x) for x in args.frames.split(",") if x}
 
     classes = json.loads((args.corpus / "classes.json").read_text(encoding="utf-8"))
     pages = {p.page_id: p for p in embed_corpus.pages_for_tier(args.corpus, args.tier)}
@@ -226,9 +301,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for v in range(args.max_v + 1):
             t1 = time.time()
             if goods:
-                ranked, _ = maybe_structural_rerank(placeholder, 0.5, snap, goods, boxes, det_ctx)
+                ranked, line = maybe_structural_rerank(placeholder, 0.5, snap, goods, boxes, det_ctx, bad_votes=bads)
             else:
-                ranked, _ = maybe_structural_rerank_example(placeholder, 0.5, snap, crop)
+                ranked, line = maybe_structural_rerank_example(placeholder, 0.5, snap, crop)
             retrain_s = time.time() - t1
             order = np.array([col[e["id"]] for e in ranked])
             score = np.array([float(e["score"]) for e in ranked])
@@ -237,7 +312,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             rest, rest_score = order[keep], score[keep]
             hits = positive[rest]
             ap_now = vc.average_precision(rest, positive)
-            g_prec, g_rec, g_f1, g_k = set_metrics(rest_score >= STRUCTURAL_DECISION_THRESHOLD, hits)
+            # The returned set is what the app returns: scores at or above the line it hands back.
+            g_prec, g_rec, g_f1, g_k = set_metrics(rest_score >= line, hits)
             steps.append(
                 {
                     "class_id": cid,
@@ -254,6 +330,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "gate_recall": g_rec,
                     "gate_f1": g_f1,
                     "gate_k": g_k,
+                    "line": line,
                     **cut_metrics(hits),
                     "retrain_s": round(retrain_s, 2),
                     "top_k": s1.LAST_TOP_K,
@@ -263,6 +340,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 clicks[-1]["ap_after"] = ap_now
                 clicks[-1]["credit"] = ap_now - prev_ap
             prev_ap = ap_now
+            if v in frame_at and goods:
+                save_frame(args.out / "frames", cid, v, pool_ids, positive, test, snap, goods, bads, boxes, det_ctx)
             if v == args.max_v:
                 # Where each test-half positive sits at the end: inside the verified shortlist or
                 # beyond it, and its gate score, so a weak class's misses can be told apart.

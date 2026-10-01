@@ -183,7 +183,10 @@ class TestVerificationScorerColdStart:
         assert at_gate == pytest.approx(0.5)
         # Below the gate is below threshold; well above saturates at 1.0.
         assert scorer.score(MatchStats(inlier_count=2, model_ok=True)) < STRUCTURAL_DECISION_THRESHOLD
-        assert scorer.score(MatchStats(inlier_count=100, model_ok=True)) == 1.0
+        # Monotone and never saturating (#4367): more inliers always scores higher.
+        hi, higher = (scorer.score(MatchStats(inlier_count=n, model_ok=True)) for n in (100, 200))
+        assert 0.9 < hi < higher < 1.0
+        assert scorer.threshold_for(DEFAULT_MIN_INLIERS) == pytest.approx(0.5)
 
 
 class _StubMatcher:
@@ -209,7 +212,7 @@ def _dummy_features(seed: int) -> StructuralFeatures:
 
 
 class TestInlierOrderPastSaturation:
-    """#4169: the gate saturates at ``2 * min_inliers``; past that, more inliers still ranks first."""
+    """#4169: more inliers ranks first (and, since #4367, also scores higher), then Stage 1."""
 
     def test_saturated_fits_are_ordered_by_inliers_then_stage1(self):
         feats = {i: _dummy_features(i) for i in (1, 2, 3, 4)}
@@ -226,7 +229,7 @@ class TestInlierOrderPastSaturation:
         out = structural_rerank(results, snap, [_dummy_features(9)], VerificationScorer(), matcher, top_k=50)
         assert [e["id"] for e in out] == [2, 1, 3, 4]
         # The reported score stays the gate's, so order and score agree.
-        assert [e["score"] for e in out] == [1.0, 1.0, 1.0, 0.0]
+        assert [e["score"] for e in out] == [0.8824, 0.7143, 0.7143, 0.0]  # n / (n + 8), rounded
 
 
 # --------------------------------------------------------------------------

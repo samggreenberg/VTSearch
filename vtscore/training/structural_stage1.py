@@ -281,6 +281,11 @@ class VerificationCache:
     def __len__(self) -> int:
         return len(self._fits)
 
+    def fit(self, template_key: Any, candidate_key: Any) -> Optional[MatchStats]:
+        """The cached fit of one template against one page, or ``None`` if never verified."""
+        hit = self._fits.get((template_key, candidate_key))
+        return None if hit is None else hit[1]
+
     def best_many(
         self,
         templates: Sequence[tuple[Any, StructuralFeatures]],
