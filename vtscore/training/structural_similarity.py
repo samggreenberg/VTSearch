@@ -35,6 +35,8 @@ from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Optional
 
+import numpy as np
+
 from vtscore.training.structural_stage1 import (
     VerificationCache,
     example_queries,
@@ -436,14 +438,21 @@ def maybe_structural_rerank(
     template_keys = None
     cache = None
     if snapshot_has_tiles(snap):
-        queries = vote_queries(good_votes, feat_snap, region_boxes)
+        cache = _verification_cache(det_ctx)
+        prune_tags: dict[Any, Any] = {}
+        if STOPLIST_POLICY != "off" and bad_votes:
+            templates, prune_tags = _stoplist(templates, bad_votes, feat_snap, matcher, cache, region_boxes)
+        boxed = {cid: tpl for cid, tpl in templates if region_boxes.get(cid) is not None}
+        queries = vote_queries(good_votes, feat_snap, region_boxes, boxed)
         if queries is not None:
             results = tiled_stage1(snap, queries, score_key)
             top_k = tiled_top_k(len(results))
             template_keys = [
-                (cid, region_boxes.get(cid), id(feat_snap[cid].get("local_features"))) for cid, _ in templates
+                (cid, region_boxes.get(cid), id(feat_snap[cid].get("local_features")), prune_tags.get(cid))
+                for cid, _ in templates
             ]
-            cache = _verification_cache(det_ctx)
+        else:
+            cache = None
 
     threshold_out = STRUCTURAL_DECISION_THRESHOLD
     if template_keys is not None and cache is not None and bad_votes:
@@ -462,6 +471,67 @@ def maybe_structural_rerank(
         tiled=template_keys is not None,
     )
     return reranked, threshold_out
+
+
+#: Stop-list from Bad votes (#4170 / #4180, pre-registered arms): ``"off"`` (shipped),
+#: ``"all"`` prunes each Good template against every Bad, ``"gated"`` only against the
+#: Bads that clear the gate for that template.
+STOPLIST_POLICY = "off"
+#: The Lowe ratio the stop-list's matches use (#4162's arm 6).
+_STOPLIST_RATIO = 0.75
+
+
+def _stoplist(
+    templates: list[tuple[Any, StructuralFeatures]],
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+    region_boxes: dict[Any, tuple[float, float, float, float]],
+) -> tuple[list[tuple[Any, StructuralFeatures]], dict[Any, Any]]:
+    """Each Good template without the descriptors a Bad page also matches; ``(templates, prune tags)``.
+
+    A descriptor that passes the ratio test against a Bad vote's page is part of
+    what lets that Bad match (a letterhead rule, a font's glyphs), so it is not
+    the mark. #4180's guard keeps one that also passes against another Good's
+    page. A tag per pruned template (the dropped indices) keys the verification
+    cache, so a template that changes is re-verified and one that does not keeps
+    its fits.
+    """
+    from vtscore.media.structural import ratio_test_matches  # noqa: PLC0415
+
+    bads = {b: f for b in bad_votes if (f := _local_features(feature_snap.get(b))) is not None and f.count > 0}
+    if not bads:
+        return templates, {}
+    goods = {cid: _local_features(feature_snap.get(cid)) for cid, _ in templates}
+    out: list[tuple[Any, StructuralFeatures]] = []
+    tags: dict[Any, Any] = {}
+    for cid, tpl in templates:
+        use = list(bads.values())
+        if STOPLIST_POLICY == "gated" and cache is not None:
+            key = (cid, region_boxes.get(cid), id(goods[cid]), None)
+            fits = cache.best_many([(key, tpl)], list(bads.items()), matcher)
+            use = [f for (b, f), s in zip(bads.items(), fits) if s.model_ok and s.inlier_count >= DEFAULT_MIN_INLIERS]
+        desc = tpl.descriptors_f32()
+        if not use or desc.shape[0] < 2:
+            out.append((cid, tpl))
+            continue
+        drop = np.zeros(desc.shape[0], dtype=bool)
+        for t_idx, _c in ratio_test_matches(desc, [f.descriptors_f32() for f in use], ratio=_STOPLIST_RATIO):
+            drop[t_idx] = True
+        others = [g for o, g in goods.items() if o != cid and g is not None and g.count > 0]
+        if others and drop.any():
+            confirmed = np.zeros(desc.shape[0], dtype=bool)
+            for t_idx, _c in ratio_test_matches(desc, [g.descriptors_f32() for g in others], ratio=_STOPLIST_RATIO):
+                confirmed[t_idx] = True
+            drop &= ~confirmed
+        if not drop.any() or drop.all():
+            out.append((cid, tpl))
+            continue
+        keep = ~drop
+        out.append((cid, StructuralFeatures(keypoints=tpl.keypoints_f32()[keep], descriptors=desc[keep])))
+        tags[cid] = hash(np.flatnonzero(drop).tobytes())
+    return out, tags
 
 
 def _bad_ceiling_threshold(

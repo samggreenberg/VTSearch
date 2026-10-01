@@ -268,3 +268,51 @@ class TestBadCeiling:
         results = [{"id": mid, "score": 0.0} for mid in snap]
         _out, thresh = maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, bad_votes={3: None})
         assert thresh == 0.5
+
+
+class TestStoplist:
+    """#4170 / #4180 (pre-registered arms): Good templates drop what a Bad page also matches."""
+
+    def _shared(self):
+        """Template 0 = 20 'mark' descriptors + 20 'glyph' descriptors; the Bad page holds only the glyphs."""
+        rng = np.random.default_rng(7)
+        mark = (rng.random((20, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+        glyph = (rng.random((20, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+        kp = np.zeros((40, 4), dtype=np.float32)
+        kp[:, :2] = rng.random((40, 2))
+        tpl = StructuralFeatures(keypoints=kp, descriptors=np.vstack([mark, glyph]))
+        noise = (rng.random((200, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+        bad_kp = np.zeros((220, 4), dtype=np.float32)
+        bad = StructuralFeatures(keypoints=bad_kp, descriptors=np.vstack([glyph + 1.0, noise]))
+        return tpl, bad, mark
+
+    def test_descriptors_a_bad_matches_are_dropped(self, monkeypatch):
+        import vtscore.training.structural_similarity as ss
+
+        tpl, bad, _ = self._shared()
+        monkeypatch.setattr(ss, "STOPLIST_POLICY", "all")
+        out, tags = ss._stoplist([("g", tpl)], {"b": None}, {"b": {"local_features": bad}}, None, None, {})
+        assert out[0][1].count == 20  # the 20 glyphs are gone, the mark stays
+        assert "g" in tags
+
+    def test_a_descriptor_another_good_also_has_is_kept(self, monkeypatch):
+        import vtscore.training.structural_similarity as ss
+
+        tpl, bad, mark = self._shared()
+        rng = np.random.default_rng(9)
+        # Another Good page carries the glyphs too (the mark inside a lockup, #4180): they stay.
+        other = StructuralFeatures(
+            keypoints=np.zeros((40, 4), dtype=np.float32),
+            descriptors=np.vstack(
+                [tpl.descriptors_f32()[20:] - 1.0, (rng.random((20, SIFT_DESCRIPTOR_DIM)) * 255)]
+            ).astype(np.float32),
+        )
+        monkeypatch.setattr(ss, "STOPLIST_POLICY", "all")
+        snap = {"b": {"local_features": bad}, "g": {"local_features": tpl}, "h": {"local_features": other}}
+        out, _tags = ss._stoplist([("g", tpl), ("h", other)], {"b": None}, snap, None, None, {})
+        assert out[0][1].count == 40
+
+    def test_shipped_policy_is_off(self):
+        import vtscore.training.structural_similarity as ss
+
+        assert ss.STOPLIST_POLICY == "off"
