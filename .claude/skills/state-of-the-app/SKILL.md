@@ -106,6 +106,34 @@ same edit.
   |z| > 3 count **next to the shuffled-image null** that `summary.md` prints.
   At 3 seeds nothing cleared it; at 7 seeds (2026-09-24) the harmful side did.
 
+## Document Logo (the structural path): standing decisions (owner, 2026-10-01, #4392)
+
+The document path (`sift_vlad_doc`, the tiled Stage 1 from #3928 / #4391)
+differs from the photo paths, and the owner settled how its review works:
+
+- **Harness:** `scripts/experiments/fullmarks/app_replay_tiled.py`, which calls
+  the app's own `maybe_structural_rerank(_example)`. `vtscore.eval` has no
+  structural path, and porting one is not a precondition for the review.
+- **Bench:** FullMarks (current frozen version), its roster classes and
+  #4162's `own_verified` pools. The opening (click 0) is example sort with the
+  class's query crop. There is no text opening, because the embedder has no
+  text side.
+- **The line:**
+  - report the set the app returns, which is the inlier gate (score ≥ 0.5,
+    i.e. ≥ 8 inliers);
+  - next to it, floor-style cuts at P = 10 / 50 / 90%;
+  - the structural path has no precision-floor estimator, so a P-cut is the
+    best cut of the same ranking with precision ≥ P (an oracle). Say so
+    wherever it appears.
+- **Repeats:** one closed-loop run per class. The path is deterministic given
+  the crop, so per-image claims rest on one observation and are labelled
+  single-observation.
+- **No ceiling** ("full-label" notch) in structural mode for now. The Headroom
+  section is omitted, and the curves end at the last click.
+- **No spot check:** the structural path has none, so that section is omitted.
+- Everything else (two significant digits, a figure per claim, literal
+  examples, the "app as it is now" framing) is as for the photo reports.
+
 ## How to run it
 
 ```bash
