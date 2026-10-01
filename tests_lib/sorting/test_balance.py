@@ -124,6 +124,23 @@ class TestTheMixturesCount:
         check = SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, walk_positives(ranking, 1.0, labels))
         assert check.n_pos == 16.0 and check.pending
 
+    def test_and_the_cap_when_a_sound_fit_counts_fewer_than_one_positive(self):
+        """Every positive voted Good: the fit is sound and right that none is left, but it is no denominator.
+
+        Ten items around 0.85, all voted Good, and forty around 0.2.  The
+        line keeps the mixture's count of one; the walk reads recall against
+        the cap lowered to the 32 unvoted, not against a count near zero,
+        which would report every check as having found every positive.
+        """
+        base, _ = _two_populations(n_high=10, n_low=40)
+        labels = {**dict.fromkeys(range(1, 11), True), **dict.fromkeys(range(11, 19), False)}
+        ranking = LineRanking.from_scores(base.ids.tolist(), base.scores, set(labels))
+        n_pos = mixture_positives(ranking, labels)
+        assert n_pos is not None and n_pos < 1.0, "the premise: a sound fit with nothing left"
+        assert fbeta_count(ranking, 1.0, labels) == 1
+        assert walk_positives(ranking, 1.0, labels) == 32.0
+        assert walk_positives(ranking, 2.0, labels) == 32.0, "128 lowered to the 32 unvoted"
+
 
 class TestTheWalk:
     def test_it_walks_deeper_to_the_f1_peak_and_keeps_its_edge(self):
@@ -178,6 +195,32 @@ class TestTheWalk:
         assert len(check.labels) == 25
         recall = check.recall_range()
         assert recall is not None and recall.hi == pytest.approx(1.0)
+
+    @pytest.mark.parametrize(
+        ("positives", "kept"),
+        [
+            (set(range(1, 9)), 8),  # the first band right, the second wrong: F1 1.0 at 8, 0.67 at 16
+            (set(range(1, 17)), 16),  # everything right: the last band is the peak
+            (set(), 8),  # nothing right: F1 ties at 0, and the tie keeps the smaller set
+        ],
+    )
+    def test_from_a_start_on_the_last_band_it_walks_shallower(self, positives, kept):
+        """A ranking no larger than the cap starts on its last band, which has no deeper step.
+
+        The walk used to end there, keeping the whole ranking whatever its
+        audits said; like the reference's ``rule_fb_walk`` it now tries the
+        other way.  Both bands are audited at the start, so stepping back
+        costs nothing.
+        """
+        check = SpotCheck.start_balance(list(range(1, 17)), 1.0, 8.0, seed=0)
+        assert check.start_k == 16 and check.n_bands == 2
+        _finish(check, positives)
+        assert check.status == BALANCE_CHECKED and check.k == kept
+        assert check.direction == WALK_SHALLOWER and check.round == 2
+
+    def test_a_ranking_of_one_band_keeps_it(self):
+        check = _finish(SpotCheck.start_balance(list(range(1, 6)), 1.0, 2.0, seed=0), {1, 2})
+        assert check.status == BALANCE_CHECKED and check.k == 5 and check.round == 1
 
     def test_a_balance_walk_needs_a_count_of_positives(self):
         ranking, _ = _planted(52)

@@ -269,7 +269,11 @@ MIRRORS: list[Mirror] = [
             "(start_balance: the same bands and picks, stopped at the F-beta peak - deeper while the estimate rises, "
             "shallower from a start whose first step does not, ties to the smaller set), whose reference is "
             "rule_fb_walk in analyze_fbeta_line_4411.py (#4411, PR #4412; to be named in this mirror's harness "
-            "field once merged). The floor walk's stop is untouched."
+            "field once merged). The floor walk's stop is untouched. A balance walk that starts on the ranking's "
+            "last band steps shallower at once, as rule_fb_walk does (#4424). Where the mixture gives no "
+            "count of at least one positive, the app's walk reads recall against the balance's cap lowered to the "
+            "unvoted count (walk_positives, #4419), where rule_fb_walk falls back to the audits' own tp for no "
+            "fit (which leaves its F-beta a function of precision alone) and keeps a count below one as it is."
         ),
     ),
     Mirror(

@@ -257,6 +257,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **On a small dataset, a spot check under the precision/recall balance no
+  longer keeps every unvoted item whatever your picks said** (issue #4424).
+  When the unvoted items numbered no more than the check's starting count
+  (32, or 128 when leaning toward recall), the check ended on all of them at
+  its first verdict. It now compares that set with the smaller one it has
+  already audited and keeps whichever scores better. The smaller set wins
+  a tie. Its recall is also no longer reported as everything found when
+  the score model counts no match left among the unvoted items.
 - **The media list no longer leaves a gap beside its last column of
   thumbnails** (issue #4347). Train fits the left panel to its thumbnail grid
   as it opens, but it measured the grid before the minimap strip beside it
