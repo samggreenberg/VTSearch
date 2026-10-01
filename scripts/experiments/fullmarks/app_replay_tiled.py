@@ -16,7 +16,8 @@ Closed loop: each vote labels the top unlabelled page of the current ranking
 from ground truth. Reported at each checkpoint: AP and P@10 on the unlabelled
 remainder, positives found, and the wall-clock of that vote's retrain.
 
-    python app_replay_tiled.py --tier s --matrix <votes-4162>/matrix-s --out <dir> [--workers 32]
+    python app_replay_tiled.py --tier s --matrix <votes-4162>/matrix-s --out <dir> [--workers 32] \
+        [--k-policies fixed,adaptive,cap]
 """
 
 from __future__ import annotations
@@ -57,7 +58,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         maybe_structural_rerank,
         maybe_structural_rerank_example,
     )
-    from vtscore.training.structural_stage1 import tiled_top_k  # noqa: PLC0415
 
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", type=Path, default=cfg.OUT)
@@ -66,8 +66,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--classes", default="")
     ap.add_argument("--max-v", type=int, default=20)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
+    ap.add_argument("--k-policies", default="fixed", help="comma-separated #4391 arms: fixed, adaptive, cap")
+    ap.add_argument("--k-cap", type=int, default=0, help="override TILED_K_CAP (the 'cap' arm's K), e.g. 2000")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
+    from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+
+    if args.k_cap:
+        s1.TILED_K_CAP = args.k_cap
+    policies = [p for p in args.k_policies.split(",") if p]
+    unknown = set(policies) - {"fixed", "adaptive", "cap"}
+    if unknown:
+        ap.error(f"unknown K policies {sorted(unknown)}")
     args.out.mkdir(parents=True, exist_ok=True)
     checkpoints = [v for v in CHECKPOINTS if v <= args.max_v]
 
@@ -86,7 +96,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     wanted = {c for c in args.classes.split(",") if c}
     rows: list[dict[str, Any]] = []
-    for f in sorted(args.matrix.glob("*.npz")):
+    for policy, f in [(p, f) for p in policies for f in sorted(args.matrix.glob("*.npz"))]:
+        s1.K_POLICY = policy
         if f.name.startswith("vectors-"):
             continue
         cid = f.stem.replace("__", "/", 1)
@@ -119,6 +130,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 rest = vc.remainder(order, labelled)
                 rows.append(
                     {
+                        "policy": policy,
                         "class_id": cid,
                         "v": v,
                         "found": len(goods),
@@ -127,7 +139,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         "ap": vc.average_precision(rest, positive),
                         "p10": float(positive[rest[:10]].mean()) if len(rest) else float("nan"),
                         "retrain_s": round(retrain_s, 2),
-                        "top_k": tiled_top_k(len(pool_ids)),
+                        "top_k": s1.LAST_TOP_K,
                         "cache_fits": len(det_ctx.structural_verification_cache or ()),
                     }
                 )
@@ -144,9 +156,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     boxes[pid] = box
             else:
                 bads[pid] = None
-        done = {r["v"]: r for r in rows if r["class_id"] == cid}
+        done = {r["v"]: r for r in rows if r["class_id"] == cid and r["policy"] == policy}
         print(
-            f"  {cid}: {len(pool_ids)} pages, {int(positive.sum())} positives, "
+            f"  [{policy}] {cid}: {len(pool_ids)} pages, {int(positive.sum())} positives, "
             + ", ".join(f"v{v} AP {done[v]['ap']:.2f}" for v in checkpoints if v in done)
             + f"; {time.time() - t_class:.0f}s",
             flush=True,
