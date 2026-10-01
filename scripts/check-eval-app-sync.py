@@ -265,7 +265,11 @@ MIRRORS: list[Mirror] = [
             "band at a time as the walk reaches it, and censuses every band at P >= 1; the "
             "reference draws every band's picks up front from planted labels (the same picks "
             "the walk would touch) and asks no user. The reference returns the band edge as "
-            "the count; the app keeps the same edge through floor_count."
+            "the count; the app keeps the same edge through floor_count. Since #4413 SpotCheck also runs the BALANCE walk "
+            "(start_balance: the same bands and picks, stopped at the F-beta peak - deeper while the estimate rises, "
+            "shallower from a start whose first step does not, ties to the smaller set), whose reference is "
+            "rule_fb_walk in analyze_fbeta_line_4411.py (#4411, PR #4412; to be named in this mirror's harness "
+            "field once merged). The floor walk's stop is untouched."
         ),
     ),
     Mirror(
