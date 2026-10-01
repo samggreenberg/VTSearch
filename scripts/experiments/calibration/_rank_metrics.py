@@ -118,6 +118,65 @@ def frame_k(frame: dict, floor: float) -> int | None:
     return k if k >= 1 else None
 
 
+BETAS: tuple[float, ...] = (0.5, 1.0, 2.0)
+
+
+def beta_tag(beta: float) -> str:
+    """``b05`` / ``b1`` / ``b2``: the column suffix a balance's metrics carry (``vtscore.eval.voting_columns.beta_tag``)."""
+    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
+
+def fbeta_of(right: int, k: int, n_pos: int, beta: float) -> float:
+    denominator = beta * beta * n_pos + k
+    return (1.0 + beta * beta) * right / denominator if denominator > 0 else 0.0
+
+
+def oracle_fbeta(ranks: np.ndarray, n_pos: int, beta: float) -> float:
+    """The best F-beta any cut of the ranking reaches: checked just after each positive, where it can only peak."""
+    if n_pos <= 0 or ranks.size == 0:
+        return float("nan")
+    tp = np.arange(1, ranks.size + 1)
+    k = ranks + 1
+    return float(np.max((1.0 + beta * beta) * tp / (beta * beta * n_pos + k)))
+
+
+def frame_beta_k(frame: dict, beta: float) -> int | None:
+    """How many the shipped balance line keeps on this frame's test half at *beta* (``test_line_k_b1``, ...), or ``None``."""
+    v = frame.get(f"test_line_k_{beta_tag(beta)}")
+    try:
+        k = int(v)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    return k if k >= 1 else None
+
+
+def balance_metrics(ranks: np.ndarray, n: int, n_pos: int, beta: float, k: int | None) -> dict[str, float]:
+    """The returned set at a balance (#4413): its F-beta over the best F-beta of any cut, with precision and recall.
+
+    *k* is the balance line's count the frame recorded (:func:`frame_beta_k`);
+    ``None`` reads the balance's cap (the floor schedule's 32 at beta <= 1, 128
+    above), which is what a run before the column, the text sort and the
+    ceiling keep.
+    """
+    nan = float("nan")
+    if n <= 0:
+        return {"k": 0, "precision": nan, "recall": nan, "fbeta": nan, "oracle_fbeta": nan, "fb_share": nan}
+    if k is None:
+        k = 32 if beta <= 1.0 else 128
+    k = int(max(1, min(k, n)))
+    right = top_k_right(ranks, k)
+    best = oracle_fbeta(ranks, n_pos, beta)
+    f = fbeta_of(right, k, n_pos, beta) if n_pos > 0 else nan
+    return {
+        "k": k,
+        "precision": right / k,
+        "recall": right / n_pos if n_pos > 0 else nan,
+        "fbeta": f,
+        "oracle_fbeta": best,
+        "fb_share": f / best if (n_pos > 0 and best > 0) else nan,
+    }
+
+
 def line_metrics(ranks: np.ndarray, n: int, n_pos: int, floor: float, k: int | None = None) -> dict[str, float]:
     """The line at *floor* on this ranking, as the report reads it.
 

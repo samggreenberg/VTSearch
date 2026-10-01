@@ -23,6 +23,27 @@ same edit.
   - **SigLIP binary:** `siglip`, `whole_image`.
   - **DINOv3 region:** `siglip+dinov3_patch`, `max_patch`, opened on SigLIP's
     text sort.
+- **The preference is a balance, beta, and a review runs one set of sessions
+  per beta (owner, 2026-10-01 03:42, #4413, after #4411's pricing).** The
+  headline is, per beta (0.5 precision-leaning, 1 balanced, 2 recall-leaning)
+  over clicks, the returned set's **F-beta as a share of the best F-beta any
+  cut of the same ranking reaches** (`returned_at_beta.png`, the "returned set
+  at each balance" table), with its precision and recall beside it. Sessions
+  run at `SOTA_BETA=0.5|1|2` once the app's `line_preference` is the balance
+  (the eval's `CALIB_BETA` arm); until then the floor-era reading below is
+  the control, and the balance columns are read off floor sessions.
+- **The floor-era reading: one set of sessions per precision floor P, the
+  returned set scored at its own P (owner, 2026-10-01 02:20, #4408).** "The quality of our
+  RETURNS matters more than the quality of our RANK." F1 cannot see P (the 50%
+  and 90% lines keep nearly the same set and got the same F1), so the headline
+  is, per P over clicks, the set the app returns **when it aims for P**: its
+  **precision against P** (below P breaks the promise; far above it leaves
+  recall behind) and its **recall against the oracle's recall at P** (the most
+  any cut of the same ranking returns at or above P). Sessions at P = 10%, 50%
+  and 90% (`SOTA_FLOOR`), each analyzed on its own, then `perp.py` reads each P
+  off its own run. AP stays as the ranking's measure; F1 is secondary. The
+  2026-10-01 review read 10% and 90% off P = 50% sessions; that is exact only
+  while a session ignores P.
 - **A review runs Binary Photo only by default (owner, 2026-09-26).** Region
   Photo is so slow (~5 h a seed) that it runs only when the owner asks for it
   explicitly: "We'll do that explicitly at some point when we need it." Never
@@ -143,6 +164,8 @@ CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node:
 bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
+# per floor (#4408): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
+python perp.py --run 0.1=<p10>/analysis-binary --run 0.5=<p50>/analysis-binary --run 0.9=<p90>/analysis-binary --out <dir>
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 
@@ -215,13 +238,13 @@ and say what the app gets wrong.
 Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/REPORT.md`
 (e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
 
-1. **Headline:** mean text-only AP, then AP at 25 and 50 clicks, then the
-   final AP against the ceiling's, with Goods found at the same points. Then
-   the returned set's **F1 over clicks** at P = 50% (`f1_over_clicks.png`).
-   Then the line at each floor, text → 25 → 50 → final → ceiling: the kept
-   set's precision, the share of sessions meeting P, the shortfall, recall
-   next to the oracle's recall at P, and F1 (`summary.md`,
-   `line_at_floors.png`).
+1. **Headline: the returned set at each P, from its own sessions** (#4408):
+   precision against P and recall against the oracle's recall at P, over
+   clicks (`perp.py`: `returned_at_own_p.png`, `perp_summary.md`; per run,
+   `returned_at_p.png`), text → 25 → 50 → final → ceiling, with the share of
+   sessions meeting P. Then the ranking: mean text-only AP, AP at 25 and 50
+   clicks, the final AP against the ceiling's, with Goods found at the same
+   points. F1 at the line (`f1_over_clicks.png`) is secondary: it cannot see P.
 2. **The spot check:** how often it confirms, its range, and how often the
    range held the truth.
 3. **Where the app does well and where it does poorly,** by class and by band,

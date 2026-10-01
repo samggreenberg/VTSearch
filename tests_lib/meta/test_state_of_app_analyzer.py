@@ -8,6 +8,10 @@ a re-run cannot show by looking at it:
 * **F1 is the returned set's** (owner, 2026-09-30: "Using the returned-set
   threshold, show F1 over time, too"): the F1 of the top *K* the floor keeps,
   read off the rank frames, at every recorded click as well as the checkpoints.
+* **Precision and recall at P** (owner, 2026-10-01, #4408): the returned set
+  at each floor, scored against the floor it aimed for, at every recorded
+  click; each run records the floor its sessions aimed at, and ``perp.py``
+  reads each P off its own run.
 * **The check is not a click:** "final" is the last ordinary step, and no check
   pick is credited to an image.
 * **The line is read off the rank frames** by one definition
@@ -207,6 +211,9 @@ def _baseline(path: Path, rm) -> dict:
                 ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
             ):
                 row[f"text_{m}_{rm.floor_tag(x)}"] = round(0.01 * (i + 1) + j / 100 + x, 6)
+        for b in rm.BETAS:  # the balance's columns (#4413), distinct from the floors'
+            for j, m in enumerate(("k", "precision", "recall", "fbeta", "oracle_fbeta", "fb_share")):
+                row[f"text_{m}_{rm.beta_tag(b)}"] = round(0.02 * (i + 1) + j / 100 + b / 10, 6)
         rows.append(row)
         want[cat] = row
     pd.DataFrame(rows).to_csv(path, index=False)
@@ -239,6 +246,8 @@ def run(tmp_path_factory, rm):
         "influence": read("influence.csv"),
         "curves": read("curves.csv"),
         "steps": read("line_steps.csv"),
+        "balances": read("balances.csv"),
+        "balance_steps": read("balance_steps.csv"),
         "summary": (out / "summary.md").read_text(),
     }
 
@@ -283,6 +292,99 @@ def test_f1_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
             assert got["f1"] == pytest.approx(want["f1"])
             assert c.loc[int(f["t"]), "f1"] == pytest.approx(want["f1"]), "the curve at a frame IS the frame"
     assert "F1 of the line at P = 50%" in run["summary"]
+
+
+def test_precision_and_recall_at_each_p_are_the_returned_sets_at_every_recorded_click(run, rm) -> None:
+    """#4408: the set the app returns when it aims for P, scored at P, per floor, off the same frames as F1."""
+    curves, steps = run["curves"], run["steps"]
+    for idx, cat in enumerate(CATS):
+        frames = _frames(run["exp"], idx)
+        c = curves[curves["category"] == cat].set_index("t")
+        for x in rm.FLOORS:
+            tag = rm.floor_tag(x)
+            assert c.loc[0, f"precision_{tag}"] == pytest.approx(run["text"][cat][f"text_precision_{tag}"])
+            for f in frames.query("kind == 'step'").to_dict("records"):
+                want = rm.line_metrics(
+                    rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), x, rm.frame_k(f, x)
+                )
+                got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["floor"] == x)].iloc[0]
+                for m in ("precision", "recall", "oracle_recall"):
+                    assert got[m] == pytest.approx(want[m])
+                    assert c.loc[int(f["t"]), f"{m}_{tag}"] == pytest.approx(want[m]), (cat, x, m)
+    assert "## The returned set at each P: precision against P, recall against the oracle" in run["summary"]
+    assert "These sessions aimed at P = 50%" in run["summary"]
+
+
+def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
+    """#4413: the set the app returns at each balance, scored as F-beta over the best cut, off the same frames."""
+    curves, balances, steps = run["curves"], run["balances"], run["balance_steps"]
+    for idx, cat in enumerate(CATS):
+        frames = _frames(run["exp"], idx)
+        c = curves[curves["category"] == cat].set_index("t")
+        for b in rm.BETAS:
+            tag = rm.beta_tag(b)
+            text = balances[(balances["category"] == cat) & (balances["point"] == "text") & (balances["beta"] == b)]
+            assert text["fb_share"].iloc[0] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
+            assert c.loc[0, f"fb_share_{tag}"] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
+            for f in frames.query("kind == 'step'").to_dict("records"):
+                want = rm.balance_metrics(
+                    rm.parse_ranks(f["test_pos_ranks"]),
+                    int(f["n_test"]),
+                    int(f["n_test_pos"]),
+                    b,
+                    rm.frame_beta_k(f, b),
+                )
+                got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["beta"] == b)].iloc[0]
+                for m in ("k", "fbeta", "fb_share", "precision", "recall"):
+                    assert got[m] == pytest.approx(want[m]), (cat, b, m)
+                assert c.loc[int(f["t"]), f"fb_share_{tag}"] == pytest.approx(want["fb_share"])
+                assert 0.0 <= want["fb_share"] <= 1.0 + 1e-9
+            final = balances[(balances["category"] == cat) & (balances["point"] == "final") & (balances["beta"] == b)]
+            last = frames.query("kind == 'last'").iloc[0]
+            want = rm.balance_metrics(
+                rm.parse_ranks(last["test_pos_ranks"]),
+                int(last["n_test"]),
+                int(last["n_test_pos"]),
+                b,
+                rm.frame_beta_k(last, b),
+            )
+            assert final["fbeta"].iloc[0] == pytest.approx(want["fbeta"])
+    assert "## The returned set at each balance: F-beta over the best cut" in run["summary"]
+    assert "These sessions aimed at a floor, not a balance" in run["summary"]
+    assert run["cells"]["session_beta"].isna().all(), "a floor run records no session beta"
+
+
+def test_the_balance_metric_peaks_at_the_balance_by_construction(rm) -> None:
+    """The oracle F-beta is the best cut's, by brute force; the returned set's share is <= 1."""
+    ranks = np.array([0, 2, 3, 7, 30])
+    n_pos = 5
+    for b in rm.BETAS:
+        brute = max(rm.fbeta_of(int((ranks < k).sum()), k, n_pos, b) for k in range(1, 2001))
+        assert rm.oracle_fbeta(ranks, n_pos, b) == pytest.approx(brute)
+        m = rm.balance_metrics(ranks, 2000, n_pos, b, 8)
+        assert m["fb_share"] <= 1.0 + 1e-9 and m["k"] == 8
+    assert rm.balance_metrics(ranks, 2000, n_pos, 2.0, None)["k"] == 128, "no recorded count: the balance's cap"
+    assert rm.balance_metrics(ranks, 2000, n_pos, 0.5, None)["k"] == 32
+
+
+def test_each_run_records_the_floor_its_sessions_aimed_at(run) -> None:
+    """``session_floor`` is the run's CALIB_MIN_PRECISION: the app's default here."""
+    trained = run["cells"][~run["cells"]["never_trained"].astype(bool)]
+    assert not trained.empty and (trained["session_floor"] == 0.5).all()
+
+
+def test_perp_reads_each_p_off_its_own_run(run, tmp_path) -> None:
+    """``perp.py`` puts one run per P side by side; with this run given for every P, each row is its own floor."""
+    out = tmp_path / "perp"
+    a = run["exp"] / "analysis"
+    subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
+        [sys.executable, str(_SOTA / "perp.py"), "--run", f"0.1={a}", "--run", f"0.5={a}", "--run", f"0.9={a}",
+         "--out", str(out)],
+        check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    assert (out / "returned_at_own_p.png").stat().st_size > 0
+    md = (out / "perp_summary.md").read_text()
+    assert "| 10% |" in md and "| 90% |" in md and "50% (read at 90%)" in md
 
 
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:

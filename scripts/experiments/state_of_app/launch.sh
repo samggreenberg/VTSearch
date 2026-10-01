@@ -24,7 +24,25 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"
 
-export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)}"
+# One set of sessions per precision floor P (owner, 2026-10-01, #4408): the
+# session itself depends on P (the line's count, the spot check, and acquisition
+# once #4409 lands), so each P runs its own sessions. SOTA_FLOOR=0.1|0.5|0.9 sets
+# their floor and suffixes the run dir (-p10, -p50, -p90); unset is the app's
+# default floor in an unsuffixed dir.
+if [[ -n "${SOTA_FLOOR:-}" && -n "${SOTA_BETA:-}" ]]; then
+  echo "set SOTA_FLOOR or SOTA_BETA, not both: one preference draws the line" >&2; exit 2
+fi
+if [[ -n "${SOTA_FLOOR:-}" ]]; then
+  export CALIB_MIN_PRECISION="$SOTA_FLOOR"
+  _PTAG="-p$(python3 -c "import sys; print(round(float(sys.argv[1]) * 100))" "$SOTA_FLOOR")"
+fi
+# The balance (#4413): SOTA_BETA=0.5|1|2 runs every session at that F-beta
+# balance (-b05, -b1, -b2); the review's sessions run once per beta.
+if [[ -n "${SOTA_BETA:-}" ]]; then
+  export CALIB_BETA="$SOTA_BETA"
+  _PTAG="-b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$SOTA_BETA")"
+fi
+export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)${_PTAG:-}}"
 export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/state-of-the-app/$SOTA_DATE}"
 export CALIB_DATASETS=coco_better
 export CALIB_COCO_BETTER_EMBEDDERS="siglip,siglip+dinov3_patch"

@@ -33,6 +33,11 @@ Rules, at each ``BETAS`` (0.5 precision-leaning, 1 balanced, 2 recall-leaning):
   preference maps to (``BETA_TO_P``: beta 0.5 -> P 90%, 1 -> 50%, 2 -> 10%):
   the band walk at P, and the no-vote line min(schedule count, mixture's
   crossing).  What the floor returns for the same user, scored at beta.
+* ``fb-walk-fixed`` / ``floor-walk-gmm`` - the same two walks with their
+  starts swapped: the F-beta walk from the schedule's fixed count, the
+  floor's walk from the mixture's P crossing.  The owner's point (2026-10-01):
+  the vote cost belongs to the walk's design, not to how the preference is
+  written; these separate the start from the stop.
 
 Metrics per world x t x size x beta x rule (``summary.csv``): the returned
 set's ``fbeta`` and ``fb_share`` (over the oracle's), ``precision``,
@@ -79,7 +84,15 @@ from analyze_line_estimate_4383 import (  # noqa: E402
 BETAS: tuple[float, ...] = (0.5, 1.0, 2.0)
 #: The floor preset a balance preference maps to, for the shipped-mechanism rows.
 BETA_TO_P = {0.5: 0.9, 1.0: 0.5, 2.0: 0.1}
-RULES: tuple[str, ...] = ("fb-gmm", "fb-walk", "fb-bands", "floor-walk", "floor-novote")
+RULES: tuple[str, ...] = (
+    "fb-gmm",
+    "fb-walk",
+    "fb-walk-fixed",
+    "fb-bands",
+    "floor-walk",
+    "floor-walk-gmm",
+    "floor-novote",
+)
 HEADLINE = ("fbeta", "fb_share", "precision", "recall", "k", "votes")
 
 
@@ -226,20 +239,21 @@ def cell_rows(job: tuple) -> list[dict]:
                     floor = BETA_TO_P[beta]
                     fixed_k = kept_count(floor, n)
                     gmm_k, _v, _e = rule_fb_gmm(p_gmm, beta, n, fixed_k)
-                    outcomes: dict[str, tuple[int, int, float]] = {
-                        "fb-gmm": (gmm_k, 0, _e),
-                        "fb-walk": rule_fb_walk(fine, beta, n_pos_mix, gmm_k),
-                        "fb-bands": rule_fb_bands(fine, beta),
-                        "floor-walk": rule_grow(fine, floor, n, lb=False),
-                    }
-                    # The no-vote line: the smaller of the schedule's count and the mixture's P crossing.
+                    # The mixture's P crossing: the floor's no-vote proposal, and a start for its walk.
+                    cross: int | None = None
                     if p_gmm is not None:
                         cum = np.cumsum(p_gmm) / np.arange(1, n + 1)
                         hit = np.flatnonzero(cum >= floor - EPS)
                         cross = int(hit.max()) + 1 if hit.size else int(np.argmax(cum)) + 1
-                        outcomes["floor-novote"] = (min(fixed_k, cross), 0, float("nan"))
-                    else:
-                        outcomes["floor-novote"] = (fixed_k, 0, float("nan"))
+                    outcomes: dict[str, tuple[int, int, float]] = {
+                        "fb-gmm": (gmm_k, 0, _e),
+                        "fb-walk": rule_fb_walk(fine, beta, n_pos_mix, gmm_k),
+                        "fb-walk-fixed": rule_fb_walk(fine, beta, n_pos_mix, fixed_k),
+                        "fb-bands": rule_fb_bands(fine, beta),
+                        "floor-walk": rule_grow(fine, floor, n, lb=False),
+                        "floor-walk-gmm": rule_grow(fine, floor, n, lb=False, start_k=cross),
+                        "floor-novote": (min(fixed_k, cross) if cross is not None else fixed_k, 0, float("nan")),
+                    }
                     for rule, (k, votes, est) in outcomes.items():
                         m = score_set(y, k, beta, best)
                         rows.append(

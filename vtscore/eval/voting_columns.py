@@ -445,10 +445,24 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     "test_line_k_p10",
     "test_line_k_p50",
     "test_line_k_p90",
+    #: The same for the balance's line (#4413) at each preset beta in
+    #: :data:`RANK_FRAME_BETAS`: the mixture's F-beta argmax under the cap on
+    #: the test half plus the session's votes.  -1 without a session line.
+    "test_line_k_b05",
+    "test_line_k_b1",
+    "test_line_k_b2",
 )
 
 #: The floors the rank frame records the shipped line's count at (the presets).
 RANK_FRAME_FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
+#: The balances it records the balance line's count at (the presets, #4413).
+RANK_FRAME_BETAS: tuple[float, ...] = (0.5, 1.0, 2.0)
+
+
+def beta_tag(beta: float) -> str:
+    """``b05`` / ``b1`` / ``b2``: the column suffix a balance's metrics carry."""
+    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
 
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;

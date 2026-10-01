@@ -143,6 +143,8 @@ ENVX="$ENVX CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUER
 ENVX="$ENVX CALIB_SKYLINE_ARMS=${CALIB_SKYLINE_ARMS:-}"
 # The sessions' line preference (#4245, #4413): a floor, or a balance (beta); empty is the app's default.
 ENVX="$ENVX CALIB_MIN_PRECISION=${CALIB_MIN_PRECISION:-} CALIB_BETA=${CALIB_BETA:-}"
+# The acquisition arm (#2876, #3319, #4409): the shipped offset unless a study names another.
+ENVX="$ENVX CALIB_ACQ_INCLUSION_OFFSET=${CALIB_ACQ_INCLUSION_OFFSET:-} CALIB_ACQ_P_CROSSING=${CALIB_ACQ_P_CROSSING:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).

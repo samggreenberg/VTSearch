@@ -313,6 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"
@@ -429,6 +430,7 @@ def main(argv: list[str] | None = None) -> int:
             cut_inclusion_qtilt_steps=cfg.CUT_INCLUSION_QTILT_STEPS or None,
             acq_inclusion_offset=cfg.ACQ_INCLUSION_OFFSET,
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
+            acq_p_crossing=cfg.ACQ_P_CROSSING,
             startup_schedule=cfg.STARTUP_SCHEDULE,
             opening_diversity=cfg.OPENING_DIVERSITY,
             pick_sink=picks_local,

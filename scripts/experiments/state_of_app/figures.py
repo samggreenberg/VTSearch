@@ -11,6 +11,10 @@
   app offers: how right the set the line keeps is, from click 0 to the final
   line, against the floor (dotted) and the full-label ceiling's line (dashed).
   Each panel's title carries the share of sessions whose final line meets P.
+* ``returned_at_p.png`` -- the returned set at each floor P over clicks: its
+  precision against P, its recall against the oracle's recall at P (#4408).
+* ``returned_at_beta.png`` -- the returned set at each balance over clicks: its
+  F-beta as a share of the best cut's (#4413).
 * ``f1_over_clicks.png`` -- the F1 of the set the line keeps (the returned set),
   over clicks, at the default floor P = 50% and at 10%, drawn only at the
   clicks a rank frame was recorded (``line_steps.csv``), with the text sort's
@@ -267,6 +271,90 @@ def per_cell(cells: pd.DataFrame, out: Path) -> None:
     plt.close(fig)
 
 
+def returned_at_p(curves: pd.DataFrame, cells: pd.DataFrame, steps: pd.DataFrame, out: Path) -> bool:
+    """The returned set at each floor over clicks (#4408): precision against P, recall against the oracle.
+
+    One column per floor (10/50/90%). Top: the set's precision, with P dashed;
+    bottom: its recall, with the oracle's recall at P (the most any cut of the
+    same ranking returns at or above P) dashed. Read at click 0 and at the
+    clicks a rank frame was recorded. A floor the run's sessions did not aim at
+    is titled so: it is read off sessions that aimed elsewhere.
+    """
+    if steps is None or steps.empty or "precision_p50" not in curves:
+        return False
+    at = sorted({0, *steps["t"].astype(int).unique().tolist()})
+    own = set(cells["session_floor"].dropna().round(4)) if "session_floor" in cells else set()
+    floors = (0.1, 0.5, 0.9)
+    fig, axes = plt.subplots(2, 3, figsize=(13, 6.4), facecolor=SURFACE, sharex=True)
+    for j, floor in enumerate(floors):
+        tag = f"p{round(floor * 100)}"
+        for arm, color in COLORS.items():
+            c = curves[(curves["arm"] == arm) & curves["t"].isin(at)]
+            if c.empty or f"precision_{tag}" not in c:
+                continue
+            m = c.groupby("t")[[f"precision_{tag}", f"recall_{tag}", f"oracle_recall_{tag}"]].mean()
+            axes[0, j].plot(m.index, m[f"precision_{tag}"], color=color, marker="o", markersize=2.5, lw=2)
+            axes[1, j].plot(m.index, m[f"recall_{tag}"], color=color, marker="o", markersize=2.5, lw=2, label=arm)
+            axes[1, j].plot(m.index, m[f"oracle_recall_{tag}"], color=color, ls="--", lw=1.2, label="oracle at P")
+            for row, col in ((0, f"precision_{tag}"), (1, f"recall_{tag}")):
+                v = m[col].iloc[-1]
+                axes[row, j].annotate(f"{v:.2f}", (m.index[-1], v), xytext=(4, 0), textcoords="offset points",
+                                      va="center", color=INK, fontsize=8)  # fmt: skip
+        axes[0, j].axhline(floor, color=INK, ls=":", lw=1.2)
+        axes[0, j].annotate(f"P = {floor:.0%}", (at[-1], floor), xytext=(-40, 4), textcoords="offset points",
+                            color=INK, fontsize=8)  # fmt: skip
+        aimed = "these sessions' P" if round(floor, 4) in own else "read off sessions at another P"
+        axes[0, j].set_title(f"P = {floor:.0%} ({aimed})", color=INK, fontsize=10, loc="left")
+        for row in (0, 1):
+            _axes(axes[row, j])
+            axes[row, j].set_ylim(0, 1.02)
+        axes[1, j].set_xlabel("clicks", color=INK)
+    axes[0, 0].set_ylabel("precision of the returned set", color=INK)
+    axes[1, 0].set_ylabel("recall of the returned set", color=INK)
+    axes[1, 0].legend(fontsize=8, frameon=False)
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    return True
+
+
+def returned_at_beta(curves: pd.DataFrame, cells: pd.DataFrame, balance_steps: pd.DataFrame, out: Path) -> bool:
+    """The returned set at each balance over clicks (#4413): its F-beta as a share of the best cut.
+
+    One panel per beta (0.5 / 1 / 2): the share, with 1.0 (the best cut) dotted;
+    read at click 0 and at the clicks a rank frame was recorded. A balance the
+    run's sessions did not aim at is titled so.
+    """
+    if balance_steps is None or balance_steps.empty or "fb_share_b1" not in curves:
+        return False
+    at = sorted({0, *balance_steps["t"].astype(int).unique().tolist()})
+    own = set(cells["session_beta"].dropna().round(4)) if "session_beta" in cells else set()
+    betas = ((0.5, "b05"), (1.0, "b1"), (2.0, "b2"))
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.9), facecolor=SURFACE, sharey=True)
+    for j, (beta, tag) in enumerate(betas):
+        ax = axes[j]
+        for arm, color in COLORS.items():
+            c = curves[(curves["arm"] == arm) & curves["t"].isin(at)]
+            if c.empty or f"fb_share_{tag}" not in c:
+                continue
+            m = c.groupby("t")[f"fb_share_{tag}"].mean()
+            ax.plot(m.index, m.to_numpy(), color=color, marker="o", markersize=2.5, lw=2, label=arm)
+            ax.annotate(f"{m.iloc[-1]:.2f}", (m.index[-1], m.iloc[-1]), xytext=(4, 0), textcoords="offset points",
+                        va="center", color=INK, fontsize=8)  # fmt: skip
+        ax.axhline(1.0, color=INK, ls=":", lw=1.2)
+        aimed = "these sessions' balance" if round(beta, 4) in own else "read off sessions at another preference"
+        ax.set_title(f"beta = {beta:g} ({aimed})", color=INK, fontsize=10, loc="left")
+        _axes(ax)
+        ax.set_ylim(0, 1.05)
+        ax.set_xlabel("clicks", color=INK)
+    axes[0].set_ylabel("F-beta of the returned set / best cut", color=INK)
+    axes[-1].legend(fontsize=8, frameon=False, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--analysis", type=Path, required=True)
@@ -285,6 +373,12 @@ def main() -> int:
     steps = pd.read_csv(steps_path) if steps_path.exists() and steps_path.stat().st_size > 1 else pd.DataFrame()
     if not f1_over_clicks(curves, cells, steps, args.out / "f1_over_clicks.png"):
         print("no rank frames in this run: f1_over_clicks.png skipped")
+    if not returned_at_p(curves, cells, steps, args.out / "returned_at_p.png"):
+        print("no rank frames in this run: returned_at_p.png skipped")
+    bs_path = args.analysis / "balance_steps.csv"
+    balance_steps = pd.read_csv(bs_path) if bs_path.exists() and bs_path.stat().st_size > 1 else pd.DataFrame()
+    if not returned_at_beta(curves, cells, balance_steps, args.out / "returned_at_beta.png"):
+        print("no rank frames in this run: returned_at_beta.png skipped")
     per_cell(cells, args.out / "per_cell.png")
     if args.compare is not None:
         seeds = set(cells["seed"])
