@@ -139,13 +139,39 @@ total through the recall term, so it is less honest than the floor walk's
 precision estimate; "how close we got" under F-beta would have to be stated
 as a precision and a recall range rather than one number.
 
+## Cost, revisited: the start, not the preference (owner's question, 04:00)
+
+"Why does switching our metric cost more votes? ... they're the same person,
+and we should tune our app to serve them (best results in the fewest votes)."
+A second run (`summary_starts.csv`, job 798255) swapped the two walks' starts.
+Corpora of 3,200 items and up, click 150, beta = 1, averaged:
+
+| walk | start | votes | F-beta share of the best cut |
+|---|---|---:|---:|
+| floor's (P = 50%) | fixed 32 | 23 | 0.67 |
+| F-beta's | fixed 32 | **30** | **0.77** |
+| floor's | the mixture's P crossing | 30 | 0.68 |
+| F-beta's | the mixture's F-beta argmax | 34 | 0.77 |
+
+- Starting the F-beta walk from the mixture's guess costs 4 votes for no gain:
+  the shipped walk should start from the fixed schedule, as the floor's does.
+- The remaining 7 votes are where the two targets sit: both walks pay 5 picks a
+  band and audit one band past their stop, but the F1 peak lies deeper than
+  the 50% crossing on these rankings (173 against 11 items on the 0.1% bench),
+  so the F-beta walk audits about one more band on its way there. Same
+  mechanism, same price per band, a different destination.
+- Per vote the F-beta walk returns more of what the user asked for. The walk's
+  start, picks per band and band sizes are the knobs to tune for "best F-beta
+  in the fewest votes", one problem whichever way the preference is written.
+
 ## What switching would mean
 
 - **The preference:** a balance (three presets, beta 0.5 / 1 / 2, or a slider)
   instead of a floor. The optimum sits at the preference for every class,
   which the floor's presets do not.
-- **The line:** the band walk with an F-beta stop, started at the mixture's
-  band (`fb-walk`); the no-vote line the mixture's argmax **capped** by a
+- **The line:** the band walk with an F-beta stop, started from the fixed
+  schedule (`fb-walk-fixed`: 4 votes cheaper than starting at the mixture's
+  band, for the same result); the no-vote line the mixture's argmax **capped** by a
   schedule count, as the floor's is (uncapped it returns 2–4× too much on
   large sparse corpora, `fb-gmm` above).
 - **Acquisition:** around the F-beta cut, the same code as #4409 with a

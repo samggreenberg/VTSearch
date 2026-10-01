@@ -204,6 +204,9 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: The floor the reporting line was drawn at; NaN on the Inclusion arm
     #: (``min_precision="off"``), where ``threshold`` is the knob's cut.
     "min_precision",
+    #: The balance arm's beta (#4413); NaN on a floor arm.  The floor columns
+    #: below then read the balance's state (its precision range as the range).
+    "beta",
     #: The floor's state this step - ``unchecked`` (the line keeps the floor's
     #: starting candidate), ``confirmed`` or ``short`` (the set the run's spot
     #: check ended on) - and so what ``threshold`` is.  Empty where no floor

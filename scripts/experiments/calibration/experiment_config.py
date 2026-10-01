@@ -989,6 +989,11 @@ def _opt_float(name: str) -> float | None:
 #: that consumes it (the conformal quantiles, ``FoldAnchoredCut.threshold_at``)
 #: is continuous in ``k``.  Parsing this as an int would silently refuse the
 #: half-step grid rather than fail, so it is a float.
+#: The balance arm (#4413): draw the line at F-beta's beta instead of the floor
+#: (``CALIB_BETA=1`` is the balanced preset; 0.5 and 2 the leaning ones).  Unset
+#: is the floor arm.  A given beta makes CALIB_MIN_PRECISION unused.
+BETA = _opt_float("CALIB_BETA")
+
 ACQ_INCLUSION_OFFSET = _opt_float("CALIB_ACQ_INCLUSION_OFFSET")
 if ACQ_INCLUSION_OFFSET is None:
     from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
