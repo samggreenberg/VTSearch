@@ -173,7 +173,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         assert ctx.model is model_before
         assert ctx.threshold == 0.73
 
-    def test_set_min_precision_rethresholds_from_fold_cache(self):
+    def test_set_min_precision_rethresholds_from_fold_cache(self, floor_preference):
         """With cached fold orderings and no estimator, a floor change re-derives
         the threshold (cheap quantile rule over the cache) without touching the
         model.  There is no ranking for the floor to keep a set of, so the line

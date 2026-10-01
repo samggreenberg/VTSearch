@@ -51,9 +51,9 @@
     "app": "ae8504e0b03401743dfcb8912d804fdf3644b23cb710d43f33e4663d680da93a",
     "harness": "6a3451d7e0f015a6eb54179630dd6e91f6ce3f72c76b5272321574933406e892"
   },
-  "thresholds.min_precision_default": {
-    "app": "b69ca0748bf3b3cef65fb6b283f6fe25694cf63a785506d196b6b4ad6ffc1c6d",
-    "harness": "02536d2784e8639eec71e2607e7297aff423dd9fd00a31d714057eaee79dc6dd"
+  "thresholds.line_preference_default": {
+    "app": "f75720b56b0a036553604f3256f71e4d65b995aa3d04945baaa16118c10efc4c",
+    "harness": "b3f66fec1f3ac1db3a1d7aa11dadfe5c31766a8aed48e288870e80005ffd3eb2"
   },
   "thresholds.rate_cut_no_root": {
     "app": "b167612751767183a0416f22e643d9d4a79c67e7d041d9b9a1ae4d20725db084",

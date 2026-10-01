@@ -364,10 +364,12 @@ def get_line_preference() -> str:
     """Which preference draws the line (#4413): ``"floor"`` (the precision floor) or ``"balance"`` (F-beta)."""
     from vtscore.config import CoreConfig
 
+    from vtscore.config.runtime import DEFAULT_LINE_PREFERENCE
+
     try:
         return str(CoreConfig.from_settings().line_preference)
     except RuntimeError:  # a library-only process with no settings builder
-        return "floor"
+        return DEFAULT_LINE_PREFERENCE
 
 
 def set_line_preference(value: str) -> None:

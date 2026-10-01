@@ -428,6 +428,13 @@ def client():
 
 
 @pytest.fixture
+def floor_preference(client):
+    """The deprecated precision floor draws the line (#4413): for the floor's own tests, now that the balance is the default."""
+    resp = client.put("/api/settings", json={"line_preference": "floor"})
+    assert resp.status_code == 200, resp.get_json()
+
+
+@pytest.fixture
 def schedule_only(monkeypatch):
     """The unchecked line at the schedule's count alone: the mixture's proposal (#4389) set aside.
 

@@ -11,7 +11,7 @@ import { ActiveContextService } from './active-context.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
 import { settleResource } from '../testing/settle-resource';
-import { FLOOR_STATES, lineFloor, wireFloor } from '../testing/line-floor';
+import { BALANCE_STATES, lineBalance, wireBalance } from '../testing/line-balance';
 
 /**
  * `SortRunnerService` in isolation.
@@ -181,10 +181,10 @@ describe('SortRunnerService', () => {
       .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
   }
 
-  // --- the floor on the line (#4247, #4272) ------------------------------------
+  // --- the balance on the line (#4247, #4272, #4413) ---------------------------
 
-  it.each(FLOOR_STATES)(
-    'installs a learned sort\'s line with its verdict when %s',
+  it.each(BALANCE_STATES)(
+    'installs a learned sort\'s line with its state when %s',
     (status) => {
       enableLearnedSort();
       runner.onLearnedSort(false);
@@ -196,7 +196,7 @@ describe('SortRunnerService', () => {
         ],
         threshold: 0.5,
         acq_threshold: 0.7,
-        floor: wireFloor(status),
+        balance: wireBalance(status),
         total: 2,
         above_threshold: 1,
         has_more_below: false,
@@ -206,14 +206,14 @@ describe('SortRunnerService', () => {
       expect(sortState.threshold).toBe(0.5);
       expect(sortState.aboveThreshold).toBe(1);
       expect(sortState.acqThreshold).toBe(0.7);
-      expect(sortState.floor?.status).toBe(status);
+      expect(sortState.balance?.status).toBe(status);
     },
   );
 
-  it('a text sort carries no floor', () => {
+  it('a text sort carries no balance', () => {
     runner.onTextSort('birds');
     httpMock.expectOne('/api/sort').flush({ results: [{ id: 1, similarity: 0.9 }], threshold: 0.5 });
-    expect(sortState.floor).toBeNull();
+    expect(sortState.balance).toBeNull();
   });
 
   it('cancels the learned-sort job by id, and only once', () => {
@@ -566,13 +566,13 @@ describe('SortRunnerService', () => {
     });
   });
 
-  // --- precision floor (#4246) ------------------------------------------------
+  // --- balance (#4413) --------------------------------------------------------
 
   describe('the line after a spot check (#4273)', () => {
-    const floorGet = (req: { url: string; method: string }) =>
-      req.url === '/api/min-precision' && req.method === 'GET';
+    const balanceGet = (req: { url: string; method: string }) =>
+      req.url === '/api/balance' && req.method === 'GET';
 
-    it('moves a learned line to the set the check ended on, without a re-sort', () => {
+    it('moves a learned line to the set where the check peaked, without a re-sort', () => {
       vi.useFakeTimers();
       enableLearnedSort();
       sortState.setSortMode('learned');
@@ -582,16 +582,17 @@ describe('SortRunnerService', () => {
           { id: 6, score: 0.2 },
         ],
         0.5,
-        lineFloor('unchecked', { count: 64 }),
+        lineBalance('unchecked', { count: 64 }),
       );
 
       runner.refreshLine();
-      httpMock.expectOne(floorGet).flush({ ...wireFloor('short'), threshold: 0.8, n_returned: 7 });
+      httpMock.expectOne(balanceGet).flush({ ...wireBalance('checked'), threshold: 0.8, n_returned: 7, line_preference: 'balance' });
       vi.advanceTimersByTime(1000);
 
       expect(sortState.threshold).toBe(0.8);
-      expect(sortState.floor?.status).toBe('short');
-      expect(sortState.floor?.range?.labelled).toBe(5);
+      expect(sortState.balance?.status).toBe('checked');
+      expect(sortState.balance?.precision?.labelled).toBe(5);
+      expect(sortState.balance?.recall?.labelled).toBe(5);
       // The server's count over the whole ranking, not the loaded head's.
       expect(sortState.aboveThreshold).toBe(7);
       expect(sortState.sortOrder?.map((i) => i.id)).toEqual([5, 6]);
@@ -603,18 +604,18 @@ describe('SortRunnerService', () => {
       sortState.setSortMode('text');
       sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
       runner.refreshLine();
-      httpMock.expectOne(floorGet).flush({ ...wireFloor('confirmed'), threshold: 0.8, n_returned: 1 });
+      httpMock.expectOne(balanceGet).flush({ ...wireBalance('checked'), threshold: 0.8, n_returned: 1, line_preference: 'balance' });
       expect(sortState.threshold).toBe(0.3);
-      expect(sortState.floor).toBeNull();
+      expect(sortState.balance).toBeNull();
     });
   });
 
-  describe('a precision-floor change', () => {
-    const floorPost = (req: { url: string; method: string }) =>
-      req.url === '/api/min-precision' && req.method === 'POST';
+  describe('a balance change (#4413)', () => {
+    const balancePost = (req: { url: string; method: string }) =>
+      req.url === '/api/balance' && req.method === 'POST';
 
-    /** A learned ranking on screen, with the floor's verdict on its line. */
-    function learnedRanking(status: Parameters<typeof lineFloor>[0]): void {
+    /** A learned ranking on screen, with the balance's state on its line. */
+    function learnedRanking(status: Parameters<typeof lineBalance>[0]): void {
       enableLearnedSort();
       sortState.setSortMode('learned');
       sortState.setSelectMode('top');
@@ -624,17 +625,17 @@ describe('SortRunnerService', () => {
           { id: 6, score: 0.2 },
         ],
         0.5,
-        lineFloor(status),
+        lineBalance(status),
       );
     }
 
     afterEach(() => vi.useRealTimers());
 
-    it('posts the floor and moves the picker at once', () => {
-      runner.onMinPrecisionChange(0.75);
+    it('posts the beta and moves the picker at once', () => {
+      runner.onBetaChange(0.5);
 
-      expect(sortState.minPrecision).toBe(0.75);
-      expect(httpMock.expectOne(floorPost).request.body).toEqual({ min_precision: 0.75 });
+      expect(sortState.beta).toBe(0.5);
+      expect(httpMock.expectOne(balancePost).request.body).toEqual({ beta: 0.5 });
     });
 
     it('leaves a ranking the detector did not draw alone', () => {
@@ -642,44 +643,44 @@ describe('SortRunnerService', () => {
       sortState.setSortMode('text');
       sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
 
-      runner.onMinPrecisionChange(0.25);
-      httpMock.expectOne(floorPost).flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.1, n_returned: 9 });
+      runner.onBetaChange(2);
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.1, n_returned: 9, line_preference: 'balance' });
       vi.advanceTimersByTime(1000);
 
       httpMock.expectNone('/api/learned-sort');
       expect(sortState.threshold).toBe(0.3);
-      expect(sortState.floor).toBeNull();
+      expect(sortState.balance).toBeNull();
     });
 
-    it.each(FLOOR_STATES)(
-      'keeps the line and swaps only the verdict when the new floor keeps the same count (%s)',
+    it.each(BALANCE_STATES)(
+      'keeps the line and swaps only the state when the new balance keeps the same count (%s)',
       (status) => {
         vi.useFakeTimers();
         learnedRanking('unchecked');
 
-        runner.onMinPrecisionChange(0.9);
-        httpMock.expectOne(floorPost).flush({ ...wireFloor(status, { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
+        runner.onBetaChange(0.5);
+        httpMock.expectOne(balancePost).flush({ ...wireBalance(status, { beta: 0.5 }), threshold: 0.5, n_returned: 1, line_preference: 'balance' });
         vi.advanceTimersByTime(1000);
 
-        // Both floors keep the top 32: the count decides the line, so it cannot move.
+        // Both balances keep the top 32: the count decides the line, so it cannot move.
         httpMock.expectNone('/api/learned-sort');
         expect(sortState.threshold).toBe(0.5);
-        expect(sortState.floor?.status).toBe(status);
-        expect(sortState.floor?.minPrecision).toBe(0.9);
+        expect(sortState.balance?.status).toBe(status);
+        expect(sortState.balance?.beta).toBe(0.5);
       },
     );
 
-    it('re-runs the learned sort only once the server has the new floor', () => {
+    it('re-runs the learned sort only once the server has the new balance', () => {
       vi.useFakeTimers();
-      learnedRanking('confirmed');
+      learnedRanking('checked');
 
-      runner.onMinPrecisionChange(0.25);
-      const post = httpMock.expectOne(floorPost);
-      // A re-sort that beat the POST would read the old floor server-side.
+      runner.onBetaChange(2);
+      const post = httpMock.expectOne(balancePost);
+      // A re-sort that beat the POST would read the old balance server-side.
       vi.advanceTimersByTime(1000);
       httpMock.expectNone('/api/learned-sort');
 
-      post.flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.15, n_returned: 2 });
+      post.flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.15, n_returned: 2, line_preference: 'balance' });
       vi.advanceTimersByTime(300);
       httpMock.expectOne('/api/learned-sort').flush({
         status: 'done',
@@ -689,56 +690,56 @@ describe('SortRunnerService', () => {
         ],
         threshold: 0.15,
         acq_threshold: 0.18,
-        floor: wireFloor('confirmed', { minPrecision: 0.25, count: 64 }),
+        balance: wireBalance('checked', { beta: 2, count: 64 }),
         total: 2,
         above_threshold: 1,
         has_more_below: false,
       });
 
-      // The re-sort brings the line, its verdict, the count and the acquisition cut back together...
+      // The re-sort brings the line, its state, the count and the acquisition cut back together...
       expect(sortState.threshold).toBe(0.15);
       expect(sortState.acqThreshold).toBe(0.18);
       expect(sortState.aboveThreshold).toBe(1);
-      expect(sortState.floor?.minPrecision).toBe(0.25);
+      expect(sortState.balance?.beta).toBe(2);
       // ...and lands on the next pick from them.
       expect(mediaState.selectedId()).toBe(6);
     });
 
-    it('re-sorts when the new floor keeps a different count', () => {
+    it('re-sorts when the new balance keeps a different count', () => {
       vi.useFakeTimers();
       learnedRanking('unchecked');
 
-      runner.onMinPrecisionChange(0.25);
-      httpMock.expectOne(floorPost).flush({ ...wireFloor('confirmed', { minPrecision: 0.25, count: 64 }), threshold: 0.15, n_returned: 2 });
+      runner.onBetaChange(2);
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.15, n_returned: 2, line_preference: 'balance' });
       vi.advanceTimersByTime(300);
 
       httpMock.expectOne('/api/learned-sort');
     });
 
-    it('drops a floor the user moved past', () => {
+    it('drops a balance the user moved past', () => {
       learnedRanking('unchecked');
 
-      runner.onMinPrecisionChange(0.75);
-      const stale = httpMock.expectOne(floorPost);
-      runner.onMinPrecisionChange(0.25);
+      runner.onBetaChange(0.5);
+      const stale = httpMock.expectOne(balancePost);
+      runner.onBetaChange(2);
 
       expect(stale.cancelled).toBe(true);
-      const fresh = httpMock.expectOne(floorPost);
-      expect(fresh.request.body).toEqual({ min_precision: 0.25 });
-      fresh.flush({ ...wireFloor('short', { minPrecision: 0.25 }), threshold: 0.5, n_returned: 1 });
-      expect(sortState.floor?.minPrecision).toBe(0.25);
+      const fresh = httpMock.expectOne(balancePost);
+      expect(fresh.request.body).toEqual({ beta: 2 });
+      fresh.flush({ ...wireBalance('unchecked', { beta: 2 }), threshold: 0.5, n_returned: 1, line_preference: 'balance' });
+      expect(sortState.balance?.beta).toBe(2);
     });
 
     it('keeps posting after a failed change', () => {
       learnedRanking('unchecked');
 
-      runner.onMinPrecisionChange(0.75);
-      httpMock.expectOne(floorPost).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
-      expect(sortState.floor?.minPrecision).toBe(0.5);
+      runner.onBetaChange(0.5);
+      httpMock.expectOne(balancePost).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expect(sortState.balance?.beta).toBe(1);
 
-      runner.onMinPrecisionChange(0.9);
-      httpMock.expectOne(floorPost).flush({ ...wireFloor('short', { minPrecision: 0.9 }), threshold: 0.5, n_returned: 1 });
-      expect(sortState.floor?.status).toBe('short');
+      runner.onBetaChange(2);
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2 }), threshold: 0.5, n_returned: 1, line_preference: 'balance' });
+      expect(sortState.balance?.status).toBe('checked');
     });
   });
 

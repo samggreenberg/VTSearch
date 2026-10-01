@@ -17,8 +17,8 @@ import { VoteStateService } from './vote-state.service';
 import { allItemsLabeled } from '../utils/all-labeled';
 import { autoSelectNext as pickNextMedia, type AutoSelectPick } from '../utils/auto-select-next';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
-import type { FloorState } from '../generated/api-client/models/floor-state';
-import { lineFloorFrom, type LineFloor } from '../utils/line-floor';
+import type { BalanceState } from '../generated/api-client/models/balance-state';
+import { lineBalanceFrom, type LineBalance } from '../utils/line-balance';
 
 /** What a sort ranks by: the detector's model, a text query, example media, or
  *  a saved detector's scores. See {@link SortRunnerService.newestSortKind}. */
@@ -34,7 +34,7 @@ export type SortKind = 'learned' | 'text' | 'example' | 'detector';
  * {@link SortStateService} (as issue #3428 originally proposed) would mean
  * either reinventing pair-scoped cancellation inside a singleton or passing a
  * component's scope subject into one; `PairScopeService`'s header records the
- * same trap being declined for `seedMinPrecision` (#3448).
+ * same trap being declined for `seedBeta` (#3448).
  *
  * ## Why these two things are one service
  *
@@ -261,22 +261,22 @@ export class SortRunnerService {
   }
 
   /**
-   * Precision floors awaiting their `POST /api/min-precision`, one at a time.
+   * Balances (betas) awaiting their `POST /api/balance`, one at a time (#4413).
    *
-   * `switchMap`, so a floor the user moved past (arrowing through the picker
+   * `switchMap`, so a balance the user moved past (arrowing through the picker
    * fires one change per key) can never land after the newer one. And the
-   * re-sort that follows a floor change is started from the response rather
-   * than beside the request: the learned sort reads the floor at request time
-   * and caches its result by it, so a re-sort that beat the POST to the server
-   * would hand back the old floor's line from that cache.
+   * re-sort that follows a balance change is started from the response rather
+   * than beside the request: the learned sort reads the balance at request
+   * time and caches its result by it, so a re-sort that beat the POST to the
+   * server would hand back the old balance's line from that cache.
    */
-  private readonly minPrecisionRequests$ = new Subject<number>();
+  private readonly betaRequests$ = new Subject<number>();
 
   constructor() {
-    this.minPrecisionRequests$
+    this.betaRequests$
       .pipe(
         switchMap((value) =>
-          this.sortingApi.setMinPrecision(value).pipe(
+          this.sortingApi.setBalance(value).pipe(
             // Pair-scoped like every threshold write (see `PairScopeService`).
             this.pairScope.scoped(),
             // A failed POST leaves the line where it was; swallowed inside so
@@ -286,7 +286,7 @@ export class SortRunnerService {
         ),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe((resp) => this.afterFloorChange(lineFloorFrom(resp)));
+      .subscribe((resp) => this.afterBalanceChange(lineBalanceFrom(resp)));
   }
 
   // --- Sort handlers ---
@@ -308,7 +308,7 @@ export class SortRunnerService {
     results?: Array<Record<string, unknown>>;
     threshold?: number;
     acq_threshold?: number | null;
-    floor?: FloorState | null;
+    balance?: BalanceState | null;
     total?: number;
     above_threshold?: number;
     has_more_below?: boolean;
@@ -324,7 +324,7 @@ export class SortRunnerService {
       items,
       threshold,
       acqThreshold: response.acq_threshold ?? null,
-      floor: lineFloorFrom(response.floor),
+      balance: lineBalanceFrom(response.balance),
       total: response.total ?? items.length,
       hasMore: response.has_more_below ?? false,
       token: response.sort_token ?? null,
@@ -775,31 +775,31 @@ export class SortRunnerService {
       });
   }
 
-  // --- Precision floor ---
+  // --- Balance ---
 
-  onMinPrecisionChange(value: number): void {
-    this.sortState.setMinPrecision(value);
-    this.minPrecisionRequests$.next(value);
+  onBetaChange(value: number): void {
+    this.sortState.setBeta(value);
+    this.betaRequests$.next(value);
   }
 
   /**
-   * The server has the new floor. Only a learned ranking draws the detector's
-   * line, so only it can move: every other sort ranks by something else and
-   * keeps its own threshold.
+   * The server has the new balance. Only a learned ranking draws the
+   * detector's line, so only it can move: every other sort ranks by something
+   * else and keeps its own threshold.
    *
-   * When the line keeps the same count of items before and after (an
-   * unchecked floor at 50% or above keeps the top 32 either way, #4272), it
+   * When the line keeps the same count of items before and after (two
+   * unchecked balances can start from the same candidate, #4272, #4413), it
    * is the same line - the count, not the state, decides where it sits - so
-   * it stays put and only its state changes. Otherwise the
-   * learned sort re-runs at the new floor, which brings the line, its state,
-   * the count above it and Autopilot's acquisition cut back together, and
-   * lands on the next pick from them.
+   * a beta change that keeps the same count only replaces the state.
+   * Otherwise the learned sort re-runs at the new balance, which brings the
+   * line, its state, the count above it and Autopilot's acquisition cut back
+   * together, and lands on the next pick from them.
    */
-  private afterFloorChange(floor: LineFloor | null): void {
+  private afterBalanceChange(balance: LineBalance | null): void {
     if (this.sortState.sortMode !== 'learned') return;
-    const before = this.sortState.floor;
-    if (before && floor && before.count === floor.count) {
-      this.sortState.setFloor(floor);
+    const before = this.sortState.balance;
+    if (before && balance && before.count === balance.count) {
+      this.sortState.setBalance(balance);
       return;
     }
     if (this.voteState.learnedSortAvailable) {
@@ -809,24 +809,24 @@ export class SortRunnerService {
 
   /**
    * Re-read the line after a spot check ends (#4273). The server has moved it
-   * to the set the check ended on, a new count over the ranking already on
-   * screen, so this moves the line without a re-sort. Only a learned ranking
-   * draws the detector's line.
+   * to the set where the check's balance peaked, a new count over the ranking
+   * already on screen, so this moves the line without a re-sort. Only a
+   * learned ranking draws the detector's line.
    */
   refreshLine(): void {
     this.sortingApi
-      .getMinPrecision()
+      .getBalance()
       .pipe(
         this.pairScope.scoped(),
         catchError(() => EMPTY),
       )
       .subscribe((resp) => {
         if (this.sortState.sortMode !== 'learned' || resp.threshold == null) return;
-        this.sortState.setLine(resp.threshold, lineFloorFrom(resp), resp.n_returned ?? null);
+        this.sortState.setLine(resp.threshold, lineBalanceFrom(resp), resp.n_returned ?? null);
       });
   }
 
-  /** Coalesce a flurry of re-rank triggers (a vote, a floor change) into one
+  /** Coalesce a flurry of re-rank triggers (a vote, a balance change) into one
    *  learned sort 300ms after the last of them. */
   scheduleLearnedSort(autoSelect = true): void {
     if (this.learnedSortPending) return;

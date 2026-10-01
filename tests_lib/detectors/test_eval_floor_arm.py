@@ -21,7 +21,9 @@ from vtscore.eval.autopilot_flow import pick_provenance
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
+    BALANCE_STATES,
     BAND_BASE,
+    DEFAULT_BETA,
     DEFAULT_MIN_PRECISION,
     FLOOR_CONFIRMED,
     FLOOR_SHORT,
@@ -62,17 +64,27 @@ class TestTheRetiredProvenanceRecord:
 
 
 class TestTheArms:
+    """The floor arm (``min_precision`` pinned; deprecated with the floor, #4413), and what the default arm is."""
+
     def _run(self, **kwargs):
+        kwargs.setdefault("min_precision", DEFAULT_MIN_PRECISION)
         picks: list[dict] = []
         rows = simulate_voting_iterations(
             _separable(), "alpha", seed=0, max_steps=15, calibrate_count=2, pick_sink=picks, **kwargs
         )
         return rows, picks
 
-    def test_the_default_arm_is_the_apps_floor(self):
+    def test_the_default_arm_is_the_apps_balance(self):
+        """Neither knob pinned draws the line where the app does: the balance at DEFAULT_BETA (#4413)."""
+        rows, _picks = self._run(min_precision=None)
+        assert rows
+        assert all(r["beta"] == DEFAULT_BETA and math.isnan(r["min_precision"]) for r in rows)
+        assert {r["floor_status"] for r in rows} <= set(BALANCE_STATES)
+
+    def test_a_pinned_floor_is_the_floor_arm(self):
         rows, _picks = self._run()
         assert rows
-        assert all(r["min_precision"] == DEFAULT_MIN_PRECISION for r in rows)
+        assert all(r["min_precision"] == DEFAULT_MIN_PRECISION and math.isnan(r["beta"]) for r in rows)
         assert {r["floor_status"] for r in rows} <= set(FLOOR_STATES)
 
     def test_before_the_check_the_line_keeps_the_unchecked_starting_candidate(self, schedule_only):

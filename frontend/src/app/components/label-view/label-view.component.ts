@@ -35,7 +35,7 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 import { ProgressModalComponent, ProgressMetric } from '../modals/progress-modal/progress-modal.component';
 import { ResortPromptModalComponent, ResortResult } from '../modals/resort-prompt-modal/resort-prompt-modal.component';
-import { FloorCheckModalComponent, type FloorCheckVoted } from '../modals/floor-check-modal/floor-check-modal.component';
+import { SpotCheckModalComponent, type SpotCheckVoted } from '../modals/spot-check-modal/spot-check-modal.component';
 import type { LabelingStatusResponse } from '../../generated/api-client/models/labeling-status-response';
 import { snapPanelWidthToGridColumns, iconSizeToGoalWidth } from '../../utils/grid-icon-size';
 import { PanelResizeDirective } from '../../directives/panel-resize.directive';
@@ -60,7 +60,7 @@ type SeedTrigger = 'entry' | 'pair' | 'retrain';
     RightPanelComponent,
     ProgressModalComponent,
     ResortPromptModalComponent,
-    FloorCheckModalComponent,
+    SpotCheckModalComponent,
     ContextMenuComponent,
     MediaCropModalComponent,
     PanelResizeDirective
@@ -206,8 +206,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   get focusModeLeft(): 'click' | 'hover' { return this.panelState.focusModeLeft; }
   get focusModeRight(): 'click' | 'hover' { return this.panelState.focusModeRight; }
 
-  /** The precision floor's spot check is open (#4273). */
-  readonly showFloorCheck = signal(false);
+  /** The balance's spot check is open (#4273, #4413). */
+  readonly showSpotCheck = signal(false);
 
   // Re-sort prompt state
   readonly showResortPrompt = signal(false);
@@ -489,7 +489,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((modelId) => this.refreshTrainableModelName(modelId));
     this.refreshTrainableModelName(this.activeContext.modelId);
-    this.pairScope.seedMinPrecision();
+    this.pairScope.seedBeta();
 
     // Reload data when the active pair changes via the top-bar switcher.
     // Skip the first emission; `ngOnInit` above already triggered the
@@ -940,33 +940,34 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortRunner.onSelectModeChange(mode);
   }
 
-  // --- Precision floor ---
+  // --- Balance ---
 
-  onMinPrecisionChange(value: number): void {
-    this.sortRunner.onMinPrecisionChange(value);
+  onBetaChange(value: number): void {
+    this.sortRunner.onBetaChange(value);
   }
 
-  /** The floor control's "Check N picks": open the spot check (#4273). */
-  onFloorCheck(): void {
+  /** The balance control's "Check N picks": open the spot check (#4273). */
+  onSpotCheck(): void {
     if (this.sortState.sortBusy) return;
-    this.showFloorCheck.set(true);
+    this.showSpotCheck.set(true);
   }
 
   /**
    * A round of the check landed. Its votes are ordinary votes, so the piles
-   * catch up; a finished check has moved the line to the set it ended on.
-   * No re-sort here: the owner's model is that *later* votes retrain and move
-   * the list under a result, and the next ordinary vote does that as usual.
+   * catch up; a finished check has moved the line to the set where its
+   * balance peaked. No re-sort here: the owner's model is that *later* votes
+   * retrain and move the list under a result, and the next ordinary vote does
+   * that as usual.
    */
-  onFloorCheckVoted(event: FloorCheckVoted): void {
+  onSpotCheckVoted(event: SpotCheckVoted): void {
     this.voteState.loadVotes();
     this.labelsetState.refresh();
     if (event.finished) this.sortRunner.refreshLine();
   }
 
   /** The check closed, however it ended: catch up on anything it left behind. */
-  onFloorCheckClosed(): void {
-    this.showFloorCheck.set(false);
+  onSpotCheckClosed(): void {
+    this.showSpotCheck.set(false);
     this.voteState.loadVotes();
     this.labelsetState.refresh();
     this.sortRunner.refreshLine();

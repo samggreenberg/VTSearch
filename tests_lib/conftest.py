@@ -241,6 +241,23 @@ def no_precision_floor():
 
 
 @pytest.fixture
+def floor_preference():
+    """The deprecated precision floor draws the line (#4413): for the floor's own tests, now that the balance is the default.
+
+    ``reset_contexts`` re-registers the default builder before the next test,
+    so nothing needs undoing.
+    """
+    import dataclasses
+
+    from vtscore.config import core_config
+
+    # Wrap whatever builder is in force (``no_precision_floor`` may have
+    # registered one already, in either order), so the two fixtures compose.
+    base = core_config._core_config_builder or _lib_default_core_config
+    config.register_core_config_builder(lambda path=None: dataclasses.replace(base(path), line_preference="floor"))
+
+
+@pytest.fixture
 def schedule_only(monkeypatch):
     """The unchecked line at the schedule's count alone: the mixture's proposal (#4389) set aside.
 

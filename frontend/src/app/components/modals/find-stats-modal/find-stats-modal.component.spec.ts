@@ -8,7 +8,7 @@ import { provideHttpTesting } from '../../../testing/test-providers';
 import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ActiveContextService } from '../../../services/active-context.service';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
-import { wireFloor } from '../../../testing/line-floor';
+import { SAMPLE_RANGE, wireBalance } from '../../../testing/line-balance';
 
 describe('FindStatsModalComponent', () => {
   let component: FindStatsModalComponent;
@@ -31,7 +31,7 @@ describe('FindStatsModalComponent', () => {
     verified_called_good: 10,
     verified_kept_good: 7,
     threshold: 0.5,
-    floor: wireFloor('confirmed'),
+    balance: wireBalance('checked'),
     n_scored: 1000,
     n_returned: 40,
     precision_curve: [
@@ -258,7 +258,7 @@ describe('FindStatsModalComponent', () => {
     });
   });
 
-  describe('the precision floor on the chart (#4246)', () => {
+  describe('the balance on the chart (#4413)', () => {
     async function load(overrides: Record<string, unknown> = {}) {
       await fixture.whenStable();
       httpMock.expectOne('/api/find/stats').flush({ ...mockStats, ...overrides });
@@ -269,24 +269,23 @@ describe('FindStatsModalComponent', () => {
 
     const legend = (el: HTMLElement) => el.querySelector('.chart-legend')!.textContent!.replace(/\s+/g, ' ');
 
-    it('draws the floor across the chart at X, and a confirmed line keeps it with its range', async () => {
-      const el = await load({ floor: wireFloor('confirmed', { minPrecision: 0.9 }) });
-      const floor = el.querySelector('.precision-chart .floor')!;
-      expect(Number(floor.getAttribute('y1'))).toBeCloseTo(component.yFor(0.9));
-      expect(floor.getAttribute('y2')).toBe(floor.getAttribute('y1'));
+    it('draws no line across the chart: a balance is a preference, not a precision to keep', async () => {
+      const el = await load({ balance: wireBalance('checked', { beta: 0.5 }) });
+      expect(el.querySelector('.precision-chart .floor')).toBeNull();
+      expect(el.querySelector('.swatch-floor')).toBeNull();
       expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
-      // The floor by neither name nor number (#4298, #4317); the check's range and the axis stay numbers.
-      expect(legend(el)).toContain('Threshold');
-      expect(legend(el)).not.toMatch(/Centered|Complete|Correct/);
-      expect(legend(el)).toContain('Line: confirmed (32 kept)');
+      // The balance by neither name nor number (#4298, #4317); the check's range and the axis stay numbers.
+      expect(legend(el)).not.toContain('Threshold');
+      expect(legend(el)).not.toMatch(/Centered|Complete|Correct|beta|F1/);
+      expect(legend(el)).toContain('Line: checked (32 kept)');
       expect(legend(el)).toContain('Likely 55–100% right (checked 5)');
-      expect(legend(el)).not.toContain('90%');
+      expect(legend(el)).not.toContain('0.5');
       // The Inclusion stepper's legend is gone.
       expect(legend(el)).not.toContain('incl');
     });
 
     it('stands the range at the line, from its low end to its high end (#4273)', async () => {
-      const el = await load({ floor: wireFloor('short') });
+      const el = await load({ balance: wireBalance('checked', { precision: SAMPLE_RANGE }) });
       const bar = el.querySelector('.precision-chart .likely-range .range-bar')!;
       expect(Number(bar.getAttribute('y'))).toBeCloseTo(component.yFor(0.73));
       expect(Number(bar.getAttribute('height'))).toBeCloseTo(component.yFor(0.11) - component.yFor(0.73));
@@ -300,10 +299,10 @@ describe('FindStatsModalComponent', () => {
     it('draws a stale range exactly as a current one; only its tooltip differs', async () => {
       const markup = (el: HTMLElement) =>
         el.querySelector('.likely-range')!.outerHTML.replace(/<title[^>]*>[^<]*<\/title>/, '').replace(/aria-label="[^"]*"/, '');
-      const fresh = await load({ floor: wireFloor('short') });
+      const fresh = await load({ balance: wireBalance('checked', { precision: SAMPLE_RANGE }) });
       const freshMarkup = markup(fresh);
       const freshLegend = legend(fresh);
-      component.stats.set({ ...component.stats()!, floor: wireFloor('short', { range: { lo: 0.11, hi: 0.73, labelled: 5, right: 2, stale: true } }) } as never);
+      component.stats.set({ ...component.stats()!, balance: wireBalance('checked', { precision: { ...SAMPLE_RANGE, stale: true } }) } as never);
       await settleZoneless(fixture);
       const el = fixture.nativeElement as HTMLElement;
       expect(markup(el)).toBe(freshMarkup);
@@ -311,27 +310,36 @@ describe('FindStatsModalComponent', () => {
       expect(el.querySelector('.likely-range title')!.textContent).toContain('Measured before your later votes');
     });
 
-    it('says how close a short check got, naming no cause, with a plain line', async () => {
-      const el = await load({ floor: wireFloor('short', { minPrecision: 0.9 }) });
-      expect(el.querySelector('.precision-chart .floor')).toBeTruthy();
+    it('says what a check found on the set the line keeps, the share right as a number and the found in words, with a plain line', async () => {
+      const el = await load({ balance: wireBalance('checked', { beta: 0.5 }) });
       expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
-      expect(legend(el)).toContain('Line: the top 32, fell short');
+      expect(legend(el)).toContain('Line: checked (32 kept)');
       const text = el.textContent!.replace(/\s+/g, ' ');
-      expect(text).toContain('Fell short: a check of 5 random picks found the top 32 the line keeps likely 11–73% right');
-      expect(text).not.toMatch(/sparse|weak model|unpromised/i);
+      expect(text).toContain('Checked: 5 random picks found the 32 the line keeps likely 55–100% right, with about half of them found.');
+      expect(el.querySelector('.chart-note[title]')!.getAttribute('title')).toContain('Likely 55–100% right, from 5 random picks (5 right).');
+      // Nothing is met or fallen short of, and the copy names no cause.
+      expect(text).not.toMatch(/\bshort\b|\bfell\b|confirmed|enough|sparse|weak model|unpromised/i);
+    });
+
+    it('notes a checked line with no ranges by its legend alone', async () => {
+      const el = await load({ balance: wireBalance('checked', { precision: null, recall: null, fbeta: null }) });
+      expect(legend(el)).toContain('Line: checked (32 kept)');
+      expect(el.querySelector('.likely-range')).toBeNull();
+      expect(el.textContent).not.toContain('Checked:');
     });
 
     it('says an unchecked line keeps its starting candidate, with no range', async () => {
       const el = await load({
-        floor: wireFloor('unchecked', { minPrecision: 0.1, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }),
+        balance: wireBalance('unchecked', { beta: 2, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }),
       });
       expect(el.querySelector('.precision-chart .current')!.getAttribute('class')).toBe('current');
       expect(el.querySelector('.likely-range')).toBeNull();
       expect(legend(el)).toContain('Line: the top 128, unchecked');
       expect(legend(el)).not.toContain('Likely');
+      expect(legend(el)).not.toContain('Threshold');
       const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
       expect(notes.some((n) => n.includes('The line keeps the top 128, unchecked'))).toBe(true);
-      // Find tests the threshold it was given: nothing here points at a check (#4317).
+      // Find tests the balance it was given: nothing here points at a check (#4317).
       expect(el.textContent).not.toMatch(/Check \d+ picks/);
       expect(el.textContent).not.toContain('default cut');
       expect(el.textContent).not.toContain('unpromised');
@@ -359,7 +367,7 @@ describe('FindStatsModalComponent — training-domain overlap', () => {
     verified_called_good: 10,
     verified_kept_good: 7,
     threshold: 0.5,
-    floor: wireFloor('unchecked'),
+    balance: wireBalance('unchecked'),
     n_scored: 100,
     n_returned: 10,
     precision_curve: [],

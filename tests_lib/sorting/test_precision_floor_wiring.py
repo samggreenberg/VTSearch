@@ -71,6 +71,9 @@ from vtscore.training.thresholds import (
     resolve_min_precision,
 )
 
+#: The floor draws the line here (#4413): these are the deprecated floor's own tests, and the balance is the default.
+pytestmark = pytest.mark.usefixtures("floor_preference")
+
 LEARNED_HARD: dict[str, object] = {"flow": "autopilot", "phase": "hard", "select_mode": "hard", "sort_kind": "learned"}
 
 

@@ -16,23 +16,30 @@ where to click, in order.
 
 The **Threshold** sits at the top of the left-hand panel: a spectrum from
 **False Positives** to **False Negatives**, with three radio buttons under
-it. Toward False Negatives it returns only the pictures most likely to be
-matches; toward False Positives it returns as many as it can while accepting
-more misses among them; the middle radio sits between the two. The line
-keeps the top of the ranking, among the pictures you haven't checked: the
-top 32 on the middle and False Negatives radios, and the top 128 on the False
-Positives radio. So moving toward False Positives moves the line down by a
-band of borderline pictures, and everything the line kept before it still
+it. Each radio is a **balance** of precision and recall - how many wrong
+pictures you will take in the results against how many real matches you will
+accept missing - and the line is drawn where that balance is best. Toward
+False Negatives it returns only the pictures most likely to be matches, and
+misses more; toward False Positives it returns the most, with more wrong ones
+among them; the middle radio weighs the two mistakes equally. The line keeps
+the top of the ranking, among the pictures you haven't checked: up to the
+top 32 on the middle and False Negatives radios, and up to the top 128 on the
+False Positives radio, fewer when the detector's own estimate says the
+balance peaks sooner. So moving toward False Positives moves the line down by
+a band of borderline pictures, and everything the line kept before it still
 keeps.
 
-The note under the spectrum says what the line keeps, and how close it got:
+The note under the spectrum says what the line keeps, and what a check found
+on it:
 
 - **Top 32 kept, unchecked** - the Threshold's starting set. Nothing has
   measured it yet. A Threshold that keeps a different count moves the line
   straight away.
-- **Confirmed · likely 55–100% right (checked 5) · 32 kept**, or **Fell
-  short · likely 19–92% right (checked 5) · top 32 kept** - a spot check in
-  Train has measured it: see
+- **Checked · likely 55–80% right, about half of them found (checked 15) ·
+  48 kept** - a spot check in Train has measured it: it walked the list and
+  ended on the set where the balance peaked, and the note says how much of
+  that set is likely right and how much of what the list holds it likely
+  found; see
   [How close the line got](../USER_GUIDE.md#how-close-the-line-got). Find
   offers no check of its own; it is where you test the Threshold.
 
@@ -89,11 +96,12 @@ most it can.
 2. Scroll to **Precision by Number Returned**. It reads down the ranked list:
    for the top N pictures, how many of them are real matches. Returning more
    (to the right) catches more matches, but the share that are right falls.
-   The solid line across the chart is your **Threshold**, and the upright
-   line is where your **Line** is now. Moving the Threshold toward False
+   The upright line is where your **Line** is now, and the legend under the
+   chart says whether it was checked (**Line: checked (48 kept)**, or
+   **Line: the top 32, unchecked**). Moving the Threshold toward False
    Positives moves the Line to the right. Once a spot check has run in Train,
-   a bar stands on the Line where it meets the Threshold: the check's likely
-   range for how much of the list is right.
+   a bar stands on the Line: the check's likely range for how much of the
+   list is right.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
@@ -129,4 +137,4 @@ along with the ones you checked by hand.
   **Stats** window.
 - [Manual mode](../USER_GUIDE.md#3-threshold), in the user guide,
   describes the same Threshold while you train, and the spot check that
-  sets it.
+  measures it.

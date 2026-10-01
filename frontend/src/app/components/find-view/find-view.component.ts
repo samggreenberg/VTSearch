@@ -43,7 +43,7 @@ import {
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
-import { lineFloorFrom } from '../../utils/line-floor';
+import { lineBalanceFrom } from '../../utils/line-balance';
 import {
   coerceFocusMode,
   coerceNonEmptyString,
@@ -52,13 +52,12 @@ import {
 } from '../../utils/settings-coerce';
 
 /**
- * How long the precision-floor picker has to settle before its
- * `POST /api/min-precision` goes out.  Short enough to feel immediate, long
- * enough that arrowing through the floors (a focused `<select>` emits a
- * `change` per key) coalesces into a single round trip instead of a burst of
- * racing ones.
+ * How long the balance picker has to settle before its `POST /api/balance`
+ * goes out.  Short enough to feel immediate, long enough that arrowing
+ * through the balances (a focused radio group emits a `change` per key)
+ * coalesces into a single round trip instead of a burst of racing ones.
  */
-const FLOOR_POST_DEBOUNCE_MS = 150;
+const BALANCE_POST_DEBOUNCE_MS = 150;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -196,23 +195,23 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private readonly destroyRef = inject(DestroyRef);
   /**
-   * Precision floors awaiting their `POST /api/min-precision`, funnelled
+   * Balances (betas) awaiting their `POST /api/balance` (#4413), funnelled
    * through a single debounced `switchMap` pipeline (wired in the constructor).
    *
-   * The picker emits on every `change`, so a quick walk through the floors
+   * The picker emits on every `change`, so a quick walk through the balances
    * would put several POSTs in flight at once, each installing its own
-   * threshold on arrival: a slow response for a floor the user had already
+   * threshold on arrival: a slow response for a balance the user had already
    * moved past landed *last* and overwrote the newer threshold, snapping the
-   * green/red line (and the left/right vote split) back to a floor that was no
-   * longer selected — and leaving it there, since nothing re-reconciles until
-   * the next pick.  This is the same out-of-order hazard
+   * green/red line (and the left/right vote split) back to a balance that was
+   * no longer selected — and leaving it there, since nothing re-reconciles
+   * until the next pick.  This is the same out-of-order hazard
    * `VoteStateService.votesSeq` closes for `/api/votes`.  Debouncing means only
-   * the floor the user settled on is sent, and `switchMap` cancels any request
-   * they moved past, so the newest POST is both the last one the server sees
-   * (keeping the persisted per-detector floor in step with the picker) and the
-   * only response that can install a threshold.
+   * the balance the user settled on is sent, and `switchMap` cancels any
+   * request they moved past, so the newest POST is both the last one the
+   * server sees (keeping the persisted per-detector balance in step with the
+   * picker) and the only response that can install a threshold.
    */
-  private readonly minPrecisionRequests$ = new Subject<number>();
+  private readonly betaRequests$ = new Subject<number>();
   private dragging = false;
   private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
@@ -221,9 +220,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor() {
-    // The one place `POST /api/min-precision` is issued from — see
-    // {@link minPrecisionRequests$} for why the picker is funnelled through it.
-    this.minPrecisionRequests$
+    // The one place `POST /api/balance` is issued from — see
+    // {@link betaRequests$} for why the picker is funnelled through it.
+    this.betaRequests$
       .pipe(
         // `timer` + `switchMap` rather than `debounceTime`: it debounces the
         // same way (a newer value restarts the wait and cancels the request the
@@ -232,8 +231,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // away by a dataset/detector switch cannot fire its POST into the new
         // pair's context.
         switchMap((value) =>
-          timer(FLOOR_POST_DEBOUNCE_MS).pipe(
-            switchMap(() => this.sortingApi.setMinPrecision(value)),
+          timer(BALANCE_POST_DEBOUNCE_MS).pipe(
+            switchMap(() => this.sortingApi.setBalance(value)),
             // Pair-scoped like every other threshold write: a response landing
             // after a switch must not install the old pair's cutoff into the
             // new context (see `PairScopeService`).
@@ -247,10 +246,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((resp) => {
-        // The response is the floor's verdict and the line it draws, in one:
-        // the line always keeps a set, checked or not (#4272).
+        // The response is the balance's state and the line it draws, in one:
+        // the line always keeps a set, checked or not (#4272, #4413).
         if (resp.threshold != null && this.sortState.sortOrder) {
-          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineFloorFrom(resp));
+          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold, lineBalanceFrom(resp));
         }
         // The server re-thresholded the unverified items over the frozen
         // scores; pull the new good/bad split back for the left/right panes.
@@ -283,7 +282,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // waiting on it.
     //
     // Tracks the ranking, the cutoff and the verified set as well as the
-    // selection, so a re-score, a floor change or a vote reconciling with
+    // selection, so a re-score, a balance change or a vote reconciling with
     // the same item on screen retargets the warm instead of leaving it on a
     // stale prediction. `nextFindSide` is a plain field; it only ever changes
     // in the same step that changes the selection, so reading it here is
@@ -345,7 +344,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Good/Bad), and the loadVotes() above refreshes them; re-running find here
     // would re-score with the unchanged model and could re-promote those items,
     // undoing the verification. Keep the verifications instead.
-    this.pairScope.seedMinPrecision();
+    this.pairScope.seedBeta();
 
     if (!returningFromBrowse) {
       this.runFindLabel();
@@ -384,7 +383,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.sortState.stopFindProgressTracking();
     // `pairScope` is component-provided, so Angular fires its scope on destroy.
-    this.minPrecisionRequests$.complete();
+    this.betaRequests$.complete();
     this.voteState.setFindMode(false);
     this.voteState.stopPolling();
     // Stop waiting on a map build if the user left Find some other way (the
@@ -453,9 +452,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           const sorted = response.results.map((r: any) => ({ id: r.id, score: r.score, bestRegion: r.best_region }));
           const threshold = response.threshold;
           // Set sort results for stripe display. The threshold is the last item
-          // of the set the precision floor keeps, and the floor's state rides
-          // with it (#4272).
-          this.sortState.setSortResults(sorted, threshold, lineFloorFrom(response.floor));
+          // of the set the balance keeps, and the balance's state rides with
+          // it (#4272, #4413).
+          this.sortState.setSortResults(sorted, threshold, lineBalanceFrom(response.balance));
           this.sortState.setLoadSortLabel(modelName);
           this.sortState.setSortStatus('');
           this.sortState.setSortProgress(0, 0);
@@ -602,22 +601,22 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Precision-floor change in Find: a pure cutoff move, **no retrain**. The
-   * model and every item's frozen score are floor-independent, so the floor
-   * only moves the green/red line over the cached scores. POST
-   * /api/min-precision moves the line to the set the new floor keeps and
+   * Balance change in Find (#4413): a pure cutoff move, **no retrain**. The
+   * model and every item's frozen score are balance-independent, so the
+   * balance only moves the green/red line over the cached scores. POST
+   * /api/balance moves the line to the set the new balance keeps and
    * re-splits the *unverified* items server-side (verified items hold). We
-   * reconcile the new line and its verdict, and the re-split votes, on the
+   * reconcile the new line and its state, and the re-split votes, on the
    * cheap response — there is no scoring spinner.
    *
    * The picker moves at once; the round trip is deferred to the debounced
-   * {@link minPrecisionRequests$} pipeline, which is what keeps a superseded
+   * {@link betaRequests$} pipeline, which is what keeps a superseded
    * response from installing a threshold the user has already moved past.
    */
-  onMinPrecisionChange(value: number): void {
+  onBetaChange(value: number): void {
     if (this.sortState.sortBusy) return;
-    this.sortState.setMinPrecision(value);
-    this.minPrecisionRequests$.next(value);
+    this.sortState.setBeta(value);
+    this.betaRequests$.next(value);
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
@@ -805,10 +804,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *
    * Derived from the *frozen scores + current cutoff* (`sortOrder` + `threshold`)
    * rather than the `goodVotes` signal, because those two move **synchronously**
-   * when the precision floor does ({@link minPrecisionRequests$} sets them on the
+   * when the balance does ({@link betaRequests$} sets them on the
    * POST response), whereas `goodVotes` only catches up on the follow-up
    * `loadVotes()` GET. Reading `goodVotes` here let a Browse fired right after a
-   * floor change pick up the *previous* cutoff's positives (the stale-superset bug);
+   * balance change pick up the *previous* cutoff's positives (the stale-superset bug);
    * scoring against the live cutoff keeps Browse in lock-step with the green
    * line the user sees. Falls back to `goodVotes` only when scores are absent
    * (no scoring pass yet).
@@ -829,7 +828,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * The full positive set of this Find run: every verified-good item (pinned by
    * the human, wherever its score lands) plus the unverified positives (above
    * the live cutoff). The unverified half rides {@link unverifiedGoodIds}, so it
-   * tracks the cutoff synchronously and never lags a floor change; the verified half is
+   * tracks the cutoff synchronously and never lags a balance change; the verified half is
    * cutoff-independent and read straight off the votes.
    */
   private goodIds(): number[] {

@@ -1,5 +1,5 @@
 <vt-modal [open]="true" title="Spot check" (closed)="close()">
-  <div class="floor-check">
+  <div class="spot-check">
     @switch (phase()) {
       @case ('starting') {
         <p class="check-note" role="status">Drawing picks…</p>
@@ -8,7 +8,7 @@
         <p class="error-text" role="alert">{{ error() }}</p>
       }
       @case ('done') {
-        <div class="check-result" role="status" [attr.data-status]="floor()?.status">
+        <div class="check-result" role="status" [attr.data-status]="balance()?.status">
           <p class="check-result-headline">
             <span class="indicator-dot" aria-hidden="true"></span>
             {{ resultHeadline() }}
@@ -18,7 +18,7 @@
       }
       @default {
         @if (walkNote()) {
-          <p class="check-shorter" role="status">{{ walkNote() }}</p>
+          <p class="check-walk" role="status">{{ walkNote() }}</p>
         }
         <p class="check-brief">{{ brief() }} Is each one a match?</p>
 

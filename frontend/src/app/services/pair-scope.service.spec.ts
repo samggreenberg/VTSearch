@@ -9,7 +9,7 @@ import { SortStateService } from './sort-state.service';
 import { VoteStateService } from './vote-state.service';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { provideHttpTesting } from '../testing/test-providers';
-import { lineFloor, wireFloor } from '../testing/line-floor';
+import { lineBalance, wireBalance } from '../testing/line-balance';
 
 @Component({ selector: 'vt-pair-scope-host', standalone: true, template: '', providers: [PairScopeService] })
 class HostComponent {
@@ -111,7 +111,7 @@ describe('PairScopeService', () => {
     expect(clearSpy).toHaveBeenCalledOnce();
     // Reloads for the new pair went out.
     expect(httpMock.match('/api/dataset/status').length).toBe(1);
-    expect(httpMock.match('/api/min-precision').length).toBe(1);
+    expect(httpMock.match('/api/balance').length).toBe(1);
   });
 
   it('clears the selection too, so the centre viewer cannot outlive the pair', () => {
@@ -142,17 +142,17 @@ describe('PairScopeService', () => {
     expect(mediaState.selectedId()).toBeNull();
   });
 
-  it('seedMinPrecision pushes the per-detector floor into SortStateService', () => {
-    service.seedMinPrecision();
-    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('confirmed', { minPrecision: 0.75 }), threshold: 0.3, n_returned: 12 });
-    expect(sortState.minPrecision).toBe(0.75);
+  it('seedBeta pushes the per-detector balance into SortStateService', () => {
+    service.seedBeta();
+    httpMock.expectOne('/api/balance').flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.3, n_returned: 12, line_preference: 'balance' });
+    expect(sortState.beta).toBe(0.5);
   });
 
-  it('seedMinPrecision seeds only the value; the verdict arrives with the line', () => {
-    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineFloor('confirmed'));
-    service.seedMinPrecision();
-    httpMock.expectOne('/api/min-precision').flush({ ...wireFloor('short'), threshold: 0.3, n_returned: 1 });
-    expect(sortState.floor?.status).toBe('confirmed');
+  it('seedBeta seeds only the beta; the state of the line arrives with the line', () => {
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineBalance('checked'));
+    service.seedBeta();
+    httpMock.expectOne('/api/balance').flush({ ...wireBalance('unchecked'), threshold: 0.3, n_returned: 1, line_preference: 'balance' });
+    expect(sortState.balance?.status).toBe('checked');
     expect(sortState.threshold).toBe(0.5);
   });
 

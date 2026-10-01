@@ -78,10 +78,12 @@ class AppSettingsSchema(Schema):
 
     # Per-user, scalar
     volume = fields.Float()
-    # The precision floor (#4245).  Never ``null``: every detector has a floor
-    # (#4269), and a stored ``null`` reads as the default.
+    # The precision floor (#4245; deprecated, #4413: it draws the line only
+    # under ``line_preference: "floor"``).  Never ``null``: every detector has
+    # a floor (#4269), and a stored ``null`` reads as the default.
     min_precision = fields.Float()
-    # The balance (#4413): F-beta's beta, and which preference draws the line.
+    # The balance (#4413): F-beta's beta, and which preference draws the line
+    # (``balance``, the default, or the deprecated ``floor``).
     beta = fields.Float()
     line_preference = fields.String(validate=validate.OneOf(LINE_PREFERENCES))
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
@@ -277,10 +279,12 @@ class SettingsUpdateSchema(Schema):
     """
 
     volume = fields.Float()
-    # The precision floor (#4245).  Never ``null``: every detector has a floor
-    # (#4269), and a stored ``null`` reads as the default.
+    # The precision floor (#4245; deprecated, #4413: it draws the line only
+    # under ``line_preference: "floor"``).  Never ``null``: every detector has
+    # a floor (#4269), and a stored ``null`` reads as the default.
     min_precision = fields.Float()
-    # The balance (#4413): F-beta's beta, and which preference draws the line.
+    # The balance (#4413): F-beta's beta, and which preference draws the line
+    # (``balance``, the default, or the deprecated ``floor``).
     beta = fields.Float()
     line_preference = fields.String(validate=validate.OneOf(LINE_PREFERENCES))
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))

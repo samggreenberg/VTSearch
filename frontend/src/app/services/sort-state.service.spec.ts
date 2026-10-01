@@ -4,7 +4,7 @@ import { Subject } from 'rxjs';
 import { SortStateService, SortedItem } from './sort-state.service';
 import { ProgressEventsService } from './progress-events.service';
 import type { ProgressEvent } from '../models/api.models';
-import { FLOOR_STATES, lineFloor } from '../testing/line-floor';
+import { BALANCE_STATES, lineBalance } from '../testing/line-balance';
 
 describe('SortStateService', () => {
   let service: SortStateService;
@@ -25,7 +25,7 @@ describe('SortStateService', () => {
     expect(service.threshold).toBeNull();
     expect(service.sortBusy).toBe(false);
     expect(service.sortStatus).toBe('');
-    expect(service.minPrecision).toBe(0.5);
+    expect(service.beta).toBe(1);
     expect(service.loadSortLabel).toBe('');
   });
 
@@ -157,15 +157,15 @@ describe('SortStateService', () => {
     expect(service.sortStatus).toBe('Sorting...');
   });
 
-  it('setMinPrecision should update', () => {
-    service.setMinPrecision(0.75);
-    expect(service.minPrecision).toBe(0.75);
+  it('setBeta should update', () => {
+    service.setBeta(0.5);
+    expect(service.beta).toBe(0.5);
   });
 
-  it('setFloor replaces the verdict and leaves the line where it was', () => {
-    service.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.2 }], 0.5, lineFloor('unchecked'));
-    service.setFloor(lineFloor('short'));
-    expect(service.floor?.status).toBe('short');
+  it('setBalance replaces the state and leaves the line where it was', () => {
+    service.setSortResults([{ id: 1, score: 0.9 }, { id: 2, score: 0.2 }], 0.5, lineBalance('unchecked'));
+    service.setBalance(lineBalance('checked'));
+    expect(service.balance?.status).toBe('checked');
     expect(service.threshold).toBe(0.5);
     expect(service.aboveThreshold).toBe(1);
     expect(service.sortOrder?.length).toBe(2);
@@ -182,7 +182,7 @@ describe('SortStateService', () => {
     service.setSortResults([{ id: 1, score: 0.5 }], 0.5);
     service.setSortBusy(true);
     service.setSortStatus('busy');
-    service.setMinPrecision(0.9);
+    service.setBeta(0.5);
     service.setLoadSortLabel('test');
 
     service.clear();
@@ -193,7 +193,7 @@ describe('SortStateService', () => {
     expect(service.threshold).toBeNull();
     expect(service.sortBusy).toBe(false);
     expect(service.sortStatus).toBe('');
-    expect(service.minPrecision).toBe(0.5);
+    expect(service.beta).toBe(1);
     expect(service.loadSortLabel).toBe('');
     expect(service.sortTotal).toBe(0);
     expect(service.sortHasMore).toBe(false);
@@ -220,78 +220,78 @@ describe('SortStateService', () => {
     expect(service.acqThreshold).toBeNull();
   });
 
-  describe('the floor on the line (#4247)', () => {
-    const win = (floor: ReturnType<typeof lineFloor> | null, acqThreshold: number | null = 0.72) => ({
+  describe('the balance on the line (#4247, #4413)', () => {
+    const win = (balance: ReturnType<typeof lineBalance> | null, acqThreshold: number | null = 0.72) => ({
       items: [
         { id: 1, score: 0.9 },
         { id: 2, score: 0.3 },
       ],
       threshold: 0.5,
       acqThreshold,
-      floor,
+      balance,
       total: 2,
       hasMore: false,
       token: null,
       aboveThreshold: 1,
     });
 
-    it.each(FLOOR_STATES)('keeps the line of the kept set with its verdict when %s', (status) => {
-      service.setSortWindow(win(lineFloor(status)));
+    it.each(BALANCE_STATES)('keeps the line of the kept set with its state when %s', (status) => {
+      service.setSortWindow(win(lineBalance(status)));
       expect(service.threshold).toBe(0.5);
-      expect(service.floor?.status).toBe(status);
+      expect(service.balance?.status).toBe(status);
     });
 
-    it.each(FLOOR_STATES)(
+    it.each(BALANCE_STATES)(
       "Autopilot samples around the sort's acquisition cut when %s (Inclusion -4 below the line)",
       (status) => {
-        service.setSortWindow(win(lineFloor(status)));
+        service.setSortWindow(win(lineBalance(status)));
         expect(service.acqThreshold).toBe(0.72);
       },
     );
 
-    it.each(FLOOR_STATES)('and falls back to the line, never to null, when %s', (status) => {
-      service.setSortWindow(win(lineFloor(status), null));
+    it.each(BALANCE_STATES)('and falls back to the line, never to null, when %s', (status) => {
+      service.setSortWindow(win(lineBalance(status), null));
       expect(service.acqThreshold).toBe(0.5);
     });
 
-    it('no verdict leaves no floor', () => {
+    it('no state leaves no balance', () => {
       service.setSortWindow(win(null));
-      expect(service.floor).toBeNull();
+      expect(service.balance).toBeNull();
     });
 
-    it('setSortResults sets the floor with the threshold, and clears it when none is given', () => {
-      service.setSortResults([{ id: 1, score: 0.9 }], 0.4, lineFloor('short'));
-      expect(service.floor?.status).toBe('short');
+    it('setSortResults sets the balance with the threshold, and clears it when none is given', () => {
+      service.setSortResults([{ id: 1, score: 0.9 }], 0.4, lineBalance('checked'));
+      expect(service.balance?.status).toBe('checked');
       service.setSortResults([{ id: 1, score: 0.9 }], 0.4);
-      expect(service.floor).toBeNull();
+      expect(service.balance).toBeNull();
     });
 
-    it('setLine moves the line and its verdict over the ranking on screen (#4273)', () => {
-      service.setSortWindow(win(lineFloor('unchecked'), 0.72));
-      service.setLine(0.2, lineFloor('confirmed'));
+    it('setLine moves the line and its state over the ranking on screen (#4273)', () => {
+      service.setSortWindow(win(lineBalance('unchecked'), 0.72));
+      service.setLine(0.2, lineBalance('checked'));
       expect(service.threshold).toBe(0.2);
-      expect(service.floor?.status).toBe('confirmed');
+      expect(service.balance?.status).toBe('checked');
       // Recounted over the loaded ranking without a server count...
       expect(service.aboveThreshold).toBe(2);
       // ...and taken from the server's when it sends one.
-      service.setLine(0.95, lineFloor('short'), 11);
+      service.setLine(0.95, lineBalance('checked', { count: 11 }), 11);
       expect(service.aboveThreshold).toBe(11);
       expect(service.sortOrder?.map((i) => i.id)).toEqual([1, 2]);
     });
 
-    it('clear drops the floor', () => {
-      service.setSortWindow(win(lineFloor('unchecked')));
+    it('clear drops the balance', () => {
+      service.setSortWindow(win(lineBalance('unchecked')));
       service.clear();
-      expect(service.floor).toBeNull();
+      expect(service.balance).toBeNull();
     });
 
-    it('floor is reactive (drives a computed that reads it)', () => {
-      const derived = TestBed.runInInjectionContext(() => computed(() => service.floor?.status ?? null));
+    it('balance is reactive (drives a computed that reads it)', () => {
+      const derived = TestBed.runInInjectionContext(() => computed(() => service.balance?.status ?? null));
       expect(derived()).toBeNull();
-      service.setSortWindow(win(lineFloor('unchecked')));
+      service.setSortWindow(win(lineBalance('unchecked')));
       expect(derived()).toBe('unchecked');
-      service.setLine(0.5, lineFloor('short'));
-      expect(derived()).toBe('short');
+      service.setLine(0.5, lineBalance('checked'));
+      expect(derived()).toBe('checked');
     });
   });
 

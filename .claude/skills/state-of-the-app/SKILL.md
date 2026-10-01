@@ -29,10 +29,13 @@ same edit.
   over clicks, the returned set's **F-beta as a share of the best F-beta any
   cut of the same ranking reaches** (`returned_at_beta.png`, the "returned set
   at each balance" table), with its precision and recall beside it. Sessions
-  run at `SOTA_BETA=0.5|1|2` once the app's `line_preference` is the balance
-  (the eval's `CALIB_BETA` arm); until then the floor-era reading below is
-  the control, and the balance columns are read off floor sessions.
-- **The floor-era reading: one set of sessions per precision floor P, the
+  run at `SOTA_BETA=0.5|1|2` (the eval's `CALIB_BETA` arm): this is the
+  standing recipe. The harness's default arm (neither `SOTA_BETA` nor
+  `SOTA_FLOOR`) is the app's default, the balance at beta 1, since #4413's
+  step 6 switched `line_preference` to the balance. The per-floor sessions
+  below are the **floor-era control** (#4408): run them to compare against
+  the floor era, not as the review.
+- **The floor-era control: one set of sessions per precision floor P, the
   returned set scored at its own P (owner, 2026-10-01 02:20, #4408).** "The quality of our
   RETURNS matters more than the quality of our RANK." F1 cannot see P (the 50%
   and 90% lines keep nearly the same set and got the same F1), so the headline
@@ -78,9 +81,10 @@ same edit.
   right. The region path's ceiling is supervised with each positive's
   ground-truth box (owner ruling on #3321).
 - **Metrics (owner, 2026-09-30, #4357): no FPR + FNR anywhere.** #4223
-  retired that objective, and since #4272 the default arm's line is the
-  floor's set (the top 32 unvoted at the default 50%), so a review scored in
-  cost reads the change of objective as a regression. Cost is gone from the
+  retired that objective, and since #4272 the default arm's line is a kept
+  set (the floor's until #4413; now the balance's at beta 1, the mixture's
+  F-beta argmax capped at 32), so a review scored in cost reads the change
+  of objective as a regression. Cost is gone from the
   headline, the tables and the figures, not moved to an appendix.
   **The precision floor is written *P*, not *X*** (owner, 2026-09-30).
   The set, as `analyze.py` reports it:
@@ -164,7 +168,8 @@ CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node:
 bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
-# per floor (#4408): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
+# per beta (#4413, the standing recipe): SOTA_BETA=0.5|1|2 on prepare / redo / analyze -> <date>-b05/-b1/-b2
+# per floor (#4408, the floor-era control): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
 python perp.py --run 0.1=<p10>/analysis-binary --run 0.5=<p50>/analysis-binary --run 0.9=<p90>/analysis-binary --out <dir>
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
@@ -200,8 +205,10 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   7.5–12 min and ~1.1 GB at 2 CPUs.
 - **The line on a fresh corpus is the shipped one** (#4402): the rank frames
   record how many the unchecked line keeps on the test half
-  (`test_line_k_p10/p50/p90`: the smaller of the schedule's count and the
-  vote-anchored mixture's, #4389), and `_rank_metrics.frame_k` reads it. A run
+  (`test_line_k_b05/b1/b2`: the mixture's F-beta argmax under the balance's
+  cap, #4413; `test_line_k_p10/p50/p90`: the smaller of the schedule's count
+  and the vote-anchored mixture's, #4389), and `_rank_metrics.frame_k` reads
+  it. A run
   from before c5f55732c has no such column, and the analyzer then reads the
   schedule's count, which is not the app's line any more: **re-run it, don't
   re-analyze it.** Recording it is a pure read; the 2026-09-30 re-run was
@@ -238,15 +245,22 @@ and say what the app gets wrong.
 Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/REPORT.md`
 (e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
 
-1. **Headline: the returned set at each P, from its own sessions** (#4408):
-   precision against P and recall against the oracle's recall at P, over
-   clicks (`perp.py`: `returned_at_own_p.png`, `perp_summary.md`; per run,
-   `returned_at_p.png`), text → 25 → 50 → final → ceiling, with the share of
+1. **Headline: the returned set at each balance, from its own sessions**
+   (#4413): per beta (0.5 / 1 / 2) over clicks, the returned set's F-beta as
+   a share of the best F-beta any cut of the same ranking reaches
+   (`returned_at_beta.png`, the "returned set at each balance" table), with
+   its precision and recall beside it, text → 25 → 50 → final → ceiling. The
+   floor-era control (#4408), when it was run: precision against P and recall
+   against the oracle's recall at P (`perp.py`: `returned_at_own_p.png`,
+   `perp_summary.md`; per run, `returned_at_p.png`), with the share of
    sessions meeting P. Then the ranking: mean text-only AP, AP at 25 and 50
    clicks, the final AP against the ceiling's, with Goods found at the same
-   points. F1 at the line (`f1_over_clicks.png`) is secondary: it cannot see P.
-2. **The spot check:** how often it confirms, its range, and how often the
-   range held the truth.
+   points. F1 at the line (`f1_over_clicks.png`) is secondary: it cannot see
+   the balance.
+2. **The spot check:** where the F-beta walk ends (the kept set's F-beta
+   against the best cut's), its precision and recall ranges, and how often
+   the precision range held the truth; under the floor-era control, how often
+   it confirms.
 3. **Where the app does well and where it does poorly,** by class and by band,
    on final AP and on the final line at 50%. Name the classes, with numbers.
 4. **Headroom:** the ceiling's AP minus the final AP. This is what better

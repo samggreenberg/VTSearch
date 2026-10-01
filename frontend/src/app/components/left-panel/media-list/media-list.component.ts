@@ -10,7 +10,7 @@ import { MediaStateService } from '../../../services/media-state.service';
 import { SkeletonComponent } from '../../skeleton/skeleton.component';
 import { SortedItem } from '../left-panel.component';
 import { prefersReducedMotion } from '../../../utils/reduced-motion';
-import { floorExplanation, type LineFloor } from '../../../utils/line-floor';
+import { balanceExplanation, type LineBalance } from '../../../utils/line-balance';
 
 /**
  * Item count above which the thumbnail grid switches to CDK virtual scrolling.
@@ -67,10 +67,10 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   readonly sortOrder = input<SortedItem[] | null>(null);
   readonly threshold = input<number | null>(null);
   /**
-   * What the precision floor says about `threshold` (#4272, #4273). The line
+   * What the balance says about `threshold` (#4272, #4273, #4413). The line
    * draws the same in every state; its tooltip says which state it is in.
    */
-  readonly floor = input<LineFloor | null>(null);
+  readonly balance = input<LineBalance | null>(null);
   readonly selectedId = input<number | null>(null);
   readonly goodVotes = input<Set<number>>(new Set());
   readonly badVotes = input<Set<number>>(new Set());
@@ -88,9 +88,9 @@ export class MediaListComponent implements OnInit, AfterViewChecked, OnDestroy {
   /** True while a page fetch is in flight (disables the Load-more trigger). */
   readonly loadingMore = input(false);
 
-  /** The line's tooltip: what it is, and what the precision floor says about it. */
+  /** The line's tooltip: what it is, and what the balance says about it. */
   readonly thresholdTitle = computed(() => {
-    const state = floorExplanation(this.floor());
+    const state = balanceExplanation(this.balance());
     const what = "The line between the detector's good and bad matches";
     return state ? `${what}. ${state}` : what;
   });

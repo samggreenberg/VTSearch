@@ -73,7 +73,7 @@ from marshmallow import Schema, fields, validate
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
-from vtsearch.schemas.sorting import FloorStateSchema
+from vtsearch.schemas.sorting import BalanceStateSchema, FloorStateSchema
 
 #: Upper bound on user-supplied detector names.  A name this long is already
 #: past any reasonable display use, and capping it here keeps the derived
@@ -573,8 +573,11 @@ class FindLabelResponseSchema(Schema):
     ok = fields.Boolean(required=True)
     results = fields.List(fields.Nested(_FindLabelResultSchema), required=True)
     threshold = fields.Float(required=True)
-    # What the precision floor says about ``threshold`` (#4247, #4272).
+    # What the precision floor says about ``threshold`` (#4247, #4272), and
+    # what the balance says (#4413); which of the two draws the line is the
+    # ``line_preference`` setting, the balance by default.
     floor = fields.Nested(FloorStateSchema, required=True)
+    balance = fields.Nested(BalanceStateSchema, required=True)
     good_count = fields.Integer(required=True)
     bad_count = fields.Integer(required=True)
     detector_name = fields.String(required=True)
@@ -674,6 +677,8 @@ class _AutoDetectResultSchema(Schema):
     # What the precision floor says about ``threshold``: unchecked, confirmed
     # or short (#4272); ``null`` for a detector with no trained context to ask.
     floor = fields.Nested(FloorStateSchema, allow_none=True)
+    # What the balance says about it (#4413); ``null`` likewise.
+    balance = fields.Nested(BalanceStateSchema, allow_none=True)
     total_hits = fields.Integer(required=True)
     hits = fields.List(fields.Nested(_HitSchema), required=True)
     negative_hits = fields.List(fields.Nested(_HitSchema), required=True)
@@ -991,10 +996,12 @@ class FindStatsResponseSchema(Schema):
     verified_precision = fields.Float(required=True, allow_none=True)
     verified_called_good = fields.Integer(required=True)
     verified_kept_good = fields.Integer(required=True)
-    # Run context: the line, and what the precision floor says about it - the
-    # floor it was cut at, its state and the spot check's likely range (#4272).
+    # Run context: the line, and what the precision floor and the balance say
+    # about it - the preference it was cut at, its state and the spot check's
+    # likely ranges (#4272, #4413).
     threshold = fields.Float(required=True)
     floor = fields.Nested(FloorStateSchema, required=True)
+    balance = fields.Nested(BalanceStateSchema, required=True)
     # How many items the Find run scored, and how many clear the current cut.
     n_scored = fields.Integer(required=True)
     n_returned = fields.Integer(required=True)

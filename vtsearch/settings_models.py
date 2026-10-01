@@ -406,7 +406,8 @@ class UserSettings(BaseModel):
     # ``None`` is not a value, so a ``null`` left in an older settings file
     # fails validation and reads as the default.  Clamped to ``[0.01, 1]``: a
     # floor of zero promises nothing and would read as a floor that is always
-    # met.
+    # met.  Deprecated (#4413): draws the line only under ``line_preference
+    # == "floor"``; kept one release, then removed with the floor.
     min_precision: Annotated[float, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
     # The balance (#4413): F-beta's beta, clamped to ``[0.25, 4]`` (the presets
     # are 0.5 precision-leaning, 1 balanced, 2 recall-leaning).  Draws the line

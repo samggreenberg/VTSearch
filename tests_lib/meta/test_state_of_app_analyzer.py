@@ -162,6 +162,7 @@ def _write_cells(exp: Path) -> None:
             seed=0,
             dataset_name="coco_better",
             max_steps=MAX_STEPS,
+            min_precision=0.5,  # the floor arm: the per-P machinery's fixture (#4408); the balance is the default
             style="whole_image",
             safe_thresholds=True,
             emit_calibration_metrics=True,
@@ -368,7 +369,7 @@ def test_the_balance_metric_peaks_at_the_balance_by_construction(rm) -> None:
 
 
 def test_each_run_records_the_floor_its_sessions_aimed_at(run) -> None:
-    """``session_floor`` is the run's CALIB_MIN_PRECISION: the app's default here."""
+    """``session_floor`` is the run's CALIB_MIN_PRECISION: pinned to 0.5 here (the default arm is the balance, #4413)."""
     trained = run["cells"][~run["cells"]["never_trained"].astype(bool)]
     assert not trained.empty and (trained["session_floor"] == 0.5).all()
 

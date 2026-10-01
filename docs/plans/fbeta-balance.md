@@ -91,6 +91,11 @@ what the state reports, and the words.
 
 ## Steps (each a PR that keeps the suite green; the floor path stays until the last)
 
+Status (2026-10-01): steps 1-4 landed with PR #4414 and PR #4416; step 6
+(the UI and the docs, with the switch of `line_preference` to the balance)
+is the PR this revision belongs to; step 5's acquisition pricing is still
+running under #4409.
+
 1. **Library core** (`vtscore/training/thresholds/spot_check.py`, tests in
    `tests_lib/sorting/`): `mixture_positives` and `fbeta_count` beside
    `mixture_count`; `SpotCheck.start(..., beta=, n_pos=)` with the F-beta
@@ -116,10 +121,42 @@ what the state reports, and the words.
    check modal's copy, Find Stats, `docs/ML.md`, `docs/api/labeling.md`,
    `docs/user/USER_GUIDE.md`, this plan's predecessor marked superseded).
 
-## Open questions for the owner (defaults chosen; say if different)
+## Decisions (2026-10-01, as shipped)
 
-- The presets: 0.5 / 1 / 2, default 1.
-- The unchecked cap: the floor's schedule counts (32 / 128). A larger cap
-  returns more on big corpora and more junk on sparse ones.
-- Whether "recall" is a word the note should use, or "about half of them
-  found".
+- **The presets are 0.5 / 1 / 2, default 1.** Any beta in `[0.25, 4]` is
+  accepted by the API and the setting; a value outside is clamped.
+- **The unchecked cap is the floor's schedule count:** 32 at beta 1 and 0.5,
+  128 at beta 2 (`balance_schedule`). It is also where a walk starts.
+- **The note says "about half of them found", not "recall".** The phrase is
+  read off the recall range's midpoint: *few of them found* / *about a
+  quarter of them found* / *about half of them found* / *about three
+  quarters of them found* / *nearly all of them found*. The checked note
+  reads `Checked · likely 55–80% right, about half of them found (checked
+  15) · 48 kept`; the unchecked one `Top 32 kept, unchecked`.
+- **The control keeps its "Threshold" heading and its spectrum** (False
+  Positives ... False Negatives) with three unlabelled radios; the component
+  is `vt-balance`. The check button stays **Check 5 picks**.
+- **The check modal is `vt-spot-check-modal`.** Its walk notes are `Better
+  so far: checking the next 32.` and `Past the peak: checking a shorter
+  list.`; its result reads `Checked: likely 55–80% right, about half of them
+  found (checked 15).` and `The line keeps these 48: the set where the
+  check's balance peaked. The ranges are what the picks say about them.`
+- **The Find Stats chart draws no floor line.** Its legend reads `Line:
+  checked (48 kept)` or `Line: the top 32, unchecked`.
+- **The states are `unchecked` and `checked`.** There is no `short`.
+- **`min_precision` and `/api/min-precision` are deprecated, not aliased.**
+  They draw the line only under `line_preference: "floor"`
+  (`PUT /api/settings`), stay for one release, and are removed next release.
+  There is no mapping from a floor to a beta: the floor's presets never were
+  an F-beta (#4411). Every response carries both a `floor` and a `balance`
+  object for that release.
+- **Headless runs export the preference's unchecked set and say so:** the
+  `detector_unchecked` event reads `Detector 'det' exports its top 32
+  unchecked (at F1); nobody is here to check it.` under the balance, and
+  carries `beta` beside `min_precision`.
+- **The eval's default arm is the balance at beta 1**
+  (`simulate_voting_iterations(beta=None, min_precision=None)`;
+  `CALIB_BETA` unset); `CALIB_BETA=0.5|1|2` pins a balance, and
+  `CALIB_MIN_PRECISION=<P>` is the floor arm. The State-of-the-App review
+  runs one set of sessions per beta (`SOTA_BETA`); the per-floor sessions
+  (`SOTA_FLOOR`, #4408) are the floor-era control.

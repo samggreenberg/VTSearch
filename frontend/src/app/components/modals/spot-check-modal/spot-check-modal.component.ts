@@ -15,31 +15,32 @@ import type { Media } from '../../../models/api.models';
 import type { PrecisionCheckResponse } from '../../../generated/api-client/models/precision-check-response';
 import type { PrecisionCheckState } from '../../../generated/api-client/models/precision-check-state';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { lineFloorFrom, rangePercent, type LineFloor } from '../../../utils/line-floor';
+import { foundWords, lineBalanceFrom, rangePercent, type LineBalance } from '../../../utils/line-balance';
 
 /** Where the step is: drawing the first round, voting on a round, sending it, on the result, or refused. */
 type Phase = 'starting' | 'voting' | 'sending' | 'done' | 'error';
 
 /** What a host needs after a round's votes land: they are ordinary votes, and a finished check moves the line. */
-export interface FloorCheckVoted {
-  /** True when this round ended the check: the line now keeps the set it ended on. */
+export interface SpotCheckVoted {
+  /** True when this round ended the check: the line now keeps the set where the balance peaked. */
   finished: boolean;
   response: PrecisionCheckResponse;
 }
 
 /**
- * The precision floor's spot check (#4273; the rule is #4272's, walking the
- * ranking in bands since #4388).
+ * The balance's spot check (#4413; the step is #4273's, walking the ranking
+ * in bands since #4388).
  *
  * Opens from the Threshold control's "Check 5 picks", in Train only: Find
- * tests the threshold it was given and offers no check (#4317). The server
+ * tests the balance it was given and offers no check (#4317). The server
  * cuts the unvoted ranking into bands (the top 8, the next 8, then 16, 32, ...)
  * and draws each band's 5 picks uniformly at random; the user votes each one
- * Good or Bad. A band at a time, the check walks: deeper while the set so far
- * meets the threshold ("Looks right so far: checking the next 32"), shallower
- * while it does not ("Not there yet: checking a shorter list"), and it ends on
- * the deepest set that met it and how close the line got - a likely range
- * from the picks alone.
+ * Good or Bad. A band at a time, the check walks: deeper while its estimate
+ * of the balance (F-beta) does not fall ("Better so far: checking the next
+ * 32"), and back to a shorter list once it does ("Past the peak: checking a
+ * shorter list"), ending on the set where the estimate peaked. The result is
+ * what the picks say about that set: a likely share right, and how many of
+ * all the matches it holds. Nothing is met or fallen short of.
  *
  * - **The picks are a check, not the ranking** (owner, 2026-09-29). They show
  *   one at a time in the order they were drawn, which is random, with no rank
@@ -53,12 +54,12 @@ export interface FloorCheckVoted {
  *   round. The server records them as ordinary votes (provenance `check`).
  * - **Closing leaves the state as it was.** Cancel, Escape or × on a running
  *   check cancels it server-side; the rounds already sent stay votes, and the
- *   floor keeps its last result. The host re-reads the votes and the line on
- *   `closed`, so nothing the step saw is left half-applied.
+ *   balance keeps its last result. The host re-reads the votes and the line
+ *   on `closed`, so nothing the step saw is left half-applied.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  selector: 'vt-floor-check-modal',
+  selector: 'vt-spot-check-modal',
   standalone: true,
   imports: [
     ModalComponent,
@@ -69,10 +70,10 @@ export interface FloorCheckVoted {
     VideoPlayerComponent,
     VotingOverlayComponent,
   ],
-  templateUrl: './floor-check-modal.component.html',
-  styleUrl: './floor-check-modal.component.scss',
+  templateUrl: './spot-check-modal.component.html',
+  styleUrl: './spot-check-modal.component.scss',
 })
-export class FloorCheckModalComponent implements OnInit {
+export class SpotCheckModalComponent implements OnInit {
   private readonly sortingApi = inject(SortingApiService);
   private readonly mediaState = inject(MediaStateService);
   private readonly metadataCache = inject(MediaMetadataCacheService);
@@ -82,14 +83,14 @@ export class FloorCheckModalComponent implements OnInit {
   /** The step closed, however it ended. */
   readonly closed = output<void>();
   /** A round's votes landed on the server. */
-  readonly voted = output<FloorCheckVoted>();
+  readonly voted = output<SpotCheckVoted>();
 
   readonly phase = signal<Phase>('starting');
   readonly error = signal('');
   /** The check as the server last reported it. */
   readonly check = signal<PrecisionCheckState | null>(null);
-  /** The floor's state from the last response: the result, once the check ends. */
-  readonly floor = signal<LineFloor | null>(null);
+  /** The balance's state from the last response: the result, once the check ends. */
+  readonly balance = signal<LineBalance | null>(null);
   /** This round's picks, in draw order. */
   readonly picks = signal<number[]>([]);
   /** This round's votes, held until the round is whole. */
@@ -136,25 +137,21 @@ export class FloorCheckModalComponent implements OnInit {
     return `${picks[0].toUpperCase()}${picks.slice(1)}${from}, ${set}.`;
   });
 
-  /** The result's headline: the floor held, or how close it got. A short check names no cause. */
+  /** The result's headline: what the picks found on the set where the balance peaked. */
   readonly resultHeadline = computed(() => {
-    const f = this.floor();
-    if (!f) return '';
-    const r = f.range;
-    if (f.status === 'confirmed') {
-      return r ? `Confirmed: likely ${rangePercent(r)} right (checked ${r.labelled}).` : 'Confirmed.';
-    }
-    return r ? `Fell short: likely ${rangePercent(r)} right (checked ${r.labelled}).` : 'Fell short.';
+    const b = this.balance();
+    if (!b) return '';
+    const p = b.precision;
+    const r = b.recall;
+    return p && r ? `Checked: likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}).` : 'Checked.';
   });
 
   /** What the line keeps now. */
   readonly resultDetail = computed(() => {
-    const f = this.floor();
-    if (!f) return '';
-    const kept = f.count.toLocaleString();
-    return f.status === 'confirmed'
-      ? `The line keeps these ${kept}: the deepest set the check found right enough. The range is how much of them the picks say is right.`
-      : `No set met the threshold, so the line keeps the top ${kept}. The range is how much of them the picks say is right.`;
+    const b = this.balance();
+    if (!b) return '';
+    const kept = b.count.toLocaleString();
+    return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them.`;
   });
 
   constructor() {
@@ -213,10 +210,10 @@ export class FloorCheckModalComponent implements OnInit {
   }
 
   /**
-   * Close the step. A running check is cancelled so the floor keeps its last
-   * result; the rounds already sent stay votes either way. The cancel outlives
-   * the step on purpose, and the host re-reads the votes and the line on
-   * `closed`, which covers a round that lands after the step has gone.
+   * Close the step. A running check is cancelled so the balance keeps its
+   * last result; the rounds already sent stay votes either way. The cancel
+   * outlives the step on purpose, and the host re-reads the votes and the
+   * line on `closed`, which covers a round that lands after the step has gone.
    */
   close(): void {
     const phase = this.phase();
@@ -238,15 +235,15 @@ export class FloorCheckModalComponent implements OnInit {
       next: (resp) => {
         const beforeBands = this.check()?.bands ?? 0;
         this.apply(resp);
-        const finished = resp.check?.status === 'confirmed' || resp.check?.status === 'short';
+        const finished = resp.check?.status === 'checked';
         const c = resp.check;
         if (!finished && c && c.bands !== beforeBands) {
           // The walk moved: the set under test grew by a band, or shrank.
           const next = c.band ? c.band.hi - c.band.lo + 1 : 0;
           this.walkNote.set(
             c.direction === 'deeper'
-              ? `Looks right so far: checking the next ${next.toLocaleString()}.`
-              : 'Not there yet: checking a shorter list.',
+              ? `Better so far: checking the next ${next.toLocaleString()}.`
+              : 'Past the peak: checking a shorter list.',
           );
         }
         this.voted.emit({ finished, response: resp });
@@ -263,7 +260,7 @@ export class FloorCheckModalComponent implements OnInit {
   private apply(resp: PrecisionCheckResponse): void {
     const c = resp.check ?? null;
     this.check.set(c);
-    this.floor.set(lineFloorFrom(resp.floor));
+    this.balance.set(lineBalanceFrom(resp.balance));
     if (c?.status === 'running' && c.picks.length > 0) {
       this.picks.set([...c.picks]);
       this.votes.set(new Map());
@@ -272,7 +269,7 @@ export class FloorCheckModalComponent implements OnInit {
       this.phase.set('voting');
       return;
     }
-    if (c?.status === 'confirmed' || c?.status === 'short') {
+    if (c?.status === 'checked') {
       this.phase.set('done');
       return;
     }

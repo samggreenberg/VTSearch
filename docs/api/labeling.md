@@ -7,87 +7,110 @@
 
 ---
 
-## The Precision Floor
+## The Balance
 
-### Get / set the precision floor
-
-```
-GET /api/min-precision
-```
-
-→ `{"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}, "threshold": 0.5123, "n_returned": 41}`
+### Get / set the balance
 
 ```
-POST /api/min-precision
+GET /api/balance
 ```
 
-**Body:** `{"min_precision": 0.75}`
+→ `{"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}, "threshold": 0.5123, "n_returned": 32, "line_preference": "balance"}`
 
-The precision floor is the share of what the detector returns that should be
-right. The line always keeps a **set**: the top `count` unvoted items of the
-ranking the detector last scored. Before any check that set is the
-**unchecked line**: the smaller of the floor's **starting candidate** - the top
-128 at 10%, the top 64 at 25%, the top 32 at 50% and above - and the count a
-2-component mixture fitted on the detector's scores, anchored on the votes,
-says is at least the floor's share right (#4389; the owner's ruling on
-#4383, priced in
-[`REPORT.md`](../experiments/2026-09-30-line-estimate-4383/REPORT.md)). The
-mixture can only lower the count; nothing has measured how much of the set is
-right. A **spot
-check** ([below](#the-spot-check)) measures it: the user votes on 5 random
-picks from each band of the unvoted ranking (the top 8, the next 8, 16, 32,
-...), and the check walks, deeper while the band-weighted share of right
-picks meets the floor and shallower while it does not, then keeps the deepest
-set that met it and says how close it got (#4388). The floor is kept per detector and seeded from the user's
-`min_precision` setting, which is `0.5` until the user changes it. A number is
-clamped to `[0.01, 1]`; a boolean, non-number or `null` is a 422: every
-detector has a floor. It is a pure cutoff knob - the active detector's line
-moves to the set the new floor keeps without retraining and, in Find mode, the
-unverified items re-split - and the same value is settable as `min_precision`
-on `PUT /api/settings`. Both verbs return the new line in the same round trip,
-so the app's floor control moves its line without re-scoring. The control
-offers three floors, 10%, 50% and 90%, as unnumbered radios along a False
-Positives to False Negatives spectrum. The API takes any value in range, but
-when the app shows a detector whose floor is off that list, the control moves
-it to the nearest of the three.
+```
+POST /api/balance
+```
 
-The floor replaced the Inclusion knob, and `/api/inclusion` is gone. Inclusion
-survives only as the internal unit Autopilot's acquisition cut and the Smart
-indicator are measured in.
+**Body:** `{"beta": 1}`
+
+The balance is the user's precision/recall preference, as F-beta's beta: what
+the line should make the most of (#4413, the owner's ruling of 2026-10-01,
+priced by #4411 in
+[`REPORT.md`](../experiments/2026-10-01-fbeta-line-4411/REPORT.md)). The
+app's Threshold control offers three presets as unnumbered radios along a
+False Positives to False Negatives spectrum: **2** (recall-leaning, the left
+radio: the line returns the most, with more wrong ones in it), **1**
+(balanced, the default) and **0.5** (precision-leaning, the right radio:
+only the surest, missing more). The API takes any beta in `[0.25, 4]`; a
+number outside it is clamped, and a boolean, non-number or `null` is a 422.
+The balance is kept per detector and seeded from the user's `beta` setting,
+as the floor was.
+
+The line always keeps a **set**: the top `count` unvoted items of the ranking
+the detector last scored.
+
+- **Unchecked** (before any spot check at this beta; AutoRun, the CLI and a
+  cold Find, which have nobody to vote): the count at which the
+  vote-anchored mixture's F-beta peaks over the unvoted ranking
+  (`fbeta_count`: a 2-component mixture fitted on the ranking's scores and
+  anchored on the votes, its high-component posterior summed down the
+  ranking for the positives in each top *k* and in all), **capped** at 128
+  items for beta 2 and 32 for beta 1 and 0.5, the counts the floor's no-vote
+  line used (#4389). The cap is what holds the mixture on a large sparse
+  corpus, where it over-counts the positives and would return 2-4x too much
+  (#4411).
+- **Checked**: the band edge where the last spot check's F-beta estimate
+  peaked ([below](#the-spot-check)).
+
+A `POST` is a pure cutoff move: under the balance preference the active
+detector's line moves to the set the new beta keeps without retraining and,
+in Find mode, the unverified items re-split. Both verbs return the new line
+in the same round trip, so the app's control moves its line without
+re-scoring. The same value is settable as `beta` on `PUT /api/settings`.
+Which preference draws the line is the `line_preference` setting:
+`"balance"` (the default) or `"floor"` (the deprecated precision floor,
+[below](#deprecated-the-precision-floor)). A `POST` under the floor
+preference stores the beta and moves nothing.
 
 | Field | Meaning |
 |---|---|
-| `min_precision` | The active detector's floor. |
-| `status` | `unchecked` (no spot check has run at this floor; the line keeps the unchecked line, the smaller of the starting candidate and the mixture's count), `confirmed` (the walk ended on a set whose picks met the floor), or `short` (no set met it, and the line keeps the first band, the top 8). |
-| `count` | How many unvoted items the line keeps: the unchecked line (the starting candidate, or fewer when the mixture says fewer are likely right; capped by the corpus), the set the walk confirmed (a band edge: 8, 16, 32, 64, ...), or the first band after a short check. |
-| `range` | The check's **likely range** for how much of the kept set is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked. Each audited band's Clopper-Pearson interval from its picks, each tail at `alpha / bands` over the set's bands, weighted by band size; exact where the picks cover a band. The walk decides on the picks' plain share, so a confirmed set's range can reach below the floor. `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
-| `schedule` | What a check at this floor costs: `candidate` (the count the walk starts from), `rounds` (the bands it audits before its first verdict) and `picks` a band. |
+| `beta` | The active detector's balance: F-beta's beta. |
+| `status` | `unchecked` (no spot check has run at this beta; the line keeps the mixture's F-beta peak under the cap) or `checked` (the last walk's peak). There is no `short`: a balance has nothing to fall short of. |
+| `count` | How many unvoted items the line keeps: the unchecked count (capped by the corpus), or the set the walk ended on (a band edge: 8, 16, 32, 64, ...). |
+| `precision` | The check's **likely range** for how much of the kept set is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked. Each audited band's Clopper-Pearson interval from its picks, each tail at `alpha / bands` over the set's bands, weighted by band size; exact where the picks cover a band. `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
+| `recall` | The check's likely range for how much of the corpus's positives the kept set found: the bands' intervals times their sizes, over the mixture's count of positives in the unvoted ranking (fixed when the walk started). The same `labelled`, `right` and `stale`; `null` while unchecked. The rougher of the two ranges: the picks cannot measure its denominator. |
+| `fbeta` | The walk's F-beta estimate for the kept set - `(1 + beta²) · tp / (beta² · n_pos + count)`, `tp` the band-weighted positives among the picks, `n_pos` the mixture's - or `null` while unchecked. |
+| `schedule` | The cap and what a walk from it costs: `candidate` (the cap, 32 or 128, which is where the walk starts), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
 | `threshold` | The line: the last item of the kept set. `null` when no detector is active or none has computed a threshold yet. |
 | `n_returned` | Items at or above `threshold` in the ranking the detector last scored, voted items included. `null` before a retrain has scored one. |
+| `line_preference` | Which preference draws the line: `balance` or `floor`. |
 
-The range comes only from the check's picks, never from a model: model-chosen
-votes break most of an estimator's promises once the reference pool is
-consistent, while a uniform pick has no such bias.
+The precision range comes only from the check's picks, never from a model:
+model-chosen votes break most of an estimator's promises once the reference
+pool is consistent, while a uniform pick has no such bias. The recall range
+and the F-beta estimate lean on the mixture's count of positives, so they are
+wider and rougher (#4411: the walk's own F-beta estimate is off by
+0.15-0.21, where the floor walk's precision estimate was off by 0.10-0.14).
 
-### The floor state
+The balance replaced the precision floor, which had replaced the Inclusion
+knob (`/api/inclusion` is gone). Inclusion survives only as the internal unit
+Autopilot's acquisition cut and the Smart indicator are measured in.
 
-Every response that carries a detector's line carries a `floor` object beside
-its `threshold`, so a client can say what set the line keeps and how close the
-check got: the [learned sort](medias.md#learned-sort),
-[`/api/find-label`](find.md#find-label-score--label-the-active-dataset), each
-detector of [`/api/auto-detect`](find.md#auto-detect), and the CLI's
-autodetect results.
+### The line state
+
+Every response that carries a detector's line carries **both** a `balance`
+object and a `floor` object beside its `threshold`, so a client can say what
+set the line keeps and what the check found on it: the
+[learned sort](medias.md#learned-sort),
+[`/api/find-label`](find.md#find-label-score--label-the-active-dataset), the
+[Find stats](find.md#find-stats-detector-evaluation), each detector of
+[`/api/auto-detect`](find.md#auto-detect), the CLI's autodetect results, and
+every `/api/precision-check` verb. Which of the two drew the line is the
+`line_preference` setting; the other rides along for one release and reports
+the set it would have kept.
 
 ```json
-{"min_precision": 0.5, "status": "short", "count": 32, "range": {"lo": 0.11, "hi": 0.73, "labelled": 5, "right": 2, "stale": false}, "schedule": {"candidate": 32, "rounds": 1, "picks": 5}}
+{"beta": 1.0, "status": "checked", "count": 48, "precision": {"lo": 0.55, "hi": 0.8, "labelled": 15, "right": 10, "stale": false}, "recall": {"lo": 0.3, "hi": 0.6, "labelled": 15, "right": 10, "stale": false}, "fbeta": 0.61, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}}
 ```
 
-The fields mean what they do on `/api/min-precision` above. The line keeps a
-set in every state: every match, count and action keeps working on it, and
-the app draws it the same in all three, with the state and its range in the
-floor control and on the Find Stats chart. It is never
-`null` for want of a check. A headless run (AutoRun, the CLI) has nobody to
-vote, so it exports the `unchecked` line and records it as such.
+The fields mean what they do on `/api/balance` above, less `threshold`,
+`n_returned` and `line_preference`. The line keeps a set in both states:
+every match, count and action keeps working on it, and the app draws it the
+same in both, with the state and its ranges under the Threshold control and
+in the Find Stats chart's legend. It is never `null` for want of a check. A
+headless run (AutoRun, the CLI) has nobody to vote, so it exports the
+`unchecked` line and records it as such. The `floor` object's shape is under
+[the floor state](#the-floor-state), below.
 
 ### The spot check
 
@@ -98,18 +121,24 @@ POST /api/precision-check/votes
 POST /api/precision-check/cancel
 ```
 
-Every verb returns `{"floor": <floor state>, "check": <check> | null}`, the
-check being the running one, else the last finished one.
+Every verb returns `{"floor": <floor state>, "balance": <balance state>,
+"check": <check> | null}`, the check being the running one, else the last
+finished one. The check walks the line's preference: a **balance walk**
+under `line_preference: "balance"`, a floor walk under `"floor"`.
 
 **`start`** fixes the unvoted ranking off the active detector's current one
 (the ranking its last learned sort or Find pass scored, in rank order), cuts
-it into bands, and deals the first band's picks. The ids never change after
-this, so every band samples one list however the model retrains behind it.
-The walk starts at the bands that hold `schedule.candidate` items. **409**
-when there is no ranking yet, nothing in it is unvoted, or the list is the one
-the last finished check already walked: there is no redraw on the same list
-(any vote, the check's own included, changes it). A check already running is
-replaced.
+it into bands (the top 8, the next 8, then 16, 32, ...), and deals the first
+band's picks: 5 drawn uniformly from the band, a census of a band smaller
+than that. The ids never change after this, so every band samples one list
+however the model retrains behind it. A balance walk also fixes `n_pos`, the
+mixture's count of positives in the unvoted ranking, which its recall is
+read against. The walk starts at the bands that hold `schedule.candidate`
+items. **409** when there is no ranking yet, nothing in it is unvoted, the
+list is the one the last finished check already walked (there is no redraw
+on the same list: any vote, the check's own included, changes it), or, on a
+balance walk, no mixture fits the ranking to read recall against. A check
+already running is replaced.
 
 **`votes`** takes `{"votes": [{"id": 12, "label": "good"}, ...]}` on the round's
 picks. Each is an ordinary vote on the item - it trains the model, persists to
@@ -117,46 +146,100 @@ the labelset, and in Find mode verifies the item - tagged with provenance
 `{"flow": "check"}`. A partial round waits for the rest; an id that is not one
 of the band's picks is a **400**; no running check is a **409**. Once the
 band is audited the walk moves on: the next band the set under test still owes
-is dealt, or the set is decided on the band-weighted share of its picks. A set
-that meets the floor sends the walk one band **deeper** (its picks are
-dealt); one that does not sends it one band **shallower** (no new picks); the
-walk stops on the first reversal or at either end. The check ends
-**confirmed** on the deepest set that met the floor, or **short** on the
-first band when none did. The floor's line then moves to the set the check
-ended on, and the result is kept on the detector: later votes retrain the
-model and the line follows the new ranking at the same count, with the range
-reported `stale`.
+is dealt, or the set is decided. A balance walk estimates the set's F-beta -
+`tp` from the picks (each band's share of right picks times the band's size),
+`n_pos` from the mixture - and goes one band **deeper** while a deeper set's
+estimate rises (its picks are dealt); the first time it falls, the walk ends
+on the peak. From a start whose first deeper step falls, it goes one band
+**shallower** while the estimate does not fall (no new picks: a shallower set
+is a subset of an audited one) and ends on the peak. A tie keeps the smaller
+set. The check ends **checked** on the peak's band edge. (A floor walk goes
+deeper while the band-weighted share of right picks meets the floor and
+shallower while it does not, and ends **confirmed** on the deepest set that
+met it, or **short** on the first band when none did.) The line then moves to
+the set the check ended on, and the result is kept on the detector: later
+votes retrain the model and the line follows the new ranking at the same
+count, with the ranges reported `stale`. A result belongs to its beta (or its
+floor): another beta is `unchecked` until it is checked itself, and the
+earlier result shows again if the beta moves back.
 
 **`cancel`** abandons a running check; its votes so far stay ordinary votes
-and the floor's state is as it was.
+and the line's state is as it was.
 
 ```json
 {
   "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
+  "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "check": {
-    "status": "running", "min_precision": 0.5,
+    "status": "running", "min_precision": null, "beta": 1.0,
+    "fbeta": null, "recall": {"lo": 0.25, "hi": 0.7, "labelled": 15, "right": 10},
     "round": 4, "rounds": 12, "picks_per_round": 5,
     "candidate": 64, "start_candidate": 32,
     "bands": 4, "band": {"index": 3, "lo": 33, "hi": 64}, "direction": "deeper", "estimate": null,
     "picks": [811, 42, 300, 57, 129],
-    "labelled": 15, "right": 14,
-    "range": {"lo": 0.4, "hi": 1.0, "labelled": 15, "right": 14}
+    "labelled": 15, "right": 10,
+    "range": {"lo": 0.4, "hi": 0.85, "labelled": 15, "right": 10}
   }
 }
 ```
 
 | Field | Meaning |
 |---|---|
-| `status` | `running`, `confirmed`, `short`, or `cancelled`. |
+| `status` | `running`; `checked` once a balance walk finished (`confirmed` or `short` for a floor walk); or `cancelled`. |
+| `min_precision` / `beta` | The floor a floor walk is at (`null` on a balance walk), and the beta a balance walk is at (absent on a floor walk). |
+| `fbeta` / `recall` | Balance walk only: the set under test's F-beta estimate (`null` while a band of it is still unaudited) and its likely recall range from the labels so far (`null` before any). |
 | `round` / `rounds` | The round being voted on (1-based; one round per band audited) and how many bands the ranking has in all. |
-| `picks_per_round` | Fresh picks each band is audited with: 5 at every floor (each band censused at a floor of 1). |
+| `picks_per_round` | Fresh picks each band is audited with: 5 (each band censused at a floor of 1). |
 | `candidate` / `start_candidate` | The set under test's size (the top `bands` bands; the kept set's once the check has finished) and the count the walk started from. |
 | `bands` / `band` | How many bands from the top the set under test spans, and the band whose picks are pending: `{"index", "lo", "hi"}`, its index from the top and its rank positions (1-based, inclusive); `null` between bands. |
-| `direction` | Which way the walk last moved: `start` (still auditing the starting bands), `deeper` (the last set met the floor) or `shallower` (it did not). |
+| `direction` | Which way the walk last moved: `start` (still auditing the starting bands), `deeper` (the last set scored better, or met the floor) or `shallower` (it did not). |
 | `estimate` | The band-weighted share of the set under test that its picks say is right; `null` while a band of it is still unaudited. |
 | `picks` | The picks awaiting a vote this round, in draw order (random). They are a check, not the ranking: a client must not show them as the top of the sort. |
 | `labelled` / `right` | Labels inside the set under test so far, and how many were right. |
-| `range` | The set's likely range from those labels; `null` before any. |
+| `range` | The set's likely precision range from those labels; `null` before any. |
+
+### Deprecated: the precision floor
+
+The precision floor was the line's preference from #4224 to #4413: the share
+of what the detector returns that should be right, with the line keeping the
+deepest set a spot check found at least that right (#4272, #4388, #4389; the
+design in [`min-precision.md`](../plans/min-precision.md)). It is
+**deprecated**: it draws the line only when the `line_preference` setting is
+`"floor"` (`PUT /api/settings {"line_preference": "floor"}`), it stays for
+one release, and it will then be removed with its endpoint, its setting and
+the `floor` object. There is no alias from a floor to a beta.
+
+#### Get / set the precision floor
+
+```
+GET /api/min-precision
+POST /api/min-precision
+```
+
+**Body:** `{"min_precision": 0.75}`
+
+→ `{"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}, "threshold": 0.5123, "n_returned": 41}`
+
+The floor is kept per detector and seeded from the user's `min_precision`
+setting (`0.5` by default; clamped to `[0.01, 1]`; a boolean, non-number or
+`null` is a 422). Under the floor preference a `POST` is the same pure cutoff
+move as `POST /api/balance`; under the balance preference it stores the floor
+and moves nothing. `status` is `unchecked` (the line keeps the smaller of the
+floor's starting candidate - the top 128 at 10%, 64 at 25%, 32 at 50% and
+above - and the count the mixture says is at least the floor's share right,
+#4389), `confirmed` (the walk ended on a set whose picks met the floor) or
+`short` (none did, and the line keeps the first band, the top 8). `count`,
+`range` (the precision range), `schedule`, `threshold` and `n_returned` mean
+what they do on `/api/balance`.
+
+#### The floor state
+
+The `floor` object that rides beside `threshold` on every response in
+[the line state](#the-line-state), for this release:
+
+```json
+{"min_precision": 0.5, "status": "short", "count": 8, "range": {"lo": 0.11, "hi": 0.73, "labelled": 5, "right": 2, "stale": false}, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}}
+```
 
 ---
 
@@ -175,7 +258,7 @@ long history. The error-cost and stability series cover only the steps a
 detector was trained for (see the note under
 [Indicator score history](#indicator-score-history)); diversity covers every
 step. Each `error_cost` is `fpr + fnr`, measured at the line that detector
-would draw at Inclusion 0, whatever the precision floor is.
+would draw at Inclusion 0, whatever the balance (or the deprecated floor) is.
 
 →
 ```json

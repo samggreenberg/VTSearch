@@ -1,0 +1,251 @@
+import type { BalanceState } from '../generated/api-client/models/balance-state';
+
+/**
+ * What the balance says about the line a detector draws (#4413; the line and
+ * its check are #4272's and #4273's).
+ *
+ * The line always keeps a set: the top `count` unvoted items of the ranking.
+ * It never falls back to a default cut.
+ *
+ * - `unchecked`: no spot check has run at this balance. The set is the
+ *   balance's starting candidate, and nothing has measured how much of it is
+ *   right.
+ * - `checked`: a check walked the ranking and ended on the set where its
+ *   estimate of the balance (F-beta) peaked; the line keeps that set, and the
+ *   two ranges say what the picks found there.
+ *
+ * Nothing is met or fallen short of: a check just says what it estimated.
+ * Every match, count and action works on the line in both states. The state
+ * and its ranges show in the balance control; the line itself is drawn the
+ * same in both.
+ */
+export type BalanceStatus = 'unchecked' | 'checked';
+
+/** A likely share, from the check's picks alone: of the kept set right (precision), or of all the matches kept (recall). */
+export interface LikelyRange {
+  lo: number;
+  hi: number;
+  /** How many of the set's items the check labelled, and how many were right. */
+  labelled: number;
+  right: number;
+  /** True once later votes moved the list under the result: the range describes the list as it was. */
+  stale: boolean;
+}
+
+/**
+ * What a spot check at a balance costs: the count the walk starts from, the
+ * bands it audits before its first step, and the picks each band draws
+ * (#4388). Beyond that the walk goes as deep as the balance keeps improving.
+ */
+export interface CheckSchedule {
+  candidate: number;
+  rounds: number;
+  picks: number;
+}
+
+/** The balance's state on the current line, as the sort state holds it. */
+export interface LineBalance {
+  /** The detector's balance, F-beta's beta. Every detector has one. */
+  beta: number;
+  status: BalanceStatus;
+  /** How many unvoted items the line keeps. */
+  count: number;
+  /** The check's likely share of the kept set that is right; null while unchecked. */
+  precision: LikelyRange | null;
+  /** The check's likely share of all the matches that are in the kept set; null while unchecked. */
+  recall: LikelyRange | null;
+  /** The check's F-beta estimate for the kept set; null while unchecked. */
+  fbeta: number | null;
+  /** What a check at this balance would cost; null when the response carried none. */
+  schedule: CheckSchedule | null;
+}
+
+const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked'];
+
+function likelyRangeFrom(range: BalanceState['precision']): LikelyRange | null {
+  return range
+    ? { lo: range.lo, hi: range.hi, labelled: range.labelled, right: range.right, stale: range.stale ?? false }
+    : null;
+}
+
+/**
+ * The wire `balance` object, as a {@link LineBalance}; null when the response
+ * carried none (a sort with no detector behind it), or a status outside the
+ * two states.
+ */
+export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBalance | null {
+  if (!wire) return null;
+  const status = STATUSES.find((s) => s === wire.status);
+  if (!status) return null;
+  const schedule = wire.schedule;
+  return {
+    beta: wire.beta,
+    status,
+    count: wire.count ?? 0,
+    precision: likelyRangeFrom(wire.precision),
+    recall: likelyRangeFrom(wire.recall),
+    fbeta: wire.fbeta ?? null,
+    schedule: schedule ? { candidate: schedule.candidate, rounds: schedule.rounds, picks: schedule.picks } : null,
+  };
+}
+
+/** One balance the control offers, and what its radio says when pointed at. */
+export interface BalancePreset {
+  /** The balance, F-beta's beta. */
+  value: number;
+  /**
+   * Its radio's tooltip. The control names no balance and shows no number
+   * (#4317): a balance is where its radio sits on the False Positives - False
+   * Negatives spectrum, and only this says it in words.
+   */
+  hint: string;
+}
+
+/**
+ * The balances the control offers, left to right along its spectrum (#4413;
+ * the spectrum is #4298's and #4317's): three radios under the thirds of a
+ * False Positives - False Negatives bar, with no word or number on any of
+ * them. Beta 2 leans to recall (toward False Positives: the most returned,
+ * with more wrong ones in it), 1 is balanced, 0.5 leans to precision (toward
+ * False Negatives: only the surest, and more missed). A place on the spectrum
+ * promises only a direction; what a check measures (its likely ranges) stays
+ * a number. The backend takes any positive beta; the control snaps one
+ * outside this list to the nearest (see {@link nearestBalancePreset}).
+ */
+export const BALANCE_PRESETS: readonly BalancePreset[] = [
+  { value: 2, hint: 'Toward false positives: return the most, with more wrong ones in it' },
+  { value: 1, hint: 'Between the two' },
+  { value: 0.5, hint: 'Toward false negatives: return only the surest, and miss more' },
+];
+
+/**
+ * The balance the control shows before the detector's own value arrives from
+ * `GET /api/balance`. It is the backend's default (balanced, F1), and only a
+ * placeholder: nothing is sent until the user picks a balance.
+ */
+export const DEFAULT_BETA = 1;
+
+/** True when `b` is one of the balances the control offers. */
+export function isBalancePreset(b: number): boolean {
+  return BALANCE_PRESETS.some((preset) => preset.value === b);
+}
+
+/**
+ * The preset closest to `b` in log space (beta is a ratio: 2 is as far from 1
+ * as 0.5 is), for a stored balance the control does not offer (one set
+ * through the CLI or the API). A tie goes to the higher beta. A beta that is
+ * not a positive number has no log, and shows as the balanced default.
+ */
+export function nearestBalancePreset(b: number): BalancePreset {
+  if (!(b > 0)) return BALANCE_PRESETS.find((preset) => preset.value === DEFAULT_BETA)!;
+  const target = Math.log(b);
+  const distance = (preset: BalancePreset) => Math.abs(Math.log(preset.value) - target);
+  // The presets run from the highest beta down, so on a tie (within floating
+  // point) the one already held, the higher, stays.
+  return BALANCE_PRESETS.reduce((best, preset) => (distance(preset) < distance(best) - 1e-9 ? preset : best));
+}
+
+/** "11–73%" for a range: what a check measured stays a number (#4298). */
+export function rangePercent(range: Pick<LikelyRange, 'lo' | 'hi'>): string {
+  return `${Math.round(range.lo * 100)}–${Math.round(range.hi * 100)}%`;
+}
+
+/**
+ * The sentence a stale range's tooltip adds; empty when the range is current.
+ * A stale range is drawn exactly as a current one (owner, 2026-09-29): this
+ * sentence is the only difference.
+ */
+export function staleNote(range: LikelyRange | null): string {
+  return range?.stale ? ' Measured before your later votes: the list at the line has changed since.' : '';
+}
+
+/**
+ * The recall range in words, from its midpoint: how many of all the matches
+ * the kept set likely holds. Words rather than a second percentage, so the
+ * state line reads as a sentence; the number is in the tooltip
+ * ({@link balanceExplanation}).
+ */
+export function foundWords(recall: LikelyRange): string {
+  const mid = (recall.lo + recall.hi) / 2;
+  if (mid < 0.15) return 'few of them found';
+  if (mid < 0.375) return 'about a quarter of them found';
+  if (mid < 0.625) return 'about half of them found';
+  if (mid < 0.875) return 'about three quarters of them found';
+  return 'nearly all of them found';
+}
+
+/** The picks a check deals, in words: "5 random picks a band, walking the list from the top 32". */
+function checkCost(schedule: CheckSchedule | null): string {
+  if (!schedule) return 'a few random picks';
+  return `${schedule.picks} random picks a band, walking the list from the top ${schedule.candidate.toLocaleString()}`;
+}
+
+/**
+ * The balance's state in one short line, for the control under the spectrum
+ * (#4413; the line is #4246's and #4273's): what the line keeps, and what the
+ * check found there. The balance itself goes unnamed (#4317): the radio above
+ * the line already shows it. The ranges come only from the check's picks,
+ * never from the model. Null when there is no state to report (no line yet,
+ * or a sort with no detector behind it). A stale range reads exactly as a
+ * current one: only {@link balanceExplanation} says so.
+ */
+export function balanceSummary(balance: LineBalance | null): string | null {
+  if (!balance) return null;
+  const kept = balance.count.toLocaleString();
+  if (balance.status === 'unchecked') return `Top ${kept} kept, unchecked`;
+  const p = balance.precision;
+  const r = balance.recall;
+  return p && r
+    ? `Checked · likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}) · ${kept} kept`
+    : `Checked · ${kept} kept`;
+}
+
+/**
+ * The same state at tooltip length: what the short line means, how the
+ * ranges were measured, and whether later votes have moved the list since.
+ * Null when {@link balanceSummary} is. It points at no check: Find, where it
+ * also shows, offers none (#4317).
+ */
+export function balanceExplanation(balance: LineBalance | null): string | null {
+  if (!balance) return null;
+  const kept = balance.count.toLocaleString();
+  if (balance.status === 'unchecked') {
+    return `Unchecked: the line keeps the top ${kept}, and nothing has measured how much of it is right.`;
+  }
+  const p = balance.precision;
+  const r = balance.recall;
+  if (!p || !r) return `A check ended on the ${kept} items the line keeps.`;
+  return (
+    `A check of ${p.labelled} random picks from the ${kept} items the line keeps found ${p.right} right, ` +
+    `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them: ` +
+    `the set where the check's balance peaked.` +
+    staleNote(p)
+  );
+}
+
+/**
+ * The balance control's check affordance (#4273): "Check 5 picks", with the
+ * picks a band draws at this balance. It starts a check in every state; after
+ * a finished one it runs a fresh check. Null with no line to check.
+ */
+export function checkLabel(balance: LineBalance | null): string | null {
+  if (!balance) return null;
+  return balance.schedule ? `Check ${balance.schedule.picks} picks` : 'Check the line';
+}
+
+/** The check affordance's tooltip: what a check does, and what it costs at this balance. */
+export function checkTitle(balance: LineBalance | null): string {
+  const cost = checkCost(balance?.schedule ?? null);
+  return (
+    `Vote on ${cost}: the check goes deeper while the balance keeps improving and shorter while it does not, ` +
+    `and the line keeps the set where it peaked. Your votes count as ordinary votes.`
+  );
+}
+
+/** A range's own tooltip, for a chart that draws it (#4273): how it was measured, and whether it is stale. */
+export function rangeTitle(range: LikelyRange): string {
+  return (
+    `Likely ${rangePercent(range)} right, from ${range.labelled} random picks (${range.right} right).` +
+    staleNote(range)
+  );
+}

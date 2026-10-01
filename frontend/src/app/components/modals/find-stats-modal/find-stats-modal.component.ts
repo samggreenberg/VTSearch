@@ -12,7 +12,7 @@ import type { FindEvidenceCoverageResponse } from '../../../generated/api-client
 import type { DatasetDomainShiftResponse } from '../../../generated/api-client/models/dataset-domain-shift-response';
 import type { DatasetRegistryEntry } from '../../../models/api.models';
 import { apiErrorMessage } from '../../../utils/api-error';
-import { lineFloorFrom, rangePercent, rangeTitle, type LikelyRange } from '../../../utils/line-floor';
+import { foundWords, lineBalanceFrom, rangePercent, rangeTitle, type LikelyRange } from '../../../utils/line-balance';
 
 /** A tick on the precision chart's log-scale x axis. */
 interface XTick {
@@ -33,9 +33,11 @@ function compactCount(n: number): string {
  * kept rates, and the headline precision-vs-returned chart (#4242) rendered as
  * a dependency-free inline SVG line chart: the verified precision of the
  * checked items in the top N, on a log-scale count axis with the line (the
- * current cut) marked, and the precision floor it was cut at drawn across it
- * (#4246). Where the line meets the floor, the spot check's likely range for
- * the set the line keeps stands as a bar (#4273). No model-based estimate is
+ * current cut) marked. At the line, the spot check's likely range for the
+ * share of the set the line keeps that is right stands as a bar (#4273); the
+ * note under the chart adds how many of all the matches it found, in words
+ * (#4413). There is no horizontal line to draw: a balance is a preference,
+ * not a precision the line is asked to keep. No model-based estimate is
  * drawn: the #4220 estimator could not back an "at least" (#4360).
  */
 @Component({
@@ -272,25 +274,14 @@ export class FindStatsModalComponent implements OnInit {
     return this.stats()?.precision_curve.some((p) => p.verified_precision != null) ?? false;
   }
 
-  /** Y position of the floor, or null before the stats arrive. */
-  get floorY(): number | null {
-    const p = this.stats()?.floor.min_precision;
-    return p == null ? null : this.yFor(p);
+  /** The balance's state as the sort state would hold it; null before the stats arrive. */
+  get lineBalance() {
+    return lineBalanceFrom(this.stats()?.balance);
   }
 
-  /** The floor's state as the sort state would hold it; null before the stats arrive. */
-  get lineFloor() {
-    return lineFloorFrom(this.stats()?.floor);
-  }
-
-  /** "11–73%" for a range, for the template. */
-  rangeText(range: Pick<LikelyRange, 'lo' | 'hi'>): string {
-    return rangePercent(range);
-  }
-
-  /** The check's likely range for the set the line keeps; null while unchecked. */
+  /** The check's likely share of the set the line keeps that is right; null while unchecked. */
   get lineRange(): LikelyRange | null {
-    return this.lineFloor?.range ?? null;
+    return this.lineBalance?.precision ?? null;
   }
 
   /**
@@ -308,14 +299,27 @@ export class FindStatsModalComponent implements OnInit {
     return r ? `Likely ${rangePercent(r)} right (checked ${r.labelled})` : '';
   }
 
-  /** The line's legend entry: whether the check confirmed the floor, fell short of it, or never ran. */
+  /** The line's legend entry: whether a check ended on the set it keeps, or never ran. */
   get lineLegend(): string {
-    const floor = this.lineFloor;
-    if (!floor) return 'Line';
-    const kept = floor.count.toLocaleString();
-    if (floor.status === 'confirmed') return `Line: confirmed (${kept} kept)`;
-    if (floor.status === 'short') return `Line: the top ${kept}, fell short`;
+    const balance = this.lineBalance;
+    if (!balance) return 'Line';
+    const kept = balance.count.toLocaleString();
+    if (balance.status === 'checked') return `Line: checked (${kept} kept)`;
     return `Line: the top ${kept}, unchecked`;
+  }
+
+  /**
+   * The note under a checked line: what the picks found on the set it keeps,
+   * the share right as a number and the share of all the matches found in
+   * words. Empty while unchecked or without ranges.
+   */
+  get checkedNote(): string {
+    const b = this.lineBalance;
+    const p = b?.precision;
+    const r = b?.recall;
+    if (!b || b.status !== 'checked' || !p || !r) return '';
+    const kept = b.count.toLocaleString();
+    return `Checked: ${p.labelled} random picks found the ${kept} the line keeps likely ${rangePercent(p)} right, with ${foundWords(r)}.`;
   }
 
   /** X position of the line's marker, or null when nothing clears it. */

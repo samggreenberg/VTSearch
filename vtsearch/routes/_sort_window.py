@@ -45,6 +45,7 @@ def windowed_sort_response(
     threshold: float | None,
     acq_threshold: float | None = None,
     floor: dict[str, Any] | None = None,
+    balance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a sort-response body, windowing the transmitted ``results``.
 
@@ -57,8 +58,10 @@ def windowed_sort_response(
     ``threshold``.  It is deliberately *not* fed to ``_windowed_sort_extras``:
     ``above_threshold`` counts what the user is told matched, which is the
     reporting cut's job.  *floor* is what the precision floor says about
-    ``threshold`` (:func:`vtscore.state.core.detector_floor_state`); likewise a
-    detector sort's alone.
+    ``threshold`` (:func:`vtscore.state.core.detector_floor_state`) and
+    *balance* what the balance says (#4413,
+    :func:`vtscore.state.core.detector_balance_state`); likewise a detector
+    sort's alone.
 
     Stores the full ranking (so ``/api/sort/page`` can serve any window) and
     returns ``{results, threshold, acq_threshold, sort_token, total,
@@ -86,6 +89,7 @@ def windowed_sort_response(
         "threshold": threshold,
         "acq_threshold": acq_threshold,
         "floor": floor,
+        "balance": balance,
         "has_more_below": has_more,
         **extras,
     }

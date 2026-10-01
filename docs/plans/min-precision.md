@@ -1,5 +1,13 @@
 # Precision floor ("MinPrecision"): replacing the Inclusion knob
 
+> **Superseded by [`fbeta-balance.md`](fbeta-balance.md)** (the owner's ruling
+> of 2026-10-01, #4413): the line's preference is a balance, F-beta's beta,
+> not a precision floor. The floor's machinery below (the band walk, the
+> vote-anchored mixture, the memoised `LineRanking`) carries over; the floor
+> itself (`min_precision`, `/api/min-precision`, the `confirmed` / `short`
+> states) remains for one release behind `line_preference: "floor"` and is
+> then removed. What follows is kept as the record of that design.
+
 **Background.** The owner's ruling on #4223 replaces the Inclusion knob's
 objective. The user states the precision they will accept ("I'm willing to look
 at X%-positive returns"), and the cut returns as much as it can while keeping at

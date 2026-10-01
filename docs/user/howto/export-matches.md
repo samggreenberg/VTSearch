@@ -20,8 +20,13 @@ with it.
 Three small buttons at the top of the **Verified Good** pile act on the good
 set: **To Dataset** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-to-dataset.dark.webp" /><img src="../assets/icon-to-dataset.light.webp" alt="The To Dataset button in the Find view" height="24" /></picture>, **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-export.dark.webp" /><img src="../assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> and **Browse** (the eye). The
 **Export** button at the top of **Verified Bad** does the same for the
-pictures that did not match, and the three buttons next to the precision
-floor on the left act on only the matches you haven't checked yet.
+pictures that did not match, and the three buttons next to the **Threshold**
+on the left act on only the matches you haven't checked yet. What they send
+is whatever the line keeps at that moment: the unchecked starting set, or
+the set a spot check ended on. An AutoRun of the same detector has nobody to
+check it, so it sends the unchecked starting set and says so, with a
+`balance` entry beside the threshold (and the older `floor` entry alongside
+it for now) in the formats that write out the full results.
 
 ## Step 1: Choose what to send
 
