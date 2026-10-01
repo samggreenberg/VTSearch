@@ -69,6 +69,8 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
+from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR
+
 #: The level the likely range is drawn at: each audited band's tail is
 #: ``alpha / bands`` over the bands in the set (#4257's alpha).
 CHECK_ALPHA = 0.05
@@ -997,6 +999,39 @@ def walk_positives(
     cap = balance_schedule(beta).candidate
     unvoted = ranking.unvoted_ids(also_voted).size if ranking is not None else 0
     return float(max(1, min(cap, unvoted) if unvoted else cap))
+
+
+def acquisition_count(
+    ranking: LineRanking | None,
+    beta: float,
+    labels: Mapping[int, bool],
+    also_voted: Iterable[int] = (),
+    factor: float = ACQUISITION_ARGMAX_FACTOR,
+) -> int | None:
+    """How deep Autopilot's acquisition cut sits under a balance: *factor* of the F-beta argmax's depth (#4409).
+
+    The argmax is :func:`fbeta_count`'s, uncapped; the count is at least one.
+    ``None`` with no ranking or no mixture estimate, and the caller keeps the
+    line - 4 cut.  :data:`~vtscore.training.thresholds.knobs.ACQUISITION_ARGMAX_FACTOR`
+    is what ships; the harness's ``acq_p_crossing`` arm passes another.
+    """
+    k = fbeta_count(ranking, beta, labels, also_voted)
+    return None if k is None else max(1, round(float(factor) * k))
+
+
+def acquisition_threshold(
+    ranking: LineRanking | None,
+    beta: float,
+    labels: Mapping[int, bool],
+    also_voted: Iterable[int] = (),
+    factor: float = ACQUISITION_ARGMAX_FACTOR,
+) -> float | None:
+    """The score the acquisition cut sits at under a balance (#4409): the last unvoted item :func:`acquisition_count` keeps."""
+    k = acquisition_count(ranking, beta, labels, also_voted, factor)
+    if k is None or ranking is None:
+        return None
+    cut = ranking.threshold_for(k, also_voted)
+    return None if cut is None or not math.isfinite(float(cut)) else float(cut)
 
 
 def fbeta_count(

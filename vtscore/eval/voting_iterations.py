@@ -101,7 +101,9 @@ from vtscore.training.thresholds import (
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
     NO_PRECISION_FLOOR,
+    ACQUISITION_ARGMAX_FACTOR,
     acquisition_inclusion,
+    acquisition_threshold,
     calculate_safe_threshold,
     line_inclusion,
     resolve_line_knobs,
@@ -1668,7 +1670,7 @@ def _parse_opening_diversity(spec: Optional[str]) -> Optional[tuple[float, int]]
 
 
 def _check_acquisition_arm(
-    acq_inclusion_offset: float, acq_rank_percentile: Optional[float], acq_p_crossing: Optional[float]
+    acq_inclusion_offset: float, acq_rank_percentile: Optional[float], acq_p_crossing: "float | str | None"
 ) -> None:
     """The acquisition cut's knobs name one cut: the shipped offset, a rank pin, or the P-aware crossing (#4409)."""
     if acq_rank_percentile is not None:
@@ -1680,14 +1682,39 @@ def _check_acquisition_arm(
             )
         if not 0.0 <= acq_rank_percentile <= 1.0:
             raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
-    if acq_p_crossing is not None:
+    if acq_p_crossing is not None and acq_p_crossing != ACQ_P_CROSSING_OFF:
         if acq_inclusion_offset != 0 or acq_rank_percentile is not None:
             raise ValueError(
                 "acq_p_crossing replaces the acquisition cut: pass acq_inclusion_offset=0 and no "
                 "acq_rank_percentile to run the P-aware arm"
             )
-        if not acq_p_crossing > 0:
-            raise ValueError(f"acq_p_crossing must be > 0 (a multiple of the P crossing's depth), got {acq_p_crossing}")
+        if isinstance(acq_p_crossing, str) or not acq_p_crossing > 0:
+            raise ValueError(
+                f"acq_p_crossing must be > 0 (a multiple of the argmax's depth) or {ACQ_P_CROSSING_OFF!r}, "
+                f"got {acq_p_crossing!r}"
+            )
+
+
+#: ``acq_p_crossing="off"``: the line - 4 offset even under a balance, whose
+#: default is otherwise the shipped argmax factor (#4409).
+ACQ_P_CROSSING_OFF = "off"
+
+
+def resolve_acquisition_factor(acq_p_crossing: "float | str | None", beta: Optional[float]) -> Optional[float]:
+    """The share of the F-beta argmax's depth the acquisition cut sits at, or ``None`` for the offset cut.
+
+    The harness's counterpart of what :func:`vtscore.state.core.detector_acquisition_threshold`
+    does with its *beta*: ``None`` is the app's default - under a balance the
+    shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`,
+    under the deprecated floor or the Inclusion arm the line - 4 offset
+    (``acq_inclusion_offset``); :data:`ACQ_P_CROSSING_OFF` forces the offset
+    under a balance too (the pricing's control); a number is the arm (#4409).
+    """
+    if acq_p_crossing == ACQ_P_CROSSING_OFF:
+        return None
+    if acq_p_crossing is None:
+        return ACQUISITION_ARGMAX_FACTOR if beta is not None else None
+    return float(acq_p_crossing)
 
 
 def _resolve_run_knobs(
@@ -1703,7 +1730,7 @@ def _resolve_run_knobs(
     acq_inclusion_offset: float,
     acq_rank_percentile: Optional[float],
     head: Optional[str],
-    acq_p_crossing: Optional[float] = None,
+    acq_p_crossing: "float | str | None" = None,
     trainer: str,
     style: Optional[str],
     calibration_seed: Optional[int],
@@ -1900,7 +1927,7 @@ def simulate_voting_iterations(  # noqa: C901
     cut_inclusion_qtilt_steps: Optional[list[float]] = None,
     acq_inclusion_offset: float = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
-    acq_p_crossing: Optional[float] = None,
+    acq_p_crossing: "float | str | None" = None,
     startup_schedule: Optional[str] = None,
     opening_diversity: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
@@ -2118,9 +2145,14 @@ def simulate_voting_iterations(  # noqa: C901
             balance, the mixture's F-beta argmax, #4413), read as a rank:
             ``1.0`` samples at the crossing, ``0.5`` halfway up to the top.  So
             a 90% floor or a precision-leaning balance samples high, a 10% floor
-            or a recall-leaning one deep.  Requires ``acq_inclusion_offset=0``
-            and a preference; a step with no ranking or no mixture keeps the
-            reporting threshold.
+            or a recall-leaning one deep.  A number requires
+            ``acq_inclusion_offset=0`` and a preference.  ``None`` (the default)
+            is the app's rule: under a balance the shipped
+            :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
+            (the ``acq_inclusion_offset`` cut is then the fallback for a step
+            with no mixture estimate), under a floor or the Inclusion arm the
+            offset cut; ``"off"`` forces the offset cut under a balance (the
+            pricing's control, ``docs/experiments/2026-10-01-acquisition-fbeta-4409``).
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -2378,7 +2410,10 @@ def simulate_voting_iterations(  # noqa: C901
     # Resolved - and so validated - before anything expensive runs.
     floor, beta = resolve_line_knobs(min_precision, beta)
     _check_inclusion_arm(inclusion, floor, beta)
-    if acq_p_crossing is not None and floor is None and beta is None:
+    # The acquisition cut's rule (#4409): the shipped argmax factor under a
+    # balance unless the arm says otherwise, the offset everywhere else.
+    acq_factor = resolve_acquisition_factor(acq_p_crossing, beta)
+    if acq_factor is not None and floor is None and beta is None:
         raise ValueError(
             "acq_p_crossing needs a preference: it places the acquisition cut at the floor's crossing, or at the "
             "balance's F-beta argmax (#4413)"
@@ -2922,47 +2957,56 @@ def simulate_voting_iterations(  # noqa: C901
         # the last step's cut.
         acq_threshold = threshold
         if safe_thresholds:
-            if acq_p_crossing is not None:
-                # #4409: sample where the session's mixture says the unvoted
-                # ranking stops being P right (no schedule cap), read as a rank.
-                # The mixture is the one the line's proposal already fitted on
-                # this ranking (memoised on it), so this costs a posterior read.
-                ranking_now = details.get("line_ranking")
-                if ranking_now is not None and (floor is not None or beta is not None):
-                    voted_now = set(good_votes) | set(bad_votes)
-                    labels_now = {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)}
-                    # Under a balance (#4413) the target is the mixture's F-beta argmax, uncapped.
-                    k_cross = (
-                        fbeta_count(ranking_now, beta, labels_now, voted_now)
-                        if beta is not None
-                        else mixture_count(ranking_now, floor, labels_now, voted_now)  # type: ignore[arg-type]
-                    )
-                    if k_cross is not None:
-                        cand = ranking_now.threshold_for(max(1, round(acq_p_crossing * k_cross)), voted_now)
-                        if cand is not None and np.isfinite(cand):
-                            acq_threshold = float(cand)
-            elif acq_rank_percentile is not None:
-                if sim_pooled_scores:
-                    acq_threshold = float(
-                        np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile)
-                    )
-            elif acq_inclusion_offset != 0 and safe_cut is not None:
-                # Re-cut the *same* fold-anchored fit.  O(1) - the mixture was
-                # fitted above; ``threshold_at`` is monotone by construction, so
-                # the arms are nested and offset 0 reproduces the reporting cut
-                # exactly.  ``safe_cut is None`` is the schedule-blend fallback
-                # (~5% of steps, concentrated in the cold start): the blend has
-                # no inclusion-aware form, so there is nothing honest to re-cut.
-                # The offset's origin is the inclusion the line sits at: the
-                # knob's under the Inclusion arm, and under a floor the
-                # fallback's or the one a promised line derives to (#4245).
+            # The offset cut: re-cut the *same* fold-anchored fit.  O(1) - the
+            # mixture was fitted above; ``threshold_at`` is monotone by
+            # construction, so the arms are nested and offset 0 reproduces the
+            # reporting cut exactly.  ``safe_cut is None`` is the schedule-blend
+            # fallback (~5% of steps, concentrated in the cold start): the blend
+            # has no inclusion-aware form, so there is nothing honest to re-cut.
+            # The offset's origin is the inclusion the line sits at: the knob's
+            # under the Inclusion arm, and under a preference the fallback's or
+            # the one a promised line derives to (#4245).  It is the cut of the
+            # offset arm, and what the argmax arm falls back to with no mixture
+            # estimate, as the app does (#4409).
+            offset_cut: float | None = None
+            if acq_inclusion_offset != 0 and safe_cut is not None:
                 line = details.get("reporting_line")
                 origin = line_inclusion(line, safe_cut) if line is not None else inclusion
                 cand = safe_cut.threshold_at(
                     acquisition_inclusion(origin if origin is not None else inclusion, acq_inclusion_offset)
                 )
                 if np.isfinite(cand):
+                    offset_cut = float(cand)
+            if acq_factor is not None:
+                # #4409: sample at a share of the depth where the session's
+                # mixture says the unvoted ranking stops being P right (no
+                # schedule cap), read as a rank; under a balance the F-beta
+                # argmax through the library's acquisition_threshold, as the
+                # app (#4413), and the shipped rule.  The mixture is the one
+                # the line's proposal already fitted on this ranking (memoised
+                # on it), so this costs a posterior read.
+                ranking_now = details.get("line_ranking")
+                cand = None
+                if ranking_now is not None and (floor is not None or beta is not None):
+                    voted_now = set(good_votes) | set(bad_votes)
+                    labels_now = {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)}
+                    if beta is not None:
+                        cand = acquisition_threshold(ranking_now, beta, labels_now, voted_now, factor=acq_factor)
+                    else:
+                        k_cross = mixture_count(ranking_now, floor, labels_now, voted_now)  # type: ignore[arg-type]
+                        if k_cross is not None:
+                            cand = ranking_now.threshold_for(max(1, round(acq_factor * k_cross)), voted_now)
+                if cand is not None and np.isfinite(cand):
                     acq_threshold = float(cand)
+                elif offset_cut is not None:
+                    acq_threshold = offset_cut
+            elif acq_rank_percentile is not None:
+                if sim_pooled_scores:
+                    acq_threshold = float(
+                        np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile)
+                    )
+            elif offset_cut is not None:
+                acq_threshold = offset_cut
 
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single

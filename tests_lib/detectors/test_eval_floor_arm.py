@@ -253,6 +253,20 @@ class TestThePAwareAcquisitionArm:
         with pytest.raises(ValueError, match="needs a preference"):
             self._run(NO_PRECISION_FLOOR, acq_inclusion_offset=0, acq_p_crossing=1.0)
 
+    def test_the_default_arm_under_a_balance_is_the_shipped_factor_and_off_is_the_offset_cut(self):
+        """#4409 shipped: a balance arm with no acq knob samples at ACQUISITION_ARGMAX_FACTOR; "off" keeps line - 4."""
+        from vtscore.eval.voting_iterations import resolve_acquisition_factor
+        from vtscore.training.thresholds import ACQUISITION_ARGMAX_FACTOR
+
+        assert resolve_acquisition_factor(None, 1.0) == ACQUISITION_ARGMAX_FACTOR == 0.5
+        assert resolve_acquisition_factor(None, None) is None and resolve_acquisition_factor("off", 1.0) is None
+        assert resolve_acquisition_factor(0.25, 2.0) == 0.25
+        shipped, _ = self._run(NO_PRECISION_FLOOR, beta=1.0)
+        offset, _ = self._run(NO_PRECISION_FLOOR, beta=1.0, acq_p_crossing="off")
+        assert [r["acq_threshold"] for r in shipped] != [r["acq_threshold"] for r in offset]
+        with pytest.raises(ValueError, match="must be > 0"):
+            self._run(NO_PRECISION_FLOOR, beta=1.0, acq_inclusion_offset=0, acq_p_crossing="x")
+
     def test_under_a_balance_it_samples_at_the_f_beta_argmax(self):
         """#4413: a precision-leaning balance samples higher than a recall-leaning one."""
         hi, _ = self._run(NO_PRECISION_FLOOR, beta=0.5, acq_inclusion_offset=0, acq_p_crossing=1.0)

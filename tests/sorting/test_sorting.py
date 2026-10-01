@@ -630,11 +630,13 @@ class TestLearnedSort:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "acq_threshold" in data
-        # A fold-anchored fit is not guaranteed on this fixture; where there is
-        # one the acquisition cut sits above the decision line, and where there
-        # is not the two coincide.  Never below - that is the falsified
-        # direction.
-        assert data["acq_threshold"] >= data["threshold"]
+        # Under the balance (the default, #4413) the acquisition cut is a rank:
+        # the score at half the depth of the mixture's F-beta argmax (#4409),
+        # the library's own reading of the context the sort just trained.
+        from vtscore.state.core import detector_acquisition_threshold, get_active_detector_context
+
+        ctx = get_active_detector_context()
+        assert data["acq_threshold"] == round(detector_acquisition_threshold(ctx, None, beta=1.0), 4)
 
     def test_text_sort_carries_no_acquisition_cut(self, client):
         """No detector behind it, so there is nothing to re-cut."""

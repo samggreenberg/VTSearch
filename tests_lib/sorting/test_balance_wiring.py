@@ -77,6 +77,20 @@ class TestTheSetting:
 
 
 class TestTheLine:
+    def test_the_acquisition_cut_under_a_balance_is_the_argmax_rank(self):
+        """#4409: the app's acquisition cut is the library's, at half the F-beta argmax's depth; no ranking, no change."""
+        from vtscore.state.core import detector_acquisition_threshold, detector_line_labels
+        from vtscore.training.thresholds import acquisition_threshold
+
+        ctx = _ctx("det-acq")
+        want = acquisition_threshold(ctx.line_ranking, 1.0, detector_line_labels(ctx), human_voted_ids(ctx))
+        assert want is not None
+        assert detector_acquisition_threshold(ctx, None, beta=1.0) == want
+        assert detector_acquisition_threshold(ctx, None, beta=0.5) >= want, "a precision-leaning balance samples higher"
+        bare = DetectorContext("det-acq-bare")
+        bare.threshold = 0.42
+        assert detector_acquisition_threshold(bare, None, beta=1.0) == 0.42, "no ranking: the two jobs coincide"
+
     def test_a_balance_serves_no_inclusion_so_smart_recuts_at_its_own(self):
         """Under a balance the line keeps a set, not an inclusion (#4243, #4413): Smart re-cuts at Inclusion 0."""
         from vtscore.state.core import detector_line_inclusion

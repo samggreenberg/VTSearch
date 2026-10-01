@@ -433,7 +433,7 @@ def learned_sort(body: dict):
         # under a promised floor no inclusion drew that line, so none is passed
         # and it is derived from the line itself (#4245).
         line_incl = detector_line_inclusion(det_ctx, min_precision_value, beta_value)
-        acq = detector_acquisition_threshold(det_ctx, line_incl)
+        acq = detector_acquisition_threshold(det_ctx, line_incl, beta=beta_value)
         # What the floor and the balance say about the line ride with it
         # (#4247, #4413); the preference that drew it is the one the knobs name.
         floor = detector_floor_state(det_ctx, min_precision_value)
