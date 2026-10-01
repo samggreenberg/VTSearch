@@ -77,6 +77,16 @@ class TestTheSetting:
 
 
 class TestTheLine:
+    def test_a_balance_serves_no_inclusion_so_smart_recuts_at_its_own(self):
+        """Under a balance the line keeps a set, not an inclusion (#4243, #4413): Smart re-cuts at Inclusion 0."""
+        from vtscore.state.core import detector_line_inclusion
+        from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
+
+        ctx = _ctx("det-line-inclusion")
+        assert detector_line_inclusion(ctx, None) == PRECISION_FLOOR_FALLBACK_INCLUSION
+        assert detector_line_inclusion(ctx, None, 1.0) is None
+        assert detector_line_inclusion(ctx, 0.5, None) is None
+
     def test_the_recut_under_a_balance_keeps_the_mixtures_argmax_under_the_cap(self):
         ctx = _ctx()
         voted = human_voted_ids(ctx)

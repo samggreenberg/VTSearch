@@ -71,7 +71,7 @@ def test_find_label_populates_calibration_cache(client):
     assert ctx.line_ranking is not None, "the ranking the floor keeps a set of"
 
 
-def test_a_floor_change_recuts_and_resplits(client):
+def test_a_floor_change_recuts_and_resplits(client, floor_preference):
     _run_find(client)
     ctx = get_active_detector_context()
     client.post("/api/min-precision", json={"min_precision": 0.5})
@@ -95,7 +95,7 @@ def test_a_floor_change_recuts_and_resplits(client):
     assert _export_good(client) == _votes_good(client)
 
 
-def test_a_find_pass_on_a_reused_head_keeps_the_floors_set(client, schedule_only):
+def test_a_find_pass_on_a_reused_head_keeps_the_floors_set(client, schedule_only, floor_preference):
     """A Find pass that reuses the cached head draws the floor's set, and can be checked (#4273).
 
     The mixture's proposal (#4389) is set aside so the set is the schedule's
