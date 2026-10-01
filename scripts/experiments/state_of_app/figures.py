@@ -13,6 +13,9 @@
   Each panel's title carries the share of sessions whose final line meets P.
 * ``returned_at_p.png`` -- the returned set at each floor P over clicks: its
   precision against P, its recall against the oracle's recall at P (#4408).
+* ``in_hand.png`` -- positives in hand over clicks (#4427): the Goods voted, the
+  positives inside the set the line keeps on the user's own unvoted corpus, and
+  their sum, with that set's precision beside them.
 * ``returned_at_beta.png`` -- the returned set at each balance over clicks: its
   F-beta as a share of the best cut's (#4413).
 * ``f1_over_clicks.png`` -- the F1 of the set the line keeps (the returned set),
@@ -355,6 +358,38 @@ def returned_at_beta(curves: pd.DataFrame, cells: pd.DataFrame, balance_steps: p
     return True
 
 
+def in_hand(cells: pd.DataFrame, pool_steps: pd.DataFrame, out: Path) -> bool:
+    """Positives in hand over clicks (#4427): Goods, the kept set's positives on the user's own unvoted
+    corpus, and their sum, per path; beside them the kept set's precision there.
+    """
+    if pool_steps is None or pool_steps.empty or not pool_steps["in_hand"].notna().any():
+        return False
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.9), facecolor=SURFACE)
+    for arm, color in COLORS.items():
+        p = pool_steps[pool_steps["arm"] == arm]
+        if p.empty:
+            continue
+        g = p.groupby("t")[["goods", "pool_tp", "in_hand", "pool_precision"]].mean()
+        axes[0].plot(g.index, g["in_hand"], color=color, lw=2.2, label=f"{arm}: in hand")
+        axes[0].plot(g.index, g["goods"], color=color, lw=1.2, ls="--", label=f"{arm}: Goods voted")
+        axes[0].plot(g.index, g["pool_tp"], color=color, lw=1.2, ls=":", label=f"{arm}: in the kept set")
+        axes[0].annotate(f"{g['in_hand'].iloc[-1]:.1f}", (g.index[-1], g["in_hand"].iloc[-1]), xytext=(4, 0),
+                         textcoords="offset points", va="center", color=INK, fontsize=8)  # fmt: skip
+        axes[1].plot(g.index, g["pool_precision"], color=color, lw=2, label=arm)
+    axes[0].set_title("positives in hand on the user's own corpus", color=INK, fontsize=10, loc="left")
+    axes[0].set_ylabel("mean over runs", color=INK)
+    axes[1].set_title("precision of the kept set there", color=INK, fontsize=10, loc="left")
+    axes[1].set_ylim(0, 1.0)
+    for ax in axes:
+        _axes(ax)
+        ax.set_xlabel("clicks", color=INK)
+    axes[0].legend(fontsize=7, frameon=False, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--analysis", type=Path, required=True)
@@ -379,6 +414,10 @@ def main() -> int:
     balance_steps = pd.read_csv(bs_path) if bs_path.exists() and bs_path.stat().st_size > 1 else pd.DataFrame()
     if not returned_at_beta(curves, cells, balance_steps, args.out / "returned_at_beta.png"):
         print("no rank frames in this run: returned_at_beta.png skipped")
+    ps_path = args.analysis / "pool_steps.csv"
+    pool_steps = pd.read_csv(ps_path) if ps_path.exists() and ps_path.stat().st_size > 1 else pd.DataFrame()
+    if not in_hand(cells, pool_steps, args.out / "in_hand.png"):
+        print("no rank frames in this run: in_hand.png skipped")
     per_cell(cells, args.out / "per_cell.png")
     if args.compare is not None:
         seeds = set(cells["seed"])

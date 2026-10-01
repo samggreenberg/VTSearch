@@ -125,6 +125,12 @@ is the PR this revision belongs to; step 5's acquisition cut shipped on
 
 ## Decisions (2026-10-01, as shipped)
 
+- **The objective** (owner, 2026-10-01, while #4427 was being measured): the
+  F-beta of the images the line keeps, scored on the withheld test half.
+  Gathering more positives counts only through that; the share of the best
+  cut and the user's own unvoted corpus (the review's Diagnostic section) are
+  diagnostics.
+
 - **The presets are 0.5 / 1 / 2, default 1.** Any beta in `[0.25, 4]` is
   accepted by the API and the setting; a value outside is clamped.
 - **The unchecked cap is the floor's schedule count:** 32 at beta 1 and 0.5,

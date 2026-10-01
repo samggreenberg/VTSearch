@@ -12,6 +12,12 @@ studies that the review points at.
 
 ## The owner's standing decisions (#4159, 2026-09-23)
 
+- **The objective (owner, 2026-10-01, #4427):** the F-beta, at the session's beta, of the set the line keeps,
+  scored on the WITHHELD test half. Found positives (Goods), the user's own unvoted corpus ("positives in
+  hand", the `Diagnostic` section, `pools.csv` / `pool_steps.csv` / `in_hand.png`) and the share of the best
+  cut explain a line's position; they are never the goal, and a ship decision cites the withheld F-beta at the
+  line first.
+
 Keep these unless the owner changes them, and record any change here in the
 same edit.
 
