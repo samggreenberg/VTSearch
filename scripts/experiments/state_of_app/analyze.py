@@ -17,8 +17,11 @@ Reads one State of the App run (``launch.sh``) and writes, under ``--out``:
 * ``line_steps.csv`` -- the same line at every click a rank frame was recorded
   (``CALIB_RANK_FRAME_STEPS``), one row per run x click x floor: what the F1
   curve is drawn from.
-* ``curves.csv`` -- every run's AP, Goods found, and the line's F1 at the
-  default floor and at 10% (``f1``, ``f1_p10``) on a common click grid.
+* ``curves.csv`` -- every run's AP, Goods found, and the returned set at each
+  floor on a common click grid: its precision and recall and the oracle's
+  recall at that floor (``precision_p50``, ``recall_p50``,
+  ``oracle_recall_p50``, ... for each of 10/50/90%), and its F1 (``f1`` at the
+  default floor, ``f1_p10``, ``f1_p90``).
 * ``influence.csv`` -- one row per click: the change in held-out AP that the
   click is credited with.
 * ``images.csv`` / ``image_detector.csv`` -- the influence rolled up per image,
@@ -41,6 +44,16 @@ the test half instead of keeping its top *K*.  The precision floor is written
 *P* (owner, 2026-09-30), not *X*.  A run recorded without rank frames still gets
 every AP, harvest and check column; its line points other than ``text`` are
 blank rather than guessed.
+
+**Precision and recall at P (owner, 2026-10-01, #4408).**  F1 cannot see P: the
+50% and 90% lines keep nearly the same set and get the same F1.  So the
+returned set is scored at the floor it aimed for: its **precision against P**
+(below P is a broken promise, far above P is recall left behind) and its
+**recall against the oracle's recall at P** (the most a cut of the same ranking
+returns while staying at or above P).  A run's sessions aim at one floor
+(``session_floor``, the run's ``CALIB_MIN_PRECISION``); the other floors are
+read off the same sessions, which is exact only while a session ignores P, so
+a review runs one set of sessions per P and reads each at its own.
 
 **The spot check is not a click.**  The default arm checks the line once the
 voting steps are spent (``spot_check="end"``): its rounds are cast as votes and
@@ -115,9 +128,18 @@ LINE_METRICS = ("k", "precision", "shortfall", "meets", "recall", "oracle_recall
 #: default (``DEFAULT_MIN_PRECISION``), which is every session's floor until the
 #: user moves it.
 DEFAULT_FLOOR = 0.5
-#: The floors ``curves.csv`` carries an F1 curve for.  90% keeps the same top 32
-#: as 50% until a check runs, so its unchecked curve would repeat 50%'s.
-CURVE_FLOORS = (0.5, 0.1)
+#: The floors ``curves.csv`` carries the returned set's curves for: every floor
+#: the app offers (#4408).
+CURVE_FLOORS = (0.5, 0.1, 0.9)
+#: The returned set's metrics a curve is kept for, per floor.
+CURVE_METRICS = ("f1", "precision", "recall", "oracle_recall")
+
+
+def curve_col(metric: str, floor: float) -> str:
+    """``curves.csv``'s column for *metric* at *floor*: ``f1`` alone is the default floor's F1, as it always was."""
+    if metric == "f1" and floor == DEFAULT_FLOOR:
+        return "f1"
+    return f"{metric}_{floor_tag(floor)}"
 
 
 def _f(x) -> float:
@@ -272,6 +294,13 @@ def run_tables(
     clicks_by = {tuple(k): g for k, g in pk_click.groupby(RUN_KEY)}
     check_picks_by = {tuple(k): g for k, g in pk_check.groupby(RUN_KEY)}
     series = {tuple(k): g.groupby("t")["average_precision"].mean() for k, g in ordinary.groupby(RUN_KEY)}
+    # The floor each run's sessions aimed at (the run's CALIB_MIN_PRECISION), off its own rows.
+    floor_of: dict[tuple, float] = {}
+    if "min_precision" in ordinary:
+        for k, g in ordinary.groupby(RUN_KEY):
+            mp = pd.to_numeric(g["min_precision"], errors="coerce").dropna()
+            if len(mp):
+                floor_of[tuple(k)] = float(mp.iloc[0])
     skyd: dict[tuple, float] = {}
     for r in sky.to_dict("records") if not sky.empty else []:
         skyd[(r["dataset"], r["category"], r["embedder"], r["style"], int(r["seed"]))] = _f(r.get("average_precision"))
@@ -295,6 +324,7 @@ def run_tables(
             "band": cat.split("@")[1] if "@" in cat else "",
             "seed": int(seed),
             "never_trained": not trained,
+            "session_floor": floor_of.get(key, float("nan")),
             "text_ap": text["text_ap"],
         }
         final_t = int(s.index.max()) if trained else (int(clicks["t"].max()) if clicks is not None else 0)
@@ -373,7 +403,8 @@ def curves(
     carries forward. A run that never trained stays at its text AP.  Goods found
     count the clicks only, never the spot check's picks.
 
-    The line's F1 (``f1`` at the default floor, ``f1_p10`` at 10%) follows the
+    The returned set at each floor (precision, recall, the oracle's recall at
+    that floor and F1; :func:`curve_col` names the columns) follows the
     same rule off the ``step`` rank frames: the text sort's until the first
     frame, then the last frame's.  Between two recorded frames that is a carried
     value, not a measurement, so a figure should read the curve only at the
@@ -386,15 +417,18 @@ def curves(
     goods_run = {tuple(k): g.sort_values("t") for k, g in pk.groupby(RUN_KEY)} if not pk.empty else {}
     horizon = max(CHECKPOINTS[-1], int(ordinary["t"].max()) if not ordinary.empty else 0)
     grid = np.arange(0, horizon + 1)
-    text_f1: dict[tuple, float] = {}
+    text_val: dict[tuple, dict[str, float]] = {}
     if lines is not None and not lines.empty:
-        for r in lines[lines["point"].astype(str) == "text"].itertuples():
-            text_f1[(r.arm, r.category, int(r.seed), float(r.floor))] = r.f1
-    f1_run: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+        for r in lines[lines["point"].astype(str) == "text"].to_dict("records"):
+            text_val[(r["arm"], r["category"], int(r["seed"]), float(r["floor"]))] = {m: r[m] for m in CURVE_METRICS}
+    run_val: dict[tuple, tuple[np.ndarray, dict[str, np.ndarray]]] = {}
     if steps is not None and not steps.empty:
         for (arm, cat, seed, floor), g in steps.groupby(["arm", "category", "seed", "floor"]):
             g = g.sort_values("t")
-            f1_run[(arm, cat, int(seed), float(floor))] = (g["t"].to_numpy(), g["f1"].to_numpy(dtype=float))
+            run_val[(arm, cat, int(seed), float(floor))] = (
+                g["t"].to_numpy(),
+                {m: g[m].to_numpy(dtype=float) for m in CURVE_METRICS},
+            )
     rows = []
     for r in cells.itertuples():
         key = (r.dataset, r.category, _emb_of(r.arm), _style_of(r.arm), int(r.seed))
@@ -413,17 +447,19 @@ def curves(
             goods[idx >= 0] = cum[idx[idx >= 0]]
         f1_cols = {}
         for floor in CURVE_FLOORS:
-            start = text_f1.get((r.arm, r.category, int(r.seed), floor), np.nan)
-            f1 = np.full(len(grid), start, dtype=float)
-            have_run = f1_run.get((r.arm, r.category, int(r.seed), floor))
-            if have_run is not None:
-                ft, fv = have_run
-                idx = np.searchsorted(ft, grid, side="right") - 1
-                f1[idx >= 0] = fv[idx[idx >= 0]]
-                f1[0] = start
-            elif not r.never_trained:
-                f1[1:] = np.nan
-            f1_cols["f1" if floor == DEFAULT_FLOOR else f"f1_{floor_tag(floor)}"] = f1
+            starts = text_val.get((r.arm, r.category, int(r.seed), floor), {})
+            have_run = run_val.get((r.arm, r.category, int(r.seed), floor))
+            for metric in CURVE_METRICS:
+                start = starts.get(metric, np.nan)
+                v = np.full(len(grid), start, dtype=float)
+                if have_run is not None:
+                    ft, fvals = have_run
+                    idx = np.searchsorted(ft, grid, side="right") - 1
+                    v[idx >= 0] = fvals[metric][idx[idx >= 0]]
+                    v[0] = start
+                elif not r.never_trained:
+                    v[1:] = np.nan
+                f1_cols[curve_col(metric, floor)] = v
         rows.append(
             pd.DataFrame(
                 {"arm": r.arm, "category": r.category, "seed": r.seed, "t": grid, "ap": ap, "goods": goods, **f1_cols}
@@ -599,6 +635,62 @@ def line_table(lines: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     return out.round(3)
 
 
+def returned_at_p(lines: pd.DataFrame, by: list[str]) -> pd.DataFrame:
+    """The returned set per *by* x floor x point, scored at the floor it aimed for (#4408).
+
+    ``precision`` against its target ``floor`` (``gap`` = precision - P; ``meets``
+    the share of runs at or above P), and ``recall`` against ``oracle_recall``,
+    the most any cut of the same ranking returns at or above P (``share`` =
+    recall / oracle recall).
+    """
+    lines = lines[lines["point"].isin(HEADLINE_POINTS)].copy()
+    lines["point"] = pd.Categorical(lines["point"], HEADLINE_POINTS, ordered=True)
+    out = lines.groupby([*by, "floor", "point"], observed=True).agg(
+        k=("k", "mean"),
+        precision=("precision", "mean"),
+        meets=("meets", "mean"),
+        recall=("recall", "mean"),
+        oracle_recall=("oracle_recall", "mean"),
+        runs=("precision", "count"),
+    )
+    out.insert(2, "gap", out["precision"] - out.index.get_level_values("floor").to_numpy(dtype=float))
+    out.insert(6, "share", out["recall"] / out["oracle_recall"])
+    return out.round(3)
+
+
+def session_floors(cells: pd.DataFrame) -> list[float]:
+    """The floors this run's sessions aimed at (``session_floor``), most runs first."""
+    if "session_floor" not in cells:
+        return []
+    return [float(x) for x in cells["session_floor"].dropna().value_counts().index]
+
+
+def returned_at_p_md(cells: pd.DataFrame, lines: pd.DataFrame) -> list[str]:
+    """The summary's first line section: precision against P and recall against the oracle, per floor."""
+    own = session_floors(cells)
+    who = (
+        "These sessions aimed at P = " + ", ".join(f"{x:.0%}" for x in own) + "; the other floors are read off "
+        "the same sessions, which is exact only while a session ignores P (a review runs one set of sessions "
+        "per P, #4408)."
+        if own
+        else "The sessions' own floor is not recorded."
+    )
+    if lines.empty or not lines[lines["point"] != "text"]["precision"].notna().any():
+        return ["## The returned set at each P", "", who, "", "*No rank frames: only click 0 is known.*", ""]
+    return [
+        "## The returned set at each P: precision against P, recall against the oracle",
+        "",
+        "The set the app returns when it aims for P, on the fresh test half. `precision` is the share of it "
+        "that is right, against the target P (`gap` = precision - P: below 0 is a broken promise, far above "
+        "0 is recall left behind); `meets` is the share of runs at or above P. `recall` is the share of the "
+        "corpus's positives it returns, against `oracle_recall`, the most any cut of the same ranking returns "
+        "while staying at or above P (`share` = recall / oracle recall). " + who,
+        "",
+        _md(returned_at_p(lines, ["arm"])),
+        "",
+    ]
+
+
 def check_table(cells: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     """The spot check per *by*: how often it confirms, its range, and whether the range held the truth."""
     ran = cells[cells["check_status"].fillna("").astype(str) != ""]
@@ -634,6 +726,7 @@ def summary(cells: pd.DataFrame, lines: pd.DataFrame, img: pd.DataFrame, out: Pa
             _md(cells.groupby("arm")[rank].mean().round(3)),
             "",
         ]
+        lines_md += returned_at_p_md(cells, lines)
         f1s = ["text_f1", *[f"f1_{c}" for c in CHECKPOINTS if c in (25, 50, 100)], "final_f1", "ceiling_f1"]
         f1s += ["final_oracle_f1"]
         lines_md += [

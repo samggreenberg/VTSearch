@@ -8,6 +8,10 @@ a re-run cannot show by looking at it:
 * **F1 is the returned set's** (owner, 2026-09-30: "Using the returned-set
   threshold, show F1 over time, too"): the F1 of the top *K* the floor keeps,
   read off the rank frames, at every recorded click as well as the checkpoints.
+* **Precision and recall at P** (owner, 2026-10-01, #4408): the returned set
+  at each floor, scored against the floor it aimed for, at every recorded
+  click; each run records the floor its sessions aimed at, and ``perp.py``
+  reads each P off its own run.
 * **The check is not a click:** "final" is the last ordinary step, and no check
   pick is credited to an image.
 * **The line is read off the rank frames** by one definition
@@ -283,6 +287,47 @@ def test_f1_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
             assert got["f1"] == pytest.approx(want["f1"])
             assert c.loc[int(f["t"]), "f1"] == pytest.approx(want["f1"]), "the curve at a frame IS the frame"
     assert "F1 of the line at P = 50%" in run["summary"]
+
+
+def test_precision_and_recall_at_each_p_are_the_returned_sets_at_every_recorded_click(run, rm) -> None:
+    """#4408: the set the app returns when it aims for P, scored at P, per floor, off the same frames as F1."""
+    curves, steps = run["curves"], run["steps"]
+    for idx, cat in enumerate(CATS):
+        frames = _frames(run["exp"], idx)
+        c = curves[curves["category"] == cat].set_index("t")
+        for x in rm.FLOORS:
+            tag = rm.floor_tag(x)
+            assert c.loc[0, f"precision_{tag}"] == pytest.approx(run["text"][cat][f"text_precision_{tag}"])
+            for f in frames.query("kind == 'step'").to_dict("records"):
+                want = rm.line_metrics(
+                    rm.parse_ranks(f["test_pos_ranks"]), int(f["n_test"]), int(f["n_test_pos"]), x, rm.frame_k(f, x)
+                )
+                got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["floor"] == x)].iloc[0]
+                for m in ("precision", "recall", "oracle_recall"):
+                    assert got[m] == pytest.approx(want[m])
+                    assert c.loc[int(f["t"]), f"{m}_{tag}"] == pytest.approx(want[m]), (cat, x, m)
+    assert "## The returned set at each P: precision against P, recall against the oracle" in run["summary"]
+    assert "These sessions aimed at P = 50%" in run["summary"]
+
+
+def test_each_run_records_the_floor_its_sessions_aimed_at(run) -> None:
+    """``session_floor`` is the run's CALIB_MIN_PRECISION: the app's default here."""
+    trained = run["cells"][~run["cells"]["never_trained"].astype(bool)]
+    assert not trained.empty and (trained["session_floor"] == 0.5).all()
+
+
+def test_perp_reads_each_p_off_its_own_run(run, tmp_path) -> None:
+    """``perp.py`` puts one run per P side by side; with this run given for every P, each row is its own floor."""
+    out = tmp_path / "perp"
+    a = run["exp"] / "analysis"
+    subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
+        [sys.executable, str(_SOTA / "perp.py"), "--run", f"0.1={a}", "--run", f"0.5={a}", "--run", f"0.9={a}",
+         "--out", str(out)],
+        check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    assert (out / "returned_at_own_p.png").stat().st_size > 0
+    md = (out / "perp_summary.md").read_text()
+    assert "| 10% |" in md and "| 90% |" in md and "50% (read at 90%)" in md
 
 
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:
