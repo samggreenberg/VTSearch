@@ -3,6 +3,6 @@
   "corpus_version": "v5.0",
   "max_v": 50,
   "tiled_top_k": 2000,
-  "classes": "spods/logo_00003_0,spods/stamp_00612_1,staver/stamp_stampds-00213_1,tobacco800/logo_aah97e00-page02_1_0,tobacco800/logo_cgr96c00_1,tobacco800/logo_aeq93a00_1,ucsf/logo_bat_leaf,ucsf/logo_rjr_script",
-  "started": "2026-10-01T02:44:51"
+  "classes": "",
+  "started": "2026-10-01T03:23:58"
 }

@@ -10,7 +10,9 @@ beside it:
   ``line_at_floors.png`` and ``per_class.png``;
 * ``images/``: thumbnails of the most helpful and most harmful clicks (credit =
   that click's change in AP, one observation each), the class's box drawn on
-  positives, so a reader can check them against the labels.
+  positives, so a reader can check them against the labels;
+* ``misses/``: for the weakest classes, the test positives the final ranking left
+  beyond the verified shortlist (from ``positives_final.csv``).
 
     python sota_documents_analyze.py --run <run dir>/round1
 """
@@ -225,6 +227,61 @@ def thumbnails(clicks: list[dict[str, Any]], out: Path, n: int = 6) -> list[dict
     return rows
 
 
+def misses(run: Path, steps: list[dict[str, Any]], weakest: int = 4) -> str:
+    """Where each class's test positives sit at the final click, and thumbnails of the weakest classes' misses.
+
+    A positive the final ranking places beyond the verified shortlist was never
+    checked by Stage 2 (a Stage-1 miss); one inside it with a gate score below
+    0.5 failed verification.
+    """
+    import embed_corpus  # noqa: PLC0415
+    import fullmarks_config as cfg  # noqa: PLC0415
+    import template_matrix as tm  # noqa: PLC0415
+    from PIL import Image, ImageDraw  # noqa: PLC0415
+
+    with (run / "positives_final.csv").open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    finals = {r["class_id"]: r for r in _at(steps, None)}
+    by: dict[str, list[dict[str, str]]] = {}
+    for r in rows:
+        by.setdefault(r["class_id"], []).append(r)
+    out = [
+        "### Where the test positives sit at the final click",
+        "",
+        "| class | final AP | test positives | beyond the shortlist | inside, failed the gate |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    order = sorted(by, key=lambda c: finals[c]["ap"])
+    for cid in order:
+        rs = by[cid]
+        beyond = sum(r["in_shortlist"] == "False" for r in rs)
+        failed = sum(r["in_shortlist"] == "True" and float(r["gate_score"]) < 0.5 for r in rs)
+        if beyond or failed:
+            out.append(f"| `{cid}` | {finals[cid]['ap']:.2f} | {len(rs)} | {beyond} | {failed} |")
+    pages = {p.page_id: p for p in embed_corpus.pages_for_tier(cfg.OUT, "m")}
+    (run / "misses").mkdir(exist_ok=True)
+    out += ["", "| class | page | rank in pool | box (fraction of page) | thumbnail |", "|---|---|---:|---|---|"]
+    for cid in [c for c in order if any(r["in_shortlist"] == "False" for r in by[c])][:weakest]:
+        beyond = sorted((r for r in by[cid] if r["in_shortlist"] == "False"), key=lambda r: int(r["rank_in_pool"]))
+        for r in beyond[:1] + (beyond[-1:] if len(beyond) > 1 else []):
+            page = pages[r["page_id"]]
+            with Image.open(page.path) as im:
+                img = im.convert("RGB")
+            box = tm.largest_box(page, cid)
+            w, h = img.size
+            size = ""
+            if box is not None:
+                ImageDraw.Draw(img).rectangle(
+                    [box[0] * w, box[1] * h, box[2] * w, box[3] * h], outline=(235, 104, 52), width=max(3, w // 200)
+                )
+                size = f"{box[2] - box[0]:.2f} x {box[3] - box[1]:.2f}"
+            img.thumbnail((420, 420))
+            name = f"{cid.replace('/', '__')}-{r['page_id'].replace('/', '__').replace('#', '_')}.png"
+            img.save(run / "misses" / name)
+            out.append(f"| `{cid}` | `{r['page_id']}` | {r['rank_in_pool']} | {size} | `misses/{name}` |")
+    return "\n".join(out) + "\n"
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--run", type=Path, required=True)
@@ -243,6 +300,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for r in rows:
             text += f"| {r['kind']} | `{r['class_id']}` | `{r['page_id']}` | {r['label']} | {int(r['click'])} | {r['credit']:+.3f} |\n"
         (args.run / "images.json").write_text(json.dumps(rows, indent=2, default=str) + "\n", encoding="utf-8")
+    if (args.run / "positives_final.csv").exists() and not args.no_thumbnails:
+        text += "\n" + misses(args.run, steps)
     (args.run / "summary.md").write_text(text, encoding="utf-8")
     print(text)
     return 0

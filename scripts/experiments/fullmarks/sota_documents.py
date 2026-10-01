@@ -23,7 +23,9 @@ does for a user.
 
 ``clicks.csv`` logs every click (page, label, test AP before and after) for
 the per-image credit; every step is scored, so a click's credit is its own
-step's change in test AP.
+step's change in test AP. ``positives_final.csv`` places every test-half
+positive at the final click: its rank, whether it was inside the verified
+shortlist, and its gate score.
 
 Features are cached per tier under ``--feature-cache`` (compact keypoints and
 descriptors, ~170 KB a page), so a re-run skips the hour of SIFT at tier ``m``.
@@ -195,6 +197,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     wanted = {c for c in args.classes.split(",") if c}
     steps: list[dict[str, Any]] = []
     clicks: list[dict[str, Any]] = []
+    misses: list[dict[str, Any]] = []
     for f in sorted(args.matrix.glob("*.npz")):
         if f.name.startswith("vectors-"):
             continue
@@ -261,6 +264,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 clicks[-1]["credit"] = ap_now - prev_ap
             prev_ap = ap_now
             if v == args.max_v:
+                # Where each test-half positive sits at the end: inside the verified shortlist or
+                # beyond it, and its gate score, so a weak class's misses can be told apart.
+                position = {int(i): r for r, i in enumerate(order)}
+                for i in np.flatnonzero(positive & test):
+                    r = position[int(i)]
+                    misses.append(
+                        {
+                            "class_id": cid,
+                            "page_id": pool_ids[i],
+                            "rank_in_pool": r,
+                            "rank_in_test": int(np.flatnonzero(rest == i)[0]),
+                            "in_shortlist": r < s1.LAST_TOP_K,
+                            "gate_score": float(score[r]),
+                        }
+                    )
                 break
             nxt = next((int(i) for i in order if not test[int(i)] and int(i) not in labelled), None)
             if nxt is None:
@@ -292,7 +310,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"final (v{last['v']}) AP {last['ap']:.2f}, found {last['found']}; {time.time() - t_class:.0f}s",
             flush=True,
         )
-        for name, rows in (("steps.csv", steps), ("clicks.csv", clicks)):
+        for name, rows in (("steps.csv", steps), ("clicks.csv", clicks), ("positives_final.csv", misses)):
+            if not rows:
+                continue
             with (args.out / name).open("w", newline="", encoding="utf-8") as fh:
                 w = csv.DictWriter(fh, fieldnames=list(rows[0]))
                 w.writeheader()
