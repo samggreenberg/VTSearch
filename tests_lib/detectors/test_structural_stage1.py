@@ -92,10 +92,10 @@ class TestTiledStage1:
 
     def test_shortlist_size_follows_the_hardware(self, monkeypatch):
         monkeypatch.setattr(s1, "_cuda", lambda: True)
-        assert s1.tiled_top_k(50_000) == s1.TILED_TOP_K == 1000
+        assert s1.tiled_top_k(50_000) == s1.TILED_TOP_K == 2000
         assert s1.tiled_top_k(300) == 300
         monkeypatch.setattr(s1, "_cuda", lambda: False)
-        assert s1.tiled_top_k(50_000) == s1.TILED_TOP_K_CPU == 500
+        assert s1.tiled_top_k(50_000) == s1.TILED_TOP_K_CPU == 1000
 
     def test_the_matrix_is_stacked_once_per_loaded_page_set(self, tiled):
         snap = tiled(4)

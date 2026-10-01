@@ -148,7 +148,8 @@ That SVM head scores 0.02–0.14 AP on FullMarks (#4162 `a3_vlad_svm`).
 
 ### 5. Shortlist size, and Stage 2 per vote
 
-- **K:** 1,000 when the matcher has CUDA, 500 without, and never more than
+- **K:** 2,000 when the matcher has CUDA, 1,000 without (owner, 2026-10-01,
+  from #4391's arms; first shipped as 1,000 / 500), and never more than
   the dataset. It is passed to `structural_rerank` in place of today's 50.
   (The first draft said 2% of the dataset. That would verify only 100 pages
   at 5,000 pages, where M3 measured 1,000. The cost is per page verified,

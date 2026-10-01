@@ -32,11 +32,13 @@ from vtscore.media.structural import MatchStats, StructuralFeatures, StructuralM
 _log = logging.getLogger(__name__)
 
 #: Shortlist Stage 2 verifies when the tiled Stage 1 ran and a GPU does the matching.
-#: At 50,000 pages it keeps 97% of exhaustive AP after 10 votes (#3928 M3).
-TILED_TOP_K = 1000
-#: The same without CUDA, where a template costs ~6 s per 1,000 pages instead of ~1 s
-#: (#3928 M4).
-TILED_TOP_K_CPU = 500
+#: 2,000 by the owner's choice (2026-10-01) from #4391's arms at 50,000 pages: +0.02 AP
+#: with votes and +0.05 before any vote over 1,000, for 2.4 s a vote (p90 3.1 s).
+#: 4,000 gained a little more for 4.5 s (p90 6.1 s, over the 5 s budget).
+TILED_TOP_K = 2000
+#: The same without CUDA, where a template costs ~6 s per 1,000 pages instead of
+#: ~1 s (#3928 M4), so the shortlist is half as long.
+TILED_TOP_K_CPU = 1000
 #: Rows per matmul chunk when scoring tiles, bounding the float32 working set.
 _CHUNK_ROWS = 262_144
 #: Cached verification fits kept before the cache starts over.

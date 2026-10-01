@@ -67,10 +67,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--max-v", type=int, default=20)
     ap.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", "8")))
     ap.add_argument("--k-policies", default="fixed", help="comma-separated #4391 arms: fixed, adaptive, cap")
+    ap.add_argument("--k-cap", type=int, default=0, help="override TILED_K_CAP (the 'cap' arm's K), e.g. 2000")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
 
+    if args.k_cap:
+        s1.TILED_K_CAP = args.k_cap
     policies = [p for p in args.k_policies.split(",") if p]
     unknown = set(policies) - {"fixed", "adaptive", "cap"}
     if unknown:

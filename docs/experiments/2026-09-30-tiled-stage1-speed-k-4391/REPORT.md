@@ -16,12 +16,20 @@ classes recover the ranking? Arms and verdict rule were pre-registered on
 - **Adaptive shortlist: no, and it does not ship.** Verifying another 1,000
   pages while ≥ 10% of the shortlist's last 250 pass the gate gains nothing:
   +0.000 [−0.000, +0.001] AP at 10 votes. Its p90 retrain of 5.2 s breaks the
-  5 s budget. **K stays 1,000.**
-- **A bigger fixed shortlist does help at 50,000 pages**, but it was a
-  reference arm, not a candidate. K = 4,000 scores **+0.035** [+0.011, +0.063]
-  AP at 10 votes, +0.043 [+0.007, +0.094] at 20, and 0.81 against 0.72 before
-  any vote. It costs 4.5 s a vote (p90 6.1 s). Whether that trade is worth it
-  is the owner's call (below).
+  5 s budget.
+- **A bigger fixed shortlist does help at 50,000 pages.** With the numbers in
+  hand, **the owner chose K = 2,000 (2026-10-01)**: 1,000 without a GPU.
+
+| tier `m`, vs K = 1,000 | AP, no votes | AP @10 | AP @20 | vote median / p90 |
+|---|---:|---:|---:|---|
+| K = 1,000 (was shipped) | 0.72 | 0.78 | 0.72 | 1.3 / 1.6 s |
+| **K = 2,000 (ships)** | 0.77, +0.048 [+0.026, +0.071] | 0.81, +0.024 [+0.009, +0.042] | 0.74, +0.020 [+0.002, +0.045] | **2.4 / 3.1 s** |
+| K = 4,000 | 0.81, +0.093 [+0.054, +0.134] | 0.82, +0.035 [+0.011, +0.062] | 0.76, +0.043 [+0.007, +0.092] | 4.5 / 6.1 s |
+
+K = 2,000 is arm D, pre-registered on #4391 after A–C (`measurements/replay-m-k2000.csv`).
+It keeps two thirds of K = 4,000's 10-vote gain at about half the cost, inside
+the 5 s budget. The first sort before any vote (example sort) takes 3.1 s
+median, against 2.1 s at K = 1,000.
 
 ![Arms](figures/arms.png)
 
@@ -44,7 +52,7 @@ because it is identical.
   float32 on the device, and a GPU test pins its scores to the CPU path within
   1e-5.
 
-## Shortlist arms (tier `m`, paired against K = 1,000 over classes)
+## Shortlist arms (tier `m`, paired against K = 1,000 over classes; measured before the K = 2,000 choice)
 
 | arm | AP, no votes | AP @10 | AP @20 | retrain median / p90 / max | K > 1,000 |
 |---|---:|---:|---:|---|---:|
@@ -70,6 +78,8 @@ calibrated accept decision first, which is #4367.
   - It takes the max per page with `scatter_reduce`.
   - It falls back to the CPU when CUDA is absent, short of memory
     (needs 3× the matrix free), or errors.
+- **`TILED_TOP_K` 1,000 → 2,000** and **`TILED_TOP_K_CPU` 500 → 1,000** (owner's
+  choice above).
 - **`K_POLICY`:** `"fixed"` (default, shipped), `"adaptive"` and `"cap"` are the
   pre-registered arms. They stay as experiment knobs so this replay
   reproduces. `_rerank_growing` in `structural_similarity.py` runs exactly one
@@ -82,6 +92,8 @@ calibrated accept decision first, which is #4367.
 source scripts/experiments/pile/pile_env.sh
 python scripts/experiments/fullmarks/app_replay_tiled.py --tier m --k-policies fixed,adaptive,cap \
     --matrix /expscratch/$USER/fullmarks/votes-4162/matrix-m --out <dir>/replay-m --workers 16
+python scripts/experiments/fullmarks/app_replay_tiled.py --tier m --k-policies cap --k-cap 2000 \
+    --matrix /expscratch/$USER/fullmarks/votes-4162/matrix-m --out <dir>/replay-m-k2000 --workers 16
 python docs/experiments/2026-09-30-tiled-stage1-speed-k-4391/figures.py
 ```
 
