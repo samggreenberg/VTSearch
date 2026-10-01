@@ -89,9 +89,14 @@ from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
     LineRanking,
     SpotCheck,
+    balance_line,
+    balance_schedule,
+    balance_state,
+    fbeta_count,
     floor_line,
     floor_state,
     mixture_count,
+    mixture_positives,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -362,9 +367,11 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
     """
     nan = float("nan")
     state = details.get("floor_state")
-    if floor is None or state is None:
+    beta = details.get("beta")
+    if (floor is None and beta is None) or state is None:
         return {
             "min_precision": floor if floor is not None else nan,
+            "beta": beta if beta is not None else nan,
             "floor_status": "",
             "floor_count": -1,
             "range_lo": nan,
@@ -373,9 +380,12 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
             "check_right": -1,
             "check_stale": -1,
         }
-    rng = state.range
+    # A balance state (#4413) carries the kept set's precision range where a
+    # floor state carries ``range``; the columns read the same thing.
+    rng = getattr(state, "range", None) if beta is None else getattr(state, "precision", None)
     return {
-        "min_precision": floor,
+        "min_precision": floor if floor is not None else nan,
+        "beta": beta if beta is not None else nan,
         "floor_status": state.status,
         "floor_count": state.count,
         "range_lo": round6(rng.lo) if rng is not None else nan,
@@ -384,6 +394,35 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
         "check_right": rng.right if rng is not None else -1,
         "check_stale": (1 if state.stale else 0) if rng is not None else -1,
     }
+
+
+def _preference_line_for_step(
+    ranking: LineRanking,
+    details: dict[str, Any],
+    min_precision: float | None,
+    beta: float | None,
+    check: "SpotCheck | None",
+    labels: "Mapping[int, bool] | None",
+) -> tuple[float | None, str]:
+    """The line the arm's preference draws over the step's ranking, and its provenance; ``(None, "")`` with neither.
+
+    The app's own rule (``_preference_line`` in the trainer): under a balance
+    (#4413) the finished F-beta walk's set, else the mixture's F-beta argmax
+    under the balance's cap; under a floor (#4272, #4389) the finished
+    walk's set, else the smaller of the schedule's count and the mixture's P
+    crossing.  Leaves the state the row's floor columns read in
+    ``details["floor_state"]`` (and ``details["beta"]`` under a balance).
+    """
+    if beta is not None:
+        proposal = fbeta_count(ranking, beta, labels or {})
+        details["floor_state"] = balance_state(beta, check, ranking, proposal=proposal)
+        details["beta"] = beta
+        return balance_line(ranking, beta, check, proposal=proposal), "balance"
+    if min_precision is not None:
+        proposal = mixture_count(ranking, min_precision, labels or {})
+        details["floor_state"] = floor_state(min_precision, check, ranking, proposal=proposal)
+        return floor_line(ranking, min_precision, check, proposal=proposal), "floor"
+    return None, ""
 
 
 def _safe_threshold_for_step(
@@ -404,6 +443,7 @@ def _safe_threshold_for_step(
     min_precision: float | None = None,
     check: "SpotCheck | None" = None,
     labels: "Mapping[int, bool] | None" = None,
+    beta: float | None = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -576,16 +616,11 @@ def _safe_threshold_for_step(
     # ones marked, as ``_fused_threshold`` parks it on the detector context.
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
     details["line_ranking"] = ranking
-    if min_precision is not None:
-        # The app's unchecked line: the smaller of the schedule's count and
-        # the vote-anchored mixture's, anchored on the votes so far (#4389).
-        proposal = mixture_count(ranking, min_precision, labels or {})
-        details["floor_state"] = floor_state(min_precision, check, ranking, proposal=proposal)
-        kept = floor_line(ranking, min_precision, check, proposal=proposal)
-        if kept is not None:
-            # No inclusion drew this line: acquisition derives its origin from it.
-            details["reporting_line"] = ReportingLine(kept, None, None)
-            return kept, all_scores, ids, fold_haystacks, "floor", cut
+    kept, provenance = _preference_line_for_step(ranking, details, min_precision, beta, check, labels)
+    if kept is not None:
+        # No inclusion drew this line: acquisition derives its origin from it.
+        details["reporting_line"] = ReportingLine(kept, None, None)
+        return kept, all_scores, ids, fold_haystacks, provenance, cut
     line = reporting_line(cut, None, inclusion_value=inclusion, min_precision=None)
     details["reporting_line"] = line
     if cut is not None and line.threshold is not None:
@@ -1855,6 +1890,7 @@ def simulate_voting_iterations(  # noqa: C901
     train_mix: "Optional[str | dict[str, float]]" = None,
     test_band_auroc: bool = False,
     min_precision: "Optional[float | str]" = None,
+    beta: Optional[float] = None,
     spot_check: str = "end",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
@@ -2192,6 +2228,10 @@ def simulate_voting_iterations(  # noqa: C901
             pass it, because a set floor wins over the knob.  A number pins a
             floor.  No step builds the #4220 estimate: the app stopped
             building it in #4362.
+        beta: The **balance** arm (#4413): draw the line at F-beta's beta
+            instead of a floor - the mixture's F-beta argmax under the
+            balance's cap, and the end-of-run check is the F-beta walk.  A
+            given beta makes the floor unused.  ``None`` is the floor arm.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272, the band walk of #4388).  ``"end"`` (the default): once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
@@ -2294,6 +2334,11 @@ def simulate_voting_iterations(  # noqa: C901
     # does (#4245); ``"off"`` is the Inclusion arm.  Resolved - and so
     # validated - before anything expensive runs.
     floor = resolve_min_precision(min_precision)
+    if beta is not None:
+        # The balance arm (#4413): the line is drawn at beta, and the floor is
+        # unused, whatever it resolved to.
+        balance_schedule(beta)
+        floor = None
     _check_inclusion_arm(inclusion, floor)
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
@@ -2645,7 +2690,7 @@ def simulate_voting_iterations(  # noqa: C901
         elif t >= n_steps or not pool:
             # The voting steps are spent.  Check the line once, if the run
             # checks at all and there is a ranking with something unvoted in it.
-            if spot_check != "end" or check is not None or floor is None or line_ranking is None:
+            if spot_check != "end" or check is not None or (floor is None and beta is None) or line_ranking is None:
                 break
             # The whole unvoted ranking, in rank order: the walk's bands are cut
             # from it (#4388), and it starts at the floor's schedule.
@@ -2654,7 +2699,19 @@ def simulate_voting_iterations(  # noqa: C901
                 break
             # Seeded off the run's own RNG, after every trajectory draw, so a
             # run without the check is byte-identical up to here.
-            check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))
+            if beta is not None:
+                # The balance walk (#4413): recall read against the mixture's
+                # count of the unvoted ranking's positives, as the app does.
+                n_pos = mixture_positives(
+                    line_ranking,
+                    {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    set(good_votes) | set(bad_votes),
+                )
+                if n_pos is None or not n_pos > 0:
+                    break
+                check = SpotCheck.start_balance(candidate, beta, n_pos, seed=int(rng.randint(2**31 - 1)))
+            else:
+                check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
             picks = list(check.pending)
             if not picks:
                 break
@@ -2785,6 +2842,7 @@ def simulate_voting_iterations(  # noqa: C901
                     min_precision=floor,
                     check=check,
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    beta=beta,
                 )
             )
             line_ranking = details.get("line_ranking")
@@ -3329,6 +3387,7 @@ def run_voting_iterations_eval(
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
     min_precision: "Optional[float | str]" = None,
+    beta: Optional[float] = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -3458,6 +3517,7 @@ def run_voting_iterations_eval(
                                     calibration_seed=calibration_seed,
                                     standalone_cut=standalone_cut,
                                     min_precision=min_precision,
+                                    beta=beta,
                                 )
                                 all_rows.extend(rows)
 
@@ -3484,6 +3544,7 @@ def run_voting_iterations_eval_from_pickles(
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
     min_precision: "Optional[float | str]" = None,
+    beta: Optional[float] = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -3515,6 +3576,8 @@ def run_voting_iterations_eval_from_pickles(
             :func:`run_voting_iterations_eval`).
         min_precision: The precision floor the line is drawn at (see
             :func:`simulate_voting_iterations`); ``"off"`` for the Inclusion arm.
+        beta: The balance arm (#4413): draw the line at F-beta's beta; the floor is then unused.
+            ``None`` is the floor arm.
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -3550,4 +3613,5 @@ def run_voting_iterations_eval_from_pickles(
         autopilot_fidelity=autopilot_fidelity,
         startup_schedule=startup_schedule,
         min_precision=min_precision,
+        beta=beta,
     )

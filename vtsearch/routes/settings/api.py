@@ -30,6 +30,8 @@ from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
     set_calibration_fraction as _state_set_calibration_fraction,
+    set_beta as _state_set_beta,
+    set_line_preference as _state_set_line_preference,
     set_min_precision as _state_set_min_precision,
 )
 
@@ -308,6 +310,10 @@ _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
     "calibrate_count": _state_set_calibrate_count,
     "calibration_fraction": _state_set_calibration_fraction,
     "min_precision": _state_set_min_precision,
+    # The balance and the switch between the two preferences (#4413): pure
+    # cutoff knobs, routed like the floor.
+    "beta": _state_set_beta,
+    "line_preference": _state_set_line_preference,
 }
 
 #: Keys that ``SettingsUpdateSchema`` accepts and that have a

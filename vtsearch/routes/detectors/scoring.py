@@ -96,16 +96,31 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
     use: *threshold* unchanged when there was a ranking already, or no set to
     keep.
     """
-    from vtscore.state.core import detector_line_proposal, get_active_detector_context, human_voted_ids  # noqa: PLC0415
-    from vtscore.training.thresholds import LineRanking, floor_line  # noqa: PLC0415
-    from vtsearch.state import get_min_precision  # noqa: PLC0415
+    from vtscore.state.core import (  # noqa: PLC0415
+        detector_balance_proposal,
+        detector_line_proposal,
+        get_active_detector_context,
+        human_voted_ids,
+    )
+    from vtscore.training.thresholds import LineRanking, balance_line, floor_line  # noqa: PLC0415
+    from vtsearch.state import line_knobs  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     if det_ctx.line_ranking is not None or not results:
         return threshold
     voted = human_voted_ids(det_ctx)
     det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
-    floor = get_min_precision()
+    knobs = line_knobs()
+    beta, floor = knobs["beta"], knobs["min_precision"]
+    if beta is not None:  # the balance draws the line (#4413)
+        kept = balance_line(
+            det_ctx.line_ranking,
+            beta,
+            det_ctx.precision_check,
+            voted,
+            proposal=detector_balance_proposal(det_ctx, beta),
+        )
+        return threshold if kept is None else kept
     if floor is None:
         return threshold
     kept = floor_line(

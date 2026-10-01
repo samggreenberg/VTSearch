@@ -20,6 +20,7 @@ import pytest
 from vtscore.eval.autopilot_flow import pick_provenance
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
+    BALANCE_CHECKED,
     BAND_BASE,
     DEFAULT_MIN_PRECISION,
     FLOOR_CONFIRMED,
@@ -158,3 +159,40 @@ class TestTheArms:
     def test_a_malformed_floor_kills_the_cell_before_it_runs(self):
         with pytest.raises(ValueError):
             self._run(min_precision=1.5)
+
+
+class TestTheBalanceArm:
+    """#4413: the line drawn at F-beta's beta, and the end-of-run check as the F-beta walk."""
+
+    def _run(self, **kwargs):
+        picks: list[dict] = []
+        rows = simulate_voting_iterations(
+            _separable(), "alpha", seed=0, max_steps=15, calibrate_count=2, pick_sink=picks, **kwargs
+        )
+        return rows, picks
+
+    def test_the_line_is_the_balances_and_the_floor_is_unused(self):
+        rows, _ = self._run(beta=1.0, min_precision=0.9)
+        steps = [r for r in rows if r["phase"] not in ("check", "")]
+        assert steps and all(r["beta"] == 1.0 and math.isnan(r["min_precision"]) for r in steps)
+        assert all(r["floor_status"] == FLOOR_UNCHECKED for r in steps)
+        assert all(1 <= r["floor_count"] <= min(32, r["n_remainder"]) for r in steps), "the cap holds"
+
+    def test_the_check_is_the_f_beta_walk_and_ends_checked(self):
+        rows, picks = self._run(beta=1.0)
+        check_rows = [r for r in rows if r["phase"] == "check"]
+        assert check_rows, "the balance arm checks the line"
+        last = check_rows[-1]
+        assert last["floor_status"] == BALANCE_CHECKED and last["beta"] == 1.0
+        assert last["floor_count"] >= 1 and 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0
+        assert last["check_labelled"] >= 5 and all(p["phase"] != "check" or p["t"] > 15 for p in picks)
+
+    def test_a_recall_leaning_balance_keeps_at_least_as_much(self):
+        lo, _ = self._run(beta=0.5)
+        hi, _ = self._run(beta=2.0)
+        at = lambda rows: [r["floor_count"] for r in rows if r["phase"] not in ("check", "")]  # noqa: E731
+        assert sum(at(hi)) >= sum(at(lo))
+
+    def test_a_balance_outside_the_range_kills_the_cell_before_it_runs(self):
+        with pytest.raises(ValueError, match="beta must be in"):
+            self._run(beta=9.0)

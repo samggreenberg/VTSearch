@@ -563,7 +563,8 @@ def _score_with_cold_detector(
             calibration_fraction=cfg.calibration_fraction,
             rows=rows,
             on_progress=_on_label,
-            min_precision=cfg.min_precision,
+            min_precision=cfg.min_precision if cfg.line_preference != "balance" else None,
+            beta=cfg.beta if cfg.line_preference == "balance" else None,
         )
         if model is None:
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
