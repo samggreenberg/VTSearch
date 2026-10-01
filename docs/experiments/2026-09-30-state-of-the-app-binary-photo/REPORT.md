@@ -1,5 +1,7 @@
 # State of the App: Binary Photo — 2026-09-30
 
+> **Superseded by [the 2026-10-01 review](../2026-10-01-state-of-the-app-binary-photo/REPORT.md)** (#4402, 10 seeds): this one measured a line that was a fixed count and a check that halved a fixed candidate. Both changed the same day (#4388, #4389).
+
 **Issues:** #4363 (this review), #4357 (the recipe). **Recipe:** `.claude/skills/state-of-the-app/SKILL.md`.
 **Path:** SigLIP whole-image embedding, binary (Good/Bad) votes, Autopilot's shipped
 opening (`g3@top,b4@mid,g20+dry1/16@top`, #4288), and the default precision

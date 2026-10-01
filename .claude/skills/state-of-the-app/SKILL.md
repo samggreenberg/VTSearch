@@ -110,7 +110,7 @@ same edit.
 
 ```bash
 cd scripts/experiments/state_of_app
-srun -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # its checks are too heavy for the login node
+srun --ntasks=1 -p cpu --mem=8G -c 2 -t 60 bash launch.sh prepare    # checks too heavy for the login node; --ntasks=1 or it submits twice
 CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node: a few classes, every band; Binary only unless SOTA_PATH=region|all
 bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
@@ -147,6 +147,24 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   `overnight.sh` does this with a deadline. Measured 2026-09-30 on the floor-era
   default arm (rank frames plus the end-of-run check): a Binary run takes
   7.5–12 min and ~1.1 GB at 2 CPUs.
+- **The line on a fresh corpus is the shipped one** (#4402): the rank frames
+  record how many the unchecked line keeps on the test half
+  (`test_line_k_p10/p50/p90`: the smaller of the schedule's count and the
+  vote-anchored mixture's, #4389), and `_rank_metrics.frame_k` reads it. A run
+  from before c5f55732c has no such column, and the analyzer then reads the
+  schedule's count, which is not the app's line any more: **re-run it, don't
+  re-analyze it.** Recording it is a pure read; the 2026-09-30 re-run was
+  identical to the run without it, click for click.
+- **Smoke the analyzer in a scratch directory.** `analyze.sh` writes
+  `text_baseline.csv` into the run directory and reuses it when it has the
+  current columns, and the baseline is per seed: a smoke analysis on seed 0
+  there leaves a one-seed baseline the full analysis then reads. Make a
+  directory whose `results/` symlinks the run's `cells/`, `prepare_info.json`
+  and `crops/`, write its own `grid_shape.json` with the seeds it holds, and
+  analyze that (2026-09-30: `<run dir>-smoke`).
+- **Measured 2026-09-30 on the band-walk app:** a Binary run takes a median
+  6 min (p90 7.3) at 1 CPU; 10 seeds (1,440 runs) took ~90 min at ~210 wide,
+  and `analyze.sh` ~16 min for 10 seeds at 8 CPUs.
 - **`analyze.sh` needs `results/grid_shape.json`, and only `launch.sh cells`
   writes it.** A run built from `subset` or `redo` (a smoke run, or seeds
   widened by index) has none, and `analyze.sh` then dies inside
