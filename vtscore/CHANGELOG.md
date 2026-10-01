@@ -1047,6 +1047,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Fixed
 
+- **A balance walk on a small ranking no longer keeps all of it whatever
+  its audits say** (issue #4424). `SpotCheck` started a balance walk on the
+  band holding the cap and stepped shallower only after a deeper step fell,
+  so a walk that started on the ranking's last band (every walk on a
+  ranking no larger than the cap) finished there at its first verdict. It
+  now steps shallower at once, as its reference `rule_fb_walk` does; a tie
+  still keeps the smaller set. `walk_positives` also falls back to the cap
+  when the mixture counts fewer than one positive, not only none: a sound
+  fit whose positives were all voted Good counts a few hundredths, and the
+  walk's recall over that count read as everything found.
 - **`vtscore.concurrency.stalls`: the stall watchdog no longer arms a dump
   that can segfault the process it watches** (issue #4345).
   `start_stall_diagnostics_from_env` used to re-arm

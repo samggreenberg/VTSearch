@@ -749,9 +749,13 @@ class SpotCheck:
     def _evaluate_balance(self) -> None:
         """Deeper while the F-beta estimate rises; from a start whose first deeper step does not, shallower while it does not fall.
 
-        The peak's band edge is the kept set; on a tie the smaller set wins
-        (fewer items, and no further picks).  A shallower set is a subset of
-        an audited one, so stepping back costs no picks.
+        A start on the ranking's last band has no deeper step, so it goes
+        shallower straight away, as the reference's ``rule_fb_walk`` does:
+        on a corpus no larger than the cap that is every walk, and ending
+        there kept the whole ranking whatever its audits said.  The peak's
+        band edge is the kept set; on a tie the smaller set wins (fewer items,
+        and no further picks).  A shallower set is a subset of an audited
+        one, so stepping back costs no picks.
         """
         est = self.fbeta_estimate()
         if est is None:
@@ -760,18 +764,21 @@ class SpotCheck:
         if self.direction in (WALK_START, WALK_DEEPER):
             if self.best is None or est > (self.best_estimate or 0.0) + _EPS:
                 self.best, self.best_estimate = self.bands, est
-                if self.bands >= self.n_bands:
+                if self.bands < self.n_bands:
+                    self.direction = WALK_DEEPER
+                    self.bands += 1
+                    self.k = int(self.edges[self.bands])
+                    return
+                # The last band.  Reached by rising, it is the peak; started
+                # on, it has not been compared with anything yet.
+                if self.direction == WALK_DEEPER or self.bands <= 1:
                     self._finish(BALANCE_CHECKED, self.bands)
                     return
-                self.direction = WALK_DEEPER
-                self.bands += 1
-                self.k = int(self.edges[self.bands])
-                return
-            # The estimate fell.  After a rise, the peak was the last set; on the
-            # first step from the start, try the other way.
-            if self.best != self.start_bands or self.best <= 1:
+            elif self.best != self.start_bands or self.best <= 1:
+                # The estimate fell after a rise: the peak was the last set.
                 self._finish(BALANCE_CHECKED, self.best)
                 return
+            # The first step from the start fell, or there was none: try the other way.
             self.direction = WALK_SHALLOWER
             self.bands = self.best - 1
             self.k = int(self.edges[self.bands])
@@ -977,11 +984,15 @@ def walk_positives(
     anyway: the balance's cap (:func:`balance_schedule`), lowered to what is
     unvoted.  Against that denominator the walk goes deeper while the audited
     share right holds up, which is the floor's instinct with the balance's
-    stop.  Always at least one.  The app's check route and the harness's
-    end-of-run check both read this, so a check starts in the same cases.
+    stop.  A sound fit that counts fewer than one positive (every positive
+    already voted Good, say) takes the cap too: the walk's recall is its
+    audited positives over this count, so a near-zero count would report
+    every check as having found them all.  Always at least one.  The app's
+    check route and the harness's end-of-run check both read this, so a
+    check starts in the same cases.
     """
     n_pos = mixture_positives(ranking, labels, also_voted)
-    if n_pos is not None and n_pos > 0:
+    if n_pos is not None and n_pos >= 1.0:
         return n_pos
     cap = balance_schedule(beta).candidate
     unvoted = ranking.unvoted_ids(also_voted).size if ranking is not None else 0
