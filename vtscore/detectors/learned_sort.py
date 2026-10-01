@@ -138,6 +138,7 @@ def build_learned_sort_signature(
     calibration_fraction_value,
     min_precision_value=None,
     inclusion_value=None,
+    beta_value=None,
 ):
     """Build the no-op short-circuit key for a learned-sort run.
 
@@ -172,7 +173,18 @@ def build_learned_sort_signature(
         calibration_fraction_value,
         min_precision_value,
         _floor_count_key(det_ctx, min_precision_value),
+        beta_value,
+        _balance_count_key(det_ctx, beta_value),
     )
+
+
+def _balance_count_key(det_ctx, beta_value) -> int | None:
+    """The count the balance's line keeps before the mixture's proposal (#4413): a finished walk re-keys the sort."""
+    from vtscore.training.thresholds import balance_count
+
+    if beta_value is None:
+        return None
+    return balance_count(beta_value, getattr(det_ctx, "precision_check", None))
 
 
 def _floor_count_key(det_ctx, min_precision_value) -> int | None:
@@ -198,6 +210,7 @@ def run_learned_sort(
     calibration_fraction_value,
     min_precision_value=None,
     inclusion_value=None,
+    beta_value=None,
 ):
     """Train and score a learned sort, reconciling the result with local votes.
 
@@ -247,6 +260,7 @@ def run_learned_sort(
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
                 min_precision=min_precision_value,
+                beta=beta_value,
             )
         else:
             results, threshold, model = train_and_score(
@@ -258,6 +272,7 @@ def run_learned_sort(
                 vote_region_boxes=region_boxes_snapshot,
                 det_ctx=det_ctx,
                 min_precision=min_precision_value,
+                beta=beta_value,
             )
 
         clock.mark("train_and_score")

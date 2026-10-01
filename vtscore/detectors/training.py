@@ -179,6 +179,28 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
     return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
 
 
+def _preference_line(
+    ranking: Any, det_ctx: Any, min_precision: float | None, beta: float | None, labels: "Mapping[int, bool] | None"
+) -> float | None:
+    """The line the user's preference draws over *ranking*, or ``None`` when neither preference is set.
+
+    Under a balance (#4413) the set the finished F-beta walk ended on, else
+    the mixture's F-beta argmax under the balance's cap; under a floor
+    (#4272, #4389) the set the finished walk ended on, else the smaller of the
+    schedule's count and the mixture's P crossing.  *labels* anchor the
+    mixture: the same votes the fold-anchored cut anchors on.  The fit is
+    memoised on the ranking, so the re-cut and the state read it back.
+    """
+    from vtscore.training.thresholds import balance_line, fbeta_count, floor_line, mixture_count  # noqa: PLC0415
+
+    check = det_ctx.precision_check if det_ctx is not None else None
+    if beta is not None:
+        return balance_line(ranking, beta, check, proposal=fbeta_count(ranking, beta, labels or {}))
+    if min_precision is not None:
+        return floor_line(ranking, min_precision, check, proposal=mixture_count(ranking, min_precision, labels or {}))
+    return None
+
+
 def _fused_threshold(
     xcal_threshold: float,
     folds: Any,
@@ -191,6 +213,7 @@ def _fused_threshold(
     voted_ids: "set[int] | None" = None,
     min_precision: float | None = None,
     labels: "Mapping[int, bool] | None" = None,
+    beta: float | None = None,
 ) -> float:
     """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
@@ -283,8 +306,6 @@ def _fused_threshold(
         drop_voted,
         PRECISION_FLOOR_FALLBACK_INCLUSION,
         fit_fold_anchored_cut,
-        floor_line,
-        mixture_count,
         reporting_line,
     )
     from vtscore.utils.scores import scored_only  # noqa: PLC0415
@@ -345,17 +366,9 @@ def _fused_threshold(
             ",".join(str(i) for i in cut.fold_iterations),
         )
 
-    if min_precision is not None:
-        # The unchecked line is the smaller of the schedule's count and the
-        # vote-anchored mixture's (#4389); *labels* are the anchors, the same
-        # votes the fold cut above anchors on.  The fit is memoised on the
-        # ranking, so the re-cut and the floor state read it back, not refit.
-        proposal = mixture_count(ranking, min_precision, labels or {})
-        kept = floor_line(
-            ranking, min_precision, det_ctx.precision_check if det_ctx is not None else None, proposal=proposal
-        )
-        if kept is not None:
-            return kept
+    kept = _preference_line(ranking, det_ctx, min_precision, beta, labels)
+    if kept is not None:
+        return kept
     line = reporting_line(cut, None, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=None)
     if line.threshold is not None:
         return line.threshold
@@ -600,7 +613,8 @@ def train_and_threshold(
     from vtscore.state import (
         get_calibrate_count,
         get_calibration_fraction,
-        get_min_precision,
+        get_min_precision,  # noqa: F401
+        line_knobs,
     )
     from vtscore.training import (
         calibration_folds,
@@ -632,7 +646,8 @@ def train_and_threshold(
     # actually has.
     hidden_dim = LINEAR_SVM_HEAD
 
-    min_precision = get_min_precision()
+    knobs = line_knobs()  # which preference draws the line (#4413)
+    min_precision, beta = knobs["min_precision"], knobs["beta"]
     # The user's persisted split wins; unset resolves to the per-space
     # production default for this detector's embedder (issue #3287).
     calibration_fraction = resolve_calibration_fraction(get_calibration_fraction(), embedder_name)
@@ -727,6 +742,7 @@ def train_and_threshold(
             voted_ids=voted_ids,
             min_precision=min_precision,
             labels=labels,
+            beta=beta,
         )
     elif det_ctx is not None:
         # Safe thresholds off: no population estimator to re-cut on a slide,
@@ -1273,6 +1289,7 @@ def _train_and_score_xy(
     rows: ScoringRows | None = None,
     min_precision: float | None = None,
     labels: "Mapping[int, bool] | None" = None,
+    beta: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
@@ -1410,6 +1427,7 @@ def _train_and_score_xy(
         voted_ids=voted_ids,
         min_precision=min_precision,
         labels=labels,
+        beta=beta,
     )
     clock.mark("fused_threshold")
 
@@ -1428,6 +1446,7 @@ def train_and_score(
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
     det_ctx: Any = None,
     min_precision: float | None = None,
+    beta: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on voted media embeddings and score every media.
 
@@ -1498,6 +1517,7 @@ def train_and_score(
         voted_ids=set(good_votes) | set(bad_votes),
         min_precision=min_precision,
         labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+        beta=beta,
     )
 
     # Stage-2 structural re-rank: a no-op for every non-structural dataset

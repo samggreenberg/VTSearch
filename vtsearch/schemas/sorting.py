@@ -55,15 +55,19 @@ class OkResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
-from vtscore.training.thresholds.spot_check import CHECK_CANCELLED, CHECK_RUNNING, FLOOR_STATES
+from vtscore.training.thresholds.spot_check import BALANCE_CHECKED, CHECK_CANCELLED, CHECK_RUNNING, FLOOR_STATES
+
+#: The states a balance can report (#4413); mirrors
+#: :data:`vtscore.training.thresholds.BALANCE_STATES`.
+BALANCE_STATES = (FLOOR_STATES[0], BALANCE_CHECKED)
 
 #: The states a precision floor can report (#4272); mirrors
 #: :data:`vtscore.training.thresholds.FLOOR_STATES`.
 PRECISION_FLOOR_STATES = FLOOR_STATES
 
 #: The states a spot check can be in: its rounds still being voted on, ended
-#: on one of the floor's two checked states, or abandoned.
-PRECISION_CHECK_STATES = (CHECK_RUNNING, *FLOOR_STATES[1:], CHECK_CANCELLED)
+#: on one of the floor's two checked states or the balance's one, or abandoned.
+PRECISION_CHECK_STATES = (CHECK_RUNNING, *FLOOR_STATES[1:], BALANCE_CHECKED, CHECK_CANCELLED)
 
 
 class LikelyRangeSchema(Schema):
@@ -113,6 +117,28 @@ class FloorStateSchema(Schema):
     # The check's likely range for the kept set; ``null`` while unchecked.
     range = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
     # What a check at this floor would cost.
+    schedule = fields.Nested(CheckScheduleSchema, required=True)
+
+
+class BalanceStateSchema(Schema):
+    """What the balance says about the line a response carries (#4413).
+
+    Built by :func:`vtscore.state.core.detector_balance_state`.  ``unchecked``:
+    no balance walk has run at this beta, and the line keeps the mixture's
+    F-beta argmax under the balance's cap; ``checked``: the last walk's peak.
+    """
+
+    # The detector's balance: F-beta's beta.
+    beta = fields.Float(required=True)
+    status = fields.String(required=True, validate=validate.OneOf(BALANCE_STATES))
+    # How many unvoted items the line keeps.
+    count = fields.Integer(required=True)
+    # The walk's likely ranges for the kept set's precision and recall, and
+    # its F-beta estimate; ``null`` while unchecked.
+    precision = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
+    recall = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
+    fbeta = fields.Float(required=True, allow_none=True)
+    # The balance's cap and what a walk from it costs.
     schedule = fields.Nested(CheckScheduleSchema, required=True)
 
 
@@ -343,7 +369,12 @@ class PrecisionCheckStateSchema(Schema):
 
     status = fields.String(required=True, validate=validate.OneOf(PRECISION_CHECK_STATES))
     # The floor the check is (or was) measuring.
-    min_precision = fields.Float(required=True)
+    # The floor a floor walk runs at; ``null`` on a balance walk (#4413), which
+    # carries ``beta``, its F-beta estimate and the set's recall range instead.
+    min_precision = fields.Float(required=True, allow_none=True)
+    beta = fields.Float(required=False, allow_none=True)
+    fbeta = fields.Float(required=False, allow_none=True)
+    recall = fields.Nested(LikelyRangeSchema, required=False, allow_none=True)
     # The round being voted on (1-based; one round per band audited) and how
     # many bands the ranking has in all.
     round = fields.Integer(required=True)
@@ -379,6 +410,9 @@ class PrecisionCheckResponseSchema(Schema):
 
     # The floor's state for the line, exactly as every other carrier reports it.
     floor = fields.Nested(FloorStateSchema, required=True)
+    # The balance's state for the line (#4413); which of the two draws it is
+    # the ``line_preference`` setting.
+    balance = fields.Nested(BalanceStateSchema, required=True)
     # The running check, or the last finished one; ``null`` when there is
     # neither.
     check = fields.Nested(PrecisionCheckStateSchema, required=True, allow_none=True)
@@ -397,6 +431,24 @@ class PrecisionCheckVotesRequestSchema(Schema):
     # Votes on this round's picks.  A partial round is accepted and waits for
     # the rest; an id that is not one of the round's picks is a 400.
     votes = fields.List(fields.Nested(PrecisionCheckVoteSchema), required=True)
+
+
+class BalanceResponseSchema(BalanceStateSchema):
+    """Response for ``GET|POST /api/balance``: the balance's state, plus the line it draws (#4413)."""
+
+    # The line the detector draws (``null`` when no detector has a threshold),
+    # and how many items of its last ranking sit at or above it.
+    threshold = fields.Float(required=True, allow_none=True)
+    n_returned = fields.Integer(required=True, allow_none=True)
+    # Which preference draws the line: ``floor`` or ``balance``.
+    line_preference = fields.String(required=True)
+
+
+class BalanceRequestSchema(Schema):
+    """Body for ``POST /api/balance``."""
+
+    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 0.5 / 1 / 2).
+    beta = fields.Raw(required=True, validate=_validate_numeric)
 
 
 class MinPrecisionRequestSchema(Schema):

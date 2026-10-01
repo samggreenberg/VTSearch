@@ -24,6 +24,8 @@ See Phase 3 of ``../docs/architecture.md``.
 
 from __future__ import annotations
 
+from vtscore.config.runtime import DEFAULT_BETA
+
 import math
 import threading
 import warnings
@@ -976,6 +978,10 @@ class DetectorContext:
         # tracked in its own flag.
         "min_precision",
         "min_precision_seeded",
+        # The detector's balance (#4413): F-beta's beta, per detector and seeded
+        # from the user's setting on first read, like the floor.
+        "beta",
+        "beta_seeded",
         # Cached in-memory data (never exported)
         "training_medias",  # voted media items with embeddings
         "label_embeddings",  # str → np.ndarray, keyed by stable_element_id
@@ -1139,6 +1145,8 @@ class DetectorContext:
         self.find_eval_stale: bool = False
         self.min_precision: float | None = None
         self.min_precision_seeded: bool = False
+        self.beta: float = DEFAULT_BETA
+        self.beta_seeded: bool = False
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
         # Embeddings for every saved labelset element, keyed by
@@ -1597,6 +1605,7 @@ def recut_detector_threshold(
     inclusion_value: float | None = None,
     *,
     min_precision: float | None = None,
+    beta: float | None = None,
 ) -> float | None:
     """The threshold *ctx*'s cached estimators cut at an operating point, or ``None``.
 
@@ -1640,10 +1649,22 @@ def recut_detector_threshold(
       touch of the stepper, which could even admit *fewer* items on a step
       toward lenient.
     """
-    from vtscore.training.thresholds import floor_line, reporting_line
+    from vtscore.training.thresholds import balance_line, floor_line, reporting_line
 
-    if min_precision is None and inclusion_value is None:
-        raise ValueError("an operating point needs an inclusion or a precision floor")
+    if min_precision is None and beta is None and inclusion_value is None:
+        raise ValueError("an operating point needs an inclusion, a precision floor or a balance")
+    if beta is not None:
+        # The balance's line (#4413): the set the finished F-beta walk ended
+        # on, else the mixture's F-beta argmax under the balance's cap.
+        kept = balance_line(
+            ctx.line_ranking,
+            beta,
+            ctx.precision_check,
+            human_voted_ids(ctx),
+            proposal=detector_balance_proposal(ctx, beta),
+        )
+        if kept is not None:
+            return kept
     if min_precision is not None:
         kept = floor_line(
             ctx.line_ranking,
@@ -1723,6 +1744,39 @@ def detector_line_proposal(ctx: "DetectorContext", min_precision: float) -> int 
     from vtscore.training.thresholds import mixture_count
 
     return mixture_count(ctx.line_ranking, min_precision, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
+def detector_balance_proposal(ctx: "DetectorContext", beta: float) -> int | None:
+    """The mixture's F-beta argmax on *ctx*'s ranking at *beta* (#4413), or ``None``: the unchecked balance line's proposal."""
+    from vtscore.training.thresholds import fbeta_count
+
+    return fbeta_count(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
+def detector_balance_positives(ctx: "DetectorContext") -> float | None:
+    """The mixture's count of positives among *ctx*'s unvoted ranking (#4413): a balance walk's recall denominator."""
+    from vtscore.training.thresholds import mixture_positives
+
+    return mixture_positives(ctx.line_ranking, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
+def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any]:
+    """What the balance says about *ctx*'s current line (#4413), for a response that carries the line.
+
+    ``status`` is ``unchecked`` (the line is the mixture's F-beta argmax under
+    the cap) or ``checked`` (the last balance walk's peak); ``count`` the set's
+    size; ``precision`` and ``recall`` the walk's likely ranges and ``fbeta``
+    its estimate, with ``stale`` once the ranking under them moved.
+    """
+    from vtscore.training.thresholds import balance_state
+
+    return balance_state(
+        beta,
+        ctx.precision_check,
+        ctx.line_ranking,
+        human_voted_ids(ctx),
+        proposal=detector_balance_proposal(ctx, beta),
+    ).as_dict()
 
 
 def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any] | None:
@@ -1815,8 +1869,12 @@ def detector_line_inclusion(ctx: "DetectorContext", min_precision: float | None)
     return float(PRECISION_FLOOR_FALLBACK_INCLUSION)
 
 
-def recompute_detector_thresholds(min_precision: float | None) -> None:
-    """Re-derive each loaded detector's threshold at its own floor, leaving the MLP in place.
+def recompute_detector_thresholds(min_precision: float | None, *, beta: float | None = None) -> None:
+    """Re-derive each loaded detector's threshold at its own preference, leaving the MLP in place.
+
+    With *beta* the line is the balance's (#4413): each detector is re-cut
+    at its own beta (seeded from *beta* when it has not read one yet);
+    *min_precision* is then ignored.  Without it, the floor's, as below.
 
     The precision floor is a pure cutoff knob: a change must not drop the model
     or re-score the haystack - only move the threshold over already-computed
@@ -1837,8 +1895,12 @@ def recompute_detector_thresholds(min_precision: float | None) -> None:
 
     with _state_lock:
         for ctx in loaded_detector_contexts():
-            floor = ctx.min_precision if ctx.min_precision_seeded else min_precision
-            threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=floor)
+            if beta is not None:
+                own = ctx.beta if ctx.beta_seeded else beta
+                threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, beta=own)
+            else:
+                floor = ctx.min_precision if ctx.min_precision_seeded else min_precision
+                threshold = recut_detector_threshold(ctx, PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=floor)
             if threshold is not None:
                 ctx.threshold = threshold
 
@@ -1903,6 +1965,20 @@ def _get_min_precision() -> tuple[bool, float | None]:
     """``(seeded, value)`` for the active detector's floor."""
     ctx = get_active_detector_context()
     return ctx.min_precision_seeded, ctx.min_precision
+
+
+def _get_beta() -> tuple[bool, float]:
+    """``(seeded, value)`` for the active detector's balance (#4413)."""
+    ctx = get_active_detector_context()
+    return ctx.beta_seeded, ctx.beta
+
+
+def _set_beta(value: float) -> None:
+    ctx = get_active_detector_context()
+    if is_request_missing_detector_context(ctx):  # as _set_min_precision: nothing to cache it on
+        return
+    ctx.beta = float(value)
+    ctx.beta_seeded = True
 
 
 def _set_min_precision(value: float | None) -> None:

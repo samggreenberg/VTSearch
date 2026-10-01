@@ -12,6 +12,8 @@ the schema is flat to match what the frontend sends and receives.
 
 from __future__ import annotations
 
+from vtscore.config.runtime import LINE_PREFERENCES
+
 from marshmallow import Schema, fields, validate
 
 from vtsearch.settings_models import (
@@ -79,6 +81,9 @@ class AppSettingsSchema(Schema):
     # The precision floor (#4245).  Never ``null``: every detector has a floor
     # (#4269), and a stored ``null`` reads as the default.
     min_precision = fields.Float()
+    # The balance (#4413): F-beta's beta, and which preference draws the line.
+    beta = fields.Float()
+    line_preference = fields.String(validate=validate.OneOf(LINE_PREFERENCES))
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
@@ -275,6 +280,9 @@ class SettingsUpdateSchema(Schema):
     # The precision floor (#4245).  Never ``null``: every detector has a floor
     # (#4269), and a stored ``null`` reads as the default.
     min_precision = fields.Float()
+    # The balance (#4413): F-beta's beta, and which preference draws the line.
+    beta = fields.Float()
+    line_preference = fields.String(validate=validate.OneOf(LINE_PREFERENCES))
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()

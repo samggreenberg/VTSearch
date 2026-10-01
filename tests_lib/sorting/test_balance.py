@@ -27,6 +27,7 @@ from vtscore.training.thresholds import (
     LineRanking,
     SpotCheck,
     applicable_balance,
+    applicable_result,
     balance_count,
     balance_line,
     balance_schedule,
@@ -34,6 +35,8 @@ from vtscore.training.thresholds import (
     check_schedule,
     fbeta_count,
     fbeta_score,
+    floor_count,
+    floor_state,
     mixture_count,
     mixture_positives,
 )
@@ -186,6 +189,9 @@ class TestTheLineAndTheState:
         assert balance_count(2.0, check, proposal=3) == 3, "another balance is unchecked until it is walked"
         floor_walk = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)
         assert applicable_balance(1.0, floor_walk) is None, "a floor's result never serves a balance"
+        # And the other way: a balance walk's NaN floor must not compare equal to every floor.
+        assert applicable_result(0.5, check) is None and floor_count(0.5, check) == 32
+        assert floor_state(0.5, check, ranking).status == FLOOR_UNCHECKED
 
     def test_the_state_a_response_carries(self):
         ranking, positives = _planted(52)

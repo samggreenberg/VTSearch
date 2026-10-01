@@ -974,8 +974,8 @@ def applicable_result(min_precision: float, result: SpotCheck | None) -> SpotChe
     until it is checked itself (the old result waits, and shows again if the
     floor moves back).
     """
-    if result is None or not result.finished:
-        return None
+    if result is None or not result.finished or result.beta is not None:
+        return None  # a balance walk's result never serves a floor (#4413); its min_precision is NaN
     if abs(result.min_precision - min_precision) > _EPS:
         return None
     return result

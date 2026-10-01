@@ -203,7 +203,9 @@ def clear_all() -> None:
 #: fire - the same failure mode :data:`vtscore.achievements_hooks.KNOWN_EVENTS`
 #: exists to catch, so this seam rejects it the same way rather than accepting
 #: a registration nothing will ever call.
-KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"min_precision", "calibrate_count", "calibration_fraction"})
+KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
+    {"min_precision", "beta", "line_preference", "calibrate_count", "calibration_fraction"}
+)
 
 #: Setting keys the library used to persist and no longer does.  Registering a
 #: persister for one is accepted with a ``DeprecationWarning`` rather than
@@ -307,9 +309,80 @@ def set_min_precision(value: float | None) -> None:
         changed = not seeded or value != old
         _core._set_min_precision(value)
         _persist_setting("min_precision", value)
-    if changed:
+    if changed and get_line_preference() == "floor":
         _core.recompute_detector_thresholds(value)
         rethreshold_unverified_find_items()
+
+
+def line_knobs() -> dict[str, float | None]:
+    """The preference the active detector's line is drawn at, as the trainer's keywords (#4413).
+
+    ``{"min_precision": P, "beta": None}`` under the floor,
+    ``{"min_precision": None, "beta": b}`` under the balance: what every retrain
+    and re-cut passes on, so one switch moves every line.
+    """
+    if get_line_preference() == "balance":
+        return {"min_precision": None, "beta": get_beta()}
+    return {"min_precision": get_min_precision(), "beta": None}
+
+
+def get_beta() -> float:
+    """The active detector's balance (#4413): F-beta's beta, seeded from the user's setting on first read.
+
+    Draws the line when :func:`get_line_preference` is ``"balance"``: the
+    band walk stopped at the F-beta peak, or the mixture's F-beta argmax
+    under the balance's cap before any check.
+    """
+    from vtscore.config import CoreConfig
+
+    with _state_lock:
+        seeded, val = _core._get_beta()
+        if not seeded:
+            val = float(CoreConfig.from_settings().beta)
+            _core._set_beta(val)
+        return val
+
+
+def set_beta(value: float) -> None:
+    """Set the active detector's balance and persist it; under the balance preference the line re-cuts (no retrain)."""
+    from vtscore.training.thresholds import BETA_MAX, BETA_MIN
+
+    value = float(value)
+    if not BETA_MIN <= value <= BETA_MAX:
+        raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {value!r}")
+    with _state_lock:
+        seeded, old = _core._get_beta()
+        changed = not seeded or value != old
+        _core._set_beta(value)
+        _persist_setting("beta", value)
+    if changed and get_line_preference() == "balance":
+        _core.recompute_detector_thresholds(None, beta=value)
+        rethreshold_unverified_find_items()
+
+
+def get_line_preference() -> str:
+    """Which preference draws the line (#4413): ``"floor"`` (the precision floor) or ``"balance"`` (F-beta)."""
+    from vtscore.config import CoreConfig
+
+    try:
+        return str(CoreConfig.from_settings().line_preference)
+    except RuntimeError:  # a library-only process with no settings builder
+        return "floor"
+
+
+def set_line_preference(value: str) -> None:
+    """Switch the preference that draws the line, persist it, and re-cut every loaded detector at it."""
+    from vtscore.config.runtime import LINE_PREFERENCES
+
+    if value not in LINE_PREFERENCES:
+        raise ValueError(f"line_preference must be one of {LINE_PREFERENCES}, got {value!r}")
+    with _state_lock:
+        _persist_setting("line_preference", value)
+    if value == "balance":
+        _core.recompute_detector_thresholds(None, beta=get_beta())
+    else:
+        _core.recompute_detector_thresholds(get_min_precision())
+    rethreshold_unverified_find_items()
 
 
 def get_dataset_display_name() -> str | None:

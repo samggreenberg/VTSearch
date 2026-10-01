@@ -30,6 +30,8 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from vtscore.config import (
     DATA_DIR,
     DEFAULT_CALIBRATE_COUNT,
+    DEFAULT_BETA,
+    DEFAULT_LINE_PREFERENCE,
     DEFAULT_MIN_PRECISION,
     PROJECTION_MIN_DIST,
     PROJECTION_N_NEIGHBORS,
@@ -62,6 +64,8 @@ __all__ = [
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
+#: Which preference draws the line (#4413): the precision floor or the F-beta balance.
+LinePreference = Literal["floor", "balance"]
 
 
 # Decorative-motion master switch. ``"show"`` forces animations on even when the
@@ -404,6 +408,11 @@ class UserSettings(BaseModel):
     # floor of zero promises nothing and would read as a floor that is always
     # met.
     min_precision: Annotated[float, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
+    # The balance (#4413): F-beta's beta, clamped to ``[0.25, 4]`` (the presets
+    # are 0.5 precision-leaning, 1 balanced, 2 recall-leaning).  Draws the line
+    # when ``line_preference`` is ``"balance"``; the floor draws it otherwise.
+    beta: Annotated[float, _clamp(0.25, 4.0)] = DEFAULT_BETA
+    line_preference: LinePreference = DEFAULT_LINE_PREFERENCE
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a
     # concrete theme to opt out and return to "system" to opt back in.

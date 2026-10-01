@@ -194,6 +194,9 @@
           "autorun_on_import": {
             "type": "boolean"
           },
+          "beta": {
+            "type": "number"
+          },
           "bin_details_docked": {
             "additionalProperties": {
               "type": "boolean"
@@ -358,6 +361,13 @@
               "type": "string"
             },
             "type": "object"
+          },
+          "line_preference": {
+            "enum": [
+              "floor",
+              "balance"
+            ],
+            "type": "string"
           },
           "max_concurrent_dataset_downloads": {
             "readOnly": true,
@@ -765,6 +775,116 @@
         "required": [
           "new_name",
           "success"
+        ],
+        "type": "object"
+      },
+      "BalanceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {}
+        },
+        "required": [
+          "beta"
+        ],
+        "type": "object"
+      },
+      "BalanceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "fbeta": {
+            "nullable": true,
+            "type": "number"
+          },
+          "line_preference": {
+            "type": "string"
+          },
+          "n_returned": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "recall": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/CheckSchedule"
+          },
+          "status": {
+            "enum": [
+              "unchecked",
+              "checked"
+            ],
+            "type": "string"
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "beta",
+          "count",
+          "fbeta",
+          "line_preference",
+          "n_returned",
+          "precision",
+          "recall",
+          "schedule",
+          "status",
+          "threshold"
+        ],
+        "type": "object"
+      },
+      "BalanceState": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "fbeta": {
+            "nullable": true,
+            "type": "number"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "recall": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "schedule": {
+            "$ref": "#/components/schemas/CheckSchedule"
+          },
+          "status": {
+            "enum": [
+              "unchecked",
+              "checked"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "beta",
+          "count",
+          "fbeta",
+          "precision",
+          "recall",
+          "schedule",
+          "status"
         ],
         "type": "object"
       },
@@ -5374,6 +5494,9 @@
       "PrecisionCheckResponse": {
         "additionalProperties": false,
         "properties": {
+          "balance": {
+            "$ref": "#/components/schemas/BalanceState"
+          },
           "check": {
             "$ref": "#/components/schemas/PrecisionCheckState",
             "nullable": true
@@ -5383,6 +5506,7 @@
           }
         },
         "required": [
+          "balance",
           "check",
           "floor"
         ],
@@ -5397,6 +5521,10 @@
           },
           "bands": {
             "type": "integer"
+          },
+          "beta": {
+            "nullable": true,
+            "type": "number"
           },
           "candidate": {
             "type": "integer"
@@ -5413,10 +5541,15 @@
             "nullable": true,
             "type": "number"
           },
+          "fbeta": {
+            "nullable": true,
+            "type": "number"
+          },
           "labelled": {
             "type": "integer"
           },
           "min_precision": {
+            "nullable": true,
             "type": "number"
           },
           "picks": {
@@ -5429,6 +5562,10 @@
             "type": "integer"
           },
           "range": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "recall": {
             "$ref": "#/components/schemas/LikelyRange",
             "nullable": true
           },
@@ -5449,6 +5586,7 @@
               "running",
               "confirmed",
               "short",
+              "checked",
               "cancelled"
             ],
             "type": "string"
@@ -6178,6 +6316,9 @@
           "autorun_on_import": {
             "type": "boolean"
           },
+          "beta": {
+            "type": "number"
+          },
           "bin_details_docked": {},
           "browse_colormap": {},
           "browse_details_metadata_width": {
@@ -6231,6 +6372,13 @@
             "type": "boolean"
           },
           "last_embedder_per_media_type": {},
+          "line_preference": {
+            "enum": [
+              "floor",
+              "balance"
+            ],
+            "type": "string"
+          },
           "min_precision": {
             "type": "number"
           },
@@ -8252,6 +8400,66 @@
           }
         }
       ]
+    },
+    "/api/balance": {
+      "get": {
+        "operationId": "get_balance_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Get the active detector's balance (F-beta's beta), its state, and the line it draws (#4413).",
+        "tags": [
+          "sorting"
+        ]
+      },
+      "post": {
+        "description": "A pure cutoff knob: under the balance preference the active detector's\nline moves to the set the new beta keeps (no retrain) and, in Find mode,\nthe unverified items re-split; under the floor preference the value is\nstored and draws nothing until the preference is switched.",
+        "operationId": "set_balance_route",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BalanceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BalanceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Set the balance, F-beta's beta, clamped to ``[0.25, 4]`` (#4413).",
+        "tags": [
+          "sorting"
+        ]
+      }
     },
     "/api/browse": {
       "get": {

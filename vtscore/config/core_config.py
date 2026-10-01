@@ -17,7 +17,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from vtscore.config.runtime import DEFAULT_MIN_PRECISION, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config.runtime import (
+    DEFAULT_BETA,
+    DEFAULT_LINE_PREFERENCE,
+    DEFAULT_MIN_PRECISION,
+    PROJECTION_MIN_DIST,
+    PROJECTION_N_NEIGHBORS,
+)
 
 
 def _retired_inclusion(where: str, value: float | None, *, stacklevel: int = 3) -> None:
@@ -179,6 +185,13 @@ class CoreConfig:
     # sets one; ``None`` survives for library callers.  Defaulted here so
     # library-only ``CoreConfig(...)`` constructions keep working.
     min_precision: float | None = DEFAULT_MIN_PRECISION
+
+    # The balance (#4413): F-beta's beta, the preference the line is drawn at
+    # when ``line_preference`` is ``"balance"``.  Per detector and seeded from
+    # the user's setting on first read, as the floor is.
+    beta: float = DEFAULT_BETA
+    # Which preference draws the line: ``"floor"`` or ``"balance"`` (#4413).
+    line_preference: str = DEFAULT_LINE_PREFERENCE
 
     # Deprecated (#4269): Inclusion is no longer a user preference, so nothing
     # reads this.  ``None`` is "not given"; ``0`` is accepted with a

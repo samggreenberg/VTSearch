@@ -37,6 +37,8 @@ from vtsearch.schemas.sorting import (
     LearnedSortRequestSchema,
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
+    BalanceRequestSchema,
+    BalanceResponseSchema,
     MinPrecisionRequestSchema,
     MinPrecisionResponseSchema,
     OkResponseSchema,
@@ -65,10 +67,14 @@ from vtsearch.state import (
     get_calibration_fraction,
     get_coverage_atlas,
     get_learned_scores,
+    get_beta,
+    get_line_preference,
     get_min_precision,
+    line_knobs,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
+    set_beta,
     set_min_precision,
     snapshot_medias,
     vote_region_boxes,
@@ -371,7 +377,8 @@ def learned_sort(body: dict):
 
     _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
-    min_precision_value = get_min_precision()
+    knobs = line_knobs()  # which preference draws the line (#4413)
+    min_precision_value, beta_value = knobs["min_precision"], knobs["beta"]
     calibrate_count_value = get_calibrate_count()
     calibration_fraction_value = get_calibration_fraction()
     region_boxes_snapshot = dict(vote_region_boxes)
@@ -387,6 +394,7 @@ def learned_sort(body: dict):
         calibrate_count_value=calibrate_count_value,
         calibration_fraction_value=calibration_fraction_value,
         min_precision_value=min_precision_value,
+        beta_value=beta_value,
     )
 
     # A cached result is only as good as the ranking its line was drawn over.
@@ -414,6 +422,7 @@ def learned_sort(body: dict):
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
             min_precision_value=min_precision_value,
+            beta_value=beta_value,
         )
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
@@ -421,7 +430,7 @@ def learned_sort(body: dict):
         # carries one.  It sits four inclusion steps stricter than the line:
         # under a promised floor no inclusion drew that line, so none is passed
         # and it is derived from the line itself (#4245).
-        line_incl = detector_line_inclusion(det_ctx, min_precision_value)
+        line_incl = detector_line_inclusion(det_ctx, min_precision_value if beta_value is None else beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl)
         # Whether the line is a promise rides with it (#4247).
         floor = detector_floor_state(det_ctx, min_precision_value)
@@ -609,6 +618,46 @@ def set_min_precision_route(body: dict):
         abort(400, message=str(exc))
     set_min_precision(value)
     return _min_precision_payload()
+
+
+@sorting_bp.route("/api/balance", methods=["GET"])
+@sorting_bp.response(200, BalanceResponseSchema)
+def get_balance_route():
+    """Get the active detector's balance (F-beta's beta), its state, and the line it draws (#4413)."""
+    return _balance_payload()
+
+
+@sorting_bp.route("/api/balance", methods=["POST"])
+@sorting_bp.arguments(BalanceRequestSchema)
+@sorting_bp.response(200, BalanceResponseSchema)
+def set_balance_route(body: dict):
+    """Set the balance, F-beta's beta, clamped to ``[0.25, 4]`` (#4413).
+
+    A pure cutoff knob: under the balance preference the active detector's
+    line moves to the set the new beta keeps (no retrain) and, in Find mode,
+    the unverified items re-split; under the floor preference the value is
+    stored and draws nothing until the preference is switched.
+    """
+    from vtsearch import settings  # noqa: PLC0415
+
+    try:
+        value = settings.validate_beta(float(body["beta"]))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
+    set_beta(value)
+    return _balance_payload()
+
+
+def _balance_payload() -> dict:
+    """The ``/api/balance`` response for the active detector."""
+    from vtscore.state.core import _empty_detector_context, detector_balance_state, get_active_detector_context
+
+    det_ctx = get_active_detector_context()
+    threshold = _active_detector_threshold()
+    state = detector_balance_state(det_ctx, get_beta())
+    ranking = None if det_ctx is _empty_detector_context else det_ctx.line_ranking
+    n_returned = ranking.above(threshold) if ranking is not None and threshold is not None else None
+    return {**state, "threshold": threshold, "n_returned": n_returned, "line_preference": get_line_preference()}
 
 
 def _min_precision_payload() -> dict:

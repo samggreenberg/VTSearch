@@ -1036,6 +1036,7 @@ def labelset_train_and_score(
     rows: Any = None,
     on_progress: ProgressCallback | None = None,
     min_precision: float | None = None,
+    beta: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -1091,6 +1092,7 @@ def labelset_train_and_score(
         rows=rows,
         min_precision=min_precision,
         labels=labelset_labels,
+        beta=beta,
     )
 
     # Stage-2 structural re-rank for a saved structural detector reloaded

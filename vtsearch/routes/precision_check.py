@@ -47,13 +47,14 @@ precision_check_bp = Blueprint(
 
 def _payload() -> dict:
     """The floor's state and the check (running, else the last finished one) for the active detector."""
-    from vtscore.state.core import detector_floor_state, get_active_detector_context  # noqa: PLC0415
-    from vtsearch.state import get_min_precision  # noqa: PLC0415
+    from vtscore.state.core import detector_balance_state, detector_floor_state, get_active_detector_context  # noqa: PLC0415
+    from vtsearch.state import get_beta, get_min_precision  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     check = det_ctx.precision_check_run or det_ctx.precision_check
     return {
         "floor": detector_floor_state(det_ctx, get_min_precision()),
+        "balance": detector_balance_state(det_ctx, get_beta()),
         "check": check.as_dict() if check is not None else None,
     }
 
@@ -81,16 +82,17 @@ def start_precision_check():
     last finished result stays in force until this check ends.
     """
     from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
-    from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
+    from vtscore.state.core import detector_balance_positives, get_active_detector_context, human_voted_ids  # noqa: PLC0415
     from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
-    from vtsearch.state import get_min_precision  # noqa: PLC0415
+    from vtsearch.state import line_knobs  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     ranking = det_ctx.line_ranking
     if ranking is None:
         abort(409, message="No ranking to check: run a learned sort or a Find pass first.")
-    floor = get_min_precision()
-    if floor is None:
+    knobs = line_knobs()
+    beta, floor = knobs["beta"], knobs["min_precision"]
+    if beta is None and floor is None:
         abort(409, message="The detector has no precision floor to check.")
     unvoted = tuple(int(i) for i in ranking.unvoted_ids(human_voted_ids(det_ctx)))
     if not unvoted:
@@ -100,7 +102,15 @@ def start_precision_check():
         abort(409, message="This list was already checked; vote on something first, or re-sort.")
     # Unseeded unless VTSEARCH_SPOT_CHECK_SEED is set, which only the
     # screenshot harness does, so a refresh frames the same picks (#4330).
-    det_ctx.precision_check_run = SpotCheck.start(unvoted, floor, seed=SPOT_CHECK_SEED)
+    if beta is not None:
+        # The balance walk (#4413): the same bands and picks, stopped at the
+        # F-beta peak, its recall read against the mixture's count of positives.
+        n_pos = detector_balance_positives(det_ctx)
+        if n_pos is None or not n_pos > 0:
+            abort(409, message="No score model to read recall against: run a learned sort or a Find pass first.")
+        det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED)
+    else:
+        det_ctx.precision_check_run = SpotCheck.start(unvoted, floor, seed=SPOT_CHECK_SEED)  # type: ignore[arg-type]
     return _payload()
 
 
@@ -190,7 +200,13 @@ def _move_line(det_ctx, floor: float | None) -> None:
     from vtscore.state.core import recut_detector_threshold  # noqa: PLC0415
     from vtscore.state.votes import rethreshold_unverified_find_items  # noqa: PLC0415
 
-    threshold = recut_detector_threshold(det_ctx, min_precision=floor)
+    from vtsearch.state import line_knobs  # noqa: PLC0415
+
+    knobs = line_knobs()
+    if knobs["beta"] is not None:
+        threshold = recut_detector_threshold(det_ctx, beta=knobs["beta"])
+    else:
+        threshold = recut_detector_threshold(det_ctx, min_precision=floor)
     if threshold is not None:
         det_ctx.threshold = threshold
         rethreshold_unverified_find_items()

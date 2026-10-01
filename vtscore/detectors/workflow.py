@@ -99,13 +99,15 @@ def apply_and_retrain(  # noqa: C901
             from vtscore.state import (
                 get_calibrate_count,
                 get_calibration_fraction,
-                get_min_precision,
+                get_min_precision,  # noqa: F401  # the floor; line_knobs picks the preference
+                line_knobs,
             )
 
             from vtscore.datasets.labelset import LabelSet
             from vtscore.detectors.model_loading import labelset_signature
 
             region_boxes = dict(det_ctx.vote_region_boxes)
+            knobs = line_knobs()  # which preference draws the line (#4413)
             _, new_threshold, new_model = train_and_score(
                 snap,
                 proposed_good,
@@ -114,7 +116,8 @@ def apply_and_retrain(  # noqa: C901
                 calibration_fraction=get_calibration_fraction(),
                 vote_region_boxes=region_boxes,
                 det_ctx=det_ctx,
-                min_precision=get_min_precision(),
+                min_precision=knobs["min_precision"],
+                beta=knobs["beta"],
             )
             # This head sees only the labels resolvable in this dataset.  Its
             # signature matches the saved labelset exactly when that is all the

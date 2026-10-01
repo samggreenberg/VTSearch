@@ -454,7 +454,10 @@ MIRRORS: list[Mirror] = [
             "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
             "the app reads no stored Inclusion: its conformal cut is at "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
-            "whose default, 0, is that cut."
+            "whose default, 0, is that cut. Since #4413 the app draws the line at whichever preference "
+            "`line_knobs` names - the floor (the default until the switch's last step) or the balance "
+            "(beta) - and hands both to _fused_threshold; the harness's default arm is the floor's until "
+            "step 3 of #4413 adds the balance arm."
         ),
     ),
     Mirror(
@@ -479,7 +482,10 @@ MIRRORS: list[Mirror] = [
             "any more (#4362): it stopped drawing the line in #4272 and lost its last reader, "
             "the Find Stats curve, in #4360. Since #4269 the app hands reporting_line "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
-            "hands it the arm's `inclusion`, whose default is that 0."
+            "hands it the arm's `inclusion`, whose default is that 0. Since #4413 the line under a "
+            "preference is drawn by _preference_line: the balance's (balance_line over fbeta_count's "
+            "proposal) when `beta` is given, else the floor's; the harness's default arm passes no beta "
+            "until step 3 of #4413."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "

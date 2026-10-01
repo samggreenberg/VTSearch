@@ -143,6 +143,17 @@ DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", 
 # ``vtscore.training.thresholds.DEFAULT_MIN_PRECISION``; defined here so the
 # settings layer can read it without importing the training stack.
 DEFAULT_MIN_PRECISION = 0.5
+
+#: The balance the line is drawn at by default (#4413): F-beta's beta, 1 =
+#: precision and recall weighed equally.  The presets are 0.5 / 1 / 2.  As with
+#: the floor, ``vtscore.training.thresholds.DEFAULT_BETA`` re-exports it.
+DEFAULT_BETA = 1.0
+
+#: Which preference draws the line (#4413): ``"floor"`` (the precision floor,
+#: ``min_precision``) or ``"balance"`` (F-beta, ``beta``).  The floor until
+#: the switch's last step flips it; the balance's machinery ships beside it.
+DEFAULT_LINE_PREFERENCE = "floor"
+LINE_PREFERENCES = ("floor", "balance")
 MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5
