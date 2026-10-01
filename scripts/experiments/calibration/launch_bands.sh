@@ -145,6 +145,8 @@ ENVX="$ENVX CALIB_SKYLINE_ARMS=${CALIB_SKYLINE_ARMS:-}"
 ENVX="$ENVX CALIB_MIN_PRECISION=${CALIB_MIN_PRECISION:-} CALIB_BETA=${CALIB_BETA:-}"
 # The acquisition arm (#2876, #3319, #4409): the shipped offset unless a study names another.
 ENVX="$ENVX CALIB_ACQ_INCLUSION_OFFSET=${CALIB_ACQ_INCLUSION_OFFSET:-} CALIB_ACQ_P_CROSSING=${CALIB_ACQ_P_CROSSING:-}"
+# The balance walk's arms (#4427): picks a band, the tolerance, the fine bands; empty is the app's walk.
+ENVX="$ENVX CALIB_WALK_PICKS=${CALIB_WALK_PICKS:-} CALIB_WALK_TOL=${CALIB_WALK_TOL:-} CALIB_WALK_FINE=${CALIB_WALK_FINE:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
