@@ -1946,6 +1946,9 @@ def simulate_voting_iterations(  # noqa: C901
     test_band_auroc: bool = False,
     min_precision: "Optional[float | str]" = None,
     beta: Optional[float] = None,
+    walk_picks: Optional[int] = None,
+    walk_tol: float = 0.0,
+    walk_fine: bool = False,
     spot_check: str = "end",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
@@ -2305,6 +2308,12 @@ def simulate_voting_iterations(  # noqa: C901
             unused.  ``None`` with *min_precision* ``None`` (the default) is
             the app's default balance, so the default arm reports the line a
             live detector draws.
+        walk_picks: The balance walk's picks a band (#4427's arms; the
+            schedule's 5 when ``None``), *walk_tol* its tolerance (a deeper
+            step within it of the best is flat and the walk looks one band
+            further; 0, the app's, is the strict rise) and *walk_fine* whether
+            every band past the start is split in two.  All three apply to
+            the end-of-run balance walk only.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272, the band walk of #4388).  ``"end"`` (the default): once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
@@ -2787,7 +2796,15 @@ def simulate_voting_iterations(  # noqa: C901
                     {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     set(good_votes) | set(bad_votes),
                 )
-                check = SpotCheck.start_balance(candidate, beta, n_pos, seed=int(rng.randint(2**31 - 1)))
+                check = SpotCheck.start_balance(
+                    candidate,
+                    beta,
+                    n_pos,
+                    seed=int(rng.randint(2**31 - 1)),
+                    picks=walk_picks,
+                    tol=walk_tol,
+                    fine=walk_fine,
+                )
             else:
                 check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
             picks = list(check.pending)

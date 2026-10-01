@@ -183,6 +183,15 @@ class TestTheBalanceArm:
         )
         return rows, picks
 
+    def test_the_walks_arms_reach_the_end_of_run_check(self):
+        """#4427: picks / tol / fine shape the end-of-run balance walk; off, it is the app's."""
+        rows, _ = self._run(beta=1.0, walk_picks=3, walk_tol=0.02, walk_fine=True)
+        check_rows = [r for r in rows if r["phase"] == "check"]
+        assert check_rows, "the balance arm checks the line"
+        assert check_rows[0]["check_labelled"] <= 3, "three picks a band"
+        with pytest.raises(ValueError, match="tol must be"):
+            self._run(beta=1.0, walk_tol=-0.1)
+
     def test_the_line_is_the_balances_and_the_floor_is_unused(self):
         rows, _ = self._run(beta=1.0, min_precision=0.9)
         steps = [r for r in rows if r["phase"] not in ("check", "")]

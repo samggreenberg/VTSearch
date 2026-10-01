@@ -1014,6 +1014,14 @@ ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 #: the shipped cut - under a balance ``ACQUISITION_ARGMAX_FACTOR`` (0.5 since
 #: #4409's pricing), the line - 4 offset otherwise; ``off`` forces the offset
 #: under a balance (the pricing's control).
+#: The balance walk's arms (#4427), all off = the app's walk: picks a band
+#: (``CALIB_WALK_PICKS``, the schedule's 5), the tolerance a deeper step may
+#: fall within and still be looked past (``CALIB_WALK_TOL``, 0) and whether
+#: every band past the start is split in two (``CALIB_WALK_FINE=1``).
+WALK_PICKS = int(_opt_float("CALIB_WALK_PICKS") or 0) or None
+WALK_TOL = _opt_float("CALIB_WALK_TOL") or 0.0
+WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true", "yes")
+
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None
 if _ACQ_P_CROSSING_ENV == "off":

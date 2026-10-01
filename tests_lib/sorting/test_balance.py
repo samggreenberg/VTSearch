@@ -244,6 +244,44 @@ class TestTheWalk:
         with pytest.raises(ValueError, match="beta must be in"):
             SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 9.0, 52.0)
 
+    def test_the_fine_bands_split_every_band_past_the_start(self):
+        """#4427: from 32 the walk can step 48, 64, 96, 128, ...; the bands up to the start are the shipped ones."""
+        from vtscore.training.thresholds import band_edges, band_edges_fine
+
+        assert band_edges(1000) == (0, 8, 16, 32, 64, 128, 256, 512, 1000)
+        assert band_edges_fine(1000, 32) == (0, 8, 16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 756, 1000)
+        assert band_edges_fine(20, 32) == (0, 8, 16, 20), "nothing past the start to split"
+        assert band_edges_fine(0, 32) == (0,)
+
+    def test_the_arms_reach_the_walk_and_the_app_keeps_none(self):
+        """#4427: picks, tol and fine are the harness's knobs; a walk with none is the shipped one."""
+        ranking, _ = _planted(52)
+        ids = ranking.unvoted_ids().tolist()
+        shipped = SpotCheck.start_balance(ids, 1.0, 52.0, seed=1)
+        assert shipped.picks == 5 and shipped.tol == 0.0
+        assert shipped.edges[:5] == (0, 8, 16, 32, 64)
+        armed = SpotCheck.start_balance(ids, 1.0, 52.0, seed=1, picks=10, tol=0.02, fine=True)
+        assert armed.picks == 10 and armed.tol == 0.02
+        assert len(armed.pending) == 8, "the first band has eight items: a census, whatever the picks"
+        assert armed.edges[:6] == (0, 8, 16, 32, 48, 64) and armed.start_k == 32
+        with pytest.raises(ValueError, match="tol must be"):
+            SpotCheck.start_balance(ids, 1.0, 52.0, tol=-1)
+        with pytest.raises(ValueError, match="picks must be"):
+            SpotCheck.start_balance(ids, 1.0, 52.0, picks=0)
+
+    def test_a_flat_step_within_the_tolerance_is_looked_past_and_a_fall_beyond_it_ends_at_the_best(self):
+        """#4427's tol arm: a deeper band that leaves the estimate within tol is not the peak yet."""
+        ranking, positives = _planted(52)
+        ids = ranking.unvoted_ids().tolist()
+        # Strict: the walk ends where the estimate first fails to rise.
+        strict = _finish(SpotCheck.start_balance(ids, 1.0, 52.0, seed=3), positives)
+        # Tolerant: it looks one band further on a flat step and keeps the best; never ends deeper than
+        # the strict walk's peak plus the one band it looked past unless the estimate rose there.
+        tolerant = _finish(SpotCheck.start_balance(ids, 1.0, 52.0, seed=3, tol=0.05), positives)
+        assert tolerant.status == strict.status == BALANCE_CHECKED
+        assert tolerant.k >= strict.k
+        assert tolerant.round >= strict.round
+
     def test_a_floor_walk_is_unchanged(self):
         ranking, positives = _planted(52)
         check = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)

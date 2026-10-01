@@ -160,6 +160,24 @@ def band_edges(n: int, base: int = BAND_BASE) -> tuple[int, ...]:
     return tuple(edges)
 
 
+def band_edges_fine(n: int, start: int, base: int = BAND_BASE) -> tuple[int, ...]:
+    """:func:`band_edges` with each band past *start* split in two (#4427's ``fine`` walk arm).
+
+    The bands up to the edge holding *start* are the shipped ones; beyond it
+    the midpoint of every band is an edge too, so a walk from 32 steps 48, 64,
+    96, 128, ... and can end between the shipped edges, where the best cut's
+    size sits on the bench (median ~46 at beta 1).
+    """
+    edges = list(band_edges(n, base))
+    out: list[int] = []
+    for a, b in zip(edges, edges[1:]):
+        out.append(a)
+        if a >= start and b - a >= 2:
+            out.append(a + (b - a) // 2)
+    out.append(edges[-1])
+    return tuple(out)
+
+
 def bands_for(count: int, edges: Sequence[int]) -> int:
     """How many bands from the top it takes to hold the top *count*: at least one."""
     for b in range(1, len(edges)):
@@ -442,6 +460,10 @@ class SpotCheck:
     n_pos: float | None = None
     #: The best F-beta estimate the balance walk has seen (the peak's).
     best_estimate: float | None = None
+    #: A balance walk's tolerance (#4427's ``tol`` arm): a deeper step whose
+    #: estimate is within this of the best is flat, not a fall, and the walk
+    #: looks one band further before deciding; 0 is the shipped strict rise.
+    tol: float = 0.0
     #: The union under test: the top *bands* bands, ``edges[bands]`` items.
     bands: int = 1
     #: The deepest union whose estimate met the floor, if any.
@@ -472,13 +494,16 @@ class SpotCheck:
         alpha: float = CHECK_ALPHA,
         seed: int | None = None,
         start_count: int | None = None,
+        picks: int | None = None,
+        edges: Sequence[int] | None = None,
     ) -> "SpotCheck":
         """A running walk over *ranking_ids* (the unvoted ranking, rank order), with its first band drawn.
 
         The walk starts at the bands that hold *start_count* items: the
         floor's schedule by default (32 at P >= 50%, 128 at 10%), or a
         caller's own proposal (#4389).  A ranking shorter than that starts at
-        its last band.
+        its last band.  *picks* (a band's picks) and *edges* (the bands) are
+        the schedule's unless an arm overrides them (#4427).
         """
         ids = tuple(int(i) for i in ranking_ids)
         if not ids:
@@ -486,14 +511,14 @@ class SpotCheck:
         if len(set(ids)) != len(ids):
             raise ValueError("the ranking's ids must be distinct")
         schedule = check_schedule(min_precision, alpha)
-        edges = band_edges(len(ids))
+        edges = band_edges(len(ids)) if edges is None else tuple(int(e) for e in edges)
         start = bands_for(min(start_count if start_count is not None else schedule.candidate, len(ids)), edges)
         check = cls(
             min_precision=float(min_precision),
             alpha=float(alpha),
             ranking_ids=ids,
             edges=edges,
-            picks=int(schedule.picks),
+            picks=int(schedule.picks if picks is None else picks),
             start_bands=start,
             bands=start,
             k=int(edges[start]),
@@ -513,6 +538,9 @@ class SpotCheck:
         alpha: float = CHECK_ALPHA,
         seed: int | None = None,
         start_count: int | None = None,
+        picks: int | None = None,
+        tol: float = 0.0,
+        fine: bool = False,
     ) -> "SpotCheck":
         """A running balance walk (#4413): the same bands and picks, stopped at the F-beta peak.
 
@@ -521,20 +549,34 @@ class SpotCheck:
         at the start: the audits read each band's share, the count turns
         that into recall.  It starts at the bands holding *start_count*, the
         balance's unchecked count by default (:func:`balance_count`).
+
+        The arms of #4427, all off in the app: *picks* a band (the
+        schedule's 5), *tol* (a deeper step within it of the best is flat and
+        the walk looks one band further; 0 is the strict rise) and *fine*
+        (every band past the start split in two, :func:`band_edges_fine`).
         """
         schedule = balance_schedule(beta, alpha)
         if not (n_pos > 0):
             raise ValueError("a balance walk needs a positive count of the ranking's positives")
+        if tol < 0:
+            raise ValueError(f"tol must be >= 0, got {tol!r}")
+        if picks is not None and picks < 1:
+            raise ValueError(f"picks must be >= 1, got {picks!r}")
+        start = start_count if start_count is not None else schedule.candidate
+        n = len(tuple(ranking_ids))
         check = cls.start(
             ranking_ids,
             schedule.candidate and 0.5,  # unused by a balance walk; a valid floor for the schedule's picks
             alpha=alpha,
             seed=seed,
-            start_count=start_count if start_count is not None else schedule.candidate,
+            start_count=start,
+            picks=picks,
+            edges=band_edges_fine(n, min(start, n)) if fine else None,
         )
         check.beta = float(beta)
         check.n_pos = float(n_pos)
         check.min_precision = float("nan")
+        check.tol = float(tol)
         return check
 
     # ---- what the check is looking at
@@ -776,6 +818,19 @@ class SpotCheck:
                 if self.direction == WALK_DEEPER or self.bands <= 1:
                     self._finish(BALANCE_CHECKED, self.bands)
                     return
+            elif (
+                self.tol > 0
+                and self.best is not None
+                and est >= (self.best_estimate or 0.0) - self.tol
+                and self.bands - self.best < 2
+                and self.bands < self.n_bands
+            ):
+                # Flat within the tolerance (#4427): look one band further
+                # before calling it the peak.  The best stays where it was.
+                self.direction = WALK_DEEPER
+                self.bands += 1
+                self.k = int(self.edges[self.bands])
+                return
             elif self.best != self.start_bands or self.best <= 1:
                 # The estimate fell after a rise: the peak was the last set.
                 self._finish(BALANCE_CHECKED, self.best)
