@@ -40,6 +40,10 @@ from vtscore.media.structural import StructuralFeatures, aggregate_vlad, load_vl
 TILE_W, TILE_H = 0.25, 0.18
 #: A tile with fewer keypoints than this has nothing to aggregate.
 MIN_TILE_KP = 20
+#: The tile layers a page is cut into, as ``(width, height)``; a page scores its best
+#: tile across all of them. The shipped app uses the one measured layer. #4415's
+#: arm B adds a finer layer for small marks in text-dense tiles.
+TILE_LAYERS: tuple[tuple[float, float], ...] = ((TILE_W, TILE_H),)
 #: The stored width.  512 beat 256 at 50,000 pages (#3928, 2026-09-18: 0.73 against
 #: 0.70 after SIFT at K = 1,000) for 46 KiB a page.
 TILE_DIM = 512
@@ -124,7 +128,7 @@ def raw_tiles(features: StructuralFeatures) -> tuple[np.ndarray, np.ndarray]:
             np.asarray([(0.0, 0.0, 1.0, 1.0)], dtype=np.float32),
         )
     x, y = kp[:, 0], kp[:, 1]
-    windows = tile_windows()
+    windows = [w for width, height in TILE_LAYERS for w in tile_windows(width, height)]
     member = np.stack([(x >= x0) & (x < x1) & (y >= y0) & (y < y1) for x0, y0, x1, y1 in windows])
     keep = member.sum(axis=1) >= MIN_TILE_KP
     if keep.any():

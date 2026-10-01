@@ -210,3 +210,28 @@ class TestLoadBackfill:
         embed_missing(medias, "sift_vlad_doc")
         assert medias[1]["tile_vectors"].vectors.shape[1] == 16
         np.testing.assert_array_equal(medias[1]["embeddings"]["sift_vlad_doc"], np.ones(8192, dtype=np.float32))
+
+
+class TestTileLayers:
+    """#4415: a finer layer adds windows; the shipped default is one layer."""
+
+    def test_the_shipped_default_is_the_measured_layer(self):
+        from vtscore.media import structural_tiles as st
+
+        assert st.TILE_LAYERS == ((st.TILE_W, st.TILE_H),)
+
+    def test_a_fine_layer_adds_tiles_on_a_dense_page(self, monkeypatch):
+        from vtscore.media import structural_tiles as st
+
+        rng = np.random.default_rng(3)
+        kp = np.zeros((6000, 4), dtype=np.float32)
+        kp[:, :2] = rng.random((6000, 2))
+        feats = StructuralFeatures(
+            keypoints=kp, descriptors=(rng.random((6000, SIFT_DESCRIPTOR_DIM)) * 255).astype(np.float32)
+        ).compact()
+        coarse, _ = st.raw_tiles(feats)
+        monkeypatch.setattr(st, "TILE_LAYERS", ((st.TILE_W, st.TILE_H), (st.TILE_W / 2, st.TILE_H / 2)))
+        both, boxes = st.raw_tiles(feats)
+        assert both.shape[0] > coarse.shape[0]
+        assert np.allclose(both[: coarse.shape[0]], coarse, atol=1e-6)  # the coarse layer comes first, unchanged
+        assert boxes[-1][2] - boxes[-1][0] == pytest.approx(st.TILE_W / 2, abs=1e-6)
