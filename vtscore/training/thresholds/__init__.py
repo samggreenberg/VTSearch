@@ -190,6 +190,8 @@ from vtscore.training.thresholds.spot_check import (
     band_edges,
     bands_for,
     MIXTURE_MIN_STD_SHARE,
+    acquisition_count,
+    acquisition_threshold,
     mixture_count,
     mixture_positives,
     mixture_posterior,
@@ -240,6 +242,7 @@ from vtscore.training.thresholds.precision_floor import (
     unpromised,
 )
 from vtscore.training.thresholds.knobs import (
+    ACQUISITION_ARGMAX_FACTOR,
     ACQUISITION_INCLUSION_OFFSET,
     INCLUSION_MAX,
     INCLUSION_MIN,
@@ -254,6 +257,7 @@ from vtscore.training.thresholds.knobs import (
 )
 
 __all__ = [
+    "ACQUISITION_ARGMAX_FACTOR",
     "ACQUISITION_INCLUSION_OFFSET",
     "INCLUSION_MAX",
     "INCLUSION_MIN",
@@ -274,6 +278,8 @@ __all__ = [
     "band_edges",
     "bands_for",
     "MIXTURE_MIN_STD_SHARE",
+    "acquisition_count",
+    "acquisition_threshold",
     "mixture_count",
     "mixture_positives",
     "mixture_posterior",

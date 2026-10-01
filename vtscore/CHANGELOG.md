@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The acquisition cut under a balance is half the F-beta argmax's depth**
+  (issue #4409; `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
+  `acquisition_count` / `acquisition_threshold` give the rank and the score
+  at `ACQUISITION_ARGMAX_FACTOR` (0.5) of the mixture's F-beta argmax over
+  the unvoted ranking; `detector_acquisition_threshold` takes the detector's
+  `beta` and returns it, falling through to the line − 4 re-cut with no
+  mixture estimate. The eval harness's default arm follows
+  (`resolve_acquisition_factor`, the `acquisition.balance_cut` mirror of the
+  sync gate): `acq_p_crossing=None` under a balance is the shipped factor,
+  `"off"` (`CALIB_ACQ_P_CROSSING=off`) the offset cut, a number the arm.
 - **A collapsed mixture fit is no estimate, and a balance check always
   starts** (issue #4419). On a tiny ranking the vote-anchored mixture can
   land its high component on the top two scores alone (a standard deviation

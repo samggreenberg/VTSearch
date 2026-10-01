@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot's picks sample higher under the balance** (issue #4409, the
+  pricing in `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
+  The acquisition cut the Hard / New picks sample around is now the score at
+  half the depth of the mixture's F-beta argmax over the unvoted ranking
+  (`ACQUISITION_ARGMAX_FACTOR`), carried on the learned sort's
+  `acq_threshold` as before; it can sit below the line. On the bench that
+  finds about nine more positives per 150 clicks than the old cut four
+  inclusion steps above the line, with the returned set's F-beta up and AP up
+  0.02–0.03 at every preset. With no mixture estimate, and under the
+  deprecated floor, the old cut stands.
 - **The Threshold control is a balance, not a precision floor** (issue #4413,
   the owner's ruling of 2026-10-01 after #4411 priced it). The three radios
   under the False Positives … False Negatives spectrum now pick how to weigh

@@ -66,7 +66,9 @@ what the state reports, and the words.
     states are `unchecked` and `checked`.
   - A result belongs to its beta, as a floor result belonged to its floor; it
     goes `stale` when the ranking under it moves.
-- **Acquisition** samples around the F-beta cut: the harness arm of #4409
+- **Acquisition** samples around the F-beta cut (shipped 2026-10-01 at half
+  the argmax's depth, `ACQUISITION_ARGMAX_FACTOR`, after the pricing in
+  `../experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`): the harness arm of #4409
   (`acq_p_crossing`) with the target depth swapped from the P crossing to the
   F-beta argmax, priced against today's line - 4 at each preset before it
   ships.
@@ -93,8 +95,8 @@ what the state reports, and the words.
 
 Status (2026-10-01): steps 1-4 landed with PR #4414 and PR #4416; step 6
 (the UI and the docs, with the switch of `line_preference` to the balance)
-is the PR this revision belongs to; step 5's acquisition pricing is still
-running under #4409.
+is the PR this revision belongs to; step 5's acquisition cut shipped on
+2026-10-01 at half the F-beta argmax's depth (#4409, the PR after #4420).
 
 1. **Library core** (`vtscore/training/thresholds/spot_check.py`, tests in
    `tests_lib/sorting/`): `mixture_positives` and `fbeta_count` beside

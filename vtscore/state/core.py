@@ -1813,8 +1813,17 @@ def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) ->
     ).as_dict()
 
 
-def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: float | None = None) -> float:
+def detector_acquisition_threshold(
+    ctx: "DetectorContext", inclusion_value: float | None = None, *, beta: float | None = None
+) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
+
+    Under a balance (*beta*, #4413) it is a rank, not a re-cut: the score at
+    :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of the depth
+    of the mixture's F-beta argmax over the unvoted ranking
+    (:func:`~vtscore.training.thresholds.acquisition_threshold`, #4409), which
+    can sit below the line; with no mixture estimate it falls through to the
+    offset below.
 
     **Not the decision line.**  ``ctx.threshold`` is what the user sees and what
     Find calls a match; this is a second cut taken from the *same* fitted
@@ -1844,6 +1853,12 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: floa
     threshold is not on the estimator's scale) - the two jobs coincide there,
     exactly as they did everywhere before #2876.
     """
+    if beta is not None:
+        from vtscore.training.thresholds import acquisition_threshold
+
+        at_argmax = acquisition_threshold(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
+        if at_argmax is not None:
+            return at_argmax
     cut = ctx.anchored_cut_cache
     if cut is None:
         return ctx.threshold

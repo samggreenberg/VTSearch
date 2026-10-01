@@ -1,4 +1,8 @@
 {
+  "acquisition.balance_cut": {
+    "app": "72d53721b881a85cc2f3e9e47ccb72cd9088d8489abae8eecd09a898c1731b12",
+    "harness": "29c2fff0e1a8167f2b74a4de7f31313c2bc70579ae6008a97d75b2565721a897"
+  },
   "autopilot.auto_select_next": {
     "app": "6ea3115e16c12d9e370d8475d4b92b12ebafdc870c7513ca1de77faa6fbabb67",
     "harness": "e9bc83e67824b3998c984178f84e2a4d0ee679dbf99483b9a0d20cf6ef44254b"

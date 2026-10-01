@@ -469,6 +469,27 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="acquisition.balance_cut",
+        app="py:vtscore.state.core.detector_acquisition_threshold",
+        harness="vtscore/eval/voting_iterations.py::resolve_acquisition_factor",
+        kind="default",
+        note=(
+            "Where Autopilot's Hard / New picks sample under a balance (#4409, shipped from the pricing in "
+            "docs/experiments/2026-10-01-acquisition-fbeta-4409): the app's detector_acquisition_threshold "
+            "takes the beta and returns the library's acquisition_threshold - the score at "
+            "ACQUISITION_ARGMAX_FACTOR of the F-beta argmax's depth over the unvoted ranking - falling "
+            "through to the line - 4 re-cut with no mixture estimate. The harness's resolve_acquisition_factor "
+            "turns acq_p_crossing=None into that same constant under a balance (and None, the offset cut, "
+            "otherwise), and its step reads the same library function. The factor cannot drift - both read "
+            "one constant - so this digest watches the resolution: a second input to the app's choice (the "
+            "corpus size, the fit's confidence) has to reach the harness too."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts 'off' (the offset cut under a balance, the pricing's control) "
+            "and a pinned factor where the app has the constant; the DEFAULT arm passes None and resolves here."
+        ),
+    ),
+    Mirror(
         id="training.fused_threshold",
         app="py:vtscore.detectors.training._fused_threshold",
         harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",
