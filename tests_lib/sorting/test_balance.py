@@ -39,6 +39,7 @@ from vtscore.training.thresholds import (
     floor_state,
     mixture_count,
     mixture_positives,
+    walk_positives,
 )
 
 
@@ -98,6 +99,30 @@ class TestTheMixturesCount:
         assert fbeta_count(None, 1.0, {}) is None and mixture_positives(None, {}) is None
         empty = LineRanking.from_scores([], [])
         assert fbeta_count(empty, 1.0, {}) is None
+
+    def test_the_walk_reads_the_mixtures_count_when_it_has_one(self):
+        ranking, _ = _planted(52)
+        labels = {c: c <= 52 + 8 for c in ranking.voted}
+        assert walk_positives(ranking, 1.0, labels) == mixture_positives(ranking, labels)
+
+    def test_and_the_cap_over_the_unvoted_when_it_has_none(self):
+        """#4419: a check still starts; recall is read against the set the unchecked line would keep."""
+        from vtscore.training.thresholds import balance_schedule
+
+        assert walk_positives(None, 1.0, {}) == balance_schedule(1.0).candidate == 32
+        assert walk_positives(None, 2.0, {}) == 128
+        empty = LineRanking.from_scores([], [])
+        assert walk_positives(empty, 0.5, {}) == 32
+        # A collapsing fit (the app's 20-item corpus, see test_mixture_count): 16 unvoted under a cap of 32.
+        scores = [0.66, 0.659, 0.515, 0.512, 0.511, 0.51, 0.509, 0.506, 0.501, 0.495]
+        scores += [0.492, 0.491, 0.49, 0.489, 0.488, 0.486, 0.486, 0.476, 0.343, 0.34]
+        labels = {1: True, 2: True, 19: False, 20: False}
+        ranking = LineRanking.from_scores(list(range(1, 21)), scores, set(labels))
+        assert mixture_positives(ranking, labels) is None
+        assert walk_positives(ranking, 1.0, labels) == 16.0
+        assert walk_positives(ranking, 2.0, labels) == 16.0
+        check = SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, walk_positives(ranking, 1.0, labels))
+        assert check.n_pos == 16.0 and check.pending
 
 
 class TestTheWalk:

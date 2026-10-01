@@ -1760,6 +1760,13 @@ def detector_balance_positives(ctx: "DetectorContext") -> float | None:
     return mixture_positives(ctx.line_ranking, detector_line_labels(ctx), human_voted_ids(ctx))
 
 
+def detector_walk_positives(ctx: "DetectorContext", beta: float) -> float:
+    """The positives a balance walk over *ctx*'s ranking reads recall against (#4419): the mixture's count, else the cap."""
+    from vtscore.training.thresholds import walk_positives
+
+    return walk_positives(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
+
+
 def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any]:
     """What the balance says about *ctx*'s current line (#4413), for a response that carries the line.
 

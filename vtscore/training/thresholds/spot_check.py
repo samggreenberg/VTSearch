@@ -885,6 +885,24 @@ def mixture_count(
     return int(ok.max()) + 1 if ok.size else int(np.argmax(cum)) + 1
 
 
+#: A mixture component whose spread is under this share of the ranking's
+#: score range has collapsed onto a few near-duplicate scores (#4419): its
+#: posterior puts no mass on anything else, so the fit is no estimate and the
+#: counts that read it keep the schedule's cap instead.
+MIXTURE_MIN_STD_SHARE = 1e-2
+
+
+def _mixture_is_sound(fit: Any, scores: np.ndarray) -> bool:
+    """True when both components of *fit* spread over a real share of *scores*' range (#4419)."""
+    if fit is None or not (fit.var_hi > 0 and fit.var_lo > 0):
+        return False
+    spread = float(scores.max() - scores.min()) if scores.size else 0.0
+    if not spread > 0:
+        return False
+    least = MIXTURE_MIN_STD_SHARE * spread
+    return math.sqrt(float(fit.var_hi)) >= least and math.sqrt(float(fit.var_lo)) >= least
+
+
 def mixture_posterior(
     ranking: LineRanking | None,
     labels: Mapping[int, bool],
@@ -893,7 +911,10 @@ def mixture_posterior(
     """The mixture's high-component posterior at each unvoted item of *ranking*, best first; ``None`` when none fits.
 
     The fit is :func:`mixture_count`'s, memoised on the ranking; this is the
-    read every mixture-based count shares.
+    read every mixture-based count shares.  A fit with a collapsed component
+    (:data:`MIXTURE_MIN_STD_SHARE`, #4419) is no fit: on a tiny ranking the
+    high component can land on the top two scores alone, and its posterior
+    then says nothing about the rest.
     """
     if ranking is None or ranking.size == 0:
         return None
@@ -917,7 +938,7 @@ def mixture_posterior(
                     anchor_scores.append(float(ranking.scores[row]))
                     anchor_labels.append(1.0 if is_good else 0.0)
         fit, _provenance = anchored_gmm_fit(ranking.scores, anchor_scores, anchor_labels)
-        ranking.mixture.append(fit if (fit is not None and fit.var_hi > 0 and fit.var_lo > 0) else None)
+        ranking.mixture.append(fit if _mixture_is_sound(fit, ranking.scores) else None)
     fit = ranking.mixture[0]
     if fit is None:
         return None
@@ -940,6 +961,31 @@ def mixture_positives(
     """
     posterior = mixture_posterior(ranking, labels, also_voted)
     return None if posterior is None else float(posterior.sum())
+
+
+def walk_positives(
+    ranking: LineRanking | None,
+    beta: float,
+    labels: Mapping[int, bool],
+    also_voted: Iterable[int] = (),
+) -> float:
+    """The positives a balance walk reads recall against: the mixture's count, else the balance's cap (#4419).
+
+    The mixture (:func:`mixture_positives`) is the estimate when it has one.
+    When it does not - nothing fits, or the fit collapsed - the walk still
+    has to start, so the denominator is the set the unchecked line would keep
+    anyway: the balance's cap (:func:`balance_schedule`), lowered to what is
+    unvoted.  Against that denominator the walk goes deeper while the audited
+    share right holds up, which is the floor's instinct with the balance's
+    stop.  Always at least one.  The app's check route and the harness's
+    end-of-run check both read this, so a check starts in the same cases.
+    """
+    n_pos = mixture_positives(ranking, labels, also_voted)
+    if n_pos is not None and n_pos > 0:
+        return n_pos
+    cap = balance_schedule(beta).candidate
+    unvoted = ranking.unvoted_ids(also_voted).size if ranking is not None else 0
+    return float(max(1, min(cap, unvoted) if unvoted else cap))
 
 
 def fbeta_count(

@@ -95,7 +95,6 @@ from vtscore.training.thresholds import (
     floor_line,
     floor_state,
     mixture_count,
-    mixture_positives,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -107,6 +106,7 @@ from vtscore.training.thresholds import (
     line_inclusion,
     resolve_line_knobs,
     threshold_from_fold_orderings,
+    walk_positives,
 )
 
 
@@ -2744,14 +2744,14 @@ def simulate_voting_iterations(  # noqa: C901
             # run without the check is byte-identical up to here.
             if beta is not None:
                 # The balance walk (#4413): recall read against the mixture's
-                # count of the unvoted ranking's positives, as the app does.
-                n_pos = mixture_positives(
+                # count of the unvoted ranking's positives, or the balance's cap
+                # when the mixture has no estimate (#4419), as the app does.
+                n_pos = walk_positives(
                     line_ranking,
+                    beta,
                     {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     set(good_votes) | set(bad_votes),
                 )
-                if n_pos is None or not n_pos > 0:
-                    break
                 check = SpotCheck.start_balance(candidate, beta, n_pos, seed=int(rng.randint(2**31 - 1)))
             else:
                 check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
