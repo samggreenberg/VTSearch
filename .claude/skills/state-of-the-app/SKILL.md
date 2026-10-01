@@ -23,8 +23,17 @@ same edit.
   - **SigLIP binary:** `siglip`, `whole_image`.
   - **DINOv3 region:** `siglip+dinov3_patch`, `max_patch`, opened on SigLIP's
     text sort.
-- **A review runs one set of sessions per precision floor P, and scores the
-  returned set at its own P (owner, 2026-10-01, #4408).** "The quality of our
+- **The preference is a balance, beta, and a review runs one set of sessions
+  per beta (owner, 2026-10-01 03:42, #4413, after #4411's pricing).** The
+  headline is, per beta (0.5 precision-leaning, 1 balanced, 2 recall-leaning)
+  over clicks, the returned set's **F-beta as a share of the best F-beta any
+  cut of the same ranking reaches** (`returned_at_beta.png`, the "returned set
+  at each balance" table), with its precision and recall beside it. Sessions
+  run at `SOTA_BETA=0.5|1|2` once the app's `line_preference` is the balance
+  (the eval's `CALIB_BETA` arm); until then the floor-era reading below is
+  the control, and the balance columns are read off floor sessions.
+- **The floor-era reading: one set of sessions per precision floor P, the
+  returned set scored at its own P (owner, 2026-10-01 02:20, #4408).** "The quality of our
   RETURNS matters more than the quality of our RANK." F1 cannot see P (the 50%
   and 90% lines keep nearly the same set and got the same F1), so the headline
   is, per P over clicks, the set the app returns **when it aims for P**: its

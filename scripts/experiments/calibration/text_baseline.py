@@ -72,7 +72,15 @@ def main() -> int:
     from vtscore.config import EMBEDDINGS_DIR  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
-    from _rank_metrics import FLOORS, floor_tag, line_metrics, ranks_from_scores  # noqa: PLC0415
+    from _rank_metrics import (  # noqa: PLC0415
+        BETAS,
+        FLOORS,
+        balance_metrics,
+        beta_tag,
+        floor_tag,
+        line_metrics,
+        ranks_from_scores,
+    )
 
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
     wf, wn = inclusion_cost_weights(cfg.INCLUSION)
@@ -202,6 +210,11 @@ def main() -> int:
                         for x in FLOORS
                         for name, v in line_metrics(ranks, int(mask.sum()), npos, x).items()
                     }
+                    balance_cols = {
+                        f"text_{name}_{beta_tag(b)}": round(float(v), 6)
+                        for b in BETAS
+                        for name, v in balance_metrics(ranks, int(mask.sum()), npos, b, None).items()
+                    }
                     rows.append(
                         {
                             "dataset": ds,
@@ -224,6 +237,7 @@ def main() -> int:
                             "text_AP": round(float(average_precision_score(y, s)), 6),
                             "text_auroc": round(float(roc_auc_score(y, s)), 6),
                             **floor_cols,
+                            **balance_cols,
                         }
                     )
                 common.log(

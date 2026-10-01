@@ -35,7 +35,7 @@ BASELINE="$EXP/text_baseline.csv"
 # A baseline from before #4357 has no line columns, and one from before #4363
 # has no F1 or p-tagged ones; rebuild it rather than
 # leave every click-0 line blank.
-if [[ ! -s "$BASELINE" ]] || ! head -1 "$BASELINE" | grep -q text_f1_p50; then
+if [[ ! -s "$BASELINE" ]] || ! head -1 "$BASELINE" | grep -q text_f1_p50 || ! head -1 "$BASELINE" | grep -q text_fb_share_b1; then
   # SigLIP only: the region path opens on SigLIP's text sort too, so one
   # baseline serves both, and it avoids reading the 7.5 GB patch cell.
   CALIB_COCO_BETTER_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"

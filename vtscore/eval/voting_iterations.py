@@ -924,7 +924,9 @@ def _precision_frame(
     return frame
 
 
-def _fresh_corpus_line(test: "LineRanking", pool: "LineRanking", vote_labels: "dict[int, bool]") -> dict[float, int]:
+def _fresh_corpus_line(
+    test: "LineRanking", pool: "LineRanking", vote_labels: "dict[int, bool]"
+) -> dict[float | str, int]:
     """What the shipped unchecked line keeps on the test half at each preset floor (#4389).
 
     A cold Find over a corpus holding the session's votes: the test half plus
@@ -934,8 +936,8 @@ def _fresh_corpus_line(test: "LineRanking", pool: "LineRanking", vote_labels: "d
     mixture's proposal - the smaller of the schedule's count and the
     mixture's.  Capped at the test half's size.  Pure read.
     """
-    from vtscore.eval.voting_columns import RANK_FRAME_FLOORS  # noqa: PLC0415
-    from vtscore.training.thresholds import floor_count  # noqa: PLC0415
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, RANK_FRAME_FLOORS  # noqa: PLC0415
+    from vtscore.training.thresholds import balance_count, fbeta_count, floor_count  # noqa: PLC0415
 
     in_test = set(test.ids.tolist())
     keep, scores = [], []
@@ -949,7 +951,12 @@ def _fresh_corpus_line(test: "LineRanking", pool: "LineRanking", vote_labels: "d
         keep.append(int(v))
     corpus = LineRanking.from_scores([*test.ids.tolist(), *keep], [*test.scores.tolist(), *scores], keep)
     labels = {v: bool(vote_labels[v]) for v in keep}
-    return {p: int(min(floor_count(p, None, mixture_count(corpus, p, labels)), test.size)) for p in RANK_FRAME_FLOORS}
+    counts: dict[float | str, int] = {
+        p: int(min(floor_count(p, None, mixture_count(corpus, p, labels)), test.size)) for p in RANK_FRAME_FLOORS
+    }
+    for b in RANK_FRAME_BETAS:  # the balance's line (#4413), read off the same fit
+        counts[f"b{b:g}"] = int(min(balance_count(b, None, fbeta_count(corpus, b, labels)), test.size))
+    return counts
 
 
 def _rank_frame(
@@ -976,7 +983,7 @@ def _rank_frame(
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.eval.voting_columns import RANK_FRAME_FLOORS  # noqa: PLC0415
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, RANK_FRAME_FLOORS, beta_tag  # noqa: PLC0415
 
     def _ranks(ids: Any, label_of: Any) -> tuple[int, int, str]:
         pos = np.flatnonzero(np.fromiter((label_of(int(i)) >= 0.5 for i in ids), dtype=bool, count=len(ids)))
@@ -988,7 +995,10 @@ def _rank_frame(
     n_pool, n_pool_pos, pool_ranks = -1, -1, ""
     if pool_ranking is not None and pool_labels is not None:
         n_pool, n_pool_pos, pool_ranks = _ranks(pool_ranking.unvoted_ids(voted), pool_labels.__getitem__)
-    line_k = dict.fromkeys(RANK_FRAME_FLOORS, -1)
+    line_k: dict[float | str, int] = {
+        **dict.fromkeys(RANK_FRAME_FLOORS, -1),
+        **{f"b{b:g}": -1 for b in RANK_FRAME_BETAS},
+    }
     if pool_ranking is not None and vote_labels:
         line_k = _fresh_corpus_line(test, pool_ranking, vote_labels)
     return {
@@ -1000,7 +1010,8 @@ def _rank_frame(
         "n_pool": n_pool,
         "n_pool_pos": n_pool_pos,
         "pool_pos_ranks": pool_ranks,
-        **{f"test_line_k_p{round(p * 100):d}": k for p, k in line_k.items()},
+        **{f"test_line_k_p{round(p * 100):d}": k for p, k in line_k.items() if not isinstance(p, str)},
+        **{f"test_line_k_{beta_tag(b)}": line_k[f"b{b:g}"] for b in RANK_FRAME_BETAS},
     }
 
 

@@ -377,6 +377,26 @@ class TestRankFrames:
         sky = sink[-1]
         assert [sky[f"test_line_k_p{q}"] for q in (10, 50, 90)] == [-1, -1, -1]
 
+    def test_step_frames_record_the_balance_lines_count_too(self):
+        """#4413: the mixture's F-beta argmax under the balance's cap, on the same corpus and fit."""
+        from vtscore.training.thresholds import LineRanking, balance_count, fbeta_count
+
+        sink: list = []
+        pframes: list = []
+        self._run((10, 20), sink, pframes)
+        for f, pf in zip([f for f in sink if f["kind"] == "step"], pframes, strict=True):
+            test_s = pf["test_scores"].astype(np.float64)
+            vote_s = pf["vote_scores"].astype(np.float64)
+            n_test = len(test_s)
+            votes = list(range(n_test, n_test + len(vote_s)))
+            corpus = LineRanking.from_scores([*range(n_test), *votes], [*test_s, *vote_s], votes)
+            labels = {v: bool(lab >= 0.5) for v, lab in zip(votes, pf["vote_labels"], strict=True)}
+            for b, tag in ((0.5, "b05"), (1.0, "b1"), (2.0, "b2")):
+                want = min(balance_count(b, None, fbeta_count(corpus, b, labels)), n_test)
+                assert f[f"test_line_k_{tag}"] == want, (f["t"], b)
+            assert f["test_line_k_b05"] <= f["test_line_k_b1"] <= f["test_line_k_b2"] or f["test_line_k_b1"] == 32
+        assert [sink[-1][f"test_line_k_{t}"] for t in ("b05", "b1", "b2")] == [-1, -1, -1], "a skyline drew no line"
+
     def test_recording_does_not_change_the_run(self):
         plain = self._run(None, None)
         recorded = self._run((10, 20), [])

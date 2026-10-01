@@ -211,6 +211,9 @@ def _baseline(path: Path, rm) -> dict:
                 ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
             ):
                 row[f"text_{m}_{rm.floor_tag(x)}"] = round(0.01 * (i + 1) + j / 100 + x, 6)
+        for b in rm.BETAS:  # the balance's columns (#4413), distinct from the floors'
+            for j, m in enumerate(("k", "precision", "recall", "fbeta", "oracle_fbeta", "fb_share")):
+                row[f"text_{m}_{rm.beta_tag(b)}"] = round(0.02 * (i + 1) + j / 100 + b / 10, 6)
         rows.append(row)
         want[cat] = row
     pd.DataFrame(rows).to_csv(path, index=False)
@@ -243,6 +246,8 @@ def run(tmp_path_factory, rm):
         "influence": read("influence.csv"),
         "curves": read("curves.csv"),
         "steps": read("line_steps.csv"),
+        "balances": read("balances.csv"),
+        "balance_steps": read("balance_steps.csv"),
         "summary": (out / "summary.md").read_text(),
     }
 
@@ -308,6 +313,58 @@ def test_precision_and_recall_at_each_p_are_the_returned_sets_at_every_recorded_
                     assert c.loc[int(f["t"]), f"{m}_{tag}"] == pytest.approx(want[m]), (cat, x, m)
     assert "## The returned set at each P: precision against P, recall against the oracle" in run["summary"]
     assert "These sessions aimed at P = 50%" in run["summary"]
+
+
+def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
+    """#4413: the set the app returns at each balance, scored as F-beta over the best cut, off the same frames."""
+    curves, balances, steps = run["curves"], run["balances"], run["balance_steps"]
+    for idx, cat in enumerate(CATS):
+        frames = _frames(run["exp"], idx)
+        c = curves[curves["category"] == cat].set_index("t")
+        for b in rm.BETAS:
+            tag = rm.beta_tag(b)
+            text = balances[(balances["category"] == cat) & (balances["point"] == "text") & (balances["beta"] == b)]
+            assert text["fb_share"].iloc[0] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
+            assert c.loc[0, f"fb_share_{tag}"] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
+            for f in frames.query("kind == 'step'").to_dict("records"):
+                want = rm.balance_metrics(
+                    rm.parse_ranks(f["test_pos_ranks"]),
+                    int(f["n_test"]),
+                    int(f["n_test_pos"]),
+                    b,
+                    rm.frame_beta_k(f, b),
+                )
+                got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["beta"] == b)].iloc[0]
+                for m in ("k", "fbeta", "fb_share", "precision", "recall"):
+                    assert got[m] == pytest.approx(want[m]), (cat, b, m)
+                assert c.loc[int(f["t"]), f"fb_share_{tag}"] == pytest.approx(want["fb_share"])
+                assert 0.0 <= want["fb_share"] <= 1.0 + 1e-9
+            final = balances[(balances["category"] == cat) & (balances["point"] == "final") & (balances["beta"] == b)]
+            last = frames.query("kind == 'last'").iloc[0]
+            want = rm.balance_metrics(
+                rm.parse_ranks(last["test_pos_ranks"]),
+                int(last["n_test"]),
+                int(last["n_test_pos"]),
+                b,
+                rm.frame_beta_k(last, b),
+            )
+            assert final["fbeta"].iloc[0] == pytest.approx(want["fbeta"])
+    assert "## The returned set at each balance: F-beta over the best cut" in run["summary"]
+    assert "These sessions aimed at a floor, not a balance" in run["summary"]
+    assert run["cells"]["session_beta"].isna().all(), "a floor run records no session beta"
+
+
+def test_the_balance_metric_peaks_at_the_balance_by_construction(rm) -> None:
+    """The oracle F-beta is the best cut's, by brute force; the returned set's share is <= 1."""
+    ranks = np.array([0, 2, 3, 7, 30])
+    n_pos = 5
+    for b in rm.BETAS:
+        brute = max(rm.fbeta_of(int((ranks < k).sum()), k, n_pos, b) for k in range(1, 2001))
+        assert rm.oracle_fbeta(ranks, n_pos, b) == pytest.approx(brute)
+        m = rm.balance_metrics(ranks, 2000, n_pos, b, 8)
+        assert m["fb_share"] <= 1.0 + 1e-9 and m["k"] == 8
+    assert rm.balance_metrics(ranks, 2000, n_pos, 2.0, None)["k"] == 128, "no recorded count: the balance's cap"
+    assert rm.balance_metrics(ranks, 2000, n_pos, 0.5, None)["k"] == 32
 
 
 def test_each_run_records_the_floor_its_sessions_aimed_at(run) -> None:

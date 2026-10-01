@@ -9,6 +9,8 @@ P only from its own sessions:
   against P (top) and its recall against the oracle's recall at P (bottom). When
   the 50% run is given, the same P read off the 50% sessions is drawn light, so
   the figure shows what running each P on its own changed.
+* With ``--kind balance`` the runs are keyed by beta (#4413): ``returned_at_own_beta.png`` (the
+  returned set's F-beta as a share of the best cut, per beta over clicks) and ``perbeta_summary.md``.
 * ``perp_summary.md`` -- per P and point (text, 25, 50, final, ceiling):
   precision, its gap to P, the share of runs meeting P, recall, the oracle's
   recall at P and the share of it returned; then each P's sessions' AP and
@@ -120,15 +122,73 @@ def summary(runs: dict[float, Path], out: Path) -> None:
     (out / "perp_summary.md").write_text("\n".join(md) + "\n")
 
 
+def _beta_tag(beta: float) -> str:
+    return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
+
+def figure_balance(runs: dict[float, Path], out: Path) -> None:
+    """Per beta, over clicks: the returned set's F-beta as a share of the best cut, each beta off its own sessions (#4413)."""
+    betas = sorted(runs)
+    fig, axes = plt.subplots(1, len(betas), figsize=(4.4 * len(betas), 3.9), facecolor=SURFACE, sharey=True)
+    axes = [axes] if len(betas) == 1 else list(axes)
+    for ax, beta in zip(axes, betas, strict=True):
+        tag = _beta_tag(beta)
+        c = pd.read_csv(runs[beta] / "curves.csv")
+        steps = pd.read_csv(runs[beta] / "balance_steps.csv")
+        clicks = sorted({0, *steps["t"].astype(int).unique().tolist()})
+        m = c[c["t"].isin(clicks)].groupby("t")[f"fb_share_{tag}"].mean()
+        ax.plot(m.index, m.to_numpy(), color="#2a6fdb", lw=2, marker="o", ms=2.5, label="its own sessions")
+        ax.annotate(f"{m.iloc[-1]:.2f}", (m.index[-1], m.iloc[-1]), xytext=(4, 0), textcoords="offset points",
+                    va="center", color=INK, fontsize=8)  # fmt: skip
+        ax.axhline(1.0, color=INK, ls=":", lw=1.2)
+        ax.set_title(f"beta = {beta:g}: F-beta / best cut", color=INK, fontsize=10, loc="left")
+        _axes(ax)
+        ax.set_ylim(0, 1.05)
+        ax.set_xlabel("clicks", color=INK)
+    axes[0].set_ylabel("F-beta of the returned set / best cut", color=INK)
+    fig.tight_layout()
+    fig.savefig(out / "returned_at_own_beta.png", dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+
+
+def summary_balance(runs: dict[float, Path], out: Path) -> None:
+    from analyze import returned_at_beta  # noqa: PLC0415
+
+    md = [
+        "# The returned set at each balance, each read off its own sessions (#4413)",
+        "",
+        "`fbeta` against `oracle_fbeta` (the best any cut of the same ranking reaches; `fb_share` = fbeta / "
+        "oracle), with `k`, `precision` and `recall`. Points: text sort, 25 and 50 clicks, the end, full labels.",
+        "",
+    ]
+    rows = []
+    for beta, d in sorted(runs.items()):
+        b = pd.read_csv(d / "balances.csv", dtype={"point": str})
+        t = returned_at_beta(b[b["beta"].round(4) == round(beta, 4)], ["arm"]).reset_index()
+        t.insert(0, "sessions_at", f"beta {beta:g}")
+        rows.append(t)
+    table = pd.concat(rows, ignore_index=True)
+    table["point"] = pd.Categorical(table["point"].astype(str), HEADLINE_POINTS, ordered=True)
+    md += [_md(table, index=False)]
+    (out / "perbeta_summary.md").write_text("\n".join(md) + "\n")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
-    ap.add_argument("--run", action="append", required=True, help="P=analysis dir, e.g. 0.9=/path/analysis-binary")
+    ap.add_argument("--run", action="append", required=True, help="P=analysis dir (or beta=dir with --kind balance)")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument(
+        "--kind", choices=("floor", "balance"), default="floor", help="the preference the runs are keyed by"
+    )
     args = ap.parse_args(argv)
     runs = {float(k): Path(v) for k, _, v in (r.partition("=") for r in args.run)}
     args.out.mkdir(parents=True, exist_ok=True)
-    figure(runs, args.out)
-    summary(runs, args.out)
+    if args.kind == "balance":
+        figure_balance(runs, args.out)
+        summary_balance(runs, args.out)
+    else:
+        figure(runs, args.out)
+        summary(runs, args.out)
     print(f"perp -> {args.out}")
     return 0
 
