@@ -266,6 +266,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     ap.add_argument("--projection", default="", help="#4415 arms: a cached projection name, e.g. tile_projection_v1")
     ap.add_argument("--stoplist", default="", help="#4170/#4180 arms: 'all' or 'gated' (default: the shipped 'off')")
+    ap.add_argument(
+        "--swap-halves",
+        action="store_true",
+        help="click in the test half and score on the click half: a second replicate per class (#4432)",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
@@ -314,6 +319,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "tile_layers": [list(layer) for layer in st.TILE_LAYERS],
                 "projection": st.PROJECTION_NAME,
                 "stoplist": args.stoplist or "off",
+                "swap_halves": args.swap_halves,
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
             },
@@ -339,7 +345,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if not positive.any():
             continue
         col = {p: i for i, p in enumerate(pool_ids)}
-        test = np.array([in_test_half(p) for p in pool_ids])
+        test = np.array([in_test_half(p) != args.swap_halves for p in pool_ids])
         if not (positive & test).any() or not (positive & ~test).any():
             print(f"  {cid}: skipped, no positive in one half", flush=True)
             continue

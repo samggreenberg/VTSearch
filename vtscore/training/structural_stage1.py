@@ -27,7 +27,7 @@ from typing import Any, Optional, Sequence
 
 import numpy as np
 
-from vtscore.media.structural import MatchStats, StructuralFeatures, StructuralMatcher
+from vtscore.media.structural import DEFAULT_MIN_INLIERS, MatchStats, StructuralFeatures, StructuralMatcher
 
 _log = logging.getLogger(__name__)
 
@@ -302,28 +302,39 @@ class VerificationCache:
         templates: Sequence[tuple[Any, StructuralFeatures]],
         candidates: Sequence[tuple[Any, StructuralFeatures]],
         matcher: StructuralMatcher,
+        *,
+        parents: Optional[dict[Any, tuple[Any, StructuralFeatures]]] = None,
     ) -> list[MatchStats]:
         """Max-over-templates :class:`MatchStats` per candidate, verifying only what is not cached.
 
         *templates* and *candidates* are ``(key, features)`` pairs. A template
         key must identify the template's content (media, box, features object);
         a candidate key is its media id.
+
+        *parents* maps a pruned template's key to its unpruned ``(key, features)``
+        (#4432). Pruning only drops template descriptors, and matching runs from
+        template to page, so a pruned template cannot fit a page its parent fails
+        on: it is verified only where the parent clears the 8-inlier gate, and
+        scores no fit elsewhere.
         """
         if len(self._fits) > _CACHE_LIMIT:
             self._fits.clear()
-        verify_many = getattr(matcher, "verify_many", None)
+        parents = parents or {}
         for tkey, tpl in templates:
-            todo = [
-                (ckey, feats)
-                for ckey, feats in candidates
-                if (hit := self._fits.get((tkey, ckey))) is None or hit[0] != id(feats)
-            ]
-            if not todo:
-                continue
-            feats_list = [f for _, f in todo]
-            fits = verify_many(tpl, feats_list) if verify_many else [matcher.verify(tpl, f) for f in feats_list]
-            for (ckey, feats), stats in zip(todo, fits):
-                self._fits[(tkey, ckey)] = (id(feats), stats)
+            todo = self._uncached(tkey, candidates)
+            parent = parents.get(tkey)
+            if todo and parent is not None:
+                pkey, ptpl = parent
+                self._verify(pkey, ptpl, self._uncached(pkey, todo), matcher)
+                passing = []
+                for ckey, feats in todo:
+                    pstats = self._fits[(pkey, ckey)][1]
+                    if pstats.model_ok and pstats.inlier_count >= DEFAULT_MIN_INLIERS:
+                        passing.append((ckey, feats))
+                    else:
+                        self._fits[(tkey, ckey)] = (id(feats), MatchStats())
+                todo = passing
+            self._verify(tkey, tpl, todo, matcher)
         out: list[MatchStats] = []
         for ckey, _feats in candidates:
             best, best_key = MatchStats(), (False, -1, -1.0)
@@ -334,3 +345,29 @@ class VerificationCache:
                     best, best_key = stats, key
             out.append(best)
         return out
+
+    def _uncached(
+        self, tkey: Any, candidates: Sequence[tuple[Any, StructuralFeatures]]
+    ) -> list[tuple[Any, StructuralFeatures]]:
+        """The *candidates* with no fit for *tkey* on their current features."""
+        return [
+            (ckey, feats)
+            for ckey, feats in candidates
+            if (hit := self._fits.get((tkey, ckey))) is None or hit[0] != id(feats)
+        ]
+
+    def _verify(
+        self,
+        tkey: Any,
+        tpl: StructuralFeatures,
+        todo: Sequence[tuple[Any, StructuralFeatures]],
+        matcher: StructuralMatcher,
+    ) -> None:
+        """Verify *tpl* against each of *todo* and keep the fits."""
+        if not todo:
+            return
+        verify_many = getattr(matcher, "verify_many", None)
+        feats_list = [f for _, f in todo]
+        fits = verify_many(tpl, feats_list) if verify_many else [matcher.verify(tpl, f) for f in feats_list]
+        for (ckey, feats), stats in zip(todo, fits):
+            self._fits[(tkey, ckey)] = (id(feats), stats)

@@ -128,6 +128,20 @@ class TestVerificationCache:
         cache.best_many([("t", page)], [(0, reloaded)], matcher)
         assert matcher.calls == 2
 
+    def test_a_pruned_template_is_verified_only_where_its_parent_passes(self):
+        # #4432: pages 0-9 fit the unpruned template with 0-9 inliers, so only 8 and 9 clear the gate.
+        pages = [(mid, _features(mid, n=30)) for mid in range(10)]
+        matcher = _CountingMatcher({id(f): mid for mid, f in pages})
+        cache = s1.VerificationCache()
+        parent = ("good", _features(50, 30))
+        cache.best_many([parent], pages, matcher)
+        assert matcher.calls == 10
+        pruned = (("good", "pruned"), _features(51, 20))
+        out = cache.best_many([pruned], pages, matcher, parents={pruned[0]: parent})
+        assert matcher.calls == 12  # the parent's fits were cached; the pruned one ran on pages 8 and 9
+        assert [s.inlier_count for s in out] == [0] * 8 + [8, 9]
+        assert not any(s.model_ok for s in out[:8])
+
     def test_cached_and_uncached_reranks_agree(self):
         feats = {mid: _features(mid, 30) for mid in range(6)}
         matcher = _CountingMatcher({id(f): (mid * 7) % 20 for mid, f in feats.items()})
