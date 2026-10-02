@@ -1818,12 +1818,14 @@ def detector_acquisition_threshold(
 ) -> float:
     """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
 
-    Under a balance (*beta*, #4413) it is a rank, not a re-cut: the score at
-    :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of the depth
-    of the mixture's F-beta argmax over the unvoted ranking
-    (:func:`~vtscore.training.thresholds.acquisition_threshold`, #4409), which
-    can sit below the line; with no mixture estimate it falls through to the
-    offset below.
+    Under a balance (*beta*, #4413) it can be a rank instead of a re-cut: the
+    score at :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR` of
+    the depth of the mixture's F-beta argmax over the unvoted ranking
+    (:func:`~vtscore.training.thresholds.acquisition_threshold`, #4409).  That
+    factor is ``None`` since the #4427 revert (the rank cut harvested the
+    user's unvoted top and few fresh images cleared the threshold), so the
+    balance falls through to the offset below like everything else; a mixture
+    with no estimate does too.
 
     **Not the decision line.**  ``ctx.threshold`` is what the user sees and what
     Find calls a match; this is a second cut taken from the *same* fitted

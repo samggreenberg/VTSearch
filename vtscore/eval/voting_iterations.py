@@ -1705,10 +1705,11 @@ def resolve_acquisition_factor(acq_p_crossing: "float | str | None", beta: Optio
 
     The harness's counterpart of what :func:`vtscore.state.core.detector_acquisition_threshold`
     does with its *beta*: ``None`` is the app's default - under a balance the
-    shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`,
-    under the deprecated floor or the Inclusion arm the line - 4 offset
-    (``acq_inclusion_offset``); :data:`ACQ_P_CROSSING_OFF` forces the offset
-    under a balance too (the pricing's control); a number is the arm (#4409).
+    shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
+    (``None`` since the #4427 revert: the line - 4 offset), under the
+    deprecated floor or the Inclusion arm the offset (``acq_inclusion_offset``);
+    :data:`ACQ_P_CROSSING_OFF` forces the offset under a balance whatever the
+    constant says; a number is the arm (#4409).
     """
     if acq_p_crossing == ACQ_P_CROSSING_OFF:
         return None

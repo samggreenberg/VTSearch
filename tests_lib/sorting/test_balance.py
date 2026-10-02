@@ -100,20 +100,24 @@ class TestTheMixturesCount:
         empty = LineRanking.from_scores([], [])
         assert fbeta_count(empty, 1.0, {}) is None
 
-    def test_the_acquisition_cut_sits_at_half_the_argmax(self):
-        """#4409: Autopilot samples at ACQUISITION_ARGMAX_FACTOR of the F-beta argmax's depth, read as a rank."""
+    def test_the_acquisition_cut_is_a_share_of_the_argmax_only_when_an_arm_asks(self):
+        """#4409 / #4427: the shipped factor is None (the line - 4 cut); a number reads a rank off the argmax."""
         from vtscore.training.thresholds import ACQUISITION_ARGMAX_FACTOR, acquisition_count, acquisition_threshold
 
         ranking, _ = _planted(52)
         labels = {c: c <= 52 + 8 for c in ranking.voted}
         k = fbeta_count(ranking, 1.0, labels)
-        assert k is not None and ACQUISITION_ARGMAX_FACTOR == 0.5
-        assert acquisition_count(ranking, 1.0, labels) == max(1, round(0.5 * k))
+        assert k is not None and ACQUISITION_ARGMAX_FACTOR is None
+        assert acquisition_count(ranking, 1.0, labels) is None and acquisition_threshold(ranking, 1.0, labels) is None
+        assert acquisition_count(ranking, 1.0, labels, factor=0.5) == max(1, round(0.5 * k))
         assert acquisition_count(ranking, 1.0, labels, factor=1.0) == k
-        assert acquisition_threshold(ranking, 1.0, labels) == ranking.threshold_for(max(1, round(0.5 * k)))
-        assert acquisition_count(None, 1.0, {}) is None and acquisition_threshold(None, 1.0, {}) is None
+        assert acquisition_threshold(ranking, 1.0, labels, factor=0.5) == ranking.threshold_for(max(1, round(0.5 * k)))
+        assert (
+            acquisition_count(None, 1.0, {}, factor=0.5) is None
+            and acquisition_threshold(None, 1.0, {}, factor=0.5) is None
+        )
         empty = LineRanking.from_scores([], [])
-        assert acquisition_threshold(empty, 1.0, {}) is None
+        assert acquisition_threshold(empty, 1.0, {}, factor=0.5) is None
 
     def test_the_walk_reads_the_mixtures_count_when_it_has_one(self):
         ranking, _ = _planted(52)

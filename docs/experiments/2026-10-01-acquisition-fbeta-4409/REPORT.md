@@ -13,7 +13,7 @@ shipped opening, 150 clicks, the balance walk once at the end. **Arms:** beta
 **Runs:** `/expscratch/sgreenberg/p-aware-acq-4409/b<beta>-x<ctl|1.0|0.5>/analysis-binary`
 (`compare_acq.py`, `figs_acq.py` here; `acq_summary.md` is the full table).
 
-**Verdict: ship the cut at half the argmax's depth (× 0.5).** At every preset
+**Verdict (2026-10-01): ship the cut at half the argmax's depth (× 0.5).** *Reversed on 2026-10-02: see section 4, which re-scores the same runs on the owner's objective.* At every preset
 it raises the returned set's F-beta and finds about nine more positives per
 150 clicks, with AP up 0.02–0.03 and precision at the line up 0.05–0.11; the
 plan's rule ("ship if it raises F-beta without losing Goods") is met three
@@ -112,3 +112,50 @@ there moves the ceiling without moving what 32 kept items can hold.
 - On the GRID: each arm's `analysis-binary/{cells,balances,balance_steps,lines,curves}.csv`
   and `summary.md`; `driver2.log` is the run's record (the arrays, the 09:10
   disk-full stall and the redo of the 53 tasks it failed).
+
+## 4. Revised 2026-10-02: on the owner's objective the cut is worse, and it was reverted
+
+The owner's objective, stated on 2026-10-01 while #4427 was being measured:
+**the F-beta of the withheld images above the threshold the app holds.** The
+tables above score the line by its *rank count* instead: the balance's rule
+re-drawn on the fresh ranking (`test_line_k_b*`, `balances.csv`), which keeps
+the top 32 of the withheld half whatever the session did. Every session row
+carries the withheld set's precision and recall at that row's threshold, so
+the same runs can be read the owner's way (`withheld_at_threshold.py`; the
+analyzer's headline since #4436): the last ordinary row is the unchecked
+line, the last check row the line after the walk and its votes.
+
+| beta | arm | F-beta above the threshold, unchecked | after the check | walk's effect | returned (unchecked → checked) | d vs line − 4, after |
+|---|---|---:|---:|---:|---:|---:|
+| 0.5 | line − 4 | 0.529 | **0.467** | −0.060 ± 0.005 | 40 → 67 | |
+| 0.5 | × 1.0 | 0.573 | 0.379 | −0.186 ± 0.008 | 32 → 85 | −0.089 ± 0.007 |
+| 0.5 | × 0.5 | 0.329 | 0.317 | −0.009 ± 0.007 | 12 → 102 | −0.150 ± 0.007 |
+| 1 | line − 4 | 0.504 | **0.470** | −0.032 ± 0.004 | 41 → 73 | |
+| 1 | × 1.0 | 0.508 | 0.415 | −0.087 ± 0.006 | 34 → 90 | −0.056 ± 0.005 |
+| 1 | × 0.5 | 0.218 | 0.385 | +0.165 ± 0.007 | 13 → 101 | −0.085 ± 0.005 |
+| 2 | line − 4 | 0.508 | **0.510** | +0.005 ± 0.004 | 80 → 114 | |
+| 2 | × 1.0 | 0.479 | 0.488 | +0.014 ± 0.005 | 92 → 127 | −0.022 ± 0.004 |
+| 2 | × 0.5 | 0.198 | 0.491 | +0.285 ± 0.011 | 35 → 128 | −0.019 ± 0.004 |
+
+- **The harvest pushes the threshold up.** Under × 0.5 the picks take the
+  positives out of the user's unvoted top (its top 32 is 15% right at the end
+  against 40% under line − 4, `pools.csv`), so the score at the kept set's edge
+  is high and few withheld images clear it: 13 returned instead of 41 at
+  beta 1, F1 0.218 instead of 0.504. The rank-count reading could not see
+  this: it re-draws the line at 32 on the fresh ranking.
+- **After the check it is still worse at every preset** (−0.085 / −0.150 /
+  −0.019): the check's votes and its deeper line recover much of the loss at
+  beta 1 and 2, not at beta 0.5.
+- **The check itself lowers the objective under line − 4 at beta ≤ 1**
+  (−0.032 / −0.060): it deepens the line (41 → 73 returned at beta 1) and
+  precision falls faster than recall rises; at beta 2 it is neutral. The
+  floor-era 50% sessions (#4408) read the same way: 0.492 → 0.470.
+- **The walk arms of #4427 are a wash** (beta 1, the × 0.5 cut, 5 seeds):
+  the app's walk 0.384; 10 picks a band 0.361 (−0.023 ± 0.003, 18 more
+  votes); a 0.02 tolerance 0.383; bands split past the start 0.387 (+0.003 ±
+  0.002); both 0.385.
+
+**Reverted:** `ACQUISITION_ARGMAX_FACTOR` is `None` again, so the balance keeps
+the line − 4 re-cut; the harness arm (`acq_p_crossing`) keeps the factor as a
+knob. The factor sweep (#4428) is re-read on this objective before any factor
+is proposed again.
