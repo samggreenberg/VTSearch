@@ -77,7 +77,8 @@ class _CountingMatcher:
         del template
         self.calls += 1
         n = self.inliers.get(id(candidate), 0)
-        return MatchStats(inlier_count=n, model_ok=n > 0)
+        # A tight fit, so #4440's geometry cuts (applied before the first Bad) do not demote it.
+        return MatchStats(inlier_count=n, model_ok=n > 0, inlier_ratio=0.9, median_reproj_error=0.001)
 
 
 class TestTiledStage1:
@@ -318,3 +319,29 @@ class TestStoplist:
         import vtscore.training.structural_similarity as ss
 
         assert ss.STOPLIST_POLICY == "off"
+
+
+class TestEarlyGeometryLine:
+    """#4440 (pre-registered H1): before the first Bad vote, the returned set needs a tight fit."""
+
+    def test_a_loose_fit_scores_half_and_keeps_its_order(self):
+        from vtscore.training.structural_similarity import VerificationScorer
+
+        scorer = VerificationScorer(ratio_min=0.75, reproj_max=0.005)
+        tight = MatchStats(inlier_count=40, model_ok=True, inlier_ratio=0.9, median_reproj_error=0.001)
+        loose = MatchStats(inlier_count=40, model_ok=True, inlier_ratio=0.4, median_reproj_error=0.001)
+        looser = MatchStats(inlier_count=60, model_ok=True, inlier_ratio=0.9, median_reproj_error=0.009)
+        assert scorer.score(tight) == pytest.approx(40 / 48)
+        assert scorer.score(loose) == pytest.approx(40 / 48 / 2)
+        assert scorer.score(loose) < 0.5  # below the line
+        assert scorer.score(loose) < scorer.score(looser) < 0.5  # failing fits keep their inlier order
+
+    def test_the_cuts_apply_only_until_a_bad_vote_exists(self, tiled):
+        from vtscore.training.structural_similarity import _line_scorer
+
+        snap = tiled(3)
+        early = _line_scorer(True, {}, snap)
+        assert early.ratio_min is not None and early.reproj_max is not None
+        later = _line_scorer(True, {1: None}, snap)  # page 1 is a Bad with features
+        assert later.ratio_min is None and later.reproj_max is None
+        assert _line_scorer(False, {}, snap).ratio_min is None  # photos: never

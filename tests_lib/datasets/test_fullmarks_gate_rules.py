@@ -81,3 +81,12 @@ def test_m1_adds_the_geometry_cuts_on_top_of_the_bad_ceiling(gr):
 def test_m2_falls_back_to_the_bad_ceiling_with_too_few_votes(gr):
     z = _geo_frame()  # 2 Goods, 1 Bad: below MIN_VOTES_M2
     assert gr.accept_geometry("M2", z, None).tolist() == gr.accept("R1", z).tolist()
+
+
+def test_the_hybrid_hands_over_to_the_bad_ceiling_at_k_bads(gr):
+    z = _geo_frame()  # one Bad vote
+    cuts = {"ratio_min": 0.75, "reproj_max": 0.005}
+    m1, r1 = gr.accept_geometry("M1", z, cuts).tolist(), gr.accept("R1", z).tolist()
+    assert gr.accept_geometry("H2", z, cuts).tolist() == m1  # 1 Bad < 2: still M1
+    assert gr.accept_geometry("H1", z, cuts).tolist() == r1  # 1 Bad >= 1: the Bad ceiling
+    assert gr.accept_geometry("Hinf", z, cuts).tolist() == m1
