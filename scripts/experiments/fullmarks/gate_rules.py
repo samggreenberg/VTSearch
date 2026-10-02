@@ -11,6 +11,15 @@ and scores the rules pre-registered on #4367 on each class's held-out test half:
         leave-one-out Stage-1 scores, verified or not
 ``R4``  oracle: the best-F1 cut of the ranking (verified by inliers, then Stage 1)
 
+#4434 adds two rules on top of R1 (the shipped line since #4367), using each
+verified page's best-fit geometry (frames saved with ``ratio`` / ``reproj``):
+
+``M1``  R1 and inlier ratio >= r* and median reprojection error <= e*, the cuts fit on
+        tier ``s``'s template matrix (``--fit-cuts``), never on the scored tier
+``M2``  R1 and P(true) >= 0.5 under a logistic regression on (log inliers, ratio,
+        reprojection error) fit on the detector's votes (Goods leave-one-out, Bads);
+        R1 until there are >= 3 of each
+
 Writes ``rules.csv`` (class x click x rule: precision, recall, F1, returned) and
 ``summary.md`` (means, then each rule paired against R0, overall and by class
 size).
@@ -22,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -29,6 +39,9 @@ import numpy as np
 
 MIN_INLIERS = 8
 RULES = ("R0", "R1", "R2", "R3", "R4")
+#: #4434's rules, scored when the frames carry the fit geometry.
+GEOMETRY_RULES = ("M1", "M2")
+MIN_VOTES_M2 = 3
 LARGE = 50  # positives: the pre-registered split by class size
 BOOTSTRAP = 10000
 
@@ -79,6 +92,66 @@ def accept(rule: str, z: Any) -> np.ndarray:
     raise KeyError(rule)
 
 
+def fit_cuts(matrix: Path) -> dict[str, float]:
+    """M1's cuts: the (ratio, reprojection) pair maximising F1 over box-template pairs past the gate.
+
+    Reads #4162's template matrix for one tier. Box templates only (template 0, the query
+    crop, is a cross-scale fit whose residuals mean something else, #3349).
+    """
+    ratios, reprojs, labels = [], [], []
+    for f in sorted(matrix.glob("*.npz")):
+        if f.name.startswith("vectors-"):
+            continue
+        z = np.load(f)
+        st = z["stats"].astype(np.float32)[1:]  # box templates
+        if st.shape[0] == 0:
+            continue
+        pos = np.broadcast_to(z["positives"].astype(bool), st.shape[:2])
+        inl = np.expm1(st[..., 0])
+        gate = (st[..., 8] > 0.5) & (inl >= MIN_INLIERS)
+        ratios.append(st[..., 1][gate])
+        reprojs.append(st[..., 4][gate])
+        labels.append(pos[gate])
+    r, e, y = np.concatenate(ratios), np.concatenate(reprojs), np.concatenate(labels)
+    best = (-1.0, 0.0, float("inf"))
+    for rc in np.quantile(r, np.linspace(0, 0.95, 20)):
+        for ec in np.quantile(e, np.linspace(0.05, 1.0, 20)):
+            acc = (r >= rc) & (e <= ec)
+            tp = int((acc & y).sum())
+            f1 = 2 * tp / (int(acc.sum()) + int(y.sum())) if acc.any() else 0.0
+            if f1 > best[0]:
+                best = (f1, float(rc), float(ec))
+    return {"ratio_min": best[1], "reproj_max": best[2], "pair_f1": best[0], "pairs": int(y.size)}
+
+
+def accept_geometry(rule: str, z: Any, cuts: Optional[dict[str, float]]) -> np.ndarray:
+    """#4434's M1 / M2 on top of R1."""
+    base = accept("R1", z)
+    ratio = np.nan_to_num(z["ratio"], nan=-1.0)
+    reproj = np.nan_to_num(z["reproj"], nan=np.inf)
+    if rule == "M1":
+        assert cuts is not None, "M1 needs --cuts"
+        return base & (ratio >= cuts["ratio_min"]) & (reproj <= cuts["reproj_max"])
+    # M2: logistic on the votes
+    g = np.column_stack([np.log1p(z["good_loo_inliers"]), z["good_loo_ratio"], z["good_loo_reproj"]])
+    b = np.column_stack([np.log1p(z["bad_inliers"]), z["bad_ratio"], z["bad_reproj"]])
+    g, b = g[np.isfinite(g).all(axis=1)], b[np.isfinite(b).all(axis=1)]
+    if len(g) < MIN_VOTES_M2 or len(b) < MIN_VOTES_M2:
+        return base
+    from sklearn.linear_model import LogisticRegression  # noqa: PLC0415
+    from sklearn.pipeline import make_pipeline  # noqa: PLC0415
+    from sklearn.preprocessing import StandardScaler  # noqa: PLC0415
+
+    model = make_pipeline(StandardScaler(), LogisticRegression(C=1.0)).fit(
+        np.vstack([g, b]), np.r_[np.ones(len(g)), np.zeros(len(b))]
+    )
+    x = np.column_stack(
+        [np.log1p(np.nan_to_num(z["inliers"], nan=0.0)), ratio, np.where(np.isfinite(reproj), reproj, 1.0)]
+    )
+    p = model.predict_proba(x)[:, 1]
+    return base & (p >= 0.5)
+
+
 def oracle(z: Any, test: np.ndarray) -> np.ndarray:
     """R4: the best-F1 cut of the app's order (verified pages by inliers first, then Stage 1)."""
     inl = np.nan_to_num(z["inliers"], nan=-1.0)
@@ -106,8 +179,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--frames", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--fit-cuts", type=Path, help="a tier's template matrix: fit M1's cuts there and write cuts.json")
+    ap.add_argument("--cuts", type=Path, help="M1's cuts.json (fit on another tier)")
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
+    if args.fit_cuts:
+        cuts = fit_cuts(args.fit_cuts)
+        (args.out / "cuts.json").write_text(json.dumps(cuts, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(cuts, indent=2))
+        return 0
+    cuts = json.loads(args.cuts.read_text(encoding="utf-8")) if args.cuts else None
+    rules: tuple[str, ...] = RULES
 
     rows: list[dict[str, Any]] = []
     for f in sorted(args.frames.glob("*.npz")):
@@ -115,8 +197,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         z = np.load(f)
         test = z["test"].astype(bool)
         positive = z["positive"].astype(bool)
-        for rule in RULES:
-            acc = oracle(z, test) if rule == "R4" else accept(rule, z)
+        geometry = "ratio" in z.files
+        if geometry and rules == RULES:
+            rules = RULES + (("M1",) if cuts else ()) + ("M2",)
+        for rule in rules:
+            if rule == "R4":
+                acc = oracle(z, test)
+            elif rule in GEOMETRY_RULES:
+                acc = accept_geometry(rule, z, cuts)
+            else:
+                acc = accept(rule, z)
             p, r, f1, k = prf(acc[test], positive[test])
             rows.append(
                 {
@@ -140,7 +230,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     vs = sorted({r["v"] for r in rows})
     out = [f"{len(classes)} classes.", "", "### Means over classes (precision / recall / F1)", ""]
     out += ["| rule | " + " | ".join(f"{v} clicks" for v in vs) + " |", "|---|" + "---|" * len(vs)]
-    for rule in RULES:
+    for rule in rules:
         cells = []
         for v in vs:
             sel = [val[(c, v, rule)] for c in classes if (c, v, rule) in val]
@@ -151,34 +241,38 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
             cells.append(f"{m('precision'):.2f} / {m('recall'):.2f} / {m('f1'):.2f}")
         out.append(f"| {rule} | " + " | ".join(cells) + " |")
-    out += ["", "### Paired against R0: F1 (and precision on classes with >= 50 positives)", ""]
-    out += [
-        "| rule | clicks | classes | F1 diff | 95% | precision diff, >= 50 | 95% |",
-        "|---|---:|---:|---:|---|---:|---|",
-    ]
-    for rule in RULES[1:]:
-        for v in vs:
-            d = [
-                val[(c, v, rule)]["f1"] - val[(c, v, "R0")]["f1"]
-                for c in classes
-                if (c, v, rule) in val
-                and (c, v, "R0") in val
-                and not np.isnan(val[(c, v, rule)]["f1"])
-                and not np.isnan(val[(c, v, "R0")]["f1"])
-            ]
-            big = [
-                val[(c, v, rule)]["precision"] - val[(c, v, "R0")]["precision"]
-                for c in classes
-                if (c, v, rule) in val
-                and val[(c, v, rule)]["n_positive"] >= LARGE
-                and not np.isnan(val[(c, v, rule)]["precision"])
-                and not np.isnan(val[(c, v, "R0")]["precision"])
-            ]
-            m, lo, hi = paired(np.array(d))
-            bm, blo, bhi = paired(np.array(big)) if big else (float("nan"),) * 3
-            out.append(
-                f"| {rule} | {v} | {len(d)} | {m:+.3f} | [{lo:+.3f}, {hi:+.3f}] | {bm:+.3f} | [{blo:+.3f}, {bhi:+.3f}] |"
-            )
+    controls = [("R0", list(rules[1:]))]
+    if any(r in GEOMETRY_RULES for r in rules):
+        controls.append(("R1", [r for r in rules if r in GEOMETRY_RULES]))  # #4434's control: the shipped line
+    for control, compared in controls:
+        out += ["", f"### Paired against {control}: F1 (and precision on classes with >= 50 positives)", ""]
+        out += [
+            "| rule | clicks | classes | F1 diff | 95% | precision diff, >= 50 | 95% |",
+            "|---|---:|---:|---:|---|---:|---|",
+        ]
+        for rule in compared:
+            for v in vs:
+                d = [
+                    val[(c, v, rule)]["f1"] - val[(c, v, control)]["f1"]
+                    for c in classes
+                    if (c, v, rule) in val
+                    and (c, v, control) in val
+                    and not np.isnan(val[(c, v, rule)]["f1"])
+                    and not np.isnan(val[(c, v, control)]["f1"])
+                ]
+                big = [
+                    val[(c, v, rule)]["precision"] - val[(c, v, control)]["precision"]
+                    for c in classes
+                    if (c, v, rule) in val
+                    and val[(c, v, rule)]["n_positive"] >= LARGE
+                    and not np.isnan(val[(c, v, rule)]["precision"])
+                    and not np.isnan(val[(c, v, control)]["precision"])
+                ]
+                m, lo, hi = paired(np.array(d))
+                bm, blo, bhi = paired(np.array(big)) if big else (float("nan"),) * 3
+                out.append(
+                    f"| {rule} | {v} | {len(d)} | {m:+.3f} | [{lo:+.3f}, {hi:+.3f}] | {bm:+.3f} | [{blo:+.3f}, {bhi:+.3f}] |"
+                )
     text = "\n".join(out) + "\n"
     (args.out / "summary.md").write_text(text, encoding="utf-8")
     print(text)

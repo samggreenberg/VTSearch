@@ -171,10 +171,22 @@ def save_frame(
     # recorded without the stop-list, so the tag is None.
     keys = [(g, boxes.get(g), id(snap[g].get("local_features")), None) for g in goods]
 
-    def best(page: str, exclude: Optional[str] = None) -> float:
+    def best_fit(page: str, exclude: Optional[str] = None) -> Any:
+        """The page's strongest cached fit over the current templates (the app's ``best_match_stats`` key)."""
         fits = [cache.fit(k, page) for k in keys if k[0] != exclude]
         fits = [f for f in fits if f is not None]
-        return float(max((f.inlier_count if f.model_ok else 0) for f in fits)) if fits else float("nan")
+        return max(fits, key=lambda f: (f.model_ok, f.inlier_count, f.inlier_ratio)) if fits else None
+
+    def best(page: str, exclude: Optional[str] = None) -> float:
+        f = best_fit(page, exclude)
+        return float("nan") if f is None else float(f.inlier_count if f.model_ok else 0)
+
+    def geometry(page: str, exclude: Optional[str] = None) -> tuple[float, float]:
+        """``(inlier ratio, median reprojection error)`` of the page's best fit, for #4434's rules."""
+        f = best_fit(page, exclude)
+        if f is None or not f.model_ok:
+            return float("nan"), float("nan")
+        return float(f.inlier_ratio), float(f.median_reproj_error)
 
     def stage1(queries_from: dict) -> np.ndarray:
         q = s1.vote_queries(queries_from, snap, boxes)
@@ -190,14 +202,19 @@ def save_frame(
     shortlisted = np.zeros(len(pool_ids), dtype=bool)
     shortlisted[order[: s1.LAST_TOP_K]] = True
     inliers = np.array([best(p) if shortlisted[i] else np.nan for i, p in enumerate(pool_ids)], dtype=np.float32)
+    geo = np.array(
+        [geometry(p) if shortlisted[i] else (np.nan, np.nan) for i, p in enumerate(pool_ids)], dtype=np.float32
+    )
     good_ids = list(goods)
     good_loo_inl = np.array([best(g, exclude=g) for g in good_ids], dtype=np.float32)
+    good_loo_geo = np.array([geometry(g, exclude=g) for g in good_ids], dtype=np.float32).reshape(-1, 2)
     good_loo_s1 = np.array(
         [stage1({o: None for o in goods if o != g})[col[g]] if len(goods) > 1 else np.nan for g in good_ids],
         dtype=np.float32,
     )
     bad_ids = list(bads)
     bad_inl = np.array([best(b) for b in bad_ids], dtype=np.float32)
+    bad_geo = np.array([geometry(b) for b in bad_ids], dtype=np.float32).reshape(-1, 2)
     out.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         out / f"{cid.replace('/', '__')}__v{v:03d}.npz",
@@ -206,11 +223,17 @@ def save_frame(
         stage1=s1_all,
         shortlisted=shortlisted,
         inliers=inliers,
+        ratio=geo[:, 0],
+        reproj=geo[:, 1],
         good_ids=np.array(good_ids),
+        good_loo_ratio=good_loo_geo[:, 0],
+        good_loo_reproj=good_loo_geo[:, 1],
         good_loo_inliers=good_loo_inl,
         good_loo_stage1=good_loo_s1,
         bad_ids=np.array(bad_ids),
         bad_inliers=bad_inl,
+        bad_ratio=bad_geo[:, 0],
+        bad_reproj=bad_geo[:, 1],
     )
 
 
