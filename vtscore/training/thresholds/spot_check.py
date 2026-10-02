@@ -69,6 +69,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
+import vtscore.training.thresholds.knobs as _knobs
 from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR
 
 #: The level the likely range is drawn at: each audited band's tail is
@@ -222,18 +223,45 @@ def check_schedule(min_precision: float, alpha: float = CHECK_ALPHA) -> CheckSch
     return CheckSchedule(candidate, rounds_for(candidate), picks)
 
 
-def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
+def balance_schedule(beta: float, alpha: float = CHECK_ALPHA, cap_rule: str | None = None) -> CheckSchedule:
     """The unchecked cap and the walk's start for a balance *beta* (#4413).
 
     The cap is the floor's schedule count for the preset the balance leans
     toward: 32 at beta <= 1 (the 50% schedule), 128 above it (the 10% one).
     It is what holds the mixture's F-beta argmax on a large sparse corpus,
     where the mixture over-counts the positives and would return 2-4x too
-    much (#4411); the walk starts from the same bands.
+    much (#4411); the walk starts from the same bands.  *cap_rule* names
+    another way of tying the cap to beta (:func:`balance_cap`, #4448);
+    ``None`` reads the process's :data:`~vtscore.training.thresholds.knobs.BALANCE_CAP_RULE`.
     """
     if not (BETA_MIN - _EPS <= float(beta) <= BETA_MAX + _EPS):
         raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {beta!r}")
-    return check_schedule(0.5 if float(beta) <= 1.0 + _EPS else 0.1, alpha)
+    rule = _knobs.BALANCE_CAP_RULE if cap_rule is None else cap_rule
+    if rule == "preset":
+        return check_schedule(0.5 if float(beta) <= 1.0 + _EPS else 0.1, alpha)
+    candidate = balance_cap(beta, rule)
+    return CheckSchedule(candidate, rounds_for(candidate), CHECK_MIN_PICKS)
+
+
+def balance_cap(beta: float, rule: str = "preset") -> int:
+    """The balance's unchecked cap at *beta* under *rule* (#4448): the count the mixture's F-beta argmax is held to.
+
+    ``"preset"`` is the shipped rule, the floor schedule's count for the
+    preset the balance leans toward (32 at beta <= 1, 128 above), under
+    which beta 1/2 and 1 keep the same line.  ``"beta"`` (the pricing arm)
+    scales the cap with beta - ``32 * beta`` below 1, ``32 * beta**2``
+    above, the two shipped anchors unchanged - on the walk's band edges and
+    never under two bands: 16 / 16 / 16 / 32 / 128 / 256 / 512 at beta
+    1/4 / 1/3 / 1/2 / 1 / 2 / 3 / 4.
+    """
+    b = float(beta)
+    if rule == "preset":
+        return check_schedule(0.5 if b <= 1.0 + _EPS else 0.1).candidate
+    if rule != "beta":
+        raise ValueError(f"balance cap rule must be one of {_knobs.BALANCE_CAP_RULES}, got {rule!r}")
+    raw = CHECK_BASE_CANDIDATE * (b if b < 1.0 else b * b)
+    edge = BAND_BASE * 2 ** int(round(math.log2(max(raw, BAND_BASE) / BAND_BASE)))
+    return max(2 * BAND_BASE, edge)
 
 
 def resolve_line_knobs(min_precision: float | str | None, beta: float | None) -> tuple[float | None, float | None]:
@@ -1429,6 +1457,7 @@ __all__ = [
     "mixture_posterior",
     "fbeta_count",
     "fbeta_score",
+    "balance_cap",
     "balance_schedule",
     "balance_count",
     "balance_line",

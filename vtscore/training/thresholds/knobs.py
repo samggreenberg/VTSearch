@@ -282,6 +282,17 @@ ACQUISITION_INCLUSION_OFFSET = -4
 #: the factor as a knob for the re-pricing (#4428).
 ACQUISITION_ARGMAX_FACTOR: float | None = None
 
+#: How the balance's unchecked cap follows beta (#4448).  ``"preset"``, the
+#: shipped rule: the floor schedule's count for the preset the balance leans
+#: toward, 32 at beta <= 1 and 128 above - under which the 1/2 and 1 presets
+#: keep the same line.  ``"beta"``, the pricing arm: the cap scales with beta
+#: (32 * beta below 1, 32 * beta**2 above, on the band edges, never under 16),
+#: so each preset keeps its own count.  Read at call time by
+#: :func:`~vtscore.training.thresholds.spot_check.balance_schedule`; the
+#: harness sets it from ``CALIB_BALANCE_CAP_RULE``.
+BALANCE_CAP_RULE: str = "preset"
+BALANCE_CAP_RULES: tuple[str, ...] = ("preset", "beta")
+
 
 def acquisition_inclusion(inclusion_value: float, offset: float = ACQUISITION_INCLUSION_OFFSET) -> float:
     """The inclusion the **selector's** cut is taken at, given the reporting one.

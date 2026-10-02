@@ -31,6 +31,16 @@ import numpy as np  # noqa: E402
 
 import experiment_config as cfg  # noqa: E402
 
+if cfg.BALANCE_CAP_RULE:
+    # #4448: the balance's cap rule is a process-wide knob, set before any line is drawn.
+    from vtscore.training.thresholds import knobs as _knobs  # noqa: E402
+
+    if cfg.BALANCE_CAP_RULE not in _knobs.BALANCE_CAP_RULES:
+        raise SystemExit(
+            f"CALIB_BALANCE_CAP_RULE must be one of {_knobs.BALANCE_CAP_RULES}, got {cfg.BALANCE_CAP_RULE!r}"
+        )
+    _knobs.BALANCE_CAP_RULE = cfg.BALANCE_CAP_RULE
+
 
 def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]]:
     out: dict[str, dict[str, list[str]]] = {}
@@ -313,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
         f"live_threshold={cfg.LIVE_THRESHOLD or 'shipped'} "
         f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
-        f"acq_p_crossing={cfg.ACQ_P_CROSSING} "
+        f"acq_p_crossing={cfg.ACQ_P_CROSSING} balance_cap_rule={cfg.BALANCE_CAP_RULE or 'preset'} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'} "
         f"opening_diversity={cfg.OPENING_DIVERSITY or 'off'} "
         f"calibration_seed={cal_seed if cal_seed is not None else 'app pin'}"

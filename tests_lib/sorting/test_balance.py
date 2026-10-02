@@ -28,6 +28,7 @@ from vtscore.training.thresholds import (
     SpotCheck,
     applicable_balance,
     applicable_result,
+    balance_cap,
     balance_count,
     balance_line,
     balance_schedule,
@@ -75,6 +76,39 @@ class TestTheArithmetic:
         assert BALANCE_PRESETS == (0.5, 1.0, 2.0) and DEFAULT_BETA == 1.0
         assert balance_schedule(0.5).candidate == balance_schedule(1.0).candidate == check_schedule(0.5).candidate == 32
         assert balance_schedule(2.0).candidate == check_schedule(0.1).candidate == 128
+
+    def test_the_beta_cap_rule_scales_the_cap_and_keeps_the_shipped_anchors(self):
+        """#4448's pricing knob: the cap follows beta (32 * beta below 1, 32 * beta**2 above, on the band
+        edges, never under 16), so each preset keeps its own count; the shipped rule gives 1/2 and 1 the same cap."""
+        from vtscore.training.thresholds.spot_check import CHECK_MIN_PICKS, rounds_for  # noqa: PLC0415
+
+        assert [balance_cap(b, "beta") for b in (0.25, 1 / 3, 0.5, 1.0, 2.0, 3.0, 4.0)] == [
+            16,
+            16,
+            16,
+            32,
+            128,
+            256,
+            512,
+        ]
+        assert (
+            balance_cap(1.0, "beta") == balance_cap(1.0) == 32 and balance_cap(2.0, "beta") == balance_cap(2.0) == 128
+        )
+        assert balance_cap(0.5) == balance_cap(0.25) == 32, "the shipped rule: every precision-leaning beta shares 32"
+        sched = balance_schedule(3.0, cap_rule="beta")
+        assert (sched.candidate, sched.rounds, sched.picks) == (256, rounds_for(256), CHECK_MIN_PICKS)
+        assert balance_schedule(3.0).candidate == 128, "the process default is the shipped rule"
+        with pytest.raises(ValueError, match="cap rule"):
+            balance_cap(1.0, "sqrt")
+
+    def test_the_process_cap_rule_reaches_the_count_and_the_walk(self, monkeypatch):
+        from vtscore.training.thresholds import knobs  # noqa: PLC0415
+
+        monkeypatch.setattr(knobs, "BALANCE_CAP_RULE", "beta")
+        assert balance_schedule(0.5).candidate == 16 and balance_count(0.5, None) == 16
+        ranking, _ = _planted(52)
+        assert SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 0.5, 52.0, seed=0).start_k == 16
+        assert SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 4.0, 52.0, seed=0).start_k == 512
 
     @pytest.mark.parametrize("bad", [0.0, 0.1, 5.0, -1.0])
     def test_a_balance_outside_the_range_is_refused(self, bad):

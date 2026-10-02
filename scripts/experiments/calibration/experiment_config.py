@@ -1028,6 +1028,9 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_ADVISORY = os.environ.get("CALIB_WALK_ADVISORY", "").strip().lower() in ("1", "true", "yes")
 WALK_SHALLOW_ONLY = os.environ.get("CALIB_WALK_SHALLOW_ONLY", "").strip().lower() in ("1", "true", "yes")
+#: The balance's cap rule (``CALIB_BALANCE_CAP_RULE=beta``, #4448): the unchecked cap follows beta instead of the
+#: preset's 32 / 128 (``balance_cap``); empty is the shipped rule.
+BALANCE_CAP_RULE = os.environ.get("CALIB_BALANCE_CAP_RULE", "").strip().lower() or None
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None
