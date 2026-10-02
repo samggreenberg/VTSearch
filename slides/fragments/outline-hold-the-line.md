@@ -24,10 +24,10 @@
 <!-- **c** — Section 2 puts the line where the *data* says. Four ideas in
      order, each one repairing what the last one starved on. -->
 
-<!-- **d** — Section 3 puts it where the *user* says instead. Same machinery,
-     second axis: a slider, what it took to make it mean anything, the
-     number a person could actually say that took its place, and the balance
-     that took that one's. -->
+<!-- **d** — Section 3 puts it where the *user* says instead: what the two
+     mistakes cost, the three radios that choose between them, what the line
+     can and cannot claim before anyone checks — and the second job the same
+     fit does. -->
 
 <!-- **e** — Section 4 is the half of asking the threshold does not do: the
      places no vote has been, and the atlas that knows where they are. -->

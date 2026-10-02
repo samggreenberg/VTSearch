@@ -26,8 +26,7 @@
 
 <!-- On FullMarks (v5.0, 5,000 pages, the same 10 votes for every rule),
      scoring by the best template ranks the pages still unlabelled at AP
-     0.87, against 0.74 for the query alone. The app scores exactly this way:
-     a learned classifier that used to replace the count did worse, and is
-     gone (#4169). With the tiled Stage 1 the app's own path now scores the
-     same 0.87 in this test (#4378). And Bad votes
-     never enter the ranking: they set where its line falls (#4367). -->
+     0.87, against 0.74 for the query alone. The app scores exactly this way,
+     and with the tiled Stage 1 its own path scores the same 0.87 in this
+     test (#4378). Bad votes never enter the ranking: they set where its line
+     falls (#4367). -->

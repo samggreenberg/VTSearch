@@ -21,8 +21,8 @@
      the page's keypoints differ from it: 64 × 128 = 8,192 numbers. -->
 
 <!-- **b** — Stage 1 compares the query's vector with every page's, all in
-     one matrix multiply, and keeps the top few. (On documents it now
-     compares tiles instead of whole pages — next slide.) -->
+     one matrix multiply, and keeps the top few. (On documents it compares
+     tiles, not whole pages — next slide.) -->
 
 <!-- **c** — Stage 2 checks only those, the slow way, and ranks them by how
      many agree. These four are the real top of Tobacco800's 1,290 pages for
