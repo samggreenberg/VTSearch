@@ -52,3 +52,32 @@ def test_rules_accept_what_they_promise(gr):
 def test_the_bad_ceiling_without_bads_is_the_shipped_gate(gr):
     z = _frame(bad_inliers=np.array([], dtype=np.float32))
     assert gr.accept("R1", z).tolist() == gr.accept("R0", z).tolist()
+
+
+def _geo_frame(**kw):
+    base = _frame()
+    base.update(
+        {
+            "ratio": np.array([0.9, 0.4, 0.95, 0.8, np.nan], dtype=np.float32),
+            "reproj": np.array([0.001, 0.006, 0.002, 0.001, np.nan], dtype=np.float32),
+            "good_loo_ratio": np.array([0.9, 0.85], dtype=np.float32),
+            "good_loo_reproj": np.array([0.001, 0.002], dtype=np.float32),
+            "bad_ratio": np.array([0.4], dtype=np.float32),
+            "bad_reproj": np.array([0.006], dtype=np.float32),
+        }
+    )
+    base.update(kw)
+    return base
+
+
+def test_m1_adds_the_geometry_cuts_on_top_of_the_bad_ceiling(gr):
+    z = _geo_frame()
+    cuts = {"ratio_min": 0.75, "reproj_max": 0.005}
+    # R1 keeps pages 0 and 1 (above the Bad's 30); page 1's loose geometry (ratio 0.4) drops it.
+    assert gr.accept("R1", z).tolist() == [True, True, False, False, False]
+    assert gr.accept_geometry("M1", z, cuts).tolist() == [True, False, False, False, False]
+
+
+def test_m2_falls_back_to_the_bad_ceiling_with_too_few_votes(gr):
+    z = _geo_frame()  # 2 Goods, 1 Bad: below MIN_VOTES_M2
+    assert gr.accept_geometry("M2", z, None).tolist() == gr.accept("R1", z).tolist()
