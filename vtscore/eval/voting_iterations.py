@@ -1952,6 +1952,7 @@ def simulate_voting_iterations(  # noqa: C901
     walk_fine: bool = False,
     walk_guard: Optional[float] = None,
     walk_advisory: bool = False,
+    walk_shallow_only: bool = False,
     spot_check: str = "end",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
@@ -2318,9 +2319,12 @@ def simulate_voting_iterations(  # noqa: C901
             every band past the start is split in two, *walk_guard* the
             precision guard (a deeper band whose audited share right is below
             it times the start set's ends the walk at the best set so far)
-            and *walk_advisory* whether the walk's end moves the line at all
+            *walk_advisory* whether the walk's end moves the line at all
             (``True``: the check runs and its votes train, the line keeps the
-            unchecked count).  All apply to the end-of-run balance walk only.
+            unchecked count) and *walk_shallow_only* whether the walk never
+            tries a deeper band (``True``: it audits the start set and steps
+            shallower while the estimate does not fall, so the check can only
+            cut the line).  All apply to the end-of-run balance walk only.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272, the band walk of #4388).  ``"end"`` (the default): once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
@@ -2812,6 +2816,7 @@ def simulate_voting_iterations(  # noqa: C901
                     tol=walk_tol,
                     fine=walk_fine,
                     guard=walk_guard,
+                    shallow_only=walk_shallow_only,
                 )
             else:
                 check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]

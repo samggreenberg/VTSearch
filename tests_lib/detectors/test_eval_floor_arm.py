@@ -201,6 +201,13 @@ class TestTheBalanceArm:
         assert check_rows and [p for p in picks if p["phase"] == "check"], "the check ran and voted"
         assert all(r["floor_status"] == FLOOR_UNCHECKED for r in check_rows), "the line never took the walk's end"
 
+    def test_a_shallower_only_walk_ends_at_or_above_its_start(self):
+        """#4427's shallow arm: the check runs and can only cut the line, never deepen it."""
+        rows, picks = self._run(beta=1.0, walk_shallow_only=True)
+        check_rows = [r for r in rows if r["phase"] == "check"]
+        assert check_rows and [p for p in picks if p["phase"] == "check"], "the check ran and voted"
+        assert check_rows[-1]["floor_count"] <= check_rows[0]["floor_count"], "it never deepened"
+
     def test_the_line_is_the_balances_and_the_floor_is_unused(self):
         rows, _ = self._run(beta=1.0, min_precision=0.9)
         steps = [r for r in rows if r["phase"] not in ("check", "")]

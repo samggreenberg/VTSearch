@@ -472,6 +472,11 @@ class SpotCheck:
     #: The start set's band-weighted share right, read once its bands are
     #: audited; what the guard compares a deeper band against.
     start_share: float | None = None
+    #: The shallower-only walk (#4427's ``shallow`` arm): the start set is the
+    #: deepest the walk may keep; from it, shallower while the estimate does
+    #: not fall, on the start's own audits.  Off, the shipped walk, it tries
+    #: one band deeper first.
+    shallow_only: bool = False
     #: The union under test: the top *bands* bands, ``edges[bands]`` items.
     bands: int = 1
     #: The deepest union whose estimate met the floor, if any.
@@ -550,6 +555,7 @@ class SpotCheck:
         tol: float = 0.0,
         fine: bool = False,
         guard: float | None = None,
+        shallow_only: bool = False,
     ) -> "SpotCheck":
         """A running balance walk (#4413): the same bands and picks, stopped at the F-beta peak.
 
@@ -565,7 +571,10 @@ class SpotCheck:
         band past the start split in two, :func:`band_edges_fine`) and *guard*
         (a deeper band whose audited share right is below *guard* times the
         start set's ends the walk at the best set so far: the walk may not buy
-        recall with a band that is mostly wrong, whatever the estimate says).
+        recall with a band that is mostly wrong, whatever the estimate says)
+        and *shallow_only* (the walk never tries a deeper band: the start set
+        is audited and the walk steps shallower while the estimate does not
+        fall, so it costs the start's picks alone and can only cut the line).
         """
         schedule = balance_schedule(beta, alpha)
         if not (n_pos > 0):
@@ -592,6 +601,7 @@ class SpotCheck:
         check.min_precision = float("nan")
         check.tol = float(tol)
         check.guard = None if guard is None else float(guard)
+        check.shallow_only = bool(shallow_only)
         return check
 
     # ---- what the check is looking at
@@ -831,6 +841,8 @@ class SpotCheck:
 
     def _walk_deeper_or_turn(self, est: float) -> None:
         """From the start or a deeper step: deeper on a rise (or a flat step within the tolerance), else the peak or a turn."""
+        if self._shallow_only_turns(est):
+            return
         if self.best is None or est > (self.best_estimate or 0.0) + _EPS:
             self.best, self.best_estimate = self.bands, est
             if self.bands < self.n_bands:
@@ -858,6 +870,20 @@ class SpotCheck:
         self.direction = WALK_SHALLOWER
         self.bands = self.best - 1
         self.k = int(self.edges[self.bands])
+
+    def _shallow_only_turns(self, est: float) -> bool:
+        """The shallower-only walk (#4427): the audited start set is the best so far and the walk turns
+        shallower at once, never trying a deeper band; a start on the first band is the kept set."""
+        if not self.shallow_only or self.direction != WALK_START:
+            return False
+        self.best, self.best_estimate = self.bands, est
+        if self.bands <= 1:
+            self._finish(BALANCE_CHECKED, self.bands)
+            return True
+        self.direction = WALK_SHALLOWER
+        self.bands = self.best - 1
+        self.k = int(self.edges[self.bands])
+        return True
 
     def _flat_within_tolerance(self, est: float) -> bool:
         return (

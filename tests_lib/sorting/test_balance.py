@@ -286,6 +286,22 @@ class TestTheWalk:
         assert tolerant.k >= strict.k
         assert tolerant.round >= strict.round
 
+    def test_a_shallower_only_walk_never_tries_a_deeper_band(self):
+        """#4427's shallow arm: the start set is audited and the walk only steps back from it, on the start's
+        own picks; where the app's walk deepens to 64 it keeps the start's 32, and from a start past the
+        peak it finds the peak one round sooner than the app's walk (no deeper band to fall on)."""
+        ranking, positives = _planted(52)
+        unvoted = ranking.unvoted_ids().tolist()
+        shallow = _finish(SpotCheck.start_balance(unvoted, 1.0, 52.0, seed=0, shallow_only=True), positives)
+        assert shallow.status == BALANCE_CHECKED and shallow.k == shallow.start_k == 32
+        assert shallow.direction == WALK_SHALLOWER
+        assert shallow.round == 3 and len(shallow.labels) == 15, "the start's three bands, nothing deeper"
+        from_past = _finish(
+            SpotCheck.start_balance(unvoted, 1.0, 52.0, seed=0, start_count=128, shallow_only=True), positives
+        )
+        assert from_past.k == 64 and from_past.round == 5, "128's five bands; 64 and 32 read off them"
+        assert not SpotCheck.start_balance(unvoted, 1.0, 52.0).shallow_only, "the app's walk tries deeper"
+
     def test_the_precision_guard_refuses_a_band_that_is_mostly_wrong(self):
         """#4427's guard arm: a deeper band well below the start set's share right ends the walk at the start,
         even where the F-beta estimate would have risen on its recall; a looser guard lets it through."""
