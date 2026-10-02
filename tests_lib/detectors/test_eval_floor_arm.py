@@ -184,13 +184,22 @@ class TestTheBalanceArm:
         return rows, picks
 
     def test_the_walks_arms_reach_the_end_of_run_check(self):
-        """#4427: picks / tol / fine shape the end-of-run balance walk; off, it is the app's."""
-        rows, _ = self._run(beta=1.0, walk_picks=3, walk_tol=0.02, walk_fine=True)
+        """#4427: picks / tol / fine / guard shape the end-of-run balance walk; off, it is the app's."""
+        rows, _ = self._run(beta=1.0, walk_picks=3, walk_tol=0.02, walk_fine=True, walk_guard=0.5)
         check_rows = [r for r in rows if r["phase"] == "check"]
         assert check_rows, "the balance arm checks the line"
         assert check_rows[0]["check_labelled"] <= 3, "three picks a band"
         with pytest.raises(ValueError, match="tol must be"):
             self._run(beta=1.0, walk_tol=-0.1)
+        with pytest.raises(ValueError, match="guard must be"):
+            self._run(beta=1.0, walk_guard=-1.0)
+
+    def test_an_advisory_walk_votes_but_never_moves_the_line(self):
+        """#4427's advisory arm: the check's rows exist and its picks train, but the line stays unchecked."""
+        rows, picks = self._run(beta=1.0, walk_advisory=True)
+        check_rows = [r for r in rows if r["phase"] == "check"]
+        assert check_rows and [p for p in picks if p["phase"] == "check"], "the check ran and voted"
+        assert all(r["floor_status"] == FLOOR_UNCHECKED for r in check_rows), "the line never took the walk's end"
 
     def test_the_line_is_the_balances_and_the_floor_is_unused(self):
         rows, _ = self._run(beta=1.0, min_precision=0.9)

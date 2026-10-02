@@ -286,6 +286,26 @@ class TestTheWalk:
         assert tolerant.k >= strict.k
         assert tolerant.round >= strict.round
 
+    def test_the_precision_guard_refuses_a_band_that_is_mostly_wrong(self):
+        """#4427's guard arm: a deeper band well below the start set's share right ends the walk at the start,
+        even where the F-beta estimate would have risen on its recall; a looser guard lets it through."""
+        # 200 items: the top 32 hold 29 positives (91% right), the next band of 32 holds 13 (41%), nothing
+        # beyond.  With 42 positives, F1 rises from 0.78 at 32 to 0.79 at 64, so the app's walk deepens.
+        ids = list(range(1, 201))
+        positives = set(range(1, 30)) | set(range(33, 46))
+        ranking = LineRanking.from_scores(ids, [1.0 - i / 1000 for i in range(200)], set())
+        unvoted = ranking.unvoted_ids().tolist()
+        plain = _finish(SpotCheck.start_balance(unvoted, 1.0, 42.0, seed=1, picks=64), positives)
+        assert plain.k == 64, "a census of each band; the estimate rises at 64"
+        guarded = _finish(SpotCheck.start_balance(unvoted, 1.0, 42.0, seed=1, picks=64, guard=1.0), positives)
+        assert guarded.k == 32 and guarded.status == BALANCE_CHECKED
+        assert guarded.start_share == pytest.approx(29 / 32)
+        loose = _finish(SpotCheck.start_balance(unvoted, 1.0, 42.0, seed=1, picks=64, guard=0.4), positives)
+        assert loose.k == 64, "41% is above 0.4 x 91%"
+        with pytest.raises(ValueError, match="guard must be"):
+            SpotCheck.start_balance(unvoted, 1.0, 42.0, guard=-1)
+        assert SpotCheck.start_balance(unvoted, 1.0, 42.0).guard is None, "the app passes no guard"
+
     def test_a_floor_walk_is_unchanged(self):
         ranking, positives = _planted(52)
         check = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)

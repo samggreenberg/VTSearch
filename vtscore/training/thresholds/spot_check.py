@@ -464,6 +464,14 @@ class SpotCheck:
     #: estimate is within this of the best is flat, not a fall, and the walk
     #: looks one band further before deciding; 0 is the shipped strict rise.
     tol: float = 0.0
+    #: The precision guard (#4427's ``guard`` arm): a deeper band whose audited
+    #: share right is below ``guard`` times the start set's ends the walk at
+    #: the best set so far, whatever the F-beta estimate says.  ``None`` is the
+    #: shipped walk, which deepens on the estimate alone.
+    guard: float | None = None
+    #: The start set's band-weighted share right, read once its bands are
+    #: audited; what the guard compares a deeper band against.
+    start_share: float | None = None
     #: The union under test: the top *bands* bands, ``edges[bands]`` items.
     bands: int = 1
     #: The deepest union whose estimate met the floor, if any.
@@ -541,6 +549,7 @@ class SpotCheck:
         picks: int | None = None,
         tol: float = 0.0,
         fine: bool = False,
+        guard: float | None = None,
     ) -> "SpotCheck":
         """A running balance walk (#4413): the same bands and picks, stopped at the F-beta peak.
 
@@ -552,14 +561,19 @@ class SpotCheck:
 
         The arms of #4427, all off in the app: *picks* a band (the
         schedule's 5), *tol* (a deeper step within it of the best is flat and
-        the walk looks one band further; 0 is the strict rise) and *fine*
-        (every band past the start split in two, :func:`band_edges_fine`).
+        the walk looks one band further; 0 is the strict rise), *fine* (every
+        band past the start split in two, :func:`band_edges_fine`) and *guard*
+        (a deeper band whose audited share right is below *guard* times the
+        start set's ends the walk at the best set so far: the walk may not buy
+        recall with a band that is mostly wrong, whatever the estimate says).
         """
         schedule = balance_schedule(beta, alpha)
         if not (n_pos > 0):
             raise ValueError("a balance walk needs a positive count of the ranking's positives")
         if tol < 0:
             raise ValueError(f"tol must be >= 0, got {tol!r}")
+        if guard is not None and guard < 0:
+            raise ValueError(f"guard must be >= 0, got {guard!r}")
         if picks is not None and picks < 1:
             raise ValueError(f"picks must be >= 1, got {picks!r}")
         start = start_count if start_count is not None else schedule.candidate
@@ -577,6 +591,7 @@ class SpotCheck:
         check.n_pos = float(n_pos)
         check.min_precision = float("nan")
         check.tol = float(tol)
+        check.guard = None if guard is None else float(guard)
         return check
 
     # ---- what the check is looking at
@@ -805,41 +820,56 @@ class SpotCheck:
         if est is None:
             self._finish(BALANCE_CHECKED, max(1, self.bands))
             return
+        if self.direction == WALK_START:
+            self.start_share = self.estimate()
+        elif self._guard_stops():
+            return
         if self.direction in (WALK_START, WALK_DEEPER):
-            if self.best is None or est > (self.best_estimate or 0.0) + _EPS:
-                self.best, self.best_estimate = self.bands, est
-                if self.bands < self.n_bands:
-                    self.direction = WALK_DEEPER
-                    self.bands += 1
-                    self.k = int(self.edges[self.bands])
-                    return
-                # The last band.  Reached by rising, it is the peak; started
-                # on, it has not been compared with anything yet.
-                if self.direction == WALK_DEEPER or self.bands <= 1:
-                    self._finish(BALANCE_CHECKED, self.bands)
-                    return
-            elif (
-                self.tol > 0
-                and self.best is not None
-                and est >= (self.best_estimate or 0.0) - self.tol
-                and self.bands - self.best < 2
-                and self.bands < self.n_bands
-            ):
-                # Flat within the tolerance (#4427): look one band further
-                # before calling it the peak.  The best stays where it was.
+            self._walk_deeper_or_turn(est)
+        else:
+            self._walk_shallower(est)
+
+    def _walk_deeper_or_turn(self, est: float) -> None:
+        """From the start or a deeper step: deeper on a rise (or a flat step within the tolerance), else the peak or a turn."""
+        if self.best is None or est > (self.best_estimate or 0.0) + _EPS:
+            self.best, self.best_estimate = self.bands, est
+            if self.bands < self.n_bands:
                 self.direction = WALK_DEEPER
                 self.bands += 1
                 self.k = int(self.edges[self.bands])
                 return
-            elif self.best != self.start_bands or self.best <= 1:
-                # The estimate fell after a rise: the peak was the last set.
-                self._finish(BALANCE_CHECKED, self.best)
+            # The last band.  Reached by rising, it is the peak; started
+            # on, it has not been compared with anything yet.
+            if self.direction == WALK_DEEPER or self.bands <= 1:
+                self._finish(BALANCE_CHECKED, self.bands)
                 return
-            # The first step from the start fell, or there was none: try the other way.
-            self.direction = WALK_SHALLOWER
-            self.bands = self.best - 1
+        elif self._flat_within_tolerance(est):
+            # Flat within the tolerance (#4427): look one band further
+            # before calling it the peak.  The best stays where it was.
+            self.direction = WALK_DEEPER
+            self.bands += 1
             self.k = int(self.edges[self.bands])
             return
+        elif self.best != self.start_bands or self.best <= 1:
+            # The estimate fell after a rise: the peak was the last set.
+            self._finish(BALANCE_CHECKED, self.best)
+            return
+        # The first step from the start fell, or there was none: try the other way.
+        self.direction = WALK_SHALLOWER
+        self.bands = self.best - 1
+        self.k = int(self.edges[self.bands])
+
+    def _flat_within_tolerance(self, est: float) -> bool:
+        return (
+            self.tol > 0
+            and self.best is not None
+            and est >= (self.best_estimate or 0.0) - self.tol
+            and self.bands - self.best < 2
+            and self.bands < self.n_bands
+        )
+
+    def _walk_shallower(self, est: float) -> None:
+        """Shallower while the estimate does not fall; the peak is the kept set."""
         if self.best is not None and est >= (self.best_estimate or 0.0) - _EPS:
             self.best, self.best_estimate = self.bands, est
             if self.bands <= 1:
@@ -849,6 +879,17 @@ class SpotCheck:
             self.k = int(self.edges[self.bands])
             return
         self._finish(BALANCE_CHECKED, self.best if self.best is not None else 1)
+
+    def _guard_stops(self) -> bool:
+        """The precision guard (#4427): end the walk at the best set so far when the band just audited on a
+        deeper step is below ``guard`` times the start set's share right, whatever the estimate says."""
+        if self.direction != WALK_DEEPER or self.guard is None or self.start_share is None:
+            return False
+        _size, labelled, right = self.band_counts(self.bands - 1)
+        if not labelled or right / labelled >= self.guard * self.start_share:
+            return False
+        self._finish(BALANCE_CHECKED, self.best if self.best is not None else max(1, self.bands - 1))
+        return True
 
     def _finish(self, status: str, bands: int) -> None:
         self.status = status
