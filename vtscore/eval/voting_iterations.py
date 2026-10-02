@@ -1950,6 +1950,8 @@ def simulate_voting_iterations(  # noqa: C901
     walk_picks: Optional[int] = None,
     walk_tol: float = 0.0,
     walk_fine: bool = False,
+    walk_guard: Optional[float] = None,
+    walk_advisory: bool = False,
     spot_check: str = "end",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
@@ -2312,9 +2314,13 @@ def simulate_voting_iterations(  # noqa: C901
         walk_picks: The balance walk's picks a band (#4427's arms; the
             schedule's 5 when ``None``), *walk_tol* its tolerance (a deeper
             step within it of the best is flat and the walk looks one band
-            further; 0, the app's, is the strict rise) and *walk_fine* whether
-            every band past the start is split in two.  All three apply to
-            the end-of-run balance walk only.
+            further; 0, the app's, is the strict rise), *walk_fine* whether
+            every band past the start is split in two, *walk_guard* the
+            precision guard (a deeper band whose audited share right is below
+            it times the start set's ends the walk at the best set so far)
+            and *walk_advisory* whether the walk's end moves the line at all
+            (``True``: the check runs and its votes train, the line keeps the
+            unchecked count).  All apply to the end-of-run balance walk only.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272, the band walk of #4388).  ``"end"`` (the default): once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
@@ -2805,6 +2811,7 @@ def simulate_voting_iterations(  # noqa: C901
                     picks=walk_picks,
                     tol=walk_tol,
                     fine=walk_fine,
+                    guard=walk_guard,
                 )
             else:
                 check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
@@ -2936,7 +2943,9 @@ def simulate_voting_iterations(  # noqa: C901
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
                     min_precision=floor,
-                    check=check,
+                    # The advisory arm (#4427): the check runs and its votes
+                    # train, but the line never moves to the walk's end.
+                    check=None if walk_advisory else check,
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     beta=beta,
                 )
