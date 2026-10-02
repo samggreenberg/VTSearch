@@ -28,7 +28,7 @@ whole second half, and are not this page's argument to make.
 Named rather than sampled because in *this* corpus the two are very different
 pictures, and the reason is worth writing down. COCO files a frame under `book`
 when its largest annotated box happens to be one, and `photos-prod` is
-deliberately disjoint from `photos` (`coco_fixture.DISJOINT_FROM`), so the
+deliberately disjoint from `photos-train` (`coco_fixture.DISJOINT_FROM`), so the
 training pile has already taken the forty-four frames where a book fills the
 picture and what is left is mostly living rooms with a shelf somewhere in them.
 Twelve at random came out as two people playing Wii, a man with a sandwich and a

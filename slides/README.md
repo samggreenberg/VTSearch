@@ -399,7 +399,7 @@ composed into the same box a screenshot occupies, so the Find slide's build
 reveals into the same frame rather than moving it.
 
 The intro groups are **one session**, shot in the order a user works, from an
-app with nothing in it: import `photos` through the Add Dataset dialog, create
+app with nothing in it: import `photos-train` through the Add Dataset dialog, create
 the detector through the modal, answer what autopilot serves until the Good and
 Bad piles have something in them, import `photos-prod` the same way, then run
 the trained head over it — a second COCO corpus that shares no frame with the

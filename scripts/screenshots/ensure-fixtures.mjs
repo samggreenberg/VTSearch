@@ -23,8 +23,8 @@
  *
  * The dashboard shows every dataset and detector in the app, so a run also
  * removes the fixtures this harness used to build (the synthetic `syn-imgs` /
- * `syn-patch` / `doc-demo`) and the slide deck's Book example (`photos`, … ,
- * `Books`), which its own shooter rebuilds every run. It never touches a
+ * `syn-patch` / `doc-demo`) and the slide deck's Book example (`photos-train`,
+ * … , `Book detector`), which its own shooter rebuilds every run. It never touches a
  * dataset or detector it does not know by name.
  *
  * Usage:  node ensure-fixtures.mjs   (APP env overrides the URL)
