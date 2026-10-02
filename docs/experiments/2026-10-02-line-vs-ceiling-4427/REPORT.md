@@ -5,11 +5,14 @@ share of the best cut fell under the shallower acquisition. **Date:**
 2026-10-02. **Data:** the #4409 arms (dev at 98cdacc7c: line − 4, the F-beta
 argmax × 1.0 and × 0.5, at beta 0.5 / 1 / 2, 144 Binary cells × 5 seeds
 each), the #4428 sweep's × 0.25 arms (dev at ee6605262), and five walk arms
-at beta 1 under the × 0.5 cut (dev + #4431's knobs, `vts-4427-walk`). Rank
-frames and session rows throughout; nothing here needed a new model.
+at beta 1 under the × 0.5 cut (dev + #4431's knobs, `vts-4427-walk`), and
+the check-shape arms of section 5 (the app's walk, two precision guards, an
+advisory walk and a shallower-only walk at beta 0.5 / 1 / 2, 144 Binary
+cells × 5 seeds, line − 4, `vts-4427-guard`). Rank frames and session rows
+throughout; nothing here needed a new model.
 **Scripts:** `ceiling_gap.py` (the line against the best cut on the frames),
 `../2026-10-01-acquisition-fbeta-4409/withheld_at_threshold.py` (the objective
-off the session rows), `compare_arms.py`, `figs_objective.py`.
+off the session rows), `compare_arms.py`, `figs_objective.py`, `figs_check.py`.
 
 **What it found, in order.** (1) On the withheld half the unchecked line
 keeps 0.79 of the best cut's F1 at beta 1; the best cut is deeper than the
@@ -23,7 +26,11 @@ user's pool, ends shallow. (4) Which raised the question the owner settled:
 the app holds** - not the rank-count line the review had been reading. (5) On
 that objective the × 0.5 cut was worse at every preset and was reverted
 (#4437); the walk arms are a wash; and the end-of-session check itself
-lowers the objective under the line − 4 cut at beta ≤ 1.
+lowers the objective under the line − 4 cut at beta ≤ 1. (6) Re-shaping the
+check (section 5): a precision guard loses further; a shallower-only walk is
+never worse than the app's walk (+0.01 to +0.02); an advisory check (votes
+train, the line stays at the unchecked rule) is the best at beta 0.5 and 1
+(+0.09, +0.04) and the worst at beta 2 (−0.02).
 
 ## 1. The unchecked line against the best cut (rank frames, withheld half)
 
@@ -168,17 +175,55 @@ precision (0.46 → 0.66). Against no check at all the gain is +0.027 at beta
 let the check move the line".
 
 The owner's rule was "ships only if it stops losing": the guard does not,
-the advisory walk does. The owner asked for one more round before deciding
-(advisory at beta 2, a shallower-only walk that can only cut the line, and
-5 seeds throughout); its result follows below.
+the advisory walk does. The owner asked for one more round before deciding:
+advisory at beta 2, a **shallower-only walk** (it audits the bands holding
+the line and may trim them, never walks past them; `shallow_only=True`,
+15 picks instead of 21), and 5 seeds throughout.
+
+### 5.1 Round two: every preset, 5 seeds
+
+![The check's shape per preset](figures/objective_check.png)
+
+The objective after the check (`objective_check_beta{0.5,1,2}.md`; d is
+paired against the app's walk, ± SE; the unchecked line is the same in
+every arm of a preset):
+
+| beta | unchecked | app's walk | shallower-only | advisory |
+|---|---:|---:|---:|---:|
+| 0.5 | 0.526 | 0.466 | 0.488 (+0.022 ± 0.003) | **0.564 (+0.090 ± 0.005)** |
+| 1 | 0.502 | 0.468 | 0.487 (+0.019 ± 0.002) | **0.513 (+0.037 ± 0.005)** |
+| 2 | 0.507 | 0.509 | **0.517 (+0.008 ± 0.002)** | 0.501 (−0.019 ± 0.005) |
+
+What each arm hands the user at click 150 (returned on the withheld half,
+precision, recall; the check's votes):
+
+| beta | app's walk | shallower-only | advisory |
+|---|---|---|---|
+| 0.5 | 67 at 0.46 / 0.57, 21 votes | 51 at 0.49 / 0.54, 15 votes | 33 at 0.66 / 0.46, 21 votes |
+| 1 | 75 at 0.42 / 0.59, 21 votes | 55 at 0.46 / 0.55, 15 votes | 35 at 0.65 / 0.46, 21 votes |
+| 2 | 115 at 0.35 / 0.63, 30 votes | 93 at 0.36 / 0.62, 25 votes | 48 at 0.64 / 0.48, 30 votes |
+
+- **The shallower-only walk is never worse than the app's walk**, at every
+  preset, for fewer votes: it keeps the walk from buying recall with bands
+  that are mostly wrong, which is where the app's walk loses at beta ≤ 1.
+  Its gain is modest (+0.02 / +0.02 / +0.01).
+- **Advisory is the best check at beta 0.5 and 1 and the worst at beta 2.**
+  Its votes tighten the model and the unchecked rule re-drawn on it returns
+  far fewer at much higher precision (82 → 48 at beta 2): what a
+  precision-leaning user wants and a recall-leaning one does not.
+- So the check's useful direction follows the preset the user already
+  chose. One rule for all three presets exists (shallower-only) and is a
+  small, safe gain; the larger gain needs the check to behave per preset:
+  advisory at beta ≤ 1, shallower-only at beta 2.
 
 ## Files
 
 - `ceiling_gap.md` / `ceiling_gap.py`: the unchecked line against the best
   cut on the frames, per arm, beta and click.
-- `objective_beta1.md`, `objective_walk.md`, `objective_guard_beta{0.5,1}.md`:
-  `compare_arms.py` over the re-scored arms (the objective first, the
-  rank-count reading and the diagnostic after); `figures/objective_beta{0.5,1,2}.png`,
+- `objective_beta1.md`, `objective_walk.md`, `objective_guard_beta{0.5,1}.md`,
+  `objective_check_beta{0.5,1,2}.md`: `compare_arms.py` over the arms (the
+  objective first, the rank-count reading and the diagnostic after);
+  `figures/objective_check.png` from `figs_check.py`; `figures/objective_beta{0.5,1,2}.png`,
   `figures/objective_walk.png` from `figs_objective.py`.
 - On the GRID: `/expscratch/sgreenberg/p-aware-acq-4409/` (the #4409 arms,
   re-scored on 2026-10-02) and `/expscratch/sgreenberg/acq-sweep-4428/`
