@@ -269,17 +269,18 @@ def inclusion_cost_weights(inclusion_value: float) -> tuple[float, float]:
 #: ``REPORT_REGION_VOTING.md`` for the two superseded readings.
 ACQUISITION_INCLUSION_OFFSET = -4
 
-#: Under the balance (#4413) Autopilot's acquisition cut is a **rank**, not a
-#: re-cut: this share of the depth of the mixture's F-beta argmax over the
-#: unvoted ranking (#4409, ``docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md``).
-#: Half way up finds ~9 more positives per 150 clicks than the line - 4 cut at
-#: every preset, with the returned set's F-beta up 0.007-0.017 and AP up
-#: 0.02-0.03; the full depth (1.0) never beat the control.  The cut can sit
-#: below the line (10-18% of steps on the bench): the picks sample where the
-#: model is mostly right, which is not always inside the set it returns.  With
-#: no mixture estimate the offset above still applies; under the deprecated
-#: floor nothing changes.
-ACQUISITION_ARGMAX_FACTOR = 0.5
+#: Under the balance (#4413) Autopilot's acquisition cut CAN be a **rank**, a
+#: share of the depth of the mixture's F-beta argmax over the unvoted ranking
+#: (#4409).  ``None``, the shipped value, keeps the line - 4 re-cut above:
+#: 0.5 was shipped on 2026-10-01 and reverted the next day (#4427), because
+#: it was priced on the rank-count reading of the line, which re-draws the
+#: balance's rule on the fresh ranking; on the owner's objective - the
+#: withheld images above the threshold the app holds - its harvest thins the
+#: user's unvoted top, the kept set's edge score climbs, and few fresh images
+#: clear it (F1 0.218 vs 0.504 unchecked and 0.385 vs 0.470 after the check at
+#: beta 1; worse at every preset).  The harness arm (``acq_p_crossing``) keeps
+#: the factor as a knob for the re-pricing (#4428).
+ACQUISITION_ARGMAX_FACTOR: float | None = None
 
 
 def acquisition_inclusion(inclusion_value: float, offset: float = ACQUISITION_INCLUSION_OFFSET) -> float:

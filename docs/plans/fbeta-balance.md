@@ -66,9 +66,10 @@ what the state reports, and the words.
     states are `unchecked` and `checked`.
   - A result belongs to its beta, as a floor result belonged to its floor; it
     goes `stale` when the ranking under it moves.
-- **Acquisition** samples around the F-beta cut (shipped 2026-10-01 at half
-  the argmax's depth, `ACQUISITION_ARGMAX_FACTOR`, after the pricing in
-  `../experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`): the harness arm of #4409
+- **Acquisition** stays at line − 4 (half the argmax's depth shipped on
+  2026-10-01 and was reverted on 2026-10-02: on the objective it was worse at
+  every preset, `../experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`
+  section 4); the rank cut remains the harness arm of #4409
   (`acq_p_crossing`) with the target depth swapped from the P crossing to the
   F-beta argmax, priced against today's line - 4 at each preset before it
   ships.

@@ -1061,15 +1061,18 @@ def acquisition_count(
     beta: float,
     labels: Mapping[int, bool],
     also_voted: Iterable[int] = (),
-    factor: float = ACQUISITION_ARGMAX_FACTOR,
+    factor: float | None = ACQUISITION_ARGMAX_FACTOR,
 ) -> int | None:
     """How deep Autopilot's acquisition cut sits under a balance: *factor* of the F-beta argmax's depth (#4409).
 
     The argmax is :func:`fbeta_count`'s, uncapped; the count is at least one.
-    ``None`` with no ranking or no mixture estimate, and the caller keeps the
-    line - 4 cut.  :data:`~vtscore.training.thresholds.knobs.ACQUISITION_ARGMAX_FACTOR`
-    is what ships; the harness's ``acq_p_crossing`` arm passes another.
+    ``None`` with no *factor* (the shipped value since the #4427 revert: the
+    caller keeps the line - 4 cut), no ranking or no mixture estimate.
+    :data:`~vtscore.training.thresholds.knobs.ACQUISITION_ARGMAX_FACTOR` is
+    what ships; the harness's ``acq_p_crossing`` arm passes a number.
     """
+    if factor is None:
+        return None
     k = fbeta_count(ranking, beta, labels, also_voted)
     return None if k is None else max(1, round(float(factor) * k))
 
@@ -1079,7 +1082,7 @@ def acquisition_threshold(
     beta: float,
     labels: Mapping[int, bool],
     also_voted: Iterable[int] = (),
-    factor: float = ACQUISITION_ARGMAX_FACTOR,
+    factor: float | None = ACQUISITION_ARGMAX_FACTOR,
 ) -> float | None:
     """The score the acquisition cut sits at under a balance (#4409): the last unvoted item :func:`acquisition_count` keeps."""
     k = acquisition_count(ranking, beta, labels, also_voted, factor)

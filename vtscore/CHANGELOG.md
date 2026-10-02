@@ -10,6 +10,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Reverted the day after (issue #4427): `ACQUISITION_ARGMAX_FACTOR` is
+  `None`**, so the balance keeps the line − 4 re-cut; `acquisition_count` /
+  `acquisition_threshold` return `None` with no factor and the harness's
+  default arm follows (`resolve_acquisition_factor(None, beta)` is `None`);
+  a number still runs the rank-cut arm.
 - **The acquisition cut under a balance is half the F-beta argmax's depth**
   (issue #4409; `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
   `acquisition_count` / `acquisition_threshold` give the rank and the score

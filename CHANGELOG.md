@@ -17,6 +17,11 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Reverted the day after: Autopilot's picks sample at the line − 4 re-cut
+  again under the balance** (issue #4427). The half-argmax cut below was priced
+  on the rank-count reading of the line; on the objective (the withheld images
+  above the threshold the app holds) it was worse at every preset, because its
+  harvest thins the unvoted top and the kept set's edge score climbs.
 - **Autopilot's picks sample higher under the balance** (issue #4409, the
   pricing in `docs/experiments/2026-10-01-acquisition-fbeta-4409/REPORT.md`).
   The acquisition cut the Hard / New picks sample around is now the score at
