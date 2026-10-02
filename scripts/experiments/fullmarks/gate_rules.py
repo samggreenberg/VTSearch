@@ -16,6 +16,8 @@ verified page's best-fit geometry (frames saved with ``ratio`` / ``reproj``):
 
 ``M1``  R1 and inlier ratio >= r* and median reprojection error <= e*, the cuts fit on
         tier ``s``'s template matrix (``--fit-cuts``), never on the scored tier
+``Hk``  #4440: M1 while the detector has fewer than k Bad votes, R1 from then on
+        (``H1`` ... ``Hinf``; ``Hinf`` is M1 throughout)
 ``M2``  R1 and P(true) >= 0.5 under a logistic regression on (log inliers, ratio,
         reprojection error) fit on the detector's votes (Goods leave-one-out, Bads);
         R1 until there are >= 3 of each
@@ -40,7 +42,8 @@ import numpy as np
 MIN_INLIERS = 8
 RULES = ("R0", "R1", "R2", "R3", "R4")
 #: #4434's rules, scored when the frames carry the fit geometry.
-GEOMETRY_RULES = ("M1", "M2")
+HYBRID_KS = (1, 2, 3, 5, 8)
+GEOMETRY_RULES = ("M1", "M2", *(f"H{k}" for k in HYBRID_KS), "Hinf")
 MIN_VOTES_M2 = 3
 LARGE = 50  # positives: the pre-registered split by class size
 BOOTSTRAP = 10000
@@ -125,8 +128,12 @@ def fit_cuts(matrix: Path) -> dict[str, float]:
 
 
 def accept_geometry(rule: str, z: Any, cuts: Optional[dict[str, float]]) -> np.ndarray:
-    """#4434's M1 / M2 on top of R1."""
+    """#4434's M1 / M2, and #4440's hybrids, on top of R1."""
     base = accept("R1", z)
+    if rule.startswith("H"):
+        k = float("inf") if rule == "Hinf" else int(rule[1:])
+        n_bads = int(np.isfinite(z["bad_inliers"]).sum())
+        return accept_geometry("M1", z, cuts) if n_bads < k else base
     ratio = np.nan_to_num(z["ratio"], nan=-1.0)
     reproj = np.nan_to_num(z["reproj"], nan=np.inf)
     if rule == "M1":
@@ -199,7 +206,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         positive = z["positive"].astype(bool)
         geometry = "ratio" in z.files
         if geometry and rules == RULES:
-            rules = RULES + (("M1",) if cuts else ()) + ("M2",)
+            hybrids = tuple(f"H{k}" for k in HYBRID_KS) + ("Hinf",) if cuts else ()
+            rules = RULES + (("M1",) if cuts else ()) + ("M2",) + hybrids
         for rule in rules:
             if rule == "R4":
                 acc = oracle(z, test)

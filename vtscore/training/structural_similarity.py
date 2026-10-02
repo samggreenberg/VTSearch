@@ -69,6 +69,15 @@ K trade-off for an instance-search tool.
 """
 
 STRUCTURAL_DECISION_THRESHOLD = 0.5
+
+#: Geometry cuts for the returned set before a detector's first Bad vote (#4440). Until
+#: then #4367's Bad ceiling is just the 8-inlier gate, which passes hard negatives on
+#: documents. A fit must also have inlier ratio >= this and median reprojection error <=
+#: :data:`GEOMETRY_REPROJ_MAX` (normalised units). Both were fit on FullMarks tier ``s``'s
+#: box-template pairs past the gate (#4434), and scored out of sample on tier ``m``:
+#: +0.23 F1 at 10 clicks.
+GEOMETRY_RATIO_MIN = 0.75
+GEOMETRY_REPROJ_MAX = 0.004887
 """Decision boundary of the verification score.
 
 The inlier gate maps ``inlier_count == DEFAULT_MIN_INLIERS`` to 0.5.
@@ -229,12 +238,20 @@ class VerificationScorer:
     """
 
     min_inliers: int = DEFAULT_MIN_INLIERS
+    #: Optional geometry cuts (#4440): a fit with a lower inlier ratio or a larger median
+    #: reprojection error scores half its value, below the line but in the same order.
+    ratio_min: Optional[float] = None
+    reproj_max: Optional[float] = None
 
     def score(self, stats: MatchStats) -> float:
         """The score for *stats*; 0 when RANSAC found no sane model."""
         if not stats.model_ok:
             return 0.0
-        return self.threshold_for(stats.inlier_count)
+        value = self.threshold_for(stats.inlier_count)
+        loose = (self.ratio_min is not None and stats.inlier_ratio < self.ratio_min) or (
+            self.reproj_max is not None and stats.median_reproj_error > self.reproj_max
+        )
+        return value / 2.0 if loose else value
 
     def threshold_for(self, inliers: float) -> float:
         """The score at which a fit has exactly *inliers* inliers."""
@@ -459,6 +476,7 @@ def maybe_structural_rerank(
         threshold_out = _bad_ceiling_threshold(
             list(zip(template_keys, [tpl for _, tpl in templates])), bad_votes, feat_snap, matcher, cache
         )
+    scorer = _line_scorer(template_keys is not None, bad_votes, feat_snap)
     reranked = _rerank_growing(
         results,
         snap,
@@ -469,6 +487,7 @@ def maybe_structural_rerank(
         template_keys=template_keys,
         cache=cache,
         tiled=template_keys is not None,
+        scorer=scorer,
     )
     return reranked, threshold_out
 
@@ -534,6 +553,17 @@ def _stoplist(
     return out, tags
 
 
+def _line_scorer(tiled: bool, bad_votes: Any, feature_snap: dict[Any, dict]) -> VerificationScorer:
+    """The scorer behind the returned set: geometry cuts on a tiled dataset with no Bad vote yet (#4440).
+
+    Until a Bad exists the Bad ceiling is only the 8-inlier gate, so a verified page
+    must also fit tightly (:data:`GEOMETRY_RATIO_MIN`, :data:`GEOMETRY_REPROJ_MAX`).
+    """
+    if tiled and not any(_local_features(feature_snap.get(b)) for b in (bad_votes or ())):
+        return VerificationScorer(ratio_min=GEOMETRY_RATIO_MIN, reproj_max=GEOMETRY_REPROJ_MAX)
+    return VerificationScorer()
+
+
 def _bad_ceiling_threshold(
     templates: list[tuple[Any, StructuralFeatures]],
     bad_votes: Any,
@@ -569,6 +599,7 @@ def _rerank_growing(
     template_keys: Optional[Sequence[Any]],
     cache: Optional[VerificationCache],
     tiled: bool,
+    scorer: Optional[VerificationScorer] = None,
 ) -> list[dict]:
     """:func:`structural_rerank`, then, on a tiled dataset, more blocks while the shortlist's tail still verifies.
 
@@ -577,7 +608,7 @@ def _rerank_growing(
     """
     from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
 
-    scorer = VerificationScorer()
+    scorer = scorer or VerificationScorer()
     stage1_ids = [e.get("id") for e in results]
     if tiled and cache is None:
         # No detector to keep fits on (a one-off sort): still never verify a page twice while growing.
