@@ -21,6 +21,14 @@ import type { BalanceState } from '../generated/api-client/models/balance-state'
  */
 export type BalanceStatus = 'unchecked' | 'checked';
 
+/**
+ * How a check treats the line at this balance (#4427): `advisory` at beta 1
+ * and below - the walk audits and reports, its votes stay votes, and the line
+ * keeps the balance's own count - or `trim` above - the walk may only step
+ * shallower from the bands holding the line, and the line keeps its end.
+ */
+export type BalanceShape = 'advisory' | 'trim';
+
 /** A likely share, from the check's picks alone: of the kept set right (precision), or of all the matches kept (recall). */
 export interface LikelyRange {
   lo: number;
@@ -58,6 +66,10 @@ export interface LineBalance {
   fbeta: number | null;
   /** What a check at this balance would cost; null when the response carried none. */
   schedule: CheckSchedule | null;
+  /** How a check treats the line at this balance. */
+  shape: BalanceShape;
+  /** The set the last check audited (the walk's end), which the ranges describe; under `advisory` not the set kept. Null while unchecked. */
+  audited: number | null;
 }
 
 const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked'];
@@ -86,6 +98,8 @@ export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBala
     recall: likelyRangeFrom(wire.recall),
     fbeta: wire.fbeta ?? null,
     schedule: schedule ? { candidate: schedule.candidate, rounds: schedule.rounds, picks: schedule.picks } : null,
+    shape: wire.shape === 'advisory' ? 'advisory' : 'trim',
+    audited: wire.audited ?? null,
   };
 }
 
@@ -214,6 +228,16 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   }
   const p = balance.precision;
   const r = balance.recall;
+  const audited = (balance.audited ?? balance.count).toLocaleString();
+  if (balance.shape === 'advisory') {
+    if (!p || !r) return `A check ended on the top ${audited}; the line keeps its ${kept}.`;
+    return (
+      `A check of ${p.labelled} random picks from the top ${audited} found ${p.right} right, ` +
+      `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them. ` +
+      `The line keeps its ${kept}, the balance's own count: at this balance a check informs the line and does not move it.` +
+      staleNote(p)
+    );
+  }
   if (!p || !r) return `A check ended on the ${kept} items the line keeps.`;
   return (
     `A check of ${p.labelled} random picks from the ${kept} items the line keeps found ${p.right} right, ` +
@@ -233,12 +257,18 @@ export function checkLabel(balance: LineBalance | null): string | null {
   return balance.schedule ? `Check ${balance.schedule.picks} picks` : 'Check the line';
 }
 
-/** The check affordance's tooltip: what a check does, and what it costs at this balance. */
+/** The check affordance's tooltip: what a check does at this balance (#4427), and what it costs. */
 export function checkTitle(balance: LineBalance | null): string {
   const cost = checkCost(balance?.schedule ?? null);
+  if (balance?.shape === 'trim') {
+    return (
+      `Vote on ${cost}: the check steps to a shorter list while the balance does not fall, ` +
+      `and the line keeps the set where it ends. Your votes count as ordinary votes.`
+    );
+  }
   return (
     `Vote on ${cost}: the check goes deeper while the balance keeps improving and shorter while it does not, ` +
-    `and the line keeps the set where it peaked. Your votes count as ordinary votes.`
+    `and reports what it found; at this balance it informs the line and does not move it. Your votes count as ordinary votes.`
   );
 }
 

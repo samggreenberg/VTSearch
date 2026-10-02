@@ -287,11 +287,13 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       });
       expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
       expect(el().querySelector('.check-result')!.getAttribute('data-status')).toBe('checked');
+      // Beta 1 is an advisory check (#4427): the audited set is named, and the line keeps its own count.
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Checked: likely 55–100% right, about half of them found (checked 15).',
+        'Checked the top 32: likely 55–100% right, about half of them found (checked 15).',
       );
       expect(text()).toContain(
-        "The line keeps these 32: the set where the check's balance peaked. The ranges are what the picks say about them.",
+        "The line keeps its 32, the balance's own count: at this balance the check informs the line and does not move it. " +
+          'The ranges are what the picks say about the top 32.',
       );
       expect(dots().length).toBe(0);
     });
@@ -325,9 +327,9 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       });
       expect(voted.map((v) => v.finished)).toEqual([false, false, false, true]);
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
-        'Checked: likely 0–45% right, few of them found (checked 5).',
+        'Checked the top 8: likely 0–45% right, few of them found (checked 5).',
       );
-      expect(text()).toContain("The line keeps these 8: the set where the check's balance peaked.");
+      expect(text()).toContain("The line keeps its 8, the balance's own count");
       expect(text()).not.toMatch(/\bshort\b|\bfell\b|\bmet\b|confirmed|threshold/i);
       // The copy names no cause: it is true of a sparse corpus and a weak model alike.
       expect(text()).not.toMatch(/sparse|weak|too few|model/i);
@@ -341,7 +343,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
         balance: wireBalance('checked', { precision: null, recall: null, fbeta: null }),
         check: { ...running([], 1, 1, 32, {}, null), status: 'checked' },
       });
-      expect(el().querySelector('.check-result-headline')!.textContent!.trim()).toBe('Checked.');
+      expect(el().querySelector('.check-result-headline')!.textContent!.trim()).toBe('Checked the top 32.');
       expect(voted.map((v) => v.finished)).toEqual([true]);
     });
   });

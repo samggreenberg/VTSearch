@@ -101,6 +101,13 @@ FLOOR_STATES = (FLOOR_UNCHECKED, FLOOR_CONFIRMED, FLOOR_SHORT)
 BALANCE_PRESETS: tuple[float, ...] = (0.5, 1.0, 2.0)
 DEFAULT_BETA = 1.0
 BETA_MIN, BETA_MAX = 0.25, 4.0
+#: How a check treats the line at a balance (#4427's pricing, 2026-10-02):
+#: ``advisory`` at beta <= 1 - the walk runs and its votes train, but the line
+#: keeps the unchecked rule's count - and ``trim`` above - the walk audits the
+#: bands holding the line, may only step shallower, and the line takes its end.
+CHECK_ADVISORY = "advisory"
+CHECK_TRIM = "trim"
+CHECK_SHAPES: tuple[str, ...] = (CHECK_ADVISORY, CHECK_TRIM)
 BALANCE_CHECKED = "checked"
 BALANCE_STATES = (FLOOR_UNCHECKED, BALANCE_CHECKED)
 
@@ -234,6 +241,23 @@ def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
     if not (BETA_MIN - _EPS <= float(beta) <= BETA_MAX + _EPS):
         raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {beta!r}")
     return check_schedule(0.5 if float(beta) <= 1.0 + _EPS else 0.1, alpha)
+
+
+def check_shape(beta: float) -> str:
+    """How a check at *beta* treats the line (#4427): ``advisory`` at beta <= 1, ``trim`` above.
+
+    Priced on the objective (the withheld set's F-beta above the app's
+    threshold; Binary, 5 seeds, every preset): the full walk that moved the
+    line to its peak lost at beta 0.5 and 1 (-0.06 and -0.03 against the
+    unchecked line) by buying recall with bands that were mostly wrong.  An
+    advisory check - its votes train, the line stays at the unchecked rule -
+    was the best there (+0.09 and +0.04 over the walk) and the worst at beta
+    2 (-0.02), where its votes tighten the model and the re-drawn line
+    returns too few for a recall-leaning balance.  A walk that may only trim
+    the line was never worse than the full walk and the best at beta 2
+    (+0.01).  So the check's direction follows the preset the user chose.
+    """
+    return CHECK_ADVISORY if float(beta) <= 1.0 + _EPS else CHECK_TRIM
 
 
 def resolve_line_knobs(min_precision: float | str | None, beta: float | None) -> tuple[float | None, float | None]:
@@ -555,7 +579,7 @@ class SpotCheck:
         tol: float = 0.0,
         fine: bool = False,
         guard: float | None = None,
-        shallow_only: bool = False,
+        shallow_only: bool | None = None,
     ) -> "SpotCheck":
         """A running balance walk (#4413): the same bands and picks, stopped at the F-beta peak.
 
@@ -574,7 +598,9 @@ class SpotCheck:
         recall with a band that is mostly wrong, whatever the estimate says)
         and *shallow_only* (the walk never tries a deeper band: the start set
         is audited and the walk steps shallower while the estimate does not
-        fall, so it costs the start's picks alone and can only cut the line).
+        fall, so it costs the start's picks alone and can only cut the line;
+        ``None``, the app's, follows :func:`check_shape`: shallower-only under
+        the ``trim`` shape, the full walk under ``advisory``).
         """
         schedule = balance_schedule(beta, alpha)
         if not (n_pos > 0):
@@ -601,7 +627,7 @@ class SpotCheck:
         check.min_precision = float("nan")
         check.tol = float(tol)
         check.guard = None if guard is None else float(guard)
-        check.shallow_only = bool(shallow_only)
+        check.shallow_only = check_shape(beta) == CHECK_TRIM if shallow_only is None else bool(shallow_only)
         return check
 
     # ---- what the check is looking at
@@ -1298,7 +1324,9 @@ class BalanceState:
 
     The wire shape beside ``threshold`` under a balance, as :class:`FloorState`
     is under a floor: ``status`` is ``unchecked`` or ``checked``; ``precision``
-    and ``recall`` are the checked set's likely ranges; ``fbeta`` its estimate.
+    and ``recall`` are the audited set's likely ranges; ``fbeta`` its estimate.
+    Under the ``advisory`` shape (#4427) the audited set is the walk's end and
+    the kept ``count`` is the unchecked rule's; under ``trim`` they coincide.
     """
 
     beta: float
@@ -1309,6 +1337,13 @@ class BalanceState:
     fbeta: float | None
     stale: bool
     schedule: CheckSchedule
+    #: How a check treats the line at this beta (:func:`check_shape`, #4427):
+    #: ``advisory`` (the ranges inform, the count stays the unchecked rule's)
+    #: or ``trim`` (the walk's end is the count).
+    shape: str = CHECK_TRIM
+    #: The set the last check audited (the walk's end), which under ``advisory``
+    #: is not the set the line keeps; ``None`` while unchecked.
+    audited: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1319,6 +1354,8 @@ class BalanceState:
             "recall": None if self.recall is None else {**self.recall.as_dict(), "stale": self.stale},
             "fbeta": None if self.fbeta is None else round(self.fbeta, 4),
             "schedule": self.schedule.as_dict(),
+            "shape": self.shape,
+            "audited": self.audited,
         }
 
 
@@ -1331,15 +1368,17 @@ def applicable_balance(beta: float, result: SpotCheck | None) -> SpotCheck | Non
     return result
 
 
-def balance_count(beta: float, result: SpotCheck | None, proposal: int | None = None) -> int:
-    """The count the line keeps at *beta*: the set the finished walk ended on, else the unchecked count.
+def balance_count(beta: float, result: SpotCheck | None, proposal: int | None = None, shape: str | None = None) -> int:
+    """The count the line keeps at *beta*: the finished walk's end where the check's shape lets it move the line, else the unchecked count.
 
     The unchecked count is the balance's cap (:func:`balance_schedule`),
     lowered to *proposal* when the caller has one: the mixture's F-beta argmax
-    (:func:`fbeta_count`).
+    (:func:`fbeta_count`).  Under the ``advisory`` shape (:func:`check_shape`,
+    beta <= 1; #4427) a finished walk informs the line and never moves it;
+    *shape* overrides the preset's (the harness's full-walk arm).
     """
     applicable = applicable_balance(beta, result)
-    if applicable is not None:
+    if applicable is not None and (shape or check_shape(beta)) != CHECK_ADVISORY:
         return applicable.k
     count = balance_schedule(beta).candidate
     if proposal is not None:
@@ -1353,11 +1392,12 @@ def balance_line(
     result: SpotCheck | None = None,
     also_voted: Iterable[int] = (),
     proposal: int | None = None,
+    shape: str | None = None,
 ) -> float | None:
     """The threshold the line sits at under a balance: the last item of the set it keeps (``None``: no ranking)."""
     if ranking is None:
         return None
-    return ranking.threshold_for(balance_count(beta, result, proposal), also_voted)
+    return ranking.threshold_for(balance_count(beta, result, proposal, shape), also_voted)
 
 
 def balance_state(
@@ -1366,25 +1406,35 @@ def balance_state(
     ranking: LineRanking | None = None,
     also_voted: Iterable[int] = (),
     proposal: int | None = None,
+    shape: str | None = None,
 ) -> BalanceState:
-    """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count."""
+    """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count.
+
+    *shape* overrides the preset's check shape (:func:`check_shape`); the
+    harness's full-walk arm passes ``trim`` so the walk's end is the count.
+    """
     schedule = balance_schedule(beta)
+    shape = shape or check_shape(beta)
     applicable = applicable_balance(beta, result)
+    count = balance_count(beta, result, proposal, shape)
+    if ranking is not None and (applicable is None or shape == CHECK_ADVISORY):
+        # The unchecked rule's count, capped by what is unvoted; a walk's end
+        # under ``trim`` is a band edge of the ranking it walked, kept as is.
+        count = min(count, len(ranking.candidate(count, also_voted)))
     if applicable is None:
-        count = balance_count(beta, None, proposal)
-        if ranking is not None:
-            count = min(count, len(ranking.candidate(count, also_voted)))
-        return BalanceState(float(beta), FLOOR_UNCHECKED, count, None, None, None, False, schedule)
+        return BalanceState(float(beta), FLOOR_UNCHECKED, count, None, None, None, False, schedule, shape, None)
     stale = ranking is not None and applicable.is_stale(ranking, also_voted)
     return BalanceState(
         float(beta),
         BALANCE_CHECKED,
-        applicable.k,
+        count,
         applicable.range(),
         applicable.recall_range(),
         applicable.fbeta_estimate(),
         stale,
         schedule,
+        shape,
+        applicable.k,
     )
 
 
@@ -1395,9 +1445,12 @@ __all__ = [
     "BETA_MAX",
     "BETA_MIN",
     "BAND_BASE",
+    "CHECK_ADVISORY",
     "CHECK_ALPHA",
     "CHECK_BASE_CANDIDATE",
     "CHECK_CANCELLED",
+    "CHECK_SHAPES",
+    "CHECK_TRIM",
     "CHECK_MIN_PICKS",
     "CHECK_PROVENANCE",
     "CHECK_RUNNING",
@@ -1417,6 +1470,7 @@ __all__ = [
     "band_edges",
     "bands_for",
     "check_schedule",
+    "check_shape",
     "clopper_pearson_lower",
     "clopper_pearson_upper",
     "floor_count",

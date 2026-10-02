@@ -1022,12 +1022,11 @@ WALK_PICKS = int(_opt_float("CALIB_WALK_PICKS") or 0) or None
 WALK_TOL = _opt_float("CALIB_WALK_TOL") or 0.0
 WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true", "yes")
 #: The precision guard (``CALIB_WALK_GUARD``: a deeper band whose audited share right is below it
-#: times the start set's ends the walk), the advisory walk (``CALIB_WALK_ADVISORY=1``: the check
-#: runs, the line stays at the unchecked count) and the shallower-only walk
-#: (``CALIB_WALK_SHALLOW_ONLY=1``: the walk never tries a deeper band, so the check can only cut the line).
+#: times the start set's ends the walk) and the check's shape (``CALIB_WALK_SHAPE``: unset is the app's,
+#: advisory at beta <= 1 and trim above since #4427's pricing; ``walk`` the full walk whose end moves the
+#: line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
-WALK_ADVISORY = os.environ.get("CALIB_WALK_ADVISORY", "").strip().lower() in ("1", "true", "yes")
-WALK_SHALLOW_ONLY = os.environ.get("CALIB_WALK_SHALLOW_ONLY", "").strip().lower() in ("1", "true", "yes")
+WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None

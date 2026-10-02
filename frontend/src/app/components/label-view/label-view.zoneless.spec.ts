@@ -745,7 +745,7 @@ describe('LabelViewComponent', () => {
    * here. Opened from the Threshold control, the step takes the vote keys, the
    * list behind it gets none, and a finished check's line is installed.
    */
-  it('runs the spot check from the Threshold control and installs the line where it peaked (#4273, #4317, #4413)', async () => {
+  it('runs the spot check from the Threshold control and installs the line the result carries (#4273, #4317, #4413)', async () => {
     flushInitialRequests();
     await settleResource();
     // Manual first: leaving Autopilot hands its sort mode back to the tab.

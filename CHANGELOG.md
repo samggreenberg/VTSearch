@@ -17,6 +17,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The spot check's effect on the line follows the balance** (issue #4427).
+  At the precision-leaning and balanced presets (beta 1 and below) the check
+  is advisory: the walk runs as an audit and reports its ranges, its votes
+  stay ordinary votes, and the line keeps the balance's own count instead of
+  moving to the walk's end. At the recall-leaning preset (beta 2) the walk
+  may only trim the line - it audits the bands holding it and steps shallower,
+  never deeper - and the line keeps the set it ends on. Priced on the withheld
+  images above the threshold the app holds: the old walk lost 0.06 / 0.03 of
+  F-beta at beta 0.5 / 1 by buying recall with bands that were mostly wrong;
+  advisory gains 0.09 / 0.04 over it there, and trimming is never worse and the
+  best at beta 2. The balance state and `GET /api/balance` carry `shape`
+  (`advisory` or `trim`) and `audited` (the set the walk ended on); the check
+  modal and the balance control say which set the ranges describe.
+
 - **Reverted the day after: Autopilot's picks sample at the line − 4 re-cut
   again under the balance** (issue #4427). The half-argmax cut below was priced
   on the rank-count reading of the line; on the objective (the withheld images

@@ -227,9 +227,12 @@ describe('MediaListComponent', () => {
 
     it('names the balance\'s state in the tooltip only', () => {
       expect(drawWith(lineBalance('unchecked')).getAttribute('title')).toContain('Unchecked: the line keeps the top 32');
+      // Beta 1 is advisory (#4427): the ranges describe the audited set, the line keeps its own count.
       const checked = drawWith(lineBalance('checked')).getAttribute('title')!;
-      expect(checked).toContain("likely 55–100% of them are, with likely 30–70% of all the matches among them: the set where the check's balance peaked");
+      expect(checked).toContain('likely 55–100% of them are, with likely 30–70% of all the matches among them. The line keeps its 32');
       expect(checked).not.toMatch(/short|enough|confirmed/i);
+      const trimmed = drawWith(lineBalance('checked', { beta: 2 })).getAttribute('title')!;
+      expect(trimmed).toContain("likely 55–100% of them are, with likely 30–70% of all the matches among them: the set where the check's balance peaked");
     });
 
     it('says a stale range is stale in the tooltip, and nowhere else', () => {

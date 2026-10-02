@@ -1,4 +1,4 @@
-import type { BalanceStatus, CheckSchedule, LikelyRange, LineBalance } from '../utils/line-balance';
+import type { BalanceShape, BalanceStatus, CheckSchedule, LikelyRange, LineBalance } from '../utils/line-balance';
 
 /** The two states the balance reports (#4413). */
 export const BALANCE_STATES: BalanceStatus[] = ['unchecked', 'checked'];
@@ -15,20 +15,31 @@ export const CHECKED_RECALL: LikelyRange = { lo: 0.3, hi: 0.7, labelled: 5, righ
 /** The schedule at the balanced default: the top 32, one round of 5 picks. */
 export const SCHEDULE_DEFAULT: CheckSchedule = { candidate: 32, rounds: 1, picks: 5 };
 
+/** The shape a check takes at a balance, as the server decides it (#4427): advisory at beta 1 and below, trim above. */
+export function shapeFor(beta: number): BalanceShape {
+  return beta <= 1 ? 'advisory' : 'trim';
+}
+
 /**
  * A balance state as the sort state holds it: the balanced default (beta 1)
- * keeping the top 32, with a check's ranges once checked.
+ * keeping the top 32, with a check's ranges once checked. The shape follows
+ * the beta unless overridden, and a checked state audited the set it keeps
+ * unless `audited` says otherwise.
  */
 export function lineBalance(status: BalanceStatus, overrides: Partial<LineBalance> = {}): LineBalance {
   const checked = status === 'checked';
+  const beta = overrides.beta ?? 1;
+  const count = overrides.count ?? 32;
   return {
-    beta: 1,
+    beta,
     status,
-    count: 32,
+    count,
     precision: checked ? CHECKED_PRECISION : null,
     recall: checked ? CHECKED_RECALL : null,
     fbeta: checked ? 0.67 : null,
     schedule: SCHEDULE_DEFAULT,
+    shape: shapeFor(beta),
+    audited: checked ? count : null,
     ...overrides,
   };
 }
@@ -44,5 +55,7 @@ export function wireBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     recall: b.recall,
     fbeta: b.fbeta,
     schedule: b.schedule ?? SCHEDULE_DEFAULT,
+    shape: b.shape,
+    audited: b.audited,
   };
 }
