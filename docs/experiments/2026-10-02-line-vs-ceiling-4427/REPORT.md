@@ -134,13 +134,51 @@ recall at that row's threshold, so the same runs read the owner's way
   the harvest depletes a pool this size within 150 clicks and would dent a
   100k-image corpus proportionally less; 5 seeds; Binary SigLIP only.
 
+## 5. The check's shape, priced on the objective (2026-10-02, added)
+
+The owner took the third way of section 4: price a precision-guarded stop.
+Eight arms on `vts-4427-guard` (dev + the walk knobs), beta 0.5 and 1 where
+the check loses, 144 Binary cells × 3 seeds, 150 clicks, the line − 4 cut:
+the app's walk, a guard at 1.0 and at 0.5 (a deeper band whose audited share
+right is below the guard times the start set's ends the walk at the best set
+so far), and an advisory walk (the check runs and its ~21 votes train, but the
+line keeps the unchecked count). The objective, after the check:
+
+| beta | unchecked | app's walk | guard 1.0 | guard 0.5 | advisory | d advisory vs app's walk |
+|---|---:|---:|---:|---:|---:|---:|
+| 0.5 | 0.526 | 0.467 | 0.390 | 0.395 | **0.561** | +0.085 ± 0.007 |
+| 1 | 0.502 | 0.468 | 0.441 | 0.437 | **0.511** | +0.035 ± 0.006 |
+
+(`objective_guard_beta{0.5,1}.md`; at beta 2 the app's walk is already
+neutral, +0.005 ± 0.004, `objective_beta2.md`.)
+
+**The guard loses because it fires at the start.** Every walk deepens the
+line relative to the unchecked count on the user's own pool (the unchecked
+line sits at ~10 there, the app's walk moves it to ~27, the guarded walk to
+~37): the guard stops the walk at its start count, so the walk never turns
+shallower, where the app's walk ends at 8 or 16 in 270 of 421 cells. Deeper
+is the losing direction on the withheld half (returned 41 → 65 / 79 at
+precision 0.46 → 0.37).
+
+**Advisory wins because the votes help and the move hurts.** The band's
+votes are mostly negatives near the line; the model tightens and the
+unchecked rule re-drawn on it returns fewer (41 → 33) at a much higher
+precision (0.46 → 0.66). Against no check at all the gain is +0.027 at beta
+0.5 and within noise at beta 1 (+0.002 ± 0.004): most of the win is "do not
+let the check move the line".
+
+The owner's rule was "ships only if it stops losing": the guard does not,
+the advisory walk does. The owner asked for one more round before deciding
+(advisory at beta 2, a shallower-only walk that can only cut the line, and
+5 seeds throughout); its result follows below.
+
 ## Files
 
 - `ceiling_gap.md` / `ceiling_gap.py`: the unchecked line against the best
   cut on the frames, per arm, beta and click.
-- `objective_beta1.md`, `objective_walk.md`: `compare_arms.py` over the
-  re-scored arms (the objective first, the rank-count reading and the
-  diagnostic after); `figures/objective_beta{0.5,1,2}.png`,
+- `objective_beta1.md`, `objective_walk.md`, `objective_guard_beta{0.5,1}.md`:
+  `compare_arms.py` over the re-scored arms (the objective first, the
+  rank-count reading and the diagnostic after); `figures/objective_beta{0.5,1,2}.png`,
   `figures/objective_walk.png` from `figs_objective.py`.
 - On the GRID: `/expscratch/sgreenberg/p-aware-acq-4409/` (the #4409 arms,
   re-scored on 2026-10-02) and `/expscratch/sgreenberg/acq-sweep-4428/`
