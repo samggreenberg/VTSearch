@@ -13,6 +13,8 @@
   Each panel's title carries the share of sessions whose final line meets P.
 * ``returned_at_p.png`` -- the returned set at each floor P over clicks: its
   precision against P, its recall against the oracle's recall at P (#4408).
+* ``objective_over_clicks.png`` -- the objective (#4427): F-beta of the withheld
+  set above the app's threshold over clicks, per path, the check's end marked.
 * ``in_hand.png`` -- positives in hand over clicks (#4427): the Goods voted, the
   positives inside the set the line keeps on the user's own unvoted corpus, and
   their sum, with that set's precision beside them.
@@ -358,6 +360,38 @@ def returned_at_beta(curves: pd.DataFrame, cells: pd.DataFrame, balance_steps: p
     return True
 
 
+def objective_over_clicks(curves: pd.DataFrame, cells: pd.DataFrame, out: Path) -> bool:
+    """The objective over clicks (#4427): F-beta of the withheld set above the app's threshold, per path,
+    the unchecked line at each click, with the post-check value marked at the end."""
+    if "thr_fbeta" not in curves or not curves["thr_fbeta"].notna().any():
+        return False
+    fig, ax = plt.subplots(figsize=(7.5, 4.2), facecolor=SURFACE)
+    _axes(ax)
+    mean = curves.groupby(["arm", "t"])["thr_fbeta"].mean().unstack(0)
+    for arm, color in COLORS.items():
+        if arm not in mean:
+            continue
+        ax.plot(mean.index, mean[arm], color=color, linewidth=2, label=f"{arm}: unchecked line")
+        c = cells[(cells["arm"] == arm) & ~cells["never_trained"].astype(bool)]
+        if "thr_fbeta_final" in c and c["thr_fbeta_final"].notna().any():
+            end = float(c["thr_fbeta_final"].mean())
+            ax.plot([mean.index.max()], [end], marker="D", markersize=7, color=color, zorder=5)
+            ax.annotate(f"after the check {end:.2f}", (mean.index.max(), end), xytext=(6, 0),
+                        textcoords="offset points", va="center", color=INK, fontsize=8)  # fmt: skip
+        ax.annotate(f"{mean[arm].dropna().iloc[-1]:.2f}", (mean.index.max(), mean[arm].dropna().iloc[-1]),
+                    xytext=(6, 10), textcoords="offset points", va="center", color=INK, fontsize=8)  # fmt: skip
+    ax.set_xlim(0, mean.index.max() * 1.25)
+    ax.set_ylim(0, 1.0)
+    ax.set_xlabel("clicks", color=INK)
+    ax.set_ylabel("F-beta of the withheld set above the threshold", color=INK)
+    ax.set_title("The objective over clicks: unchecked line, then the check's end", color=INK, fontsize=10, loc="left")
+    ax.legend(fontsize=8, frameon=False, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out, dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+    return True
+
+
 def in_hand(cells: pd.DataFrame, pool_steps: pd.DataFrame, out: Path) -> bool:
     """Positives in hand over clicks (#4427): Goods, the kept set's positives on the user's own unvoted
     corpus, and their sum, per path; beside them the kept set's precision there.
@@ -400,6 +434,8 @@ def main() -> int:
     cells = pd.read_csv(args.analysis / "cells.csv")
     curves = pd.read_csv(args.analysis / "curves.csv")
     lines = pd.read_csv(args.analysis / "lines.csv", dtype={"point": str})
+    if not objective_over_clicks(curves, cells, args.out / "objective_over_clicks.png"):
+        print("no session thresholds in this run: objective_over_clicks.png skipped")
     over_clicks(curves, cells, "ap", args.out / "ap_over_clicks.png")
     over_clicks(curves, cells, "goods", args.out / "goods_over_clicks.png")
     if not line_at_floors(lines, args.out / "line_at_floors.png"):

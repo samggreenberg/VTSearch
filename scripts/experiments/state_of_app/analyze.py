@@ -137,6 +137,12 @@ CEILING = "skyline_train_full"
 LINE_METRICS = ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
 #: The balance's metrics, as ``_rank_metrics.balance_metrics`` names them (#4413).
 BALANCE_METRICS = ("k", "precision", "recall", "fbeta", "oracle_fbeta", "fb_share")
+#: THE objective (owner, 2026-10-01): the withheld images above the app's threshold, as F-beta at the session's
+#: beta.  Every session row carries the test set's precision / recall at that row's threshold; the last ordinary
+#: row is the unchecked line, the last ``check`` row the line after the walk and its votes.  Unlike the rank-count
+#: reading (``balances.csv``, the balance's rule re-drawn on the fresh ranking) this sees the threshold the app
+#: actually holds, so a harvest that thins the user's unvoted top shows up here (#4427).
+THRESHOLD_METRICS = ("thr_precision", "thr_recall", "thr_fbeta", "thr_returned")
 #: A diagnostic, not the objective (#4427; owner 2026-10-01: the goal is the F-beta of what the line keeps,
 #: scored on the withheld test half).  The user's own corpus: the line the app actually kept over the
 #: session's UNVOTED pool at that click (``pool_k``, the harness's ``floor_count``), what it holds, and the
@@ -301,6 +307,24 @@ def _check_columns(check: pd.DataFrame | None, last_frame: dict | None, check_pi
     }
 
 
+def _fbeta_pr(precision: float, recall: float, beta: float) -> float:
+    if not (np.isfinite(precision) and np.isfinite(recall)):
+        return float("nan")
+    b2 = beta * beta
+    return (1.0 + b2) * precision * recall / (b2 * precision + recall) if (b2 * precision + recall) > 0 else 0.0
+
+
+def _threshold_at(row: pd.Series | None, beta: float) -> dict[str, float]:
+    """The withheld set above *row*'s threshold (#4427): its precision, recall, F-beta and size."""
+    nan = float("nan")
+    if row is None:
+        return {m: nan for m in THRESHOLD_METRICS}
+    p, r = _f(row.get("precision")), _f(row.get("recall"))
+    n_pos, n_neg, fpr = _f(row.get("n_test_pos")), _f(row.get("n_test_neg")), _f(row.get("fpr"))
+    returned = r * n_pos + fpr * n_neg if np.isfinite(r * n_pos + fpr * n_neg) else nan
+    return {"thr_precision": p, "thr_recall": r, "thr_fbeta": _fbeta_pr(p, r, beta), "thr_returned": returned}
+
+
 def _pool_at(frame: dict | None, count: float, goods: int, beta: float) -> dict[str, float]:
     """The line over the session's unvoted pool at *count* (the app's own kept set), and the positives in hand (#4427)."""
     nan = float("nan")
@@ -373,11 +397,13 @@ def _line_at(frame: dict | None, floor: float) -> dict[str, float]:
 
 def run_tables(
     base: pd.DataFrame, sky: pd.DataFrame, ts: dict, picks: pd.DataFrame, frames: pd.DataFrame
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """``(cells, lines, steps, balances, balance_steps, pools, pool_steps)``: one row per run, one per run x
-    point x floor, one per run x recorded click x floor (every ``step`` rank frame, for the F1 curve), the
-    same two per balance (#4413: the returned set's F-beta over the best cut, at each preset beta), and the
-    same two over the session's own unvoted pool at the line the app kept (#4427: the positives in hand).
+) -> tuple[pd.DataFrame, ...]:
+    """``(cells, lines, steps, balances, balance_steps, pools, pool_steps, thresholds)``: one row per run, one
+    per run x point x floor, one per run x recorded click x floor (every ``step`` rank frame, for the F1
+    curve), the same two per balance (#4413: the returned set's F-beta over the best cut, at each preset
+    beta), the same two over the session's own unvoted pool at the line the app kept (#4427: the positives in
+    hand), and the objective: the withheld set above the app's threshold at every click, unchecked and after
+    the check (``thresholds``, :data:`THRESHOLD_METRICS`).
 
     A run that never found a positive has no scored steps (the head cannot
     train without a Good), and it is the review's most important row, so it is
@@ -416,7 +442,7 @@ def run_tables(
         skyd[(r["dataset"], r["category"], r["embedder"], r["style"], int(r["seed"]))] = _f(r.get("average_precision"))
 
     keys = set(series) | set(clicks_by) | set(skyd)
-    cells, lines, steps_out, balances, balance_steps, pools, pool_steps = [], [], [], [], [], [], []
+    cells, lines, steps_out, balances, balance_steps, pools, pool_steps, thresholds = [], [], [], [], [], [], [], []
     for key in sorted(keys, key=lambda k: tuple(str(x) for x in k)):
         ds, cat, emb, style, seed = key
         text = _text_for(ts, ds, cat, emb, int(seed))
@@ -456,6 +482,26 @@ def run_tables(
         # The session's own preference, for the pool-side line (#4427): its beta, or F1 under a floor.
         own_beta = beta_of.get(key, 1.0)
         counts, end_count = _counts_by_t(ordinary_by.get(key), checks.get(key))
+        # The objective (#4427): the withheld set above the app's threshold, from the session's own rows.
+        ord_rows = ordinary_by.get(key)
+        ord_rows = ord_rows.sort_values("t") if ord_rows is not None else None
+        chk_rows = checks.get(key)
+        last_ord = ord_rows.iloc[-1] if ord_rows is not None and len(ord_rows) else None
+        last_chk = chk_rows.sort_values("t").iloc[-1] if chk_rows is not None and len(chk_rows) else None
+        unchecked = _threshold_at(last_ord, own_beta)
+        after = _threshold_at(last_chk if last_chk is not None else last_ord, own_beta)
+        for c in CHECKPOINTS:
+            at = ord_rows[ord_rows["t"] <= c] if ord_rows is not None else None
+            row[f"thr_fbeta_{c}"] = _threshold_at(at.iloc[-1] if at is not None and len(at) else None, own_beta)[
+                "thr_fbeta"
+            ]
+        row["thr_fbeta_unchecked"] = unchecked["thr_fbeta"]
+        row["thr_returned_unchecked"] = unchecked["thr_returned"]
+        row["thr_fbeta_final"] = after["thr_fbeta"]
+        row["thr_precision_final"] = after["thr_precision"]
+        row["thr_recall_final"] = after["thr_recall"]
+        row["thr_returned_final"] = after["thr_returned"]
+        row["thr_walk_effect"] = after["thr_fbeta"] - unchecked["thr_fbeta"]
         cells.append(row)
 
         # The line, left to right.  Without rank frames only click 0 is known.
@@ -524,6 +570,20 @@ def run_tables(
             t_fr = int(fr["t"])
             mp = _pool_at(fr, counts.get(t_fr, float("nan")), _goods_by(clicks, t_fr), own_beta)
             pool_steps.append({**ident, "t": t_fr, "beta": own_beta, **mp})
+        # The withheld set above the threshold at every ordinary click, then unchecked and after the check.
+        if ord_rows is not None:
+            for r_ in ord_rows.to_dict("records"):
+                thresholds.append(
+                    {
+                        **ident,
+                        "point": "step",
+                        "t": int(r_["t"]),
+                        "beta": own_beta,
+                        **_threshold_at(pd.Series(r_), own_beta),
+                    }
+                )
+            thresholds.append({**ident, "point": "unchecked", "t": int(last_ord["t"]), "beta": own_beta, **unchecked})
+            thresholds.append({**ident, "point": "final", "t": final_t, "beta": own_beta, **after})
     return (
         pd.DataFrame(cells),
         pd.DataFrame(lines),
@@ -532,6 +592,7 @@ def run_tables(
         pd.DataFrame(balance_steps),
         pd.DataFrame(pools),
         pd.DataFrame(pool_steps),
+        pd.DataFrame(thresholds),
     )
 
 
@@ -543,6 +604,7 @@ def curves(
     steps: pd.DataFrame | None = None,
     balances: pd.DataFrame | None = None,
     balance_steps: pd.DataFrame | None = None,
+    thresholds: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Every run on a common click grid 0..horizon, as the USER would see it.
 
@@ -590,6 +652,11 @@ def curves(
                 g["t"].to_numpy(),
                 {m: g[m].to_numpy(dtype=float) for m in BALANCE_CURVE_METRICS},
             )
+    thr_run: dict[tuple, tuple[np.ndarray, np.ndarray]] = {}
+    if thresholds is not None and not thresholds.empty:
+        for (arm, cat, seed), g in thresholds[thresholds["point"] == "step"].groupby(["arm", "category", "seed"]):
+            g = g.sort_values("t")
+            thr_run[(arm, cat, int(seed))] = (g["t"].to_numpy(), g["thr_fbeta"].to_numpy(dtype=float))
     rows = []
     for r in cells.itertuples():
         key = (r.dataset, r.category, _emb_of(r.arm), _style_of(r.arm), int(r.seed))
@@ -623,9 +690,25 @@ def curves(
                 elif not r.never_trained:
                     v[1:] = np.nan
                 f1_cols[curve_col(metric, floor)] = v
+        # The objective over clicks (#4427): no threshold before the first trained click, then carried forward.
+        thr = np.full(len(grid), np.nan, dtype=float)
+        have_thr = thr_run.get((r.arm, r.category, int(r.seed)))
+        if have_thr is not None:
+            tt, tv = have_thr
+            idx = np.searchsorted(tt, grid, side="right") - 1
+            thr[idx >= 0] = tv[idx[idx >= 0]]
         rows.append(
             pd.DataFrame(
-                {"arm": r.arm, "category": r.category, "seed": r.seed, "t": grid, "ap": ap, "goods": goods, **f1_cols}
+                {
+                    "arm": r.arm,
+                    "category": r.category,
+                    "seed": r.seed,
+                    "t": grid,
+                    "ap": ap,
+                    "goods": goods,
+                    "thr_fbeta": thr,
+                    **f1_cols,
+                }
             )
         )
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
@@ -876,6 +959,68 @@ def check_table(cells: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     ).round(3)
 
 
+def objective_table(cells: pd.DataFrame, by: list[str]) -> pd.DataFrame:
+    """The objective per *by* (#4427): F-beta of the withheld set above the app's threshold, unchecked and checked."""
+    c = cells[~cells["never_trained"].astype(bool)].copy()
+    out = (
+        c.groupby(by)
+        .agg(
+            runs=("thr_fbeta_final", "count"),
+            fbeta_25=("thr_fbeta_25", "mean"),
+            fbeta_50=("thr_fbeta_50", "mean"),
+            fbeta_100=("thr_fbeta_100", "mean"),
+            fbeta_unchecked=("thr_fbeta_unchecked", "mean"),
+            fbeta_checked=("thr_fbeta_final", "mean"),
+            walk_effect=("thr_walk_effect", "mean"),
+            walk_effect_se=("thr_walk_effect", lambda v: v.std(ddof=1) / np.sqrt(len(v)) if len(v) > 1 else np.nan),
+            precision=("thr_precision_final", "mean"),
+            recall=("thr_recall_final", "mean"),
+            returned_unchecked=("thr_returned_unchecked", "mean"),
+            returned_checked=("thr_returned_final", "mean"),
+            check_votes=("check_votes", "mean"),
+        )
+        .round(3)
+    )
+    return out
+
+
+def objective_md(cells: pd.DataFrame) -> list[str]:
+    """The headline (owner, 2026-10-01): the withheld images above the app's threshold, as F-beta at the session's beta."""
+    own = session_betas(cells)
+    aim = ("beta = " + ", ".join(f"{x:g}" for x in own)) if own else "a floor (read as F1 here)"
+    if cells.empty or "thr_fbeta_final" not in cells or not cells["thr_fbeta_final"].notna().any():
+        return [
+            "## The objective: the withheld set above the app's threshold",
+            "",
+            "*No session rows with a threshold.*",
+            "",
+        ]
+    c = cells[~cells["never_trained"].astype(bool)]
+    by_band = (
+        c.groupby(["arm", "band"])[["thr_fbeta_unchecked", "thr_fbeta_final", "thr_walk_effect"]].mean().round(3)
+        if "band" in c and c["band"].astype(bool).any()
+        else None
+    )
+    out = [
+        "## The objective: the withheld set above the app's threshold",
+        "",
+        "The images of the withheld half that score above the threshold the app holds, as F-beta at the "
+        f"session's own preference ({aim}): `fbeta_unchecked` at the last click before the spot check (the "
+        "line as AutoRun or an unchecked session leaves it), `fbeta_checked` after the check and its votes, "
+        "`walk_effect` their paired difference, with the set's precision, recall and size (`returned_*`) and "
+        "the check's votes. Fixed-click columns read the unchecked line at that click. This, not the "
+        "rank-count line below (the balance's rule re-drawn on the fresh ranking), is what a user's next "
+        "corpus gets, and it is where a harvesting acquisition shows: a thinned unvoted top pushes the kept "
+        "set's edge score up and few fresh images clear it (#4427).",
+        "",
+        _md(objective_table(cells, ["arm"])),
+        "",
+    ]
+    if by_band is not None:
+        out += ["By size band:", "", _md(by_band), ""]
+    return out
+
+
 def in_hand_table(pools: pd.DataFrame, balances: pd.DataFrame | None, by: list[str]) -> pd.DataFrame:
     """Positives in hand per *by* x point (#4427): Goods + the kept set's positives on the session's own pool.
 
@@ -1002,6 +1147,7 @@ def summary(
         nt = cells[cells["never_trained"]][["arm", "category", "seed", "positives_found", "text_ap", "ceiling_ap"]]
         lines_md += ["## Runs that never found a positive (no detector was ever trained)", "", _md(nt, index=False), ""]
     if not cells.empty:
+        lines_md += objective_md(cells)
         rank = ["text_ap", "ap_25", "ap_50", "final_ap", "ceiling_ap", "goods_25", "goods_50", "positives_found"]
         lines_md += [
             "## The ranking: AP and Goods found, per path",
@@ -1151,7 +1297,9 @@ def main() -> int:
     if base.empty and sky.empty:
         raise SystemExit(f"no cells under {args.exp}/results/cells")
     ts = text_scores(args.baseline)
-    cells, lines, steps, balances, balance_steps, pools, pool_steps = run_tables(base, sky, ts, picks, frames)
+    cells, lines, steps, balances, balance_steps, pools, pool_steps, thresholds = run_tables(
+        base, sky, ts, picks, frames
+    )
     inf = attribute(base, picks, ts) if not base.empty else pd.DataFrame()
     img, det = roll_up(inf)
     cells.to_csv(args.out / "cells.csv", index=False)
@@ -1161,7 +1309,10 @@ def main() -> int:
     balance_steps.to_csv(args.out / "balance_steps.csv", index=False)
     pools.to_csv(args.out / "pools.csv", index=False)
     pool_steps.to_csv(args.out / "pool_steps.csv", index=False)
-    curves(cells, base, picks, lines, steps, balances, balance_steps).to_csv(args.out / "curves.csv", index=False)
+    thresholds.to_csv(args.out / "thresholds.csv", index=False)
+    curves(cells, base, picks, lines, steps, balances, balance_steps, thresholds).to_csv(
+        args.out / "curves.csv", index=False
+    )
     inf.to_csv(args.out / "influence.csv", index=False)
     img.to_csv(args.out / "images.csv", index=False)
     det.to_csv(args.out / "image_detector.csv", index=False)

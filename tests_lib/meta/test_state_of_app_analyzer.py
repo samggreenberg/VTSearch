@@ -251,6 +251,7 @@ def run(tmp_path_factory, rm):
         "balance_steps": read("balance_steps.csv"),
         "pools": read("pools.csv"),
         "pool_steps": read("pool_steps.csv"),
+        "thresholds": read("thresholds.csv"),
         "summary": (out / "summary.md").read_text(),
     }
 
@@ -355,6 +356,45 @@ def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> No
     assert "## The returned set at each balance: F-beta over the best cut" in run["summary"]
     assert "These sessions aimed at a floor, not a balance" in run["summary"]
     assert run["cells"]["session_beta"].isna().all(), "a floor run records no session beta"
+
+
+def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:
+    """#4427 (owner): F-beta of the withheld images above the app's threshold, off the session's own rows -
+    the last ordinary row (unchecked) and the last check row (after the walk); every ordinary click in
+    thresholds.csv and the curve; the summary's first section."""
+    cells, thr, curves = run["cells"], run["thresholds"], run["curves"]
+
+    def f1(p, r):
+        return 2 * p * r / (p + r) if (p + r) > 0 else 0.0
+
+    for idx, cat in enumerate(CATS):
+        main = _main_frame(run["exp"], idx).sort_values("t")
+        ordinary = main[main["phase"].astype(str) != "check"]
+        check = main[main["phase"].astype(str) == "check"]
+        last = ordinary.iloc[-1]
+        want_unchecked = f1(float(last["precision"]), float(last["recall"]))
+        assert cells.loc[cat, "thr_fbeta_unchecked"] == pytest.approx(want_unchecked)
+        end = check.iloc[-1] if len(check) else last
+        want_final = f1(float(end["precision"]), float(end["recall"]))
+        assert cells.loc[cat, "thr_fbeta_final"] == pytest.approx(want_final)
+        assert cells.loc[cat, "thr_walk_effect"] == pytest.approx(want_final - want_unchecked)
+        assert cells.loc[cat, "thr_returned_final"] == pytest.approx(
+            float(end["recall"]) * float(end["n_test_pos"]) + float(end["fpr"]) * float(end["n_test_neg"])
+        )
+        steps = thr[(thr["category"] == cat) & (thr["point"] == "step")].set_index("t")
+        c = curves[curves["category"] == cat].set_index("t")
+        for _, r in ordinary.iterrows():
+            want = f1(float(r["precision"]), float(r["recall"]))
+            assert steps.loc[int(r["t"]), "thr_fbeta"] == pytest.approx(want)
+            assert c.loc[int(r["t"]), "thr_fbeta"] == pytest.approx(want)
+        assert np.isnan(c.loc[0, "thr_fbeta"]), "no threshold before the first trained click"
+        fin = thr[(thr["category"] == cat) & (thr["point"] == "final")].iloc[0]
+        assert fin["thr_fbeta"] == pytest.approx(want_final) and fin["beta"] == 1.0
+    s = run["summary"]
+    assert s.index("## The objective: the withheld set above the app's threshold") < s.index("## The ranking: AP"), (
+        "the objective comes first"
+    )
+    assert "fbeta_unchecked" in s and "walk_effect" in s
 
 
 def test_positives_in_hand_are_the_goods_plus_the_kept_sets_on_the_users_own_corpus(run, rm) -> None:
