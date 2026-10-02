@@ -21,10 +21,12 @@
      the page's keypoints differ from it: 64 × 128 = 8,192 numbers. -->
 
 <!-- **b** — Stage 1 compares the query's vector with every page's, all in
-     one matrix multiply, and keeps the top few. -->
+     one matrix multiply, and keeps the top few. (On documents it now
+     compares tiles instead of whole pages — next slide.) -->
 
 <!-- **c** — Stage 2 checks only those, the slow way, and ranks them by how
      many agree. These four are the real top of Tobacco800's 1,290 pages for
-     this crop, after the query's own page. The app keeps the top 50. A page
+     this crop, after the query's own page. The app keeps the top 2,000 on
+     documents (1,000 without a GPU), and 50 on photos. A page
      Stage 1 does not shortlist is never checked, so Stage 1 is the
      ceiling. -->

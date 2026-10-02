@@ -25,8 +25,9 @@
      order, each one repairing what the last one starved on. -->
 
 <!-- **d** — Section 3 puts it where the *user* says instead. Same machinery,
-     second axis: a slider, what it took to make it mean anything, and the
-     number a person can actually say that took its place. -->
+     second axis: a slider, what it took to make it mean anything, the
+     number a person could actually say that took its place, and the balance
+     that took that one's. -->
 
 <!-- **e** — Section 4 is the half of asking the threshold does not do: the
      places no vote has been, and the atlas that knows where they are. -->

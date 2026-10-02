@@ -8,7 +8,8 @@
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
 # same machinery walked a second time along the axis the *user* sets — a
-# slider, and then the precision floor that replaced it (#4244). Then the
+# slider, then the precision floor that replaced it (#4244), which the F-beta
+# balance has since replaced in turn (#4413). Then the
 # places the loop never asks about, the data the
 # experiments run on, the region-voting idea (whose measured verdict waits for
 # the Results section with the runs still reporting), and logos.
@@ -58,6 +59,9 @@ slides:
   # 3 — Preference: why a line needs one, the slider we shipped and what it
   # took to make it mean anything, then the number a person can actually say
   # — a precision floor — and the spot check that earns it (#4224, #4267).
+  # The app has since moved on to an F-beta balance and a band-walk check
+  # (#4388, #4413); the two floor slides now carry that in their notes, and
+  # their figures still draw the floor.
   # Second Cut stays last: the acquisition cut is measured from wherever the
   # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
@@ -130,8 +134,9 @@ slides:
   # Tobacco800 pages). The background comes first, in the order a page is
   # checked: keypoints, then matching and RANSAC. Then the three things the
   # documents changed: the keypoint budget, the shortlist and why a page
-  # vector cannot build one, and the votes. Tiles is the one idea here that
-  # is measured but not shipped, and its notes say so.
+  # vector cannot build one, and the votes. Tiles shipped after these slides
+  # were drawn (#4378, #4415): the notes say so, and the stages and tiles
+  # figures still draw the single-layer, page-vector picture.
   logo-keypoints
   logo-match
   logo-budget

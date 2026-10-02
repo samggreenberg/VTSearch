@@ -17,7 +17,7 @@
      the second. -->
 
 <!-- **a** — The fitted estimator, cutting where the line sits — today, at
-     the foot of the floor's candidate. **b** — Job one, drawn as a bracket
+     the foot of the balance's kept set. **b** — Job one, drawn as a bracket
      over what comes back. -->
 
 <!-- **c** — The turn, and the mechanism is not what people guess. Autopilot's
@@ -44,4 +44,6 @@
      exactly this arm. On verified labels the grid went past minus four, and
      minus four ships: cost is flat from minus two to minus five, and minus four
      buys pick precision, 24 to 35 percent. Its real worth is speed — half the
-     clicks to the same answer. -->
+     clicks to the same answer. A cut at half the balance's F-beta argmax
+     replaced it for a day and was reverted: worse withheld F-beta at every
+     preset (#4427). -->

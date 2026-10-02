@@ -34,7 +34,7 @@
      positives, α halving per step: *the fraction of true matches I am willing
      to miss*. A cap, not a target. -->
 
-<!-- **f** — And what the user sees: three settings, three different sets, where
+<!-- **f** — And what the user saw: three settings, three different sets, where
      the retired rule returned one answer for the whole slider. -->
 
 <!-- Measured: no flat sweeps at all, ten distinct admitted sizes across eleven

@@ -12,13 +12,14 @@
      thing a person could say. Nobody sits down at a search box wanting
      Inclusion minus three. -->
 
-<!-- **a** — What they can say is this sentence. So the slider is retired as a
-     preference, and every detector carries a **floor** instead — 50% until the
-     user changes it, with presets from 10% to 90%. Under it, the corpus as
-     before, best on the right, and the thing the floor is asked about: a
-     **candidate**, the top 32 items nobody has voted on. The <span
-     class="cut">line</span> sits at its foot. Before anyone checks, that is
-     what comes back, and the control says so: *unchecked*. -->
+<!-- **a** — What they can say is this sentence. So the slider was retired as
+     a preference, and every detector carried a **floor** instead — 50% until
+     the user changed it, presets 10% to 90% — until the balance replaced it
+     (#4413). Under it, the corpus as before, best on the right, and the
+     thing the floor was asked about: a **candidate**, the top 32 items nobody
+     has voted on. The <span class="cut">line</span> sits at its foot. Before
+     anyone checks, that is what comes back — still, under the balance — and
+     the control says so: *unchecked*. -->
 
 <!-- **b** — The obvious move is to read the promise off the votes the session
      already holds. Here they are, at the scores they landed on: a cluster at

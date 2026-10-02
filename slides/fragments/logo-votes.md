@@ -28,6 +28,6 @@
      scoring by the best template ranks the pages still unlabelled at AP
      0.87, against 0.74 for the query alone. The app scores exactly this way:
      a learned classifier that used to replace the count did worse, and is
-     gone (#4169). But the app checks only the page vector's top 50, which
-     rarely holds a positive, so its path scores 0.20 in the same test. That
-     is the Stage 1 still open (#3928). -->
+     gone (#4169). With the tiled Stage 1 the app's own path now scores the
+     same 0.87 in this test (#4378). And Bad votes
+     never enter the ranking: they set where its line falls (#4367). -->
