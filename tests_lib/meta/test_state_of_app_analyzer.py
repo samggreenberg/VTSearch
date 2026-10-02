@@ -383,7 +383,7 @@ def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:
         )
         steps = thr[(thr["category"] == cat) & (thr["point"] == "step")].set_index("t")
         c = curves[curves["category"] == cat].set_index("t")
-        for r in ordinary.to_dict("records"):
+        for _, r in ordinary.iterrows():
             want = f1(float(r["precision"]), float(r["recall"]))
             assert steps.loc[int(r["t"]), "thr_fbeta"] == pytest.approx(want)
             assert c.loc[int(r["t"]), "thr_fbeta"] == pytest.approx(want)
