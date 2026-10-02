@@ -291,7 +291,9 @@ class TestStoplist:
 
         tpl, bad, _ = self._shared()
         monkeypatch.setattr(ss, "STOPLIST_POLICY", "all")
-        out, tags = ss._stoplist([("g", tpl)], {"b": None}, {"b": {"local_features": bad}}, None, None, {})
+        out, tags = ss._stoplist(
+            [("g", tpl)], {"b": None}, {"b": {"local_features": bad}}, _CountingMatcher({}), None, {}
+        )
         assert out[0][1].count == 20  # the 20 glyphs are gone, the mark stays
         assert "g" in tags
 
@@ -309,7 +311,7 @@ class TestStoplist:
         )
         monkeypatch.setattr(ss, "STOPLIST_POLICY", "all")
         snap = {"b": {"local_features": bad}, "g": {"local_features": tpl}, "h": {"local_features": other}}
-        out, _tags = ss._stoplist([("g", tpl), ("h", other)], {"b": None}, snap, None, None, {})
+        out, _tags = ss._stoplist([("g", tpl), ("h", other)], {"b": None}, snap, _CountingMatcher({}), None, {})
         assert out[0][1].count == 40
 
     def test_shipped_policy_is_off(self):
