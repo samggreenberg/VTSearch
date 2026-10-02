@@ -156,8 +156,9 @@ describe('BalanceComponent (#4413, #4317)', () => {
       await show(0.5, lineBalance('checked', { beta: 0.5 }), 1234);
       expect(state()!.getAttribute('data-status')).toBe('green');
       expect(stateText()!.textContent).toContain('Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept');
-      expect(stateText()!.getAttribute('title')).toContain('5 random picks from the 32 items the line keeps');
-      expect(stateText()!.getAttribute('title')).toContain("the set where the check's balance peaked");
+      // Beta 0.5 is an advisory check (#4427): the ranges describe the audited set, the line keeps its own count.
+      expect(stateText()!.getAttribute('title')).toContain('5 random picks from the top 32');
+      expect(stateText()!.getAttribute('title')).toContain('at this balance a check informs the line and does not move it');
     });
 
     it('reads the count off the result, never the preset', async () => {
@@ -184,7 +185,8 @@ describe('BalanceComponent (#4413, #4317)', () => {
     it('prices a check off the schedule, rounds and all, on the check button', async () => {
       await show(2, lineBalance('unchecked', { beta: 2, count: 128, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
       expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('5 random picks a band, walking the list from the top 128');
-      expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('while the balance keeps improving');
+      // Beta 2 trims (#4427): the walk only steps to a shorter list.
+      expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('steps to a shorter list while the balance does not fall');
     });
 
     it('notes a stale checked range only in the tooltip', async () => {

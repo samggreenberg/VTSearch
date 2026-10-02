@@ -194,19 +194,28 @@ class TestTheBalanceArm:
         with pytest.raises(ValueError, match="guard must be"):
             self._run(beta=1.0, walk_guard=-1.0)
 
-    def test_an_advisory_walk_votes_but_never_moves_the_line(self):
-        """#4427's advisory arm: the check's rows exist and its picks train, but the line stays unchecked."""
-        rows, picks = self._run(beta=1.0, walk_advisory=True)
+    def test_the_default_check_is_advisory_at_beta_one_and_the_full_walk_can_be_forced(self):
+        """#4427: the arm's check follows the app's shape; at beta 1 the walk audits but the line keeps the
+        unchecked rule's count; ``walk_shape="walk"`` is the full walk whose end moves the line."""
+        rows, picks = self._run(beta=1.0)
         check_rows = [r for r in rows if r["phase"] == "check"]
         assert check_rows and [p for p in picks if p["phase"] == "check"], "the check ran and voted"
-        assert all(r["floor_status"] == FLOOR_UNCHECKED for r in check_rows), "the line never took the walk's end"
+        last = check_rows[-1]
+        assert last["floor_status"] == BALANCE_CHECKED and last["check_audited"] >= 1
+        assert last["check_audited"] == max(r["check_audited"] for r in check_rows), "the walk's end is on the row"
+        full, _ = self._run(beta=1.0, walk_shape="walk")
+        last_full = [r for r in full if r["phase"] == "check"][-1]
+        assert last_full["floor_count"] == last_full["check_audited"], "the full walk's end is the line"
+        with pytest.raises(ValueError, match="walk_shape must be"):
+            self._run(beta=1.0, walk_shape="sideways")
 
-    def test_a_shallower_only_walk_ends_at_or_above_its_start(self):
-        """#4427's shallow arm: the check runs and can only cut the line, never deepen it."""
-        rows, picks = self._run(beta=1.0, walk_shallow_only=True)
+    def test_a_trim_walk_ends_at_or_above_its_start(self):
+        """#4427's trim shape: the check runs and can only cut the line, never deepen it."""
+        rows, picks = self._run(beta=1.0, walk_shape="trim")
         check_rows = [r for r in rows if r["phase"] == "check"]
         assert check_rows and [p for p in picks if p["phase"] == "check"], "the check ran and voted"
         assert check_rows[-1]["floor_count"] <= check_rows[0]["floor_count"], "it never deepened"
+        assert check_rows[-1]["floor_count"] == check_rows[-1]["check_audited"], "and the line is its end"
 
     def test_the_line_is_the_balances_and_the_floor_is_unused(self):
         rows, _ = self._run(beta=1.0, min_precision=0.9)
@@ -221,7 +230,10 @@ class TestTheBalanceArm:
         assert check_rows, "the balance arm checks the line"
         last = check_rows[-1]
         assert last["floor_status"] == BALANCE_CHECKED and last["beta"] == 1.0
-        assert last["floor_count"] >= 1 and 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0
+        # Advisory at beta 1 (#4427): the audited set is the walk's end; the count is the unchecked rule's,
+        # which on this tiny corpus can be every unvoted item left - possibly none.
+        assert last["check_audited"] >= 1 and last["floor_count"] >= 0
+        assert 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0
         assert last["check_labelled"] >= 5 and all(p["phase"] != "check" or p["t"] > 15 for p in picks)
 
     def test_a_recall_leaning_balance_keeps_at_least_as_much(self):

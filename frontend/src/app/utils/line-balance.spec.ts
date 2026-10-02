@@ -28,6 +28,8 @@ describe('line-balance (#4413)', () => {
         recall: { lo: 0.3, hi: 0.7, labelled: 5, right: 5 },
         fbeta: 0.71,
         schedule: { candidate: 64, rounds: 2, picks: 5 },
+        shape: 'advisory',
+        audited: 128,
       };
       expect(lineBalanceFrom(wire)).toEqual({
         beta: 0.5,
@@ -37,11 +39,13 @@ describe('line-balance (#4413)', () => {
         recall: { lo: 0.3, hi: 0.7, labelled: 5, right: 5, stale: false },
         fbeta: 0.71,
         schedule: { candidate: 64, rounds: 2, picks: 5 },
+        shape: 'advisory',
+        audited: 128,
       });
     });
 
     it('reads an unchecked line with no ranges and no estimate', () => {
-      const wire = { beta: 2, status: 'unchecked', count: 128, precision: null, recall: null, fbeta: null, schedule: { candidate: 128, rounds: 3, picks: 5 } };
+      const wire = { beta: 2, status: 'unchecked', count: 128, precision: null, recall: null, fbeta: null, schedule: { candidate: 128, rounds: 3, picks: 5 }, shape: 'trim', audited: null };
       expect(lineBalanceFrom(wire as unknown as BalanceState)).toEqual({
         beta: 2,
         status: 'unchecked',
@@ -50,6 +54,8 @@ describe('line-balance (#4413)', () => {
         recall: null,
         fbeta: null,
         schedule: { candidate: 128, rounds: 3, picks: 5 },
+        shape: 'trim',
+        audited: null,
       });
     });
 
@@ -59,6 +65,8 @@ describe('line-balance (#4413)', () => {
       expect(balance.precision!.stale).toBe(false);
       expect(balance.recall).toBeNull();
       expect(balance.schedule).toBeNull();
+      expect(balance.shape).toBe('trim');
+      expect(balance.audited).toBeNull();
     });
 
     it('is null for a response with no detector behind it', () => {
@@ -195,8 +203,8 @@ describe('line-balance (#4413)', () => {
       expect(checkLabel(null)).toBeNull();
     });
 
-    it('explains a checked line by its check, both ranges as numbers, as the set where the balance peaked', () => {
-      const why = balanceExplanation(lineBalance('checked'))!;
+    it('explains a trimmed line (beta above 1) by its check, both ranges as numbers, as the set where the balance peaked', () => {
+      const why = balanceExplanation(lineBalance('checked', { beta: 2 }))!;
       expect(why).toBe(
         'A check of 5 random picks from the 32 items the line keeps found 5 right, so likely 55–100% of them are, ' +
           'with likely 30–70% of all the matches among them: the set where the check\'s balance peaked.',
@@ -204,8 +212,18 @@ describe('line-balance (#4413)', () => {
       expect(why).not.toMatch(/estimate|enough|short/i);
     });
 
+    it('explains an advisory check (beta 1 and below) by the set it audited, and says the line keeps its own count', () => {
+      const why = balanceExplanation(lineBalance('checked', { count: 16, audited: 64 }))!;
+      expect(why).toContain('A check of 5 random picks from the top 64 found 5 right');
+      expect(why).toContain('The line keeps its 16, the balance\'s own count: at this balance a check informs the line and does not move it.');
+      expect(why).not.toContain('peaked');
+      expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, precision: null, recall: null }))).toBe(
+        'A check ended on the top 64; the line keeps its 16.',
+      );
+    });
+
     it('explains a checked line with no ranges as where the check ended', () => {
-      expect(balanceExplanation(lineBalance('checked', { precision: null, recall: null }))).toBe(
+      expect(balanceExplanation(lineBalance('checked', { beta: 2, precision: null, recall: null }))).toBe(
         'A check ended on the 32 items the line keeps.',
       );
     });
@@ -243,11 +261,17 @@ describe('line-balance (#4413)', () => {
       expect(checkLabel(lineBalance('unchecked', { schedule: null }))).toBe('Check the line');
     });
 
-    it('says what a check does, that it walks to the peak, and that its votes are votes', () => {
+    it('says what a check does at this balance (#4427), and that its votes are votes', () => {
+      const trimmed = checkTitle(lineBalance('unchecked', { beta: 2, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
+      expect(trimmed).toBe(
+        'Vote on 5 random picks a band, walking the list from the top 128: the check steps to a shorter list while the balance ' +
+          'does not fall, and the line keeps the set where it ends. Your votes count as ordinary votes.',
+      );
       const title = checkTitle(lineBalance('unchecked', { schedule: { candidate: 64, rounds: 4, picks: 5 } }));
       expect(title).toBe(
         'Vote on 5 random picks a band, walking the list from the top 64: the check goes deeper while the balance keeps ' +
-          'improving and shorter while it does not, and the line keeps the set where it peaked. Your votes count as ordinary votes.',
+          'improving and shorter while it does not, and reports what it found; at this balance it informs the line and does not move it. ' +
+          'Your votes count as ordinary votes.',
       );
       expect(checkTitle(lineBalance('unchecked', { schedule: null }))).toContain('Vote on a few random picks:');
       expect(checkTitle(null)).toContain('Vote on a few random picks:');

@@ -91,6 +91,7 @@ from vtscore.training.thresholds import (
     SpotCheck,
     balance_line,
     balance_state,
+    check_shape,
     fbeta_count,
     floor_line,
     floor_state,
@@ -102,6 +103,8 @@ from vtscore.training.thresholds import (
     NO_GOOD_THRESHOLD,
     NO_PRECISION_FLOOR,
     ACQUISITION_ARGMAX_FACTOR,
+    CHECK_SHAPES,
+    CHECK_TRIM,
     acquisition_inclusion,
     acquisition_threshold,
     calculate_safe_threshold,
@@ -380,6 +383,7 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
             "check_labelled": -1,
             "check_right": -1,
             "check_stale": -1,
+            "check_audited": -1,
         }
     # A balance state (#4413) carries the kept set's precision range where a
     # floor state carries ``range``; the columns read the same thing.
@@ -394,6 +398,9 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
         "check_labelled": rng.labelled if rng is not None else -1,
         "check_right": rng.right if rng is not None else -1,
         "check_stale": (1 if state.stale else 0) if rng is not None else -1,
+        # The set the walk audited (#4427): under the advisory shape not the
+        # set the line keeps, which ``floor_count`` reports.
+        "check_audited": getattr(state, "audited", None) if rng is not None else -1,
     }
 
 
@@ -404,6 +411,7 @@ def _preference_line_for_step(
     beta: float | None,
     check: "SpotCheck | None",
     labels: "Mapping[int, bool] | None",
+    line_shape: "str | None" = None,
 ) -> tuple[float | None, str]:
     """The line the arm's preference draws over the step's ranking, and its provenance; ``(None, "")`` with neither.
 
@@ -416,9 +424,9 @@ def _preference_line_for_step(
     """
     if beta is not None:
         proposal = fbeta_count(ranking, beta, labels or {})
-        details["floor_state"] = balance_state(beta, check, ranking, proposal=proposal)
+        details["floor_state"] = balance_state(beta, check, ranking, proposal=proposal, shape=line_shape)
         details["beta"] = beta
-        return balance_line(ranking, beta, check, proposal=proposal), "balance"
+        return balance_line(ranking, beta, check, proposal=proposal, shape=line_shape), "balance"
     if min_precision is not None:
         proposal = mixture_count(ranking, min_precision, labels or {})
         details["floor_state"] = floor_state(min_precision, check, ranking, proposal=proposal)
@@ -445,6 +453,7 @@ def _safe_threshold_for_step(
     check: "SpotCheck | None" = None,
     labels: "Mapping[int, bool] | None" = None,
     beta: float | None = None,
+    line_shape: "str | None" = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -617,7 +626,7 @@ def _safe_threshold_for_step(
     # ones marked, as ``_fused_threshold`` parks it on the detector context.
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
     details["line_ranking"] = ranking
-    kept, provenance = _preference_line_for_step(ranking, details, min_precision, beta, check, labels)
+    kept, provenance = _preference_line_for_step(ranking, details, min_precision, beta, check, labels, line_shape)
     if kept is not None:
         # No inclusion drew this line: acquisition derives its origin from it.
         details["reporting_line"] = ReportingLine(kept, None, None)
@@ -1700,6 +1709,23 @@ def _check_acquisition_arm(
 ACQ_P_CROSSING_OFF = "off"
 
 
+#: The harness's name for the full balance walk whose end moves the line (what the app shipped before #4427's pricing).
+WALK_SHAPE_FULL = "walk"
+
+
+def resolve_walk_shape(walk_shape: Optional[str], beta: Optional[float]) -> Optional[str]:
+    """The end-of-run check's shape for an arm: the app's (:func:`check_shape`) when none is named; ``None`` with no balance.
+
+    ``"walk"`` is the full walk, ``"advisory"`` and ``"trim"`` force a shape (#4427).  Validated here, so a malformed
+    arm fails before anything expensive runs.
+    """
+    if walk_shape is not None and walk_shape not in (WALK_SHAPE_FULL, *CHECK_SHAPES):
+        raise ValueError(f"walk_shape must be one of {(WALK_SHAPE_FULL, *CHECK_SHAPES)}, got {walk_shape!r}")
+    if beta is None:
+        return None
+    return check_shape(beta) if walk_shape is None else walk_shape
+
+
 def resolve_acquisition_factor(acq_p_crossing: "float | str | None", beta: Optional[float]) -> Optional[float]:
     """The share of the F-beta argmax's depth the acquisition cut sits at, or ``None`` for the offset cut.
 
@@ -1951,8 +1977,7 @@ def simulate_voting_iterations(  # noqa: C901
     walk_tol: float = 0.0,
     walk_fine: bool = False,
     walk_guard: Optional[float] = None,
-    walk_advisory: bool = False,
-    walk_shallow_only: bool = False,
+    walk_shape: Optional[str] = None,
     spot_check: str = "end",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
@@ -2319,12 +2344,14 @@ def simulate_voting_iterations(  # noqa: C901
             every band past the start is split in two, *walk_guard* the
             precision guard (a deeper band whose audited share right is below
             it times the start set's ends the walk at the best set so far)
-            *walk_advisory* whether the walk's end moves the line at all
-            (``True``: the check runs and its votes train, the line keeps the
-            unchecked count) and *walk_shallow_only* whether the walk never
-            tries a deeper band (``True``: it audits the start set and steps
-            shallower while the estimate does not fall, so the check can only
-            cut the line).  All apply to the end-of-run balance walk only.
+            and *walk_shape* how the check treats the line: ``None``, the
+            app's, follows :func:`~vtscore.training.thresholds.check_shape`
+            (``advisory`` at beta <= 1: the votes train, the line keeps the
+            unchecked rule's count; ``trim`` above: the walk may only step
+            shallower and the line takes its end); ``"walk"`` is the full
+            walk whose end moves the line, what the app shipped before
+            #4427's pricing; ``"advisory"`` and ``"trim"`` force a shape.
+            All apply to the end-of-run balance walk only.
         spot_check: When the simulated user runs the floor's **spot check**
             (#4272, the band walk of #4388).  ``"end"`` (the default): once the
             voting steps are spent - *max_steps* reached, or the pool exhausted
@@ -2429,6 +2456,9 @@ def simulate_voting_iterations(  # noqa: C901
     # the Inclusion arm, and a beta the balance arm whatever the floor says.
     # Resolved - and so validated - before anything expensive runs.
     floor, beta = resolve_line_knobs(min_precision, beta)
+    walk_shape_resolved = resolve_walk_shape(walk_shape, beta)
+    # What the line reads a finished walk as: the app's shape when the arm names none; the full walk's end moves the line.
+    line_shape = None if walk_shape is None else (CHECK_TRIM if walk_shape == WALK_SHAPE_FULL else walk_shape)
     _check_inclusion_arm(inclusion, floor, beta)
     # The acquisition cut's rule (#4409): the shipped argmax factor under a
     # balance unless the arm says otherwise, the offset everywhere else.
@@ -2816,7 +2846,7 @@ def simulate_voting_iterations(  # noqa: C901
                     tol=walk_tol,
                     fine=walk_fine,
                     guard=walk_guard,
-                    shallow_only=walk_shallow_only,
+                    shallow_only=walk_shape_resolved == CHECK_TRIM,
                 )
             else:
                 check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
@@ -2948,11 +2978,10 @@ def simulate_voting_iterations(  # noqa: C901
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
                     min_precision=floor,
-                    # The advisory arm (#4427): the check runs and its votes
-                    # train, but the line never moves to the walk's end.
-                    check=None if walk_advisory else check,
+                    check=check,
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     beta=beta,
+                    line_shape=line_shape,
                 )
             )
             line_ranking = details.get("line_ranking")

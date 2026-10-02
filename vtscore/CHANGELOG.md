@@ -10,6 +10,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A balance walk's effect on the line follows the preset** (issue #4427).
+  `check_shape(beta)` is `advisory` at beta <= 1 and `trim` above:
+  `balance_count` / `balance_line` ignore a finished walk under `advisory`
+  (the line keeps the unchecked rule's count) and take its end under `trim`;
+  `SpotCheck.start_balance` defaults `shallow_only` to the shape (the walk
+  may only step shallower under `trim`); `BalanceState` gains `shape` and
+  `audited`. The eval harness's `walk_shape` (`None` the app's, `"walk"` the
+  full walk whose end moves the line, `"advisory"`, `"trim"`) replaces the
+  day-old `walk_advisory` / `walk_shallow_only` knobs, and its rows gain
+  `check_audited`.
 - **Reverted the day after (issue #4427): `ACQUISITION_ARGMAX_FACTOR` is
   `None`**, so the balance keeps the line − 4 re-cut; `acquisition_count` /
   `acquisition_threshold` return `None` with no factor and the harness's

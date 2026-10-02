@@ -15,7 +15,7 @@ import pytest
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.state.core import detector_balance_state, get_active_detector_context, human_voted_ids
-from vtscore.training.thresholds import BALANCE_CHECKED, balance_line
+from vtscore.training.thresholds import BALANCE_CHECKED, CHECK_ADVISORY, CHECK_TRIM, balance_count, balance_line
 from vtsearch.state import bad_votes, get_beta, get_line_preference, good_votes, snapshot_medias
 
 
@@ -83,27 +83,50 @@ class TestTheLineUnderTheBalance:
         moved = client.post("/api/balance", json={"beta": 0.5}).get_json()
         assert moved["beta"] == 0.5 and moved["threshold"] == round(ctx.threshold, 4)
 
-    def test_a_check_under_the_balance_is_the_f_beta_walk_and_moves_the_line_to_its_peak(self, client):
-        detector_id = _load_detector(client)
-        client.post("/api/find-label", json={"detector_id": detector_id})
+    def _walk(self, client, positives=frozenset(range(1, 7))):
         start = client.post("/api/precision-check/start", json={})
         assert start.status_code == 200, start.get_json()
-        check = start.get_json()["check"]
-        assert check["beta"] == 1.0 and check["min_precision"] is None and check["status"] == "running"
-        assert start.get_json()["balance"]["status"] == "unchecked"
-        ctx = get_active_detector_context()
-        positives = set(range(1, 7))
         data = start.get_json()
         for _ in range(20):
             if data["check"]["status"] != "running":
                 break
             votes = [{"id": cid, "label": "good" if cid in positives else "bad"} for cid in data["check"]["picks"]]
             data = client.post("/api/precision-check/votes", json={"votes": votes}).get_json()
+        return start.get_json(), data
+
+    def test_a_check_at_beta_one_is_the_f_beta_walk_as_advisory_and_the_line_keeps_its_count(self, client):
+        """#4427: at beta <= 1 the walk audits and reports, its votes stay votes, and the line keeps the unchecked
+        rule's count; the state says which set was audited."""
+        detector_id = _load_detector(client)
+        client.post("/api/find-label", json={"detector_id": detector_id})
+        start, data = self._walk(client)
+        check = start["check"]
+        assert check["beta"] == 1.0 and check["min_precision"] is None and check["status"] == "running"
+        assert start["balance"]["status"] == "unchecked" and start["balance"]["shape"] == CHECK_ADVISORY
+        assert start["balance"]["audited"] is None
+        ctx = get_active_detector_context()
         assert data["check"]["status"] == BALANCE_CHECKED, "a balance walk ends checked, never short"
-        assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["count"] == data["check"]["candidate"]
+        assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["shape"] == CHECK_ADVISORY
+        assert data["balance"]["audited"] == data["check"]["candidate"], "the walk's end is what the ranges describe"
+        unchecked = balance_count(1.0, None, proposal=detector_balance_state(ctx, 1.0)["count"])
+        assert data["balance"]["count"] == unchecked, "the line keeps the unchecked rule's count"
         assert data["balance"]["fbeta"] is not None and data["balance"]["recall"] is not None
         assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
         assert data["floor"]["status"] == "unchecked", "the floor's own state is untouched by a balance walk"
+
+    def test_a_check_at_beta_two_trims_and_moves_the_line_to_its_end(self, client):
+        """#4427: above beta 1 the walk may only step shallower, and the line takes the set it ends on."""
+        detector_id = _load_detector(client)
+        client.post("/api/find-label", json={"detector_id": detector_id})
+        assert client.post("/api/balance", json={"beta": 2.0}).get_json()["shape"] == CHECK_TRIM
+        start, data = self._walk(client)
+        assert start["check"]["beta"] == 2.0 and start["balance"]["shape"] == CHECK_TRIM
+        ctx = get_active_detector_context()
+        assert data["check"]["status"] == BALANCE_CHECKED
+        assert data["check"]["candidate"] <= data["check"]["start_candidate"], "never deeper than its start"
+        assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["shape"] == CHECK_TRIM
+        assert data["balance"]["count"] == data["balance"]["audited"] == data["check"]["candidate"]
+        assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
 
     def test_a_check_starts_when_the_mixture_has_no_estimate(self, client):
         """#4419: on the 20-item corpus the fit collapses onto the top two scores; the walk reads recall against the cap."""

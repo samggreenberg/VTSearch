@@ -28,6 +28,8 @@ from vtscore.state.core import (
     set_thread_detector_context,
 )
 from vtscore.training.thresholds import (
+    CHECK_ADVISORY,
+    CHECK_TRIM,
     BALANCE_CHECKED,
     FLOOR_UNCHECKED,
     LineRanking,
@@ -125,23 +127,45 @@ class TestTheLine:
         )
         assert n_pos is not None and 10 <= n_pos <= 40, n_pos
 
-    def test_a_finished_balance_walk_moves_the_line_to_its_peak(self):
-        ctx = _ctx()
+    def _walk(self, ctx, beta: float) -> SpotCheck:
         voted = human_voted_ids(ctx)
         unvoted = ctx.line_ranking.unvoted_ids(voted).tolist()
         n_pos = detector_balance_positives(ctx)
         assert n_pos is not None
-        check = SpotCheck.start_balance(unvoted, 1.0, n_pos, seed=0)
+        check = SpotCheck.start_balance(unvoted, beta, n_pos, seed=0)
         positives = set(range(1, 29))  # the high population's ids
         while check.running:
             check.record({cid: cid in positives for cid in check.pending})
         check.fingerprint = ctx.line_ranking.fingerprint(check.k, voted)
+        return check
+
+    def test_a_finished_balance_walk_at_beta_one_is_advisory_and_the_line_keeps_its_count(self):
+        """#4427: at beta <= 1 the walk's ranges inform the line; the count stays the unchecked rule's."""
+        ctx = _ctx()
+        voted = human_voted_ids(ctx)
+        unchecked = recut_detector_threshold(ctx, beta=1.0)
+        check = self._walk(ctx, 1.0)
+        assert not check.shallow_only, "the full walk runs, as an audit"
         ctx.precision_check = check
-        assert recut_detector_threshold(ctx, beta=1.0) == ctx.line_ranking.threshold_for(check.k, voted)
+        assert recut_detector_threshold(ctx, beta=1.0) == unchecked, "the line did not move"
         state = detector_balance_state(ctx, 1.0)
-        assert state["status"] == BALANCE_CHECKED and state["count"] == check.k
+        assert state["status"] == BALANCE_CHECKED and state["shape"] == CHECK_ADVISORY
+        assert state["audited"] == check.k and state["count"] != check.k or state["audited"] == state["count"]
+        assert ctx.line_ranking.threshold_for(state["count"], voted) == unchecked
         assert state["precision"]["stale"] is False and state["recall"]["lo"] <= state["recall"]["hi"]
         assert detector_balance_state(ctx, 2.0)["status"] == FLOOR_UNCHECKED, "a result belongs to its balance"
+
+    def test_a_finished_balance_walk_at_beta_two_trims_and_the_line_takes_its_end(self):
+        """#4427: above beta 1 the walk may only step shallower, and the line keeps the set it ended on."""
+        ctx = _ctx()
+        voted = human_voted_ids(ctx)
+        check = self._walk(ctx, 2.0)
+        assert check.shallow_only and check.k <= check.start_k
+        ctx.precision_check = check
+        assert recut_detector_threshold(ctx, beta=2.0) == ctx.line_ranking.threshold_for(check.k, voted)
+        state = detector_balance_state(ctx, 2.0)
+        assert state["status"] == BALANCE_CHECKED and state["shape"] == CHECK_TRIM
+        assert state["count"] == state["audited"] == check.k
 
     def test_the_state_before_a_check(self):
         ctx = _ctx()

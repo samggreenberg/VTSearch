@@ -791,6 +791,10 @@
       "BalanceResponse": {
         "additionalProperties": false,
         "properties": {
+          "audited": {
+            "nullable": true,
+            "type": "integer"
+          },
           "beta": {
             "type": "number"
           },
@@ -819,6 +823,13 @@
           "schedule": {
             "$ref": "#/components/schemas/CheckSchedule"
           },
+          "shape": {
+            "enum": [
+              "advisory",
+              "trim"
+            ],
+            "type": "string"
+          },
           "status": {
             "enum": [
               "unchecked",
@@ -832,6 +843,7 @@
           }
         },
         "required": [
+          "audited",
           "beta",
           "count",
           "fbeta",
@@ -840,6 +852,7 @@
           "precision",
           "recall",
           "schedule",
+          "shape",
           "status",
           "threshold"
         ],
@@ -848,6 +861,10 @@
       "BalanceState": {
         "additionalProperties": false,
         "properties": {
+          "audited": {
+            "nullable": true,
+            "type": "integer"
+          },
           "beta": {
             "type": "number"
           },
@@ -869,6 +886,13 @@
           "schedule": {
             "$ref": "#/components/schemas/CheckSchedule"
           },
+          "shape": {
+            "enum": [
+              "advisory",
+              "trim"
+            ],
+            "type": "string"
+          },
           "status": {
             "enum": [
               "unchecked",
@@ -878,12 +902,14 @@
           }
         },
         "required": [
+          "audited",
           "beta",
           "count",
           "fbeta",
           "precision",
           "recall",
           "schedule",
+          "shape",
           "status"
         ],
         "type": "object"

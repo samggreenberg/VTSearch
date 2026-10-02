@@ -137,20 +137,28 @@ export class SpotCheckModalComponent implements OnInit {
     return `${picks[0].toUpperCase()}${picks.slice(1)}${from}, ${set}.`;
   });
 
-  /** The result's headline: what the picks found on the set where the balance peaked. */
+  /** The result's headline: what the picks found on the set the walk ended on (under `advisory`, named, since the line keeps another). */
   readonly resultHeadline = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const p = b.precision;
     const r = b.recall;
-    return p && r ? `Checked: likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}).` : 'Checked.';
+    const what = b.shape === 'advisory' ? `Checked the top ${(b.audited ?? b.count).toLocaleString()}` : 'Checked';
+    return p && r ? `${what}: likely ${rangePercent(p)} right, ${foundWords(r)} (checked ${p.labelled}).` : `${what}.`;
   });
 
-  /** What the line keeps now. */
+  /** What the line keeps now, and what the ranges describe (#4427: under `advisory` the two differ). */
   readonly resultDetail = computed(() => {
     const b = this.balance();
     if (!b) return '';
     const kept = b.count.toLocaleString();
+    if (b.shape === 'advisory') {
+      const audited = (b.audited ?? b.count).toLocaleString();
+      return (
+        `The line keeps its ${kept}, the balance's own count: at this balance the check informs the line and does not move it. ` +
+        `The ranges are what the picks say about the top ${audited}.`
+      );
+    }
     return `The line keeps these ${kept}: the set where the check's balance peaked. The ranges are what the picks say about them.`;
   });
 
@@ -243,7 +251,9 @@ export class SpotCheckModalComponent implements OnInit {
           this.walkNote.set(
             c.direction === 'deeper'
               ? `Better so far: checking the next ${next.toLocaleString()}.`
-              : 'Past the peak: checking a shorter list.',
+              : this.balance()?.shape === 'trim'
+                ? 'Trimming: checking a shorter list.'
+                : 'Past the peak: checking a shorter list.',
           );
         }
         this.voted.emit({ finished, response: resp });

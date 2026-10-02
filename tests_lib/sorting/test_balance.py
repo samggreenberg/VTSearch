@@ -19,6 +19,8 @@ from tests_lib.sorting.test_mixture_count import _two_populations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
     BALANCE_PRESETS,
+    CHECK_ADVISORY,
+    CHECK_TRIM,
     DEFAULT_BETA,
     FLOOR_CONFIRMED,
     FLOOR_UNCHECKED,
@@ -33,6 +35,7 @@ from vtscore.training.thresholds import (
     balance_schedule,
     balance_state,
     check_schedule,
+    check_shape,
     fbeta_count,
     fbeta_score,
     floor_count,
@@ -329,6 +332,17 @@ class TestTheWalk:
         assert check.as_dict()["min_precision"] == 0.5 and "beta" not in check.as_dict()
 
 
+class TestTheCheckShape:
+    def test_the_shape_follows_the_preset(self):
+        """#4427's pricing: advisory at beta <= 1, trim above; the walk's default direction follows it."""
+        assert [check_shape(b) for b in (0.25, 0.5, 1.0, 2.0, 4.0)] == [CHECK_ADVISORY] * 3 + [CHECK_TRIM] * 2
+        ranking, _ = _planted(52)
+        unvoted = ranking.unvoted_ids().tolist()
+        assert not SpotCheck.start_balance(unvoted, 1.0, 52.0).shallow_only, "advisory: the full walk, as audit"
+        assert SpotCheck.start_balance(unvoted, 2.0, 52.0).shallow_only, "trim: shallower only"
+        assert not SpotCheck.start_balance(unvoted, 2.0, 52.0, shallow_only=False).shallow_only, "forced"
+
+
 class TestTheLineAndTheState:
     def test_the_unchecked_count_is_the_mixtures_argmax_under_the_cap(self):
         assert balance_count(1.0, None) == 32 and balance_count(2.0, None) == 128
@@ -346,8 +360,13 @@ class TestTheLineAndTheState:
         ranking, positives = _planted(52)
         check = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, 52.0, seed=0), positives)
         assert applicable_balance(1.0, check) is check and applicable_balance(2.0, check) is None
-        assert balance_count(1.0, check, proposal=3) == 64
+        # At beta 1 the check is advisory (#4427): the finished walk informs the line and never moves it.
+        assert check_shape(1.0) == CHECK_ADVISORY and balance_count(1.0, check, proposal=3) == 3
+        assert balance_count(1.0, check, proposal=3, shape=CHECK_TRIM) == 64, "the full walk's end, forced"
         assert balance_count(2.0, check, proposal=3) == 3, "another balance is unchecked until it is walked"
+        trim = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 2.0, 52.0, seed=0), positives)
+        assert check_shape(2.0) == CHECK_TRIM and trim.shallow_only, "above 1 the walk may only trim"
+        assert balance_count(2.0, trim, proposal=3) == trim.k, "and its end is the line"
         floor_walk = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)
         assert applicable_balance(1.0, floor_walk) is None, "a floor's result never serves a balance"
         # And the other way: a balance walk's NaN floor must not compare equal to every floor.
@@ -363,7 +382,11 @@ class TestTheLineAndTheState:
         check.fingerprint = ranking.fingerprint(check.k)
         after = balance_state(1.0, check, ranking)
         d = after.as_dict()
-        assert d["status"] == BALANCE_CHECKED and d["count"] == 64 and d["beta"] == 1.0
+        assert d["status"] == BALANCE_CHECKED and d["beta"] == 1.0
+        # Advisory at beta 1 (#4427): the walk audited 64, the line keeps the unchecked count.
+        assert d["shape"] == CHECK_ADVISORY and d["audited"] == 64 and d["count"] == 32
+        assert balance_state(1.0, check, ranking, shape=CHECK_TRIM).count == 64, "the full walk's end, forced"
+        assert before.as_dict()["shape"] == CHECK_ADVISORY and before.as_dict()["audited"] is None
         assert d["precision"]["stale"] is False and d["recall"]["lo"] <= d["recall"]["hi"]
         assert d["fbeta"] == pytest.approx(check.best_estimate, abs=1e-4)
         # A later vote inside the set moves the ranking under the result.

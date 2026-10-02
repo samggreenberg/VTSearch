@@ -55,7 +55,13 @@ class OkResponseSchema(Schema):
     ok = fields.Boolean(required=True)
 
 
-from vtscore.training.thresholds.spot_check import BALANCE_CHECKED, CHECK_CANCELLED, CHECK_RUNNING, FLOOR_STATES
+from vtscore.training.thresholds.spot_check import (
+    BALANCE_CHECKED,
+    CHECK_CANCELLED,
+    CHECK_RUNNING,
+    CHECK_SHAPES,
+    FLOOR_STATES,
+)
 
 #: The states a balance can report (#4413); mirrors
 #: :data:`vtscore.training.thresholds.BALANCE_STATES`.
@@ -125,7 +131,10 @@ class BalanceStateSchema(Schema):
 
     Built by :func:`vtscore.state.core.detector_balance_state`.  ``unchecked``:
     no balance walk has run at this beta, and the line keeps the mixture's
-    F-beta argmax under the balance's cap; ``checked``: the last walk's peak.
+    F-beta argmax under the balance's cap; ``checked``: a walk has, and under
+    the ``trim`` shape (beta above 1) the line keeps its end, under ``advisory``
+    (beta 1 and below) the walk's ranges inform the line and the count stays
+    the unchecked rule's (#4427).
     """
 
     # The detector's balance: F-beta's beta.
@@ -140,6 +149,11 @@ class BalanceStateSchema(Schema):
     fbeta = fields.Float(required=True, allow_none=True)
     # The balance's cap and what a walk from it costs.
     schedule = fields.Nested(CheckScheduleSchema, required=True)
+    # How a check treats the line at this beta (#4427): ``advisory`` or ``trim``.
+    shape = fields.String(required=True, validate=validate.OneOf(CHECK_SHAPES))
+    # The set the last check audited (the walk's end); under ``advisory`` not the
+    # set the line keeps.  ``null`` while unchecked.
+    audited = fields.Integer(required=True, allow_none=True)
 
 
 # ---------------------------------------------------------------------------

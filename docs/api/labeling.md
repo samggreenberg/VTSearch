@@ -49,8 +49,12 @@ the detector last scored.
   line used (#4389). The cap is what holds the mixture on a large sparse
   corpus, where it over-counts the positives and would return 2-4x too much
   (#4411).
-- **Checked**: the band edge where the last spot check's F-beta estimate
-  peaked ([below](#the-spot-check)).
+- **Checked**: a spot check has walked the ranking ([below](#the-spot-check)).
+  What that does to the line follows the preset (#4427): at beta 1 and below
+  the check is **advisory** - the walk's ranges inform the line, its votes
+  are ordinary votes, and the count stays the unchecked rule's; above 1 the
+  check **trims** - the walk may only step shallower from the bands holding
+  the line, and the line keeps the band edge it ended on.
 
 A `POST` is a pure cutoff move: under the balance preference the active
 detector's line moves to the set the new beta keeps without retraining and,
@@ -65,8 +69,10 @@ preference stores the beta and moves nothing.
 | Field | Meaning |
 |---|---|
 | `beta` | The active detector's balance: F-beta's beta. |
-| `status` | `unchecked` (no spot check has run at this beta; the line keeps the mixture's F-beta peak under the cap) or `checked` (the last walk's peak). There is no `short`: a balance has nothing to fall short of. |
-| `count` | How many unvoted items the line keeps: the unchecked count (capped by the corpus), or the set the walk ended on (a band edge: 8, 16, 32, 64, ...). |
+| `status` | `unchecked` (no spot check has run at this beta; the line keeps the mixture's F-beta peak under the cap) or `checked` (a walk has run: under `trim` the line keeps its end, under `advisory` the walk informs it). There is no `short`: a balance has nothing to fall short of. |
+| `shape` | How a check treats the line at this beta (#4427): `advisory` (beta ≤ 1: the walk's ranges inform the line, the count stays the unchecked rule's) or `trim` (above 1: the walk may only step shallower, and the line takes its end). |
+| `audited` | The set the last walk ended on, a band edge; what `precision`, `recall` and `fbeta` describe. Under `advisory` it is not the set the line keeps. `null` while unchecked. |
+| `count` | How many unvoted items the line keeps: the unchecked count (capped by the corpus), or under `trim` the set the walk ended on (a band edge: 8, 16, 32, 64, ...). |
 | `precision` | The check's **likely range** for how much of the kept set is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked. Each audited band's Clopper-Pearson interval from its picks, each tail at `alpha / bands` over the set's bands, weighted by band size; exact where the picks cover a band. `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
 | `recall` | The check's likely range for how much of the corpus's positives the kept set found: the bands' intervals times their sizes, over the mixture's count of positives in the unvoted ranking (fixed when the walk started). The same `labelled`, `right` and `stale`; `null` while unchecked. The rougher of the two ranges: the picks cannot measure its denominator. |
 | `fbeta` | The walk's F-beta estimate for the kept set - `(1 + beta²) · tp / (beta² · n_pos + count)`, `tp` the band-weighted positives among the picks, `n_pos` the mixture's - or `null` while unchecked. |
