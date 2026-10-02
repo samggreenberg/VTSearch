@@ -167,7 +167,9 @@ def save_frame(
 
     cache = det_ctx.structural_verification_cache
     col = {p: i for i, p in enumerate(pool_ids)}
-    keys = [(g, boxes.get(g), id(snap[g].get("local_features"))) for g in goods]
+    # The app's template keys (structural_similarity): media, box, features, prune tag. Frames are only
+    # recorded without the stop-list, so the tag is None.
+    keys = [(g, boxes.get(g), id(snap[g].get("local_features")), None) for g in goods]
 
     def best(page: str, exclude: Optional[str] = None) -> float:
         fits = [cache.fit(k, page) for k in keys if k[0] != exclude]
@@ -240,6 +242,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="#4415 arms: 'coarse' cuts only the 0.25 x 0.18 layer (default: the shipped layers)",
     )
     ap.add_argument("--projection", default="", help="#4415 arms: a cached projection name, e.g. tile_projection_v1")
+    ap.add_argument("--stoplist", default="", help="#4170/#4180 arms: 'all' or 'gated' (default: the shipped 'off')")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
@@ -250,6 +253,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ap.error(f"unknown --tile-layers {args.tile_layers!r}")
     if args.projection:
         st.PROJECTION_NAME = args.projection
+    if args.stoplist:
+        import vtscore.training.structural_similarity as ss  # noqa: PLC0415
+
+        if args.stoplist not in ("all", "gated"):
+            ap.error(f"unknown --stoplist {args.stoplist!r}")
+        ss.STOPLIST_POLICY = args.stoplist
     args.out.mkdir(parents=True, exist_ok=True)
     frame_at = {int(x) for x in args.frames.split(",") if x}
 
@@ -281,6 +290,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "tiled_top_k": s1.TILED_TOP_K,
                 "tile_layers": [list(layer) for layer in st.TILE_LAYERS],
                 "projection": st.PROJECTION_NAME,
+                "stoplist": args.stoplist or "off",
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
             },

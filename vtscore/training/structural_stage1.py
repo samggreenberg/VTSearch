@@ -205,11 +205,16 @@ def vote_queries(
     good_votes: Any,
     feature_snap: dict[Any, dict],
     region_boxes: dict[Any, tuple[float, float, float, float]],
+    box_templates: Optional[dict[Any, StructuralFeatures]] = None,
 ) -> Optional[np.ndarray]:
     """Stage-1 queries from the Good votes, projected like the tiles, or ``None``.
 
     ``None`` when the cached projection is missing (a WARNING names the fix) or
     no Good vote yields a query; the caller then keeps its own Stage 1.
+
+    *box_templates* maps a boxed Good to the template Stage 2 verifies with. When
+    given, its query is that template's VLAD, so a stop-list that prunes the
+    template prunes the query too (#4170 / #4180).
     """
     from vtscore.media.structural_tiles import (  # noqa: PLC0415
         TileProjectionMissing,
@@ -233,6 +238,12 @@ def vote_queries(
         if not isinstance(feats, StructuralFeatures) or feats.count == 0:
             continue
         box = region_boxes.get(cid)
+        tpl = (box_templates or {}).get(cid) if box is not None else None
+        if tpl is not None and tpl.count > 0:
+            from vtscore.media.structural import aggregate_vlad, load_vlad_codebook  # noqa: PLC0415
+
+            rows.append(project_query(projection, aggregate_vlad(tpl.descriptors_f32(), load_vlad_codebook())))
+            continue
         if box is not None and (raw := box_vlad(feats, box)) is not None:
             rows.append(project_query(projection, raw))
             continue
