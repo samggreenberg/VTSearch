@@ -536,9 +536,9 @@ EMPTY = "\u00d8"
 #: two halves of the argument rather than as two more entries in a list.
 TERM_PT = FLOOR_PT + 3
 HEAD_PT = FLOOR_PT + 11
-#: Gap between a term and its gloss on the shared baseline. Wider than a word
-#: space: the point is that the two are different registers, not one phrase.
-TERM_GAP = 0.009
+#: Gap between the widest term and the gloss column. Wider than a word space:
+#: the point is that the two are different registers, not one phrase.
+TERM_GAP = 0.012
 #: Three gaps, and their *order* is the hierarchy the column is asking the eye
 #: to read: tightest between two definitions, wider after a heading where the
 #: argument moves on, widest of all above a heading.
@@ -553,8 +553,14 @@ HEAD_PITCH = 0.095
 STACK_TOP = LEFT_TOP - 0.010
 STACK_FLOOR = 0.035
 #: How wide a definition line may be, in figure fractions: the left column's
-#: own width, less the gutter before the drawing starts.
-STACK_MAX_W = 0.275
+#: own width. The drawing starts `VENN_GUTTER` after it, so widening this
+#: narrows the Venn rather than running a gloss into it — which is the trade
+#: #4443 asked for, to fit the glosses in one column of their own.
+STACK_MAX_W = 0.34
+VENN_GUTTER = 0.02
+#: The Venn's right-hand limit, and the band it is centred in vertically.
+VENN_X1 = 0.965
+VENN_Y0, VENN_Y1 = 0.045, 0.955
 
 #: Every label sits on a chip of its own background, because most of them land
 #: on hatching. Tight padding: the chip is there to stop the strokes running
@@ -571,21 +577,22 @@ COCO_BETTER_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgeco
 #: two definitions, the easy experiment they buy, two more definitions, and the
 #: hard experiment *those* buy.
 #:
-#: **A gloss is an instruction to the images, not a description of the set.**
-#: `A⁺` does not hold an A — the pictures in it do, every one of them — so the
-#: gloss is written as the entry requirement each of them meets: *Hold an A,
-#: maybe more.* Which is also why all four start with the same verb: the sets
-#: differ in what they demand, not in what kind of demand it is.
+#: **A gloss says what the images show, not what the set is.** `A⁺` does not
+#: show an A — the pictures in it do, every one of them — so the gloss names
+#: the pictures and the requirement each of them meets: *Images showing A,
+#: maybe more.* Which is also why all four start with the same two words: the
+#: sets differ in what they demand, not in what kind of thing they hold
+#: (#4443).
 #:
 #: The `Easy:` heading is the one entry whose term moves — the experiment is
 #: shown three times, once per class, and `_coco_better_easy_term` supplies the
 #: spelling for the frame being drawn.
 COCO_BETTER_BLOCKS = [
-    ("def", "A⁺", "Hold an A, maybe more."),
-    ("def", EMPTY, "Hold none of the three."),
+    ("def", "A⁺", "Images showing A, maybe more."),
+    ("def", EMPTY, "Images showing none of the three."),
     ("head", f"Easy: A⁺ vs {EMPTY}", None),
-    ("def", "AB⁼", "Hold exactly A and B."),
-    ("def", "¬A", "Hold no A."),
+    ("def", "AB⁼", "Images showing exactly A and B."),
+    ("def", "¬A", "Images showing no A."),
     ("head", "Hard: A⁺ vs ¬A", None),
 ]
 
@@ -698,6 +705,17 @@ def _text_width(fig: plt.Figure, text: "matplotlib.text.Text") -> float:
     return text.get_window_extent(fig.canvas.get_renderer()).width / fig.bbox.width
 
 
+def _widest_term(fig: plt.Figure) -> float:
+    """The widest definition term, as a fraction of the figure's width."""
+    widest = 0.0
+    for kind, term, _ in COCO_BETTER_BLOCKS:
+        if kind == "def":
+            probe = fig.text(0, 0, term, fontsize=TERM_PT, fontweight="bold")
+            widest = max(widest, _text_width(fig, probe))
+            probe.remove()
+    return widest
+
+
 def _coco_better_stack(fig: plt.Figure, frame: int) -> None:
     """The left column: the notation, introduced one block per frame.
 
@@ -707,12 +725,16 @@ def _coco_better_stack(fig: plt.Figure, frame: int) -> None:
     measure the whole column for the same reason — a reworded gloss fails on
     the first figure rather than on the last one.
 
-    Definitions set their gloss on the term's own baseline, which means
-    measuring the term: the gap between the two is a gap between *registers*
-    and has to be the same however wide the term is, so it cannot be a column
-    position. `A⁺` and `AB⁼` differ by half the gloss's own indent.
+    Definitions are a table: the terms in one column, the glosses in a second
+    one beside it, every gloss starting at the same x on its term's baseline
+    (#4443). The gloss column is placed by measuring the widest term of all
+    four — not of the ones drawn so far — so it does not shift as terms arrive.
+    It used to sit one fixed gap after each term's own width, which kept the
+    gap between registers even and left the four glosses starting at four
+    different places, a ragged edge the eye had to hunt along.
     """
     shown, lit = COCO_BETTER_FRAMES[frame][3], COCO_BETTER_FRAMES[frame][4]
+    gloss_x = LEFT_X + _widest_term(fig) + TERM_GAP
     y = lowest = STACK_TOP
     for index, (kind, term, gloss) in enumerate(COCO_BETTER_BLOCKS):
         draw = index < shown
@@ -731,9 +753,8 @@ def _coco_better_stack(fig: plt.Figure, frame: int) -> None:
             lowest, y = y, y - HEAD_PITCH
             continue
         head = fig.text(LEFT_X, y, term, fontsize=TERM_PT, color=INK, fontweight="bold", va="baseline")
-        width = _text_width(fig, head)
-        body = fig.text(LEFT_X + width + TERM_GAP, y, gloss, fontsize=FLOOR_PT, color=SOFT, va="baseline")
-        line = width + TERM_GAP + _text_width(fig, body)
+        body = fig.text(gloss_x, y, gloss, fontsize=FLOOR_PT, color=SOFT, va="baseline")
+        line = gloss_x - LEFT_X + _text_width(fig, body)
         if line > STACK_MAX_W:
             raise SystemExit(
                 f'notation column: "{term} {gloss}" sets {line:.3f} of the figure wide, over the '
@@ -793,8 +814,13 @@ def fig_coco_better_complement(frame: int = len(COCO_BETTER_FRAMES) - 1) -> plt.
     # The axes take the rectangle's own aspect, so the drawing fills them
     # exactly instead of letterboxing inside a slot picked by hand — and a
     # later change to COCO_BETTER_RECT keeps doing so.
-    ax_h = 0.91
-    ax = fig.add_axes((0.342, 0.045, ax_h * FIG_H * (w / h) / FIG_W, ax_h))
+    #
+    # It starts where the notation column's widest line may end, plus a
+    # gutter, and is as large as the room from there to `VENN_X1` allows.
+    ax_x = LEFT_X + STACK_MAX_W + VENN_GUTTER
+    ax_w = min(VENN_X1 - ax_x, (VENN_Y1 - VENN_Y0) * FIG_H * (w / h) / FIG_W)
+    ax_h = ax_w * FIG_W / (FIG_H * (w / h))
+    ax = fig.add_axes((ax_x, VENN_Y0 + (VENN_Y1 - VENN_Y0 - ax_h) / 2, ax_w, ax_h))
     ax.set_aspect("equal")
     ax.axis("off")
     ax.set_xlim(x0, x0 + w)

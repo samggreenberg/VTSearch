@@ -12,8 +12,7 @@
 <!-- build: figs/ui-steps-make-detector.build1.webp -->
 
 2. Say what you want
-3. Name it
-4. **Create**
+3. **Create**
 
 </div>
 
@@ -23,5 +22,5 @@
 
 <!-- **b** — One field matters: what you are after, in a word. Here, `book`.
      It only gives the detector somewhere to start; the answers in the next
-     step do the teaching. Give it a name you will recognise later, and
-     Create. -->
+     step do the teaching. The name fills itself in from the word — "Book
+     detector" — so there is nothing more to type: Create. -->

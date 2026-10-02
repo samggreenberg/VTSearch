@@ -60,6 +60,22 @@ def _save(fig: Any, name: str) -> None:
 
 
 # --------------------------------------------------------------------------
+# The card before any dataset is on it
+# --------------------------------------------------------------------------
+
+
+def frame_title() -> Any:
+    """The card with nothing on it: the slide's "Data, Set" headline alone.
+
+    The first page of the section's first card (#4443). It is where the
+    presenter talks about data in general before any one dataset is named, and
+    it puts a page between the headline and the first subtitle under it, so
+    "Data, Set" is read as the headline before "Caltech-101" is read beneath it.
+    """
+    return dc.blank()
+
+
+# --------------------------------------------------------------------------
 # Caltech-101
 # --------------------------------------------------------------------------
 
@@ -987,6 +1003,7 @@ def frame_fullmarks_zoom() -> Any:
 
 
 FRAMES = {
+    "title": [("data-set-title", frame_title)],
     "caltech": [("data-set-caltech", frame_caltech)],
     "coco": [("data-set-coco-grid", frame_coco_grid), ("data-set-coco-zoom", frame_coco_zoom)],
     "coco-better": [
