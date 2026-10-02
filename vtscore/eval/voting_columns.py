@@ -228,6 +228,7 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: retrained the model, so the range describes the list as it was), 0
     #: while it holds, -1 with no finished check.
     "check_stale",
+    "check_audited",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
