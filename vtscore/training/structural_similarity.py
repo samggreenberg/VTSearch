@@ -275,6 +275,7 @@ def structural_rerank(
     score_key: str = "score",
     template_keys: Optional[Sequence[Any]] = None,
     cache: Optional[Any] = None,
+    parents: Optional[dict[Any, tuple[Any, StructuralFeatures]]] = None,
 ) -> list[dict]:
     """Re-rank Stage-1 *results* by geometric verification of the top-*K*.
 
@@ -296,6 +297,8 @@ def structural_rerank(
     With a *cache* (a :class:`~vtscore.training.structural_stage1.VerificationCache`)
     and one *template_keys* entry per template, fits already computed on an
     earlier retrain are reused and only new (template, page) pairs are verified.
+    *parents* (pruned template key -> unpruned ``(key, features)``) limits a
+    stop-listed template to the pages its unpruned self passes (#4432).
     """
     if not results or not template_features:
         return list(results)
@@ -312,6 +315,7 @@ def structural_rerank(
             list(zip(template_keys, template_features)),
             [(head[i].get("id"), f) for i, f in verifiable],
             matcher,
+            parents=parents,
         )
     else:
         batched = best_match_stats_many([(None, tpl) for tpl in template_features], [f for _, f in verifiable], matcher)
@@ -454,9 +458,11 @@ def maybe_structural_rerank(
 
     template_keys = None
     cache = None
+    parents: dict[Any, tuple[Any, StructuralFeatures]] = {}
     if snapshot_has_tiles(snap):
         cache = _verification_cache(det_ctx)
         prune_tags: dict[Any, Any] = {}
+        unpruned = dict(templates)
         if STOPLIST_POLICY != "off" and bad_votes:
             templates, prune_tags = _stoplist(templates, bad_votes, feat_snap, matcher, cache, region_boxes)
         boxed = {cid: tpl for cid, tpl in templates if region_boxes.get(cid) is not None}
@@ -468,6 +474,11 @@ def maybe_structural_rerank(
                 (cid, region_boxes.get(cid), id(feat_snap[cid].get("local_features")), prune_tags.get(cid))
                 for cid, _ in templates
             ]
+            parents = {
+                key: ((cid, region_boxes.get(cid), key[2], None), unpruned[cid])
+                for key, (cid, _tpl) in zip(template_keys, templates)
+                if key[3] is not None
+            }
         else:
             cache = None
 
@@ -488,6 +499,7 @@ def maybe_structural_rerank(
         cache=cache,
         tiled=template_keys is not None,
         scorer=scorer,
+        parents=parents,
     )
     return reranked, threshold_out
 
@@ -600,6 +612,7 @@ def _rerank_growing(
     cache: Optional[VerificationCache],
     tiled: bool,
     scorer: Optional[VerificationScorer] = None,
+    parents: Optional[dict[Any, tuple[Any, StructuralFeatures]]] = None,
 ) -> list[dict]:
     """:func:`structural_rerank`, then, on a tiled dataset, more blocks while the shortlist's tail still verifies.
 
@@ -624,6 +637,7 @@ def _rerank_growing(
             score_key=score_key,
             template_keys=template_keys,
             cache=cache,
+            parents=parents,
         )
         verified = {e["id"]: float(e.get(score_key, 0.0) or 0.0) for e in reranked[:top_k]}
         if not (tiled and s1.should_extend(stage1_ids, verified, top_k)):
