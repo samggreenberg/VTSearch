@@ -436,6 +436,7 @@ def main(argv: list[str] | None = None) -> int:
             walk_fine=cfg.WALK_FINE,
             walk_guard=cfg.WALK_GUARD,
             walk_advisory=cfg.WALK_ADVISORY,
+            walk_shallow_only=cfg.WALK_SHALLOW_ONLY,
             startup_schedule=cfg.STARTUP_SCHEDULE,
             opening_diversity=cfg.OPENING_DIVERSITY,
             pick_sink=picks_local,

@@ -148,6 +148,7 @@ ENVX="$ENVX CALIB_ACQ_INCLUSION_OFFSET=${CALIB_ACQ_INCLUSION_OFFSET:-} CALIB_ACQ
 # The balance walk's arms (#4427): picks a band, the tolerance, the fine bands; empty is the app's walk.
 ENVX="$ENVX CALIB_WALK_PICKS=${CALIB_WALK_PICKS:-} CALIB_WALK_TOL=${CALIB_WALK_TOL:-} CALIB_WALK_FINE=${CALIB_WALK_FINE:-}"
 ENVX="$ENVX CALIB_WALK_GUARD=${CALIB_WALK_GUARD:-} CALIB_WALK_ADVISORY=${CALIB_WALK_ADVISORY:-}"
+ENVX="$ENVX CALIB_WALK_SHALLOW_ONLY=${CALIB_WALK_SHALLOW_ONLY:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
