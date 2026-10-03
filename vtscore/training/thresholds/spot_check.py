@@ -1,59 +1,48 @@
-"""The spot check that decides the precision floor's line, and how close it got (#4272, #4388).
+"""The spot check that decides the balance's line, and what it estimated (#4272, #4388, #4413).
 
-The floor *P* is a share of what the line returns that should be right.  The
-owner's ruling on #4267 (2026-09-29) moved the promise off the #4220 estimator
-(:mod:`~vtscore.training.thresholds.precision_floor`, which stays as public
-library API that no app path reads since #4360 and #4362) and onto a **spot
-check**: the user votes on uniform random picks, and their labels decide.
-#4256 showed that model-chosen votes break 83% of the estimator's P = 50%
-promises once the reference pool is consistent; a uniform pick has no such
-bias, so what it says holds at every prevalence measured (#4257).
+The user's preference is a **balance** of precision and recall: F-beta's
+*beta* (presets 0.5, 1 and 2).  Before any check the line keeps the
+mixture's F-beta argmax under the balance's cap (:func:`balance_count`); a
+**spot check** then audits the ranking with the user's votes on uniform
+random picks, whose labels say how much of a set is right without the bias
+model-chosen votes carry (#4256, #4257).
 
 **The check walks the ranking in bands (#4383, the owner's ruling of
-2026-09-30).**  The first version of the check (#4272) drew its picks from a
-fixed candidate, the top 32 unvoted at P >= 50% and the top 128 at 10%, and
-could only halve it.  That count was right on exactly one corpus, the 11k-image
-bench it was priced on: on a corpus ten times larger it kept 5% of the
-positives, and on a 320-image Find set it returned all 32 at 4% right
-(``docs/experiments/2026-09-30-line-estimate-4383/REPORT.md``).  The walk lets
-the line follow the corpus:
+2026-09-30).**
 
 * **Bands.**  The unvoted ranking is cut into bands from the top: the top 8,
   the next 8, then 16, 32, 64, ... doubling to the corpus's end
   (:func:`band_edges`).  A band is audited with :data:`CHECK_MIN_PICKS` items
   drawn uniformly from it (a census when it holds no more than that), and a
   band is never drawn from twice.
-* **The union under test** is the top ``b`` bands.  Its estimate is
+* **The union under test** is the top ``b`` bands.  Its share right is
   band-stratified: each band's share of right answers weighted by the band's
   size, which is unbiased for the union whatever the picks per band
-  (:meth:`SpotCheck.estimate`).
-* **The walk** starts at the bands that hold today's count (the floor's
-  schedule: 32 at P >= 50%, 128 at 10%; :func:`check_schedule`), auditing
-  each.  While the union's estimate is at or above *P* it goes one band deeper
-  (drawing that band); while it is below, one band shallower (no new picks).
-  It stops on the first reversal, or at either end, and the line keeps the
-  deepest union that met *P*: ``confirmed``.  When no union met it, the first
-  band, ``short``.
-* **How close.**  A checked set carries a **likely range**: each audited
-  band's Clopper-Pearson interval, exact where the band was censused, with
-  each tail at ``alpha / bands`` (the union bound over the bands in the set),
-  weighted by band size (:meth:`SpotCheck.range`).  The walk decides on the
-  point estimate (the owner's "do your best", #4267, and the rule priced), so
-  a confirmed set's range can straddle *P*; the range says how close.
+  (:meth:`SpotCheck.estimate`); its positives over the mixture's count of
+  the ranking's positives is its recall, and the two give its F-beta
+  (:meth:`SpotCheck.fbeta_estimate`).
+* **The walk** starts at the bands that hold the balance's cap (the top 32 at
+  beta <= 1, 128 above it; :func:`balance_schedule`), auditing each.  It goes
+  one band deeper while the F-beta estimate rises and, from a start whose
+  first deeper step does not, shallower while it does not fall; the peak is
+  the set it keeps (#4411's ``fb-walk``).  How the check treats the line
+  follows the preset (:func:`check_shape`, #4427).
+* **How close.**  A checked set carries a **likely range** for its precision
+  and its recall: each audited band's Clopper-Pearson interval, exact where
+  the band was censused, with each tail at ``alpha / bands`` (the union bound
+  over the bands in the set), weighted by band size (:meth:`SpotCheck.range`).
 
-**Do your best, and say how close we got** (#4267).  The line always keeps a
-set.  Before any check it keeps the schedule's unchecked starting candidate;
-after one, the set the walk ended on.  Nothing falls back to the old Inclusion
-0 cut.  The states a floor reports (:data:`FLOOR_STATES`): ``unchecked``,
-``confirmed`` and ``short``.  A finished result is kept and goes **stale**
-quietly once the ranking under it moves: later votes retrain the model, the
-line follows the new ranking at the result's count, and the range stays with a
-``stale`` flag.
+The line always keeps a set.  The states a balance reports
+(:data:`BALANCE_STATES`): ``unchecked`` and ``checked``.  A finished result
+is kept and goes **stale** quietly once the ranking under it moves: later
+votes retrain the model, the line follows the new ranking, and the ranges
+stay with a ``stale`` flag.
 
-The rule the walk implements is ``grow-fine`` in
+The bands, the picks and the likely range are the ``grow-fine`` reference in
 ``scripts/experiments/calibration/analyze_line_estimate_4383.py``
-(``band_edges``, ``draw_audits``, ``Audits.union_estimate``, ``rule_grow``),
-which ``scripts/check-eval-app-sync.py`` pins against this module.
+(``band_edges``, ``draw_audits``, ``Audits.union_estimate``), and the walk's
+stop is ``rule_fb_walk`` in ``analyze_fbeta_line_4411.py``;
+``scripts/check-eval-app-sync.py`` pins this module against them.
 
 Everything here is scores, ids and labels - never a vector - so a
 :class:`SpotCheck` and a :class:`LineRanking` may live on a detector context
@@ -75,9 +64,11 @@ from vtscore.training.thresholds.knobs import ACQUISITION_ARGMAX_FACTOR
 #: ``alpha / bands`` over the bands in the set (#4257's alpha).
 CHECK_ALPHA = 0.05
 
-#: The schedule's base: the starting candidate at P >= 50% is the top 32
-#: (#4257's ``a:top32``, the #4267 ruling); it doubles as the floor falls.
+#: The balance's cap at beta <= 1: the top 32 (#4257's ``a:top32``, the #4267
+#: ruling).  Above beta 1 it is :data:`CHECK_RECALL_CANDIDATE`.
 CHECK_BASE_CANDIDATE = 32
+#: The balance's cap above beta 1, where recall weighs more: the top 128.
+CHECK_RECALL_CANDIDATE = 128
 
 #: The first band's size, and the smallest set a walk can keep (#4383).
 BAND_BASE = 8
@@ -85,19 +76,10 @@ BAND_BASE = 8
 #: The picks a band is audited with (owner, 2026-09-30: 5 picks a band).
 CHECK_MIN_PICKS = 5
 
-#: Floor states.  ``unchecked``: no check has run on the current floor, and the
-#: line is the schedule's starting candidate.  ``confirmed``: the walk ended on
-#: a set whose estimate met the floor.  ``short``: no set met it, and the line
-#: keeps the first band the walk ended on.
-FLOOR_UNCHECKED = "unchecked"
-FLOOR_CONFIRMED = "confirmed"
-FLOOR_SHORT = "short"
-FLOOR_STATES = (FLOOR_UNCHECKED, FLOOR_CONFIRMED, FLOOR_SHORT)
-
 #: The balance (#4413): the user's precision/recall preference as F-beta's beta.
 #: The presets are precision-leaning, balanced and recall-leaning; any beta in
-#: ``[BETA_MIN, BETA_MAX]`` is accepted.  A finished balance walk is ``checked``:
-#: a balance has nothing to fall short of, so there is no ``short``.
+#: ``[BETA_MIN, BETA_MAX]`` is accepted.  A line no check has measured is
+#: ``unchecked``; a finished walk is ``checked``.
 BALANCE_PRESETS: tuple[float, ...] = (0.5, 1.0, 2.0)
 DEFAULT_BETA = 1.0
 BETA_MIN, BETA_MAX = 0.25, 4.0
@@ -108,8 +90,9 @@ BETA_MIN, BETA_MAX = 0.25, 4.0
 CHECK_ADVISORY = "advisory"
 CHECK_TRIM = "trim"
 CHECK_SHAPES: tuple[str, ...] = (CHECK_ADVISORY, CHECK_TRIM)
+BALANCE_UNCHECKED = "unchecked"
 BALANCE_CHECKED = "checked"
-BALANCE_STATES = (FLOOR_UNCHECKED, BALANCE_CHECKED)
+BALANCE_STATES = (BALANCE_UNCHECKED, BALANCE_CHECKED)
 
 #: The surfacing provenance a check's vote is recorded with
 #: (:mod:`vtscore.datasets.vote_provenance`): the app's route and the eval
@@ -117,12 +100,12 @@ BALANCE_STATES = (FLOOR_UNCHECKED, BALANCE_CHECKED)
 CHECK_PROVENANCE: dict[str, str] = {"flow": "check"}
 
 #: A check's status while its bands are still being voted on, and once it was
-#: abandoned (its votes so far stay ordinary votes; the floor's state is as it was).
+#: abandoned (its votes so far stay ordinary votes; the line's state is as it was).
 CHECK_RUNNING = "running"
 CHECK_CANCELLED = "cancelled"
 
-#: Which way the walk last moved: where it started, one band deeper (the last
-#: union met the floor), or one band shallower (it did not).
+#: Which way the walk last moved: where it started, one band deeper, or one
+#: band shallower.
 WALK_START = "start"
 WALK_DEEPER = "deeper"
 WALK_SHALLOWER = "shallower"
@@ -198,7 +181,7 @@ def bands_for(count: int, edges: Sequence[int]) -> int:
 
 @dataclass(frozen=True)
 class CheckSchedule:
-    """What a check at one floor costs: its starting candidate, rounds and picks a round."""
+    """What a check at one balance costs: its starting candidate, rounds and picks a round."""
 
     candidate: int
     rounds: int
@@ -208,39 +191,24 @@ class CheckSchedule:
         return {"candidate": self.candidate, "rounds": self.rounds, "picks": self.picks}
 
 
-def check_schedule(min_precision: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
-    """``(K, bands, m)`` for floor *min_precision*: what a walk starts from and costs a band.
+def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
+    """``(K, bands, m)`` for a balance *beta* (#4413): the unchecked cap, the bands that hold it, the picks a band.
 
-    *K* is the unchecked starting candidate, the count today's line keeps
-    before any check: ``32 * 2**max(0, floor(log2(0.5 / P)))``, the top 128 at
-    10%, the top 64 at 25%, and the top 32 at 50% and above (the #4267 ruling;
-    the reference's ``schedule_for``).  ``rounds`` is how many bands the walk
+    *K* is :data:`CHECK_BASE_CANDIDATE` (the top 32) at beta <= 1 and
+    :data:`CHECK_RECALL_CANDIDATE` (the top 128) above it: the counts the
+    precision floor's schedule kept at 50% and at 10% (the #4267 ruling),
+    which the balance inherited for the preset it leans toward.  It is what
+    holds the mixture's F-beta argmax on a large sparse corpus, where the
+    mixture over-counts the positives and would return 2-4x too much (#4411);
+    the walk starts from the same bands.  ``rounds`` is how many bands the walk
     audits before its first verdict, the bands that hold *K*
     (:func:`rounds_for`); ``picks`` is what each band costs,
-    :data:`CHECK_MIN_PICKS`.  At ``P >= 1`` no sample can vouch for every
-    item, so each band is censused: ``picks`` is the first band's size.
-    """
-    x = float(min_precision)
-    if not 0.0 < x <= 1.0:
-        raise ValueError(f"precision floor must be in (0, 1], got {min_precision!r}")
-    doublings = max(0, math.floor(math.log2(0.5 / x) + _EPS))
-    candidate = CHECK_BASE_CANDIDATE * 2**doublings
-    picks = BAND_BASE if x >= 1.0 - _EPS else CHECK_MIN_PICKS
-    return CheckSchedule(candidate, rounds_for(candidate), picks)
-
-
-def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
-    """The unchecked cap and the walk's start for a balance *beta* (#4413).
-
-    The cap is the floor's schedule count for the preset the balance leans
-    toward: 32 at beta <= 1 (the 50% schedule), 128 above it (the 10% one).
-    It is what holds the mixture's F-beta argmax on a large sparse corpus,
-    where the mixture over-counts the positives and would return 2-4x too
-    much (#4411); the walk starts from the same bands.
+    :data:`CHECK_MIN_PICKS`.
     """
     if not (BETA_MIN - _EPS <= float(beta) <= BETA_MAX + _EPS):
         raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {beta!r}")
-    return check_schedule(0.5 if float(beta) <= 1.0 + _EPS else 0.1, alpha)
+    candidate = CHECK_BASE_CANDIDATE if float(beta) <= 1.0 + _EPS else CHECK_RECALL_CANDIDATE
+    return CheckSchedule(candidate, rounds_for(candidate), CHECK_MIN_PICKS)
 
 
 def check_shape(beta: float) -> str:
@@ -260,29 +228,30 @@ def check_shape(beta: float) -> str:
     return CHECK_ADVISORY if float(beta) <= 1.0 + _EPS else CHECK_TRIM
 
 
-def resolve_line_knobs(min_precision: float | str | None, beta: float | None) -> tuple[float | None, float | None]:
-    """The preference an eval arm draws its line at, as ``(floor, beta)``; neither pinned is the app's default (#4413).
+#: How an eval arm whose ``None`` already means "the shipped default" spells
+#: *no balance*: the Inclusion arm, whose line is the fold-anchored cut at the
+#: arm's ``inclusion``.
+NO_BALANCE = "off"
+
+
+def resolve_line_knobs(beta: float | str | None) -> float | None:
+    """The balance an eval arm draws its line at; ``None`` (unpinned) is the app's default (#4413).
 
     The harness's counterpart of :func:`vtscore.state.line_knobs`, which is
-    what the app hands every retrain and re-cut: a pinned *beta* is the
-    balance arm (``(None, beta)``; the floor is unused whatever it says);
-    neither pinned resolves to the app's default preference
-    (:data:`~vtscore.config.runtime.DEFAULT_LINE_PREFERENCE`) - the balance
-    at :data:`DEFAULT_BETA`, or the floor at
-    :data:`~vtscore.training.thresholds.DEFAULT_MIN_PRECISION`; a pinned floor
-    is the floor arm (deprecated with the floor); ``"off"`` is the Inclusion
-    arm (``(None, None)``).  Validated here, so a malformed arm fails before
-    anything expensive runs.
+    what the app hands every retrain and re-cut.  ``None`` - the default arm -
+    resolves to :data:`DEFAULT_BETA`, what an unset user setting resolves to;
+    :data:`NO_BALANCE` is the Inclusion arm (``None``: no balance draws the
+    line); a number pins the balance arm.  Validated here, so a malformed arm
+    fails before anything expensive runs.
     """
-    from vtscore.config.runtime import DEFAULT_LINE_PREFERENCE  # noqa: PLC0415
-    from vtscore.training.thresholds.precision_floor import resolve_min_precision  # noqa: PLC0415
-
-    if beta is not None:
-        balance_schedule(beta)
-        return None, float(beta)
-    if min_precision is None and DEFAULT_LINE_PREFERENCE == "balance":
-        return None, DEFAULT_BETA
-    return resolve_min_precision(min_precision), None
+    if beta is None:
+        return DEFAULT_BETA
+    if beta == NO_BALANCE:
+        return None
+    if isinstance(beta, (str, bool)):
+        raise ValueError(f"beta must be a number in [{BETA_MIN}, {BETA_MAX}], None or {NO_BALANCE!r}; got {beta!r}")
+    balance_schedule(float(beta))
+    return float(beta)
 
 
 def fbeta_score(tp: float, k: float, n_pos: float, beta: float) -> float:
@@ -388,7 +357,7 @@ class LineRanking:
     ids: np.ndarray
     scores: np.ndarray
     voted: frozenset[int]
-    #: :func:`mixture_count`'s one-slot memo: the mixture fitted on this
+    #: :func:`mixture_posterior`'s one-slot memo: the mixture fitted on this
     #: ranking (``[fit]``, ``[None]`` when none fits), empty until first asked.
     #: Contents only; the ranking itself stays immutable.
     mixture: list[Any] = field(default_factory=list, compare=False, repr=False)
@@ -459,10 +428,10 @@ class LineRanking:
 
 @dataclass
 class SpotCheck:
-    """One walk of a detector's line at one floor: its bands, the picks in each, and where it ended.
+    """One walk of a detector's line at one balance: its bands, the picks in each, and where it ended.
 
-    Built by :meth:`start` on the unvoted ranking as it stands at that moment
-    (ids in rank order), cut into bands.  :meth:`draw` deals the next band's
+    Built by :meth:`start_balance` on the unvoted ranking as it stands at that
+    moment (ids in rank order), cut into bands.  :meth:`draw` deals the next band's
     picks; :meth:`record` takes the user's labels on them and, once the band is
     audited, either deals the next band the union under test still owes, or
     decides: the walk goes deeper, shallower, or ends.  The ranking's ids never
@@ -470,19 +439,18 @@ class SpotCheck:
     however the model moves behind it.
     """
 
-    min_precision: float
     alpha: float
     #: The unvoted ranking the walk is over, in rank order, fixed at the start.
     ranking_ids: tuple[int, ...]
     edges: tuple[int, ...]
     picks: int
-    #: The bands the walk started from: those that hold the floor's candidate.
+    #: The bands the walk started from: those that hold the balance's cap.
     start_bands: int
-    #: A balance walk's beta and its count of the ranking's positives (the
-    #: mixture's, fixed at the start); ``None`` on a floor walk (#4413).
-    beta: float | None = None
-    n_pos: float | None = None
-    #: The best F-beta estimate the balance walk has seen (the peak's).
+    #: The walk's beta and its count of the ranking's positives (the
+    #: mixture's, fixed at the start; #4413).
+    beta: float
+    n_pos: float
+    #: The best F-beta estimate the walk has seen (the peak's).
     best_estimate: float | None = None
     #: A balance walk's tolerance (#4427's ``tol`` arm): a deeper step whose
     #: estimate is within this of the best is flat, not a fall, and the walk
@@ -503,7 +471,7 @@ class SpotCheck:
     shallow_only: bool = False
     #: The union under test: the top *bands* bands, ``edges[bands]`` items.
     bands: int = 1
-    #: The deepest union whose estimate met the floor, if any.
+    #: The peak so far: the union with the best F-beta estimate, if any.
     best: int | None = None
     direction: str = WALK_START
     #: Bands audited so far (each is one round of picks).
@@ -523,49 +491,6 @@ class SpotCheck:
     _audited: set[int] = field(default_factory=set, repr=False, compare=False)
 
     @classmethod
-    def start(
-        cls,
-        ranking_ids: Sequence[int],
-        min_precision: float,
-        *,
-        alpha: float = CHECK_ALPHA,
-        seed: int | None = None,
-        start_count: int | None = None,
-        picks: int | None = None,
-        edges: Sequence[int] | None = None,
-    ) -> "SpotCheck":
-        """A running walk over *ranking_ids* (the unvoted ranking, rank order), with its first band drawn.
-
-        The walk starts at the bands that hold *start_count* items: the
-        floor's schedule by default (32 at P >= 50%, 128 at 10%), or a
-        caller's own proposal (#4389).  A ranking shorter than that starts at
-        its last band.  *picks* (a band's picks) and *edges* (the bands) are
-        the schedule's unless an arm overrides them (#4427).
-        """
-        ids = tuple(int(i) for i in ranking_ids)
-        if not ids:
-            raise ValueError("a check needs at least one unvoted item to draw from")
-        if len(set(ids)) != len(ids):
-            raise ValueError("the ranking's ids must be distinct")
-        schedule = check_schedule(min_precision, alpha)
-        edges = band_edges(len(ids)) if edges is None else tuple(int(e) for e in edges)
-        start = bands_for(min(start_count if start_count is not None else schedule.candidate, len(ids)), edges)
-        check = cls(
-            min_precision=float(min_precision),
-            alpha=float(alpha),
-            ranking_ids=ids,
-            edges=edges,
-            picks=int(schedule.picks if picks is None else picks),
-            start_bands=start,
-            bands=start,
-            k=int(edges[start]),
-            _generator=_rng(seed),
-            _rank={cid: i for i, cid in enumerate(ids)},
-        )
-        check.draw()
-        return check
-
-    @classmethod
     def start_balance(
         cls,
         ranking_ids: Sequence[int],
@@ -581,13 +506,14 @@ class SpotCheck:
         guard: float | None = None,
         shallow_only: bool | None = None,
     ) -> "SpotCheck":
-        """A running balance walk (#4413): the same bands and picks, stopped at the F-beta peak.
+        """A running walk over *ranking_ids* (the unvoted ranking, rank order) at *beta*, with its first band drawn (#4413).
 
         *n_pos* is the walk's count of the ranking's positives, the
         mixture's over the unvoted ranking (:func:`mixture_positives`), fixed
         at the start: the audits read each band's share, the count turns
         that into recall.  It starts at the bands holding *start_count*, the
-        balance's unchecked count by default (:func:`balance_count`).
+        balance's cap by default (:func:`balance_schedule`), or a caller's own
+        proposal (#4389); a ranking shorter than that starts at its last band.
 
         The arms of #4427, all off in the app: *picks* a band (the
         schedule's 5), *tol* (a deeper step within it of the best is flat and
@@ -602,6 +528,11 @@ class SpotCheck:
         ``None``, the app's, follows :func:`check_shape`: shallower-only under
         the ``trim`` shape, the full walk under ``advisory``).
         """
+        ids = tuple(int(i) for i in ranking_ids)
+        if not ids:
+            raise ValueError("a check needs at least one unvoted item to draw from")
+        if len(set(ids)) != len(ids):
+            raise ValueError("the ranking's ids must be distinct")
         schedule = balance_schedule(beta, alpha)
         if not (n_pos > 0):
             raise ValueError("a balance walk needs a positive count of the ranking's positives")
@@ -611,23 +542,26 @@ class SpotCheck:
             raise ValueError(f"guard must be >= 0, got {guard!r}")
         if picks is not None and picks < 1:
             raise ValueError(f"picks must be >= 1, got {picks!r}")
-        start = start_count if start_count is not None else schedule.candidate
-        n = len(tuple(ranking_ids))
-        check = cls.start(
-            ranking_ids,
-            schedule.candidate and 0.5,  # unused by a balance walk; a valid floor for the schedule's picks
-            alpha=alpha,
-            seed=seed,
-            start_count=start,
-            picks=picks,
-            edges=band_edges_fine(n, min(start, n)) if fine else None,
+        start_count = schedule.candidate if start_count is None else start_count
+        edges = band_edges_fine(len(ids), min(start_count, len(ids))) if fine else band_edges(len(ids))
+        start = bands_for(min(start_count, len(ids)), edges)
+        check = cls(
+            alpha=float(alpha),
+            ranking_ids=ids,
+            edges=edges,
+            picks=int(schedule.picks if picks is None else picks),
+            start_bands=start,
+            beta=float(beta),
+            n_pos=float(n_pos),
+            tol=float(tol),
+            guard=None if guard is None else float(guard),
+            shallow_only=check_shape(beta) == CHECK_TRIM if shallow_only is None else bool(shallow_only),
+            bands=start,
+            k=int(edges[start]),
+            _generator=_rng(seed),
+            _rank={cid: i for i, cid in enumerate(ids)},
         )
-        check.beta = float(beta)
-        check.n_pos = float(n_pos)
-        check.min_precision = float("nan")
-        check.tol = float(tol)
-        check.guard = None if guard is None else float(guard)
-        check.shallow_only = check_shape(beta) == CHECK_TRIM if shallow_only is None else bool(shallow_only)
+        check.draw()
         return check
 
     # ---- what the check is looking at
@@ -652,7 +586,7 @@ class SpotCheck:
 
     @property
     def finished(self) -> bool:
-        return self.status in (FLOOR_CONFIRMED, FLOOR_SHORT, BALANCE_CHECKED)
+        return self.status == BALANCE_CHECKED
 
     @property
     def tail(self) -> float:
@@ -716,9 +650,7 @@ class SpotCheck:
         return total
 
     def fbeta_estimate(self, bands: int | None = None) -> float | None:
-        """A balance walk's F-beta estimate for the top *bands* bands: audited positives over the walk's count."""
-        if self.beta is None or self.n_pos is None:
-            return None
+        """The F-beta estimate for the top *bands* bands: audited positives over the walk's count."""
         bands = self.bands if bands is None else bands
         tp = self.positives_estimate(bands)
         if tp is None:
@@ -726,8 +658,8 @@ class SpotCheck:
         return fbeta_score(tp, float(self.edges[bands]), self.n_pos, self.beta)
 
     def recall_range(self) -> LikelyRange | None:
-        """A balance walk's likely range for the current set's recall: the positives' range over the walk's count."""
-        if self.n_pos is None or self.k <= 0:
+        """The likely range for the current set's recall: the positives' range over the walk's count."""
+        if self.k <= 0:
             return None
         lo = hi = 0.0
         labelled_all = right_all = 0
@@ -815,33 +747,6 @@ class SpotCheck:
         return True
 
     def _evaluate(self) -> None:
-        """Deeper while the set meets the floor, shallower while it does not; stop on the first reversal."""
-        if self.beta is not None:
-            self._evaluate_balance()
-            return
-        est = self.estimate()
-        if est is not None and est >= self.min_precision - _EPS:
-            self.best = self.bands
-            if self.bands >= self.n_bands:
-                self._finish(FLOOR_CONFIRMED, self.bands)
-                return
-            self.direction = WALK_DEEPER
-            self.bands += 1
-            self.k = int(self.edges[self.bands])
-            return
-        if self.best is not None:
-            # The set under test fell short: step back to the deepest that did not.
-            self.direction = WALK_SHALLOWER
-            self._finish(FLOOR_CONFIRMED, self.best)
-            return
-        if self.bands <= 1:
-            self._finish(FLOOR_SHORT, 1)
-            return
-        self.direction = WALK_SHALLOWER
-        self.bands -= 1
-        self.k = int(self.edges[self.bands])
-
-    def _evaluate_balance(self) -> None:
         """Deeper while the F-beta estimate rises; from a start whose first deeper step does not, shallower while it does not fall.
 
         A start on the ranking's last band has no deeper step, so it goes
@@ -971,19 +876,13 @@ class SpotCheck:
         band = None
         if self.band is not None:
             band = {"index": self.band, "lo": int(self.edges[self.band]) + 1, "hi": int(self.edges[self.band + 1])}
-        balance = {}
-        if self.beta is not None:
-            fb = self.fbeta_estimate()
-            recall = self.recall_range() if labelled else None
-            balance = {
-                "beta": self.beta,
-                "fbeta": None if fb is None else round(fb, 4),
-                "recall": recall.as_dict() if recall is not None else None,
-            }
+        fb = self.fbeta_estimate()
+        recall = self.recall_range() if labelled else None
         return {
             "status": self.status,
-            "min_precision": None if self.beta is not None else self.min_precision,
-            **balance,
+            "beta": self.beta,
+            "fbeta": None if fb is None else round(fb, 4),
+            "recall": recall.as_dict() if recall is not None else None,
             "round": self.round + (1 if self.pending else 0),
             "rounds": self.n_bands,
             "picks_per_round": self.picks,
@@ -1000,46 +899,7 @@ class SpotCheck:
         }
 
 
-# ------------------------------------------------------------ the mixture's count
-
-
-def mixture_count(
-    ranking: LineRanking | None,
-    min_precision: float,
-    labels: Mapping[int, bool],
-    also_voted: Iterable[int] = (),
-) -> int | None:
-    """How many unvoted items the vote-anchored mixture says are at least *min_precision* right (#4389).
-
-    The owner's ruling on #4383 for the line with no audit votes: the smaller
-    of today's count and this.  A 2-component mixture is fitted on the
-    ranking's scores (:func:`~vtscore.training.thresholds.gmm.anchored_gmm_fit`,
-    which subsamples a large ranking), anchored by the scores of the items in
-    *labels* (``True`` = Good) that the ranking holds; the high component's
-    posterior is read at each unvoted score, best first, and the count is the
-    deepest top *k* whose mean posterior is at or above the floor (the
-    ``gmm`` rule of ``analyze_line_estimate_4383.py``), or the *k* with the
-    highest mean when none is (best effort, at least one).  ``None`` when
-    there is no ranking, nothing unvoted, or no mixture fits, and the caller
-    keeps today's count.
-
-    Priced in ``docs/experiments/2026-09-30-line-estimate-4383/REPORT.md``
-    (``gmm`` and ``min-fixed-gmm``): right-sized on small corpora and at
-    moderate prevalence, 5-66x too deep on large sparse ones, which is why
-    it only ever *lowers* the count.  **Fitted once per ranking**, on the
-    anchors of the first caller - the retrain's training labels, or the
-    human votes for a ranking a cold Find built - and memoised on it, so
-    the re-cut and every response that reports the floor's state read the
-    same fit; only the unvoted set the count is taken over follows the live
-    votes, as the ranking's own line does.  A retrain parks a new ranking,
-    and with it a new fit on the votes it trained on.
-    """
-    posterior = mixture_posterior(ranking, labels, also_voted)
-    if posterior is None:
-        return None
-    cum = np.cumsum(posterior) / np.arange(1, posterior.size + 1)
-    ok = np.flatnonzero(cum >= float(min_precision) - _EPS)
-    return int(ok.max()) + 1 if ok.size else int(np.argmax(cum)) + 1
+# ------------------------------------------------------------ the mixture
 
 
 #: A mixture component whose spread is under this share of the ranking's
@@ -1067,8 +927,17 @@ def mixture_posterior(
 ) -> np.ndarray | None:
     """The mixture's high-component posterior at each unvoted item of *ranking*, best first; ``None`` when none fits.
 
-    The fit is :func:`mixture_count`'s, memoised on the ranking; this is the
-    read every mixture-based count shares.  A fit with a collapsed component
+    A 2-component mixture is fitted on the ranking's scores
+    (:func:`~vtscore.training.thresholds.gmm.anchored_gmm_fit`, which
+    subsamples a large ranking), anchored by the scores of the items in
+    *labels* (``True`` = Good) that the ranking holds; this is the read every
+    mixture-based count shares (#4389, #4413).  **Fitted once per ranking**,
+    on the anchors of the first caller - the retrain's training labels, or
+    the human votes for a ranking a cold Find built - and memoised on it, so
+    the re-cut and every response that reports the line's state read the same
+    fit; only the unvoted set the posterior is read over follows the live
+    votes, as the ranking's own line does.  A retrain parks a new ranking,
+    and with it a new fit on the votes it trained on.  A fit with a collapsed component
     (:data:`MIXTURE_MIN_STD_SHARE`, #4419) is no fit: on a tiny ranking the
     high component can land on the top two scores alone, and its posterior
     then says nothing about the rest.
@@ -1133,8 +1002,7 @@ def walk_positives(
     has to start, so the denominator is the set the unchecked line would keep
     anyway: the balance's cap (:func:`balance_schedule`), lowered to what is
     unvoted.  Against that denominator the walk goes deeper while the audited
-    share right holds up, which is the floor's instinct with the balance's
-    stop.  A sound fit that counts fewer than one positive (every positive
+    share right holds up.  A sound fit that counts fewer than one positive (every positive
     already voted Good, say) takes the cap too: the walk's recall is its
     audited positives over this count, so a near-zero count would report
     every check as having found them all.  Always at least one.  The app's
@@ -1210,120 +1078,21 @@ def fbeta_count(
 # ------------------------------------------------------------------- the line
 
 
-@dataclass(frozen=True)
-class FloorState:
-    """What the floor says about a detector's line: its state, the set's size and how close it got.
-
-    Built by :func:`floor_state`; the wire shape every response that carries a
-    line carries beside its ``threshold`` (:func:`vtscore.state.core.detector_floor_state`).
-    """
-
-    min_precision: float
-    status: str
-    count: int
-    range: LikelyRange | None
-    stale: bool
-    schedule: CheckSchedule
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "min_precision": self.min_precision,
-            "status": self.status,
-            "count": self.count,
-            "range": None if self.range is None else {**self.range.as_dict(), "stale": self.stale},
-            "schedule": self.schedule.as_dict(),
-        }
-
-
-def applicable_result(min_precision: float, result: SpotCheck | None) -> SpotCheck | None:
-    """*result* when it is a finished check of *min_precision*; ``None`` otherwise.
-
-    A result is about the floor it was run at: a different floor is unchecked
-    until it is checked itself (the old result waits, and shows again if the
-    floor moves back).
-    """
-    if result is None or not result.finished or result.beta is not None:
-        return None  # a balance walk's result never serves a floor (#4413); its min_precision is NaN
-    if abs(result.min_precision - min_precision) > _EPS:
-        return None
-    return result
-
-
-def floor_count(min_precision: float, result: SpotCheck | None, proposal: int | None = None) -> int:
-    """The count the line keeps at *min_precision*: the set the finished walk ended on, else the unchecked count.
-
-    The unchecked count is the schedule's starting candidate, lowered to
-    *proposal* when the caller has one: the mixture's count
-    (:func:`mixture_count`), the owner's rule for the line before any check
-    (#4389).  The corpus may hold fewer unvoted items; :class:`LineRanking`
-    truncates.
-    """
-    applicable = applicable_result(min_precision, result)
-    if applicable is not None:
-        return applicable.k
-    count = check_schedule(min_precision).candidate
-    if proposal is not None:
-        count = max(1, min(count, int(proposal)))
-    return count
-
-
-def floor_line(
-    ranking: LineRanking | None,
-    min_precision: float,
-    result: SpotCheck | None = None,
-    also_voted: Iterable[int] = (),
-    proposal: int | None = None,
-) -> float | None:
-    """The threshold the line sits at: the last item of the set the floor keeps.
-
-    *proposal* is the mixture's count for the unchecked line, if the caller
-    has one (:func:`mixture_count`, #4389).  ``None`` when there is no
-    ranking, or nothing in it is unvoted; the caller keeps whatever
-    inclusion-blind fallback it has, as it did before the floor.
-    """
-    if ranking is None:
-        return None
-    return ranking.threshold_for(floor_count(min_precision, result, proposal), also_voted)
-
-
-def floor_state(
-    min_precision: float,
-    result: SpotCheck | None = None,
-    ranking: LineRanking | None = None,
-    also_voted: Iterable[int] = (),
-    proposal: int | None = None,
-) -> FloorState:
-    """The floor's state at *min_precision*, given the detector's last finished check, its ranking and the mixture's count."""
-    schedule = check_schedule(min_precision)
-    applicable = applicable_result(min_precision, result)
-    if applicable is None:
-        count = floor_count(min_precision, None, proposal)
-        if ranking is not None:
-            count = min(count, len(ranking.candidate(count, also_voted)))
-        return FloorState(float(min_precision), FLOOR_UNCHECKED, count, None, False, schedule)
-    stale = ranking is not None and applicable.is_stale(ranking, also_voted)
-    return FloorState(float(min_precision), applicable.status, applicable.k, applicable.range(), stale, schedule)
-
-
 def aim_words(state: Mapping[str, Any]) -> str:
-    """The preference a line's state was drawn at, in words for a log line (#4413).
+    """The balance a line's state was drawn at, in words for a log line (#4413): ``at F1``.
 
-    ``aiming at 25% right`` for a floor's state (one that carries
-    ``min_precision``), ``at F1`` for a balance's (one that carries ``beta``):
-    what a headless run says beside the unchecked set it exports.
+    What a headless run says beside the unchecked set it exports.
     """
-    beta = state.get("beta")
-    if beta is not None:
-        return f"at F{beta:g}"
-    return f"aiming at {100 * state['min_precision']:.0f}% right"
+    return f"at F{state['beta']:g}"
 
 
 @dataclass(frozen=True)
 class BalanceState:
     """What the balance says about a detector's line: its state, the set's size and what the check estimated (#4413).
 
-    The wire shape beside ``threshold`` under a balance, as :class:`FloorState`
-    is under a floor: ``status`` is ``unchecked`` or ``checked``; ``precision``
+    The wire shape every response that carries a line carries beside its
+    ``threshold`` (:func:`vtscore.state.core.detector_balance_state`):
+    ``status`` is ``unchecked`` or ``checked``; ``precision``
     and ``recall`` are the audited set's likely ranges; ``fbeta`` its estimate.
     Under the ``advisory`` shape (#4427) the audited set is the walk's end and
     the kept ``count`` is the unchecked rule's; under ``trim`` they coincide.
@@ -1360,8 +1129,13 @@ class BalanceState:
 
 
 def applicable_balance(beta: float, result: SpotCheck | None) -> SpotCheck | None:
-    """*result* when it is a finished balance walk at *beta*; ``None`` otherwise (a floor walk never applies)."""
-    if result is None or not result.finished or result.beta is None:
+    """*result* when it is a finished walk at *beta*; ``None`` otherwise.
+
+    A result is about the balance it was run at: a different balance is
+    unchecked until it is checked itself (the old result waits, and shows
+    again if the balance moves back).
+    """
+    if result is None or not result.finished:
         return None
     if abs(result.beta - float(beta)) > _EPS:
         return None
@@ -1422,7 +1196,7 @@ def balance_state(
         # under ``trim`` is a band edge of the ranking it walked, kept as is.
         count = min(count, len(ranking.candidate(count, also_voted)))
     if applicable is None:
-        return BalanceState(float(beta), FLOOR_UNCHECKED, count, None, None, None, False, schedule, shape, None)
+        return BalanceState(float(beta), BALANCE_UNCHECKED, count, None, None, None, False, schedule, shape, None)
     stale = ranking is not None and applicable.is_stale(ranking, also_voted)
     return BalanceState(
         float(beta),
@@ -1442,6 +1216,7 @@ __all__ = [
     "BALANCE_CHECKED",
     "BALANCE_PRESETS",
     "BALANCE_STATES",
+    "BALANCE_UNCHECKED",
     "BETA_MAX",
     "BETA_MIN",
     "BAND_BASE",
@@ -1453,32 +1228,23 @@ __all__ = [
     "CHECK_TRIM",
     "CHECK_MIN_PICKS",
     "CHECK_PROVENANCE",
+    "CHECK_RECALL_CANDIDATE",
     "CHECK_RUNNING",
-    "FLOOR_CONFIRMED",
-    "FLOOR_SHORT",
-    "FLOOR_STATES",
-    "FLOOR_UNCHECKED",
     "WALK_DEEPER",
     "WALK_SHALLOWER",
     "WALK_START",
     "CheckSchedule",
-    "FloorState",
     "LikelyRange",
     "LineRanking",
+    "NO_BALANCE",
     "SpotCheck",
-    "applicable_result",
     "band_edges",
     "bands_for",
-    "check_schedule",
     "check_shape",
     "clopper_pearson_lower",
     "clopper_pearson_upper",
-    "floor_count",
-    "floor_line",
-    "floor_state",
     "likely_range",
     "line_under",
-    "mixture_count",
     "mixture_positives",
     "mixture_posterior",
     "fbeta_count",

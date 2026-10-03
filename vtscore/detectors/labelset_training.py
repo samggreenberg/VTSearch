@@ -996,7 +996,7 @@ def train_from_labelset(
     # populate_label_embeddings stamped det_ctx.embedder with the space the
     # labels were embedded in; score the safe-threshold pass in that same space.
     # Pass det_ctx so the fold orderings are cached for a no-retrain re-cut
-    # (otherwise a floor change can't move the cutoff — see train_and_threshold).
+    # (otherwise a balance change can't move the cutoff — see train_and_threshold).
     haystack = haystack_for(det_ctx.embedder or "") if haystack_for is not None else None
     labels = labeled_media_labels(labelset, snap)
     voted_ids = set(labels)
@@ -1036,7 +1036,6 @@ def labelset_train_and_score(
     calibration_fraction: float | None = None,
     rows: Any = None,
     on_progress: ProgressCallback | None = None,
-    min_precision: float | None = None,
     beta: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
@@ -1067,8 +1066,8 @@ def labelset_train_and_score(
     patch detector, one ``patch_forward``).  A caller driving a progress bar -
     or wanting a cancellation checkpoint - passes it.
 
-    *min_precision* is the precision floor to cut at (the line keeps the set
-    the floor keeps, #4272), or ``None`` for no floor (the Inclusion 0 cut).
+    *beta* is the balance to cut at (the line keeps the set the balance
+    keeps, #4413), or ``None`` for no balance (the Inclusion 0 cut).
     *inclusion_value* is deprecated
     (#4269): leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and
     any other value raises ``ValueError``.
@@ -1091,7 +1090,6 @@ def labelset_train_and_score(
         score_rows=score_rows,
         voted_ids=set(labelset_labels := labeled_media_labels(labelset, clips_dict)),
         rows=rows,
-        min_precision=min_precision,
         labels=labelset_labels,
         beta=beta,
     )

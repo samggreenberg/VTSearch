@@ -24,21 +24,15 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"
 
-# One set of sessions per precision floor P (owner, 2026-10-01, #4408): the
-# session itself depends on P (the line's count, the spot check, and acquisition
-# once #4409 lands), so each P runs its own sessions. SOTA_FLOOR=0.1|0.5|0.9 sets
-# their floor and suffixes the run dir (-p10, -p50, -p90).  Neither SOTA_FLOOR
-# nor SOTA_BETA is the app's default preference - the balance at beta 1 since
-# #4413's last step - in an unsuffixed dir.
-if [[ -n "${SOTA_FLOOR:-}" && -n "${SOTA_BETA:-}" ]]; then
-  echo "set SOTA_FLOOR or SOTA_BETA, not both: one preference draws the line" >&2; exit 2
-fi
-if [[ -n "${SOTA_FLOOR:-}" ]]; then
-  export CALIB_MIN_PRECISION="$SOTA_FLOOR"
-  _PTAG="-p$(python3 -c "import sys; print(round(float(sys.argv[1]) * 100))" "$SOTA_FLOOR")"
-fi
 # The balance (#4413): SOTA_BETA=0.5|1|2 runs every session at that F-beta
-# balance (-b05, -b1, -b2); the review's sessions run once per beta.
+# balance and suffixes the run dir (-b05, -b1, -b2); the review's sessions run
+# once per beta, because the session itself depends on it (the line's count,
+# the spot check, acquisition; #4408).  Unset is the app's default balance,
+# beta 1, in an unsuffixed dir.  The precision floor's SOTA_FLOOR went with the
+# floor (#4421).
+if [[ -n "${SOTA_FLOOR:-}" ]]; then
+  echo "SOTA_FLOOR was removed with the precision floor (#4421); set SOTA_BETA=0.5|1|2" >&2; exit 2
+fi
 if [[ -n "${SOTA_BETA:-}" ]]; then
   export CALIB_BETA="$SOTA_BETA"
   _PTAG="-b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$SOTA_BETA")"

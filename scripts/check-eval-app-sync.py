@@ -194,31 +194,33 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
-        id="floor.check_schedule",
-        app="py:vtscore.training.thresholds.spot_check.check_schedule",
-        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::kept_count,band_edges,BASE_FINE,M_PICKS",
+        id="check.schedule",
+        app="py:vtscore.training.thresholds.spot_check.balance_schedule",
+        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::floor_schedule,kept_count,band_edges,BASE_FINE,M_PICKS",
         kind="ported",
         note=(
             "Where the band walk starts and what a band costs (#4388, the owner's ruling on "
-            "#4383): the starting candidate K(P) = 32 * 2**max(0, floor(log2(0.5 / P))) (the "
-            "#4267 ruling, unchanged), the bands 8 / 16 / 32 / 64 / ... the walk is over "
-            "(band_edges at BASE_FINE), and the 5 picks a band (M_PICKS). The owner priced this "
-            "exact rule (grow-fine) on the #4220 precision frames "
-            "(docs/experiments/2026-09-30-line-estimate-4383/REPORT.md); the presets must keep "
-            "resolving to (128, 5, 5), (64, 4, 5), (32, 3, 5), (32, 3, 5) and (32, 3, 5), where "
-            "the middle number is the bands that hold K - tests_lib/sorting/test_spot_check.py "
-            "pins them literally. The eval harness itself delegates to the library "
-            "(voting_iterations calls check_schedule / SpotCheck), so the pair pinned here is "
-            "library vs. the priced reference."
+            "#4383; the balance's cap since #4413): the starting candidate is the precision "
+            "floor's schedule count for the preset the balance leans toward - K(P) = "
+            "32 * 2**max(0, floor(log2(0.5 / P))) (the #4267 ruling) at P = 50% for beta <= 1 "
+            "(32) and at P = 10% above it (128) - over the bands 8 / 16 / 32 / 64 / ... "
+            "(band_edges at BASE_FINE), with 5 picks a band (M_PICKS). The owner priced the "
+            "walk from these counts (grow-fine on the #4220 precision frames, "
+            "docs/experiments/2026-09-30-line-estimate-4383/REPORT.md; the F-beta stop in "
+            "docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md, which reads the cap through "
+            "kept_count); tests_lib/sorting/test_spot_check.py pins (32, 3, 5) and (128, 5, 5) "
+            "literally. The eval harness itself delegates to the library (voting_iterations "
+            "calls balance_schedule through SpotCheck and balance_count), so the pair pinned "
+            "here is library vs. the priced reference."
         ),
         divergence=(
-            "INTENTIONAL: the library validates P in (0, 1] and, at P >= 1, censuses each band "
-            "(no sample can vouch for every item); the reference's kept_count delegates to the "
-            "library's check_schedule for K and reads its bands and picks off its own constants."
+            "INTENTIONAL: the reference is keyed by the floor P it was priced at (floor_schedule, "
+            "which also censuses each band at P >= 1); the library keys the same two counts by "
+            "beta and validates beta in [0.25, 4]."
         ),
     ),
     Mirror(
-        id="floor.likely_range",
+        id="check.likely_range",
         app="py:vtscore.training.thresholds.spot_check.likely_range",
         harness="scripts/experiments/calibration/analyze_floor_candidate_4267.py::range_tail,likely_range",
         kind="ported",
@@ -226,9 +228,10 @@ MIRRORS: list[Mirror] = [
             "The interval one band of a checked set carries (#4272, #4388): Clopper-Pearson "
             "from the picks inside the band, each tail at alpha / bands (range_tail, split "
             "over the bands in the set so the set's size-weighted range holds by the union "
-            "bound), exact (s / K) once the picks cover the band. Since #4388 the walk decides "
-            "on the band-weighted point estimate, not on this lower end, so a confirmed set's "
-            "range can straddle P; the range says how close. The reference's coverage numbers "
+            "bound), exact (s / K) once the picks cover the band. The walk decides on the "
+            "band-weighted point estimate, not on this range, which says how close the "
+            "estimate is; a balance reports it for the set's precision and, over the walk's "
+            "count of positives, its recall (#4413). The reference's coverage numbers "
             "(99% of sessions) hold only for this tail; a plain 90% range showed above the "
             "truth 11% of the time after a first pass. If the tail or the census rule moves on "
             "either side, move the other."
@@ -242,61 +245,70 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
-        id="floor.check_rounds",
+        id="check.bands",
         app="py:vtscore.training.thresholds.spot_check.SpotCheck",
-        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::rule_grow,draw_audits,Audits",
+        harness="scripts/experiments/calibration/analyze_line_estimate_4383.py::draw_audits,Audits",
         kind="ported",
         note=(
-            "The band walk (#4388, the owner's ruling on #4383; grow-fine in the reference): 5 "
-            "picks drawn uniformly from each band, never twice from one band; the set under test "
-            "is the top b bands and its estimate is band-stratified (each band's share weighted "
-            "by its size, Audits.union_estimate); the walk starts at the bands holding K(P), goes "
-            "one band deeper while the estimate meets P and one shallower while it does not, "
-            "stops on the first reversal or at either end, and keeps the deepest set that met P "
-            "(the first band when none did). SpotCheck is the app's live state machine over one "
-            "fixed unvoted ranking; rule_grow is the search the rule was priced with over "
-            "draw_audits' per-band picks. If either changes the bands, the picks a band, the "
-            "estimate or the stopping rule, the other has to follow or the pricing no longer "
-            "describes the shipped check."
+            "What the band walk audits (#4388, the owner's ruling on #4383): 5 picks drawn "
+            "uniformly from each band, never twice from one band; the set under test is the top "
+            "b bands and its share right is band-stratified (each band's share weighted by its "
+            "size, Audits.union_estimate). SpotCheck is the app's live state machine over one "
+            "fixed unvoted ranking; draw_audits / Audits are what the rule was priced with. If "
+            "either changes the bands, the picks a band or the estimate, the other has to follow "
+            "or the pricing no longer describes the shipped check. Where the walk stops is the "
+            "check.walk mirror's."
         ),
         divergence=(
             "INTENTIONAL: the app's check can end 'cancelled' (the user closed the step), "
-            "carries a fingerprint for the stale flag, reports its state to a client, draws one "
-            "band at a time as the walk reaches it, and censuses every band at P >= 1; the "
-            "reference draws every band's picks up front from planted labels (the same picks "
-            "the walk would touch) and asks no user. The reference returns the band edge as "
-            "the count; the app keeps the same edge through floor_count. Since #4413 SpotCheck also runs the BALANCE walk "
-            "(start_balance: the same bands and picks, stopped at the F-beta peak - deeper while the estimate rises, "
-            "shallower from a start whose first step does not, ties to the smaller set), whose reference is "
-            "rule_fb_walk in analyze_fbeta_line_4411.py (#4411, PR #4412; to be named in this mirror's harness "
-            "field once merged). The floor walk's stop is untouched. A balance walk that starts on the ranking's "
-            "last band steps shallower at once, as rule_fb_walk does (#4424). Where the mixture gives no "
-            "count of at least one positive, the app's walk reads recall against the balance's cap lowered to the "
-            "unvoted count (walk_positives, #4419), where rule_fb_walk falls back to the audits' own tp for no "
-            "fit (which leaves its F-beta a function of precision alone) and keeps a count below one as it is."
+            "carries a fingerprint for the stale flag, reports its state to a client, and draws "
+            "one band at a time as the walk reaches it; the reference draws every band's picks "
+            "up front from planted labels (the same picks the walk would touch) and asks no user."
         ),
     ),
     Mirror(
-        id="thresholds.line_preference_default",
+        id="check.walk",
+        app="py:vtscore.training.thresholds.spot_check.SpotCheck",
+        harness="scripts/experiments/calibration/analyze_fbeta_line_4411.py::rule_fb_walk,_edge_tp",
+        kind="ported",
+        note=(
+            "Where the band walk stops (#4413, priced in #4411): the F-beta estimate of the top "
+            "b bands - their audited positives (_edge_tp) over the mixture's count of the "
+            "ranking's positives - and the walk deeper while it rises, shallower from a start "
+            "whose first deeper step does not, ties to the smaller set; a walk that starts on "
+            "the ranking's last band steps shallower at once (#4424). If either side changes "
+            "the stop, the other has to follow or the pricing no longer describes the shipped "
+            "check."
+        ),
+        divergence=(
+            "INTENTIONAL: the app's walk carries #4427's arms (picks, tol, fine, guard and the "
+            "shallower-only walk), all off by default save the shallower-only walk that "
+            "check_shape turns on above beta 1, and its shape decides whether the walk's end "
+            "moves the line (balance_count). Where the mixture gives no count of at least one "
+            "positive, the app's walk reads recall against the balance's cap lowered to the "
+            "unvoted count (walk_positives, #4419), where rule_fb_walk falls back to the "
+            "audits' own tp for no fit (which leaves its F-beta a function of precision alone) "
+            "and keeps a count below one as it is."
+        ),
+    ),
+    Mirror(
+        id="thresholds.balance_default",
         app="py:vtscore.state.__init__.line_knobs",
         harness="vtscore/training/thresholds/spot_check.py::resolve_line_knobs",
         kind="default",
         note=(
-            "What preference a detector's line is drawn at when nobody pinned one (#4245, #4413): "
-            "the app's line_knobs reads the line_preference setting (DEFAULT_LINE_PREFERENCE, the "
-            "balance since #4413's last step) and hands the trainer the beta it names (DEFAULT_BETA "
-            "when unset) or, under the deprecated floor, the floor (DEFAULT_MIN_PRECISION when unset); "
-            "the harness's resolve_line_knobs resolves min_precision=None, beta=None to the same "
-            "constants. The values cannot drift - both sides read the same constants, and "
+            "What balance a detector's line is drawn at when nobody pinned one (#4413): the app's "
+            "line_knobs hands the trainer the detector's beta, seeded from the user's setting "
+            "(DEFAULT_BETA when unset); the harness's resolve_line_knobs resolves beta=None to the "
+            "same constant. The values cannot drift - both sides read the same constants, and "
             "tests/sorting/test_balance_routes.py pins UserSettings' defaults against the wire - so "
             "this digest watches the *resolution*: if the app's preference starts depending on "
             "something else (the dataset, the embedder, a per-detector default), that has to reach "
             "the harness too."
         ),
         divergence=(
-            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm), a pinned floor and a pinned "
-            "beta where the app has per-user settings; the DEFAULT arm passes None for both and "
-            "resolves here."
+            "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned beta where the "
+            "app has per-user settings; the DEFAULT arm passes None and resolves here."
         ),
     ),
     Mirror(
@@ -362,16 +374,16 @@ MIRRORS: list[Mirror] = [
             "What a cost is priced at is shared too (issue #4243): both sides price at "
             "`cost_trend.SMART_INCLUSION` and score each model at `cost_trend.smart_cut` of "
             "its reporting line, not at the arm's or the user's inclusion - and the line's "
-            "own inclusion is the operating point's (none when a precision floor kept a "
-            "set, #4272), so both sides hand smart_cut the reporting line's inclusion "
+            "own inclusion is the operating point's (none when the balance kept a "
+            "set, #4272, #4413), so both sides hand smart_cut the reporting line's inclusion "
             "rather than the knob's. Only the re-cut "
             "each side hands `smart_cut` differs. The app passes `recut_detector_threshold`, "
             "which falls back to the conformal rule over the fold orderings when there is no "
             "fold-anchored fit; the harness passes its step's fold-anchored fit or nothing "
             "(`voting_iterations._no_recut`), keeping the reporting line. That matters only "
             "on a step whose folds split but yielded no fold-anchored fit, served at an "
-            "inclusion other than `SMART_INCLUSION` or at none. Since #4272 the default arm's "
-            "floor serves every kept set at no inclusion, so `smart_cut` re-cuts on every "
+            "inclusion other than `SMART_INCLUSION` or at none. The default arm's "
+            "balance serves every kept set at no inclusion, so `smart_cut` re-cuts on every "
             "default-arm step and the difference reaches the default arm, though only on such "
             "a step: a fold-anchored fit fails only when no fold yields a mixture."
         ),
@@ -462,10 +474,9 @@ MIRRORS: list[Mirror] = [
             "real - so a head change fails the suite as well as tripping this digest. Since #4269 "
             "the app reads no stored Inclusion: its conformal cut is at "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0). The harness keeps `inclusion` as an arm knob "
-            "whose default, 0, is that cut. Since #4413 the app draws the line at whichever preference "
-            "`line_knobs` names - the balance (beta, the default since the switch's last step) or the "
-            "deprecated floor - and hands both to _fused_threshold; the harness's default arm is the "
-            "balance's at DEFAULT_BETA (resolve_line_knobs, the thresholds.line_preference_default mirror)."
+            "whose default, 0, is that cut. Since #4413 the app draws the line at the balance "
+            "`line_knobs` names and hands its beta to _fused_threshold; the harness's default arm is the "
+            "balance's at DEFAULT_BETA (resolve_line_knobs, the thresholds.balance_default mirror)."
         ),
     ),
     Mirror(
@@ -498,23 +509,22 @@ MIRRORS: list[Mirror] = [
             "How the cross-calibration cut and the population estimate are fused into the "
             "shipped threshold. The harness's reported operating point is only comparable to "
             "the app's if this rule matches. Since #4272 this is where the line is drawn under "
-            "a floor: the set the floor keeps, through the shared floor_line over a LineRanking "
-            "built from the final model's scores with the voted items marked - delegated, so "
-            "which line a floor draws cannot drift; what this digest watches is the ranking's "
-            "inputs (every scored item, unscorable ones dropped, the trainer's voted set), which "
-            "the harness has to build the same way, the mixture's proposal for the unchecked line "
-            "(#4389: mixture_count on that ranking, anchored on the labels the step trained on, "
-            "handed to floor_line and floor_state as `proposal`, which the harness has to hand the "
-            "same way), and the order of the fallbacks under it "
-            "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no floor, the "
+            "a preference: the set the balance keeps, through the shared balance_line over a "
+            "LineRanking built from the final model's scores with the voted items marked - "
+            "delegated, so which line a balance draws cannot drift; what this digest watches is the "
+            "ranking's inputs (every scored item, unscorable ones dropped, the trainer's voted set), "
+            "which the harness has to build the same way, the mixture's proposal for the unchecked "
+            "line (#4389, #4413: fbeta_count on that ranking, anchored on the labels the step "
+            "trained on, handed to balance_line and balance_state as `proposal`, which the harness "
+            "has to hand the same way), and the order of the fallbacks under it "
+            "(the fold-anchored cut at PRECISION_FLOOR_FALLBACK_INCLUSION with no balance, the "
             "schedule blend with no fitted cut). Neither side builds the #4220 precision estimate "
             "any more (#4362): it stopped drawing the line in #4272 and lost its last reader, "
             "the Find Stats curve, in #4360. Since #4269 the app hands reporting_line "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
-            "hands it the arm's `inclusion`, whose default is that 0. Since #4413 the line under a "
-            "preference is drawn by _preference_line: the balance's (balance_line over fbeta_count's "
-            "proposal) when `beta` is given, else the floor's; the harness's default arm passes no beta "
-            "until step 3 of #4413."
+            "hands it the arm's `inclusion`, whose default is that 0. The line under a balance is drawn "
+            "by _preference_line (balance_line over fbeta_count's proposal) when `beta` is given; the "
+            "harness's default arm passes DEFAULT_BETA."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
