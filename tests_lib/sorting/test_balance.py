@@ -1,4 +1,4 @@
-"""The balance: the line at an F-beta optimum instead of a precision floor (#4413).
+"""The balance: the line at an F-beta optimum (#4413).
 
 The owner's ruling of 2026-10-01 after #4411: the preference is a balance,
 beta, and the line is the band walk stopped at the F-beta peak.  Pinned here,
@@ -15,33 +15,31 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests_lib.sorting.test_mixture_count import _two_populations
+from tests_lib.sorting.test_mixture import _two_populations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
     BALANCE_PRESETS,
     CHECK_ADVISORY,
     CHECK_TRIM,
+    BALANCE_UNCHECKED,
+    CHECK_ALPHA,
     DEFAULT_BETA,
-    FLOOR_CONFIRMED,
-    FLOOR_UNCHECKED,
+    NO_BALANCE,
     WALK_DEEPER,
     WALK_SHALLOWER,
     LineRanking,
     SpotCheck,
     applicable_balance,
-    applicable_result,
     balance_count,
     balance_line,
     balance_schedule,
     balance_state,
-    check_schedule,
     check_shape,
     fbeta_count,
     fbeta_score,
-    floor_count,
-    floor_state,
-    mixture_count,
     mixture_positives,
+    resolve_line_knobs,
+    rounds_for,
     walk_positives,
 )
 
@@ -76,13 +74,38 @@ class TestTheArithmetic:
 
     def test_the_presets_and_their_caps(self):
         assert BALANCE_PRESETS == (0.5, 1.0, 2.0) and DEFAULT_BETA == 1.0
-        assert balance_schedule(0.5).candidate == balance_schedule(1.0).candidate == check_schedule(0.5).candidate == 32
-        assert balance_schedule(2.0).candidate == check_schedule(0.1).candidate == 128
+        # The precision floor's schedule counts at 50% and 10% (#4267), which the balance kept as its caps.
+        assert (
+            balance_schedule(0.5).as_dict()
+            == balance_schedule(1.0).as_dict()
+            == {"candidate": 32, "rounds": 3, "picks": 5}
+        )
+        assert balance_schedule(2.0).as_dict() == {"candidate": 128, "rounds": 5, "picks": 5}
+        assert balance_schedule(4.0) == balance_schedule(2.0) and rounds_for(128) == 5
+        assert balance_schedule(1.0, CHECK_ALPHA) == balance_schedule(1.0)
 
     @pytest.mark.parametrize("bad", [0.0, 0.1, 5.0, -1.0])
     def test_a_balance_outside_the_range_is_refused(self, bad):
         with pytest.raises(ValueError, match="beta must be in"):
             balance_schedule(bad)
+
+
+class TestResolvingTheArmKnob:
+    """The eval harness's balance knob (#4413): the app's default, the Inclusion arm, or a pinned beta."""
+
+    def test_none_is_the_apps_default(self):
+        assert resolve_line_knobs(None) == DEFAULT_BETA
+
+    def test_off_is_the_inclusion_arm(self):
+        assert resolve_line_knobs(NO_BALANCE) is None
+
+    def test_a_number_pins_a_balance(self):
+        assert resolve_line_knobs(2) == 2.0
+
+    @pytest.mark.parametrize("bad", [0.1, 5.0, "half", "0.5", True])
+    def test_anything_else_is_refused(self, bad):
+        with pytest.raises(ValueError, match="beta"):
+            resolve_line_knobs(bad)
 
 
 class TestTheMixturesCount:
@@ -95,8 +118,6 @@ class TestTheMixturesCount:
         # Recall-leaning returns more, precision-leaning fewer.
         k2, k05 = fbeta_count(ranking, 2.0, labels), fbeta_count(ranking, 0.5, labels)
         assert k2 is not None and k05 is not None and k05 <= k <= k2
-        # The floor's own count at 50% on the same fit runs deeper: it keeps going while the set is half right.
-        assert (mixture_count(ranking, 0.5, labels) or 0) >= k
 
     def test_nothing_fits_is_none(self):
         assert fbeta_count(None, 1.0, {}) is None and mixture_positives(None, {}) is None
@@ -135,7 +156,7 @@ class TestTheMixturesCount:
         assert walk_positives(None, 2.0, {}) == 128
         empty = LineRanking.from_scores([], [])
         assert walk_positives(empty, 0.5, {}) == 32
-        # A collapsing fit (the app's 20-item corpus, see test_mixture_count): 16 unvoted under a cap of 32.
+        # A collapsing fit (the app's 20-item corpus, see test_mixture): 16 unvoted under a cap of 32.
         scores = [0.66, 0.659, 0.515, 0.512, 0.511, 0.51, 0.509, 0.506, 0.501, 0.495]
         scores += [0.492, 0.491, 0.49, 0.489, 0.488, 0.486, 0.486, 0.476, 0.343, 0.34]
         labels = {1: True, 2: True, 19: False, 20: False}
@@ -209,7 +230,7 @@ class TestTheWalk:
         ranking, positives = _planted(52)
         check = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, 52.0, seed=0), positives)
         d = check.as_dict()
-        assert d["status"] == BALANCE_CHECKED and d["beta"] == 1.0 and d["min_precision"] is None
+        assert d["status"] == BALANCE_CHECKED and d["beta"] == 1.0 and "min_precision" not in d
         assert d["fbeta"] == pytest.approx(check.best_estimate, abs=1e-4)
         assert d["fbeta"] == pytest.approx(fbeta_score(52, 64, 52, 1.0), abs=0.2)
         # The ranges describe the kept set (its 4 bands, 20 picks); the 5th band was audited only to see the fall.
@@ -325,11 +346,9 @@ class TestTheWalk:
             SpotCheck.start_balance(unvoted, 1.0, 42.0, guard=-1)
         assert SpotCheck.start_balance(unvoted, 1.0, 42.0).guard is None, "the app passes no guard"
 
-    def test_a_floor_walk_is_unchanged(self):
-        ranking, positives = _planted(52)
-        check = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)
-        assert check.beta is None and check.status == FLOOR_CONFIRMED and check.fbeta_estimate() is None
-        assert check.as_dict()["min_precision"] == 0.5 and "beta" not in check.as_dict()
+    def test_the_precision_floors_walk_is_gone(self):
+        """#4421: one walk, the balance's; nothing starts a floor walk any more."""
+        assert not hasattr(SpotCheck, "start")
 
 
 class TestTheCheckShape:
@@ -367,16 +386,13 @@ class TestTheLineAndTheState:
         trim = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 2.0, 52.0, seed=0), positives)
         assert check_shape(2.0) == CHECK_TRIM and trim.shallow_only, "above 1 the walk may only trim"
         assert balance_count(2.0, trim, proposal=3) == trim.k, "and its end is the line"
-        floor_walk = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)
-        assert applicable_balance(1.0, floor_walk) is None, "a floor's result never serves a balance"
-        # And the other way: a balance walk's NaN floor must not compare equal to every floor.
-        assert applicable_result(0.5, check) is None and floor_count(0.5, check) == 32
-        assert floor_state(0.5, check, ranking).status == FLOOR_UNCHECKED
+        running = SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, 52.0, seed=0)
+        assert applicable_balance(1.0, running) is None, "a running walk serves no line"
 
     def test_the_state_a_response_carries(self):
         ranking, positives = _planted(52)
         before = balance_state(1.0, None, ranking, proposal=20)
-        assert before.status == FLOOR_UNCHECKED and before.count == 20 and before.precision is None
+        assert before.status == BALANCE_UNCHECKED and before.count == 20 and before.precision is None
         assert before.as_dict()["schedule"]["candidate"] == 32 and before.as_dict()["fbeta"] is None
         check = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, 52.0, seed=0), positives)
         check.fingerprint = ranking.fingerprint(check.k)
@@ -392,4 +408,4 @@ class TestTheLineAndTheState:
         # A later vote inside the set moves the ranking under the result.
         stale = balance_state(1.0, check, ranking, also_voted={1})
         assert stale.stale is True and stale.as_dict()["precision"]["stale"] is True
-        assert balance_state(2.0, check, ranking).status == FLOOR_UNCHECKED, "a result belongs to its balance"
+        assert balance_state(2.0, check, ranking).status == BALANCE_UNCHECKED, "a result belongs to its balance"

@@ -1,15 +1,14 @@
-"""Planted-answer tests for the precision floor's spot check: the band walk (#4272, #4388).
+"""Planted-answer tests for the spot check's machinery: the band walk (#4272, #4388, #4413).
 
-The rule the owner ruled on #4383, priced in
+The bands the owner ruled on #4383, priced in
 ``docs/experiments/2026-09-30-line-estimate-4383`` (``grow-fine`` in
 ``analyze_line_estimate_4383.py`` is the reference; the eval/app sync gate
 pins the two against each other): the bands of a ranking (8, 8, 16, 32, ...),
 the schedule that says where a walk starts and what a band costs, the
 band-weighted estimate and the likely range built from each band's interval,
-the walk (deeper while the set meets the floor, shallower while it does not,
-stop on the first reversal), a ranking that stays fixed while the model
-retrains, and the line that keeps the set the walk ended on - or the unchecked
-starting candidate before any check, which is what a headless run exports.
+the rounds a walk deals, and a ranking that stays fixed while the model
+retrains.  Where the walk stops - the F-beta peak - and the line it leaves are
+pinned in ``test_balance.py``.
 """
 
 from __future__ import annotations
@@ -20,29 +19,23 @@ import numpy as np
 import pytest
 
 from vtscore.training.thresholds import (
-    BAND_BASE,
+    BALANCE_CHECKED,
     CHECK_ALPHA,
     CHECK_BASE_CANDIDATE,
     CHECK_CANCELLED,
     CHECK_MIN_PICKS,
     CHECK_PROVENANCE,
-    FLOOR_CONFIRMED,
-    FLOOR_SHORT,
-    FLOOR_UNCHECKED,
+    CHECK_RECALL_CANDIDATE,
     WALK_DEEPER,
-    WALK_SHALLOWER,
     WALK_START,
     LineRanking,
     SpotCheck,
-    applicable_result,
+    applicable_balance,
+    balance_schedule,
     band_edges,
     bands_for,
-    check_schedule,
     clopper_pearson_lower,
     clopper_pearson_upper,
-    floor_count,
-    floor_line,
-    floor_state,
     likely_range,
     line_under,
     range_tail,
@@ -50,8 +43,8 @@ from vtscore.training.thresholds import (
 )
 from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
 
-#: (starting candidate, bands the walk audits before its first verdict, picks a band).
-PRESETS = {0.10: (128, 5, 5), 0.25: (64, 4, 5), 0.50: (32, 3, 5), 0.75: (32, 3, 5), 0.90: (32, 3, 5)}
+#: (starting candidate, bands the walk audits before its first verdict, picks a band) at each preset balance.
+PRESETS = {0.5: (32, 3, 5), 1.0: (32, 3, 5), 2.0: (128, 5, 5)}
 
 
 def _ranking(n: int = 200, voted: set[int] | None = None, seed: int = 42) -> LineRanking:
@@ -62,6 +55,11 @@ def _ranking(n: int = 200, voted: set[int] | None = None, seed: int = 42) -> Lin
 
 def _unvoted(r: LineRanking, also_voted: set[int] | None = None) -> tuple[int, ...]:
     return tuple(int(i) for i in r.unvoted_ids(also_voted or set()))
+
+
+def _start(ids: tuple[int, ...], beta: float = 1.0, n_pos: float = 52.0, **kwargs) -> SpotCheck:
+    """A balance walk over *ids*; *n_pos* is the walk's count of the ranking's positives."""
+    return SpotCheck.start_balance(ids, beta, n_pos, **kwargs)
 
 
 def _finish(check: SpotCheck, right_ids: set[int] | None = None) -> SpotCheck:
@@ -109,26 +107,19 @@ class TestTheBands:
 
 class TestTheSchedule:
     def test_the_presets_resolve_as_the_owner_ruled_them(self):
-        got = {x: (s.candidate, s.rounds, s.picks) for x, s in ((x, check_schedule(x)) for x in PRESETS)}
+        got = {b: (s.candidate, s.rounds, s.picks) for b, s in ((b, balance_schedule(b)) for b in PRESETS)}
         assert got == PRESETS
 
-    def test_the_candidate_doubles_as_the_floor_halves_and_the_bands_follow(self):
-        for x, (k, rounds, _m) in PRESETS.items():
-            assert k == CHECK_BASE_CANDIDATE * 2 ** max(0, math.floor(math.log2(0.5 / x) + 1e-9))
+    def test_the_caps_are_the_precision_floors_counts_at_50_and_10_percent(self):
+        """#4267's schedule, ``32 * 2**max(0, floor(log2(0.5 / P)))``, at the floor each preset leans toward."""
+        for beta, (k, rounds, _m) in PRESETS.items():
+            floor = 0.5 if beta <= 1 else 0.1
+            assert k == CHECK_BASE_CANDIDATE * 2 ** max(0, math.floor(math.log2(0.5 / floor) + 1e-9))
             assert rounds == rounds_for(k) == bands_for(k, band_edges(k))
+        assert (CHECK_BASE_CANDIDATE, CHECK_RECALL_CANDIDATE) == (32, 128)
 
     def test_every_band_costs_the_same_five_picks(self):
-        assert all(check_schedule(x).picks == CHECK_MIN_PICKS for x in (0.1, 0.25, 0.5, 0.75, 0.9))
-
-    def test_a_floor_of_one_censuses_each_band(self):
-        assert check_schedule(1.0).picks == BAND_BASE
-        check = SpotCheck.start(_unvoted(_ranking()), 1.0, seed=1)
-        assert len(check.pending) == BAND_BASE and set(check.pending) == _top(8)
-
-    @pytest.mark.parametrize("bad", [0.0, -0.1, 1.5])
-    def test_a_floor_outside_the_unit_interval_is_refused(self, bad):
-        with pytest.raises(ValueError):
-            check_schedule(bad)
+        assert all(balance_schedule(b).picks == CHECK_MIN_PICKS for b in (0.25, 0.5, 1.0, 2.0, 4.0))
 
 
 class TestTheLikelyRange:
@@ -155,13 +146,14 @@ class TestTheLikelyRange:
     def test_a_sets_range_is_its_bands_intervals_weighted_by_size(self):
         """Two bands of 8: one censused at 100%, one with 5 picks 3 right at the tail alpha / 2."""
         r = _ranking(16)
-        check = SpotCheck.start(_unvoted(r), 0.5, seed=1, start_count=16)
+        # 13 positives: the walk's F1 at both bands (12.8 right of 16) beats the first band's (8 of 8).
+        check = _start(_unvoted(r), n_pos=13.0, seed=1, start_count=16)
         assert check.bands == 2 and check.band == 0
         check.record({cid: True for cid in check.pending})
         assert check.band == 1
         second = check.pending
         check.record({cid: i < 3 for i, cid in enumerate(second)})
-        assert check.finished
+        assert check.finished and check.k == 16
         tail = range_tail(2)
         band0 = likely_range(5, 5, 8, tail)
         band1 = likely_range(3, 5, 8, tail)
@@ -186,7 +178,7 @@ class TestTheRanking:
 
     def test_the_line_sits_just_under_the_last_item_of_the_set(self):
         r = _ranking()
-        assert floor_line(r, 0.5) == line_under(r.score_of(32))
+        assert r.threshold_for(32) == line_under(r.score_of(32))
         assert r.threshold_for(500) == line_under(r.score_of(200))
         assert LineRanking.from_scores([1], [0.5], {1}).threshold_for(32) is None
 
@@ -211,64 +203,37 @@ class TestTheRanking:
 
 
 class TestTheWalk:
-    def test_it_starts_at_the_bands_that_hold_the_floors_count_and_deals_the_top_band(self):
-        check = SpotCheck.start(_unvoted(_ranking()), 0.5, seed=3)
+    def test_it_starts_at_the_bands_that_hold_the_balances_cap_and_deals_the_top_band(self):
+        check = _start(_unvoted(_ranking()), seed=3)
         assert (check.start_k, check.bands, check.k, check.picks) == (32, 3, 32, 5)
         assert check.edges == (0, 8, 16, 32, 64, 128, 200)
         assert check.band == 0 and set(check.pending) <= _top(8) and len(check.pending) == 5
         assert check.round == 0 and check.running and check.direction == WALK_START
-        deep = SpotCheck.start(_unvoted(_ranking()), 0.1, seed=3)
+        deep = _start(_unvoted(_ranking()), beta=2.0, seed=3)
         assert (deep.start_k, deep.bands) == (128, 5)
 
     def test_it_audits_each_starting_band_in_turn_before_its_first_verdict(self):
-        check = SpotCheck.start(_unvoted(_ranking()), 0.5, seed=5)
+        check = _start(_unvoted(_ranking()), seed=5)
         seen: list[int] = []
         for expected_band in (0, 1, 2):
             assert check.band == expected_band
             seen += check.pending
             check.record({cid: True for cid in check.pending})
         assert check.round == 3
-        # The starting set met the floor: the walk went one band deeper, and only now.
+        # The starting set's estimate is the first to compare: the walk went one band deeper, and only now.
         assert check.direction == WALK_DEEPER and check.bands == 4 and check.k == 64 and check.band == 3
         assert set(check.pending) <= set(range(33, 65)) and not set(check.pending) & set(seen)
 
-    def test_it_grows_while_the_set_meets_the_floor_and_stops_on_the_first_reversal(self):
-        """Positives are the top 40: the set of 64 is at least half right, the set of 128 is not."""
-        check = _finish(SpotCheck.start(_unvoted(_ranking()), 0.5, seed=7), right_ids=_top(40))
-        assert check.status == FLOOR_CONFIRMED and check.k == 64 and check.best == 4
-        assert check.direction == WALK_SHALLOWER, "it stepped back from the set that fell short"
-        # Five bands audited (the three it started with, then 64 and 128), 5 picks each.
-        assert check.round == 5 and len(check.labels) == 25
-        est = check.estimate()
-        assert est is not None and est >= 0.5
-        assert check.range().labelled == 20, "the range describes the kept set only"
-
-    def test_it_walks_to_the_end_of_a_ranking_that_is_all_right(self):
-        check = _finish(SpotCheck.start(_unvoted(_ranking()), 0.5, seed=7))
-        assert check.status == FLOOR_CONFIRMED and check.k == 200 and check.bands == 6
-        assert check.round == 6 and check.direction == WALK_DEEPER
-
-    def test_it_shrinks_while_the_set_falls_short_and_ends_on_the_first_band(self):
-        check = _finish(SpotCheck.start(_unvoted(_ranking()), 0.5, seed=5), right_ids=set())
-        assert check.status == FLOOR_SHORT and check.k == BAND_BASE and check.bands == 1
-        assert check.round == 3, "shrinking needs no new picks: the bands were audited already"
-        assert check.direction == WALK_SHALLOWER and check.best is None
-
-    def test_it_settles_one_band_shallower_when_the_start_falls_short_and_a_smaller_set_meets_it(self):
-        """Positives are the top 12: the top 32 is under half right, the top 16 is not."""
-        check = _finish(SpotCheck.start(_unvoted(_ranking()), 0.5, seed=9), right_ids=_top(12))
-        assert check.status == FLOOR_CONFIRMED and check.k == 16 and check.round == 3
-
     def test_a_walk_can_start_where_a_caller_proposes(self):
-        check = SpotCheck.start(_unvoted(_ranking()), 0.5, seed=1, start_count=100)
+        check = _start(_unvoted(_ranking()), seed=1, start_count=100)
         assert (check.start_k, check.bands, check.k) == (128, 5, 128)
-        tiny = SpotCheck.start(_unvoted(_ranking()), 0.5, seed=1, start_count=3)
+        tiny = _start(_unvoted(_ranking()), seed=1, start_count=3)
         assert (tiny.start_k, tiny.bands, tiny.k) == (8, 1, 8)
 
     def test_the_ranking_never_changes_after_the_start(self):
         """The model may retrain behind the check; every band samples the one list fixed at the start."""
         ranking = _ranking()
-        check = SpotCheck.start(_unvoted(ranking), 0.25, seed=9)
+        check = _start(_unvoted(ranking), beta=2.0, seed=9)
         fixed = check.ranking_ids
         moved = LineRanking.from_scores(ranking.ids.tolist(), ranking.scores[::-1], set())
         check.record({cid: False for cid in check.pending})
@@ -277,7 +242,7 @@ class TestTheWalk:
         assert _unvoted(moved) != fixed, "the retrained ranking would have said otherwise"
 
     def test_a_partial_round_waits_and_a_stray_vote_is_refused(self):
-        check = SpotCheck.start(_unvoted(_ranking()), 0.5, seed=2)
+        check = _start(_unvoted(_ranking()), seed=2)
         first, rest = check.pending[0], check.pending[1:]
         assert check.record({first: True}) is False
         assert check.pending == rest and check.running
@@ -287,116 +252,50 @@ class TestTheWalk:
         assert check.band == 1, "the next band the starting set owes"
 
     def test_a_finished_check_takes_no_more_votes_and_a_cancelled_one_is_neither_state(self):
-        done = _finish(SpotCheck.start(_unvoted(_ranking()), 0.5, seed=2))
+        done = _finish(_start(_unvoted(_ranking()), seed=2))
         with pytest.raises(ValueError):
             done.record({})
         with pytest.raises(ValueError):
             done.draw()
-        cancelled = SpotCheck.start(_unvoted(_ranking()), 0.5, seed=2)
+        cancelled = _start(_unvoted(_ranking()), seed=2)
         cancelled.cancel()
         assert cancelled.status == CHECK_CANCELLED and not cancelled.running and not cancelled.finished
-        assert applicable_result(0.5, cancelled) is None
+        assert applicable_balance(1.0, cancelled) is None
 
     def test_a_small_corpus_is_one_band_and_a_census(self):
-        tiny = SpotCheck.start(_unvoted(_ranking(3)), 0.5, seed=4)
+        tiny = _start(_unvoted(_ranking(3)), n_pos=3.0, seed=4)
         assert tiny.edges == (0, 3) and tiny.bands == 1 and len(tiny.pending) == 3
         tiny.record({cid: True for cid in tiny.pending})
-        assert tiny.status == FLOOR_CONFIRMED and tiny.k == 3
+        assert tiny.status == BALANCE_CHECKED and tiny.k == 3
         assert tiny.range().lo == tiny.range().hi == 1.0
-        five = SpotCheck.start(_unvoted(_ranking(5)), 0.9, seed=1)
+        five = _start(_unvoted(_ranking(5)), n_pos=4.0, seed=1)
         five.record({cid: cid != 5 for cid in five.pending})
         assert (five.range().lo, five.range().hi) == (0.8, 0.8)
-        assert five.status == FLOOR_SHORT and five.k == 5
+        assert five.status == BALANCE_CHECKED and five.k == 5
 
     def test_a_ranking_must_have_distinct_ids(self):
         with pytest.raises(ValueError):
-            SpotCheck.start((1, 1, 2), 0.5)
+            _start((1, 1, 2))
         with pytest.raises(ValueError):
-            SpotCheck.start((), 0.5)
+            _start(())
 
     def test_the_picks_are_seeded_and_the_provenance_is_the_apps(self):
-        a = SpotCheck.start(_unvoted(_ranking()), 0.1, seed=11).pending
-        b = SpotCheck.start(_unvoted(_ranking()), 0.1, seed=11).pending
+        a = _start(_unvoted(_ranking()), beta=2.0, seed=11).pending
+        b = _start(_unvoted(_ranking()), beta=2.0, seed=11).pending
         assert a == b
         assert CHECK_PROVENANCE == {"flow": "check"}
 
     def test_the_state_a_client_sees(self):
-        check = SpotCheck.start(_unvoted(_ranking()), 0.25, seed=6)
+        check = _start(_unvoted(_ranking()), seed=6)
         state = check.as_dict()
         assert state["status"] == "running" and state["picks"] == list(check.pending)
         assert (state["round"], state["rounds"], state["picks_per_round"]) == (1, 6, 5)
-        assert (state["candidate"], state["start_candidate"], state["bands"]) == (64, 64, 4)
+        assert (state["candidate"], state["start_candidate"], state["bands"]) == (32, 32, 3)
         assert state["band"] == {"index": 0, "lo": 1, "hi": 8} and state["direction"] == WALK_START
         assert state["range"] is None and state["labelled"] == 0 and state["estimate"] is None
+        assert state["beta"] == 1.0 and state["fbeta"] is None and state["recall"] is None
+        assert "min_precision" not in state
         _finish(check, right_ids=_top(40))
         state = check.as_dict()
-        assert state["status"] == FLOOR_CONFIRMED and state["picks"] == [] and state["band"] is None
-        # At 25% the top 128 (40 right of 128) meets the floor and the top 200 does not.
-        assert state["candidate"] == 128 and state["direction"] == WALK_SHALLOWER
-        assert state["range"]["labelled"] == 25 and 0.25 <= state["estimate"] <= 1.0
-
-
-class TestTheLine:
-    def test_before_any_check_the_line_keeps_the_unchecked_starting_candidate(self):
-        """What a headless run exports: the top 128 at 10%, 64 at 25%, 32 at 50% and above."""
-        r = _ranking(voted={1})
-        for x, (k, _r, _m) in PRESETS.items():
-            assert floor_count(x, None) == k
-            assert floor_line(r, x) == r.threshold_for(k)
-            state = floor_state(x, None, r)
-            assert (state.status, state.count, state.range, state.stale) == (FLOOR_UNCHECKED, k, None, False)
-            assert state.as_dict()["schedule"] == {"candidate": k, "rounds": _r, "picks": _m}
-
-    def test_a_corpus_smaller_than_the_candidate_reports_what_it_has(self):
-        r = _ranking(10, voted={1, 2})
-        state = floor_state(0.5, None, r)
-        assert state.count == 8 and floor_line(r, 0.5) == r.threshold_for(8) == r.score_of(10)
-        assert floor_state(0.5, None, None).count == 32, "with no ranking the schedule's count is all there is"
-        assert floor_line(None, 0.5) is None
-
-    def test_a_confirmed_check_keeps_the_set_the_walk_ended_on(self):
-        r = _ranking()
-        check = _finish(SpotCheck.start(_unvoted(r), 0.25, seed=8), right_ids=_top(40))
-        assert check.status == FLOOR_CONFIRMED and check.k == 128, "at 25% the set of 128 is right enough"
-        check.fingerprint = r.fingerprint(128, set(check.labels))
-        assert floor_count(0.25, check) == 128
-        assert floor_line(r, 0.25, check, set(check.labels)) == r.threshold_for(128, set(check.labels))
-        state = floor_state(0.25, check, r, set(check.labels))
-        assert state.status == FLOOR_CONFIRMED and state.count == 128 and not state.stale
-        assert state.range is not None and state.range.labelled == 25
-
-    def test_a_short_check_keeps_the_first_band_it_ended_on(self):
-        r = _ranking()
-        check = _finish(SpotCheck.start(_unvoted(r), 0.1, seed=8), right_ids=set())
-        assert check.status == FLOOR_SHORT and check.k == BAND_BASE
-        check.fingerprint = r.fingerprint(BAND_BASE, set(check.labels))
-        state = floor_state(0.1, check, r, set(check.labels))
-        assert state.status == FLOOR_SHORT and state.count == BAND_BASE
-        assert state.range is not None and state.range.hi < 0.6
-        assert floor_line(r, 0.1, check, set(check.labels)) == r.threshold_for(BAND_BASE, set(check.labels))
-
-    def test_a_result_belongs_to_its_floor(self):
-        r = _ranking()
-        check = _finish(SpotCheck.start(_unvoted(r), 0.5, seed=8), right_ids=_top(40))
-        assert applicable_result(0.5, check) is check
-        assert applicable_result(0.25, check) is None
-        assert floor_state(0.25, check, r).status == FLOOR_UNCHECKED
-        assert floor_count(0.25, check) == 64
-
-    def test_a_finished_result_goes_stale_when_the_set_under_it_moves(self):
-        r = _ranking()
-        check = _finish(SpotCheck.start(_unvoted(r), 0.5, seed=8), right_ids=_top(40))
-        assert check.k == 64
-        voted = set(check.labels)
-        check.fingerprint = r.fingerprint(64, voted)
-        assert not floor_state(0.5, check, r, voted).stale
-        # A later vote inside the set: the top 64 unvoted shifts by one.
-        later = voted | {next(cid for cid in r.candidate(64, voted))}
-        assert floor_state(0.5, check, r, later).stale
-        # A retrain that reorders the ranking.
-        retrained = LineRanking.from_scores(r.ids.tolist(), r.scores[::-1], set())
-        assert floor_state(0.5, check, retrained, voted).stale
-        # A vote far below the line leaves the set, and so the range, alone.
-        below = voted | {200}
-        assert not floor_state(0.5, check, r, below).stale
-        assert floor_line(r, 0.5, check, later) == r.threshold_for(64, later), "the line follows at the same count"
+        assert state["status"] == BALANCE_CHECKED and state["picks"] == [] and state["band"] is None
+        assert state["fbeta"] is not None and state["range"]["labelled"] >= 15 and 0.0 <= state["estimate"] <= 1.0

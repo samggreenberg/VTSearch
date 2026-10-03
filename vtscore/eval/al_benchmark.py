@@ -360,7 +360,9 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     args = parser.parse_args(argv)
     if args.inclusion != 0 and args.beta != NO_BALANCE:
-        parser.error("--inclusion draws the line only with --beta off; under a balance it would only re-weight cost (#4361)")
+        parser.error(
+            "--inclusion draws the line only with --beta off; under a balance it would only re-weight cost (#4361)"
+        )
     strategies = _resolve_strategies(args.strategies)
     dataset_clips = _build_source(args)
 

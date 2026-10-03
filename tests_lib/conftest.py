@@ -225,60 +225,37 @@ def reset_contexts(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def no_precision_floor():
-    """No precision floor and no balance, so every line is the Inclusion 0 cut, with no promise attempted.
+def no_balance():
+    """No balance, so every line is the Inclusion 0 cut, with no set kept.
 
-    The app always sets a floor (#4269) and, since #4413, draws the line at the
-    balance by default; a library caller can still leave both aside.  For
-    tests whose subject is a line no preference decides.
-    ``reset_contexts`` re-registers the default builder before the next test,
-    so nothing needs undoing.
+    The app always sets a balance (#4413); a library caller can still leave it
+    aside (``CoreConfig(beta=None)``).  For tests whose subject is a line no
+    preference decides.  ``reset_contexts`` re-registers the default builder
+    before the next test, so nothing needs undoing.
     """
     import dataclasses
 
-    # ``line_preference="floor"`` with no floor is "no preference" (#4413): the
-    # balance, the default, would otherwise draw the line in the floor's place.
     config.register_core_config_builder(
-        lambda path=None: dataclasses.replace(
-            _lib_default_core_config(path), min_precision=None, line_preference="floor"
-        )
+        lambda path=None: dataclasses.replace(_lib_default_core_config(path), beta=None)
     )
 
 
 @pytest.fixture
-def floor_preference():
-    """The deprecated precision floor draws the line (#4413): for the floor's own tests, now that the balance is the default.
-
-    ``reset_contexts`` re-registers the default builder before the next test,
-    so nothing needs undoing.
-    """
-    import dataclasses
-
-    from vtscore.config import core_config
-
-    # Wrap whatever builder is in force (``no_precision_floor`` may have
-    # registered one already, in either order), so the two fixtures compose.
-    base = core_config._core_config_builder or _lib_default_core_config
-    config.register_core_config_builder(lambda path=None: dataclasses.replace(base(path), line_preference="floor"))
-
-
-@pytest.fixture
 def schedule_only(monkeypatch):
-    """The unchecked line at the schedule's count alone: the mixture's proposal (#4389) set aside.
+    """The unchecked line at the balance's cap alone: the mixture's proposal (#4389, #4413) set aside.
 
-    Before any check the line keeps the smaller of the schedule's count and
-    the vote-anchored mixture's; on a fixture corpus of a few dozen synthetic
-    items the mixture's count is whatever the fit says that day.  For tests
-    whose subject is the schedule, the walk or a carrier of the state, not
-    the mixture - that rule is pinned in
-    ``tests_lib/sorting/test_mixture_count.py``.  Both seams: the package
+    Before any check the line keeps the smaller of the cap and the mixture's
+    F-beta argmax; on a fixture corpus of a few dozen synthetic items the
+    argmax is whatever the fit says that day.  For tests whose subject is the
+    cap, the walk or a carrier of the state, not the mixture - that rule is
+    pinned in ``tests_lib/sorting/test_balance.py``.  Both seams: the package
     name the app's local imports read, and the harness's module binding.
     """
     import vtscore.eval.voting_iterations as harness
     import vtscore.training.thresholds as thresholds
 
-    monkeypatch.setattr(thresholds, "mixture_count", lambda *_a, **_k: None)
-    monkeypatch.setattr(harness, "mixture_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(thresholds, "fbeta_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(harness, "fbeta_count", lambda *_a, **_k: None)
 
 
 @pytest.hookimpl(trylast=True)

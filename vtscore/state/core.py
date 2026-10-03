@@ -31,7 +31,7 @@ import threading
 import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, overload
 
 
 # Reentrant lock protecting all mutable state.
@@ -1136,7 +1136,7 @@ class DetectorContext:
         # version that scored this pass; flipped True when its labelset changes
         # underneath (corrections folded in + retrain).
         self.find_eval_stale: bool = False
-        self.beta: float = DEFAULT_BETA
+        self.beta: float | None = DEFAULT_BETA
         self.beta_seeded: bool = False
         # Cached in-memory data (never exported)
         self.training_medias: dict[int, dict[str, Any]] = {}
@@ -1734,16 +1734,29 @@ def detector_walk_positives(ctx: "DetectorContext", beta: float) -> float:
     return walk_positives(ctx.line_ranking, beta, detector_line_labels(ctx), human_voted_ids(ctx))
 
 
-def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any]:
+@overload
+def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any]: ...
+@overload
+def detector_balance_state(ctx: "DetectorContext", beta: None) -> None: ...
+@overload
+def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[str, Any] | None: ...
+def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[str, Any] | None:
     """What the balance says about *ctx*'s current line (#4413), for a response that carries the line.
 
-    ``status`` is ``unchecked`` (the line is the mixture's F-beta argmax under
-    the cap) or ``checked`` (the last balance walk's peak); ``count`` the set's
-    size; ``precision`` and ``recall`` the walk's likely ranges and ``fbeta``
-    its estimate, with ``stale`` once the ranking under them moved.
+    Every place a detector's threshold leaves the process - a sort result, a
+    Find pass, a balance change, a headless export - reports it beside the
+    threshold (#4247, #4272).  ``status`` is ``unchecked`` (the line is the
+    mixture's F-beta argmax under the cap) or ``checked`` (a balance walk has
+    run); ``count`` the set's size; ``precision`` and ``recall`` the walk's
+    likely ranges and ``fbeta`` its estimate, with ``stale`` once the ranking
+    under them moved; ``schedule`` is what a check at this balance costs.
+    ``None`` when no balance is set (a library caller's choice; the app
+    always sets one).
     """
     from vtscore.training.thresholds import balance_state
 
+    if beta is None:
+        return None
     return balance_state(
         beta,
         ctx.precision_check,
@@ -1870,9 +1883,10 @@ def user_beta() -> float | None:
     from vtscore.config import CoreConfig
 
     try:
-        return float(CoreConfig.from_settings().beta)
+        beta = CoreConfig.from_settings().beta
     except RuntimeError:
         return None
+    return None if beta is None else float(beta)
 
 
 def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
@@ -1917,13 +1931,13 @@ def _set_dataset_display_name(value: str | None) -> None:
     get_active_context().dataset_display_name = value
 
 
-def _get_beta() -> tuple[bool, float]:
+def _get_beta() -> tuple[bool, float | None]:
     """``(seeded, value)`` for the active detector's balance (#4413)."""
     ctx = get_active_detector_context()
     return ctx.beta_seeded, ctx.beta
 
 
-def _set_beta(value: float) -> None:
+def _set_beta(value: float | None) -> None:
     ctx = get_active_detector_context()
     # The balance is cached per-detector for fast reads, but its canonical
     # persisted home is the per-user settings store (written by the caller's
@@ -1936,7 +1950,7 @@ def _set_beta(value: float) -> None:
     # no-op instead of a 400.
     if is_request_missing_detector_context(ctx):
         return
-    ctx.beta = float(value)
+    ctx.beta = None if value is None else float(value)
     ctx.beta_seeded = True
 
 

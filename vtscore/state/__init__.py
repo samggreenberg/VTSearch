@@ -203,9 +203,7 @@ def clear_all() -> None:
 #: fire - the same failure mode :data:`vtscore.achievements_hooks.KNOWN_EVENTS`
 #: exists to catch, so this seam rejects it the same way rather than accepting
 #: a registration nothing will ever call.
-KNOWN_SETTING_KEYS: frozenset[str] = frozenset(
-    {"beta", "calibrate_count", "calibration_fraction"}
-)
+KNOWN_SETTING_KEYS: frozenset[str] = frozenset({"beta", "calibrate_count", "calibration_fraction"})
 
 #: Setting keys the library used to persist and no longer does.  Registering a
 #: persister for one is accepted with a ``DeprecationWarning`` rather than
@@ -273,7 +271,7 @@ def set_inclusion(value: int) -> None:
     _retired_inclusion("vtscore.state.set_inclusion()", value)
 
 
-def line_knobs() -> dict[str, float]:
+def line_knobs() -> dict[str, float | None]:
     """The preference the active detector's line is drawn at, as the trainer's keywords (#4413): ``{"beta": b}``.
 
     What every retrain and re-cut passes on, so one setting moves every line.
@@ -281,18 +279,22 @@ def line_knobs() -> dict[str, float]:
     return {"beta": get_beta()}
 
 
-def get_beta() -> float:
+def get_beta() -> float | None:
     """The active detector's balance (#4413): F-beta's beta, seeded from the user's setting on first read.
 
     Draws the line: the band walk stopped at the F-beta peak, or the
     mixture's F-beta argmax under the balance's cap before any check.
+    ``None`` means no balance: the line is the Inclusion 0 cut.  The app
+    always sets a balance; ``None`` survives for library callers
+    (``CoreConfig(beta=None)``).
     """
     from vtscore.config import CoreConfig
 
     with _state_lock:
         seeded, val = _core._get_beta()
         if not seeded:
-            val = float(CoreConfig.from_settings().beta)
+            raw = CoreConfig.from_settings().beta
+            val = None if raw is None else float(raw)
             _core._set_beta(val)
         return val
 

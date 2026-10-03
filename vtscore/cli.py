@@ -382,21 +382,23 @@ def _load_and_train_detectors(
     return out
 
 
-def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any]:
+def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
     """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
     Read at the balance the training read (:func:`vtscore.state.line_knobs`,
     #4413).  A headless run cannot spot-check its line (#4272), so it exports
     the balance's unchecked set - the cap or the mixture's F-beta argmax,
     whichever is smaller (#4389) - and the ``detector_unchecked`` event is
-    the run's record that the set it exports was never checked.
+    the run's record that the set it exports was never checked.  ``None``
+    with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
+    the Inclusion 0 cut, and there is no set to report.
     """
     from vtscore.state import get_beta  # noqa: PLC0415
     from vtscore.state.core import detector_balance_state  # noqa: PLC0415
     from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
 
     balance = detector_balance_state(det_ctx, get_beta())
-    if balance["status"] == BALANCE_UNCHECKED:
+    if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         cli_progress.emit(
             "detector_unchecked",
             text=(

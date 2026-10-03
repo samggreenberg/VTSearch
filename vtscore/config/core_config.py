@@ -176,11 +176,13 @@ class CoreConfig:
     # without the app shim keep working unchanged.
     hide_ingest_eta: bool = False
 
-    # The balance (#4413): F-beta's beta, the preference the line is drawn at.
-    # Seeds each detector's own balance on first read
-    # (``vtscore.state.get_beta``).  Defaulted here so library-only
-    # ``CoreConfig(...)`` constructions keep working.
-    beta: float = DEFAULT_BETA
+    # The balance (#4413): F-beta's beta, the preference the line is drawn at,
+    # or ``None`` for no balance - the line is then the Inclusion 0 cut.  Seeds
+    # each detector's own balance on first read (``vtscore.state.get_beta``).
+    # The app always sets one; ``None`` survives for library callers.
+    # Defaulted here so library-only ``CoreConfig(...)`` constructions keep
+    # working.
+    beta: float | None = DEFAULT_BETA
 
     # Deprecated (#4269): Inclusion is no longer a user preference, so nothing
     # reads this.  ``None`` is "not given"; ``0`` is accepted with a
