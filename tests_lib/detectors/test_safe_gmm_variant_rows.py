@@ -335,3 +335,24 @@ class TestTheDefaultArmDrawsTheLabelsLine:
         assert drawn, "the default arm never drew the labels' line"
         assert all(np.isfinite(r["find_prevalence"]) and 0.0 < r["find_prevalence"] <= 0.5 for r in drawn)
         assert all(np.isfinite(r["train_threshold"]) for r in drawn)
+
+
+class TestTheWiderWorldKnobs:
+    """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""
+
+    def test_the_test_score_sink_carries_the_withheld_half_and_the_labels_model(self):
+        sink: list = []
+        rows = _run_safe_uncached("max_patch", min_precision=None, test_score_sink=sink)
+        assert rows and sink
+        last = sink[-1]
+        assert last["scores"].dtype == np.float32 and last["scores"].shape == last["labels"].shape
+        assert last["labels"].sum() > 0 and np.isfinite(last["train_threshold"])
+        drawn = [s for s in sink if s["model"] is not None]
+        assert drawn and {"mu_pos", "mu_neg", "sigma"} <= set(drawn[-1]["model"])
+
+    def test_a_smaller_train_pool_keeps_the_withheld_half_whole(self):
+        full = _run_safe_uncached("max_patch", min_precision=None, max_steps=6)
+        small = _run_safe_uncached("max_patch", min_precision=None, max_steps=6, sim_size=30)
+        assert {r["prevalence_arm"] for r in small} == {"sim_30"}
+        base = lambda rows: [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]  # noqa: E731
+        assert base(full)[0]["n_test_pos"] == base(small)[0]["n_test_pos"], "the Find side is untouched"

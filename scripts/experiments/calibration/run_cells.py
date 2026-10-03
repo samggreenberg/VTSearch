@@ -370,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     all_picks: list[dict] = []
     all_pframes: list[dict] = []
     all_rankframes: list[dict] = []
+    all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
@@ -379,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
         picks_local: list[dict] | None = [] if cfg.EMIT_PICKS else None
         pframes_local: list[dict] | None = [] if cfg.PFRAME_STEPS else None
         rankframes_local: list[dict] | None = [] if cfg.RANK_FRAME_STEPS else None
+        testscores_local: list[dict] | None = [] if cfg.SAVE_TEST_SCORES else None
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -442,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
             precision_frame_sink=pframes_local,
             precision_frame_steps=cfg.PFRAME_STEPS or None,
             rank_frame_sink=rankframes_local,
+            test_score_sink=testscores_local,
+            sim_size=cfg.SIM_SIZE,
             rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
             calibration_seed=cal_seed,
         )
@@ -508,6 +512,11 @@ def main(argv: list[str] | None = None) -> int:
         all_pframes.extend({**f, "style": np.array(style or "")} for f in pframes_local or [])
         all_fitq.extend(fitq_local or [])
         all_rankframes.extend(rankframes_local or [])
+        if testscores_local:
+            # The last ordinary step and the last row (after the check): what Train left and what Find applies.
+            ordinary = [f for f in testscores_local if f["phase"] != "check"]
+            keep = {"last": ordinary[-1] if ordinary else testscores_local[-1], "final": testscores_local[-1]}
+            all_testscores.update({f"{emb}/{style}/{k}": v for k, v in keep.items()})
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
             f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows, "
@@ -574,6 +583,17 @@ def main(argv: list[str] | None = None) -> int:
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means
     # "off", because nothing reads it by default.
+    if cfg.SAVE_TEST_SCORES and all_testscores:
+        # #4452's Find scenarios: per kept snapshot its scores, labels and a JSON of the rest.
+        ts_out = outdir / f"task_{idx:04d}__testscores.npz"
+        packed_ts: dict[str, object] = {}
+        for key, snap in all_testscores.items():
+            packed_ts[f"{key}/scores"] = snap["scores"]
+            packed_ts[f"{key}/labels"] = snap["labels"]
+            meta = {k: v for k, v in snap.items() if k not in ("scores", "labels")}
+            packed_ts[f"{key}/meta"] = np.array(json.dumps(meta))
+        np.savez_compressed(ts_out, **packed_ts)
+        common.log(f"wrote {len(all_testscores)} test-score snapshots to {ts_out}")
     if cfg.PFRAME_STEPS:
         pframes_out = outdir / f"task_{idx:04d}__pframes.npz"
         packed = {f"t{int(f['t'])}/{k}": v for f in all_pframes for k, v in f.items()}

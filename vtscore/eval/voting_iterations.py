@@ -2006,6 +2006,8 @@ def simulate_voting_iterations(  # noqa: C901
     precision_frame_steps: Optional[Sequence[int]] = None,
     rank_frame_sink: Optional[list[dict[str, Any]]] = None,
     rank_frame_steps: Optional[Sequence[int]] = None,
+    test_score_sink: Optional[list[dict[str, Any]]] = None,
+    sim_size: Optional[int] = None,
     exclusion_min_remainder: Optional[float] = None,
     live_cut_rule: Optional[str] = None,
     live_threshold: Optional[str] = None,
@@ -2540,6 +2542,18 @@ def simulate_voting_iterations(  # noqa: C901
         sim_ids, test_ids, all_cohorts = mix_split
         wanted = None if test_bands in (None, "auto") else set(test_bands)
         band_cohorts = {b: ids for b, ids in all_cohorts.items() if wanted is None or b in wanted}
+
+    # A smaller Train pool (#4452's wider world): a seeded subsample of the
+    # simulation half, after the split so the withheld half - the Find side -
+    # is the full one whatever the pool's size.
+    if sim_size is not None and len(sim_ids) > int(sim_size):
+        sub_rng = np.random.RandomState(int(seed) + 7919)
+        keep = sub_rng.choice(len(sim_ids), size=int(sim_size), replace=False)
+        sim_ids = [sim_ids[int(i)] for i in sorted(keep)]
+        prevalence_arm = f"sim_{int(sim_size)}"
+        realized_prevalence = round(
+            sum(1 for cid in sim_ids if media_is_positive(clips_dict[cid], target_category)) / len(sim_ids), 6
+        )
 
     # After the split and the cohorts, so neither moves (#4184).
     if haystack_prevalence is not None:
@@ -3132,6 +3146,22 @@ def simulate_voting_iterations(  # noqa: C901
                 repool_variants or [],
                 repool_topk,
             )
+            if test_score_sink is not None:
+                # The withheld half as Find sees it (#4452's Find scenarios):
+                # its scores and labels, Train's threshold and the labels' class
+                # model, so any Find corpus drawn from it is priced post hoc.
+                find_line = details.get("find_line")
+                test_score_sink.append(
+                    {
+                        "t": int(t),
+                        "phase": "check" if picks is not None else (flow.phase if flow is not None else ""),
+                        "scores": np.asarray(calibration[1], dtype=np.float32),
+                        "labels": np.asarray(calibration[2], dtype=np.int8),
+                        "train_threshold": float(threshold),
+                        "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
+                        "model": None if find_line is None else find_line.model.as_dict(),
+                    }
+                )
         else:
             scored: list[Any] = []
             metrics = _evaluate_on_test(
