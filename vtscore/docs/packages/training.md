@@ -21,7 +21,8 @@ this package is the underlying ML core.
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the production head's fit) |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
-| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank + match-statistic verification classifier |
+| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank: the inlier gate, and the returned-set line on documents (#4367, #4440) |
+| `vtscore/training/structural_stage1.py`                               | The tiled Stage 1 for document pages (best tile per page), the shortlist size and the verification cache |
 | `vtscore/training/query_sort.py`                                      | External-query sorts of the active dataset (example media, label files): `cosine_sort_active`, `example_sort_from_paths`, `train_and_score_active`, … |
 
 The package `__init__.py` re-exports the head-building names and the eight

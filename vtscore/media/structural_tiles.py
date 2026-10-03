@@ -5,9 +5,10 @@ text wins, so a stamp or logo is invisible to it (FullMarks: AP 0.003 at 50,000
 pages).  Tiling the page lets a mark compete with its neighbourhood instead:
 one VLAD per overlapping window, projected by a whitened PCA to
 :data:`TILE_DIM` dimensions, and a page scores its **best tile**.  Measured on
-FullMarks v5.0 (``docs/plans/structural-tiled-stage1.md``): the top 1,000 pages
-it hands Stage 2 keep 84% of verifying every page, and 97% once Good votes add
-their boxes as queries.
+FullMarks v5.0 at 50,000 pages
+(``docs/experiments/2026-09-30-fullmarks-tiled-stage1-app-3928/REPORT.md``): the
+top 1,000 pages it hands Stage 2 keep 84% of verifying every page, and 97% once
+Good votes add their boxes as queries.
 
 This module is the one definition of the tiling, the projection and the
 segment-max score.  The app and the FullMarks experiment scripts both import it.
