@@ -38,7 +38,7 @@ from typing import Any, NamedTuple, Optional, Sequence
 import numpy as np
 
 MIN_INLIERS = 8
-BETAS = (0.5, 2.0)  # beta 1 keeps the shipped line (#4458)
+BETAS = (0.5, 1.0, 2.0)  # beta 1 fit too (owner, 2026-10-03, #4458)
 T_GRID = (8, 10, 12, 16, 20, 24, 32)
 D_GRID: tuple[Optional[int], ...] = (None, -2, 0, 2, 4, 8)
 SEARCH_CLICKS = (0, 1, 2, 3, 5, 10, 15, 25)
