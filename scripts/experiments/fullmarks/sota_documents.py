@@ -255,6 +255,64 @@ def save_frame(
     )
 
 
+def save_opening_frame(
+    out: Path,
+    cid: str,
+    pool_ids: list[str],
+    positive: np.ndarray,
+    test: np.ndarray,
+    snap: dict,
+    crop: Any,
+    ranked: list[dict],
+) -> None:
+    """Click 0's frame (#4458): the example sort's shortlist, and each shortlisted page's fit to the crop.
+
+    The example sort keeps no verification cache, so the crop is verified again against its
+    shortlist (the same matcher and template, so the same fits). There are no votes yet.
+    """
+    from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
+    from vtscore.training.structural_similarity import _resolve_matcher  # noqa: PLC0415
+
+    col = {p: i for i, p in enumerate(pool_ids)}
+    head = [e["id"] for e in ranked[: s1.LAST_TOP_K]]
+    shortlisted = np.zeros(len(pool_ids), dtype=bool)
+    shortlisted[[col[p] for p in head]] = True
+    stage1 = np.zeros(len(pool_ids), dtype=np.float32)  # the example sort's order, as a decreasing score
+    for r, e in enumerate(ranked):
+        stage1[col[e["id"]]] = 1.0 - r / max(1, len(ranked))
+    matcher = _resolve_matcher(snap)
+    fits = matcher.verify_many(crop, [snap[p]["local_features"] for p in head]) if matcher else []
+    inliers = np.full(len(pool_ids), np.nan, dtype=np.float32)
+    ratio = np.full(len(pool_ids), np.nan, dtype=np.float32)
+    reproj = np.full(len(pool_ids), np.nan, dtype=np.float32)
+    for p, f in zip(head, fits):
+        i = col[p]
+        inliers[i] = float(f.inlier_count if f.model_ok else 0)
+        if f.model_ok:
+            ratio[i], reproj[i] = float(f.inlier_ratio), float(f.median_reproj_error)
+    empty = np.array([], dtype=np.float32)
+    out.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        out / f"{cid.replace('/', '__')}__v000.npz",
+        positive=positive,
+        test=test,
+        stage1=stage1,
+        shortlisted=shortlisted,
+        inliers=inliers,
+        ratio=ratio,
+        reproj=reproj,
+        good_ids=np.array([], dtype=str),
+        good_loo_ratio=empty,
+        good_loo_reproj=empty,
+        good_loo_inliers=empty,
+        good_loo_stage1=empty,
+        bad_ids=np.array([], dtype=str),
+        bad_inliers=empty,
+        bad_ratio=empty,
+        bad_reproj=empty,
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     from vtscore.media.structural_tiles import load_tile_projection, tile_vectors  # noqa: PLC0415
     from vtscore.state.core import DetectorContext  # noqa: PLC0415
@@ -449,6 +507,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             prev_ap = ap_now
             if v in frame_at and goods:
                 save_frame(args.out / "frames", cid, v, pool_ids, positive, test, snap, goods, bads, boxes, det_ctx)
+            elif v in frame_at and not seeded:
+                save_opening_frame(args.out / "frames", cid, pool_ids, positive, test, snap, crop, ranked)
             if v == args.max_v:
                 # Where each test-half positive sits at the end: inside the verified shortlist or
                 # beyond it, and its gate score, so a weak class's misses can be told apart.
