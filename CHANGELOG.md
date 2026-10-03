@@ -17,6 +17,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold's line comes from your labels alone, in Train and in Find**
+  (issue #4452). The line under a balance is no longer a count of the top of
+  the ranking: VTSearch learns from your votes' held-out scores how high a
+  match and a non-match tend to score, estimates how common matches are in the
+  collection being searched, and draws the line where the balance your radio
+  asks for is best for a collection like that. It keeps every item above the
+  line, possibly none - Find on 200 images with nothing like the target used
+  to return the top 26-128 of them, all wrong, and now returns next to nothing.
+  Nothing is stored but the labels, so an exported labelset draws the same
+  line on another collection or with another embedder. The spot check never
+  moves the line any more (it is advisory at every radio): it measures, and
+  its picks train the detector like any vote. The balance state's `count` is
+  what the line keeps of the ranking scored last, and `shape` is always
+  `advisory`.
 - **The spot check's effect on the line follows the balance** (issue #4427).
   At the precision-leaning and balanced presets (beta 1 and below) the check
   is advisory: the walk runs as an audit and reports its ranges, its votes

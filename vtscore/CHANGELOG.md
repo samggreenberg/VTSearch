@@ -10,6 +10,22 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The balance's line from the labels alone** (issue #4452). New
+  `vtscore.training.thresholds.labels_line`: `ClassScoreModel` /
+  `class_score_model` (the calibration folds' held-out Good and Bad scores as
+  two normals of one spread on the logit scale), `estimate_positives` and
+  `corpus_prevalence` (the model's EM over a corpus's unvoted scores),
+  `labels_line_threshold` (the expected-F-beta argmax at a prevalence),
+  `LabelsLine` (`threshold(beta)`, `on_corpus(...)` to re-estimate the
+  prevalence on another corpus) and `fit_labels_line`. Every retrain fits it
+  and parks it on `DetectorContext.labels_line`; under a balance it is the
+  line (no count, no cap), the re-cut moves it with beta, and a Find over a
+  new dataset re-estimates only the prevalence. `balance_state(...,
+  threshold=)` counts what a threshold keeps of the ranking; `check_shape`
+  is `advisory` at every beta. The eval harness's default arm draws the same
+  line on the sim set and cuts the withheld half at Find's threshold; its base
+  calibration rows gain `train_threshold`, `train_prevalence` and
+  `find_prevalence`, and a forced `walk_shape` runs the count line as an arm.
 - **A balance walk's effect on the line follows the preset** (issue #4427).
   `check_shape(beta)` is `advisory` at beta <= 1 and `trim` above:
   `balance_count` / `balance_line` ignore a finished walk under `advisory`

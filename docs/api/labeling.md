@@ -36,29 +36,27 @@ number outside it is clamped, and a boolean, non-number or `null` is a 422.
 The balance is kept per detector and seeded from the user's `beta` setting,
 as the floor was.
 
-The line always keeps a **set**: the top `count` unvoted items of the ranking
-the detector last scored.
+Since #4452 the line comes **from the labels alone**, so an exported labelset
+draws it again on any corpus: the calibration folds' held-out scores of the
+votes give a class model (two normals of one spread on the logit scale), the
+model's EM over the unvoted scores of the corpus being decided gives its
+prevalence (the Train dataset in Train, the searched dataset in Find, AutoRun
+and the CLI), and the threshold is the score where the kept set's expected
+F-beta peaks at that prevalence ([`docs/ML.md`](../ML.md#threshold-calibration)
+has the model). There is no count and no cap: the line keeps every unvoted
+item at or above the threshold, which on a corpus with nothing like the
+target can be none. A detector whose folds support no class model (too few
+votes, one class) keeps its retrain's fallback cut, never a count.
 
-- **Unchecked** (before any spot check at this beta; AutoRun, the CLI and a
-  cold Find, which have nobody to vote): the count at which the
-  vote-anchored mixture's F-beta peaks over the unvoted ranking
-  (`fbeta_count`: a 2-component mixture fitted on the ranking's scores and
-  anchored on the votes, its high-component posterior summed down the
-  ranking for the positives in each top *k* and in all), **capped** at 128
-  items for beta 2 and 32 for beta 1 and 0.5, the counts the floor's no-vote
-  line used (#4389). The cap is what holds the mixture on a large sparse
-  corpus, where it over-counts the positives and would return 2-4x too much
-  (#4411).
+- **Unchecked**: no spot check has run at this beta.
 - **Checked**: a spot check has walked the ranking ([below](#the-spot-check)).
-  What that does to the line follows the preset (#4427): at beta 1 and below
-  the check is **advisory** - the walk's ranges inform the line, its votes
-  are ordinary votes, and the count stays the unchecked rule's; above 1 the
-  check **trims** - the walk may only step shallower from the bands holding
-  the line, and the line keeps the band edge it ended on.
+  The check is **advisory** at every preset: its ranges describe the set it
+  audited, its picks are ordinary votes the next retrain learns from, and
+  the line stays where the labels put it.
 
 A `POST` is a pure cutoff move: under the balance preference the active
-detector's line moves to the set the new beta keeps without retraining and,
-in Find mode, the unverified items re-split. Both verbs return the new line
+detector's line moves to the new beta's cut of the same labels' line without
+retraining and, in Find mode, the unverified items re-split. Both verbs return the new line
 in the same round trip, so the app's control moves its line without
 re-scoring. The same value is settable as `beta` on `PUT /api/settings`.
 Which preference draws the line is the `line_preference` setting:
@@ -69,15 +67,15 @@ preference stores the beta and moves nothing.
 | Field | Meaning |
 |---|---|
 | `beta` | The active detector's balance: F-beta's beta. |
-| `status` | `unchecked` (no spot check has run at this beta; the line keeps the mixture's F-beta peak under the cap) or `checked` (a walk has run: under `trim` the line keeps its end, under `advisory` the walk informs it). There is no `short`: a balance has nothing to fall short of. |
-| `shape` | How a check treats the line at this beta (#4427): `advisory` (beta ≤ 1: the walk's ranges inform the line, the count stays the unchecked rule's) or `trim` (above 1: the walk may only step shallower, and the line takes its end). |
-| `audited` | The set the last walk ended on, a band edge; what `precision`, `recall` and `fbeta` describe. Under `advisory` it is not the set the line keeps. `null` while unchecked. |
-| `count` | How many unvoted items the line keeps: the unchecked count (capped by the corpus), or under `trim` the set the walk ended on (a band edge: 8, 16, 32, 64, ...). |
+| `status` | `unchecked` (no spot check has run at this beta) or `checked` (a walk has run; it informs the line and never moves it). There is no `short`: a balance has nothing to fall short of. |
+| `shape` | How a check treats the line: always `advisory` since #4452 (the walk's ranges inform the line, its picks train, and the line stays where the labels put it). `trim` - the walk may only step shallower and the line takes its end - was the beta-2 shape of the count line (#4427) and is no longer sent. |
+| `audited` | The set the last walk ended on, a band edge; what `precision`, `recall` and `fbeta` describe - not the set the line keeps. `null` while unchecked. |
+| `count` | How many unvoted items of the ranking the detector last scored are at or above `threshold`: what the line keeps there, possibly 0. No cap bounds it (#4452). |
 | `precision` | The check's **likely range** for how much of the kept set is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked. Each audited band's Clopper-Pearson interval from its picks, each tail at `alpha / bands` over the set's bands, weighted by band size; exact where the picks cover a band. `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
 | `recall` | The check's likely range for how much of the corpus's positives the kept set found: the bands' intervals times their sizes, over the mixture's count of positives in the unvoted ranking (fixed when the walk started). The same `labelled`, `right` and `stale`; `null` while unchecked. The rougher of the two ranges: the picks cannot measure its denominator. |
 | `fbeta` | The walk's F-beta estimate for the kept set - `(1 + beta²) · tp / (beta² · n_pos + count)`, `tp` the band-weighted positives among the picks, `n_pos` the mixture's - or `null` while unchecked. |
-| `schedule` | The cap and what a walk from it costs: `candidate` (the cap, 32 or 128, which is where the walk starts), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
-| `threshold` | The line: the last item of the kept set. `null` when no detector is active or none has computed a threshold yet. |
+| `schedule` | Where a walk starts and what it costs: `candidate` (32 at beta ≤ 1, 128 above: the bands a walk audits first; no longer a cap on the line), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
+| `threshold` | The line: the labels' cut at this beta. `null` when no detector is active or none has computed a threshold yet. |
 | `n_returned` | Items at or above `threshold` in the ranking the detector last scored, voted items included. `null` before a retrain has scored one. |
 | `line_preference` | Which preference draws the line: `balance` or `floor`. |
 
@@ -141,8 +139,8 @@ however the model retrains behind it. A balance walk also fixes `n_pos`, the
 mixture's count of positives in the unvoted ranking, which its recall is
 read against; when no mixture fits the ranking, or the fit collapsed onto a
 few near-duplicate scores (#4419), `n_pos` is the balance's cap
-(`schedule.candidate`) lowered to the unvoted count - the set the unchecked
-line would have kept - so the check still starts. The walk starts at the
+(`schedule.candidate`) lowered to the unvoted count - the bands a walk starts
+from - so the check still starts. The walk starts at the
 bands that hold `schedule.candidate` items. **409** when there is no ranking
 yet, nothing in it is unvoted, or the list is the one the last finished check
 already walked (there is no redraw on the same list: any vote, the check's
@@ -164,10 +162,11 @@ is a subset of an audited one) and ends on the peak. A tie keeps the smaller
 set. The check ends **checked** on the peak's band edge. (A floor walk goes
 deeper while the band-weighted share of right picks meets the floor and
 shallower while it does not, and ends **confirmed** on the deepest set that
-met it, or **short** on the first band when none did.) The line then moves to
-the set the check ended on, and the result is kept on the detector: later
-votes retrain the model and the line follows the new ranking at the same
-count, with the ranges reported `stale`. A result belongs to its beta (or its
+met it, or **short** on the first band when none did.) Under the balance the
+line does not move: the check is advisory (#4452), its result is kept on the
+detector for its ranges, the walk's picks retrain the model like any vote,
+and the ranges are reported `stale` once later votes move the list. A floor
+walk still moves the floor's line to the set it ended on. A result belongs to its beta (or its
 floor): another beta is `unchecked` until it is checked itself, and the
 earlier result shows again if the beta moves back.
 
