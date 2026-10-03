@@ -484,6 +484,10 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "degenerate",
     "threshold_percentile",
     "xcal_threshold",
+    # #4452: Train's threshold beside the row's (Find's, on the withheld half), and the two prevalence estimates.
+    "train_threshold",
+    "train_prevalence",
+    "find_prevalence",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base

@@ -246,6 +246,15 @@ from vtscore.training.thresholds.precision_floor import (
     resolve_min_precision,
     unpromised,
 )
+from vtscore.training.thresholds.labels_line import (
+    ClassScoreModel,
+    LabelsLine,
+    class_score_model,
+    corpus_prevalence,
+    estimate_positives,
+    fit_labels_line,
+    labels_line_threshold,
+)
 from vtscore.training.thresholds.knobs import (
     ACQUISITION_ARGMAX_FACTOR,
     ACQUISITION_INCLUSION_OFFSET,
@@ -262,6 +271,13 @@ from vtscore.training.thresholds.knobs import (
 )
 
 __all__ = [
+    "ClassScoreModel",
+    "LabelsLine",
+    "class_score_model",
+    "corpus_prevalence",
+    "estimate_positives",
+    "fit_labels_line",
+    "labels_line_threshold",
     "ACQUISITION_ARGMAX_FACTOR",
     "ACQUISITION_INCLUSION_OFFSET",
     "INCLUSION_MAX",

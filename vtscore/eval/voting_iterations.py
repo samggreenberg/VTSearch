@@ -93,6 +93,7 @@ from vtscore.training.thresholds import (
     balance_state,
     check_shape,
     fbeta_count,
+    fit_labels_line,
     floor_line,
     floor_state,
     mixture_count,
@@ -422,7 +423,27 @@ def _preference_line_for_step(
     crossing.  Leaves the state the row's floor columns read in
     ``details["floor_state"]`` (and ``details["beta"]`` under a balance).
     """
+    if beta is not None and line_shape is None:
+        # The app's line (#4452): the labels' class model (the step's fold
+        # orderings) cut at the prevalence it estimates on this ranking - the
+        # Train side.  ``details["find_line"]`` carries it to the test side,
+        # which re-estimates the prevalence on the withheld half the way a
+        # Find on a new corpus does.
+        details["beta"] = beta
+        labels_line = fit_labels_line(
+            details.get("fold_orderings") or None, ranking.scores, ranking.ids.tolist(), labels or {}
+        )
+        details["find_line"] = labels_line
+        if labels_line is not None:
+            kept = labels_line.threshold(beta)
+            details["floor_state"] = balance_state(beta, check, ranking, threshold=kept)
+            details["train_prevalence"] = labels_line.prevalence
+            return kept, "balance"
+        details["floor_state"] = balance_state(beta, check, ranking)
+        return None, ""
     if beta is not None:
+        # A forced check shape (``walk_shape``): the count line the app drew
+        # before #4452, kept as a measurement arm.
         proposal = fbeta_count(ranking, beta, labels or {})
         details["floor_state"] = balance_state(beta, check, ranking, proposal=proposal, shape=line_shape)
         details["beta"] = beta
@@ -1035,8 +1056,14 @@ def _evaluate_on_test(
     region_aware: bool = False,
     style_obj: Any = None,
     scored_sink: "list[Any] | None" = None,
+    find_line: Any = None,
+    beta: float | None = None,
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
+
+    With *find_line* (the app's labels line, #4452) the threshold is the one a
+    Find on the withheld half would draw: the same class model, the prevalence
+    re-estimated on these scores.
 
     Returns the operating-point metrics the user cares about — inclusion-weighted
     ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and ``f1`` (all
@@ -1082,6 +1109,8 @@ def _evaluate_on_test(
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
+    if find_line is not None and beta is not None:
+        threshold = float(find_line.on_corpus(scores_arr).threshold(float(beta)))
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
         detection_metrics,
         inclusion_weights,
@@ -1184,6 +1213,17 @@ def _calibration_metric_rows(
 
     # --- Base pooling (max): the arm's real operating point. ---
     base_scores = cm.segment_max_pool(flat, seg)
+    # The test side models Find (#4452): a Find on a new corpus applies the
+    # labels' class model with the prevalence re-estimated on that corpus, so
+    # the withheld half is cut at the threshold Find would draw there, not at
+    # the Train side's.
+    train_threshold = threshold
+    find_line = details.get("find_line")
+    find_prevalence = float("nan")
+    if find_line is not None and details.get("beta") is not None:
+        on_test = find_line.on_corpus(base_scores)
+        find_prevalence = on_test.prevalence
+        threshold = float(on_test.threshold(float(details["beta"])))
     # dump: calibration path -- `ids` is aligned with base_scores and labels.
     maybe_dump_predictions(clips_dict, list(ids), base_scores, list(labels), threshold, target_category)
     base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
@@ -1203,6 +1243,10 @@ def _calibration_metric_rows(
         # Under safe_thresholds the base row's threshold is the blended one;
         # record the pre-blend conformal cut alongside it (issue #2799).
         base["xcal_threshold"] = round6(float(details["xcal_threshold"]))
+    # Train's threshold and the two prevalence estimates behind the Find one (#4452).
+    base["train_threshold"] = round6(float(train_threshold))
+    base["train_prevalence"] = round6(float(details.get("train_prevalence", float("nan"))))
+    base["find_prevalence"] = round6(find_prevalence)
     # How many held-out scores the conformal quantile was actually taken over,
     # on the SHIPPED row rather than only on the fold-count variant rows (issue
     # #3287).  It was declared in `CALIBRATION_COLUMNS` and filled only by the
@@ -3100,6 +3144,8 @@ def simulate_voting_iterations(  # noqa: C901
                 region_aware=region_aware,
                 style_obj=style_obj,
                 scored_sink=scored,
+                find_line=details.get("find_line"),
+                beta=details.get("beta"),
             )
             if emit_calibration_metrics and trainer != APP_TRAINER and scored:
                 # A standalone trainer has no style, so it never reaches the

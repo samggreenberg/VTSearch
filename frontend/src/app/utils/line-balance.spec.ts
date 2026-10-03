@@ -215,7 +215,7 @@ describe('line-balance (#4413)', () => {
     it('explains an advisory check (beta 1 and below) by the set it audited, and says the line keeps its own count', () => {
       const why = balanceExplanation(lineBalance('checked', { count: 16, audited: 64 }))!;
       expect(why).toContain('A check of 5 random picks from the top 64 found 5 right');
-      expect(why).toContain('The line keeps its 16, the balance\'s own count: at this balance a check informs the line and does not move it.');
+      expect(why).toContain('The line keeps its 16, where your labels put it: a check informs the line and does not move it.');
       expect(why).not.toContain('peaked');
       expect(balanceExplanation(lineBalance('checked', { count: 16, audited: 64, precision: null, recall: null }))).toBe(
         'A check ended on the top 64; the line keeps its 16.',
@@ -270,7 +270,7 @@ describe('line-balance (#4413)', () => {
       const title = checkTitle(lineBalance('unchecked', { schedule: { candidate: 64, rounds: 4, picks: 5 } }));
       expect(title).toBe(
         'Vote on 5 random picks a band, walking the list from the top 64: the check goes deeper while the balance keeps ' +
-          'improving and shorter while it does not, and reports what it found; at this balance it informs the line and does not move it. ' +
+          'improving and shorter while it does not, and reports what it found; it informs the line and does not move it. ' +
           'Your votes count as ordinary votes.',
       );
       expect(checkTitle(lineBalance('unchecked', { schedule: null }))).toContain('Vote on a few random picks:');

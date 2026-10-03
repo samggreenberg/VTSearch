@@ -244,7 +244,18 @@ def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
 
 
 def check_shape(beta: float) -> str:
-    """How a check at *beta* treats the line (#4427): ``advisory`` at beta <= 1, ``trim`` above.
+    """How a check at *beta* treats the line: ``advisory`` at every preset since #4452.
+
+    Since #4452 the app's line comes from the labelset alone (the class model
+    the calibration folds imply, at the prevalence the detector's evidence
+    pools; :mod:`~vtscore.training.thresholds.labels_line`), so a walk's end -
+    a count on the corpus it walked - cannot be the line: an exported labelset
+    would not reproduce it.  The check audits and reports, its picks are
+    ordinary votes the next retrain learns from (uniform picks within bands,
+    the least biased evidence the labels hold), and the line stays where the
+    labels put it.  ``trim`` remains a shape the eval harness can force.
+
+    #4427's pricing, which set ``trim`` above beta 1 for the count-based line:
 
     Priced on the objective (the withheld set's F-beta above the app's
     threshold; Binary, 5 seeds, every preset): the full walk that moved the
@@ -257,7 +268,8 @@ def check_shape(beta: float) -> str:
     the line was never worse than the full walk and the best at beta 2
     (+0.01).  So the check's direction follows the preset the user chose.
     """
-    return CHECK_ADVISORY if float(beta) <= 1.0 + _EPS else CHECK_TRIM
+    del beta  # every preset (#4452)
+    return CHECK_ADVISORY
 
 
 def resolve_line_knobs(min_precision: float | str | None, beta: float | None) -> tuple[float | None, float | None]:
@@ -1407,8 +1419,13 @@ def balance_state(
     also_voted: Iterable[int] = (),
     proposal: int | None = None,
     shape: str | None = None,
+    threshold: float | None = None,
 ) -> BalanceState:
     """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count.
+
+    With *threshold* (the app's labels line, #4452) the count is how many
+    unvoted items of *ranking* score at or above it - the set the line keeps
+    there, which may be none - rather than the count rule's.
 
     *shape* overrides the preset's check shape (:func:`check_shape`); the
     harness's full-walk arm passes ``trim`` so the walk's end is the count.
@@ -1417,7 +1434,11 @@ def balance_state(
     shape = shape or check_shape(beta)
     applicable = applicable_balance(beta, result)
     count = balance_count(beta, result, proposal, shape)
-    if ranking is not None and (applicable is None or shape == CHECK_ADVISORY):
+    if threshold is not None and ranking is not None:
+        excluded = ranking.voted.union(int(v) for v in also_voted)
+        mask = np.fromiter((int(i) not in excluded for i in ranking.ids), dtype=bool, count=ranking.size)
+        count = int((ranking.scores[mask] >= float(threshold)).sum())
+    elif ranking is not None and (applicable is None or shape == CHECK_ADVISORY):
         # The unchecked rule's count, capped by what is unvoted; a walk's end
         # under ``trim`` is a band edge of the ranking it walked, kept as is.
         count = min(count, len(ranking.candidate(count, also_voted)))

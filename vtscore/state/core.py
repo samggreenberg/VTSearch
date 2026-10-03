@@ -1101,6 +1101,12 @@ class DetectorContext:
         # ends.  Ids and labels only - never serialised.
         "precision_check",  # SpotCheck | None (finished)
         "precision_check_run",  # SpotCheck | None (running)
+        # The line the labels imply (``LabelsLine``, #4452): the class model
+        # the last retrain's calibration folds fitted from the labels, and the
+        # prevalence it estimated on the corpus scored last (a Find pass over a
+        # new dataset re-estimates it there).  A balance change re-cuts it.
+        # Goes with the head.
+        "labels_line",  # LabelsLine | None
     )
 
     def __init__(
@@ -1177,6 +1183,7 @@ class DetectorContext:
         self.line_ranking: Any = None  # LineRanking | None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
+        self.labels_line: Any = None  # LabelsLine | None
 
 
 # ---------------------------------------------------------------------------
@@ -1600,6 +1607,31 @@ def invalidate_loaded_detector_models() -> None:
             ctx.threshold = 0.5
 
 
+def _recut_balance(ctx: "DetectorContext", beta: float) -> float | None:
+    """The balance's line for *ctx* at *beta*, or ``None`` for the caller's fallbacks.
+
+    The labels' line (#4452) when the last retrain fitted one: its class model
+    cut at *beta* and the prevalence it was cut at, reading nothing from the
+    ranking, so it moves the same in Train and in Find.  A trained head with no
+    class model (too few votes, one class) draws no count on the corpus: the
+    fallbacks answer, as the retrain's did.  Only a context with no head at
+    all still reads the count rule over its ranking (#4413).
+    """
+    from vtscore.training.thresholds import balance_line  # noqa: PLC0415
+
+    if ctx.labels_line is not None:
+        return float(ctx.labels_line.threshold(beta))
+    if ctx.model is not None:
+        return None
+    return balance_line(
+        ctx.line_ranking,
+        beta,
+        ctx.precision_check,
+        human_voted_ids(ctx),
+        proposal=detector_balance_proposal(ctx, beta),
+    )
+
+
 def recut_detector_threshold(
     ctx: "DetectorContext",
     inclusion_value: float | None = None,
@@ -1649,20 +1681,12 @@ def recut_detector_threshold(
       touch of the stepper, which could even admit *fewer* items on a step
       toward lenient.
     """
-    from vtscore.training.thresholds import balance_line, floor_line, reporting_line
+    from vtscore.training.thresholds import floor_line, reporting_line
 
     if min_precision is None and beta is None and inclusion_value is None:
         raise ValueError("an operating point needs an inclusion, a precision floor or a balance")
     if beta is not None:
-        # The balance's line (#4413): the set the finished F-beta walk ended
-        # on, else the mixture's F-beta argmax under the balance's cap.
-        kept = balance_line(
-            ctx.line_ranking,
-            beta,
-            ctx.precision_check,
-            human_voted_ids(ctx),
-            proposal=detector_balance_proposal(ctx, beta),
-        )
+        kept = _recut_balance(ctx, beta)
         if kept is not None:
             return kept
     if min_precision is not None:
@@ -1777,12 +1801,15 @@ def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any
     """
     from vtscore.training.thresholds import balance_state
 
+    # Under the labelset's line (#4452) the count is what the threshold keeps
+    # of the ranking scored last - possibly none - not the count rule's.
     return balance_state(
         beta,
         ctx.precision_check,
         ctx.line_ranking,
         human_voted_ids(ctx),
-        proposal=detector_balance_proposal(ctx, beta),
+        proposal=detector_balance_proposal(ctx, beta) if ctx.labels_line is None else None,
+        threshold=ctx.threshold if ctx.labels_line is not None else None,
     ).as_dict()
 
 
