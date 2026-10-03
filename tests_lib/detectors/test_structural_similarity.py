@@ -229,7 +229,7 @@ class TestInlierOrderPastSaturation:
         out = structural_rerank(results, snap, [_dummy_features(9)], VerificationScorer(), matcher, top_k=50)
         assert [e["id"] for e in out] == [2, 1, 3, 4]
         # The reported score stays the gate's, so order and score agree.
-        assert [e["score"] for e in out] == [0.8824, 0.7143, 0.7143, 0.0]  # n / (n + 8), rounded
+        assert [e["score"] for e in out] == [0.882353, 0.714286, 0.714286, 0.0]  # n / (n + 8), rounded
 
 
 # --------------------------------------------------------------------------
