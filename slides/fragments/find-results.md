@@ -23,8 +23,8 @@
      actually matters: the few minutes bought a detector, and the detector is
      for the data nobody is ever going to look at by hand. -->
 
-<!-- **b** — Two hundred and forty items scored and ranked in the time it took
-     to click, and this is what came back: shelves, stacks, spines and four
+<!-- **b** — Ten thousand items scored and ranked in the time it took to
+     click, and this is what came back: shelves, stacks, spines and four
      people reading — out of a corpus that had no labels in it an hour ago, on
      the strength of a handful of answers to a handful of questions. -->
 
@@ -37,5 +37,5 @@
      not a screen with them stacked in a panel down one side of it. -->
 
 <!-- The next slide goes back into the tool, once, for the one thing this view
-     cannot show: **55** of the 240 came back and 185 did not. Nobody asked for
+     cannot show: the top **32** came back and the rest did not. Nobody asked for
      that split and nothing in the votes specified it. -->

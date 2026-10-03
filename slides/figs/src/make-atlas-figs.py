@@ -213,41 +213,63 @@ def _cells_at(depth: int) -> np.ndarray:
 # ──────────────────────────────────────────────────────────────────────────────
 
 BLINDSPOT_STAGES = 4
-#: How wide the ring of never-asked items is drawn, in canvas units.
-RING_R = 1.55
+#: The radii the never-asked ring may take, in canvas units. Swept rather than
+#: fixed, because the radius is half of what keeps the ring off the items: a
+#: circle of one size that happens to pass through four of them is a picture
+#: the room reads as "which side are these on?" when the slide's claim is that
+#: they are on the inside.
+RING_RADII = np.arange(1.3, 2.05, 0.05)
+#: How far every item's edge must sit from the ring, in canvas units, so that
+#: each one is plainly in or plainly out of it. The ring is drawn 3pt wide —
+#: under 0.04 units either side of its centre line — so this leaves a gap the
+#: back of a room can see.
+RING_CLEAR = 0.15
+#: How far the ring must sit outside the loose cut of the band, and how far
+#: from any vote, in canvas units.
+RING_BAND_GAP = 0.35
+RING_VOTE_GAP = 0.4
 
 
 @functools.lru_cache(maxsize=1)
-def _ring() -> tuple[np.ndarray, tuple[int, ...]]:
-    """Where the never-asked pocket goes, and which items fall in it.
+def _ring() -> tuple[np.ndarray, float, tuple[int, ...]]:
+    """Where the never-asked pocket goes, how big it is, and which items fall in it.
 
-    Chosen rather than placed: the disc is swept over the canvas and scored by
-    how many items it holds, subject to holding no vote, keeping clear of the
-    boundary the loop is asking along, and staying out of the title's corner.
-    Picking it by hand would invite the suspicion that the figure's whole claim
-    was arranged, and the constraint that it contain no vote is the claim.
+    Chosen rather than placed: the disc is swept over the canvas, at every
+    radius in `RING_RADII`, and scored by how many items it holds, subject to
+    holding no vote, keeping clear of the band the loop is asking along,
+    staying out of the title's corner, and passing through no item. Ties go to
+    the ring with the most room between it and the nearest item. Picking it by
+    hand would invite the suspicion that the figure's whole claim was arranged,
+    and the constraint that it contain no vote is the claim.
     """
-    pts, _first, second, curve, *_ = INTRO._scene()
+    pts, _first, second, curve, _after, asked, _again, labeled = INTRO._scene()
     seed_good, seed_bad = INTRO._seed_votes()
     voted = pts[list(seed_good + seed_bad)]
-    best, best_count = None, -1
-    margin = RING_R + 1.15  # room for the ring's own caption under it
-    for x in np.arange(margin, CANVAS[0] - margin, 0.1):
-        for y in np.arange(margin, CANVAS[1] - margin, 0.1):
-            centre = np.array([x, y])
-            if x - RING_R < 4.2 and y + RING_R > 7.1:
-                continue  # the headline's corner
-            if np.hypot(*(curve - centre).T).min() < RING_R + 0.9:
-                continue  # must be nowhere near the line the loop asks along
-            if np.hypot(*(voted - centre).T).min() < RING_R + 0.5:
-                continue  # and must hold no vote, which is the whole point
-            count = int((np.hypot(*(pts - centre).T) < RING_R).sum())
-            if count > best_count:
-                best, best_count = centre, count
-    if best is None or best_count < 4:
+    band = INTRO._band_width(second, pts, labeled + (asked,))
+    best, best_key = None, (-1, 0.0)
+    for radius in RING_RADII:
+        margin = radius + 0.3
+        for x in np.arange(margin, CANVAS[0] - margin, 0.05):
+            for y in np.arange(margin, CANVAS[1] - margin, 0.05):
+                centre = np.array([x, y])
+                if x - radius < 4.2 and y + radius > 7.1:
+                    continue  # the headline's corner
+                if np.hypot(*(curve - centre).T).min() < radius + band + RING_BAND_GAP:
+                    continue  # must be nowhere near the band the loop asks along
+                if np.hypot(*(voted - centre).T).min() < radius + RING_VOTE_GAP:
+                    continue  # and must hold no vote, which is the whole point
+                dist = np.hypot(*(pts - centre).T)
+                clear = float(np.abs(dist - radius).min()) - R
+                if clear < RING_CLEAR:
+                    continue  # and must not run through an item
+                key = (int((dist < radius).sum()), clear)
+                if key > best_key:
+                    best, best_key = (centre, float(radius)), key
+    if best is None or best_key[0] < 4:
         raise SystemExit("no unexplored pocket clear of the boundary — the field moved")
-    inside = tuple(int(i) for i in np.flatnonzero(np.hypot(*(pts - best).T) < RING_R))
-    return best, inside
+    centre, radius = best
+    inside = tuple(int(i) for i in np.flatnonzero(np.hypot(*(pts - centre).T) < radius))
+    return centre, radius, inside
 
 
 def _blindspot_stage(stage: int) -> plt.Figure:
@@ -259,16 +281,20 @@ def _blindspot_stage(stage: int) -> plt.Figure:
         INTRO._band(ax, second, INTRO._band_width(second, pts, labeled + (asked,)))
     INTRO._boundary(ax, second)
 
-    centre, inside = _ring()
+    # The ring is solid, never dashed: a dashed line on this plane is one of the
+    # band's looser and tighter cuts, and the ring is not a cut. On the last page
+    # it is drawn exactly as the detector's own curve is — the same blue, the
+    # same weight — because that is what it is: a second piece of the boundary
+    # between Good and Bad, the piece the detector never drew.
+    centre, radius, inside = _ring()
     if stage >= 3:
         ax.add_patch(
             plt.Circle(
                 tuple(centre),
-                RING_R,
+                radius,
                 facecolor="none",
-                edgecolor=GREEN if stage >= 4 else SOFT,
-                linewidth=2.4,
-                linestyle=(0, (6, 5)),
+                edgecolor=BLUE if stage >= 4 else SOFT,
+                linewidth=3.0 if stage >= 4 else 2.4,
                 zorder=2,
             )
         )

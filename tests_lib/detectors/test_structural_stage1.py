@@ -98,6 +98,36 @@ class TestTiledStage1:
         monkeypatch.setattr(s1, "_cuda", lambda: False)
         assert s1.tiled_top_k(50_000) == s1.TILED_TOP_K_CPU == 1000
 
+    def test_gpu_scoring_frees_the_cache_before_measuring_and_says_when_it_falls_back(self, monkeypatch, caplog):
+        # #4170: memory PyTorch had cached did not count as free, so a 32 GB card fell back
+        # to the CPU from the second matrix on, without a word.
+        import sys
+        from types import SimpleNamespace
+
+        calls: list[str] = []
+        cuda = SimpleNamespace(
+            is_available=lambda: True,
+            empty_cache=lambda: calls.append("empty"),
+            mem_get_info=lambda: (calls.append("measure"), (1024, 2048))[1],
+        )
+        monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(cuda=cuda))
+        s1._GPU_CACHE.clear()
+        matrix = np.zeros((1000, DIM), dtype=np.float16)
+        with caplog.at_level("WARNING", logger=s1._log.name):
+            out = s1._gpu_page_scores(matrix, np.array([0, 500]), np.zeros((1, DIM), dtype=np.float32))
+        assert out is None
+        assert calls == ["empty", "measure"]
+        assert "scoring on the CPU" in caplog.text
+
+    def test_a_seeded_crop_queries_whole_and_a_page_by_its_tiles(self, tiled):
+        # #4170: a crop's tiles are fragments of the mark, so a seeded crop is one whole-VLAD query.
+        snap = tiled(2)
+        page = s1.vote_queries({0: None}, snap, {})
+        assert page is not None and page.shape[0] == snap[0]["tile_vectors"].count > 1
+        snap[0] = dict(snap[0], seeded_example=True)
+        crop = s1.vote_queries({0: None}, snap, {})
+        assert crop is not None and crop.shape == (1, DIM)
+
     def test_the_matrix_is_stacked_once_per_loaded_page_set(self, tiled):
         snap = tiled(4)
         first = s1._tile_matrix(snap)

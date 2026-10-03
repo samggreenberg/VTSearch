@@ -10,7 +10,8 @@
  *
  *   steps          `figs/ui-steps-*[.buildN].webp`         — the same session,
  *                                                            numbered (#4202)
- *   make-detector  `figs/ui-make-detector[.buildN].webp`  — name the concept
+ *   make-detector  `figs/ui-make-detector[.buildN].webp`  — an empty app, a pile,
+ *                                                            then name the concept
  *   train-loop     `figs/ui-train-loop[.buildN].webp`     — answer, repeatedly
  *   find           `figs/ui-find*.webp`                    — score unseen media
  *   region-voting  `figs/ui-region-voting.webp`           — vote on a region
@@ -208,6 +209,27 @@ const DEFAULT_LAYOUT = {
   panel_pct_left: { image: 260 },
   panel_pct_right: { image: 300 },
 };
+// The Label view for the train loop, narrowed on the right to two columns of
+// votes rather than three (#4443). The piles that grow there are the slide's
+// evidence that answers accumulate, not its subject: at three columns they
+// took a quarter of the app and pulled the eye off the item in the middle,
+// which is the one thing on screen the audience is being asked to judge. The
+// centre gets the width back. The panel snaps to whole grid columns
+// (`snapPanelWidthToGridColumns`), so this is a value inside the two-column
+// band, and `shootTrainLoop` checks the column count rather than trusting it.
+const TRAIN_LAYOUT = {
+  ...DEFAULT_LAYOUT,
+  panel_pct_right: { image: 215 },
+};
+const TRAIN_VOTE_COLUMNS = 2;
+// What the Find slide's dashboard says the production pile holds (#4443). The
+// pile is 240 photographs, because that is what embeds on a laptop in the time
+// a re-shoot is worth; the scale the tool is *for* is tens of thousands, and a
+// slide that says 240 tells the room the tool is a way to search a folder they
+// could have scrolled. So the count cell is painted over for that one frame
+// and its numbered twin — the only number in the session that is not the
+// app's own, and it is not a number any later slide computes from.
+const PROD_ITEMS_SHOWN = '10,000';
 
 const log = (...a) => console.log('[slide-shots]', ...a);
 const app = appClient(APP, log);
@@ -377,9 +399,10 @@ async function deselectAll(page, tag) {
  * the one we want: selection persists server-side, so a rerun (or the previous
  * shot's fixture) can leave the wrong rows ticked.
  *
- * Match the name cell exactly, not the row's text — `photos` is a substring of
- * `photos-prod`, and a substring match ticks both, which leaves Train and Find
- * permanently disabled and looks exactly like a hung page.
+ * Match the name cell exactly, not the row's text — one dataset's name can be
+ * a substring of another's (the training pile was once `photos`, inside
+ * `photos-prod`), and a substring match ticks both, which leaves Train and
+ * Find permanently disabled and looks exactly like a hung page.
  */
 async function selectOnly(page, tag, name) {
   const rows = page.locator(tag);
@@ -393,6 +416,42 @@ async function selectOnly(page, tag, name) {
     await box.click();
     await page.waitForTimeout(350);
   }
+}
+
+/**
+ * Fail the run unless the row called *name* is already ticked.
+ *
+ * The Step-By-Step slides tell the user there is nothing to tick: a dataset or
+ * detector that has just been added is selected on its own (the dashboard's
+ * `reconcileSelection`), so Train and Find are one click (#4443). The harness
+ * still drives selection itself (`selectOnly`) so a rerun cannot shoot the
+ * wrong rows, which means it would also paper over the app no longer doing
+ * that — so check first.
+ */
+async function assertTicked(page, tag, name) {
+  const row = page.locator(tag).filter({
+    has: page.locator('.name-cell', { hasText: new RegExp(`^\\s*${name}\\s*$`) }),
+  });
+  const state = await row.first().locator('.select-checkbox').first().getAttribute('aria-checked');
+  if (state !== 'true') {
+    throw new Error(`${name} was not selected on its own; the Step-By-Step slides say it is (#4443)`);
+  }
+}
+
+/** Paint the # ITEMS cell of the row called *name*. See `PROD_ITEMS_SHOWN`. */
+async function paintItemCount(page, name, shown) {
+  const painted = await page.evaluate(({ name, shown }) => {
+    const table = [...document.querySelectorAll('tr[vt-dataset-card]')][0]?.closest('table');
+    const headers = [...(table?.querySelectorAll('thead th') ?? [])];
+    const col = headers.findIndex((th) => /#\s*items/i.test(th.textContent));
+    const row = [...document.querySelectorAll('tr[vt-dataset-card]')]
+      .find((r) => r.querySelector('.name-cell')?.textContent.trim() === name);
+    const cell = row?.children[col];
+    if (col < 0 || !cell) return false;
+    cell.textContent = shown;
+    return true;
+  }, { name, shown });
+  if (!painted) throw new Error(`no # ITEMS cell for ${name} on the dashboard`);
 }
 
 async function openDashboard(page) {
@@ -417,10 +476,15 @@ async function openDashboard(page) {
  * `shownPath`) by setting the element's value without an input event, which
  * leaves the form's model — and so the import — on the real path.
  */
-async function shootImport(page, name, figure) {
+async function shootImport(page, name, figure, clean = null) {
   await openDashboard(page);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
+  // The empty app is also the intro's first frame (#4443): `make-detector`
+  // opens on the dashboard's two empty cards, each pointing at its own **+**,
+  // before the pile arrives — the arrow to the detectors' **+** on the next
+  // frame reads as the second of two, not as an arrow from nowhere.
+  if (clean) await shoot(page, clean);
   await shootNumbered(page, `${figure}.build1`, [step(1, 'button[title="Import a new dataset"]:not(.inline-add-btn)')]);
 
   await page.locator('button[title="Import a new dataset"]:not(.inline-add-btn)').click();
@@ -458,22 +522,29 @@ async function shootImport(page, name, figure) {
 /**
  * Step 2 — name the concept.
  *
- * Three intro pages, and they are the clicks: the dashboard with a pile of
+ * Four intro pages, and they are the clicks: the empty dashboard (shot by
+ * `shootImport`, before the pile is imported), the dashboard with a pile of
  * media and no detector, the dialog, the dialog with the concept written into
  * it. The dataset row is selected first because the modal takes its media type
  * and its embedder from whatever is active — a detector created against
  * nothing is a detector the next two shots could not use.
  *
- * The first and last of them are shot again, numbered, for the Step-By-Step
- * slide: the **+**, then the phrase, the name, and Create.
+ * The name is left as the dialog fills it in (#4443): the user types one word,
+ * and "Book detector" is the dialog's own suggestion for it. Typing a name of
+ * the harness's choosing would put a step on the slide that nobody has to do.
+ *
+ * The second and last of them are shot again, numbered, for the Step-By-Step
+ * slide: the **+**, then the phrase and Create — no number on the name, which
+ * is filled in for the user.
  */
 async function shootMakeDetector(page) {
   await openDashboard(page);
+  await assertTicked(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await selectOnly(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await deselectAll(page, 'tr[vt-detector-card]');
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
-  await shoot(page, 'ui-make-detector.build1');
+  await shoot(page, 'ui-make-detector.build2');
   await shootNumbered(page, 'ui-steps-make-detector.build1', [
     step(1, 'button[title="Create a new detector"]:not(.inline-add-btn)'),
   ]);
@@ -481,19 +552,21 @@ async function shootMakeDetector(page) {
   await page.locator('button[title="Create a new detector"]:not(.inline-add-btn)').click();
   await page.waitForSelector('.new-detector-form', { timeout: 20000 });
   await page.waitForTimeout(900);
-  await shoot(page, 'ui-make-detector.build2');
+  await shoot(page, 'ui-make-detector.build3');
 
   // The text tab is the default, and it is the one the deck's argument needs:
   // the whole claim of the slide before this is that the concept is a phrase
   // somebody can say and not a query they can write.
   await page.locator('.example-panel input.form-input').first().fill(BOOK_TEXT);
-  await page.locator('#detector-name').fill(BOOK_DETECTOR);
   await page.waitForTimeout(700);
+  const named = await page.locator('#detector-name').inputValue();
+  if (named !== BOOK_DETECTOR) {
+    throw new Error(`the dialog named the detector ${named}, not ${BOOK_DETECTOR} (book-example.mjs)`);
+  }
   await shoot(page, 'ui-make-detector');
   await shootNumbered(page, 'ui-steps-make-detector', [
     step(2, '.example-panel input.form-input'),
-    step(3, '#detector-name'),
-    step(4, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
+    step(3, { selector: 'vt-modal .btn--primary', hasText: 'Create' }, 'right'),
   ]);
 
   // The detector is still created — the next two groups are the same session —
@@ -595,28 +668,31 @@ async function assertVoted(filename, good) {
  * the two buttons.
  *
  * The Step-By-Step slide gets two numbered pages out of it: the dashboard with
- * the pile and the detector ticked and Train waiting, and the first question
- * with Good and Bad marked.
+ * Train waiting — the pile and the detector are already ticked, because each
+ * was selected the moment it was added, so the only number is on Train
+ * (#4443) — and the first question with Good and Bad marked.
  */
 async function shootTrainLoop(page) {
+  // The narrower right panel goes in first, and the page is reloaded to read
+  // it, for the reason `shootFind` gives. The dashboard has no media panels.
+  await app.api('/api/settings', { method: 'PUT', body: TRAIN_LAYOUT });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
+  await assertTicked(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
+  await assertTicked(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await selectOnly(page, 'tr[vt-dataset-card]', TRAIN_DATASET);
   await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await page.mouse.move(700, 60);
   await page.waitForTimeout(400);
-  await shootNumbered(page, 'ui-steps-train.build1', [
-    step(1, datasetRow(TRAIN_DATASET)),
-    step(2, detectorRow(BOOK_DETECTOR)),
-    step(3, dashButton('Train')),
-  ]);
+  await shootNumbered(page, 'ui-steps-train.build1', [step(1, dashButton('Train'))]);
 
   await enterLabelView(page, TRAIN_DATASET, BOOK_DETECTOR);
   await collapseIntoAutopilot(page);
   await page.waitForSelector('.btn-good', { timeout: 120000 });
   await page.waitForTimeout(1500);
   await shootNumbered(page, 'ui-steps-train', [
-    step(4, '.btn-good', 'right'),
-    step(5, '.btn-bad'),
+    step(2, '.btn-good', 'right'),
+    step(3, '.btn-bad'),
   ]);
 
   let cast = 0;
@@ -638,7 +714,20 @@ async function shootTrainLoop(page) {
   }
   log(`train loop: ${cast} votes — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
+  await assertVoteColumns(page);
   await shoot(page, 'ui-train-loop');
+}
+
+/** Fail the run unless the vote piles are `TRAIN_VOTE_COLUMNS` wide. */
+async function assertVoteColumns(page) {
+  const columns = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll('.panel-right .vote-entry')];
+    const top = cells.length ? cells[0].getBoundingClientRect().top : 0;
+    return cells.filter((c) => Math.abs(c.getBoundingClientRect().top - top) < 2).length;
+  });
+  if (columns !== TRAIN_VOTE_COLUMNS) {
+    throw new Error(`the vote piles are ${columns} columns wide, not ${TRAIN_VOTE_COLUMNS}: adjust TRAIN_LAYOUT`);
+  }
 }
 
 /**
@@ -662,7 +751,7 @@ async function scrollResults(page, to) {
  * Two slides out of one session. `ui-find[.build1]` is the click-by-click one:
  * the dashboard with the *production* pile selected beside the detector, then
  * the top of the ranking it produces. `photos-prod` does not share a single
- * frame with `photos` (`coco_fixture.DISJOINT_FROM`), which is the only reason
+ * frame with `photos-train` (`coco_fixture.DISJOINT_FROM`), which is the only reason
  * that slide is allowed to say what it says.
  *
  * `ui-find-line` is the same screen scrolled down to the line the tool drew
@@ -679,10 +768,17 @@ async function shootFind(page) {
   await app.api('/api/settings', { method: 'PUT', body: FIND_LINE_LAYOUT });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openDashboard(page);
+  for (const [tag, name] of [['tr[vt-dataset-card]', TEST_DATASET], ['tr[vt-detector-card]', BOOK_DETECTOR]]) {
+    await assertTicked(page, tag, name).then(
+      () => log(`find: ${name} already ticked`),
+      () => log(`find: ${name} NOT ticked on arrival`),
+    );
+  }
   await selectOnly(page, 'tr[vt-dataset-card]', TEST_DATASET);
   await selectOnly(page, 'tr[vt-detector-card]', BOOK_DETECTOR);
   await page.mouse.move(700, 120);
   await page.waitForTimeout(400);
+  await paintItemCount(page, TEST_DATASET, PROD_ITEMS_SHOWN);
   await shoot(page, 'ui-find.build1');
   await shootNumbered(page, 'ui-steps-find.build1', [
     step(1, datasetRow(TEST_DATASET)),
@@ -897,7 +993,7 @@ async function shootSession(page) {
   if (strangers.length) {
     log(`warning: the first frame is meant to show an empty app, but it holds ${strangers.join(', ')}`);
   }
-  await shootImport(page, TRAIN_DATASET, 'ui-steps-load-train');
+  await shootImport(page, TRAIN_DATASET, 'ui-steps-load-train', 'ui-make-detector.build1');
   await shootMakeDetector(page);
   await shootTrainLoop(page);
   await shootImport(page, TEST_DATASET, 'ui-steps-load-test');

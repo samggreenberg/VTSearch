@@ -24,15 +24,27 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(HERE, '../..');
 const FIXTURE_BUILDER = join(REPO, 'slides', 'figs', 'src', 'coco_fixture.py');
 
-/** The training pile: books among the rectangular, printed and shelved. */
-export const TRAIN_DATASET = 'photos';
+/**
+ * The training pile: books among the rectangular, printed and shelved.
+ *
+ * Named for its job, like the pile after it: `photos-train` is what the
+ * detector learns from and `photos-prod` is what it is then run on (#4443).
+ */
+export const TRAIN_DATASET = 'photos-train';
 /** The pile the detector is run over: same subjects, not one frame shared. */
 export const TEST_DATASET = 'photos-prod';
 /** A small pile embedded with DINOv2 patch, for region voting. */
 export const REGION_DATASET = 'photo-regions';
 
-/** The detector the whole example builds: named for what it finds. */
-export const BOOK_DETECTOR = 'Books';
+/**
+ * The detector the whole example builds, under the name the New Detector
+ * dialog gives it on its own: the phrase in sentence case, then "detector"
+ * (`new-detector-modal.component.ts`, #4305). The slides show a user typing
+ * one word and leaving the name alone (#4443), so this is not a name the
+ * harness picks — `shoot-ui-figs.mjs` fails the run if the dialog's default
+ * stops being it.
+ */
+export const BOOK_DETECTOR = 'Book detector';
 /** What a user types to describe it — the whole specification. */
 export const BOOK_TEXT = 'book';
 /** Region voting needs its own detector: one binds an embedder type. */

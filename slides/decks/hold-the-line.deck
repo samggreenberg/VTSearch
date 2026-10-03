@@ -7,8 +7,8 @@
 # room that has not seen the tool cannot be told about a threshold inside it.
 #
 # Then the ideas, in order: four iterations on where the line goes, then the
-# same machinery walked a second time along the axis the *user* sets — a
-# slider, and then the precision floor that replaced it (#4244). Then the
+# axis the *user* sets — what the two mistakes cost, and the three-radio
+# balance that asks which one they mind more (#4413). Then the
 # places the loop never asks about, the data the
 # experiments run on, the region-voting idea (whose measured verdict waits for
 # the Results section with the runs still reporting), and logos.
@@ -55,19 +55,19 @@ slides:
   quantile-transfer
   split-fraction
 
-  # 3 — Preference: why a line needs one, the slider we shipped and what it
-  # took to make it mean anything, then the number a person can actually say
-  # — a precision floor — and the spot check that earns it (#4224, #4267).
+  # 3 — Preference: why a line needs one, the prices that choose it, the
+  # three-radio balance that asks for them (#4413), and what the line can and
+  # cannot claim before anyone checks. Present tense throughout: the deck says
+  # what the app does, and the slider that came before the balance is in the
+  # appendix after The End.
   # Second Cut stays last: the acquisition cut is measured from wherever the
   # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
   inclusion-rank
   inclusion-cost
-  inclusion-knob
-  inclusion-walk
-  inclusion-tilt
   floor-ask
-  floor-check
+  # floor-check — out until #4427 settles: it still draws the precision
+  # floor's check, and the band walk that replaced it may still change.
   inclusion-acq
 
   # 4 — Exploration: the Coverage Atlas, how autopilot decides what to ask
@@ -130,8 +130,9 @@ slides:
   # Tobacco800 pages). The background comes first, in the order a page is
   # checked: keypoints, then matching and RANSAC. Then the three things the
   # documents changed: the keypoint budget, the shortlist and why a page
-  # vector cannot build one, and the votes. Tiles is the one idea here that
-  # is measured but not shipped, and its notes say so.
+  # vector cannot build one, and the votes. Tiles shipped after these slides
+  # were drawn (#4378, #4415): the notes say so, and the stages and tiles
+  # figures still draw the single-layer, page-vector picture.
   logo-keypoints
   logo-match
   logo-budget
@@ -154,3 +155,10 @@ slides:
 
   # The End
   outline-hold-the-line +end
+
+  # Appendix, for questions: the Inclusion slider's iterations — how the old
+  # user control was made to mean something. Inclusion is no longer a control
+  # (#4269); it survives only as the unit Second Cut's re-pricing is taken in.
+  inclusion-knob
+  inclusion-walk
+  inclusion-tilt

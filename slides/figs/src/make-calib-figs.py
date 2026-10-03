@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import patheffects
 from matplotlib.font_manager import FontProperties
-from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
+from matplotlib.patches import Circle, Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
 from matplotlib.textpath import TextPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -3687,7 +3687,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
         ax.text(
             zoom_acq_x - LABEL_GAP,
             zoom_y0 - 0.32 - LABEL_GAP,
-            _sub(r"\theta_{acq}\ \ (k - 4)"),
+            _sub(r"\theta_{acq}"),
             ha="right",
             va="top",
             fontsize=16,
@@ -4178,11 +4178,12 @@ def _cost_curve(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float, cut
 
 
 def cost_knob_fig() -> None:
-    """What the Inclusion knob is *for*, before the deck shows it failing.
+    """What the Threshold control is *for*.
 
     One imperfect ranking, three defensible cuts, and the thing that chooses
     between them: how much the person at the keyboard hates a false alarm
-    against how much they hate a miss.
+    against how much they hate a miss. The last page draws the control that
+    asks them — the three radios of the app's balance (#4413).
     """
     final = _cost_knob_stage(COST_STAGES)
     box = tight_box(final)
@@ -4322,27 +4323,24 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 5: the control that sets the ratio ──────────────────────────────
-    # Down in the corner with the prices, not under the ranking. It sets the
-    # ratio those three labels name, so that is where it belongs; drawn across
-    # the full width under the panel, a rail with a knob in the middle read as a
-    # second copy of the score axis, as though the knob picked an item.
+    # ── stage 5: the control that asks for the ratio ──────────────────────────
+    # Down in the corner with the prices, not under the ranking. It chooses
+    # among what those three labels name, so that is where it belongs; drawn
+    # across the full width under the panel, a control read as a second copy of
+    # the score axis, as though it picked an item.
     if stage >= COST_STAGES:
-        _incl_slider(ax, COST_SLIDER_X0, panel_base - COST_SLIDER_DROP, COST_SLIDER_W)
+        _balance_control(ax, COST_CONTROL_X0, panel_base - COST_CONTROL_DROP, COST_CONTROL_W)
     return fig
 
 
-#: The slider's stops, and the two ends it is labelled by.
-INCL_STOPS = 9
-INCL_SLIDER_H = 0.34
-
-#: Where the slider sits: the bottom-left corner, centred under the column of
-#: three prices it sets, and stopping short of the panel so its end label does
-#: not run under the curves.
-COST_SLIDER_X0 = 1.45
-COST_SLIDER_W = 2.2
-#: How far under the panel's floor the rail runs.
-COST_SLIDER_DROP = 1.15
+#: Where the control sits: the bottom-left corner, under the column of three
+#: prices it chooses among, stopping short of the panel.
+COST_CONTROL_X0 = 0.45
+COST_CONTROL_W = 3.35
+#: How far under the panel's floor the control's track runs.
+COST_CONTROL_DROP = 1.4
+#: The radios' radius, in canvas units.
+BALANCE_RADIO_R = 0.13
 
 #: The axis label, placed so it lands where `book-rank`'s does on its slide:
 #: centred on the slide rather than on this figure's (indented) axis, and at
@@ -4353,31 +4351,37 @@ COST_AXIS_LABEL_LIFT = 0.30
 COST_AXIS_LABEL_PT = 12.8
 
 
-def _incl_slider(ax: plt.Axes, x0: float, y: float, w: float) -> None:
-    """The Inclusion control, drawn as the thing the room will actually see.
+def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
+    """The Threshold control, drawn as the thing the room will actually see.
 
-    A rail with its stops, the knob in the middle, and the two ends numbered.
-    Each step up doubles the price of a miss and each step down doubles the
-    price of a false alarm — the ratio the labels above it name. That is the
-    whole definition, and every rule in the section it opens shares it.
+    The app's balance (`balance.component.html`, #4413): a False Positives …
+    False Negatives track with a radio under each third and no word or number
+    on any of them, the middle one picked. Left to right they lean to recall,
+    sit between, and lean to precision — F-beta's beta of 2, 1 and 0.5 — which
+    are the loose, middle and strict cuts the three prices above it choose.
     """
-    _range_line(ax, x0, x0 + w, y, z=3)
-    for i in range(INCL_STOPS):
-        x = x0 + w * i / (INCL_STOPS - 1)
-        ax.plot([x, x], [y, y + INCL_SLIDER_H], color=SOFT, linewidth=1.4, zorder=3)
-    ax.add_patch(
-        Rectangle(
-            (x0 + w / 2 - 0.12, y - 0.06),
-            0.24,
-            INCL_SLIDER_H + 0.12,
-            facecolor=BLUE,
-            edgecolor="none",
-            zorder=4,
+    ax.text(x0, y + 1.02, "Threshold:", ha="left", va="baseline", fontsize=16, color=INK)
+    # On one shared baseline: "Negatives" has a descender and "Positives" does
+    # not, so bottom-aligned boxes would set the two words at different heights.
+    for x, ha, word in ((x0, "left", "Positives"), (x0 + w, "right", "Negatives")):
+        ax.text(x, y + 0.62, "False", ha=ha, va="baseline", fontsize=13, color=INK)
+        ax.text(x, y + 0.24, word, ha=ha, va="baseline", fontsize=13, color=INK)
+    ax.plot([x0, x0 + w], [y, y], color=SOFT, linewidth=4.0, solid_capstyle="round", zorder=3)
+    for i in range(3):
+        cx = x0 + w * (2 * i + 1) / 6
+        picked = i == 1
+        ax.add_patch(
+            Circle(
+                (cx, y - 0.38),
+                BALANCE_RADIO_R,
+                facecolor="white",
+                edgecolor=BLUE if picked else SOFT,
+                linewidth=1.6,
+                zorder=4,
+            )
         )
-    )
-    ax.text(x0, y - LABEL_GAP, "−10", ha="center", va="top", fontsize=15, color=INK)
-    ax.text(x0 + w / 2, y + INCL_SLIDER_H + LABEL_GAP, "Inclusion", ha="center", va="bottom", fontsize=16, color=INK)
-    ax.text(x0 + w, y - LABEL_GAP, "+10", ha="center", va="top", fontsize=15, color=INK)
+        if picked:
+            ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
 
 
 #: The mixture the crossing figure argues over: (weight, mean, variance) for
@@ -5143,13 +5147,15 @@ def clopper_pearson(s: int, n: int, tail: float) -> tuple[float, float]:
 
 
 def floor_ask_fig() -> None:
-    """The floor stated, and why the session's own votes cannot certify it (#4244).
+    """The line the balance keeps, and why the session's own votes cannot vouch for it.
 
-    Three stages: the sentence a person can say and the candidate it is asked
-    about; the votes the session already holds, drawn where the model chose to
-    look; and the conclusion — they say where the model looked, not how right
-    the candidate is. The 83% is #4256's: learned-sort evidence alone, with a
-    consistent reference pool, broke that share of X = 50% promises.
+    Three stages: what the Threshold control says before anyone checks — the
+    top 32 nobody has voted on are kept, unchecked (#4413) — with that kept set
+    and its line; the votes the session already holds, drawn where the model
+    chose to look; and the conclusion — they say where the model looked, not
+    how right the kept set is. The 83% is #4256's: an estimator calibrated on
+    learned-sort evidence alone, with a consistent reference pool, broke that
+    share of its 50% promises.
     """
     final = _floor_stage(FLOOR_ASK_STAGES, "ask")
     box = tight_box(final)
@@ -5204,13 +5210,14 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
     line_x = _floor_cell_x(FLOOR_ITEMS - FLOOR_K)
     cand_x1 = FLOOR_STRIP_X0 + FLOOR_STRIP_W
 
-    # The statement is the one line of the section a user could say aloud, and
-    # it is the only ink above the strip on the first page. It starts right of
-    # the title notch; the strip below runs from the margin.
+    # The statement is what the Threshold control says out loud before anyone
+    # checks, word for word, and it is the only ink above the strip on the
+    # first page. It starts right of the title notch; the strip below runs from
+    # the margin.
     ax.text(
         FLOOR_STATEMENT_X,
         top - FLOOR_STATEMENT_DROP,
-        "“Show me what is at least 50% right.”",
+        f"“Top {FLOOR_K} kept, unchecked”",
         ha="left",
         va="bottom",
         fontsize=18,
@@ -5237,7 +5244,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
     ax.text(
         (line_x + cand_x1) / 2,
         brace_y - LABEL_GAP,
-        f"the candidate: the top {FLOOR_K} nobody has voted on",
+        f"kept: the top {FLOOR_K} nobody has voted on",
         ha="center",
         va="top",
         fontsize=15,
@@ -5292,7 +5299,7 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         ax.text(
             INCL_CANVAS_W / 2,
             rows["brace_y"] - 1.75,
-            "They say where the model looked, not how right the candidate is.",
+            "They say where the model looked, not how right the kept set is.",
             ha="center",
             va="center",
             fontsize=17,

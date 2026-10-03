@@ -148,8 +148,19 @@ def _gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray
         key = (id(matrix), matrix.shape)
         if _GPU_CACHE.get("key") != key:
             _GPU_CACHE.clear()
+            # Hand the previous matrix (and anything else cached but unused) back to the device first:
+            # memory PyTorch's allocator holds does not count as free, and on a 32 GB card that
+            # alone failed this check from the second matrix on (#4170).
+            torch.cuda.empty_cache()
             free, _total = torch.cuda.mem_get_info()
             if matrix.nbytes * 3 > free:  # the copy, plus room for a float32 chunk and the models
+                _log.warning(
+                    "tiled Stage 1: %.1f GiB tile matrix needs %.1f GiB of GPU memory, %.1f GiB free; "
+                    "scoring on the CPU",
+                    matrix.nbytes / 2**30,
+                    matrix.nbytes * 3 / 2**30,
+                    free / 2**30,
+                )
                 return None
             counts = np.diff(np.append(starts, matrix.shape[0]))
             _GPU_CACHE.update(
@@ -246,6 +257,14 @@ def vote_queries(
             continue
         if box is not None and (raw := box_vlad(feats, box)) is not None:
             rows.append(project_query(projection, raw))
+            continue
+        if media.get("seeded_example"):
+            # A crop seeded as a Good (#4170's --seed-crop whole): the whole crop is the mark, so it
+            # queries as one VLAD, as the example sort does. Its tiles would be fragments of the mark.
+            # The app's seeded examples carry no local_features today, so only the review sets this.
+            from vtscore.media.structural import aggregate_vlad, load_vlad_codebook  # noqa: PLC0415
+
+            rows.append(project_query(projection, aggregate_vlad(feats.descriptors_f32(), load_vlad_codebook())))
             continue
         # No box: the page's own tiles, so whichever part of it the mark is on can match.
         stored = media.get("tile_vectors")

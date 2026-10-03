@@ -384,9 +384,11 @@ def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:
         )
         steps = thr[(thr["category"] == cat) & (thr["point"] == "step")].set_index("t")
         c = curves[curves["category"] == cat].set_index("t")
-        for t, precision, recall in zip(
-            ordinary["t"].tolist(), ordinary["precision"].tolist(), ordinary["recall"].tolist(), strict=True
-        ):
+        # Plain numpy columns rather than rows: `iterrows` and `to_dict` each
+        # type their cells differently across pandas-stubs releases, and pyright
+        # has rejected each of them in turn.
+        rows = zip(np.asarray(ordinary["t"]), np.asarray(ordinary["precision"]), np.asarray(ordinary["recall"]))
+        for t, precision, recall in rows:
             want = f1(float(precision), float(recall))
             assert steps.loc[int(t), "thr_fbeta"] == pytest.approx(want)
             assert c.loc[int(t), "thr_fbeta"] == pytest.approx(want)

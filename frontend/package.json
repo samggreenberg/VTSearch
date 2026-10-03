@@ -48,7 +48,8 @@
     "postcss": "^8.5.10",
     "qs": "^6.16.0",
     "@angular/build": {
-      "undici": "^7.29.0"
+      "undici": "^7.29.0",
+      "piscina": "^5.3.2"
     }
   }
 }
