@@ -7,19 +7,18 @@
 
 <div class="side steps">
 
-1. Tick the photos
-2. Tick the detector
-3. **Train**
+1. **Train**
 
 <!-- build: figs/ui-steps-train.build1.webp -->
 
-4. **Good** if it is
-5. **Bad** if it is not
+2. **Good** if you want this kind of image
+3. **Bad** if you don't want this kind of image
 
 </div>
 
-<!-- **a** — Tick the photos and the detector — one row each — and Train. That
-     pairing is the whole setup: *this* detector learns from *these* photos. -->
+<!-- **a** — Nothing to tick: the photos and the detector were each selected
+     the moment they were added, so Train is the whole setup — *this*
+     detector learns from *these* photos. -->
 
 <!-- **b** — One photo at a time, and one question: is it what you are looking
      for? Good or Bad, or the arrow keys. Every answer retrains the detector

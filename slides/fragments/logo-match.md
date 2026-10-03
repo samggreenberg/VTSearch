@@ -27,6 +27,9 @@
      carried onto the page by the winning fit, so the crest is found and
      located. Right: 5 happen to agree, in the body text. -->
 
-<!-- The count is the score, and the app calls 8 or more a match, so 5 is a
-     no. The fit allows shift, turn and uniform scale, and no shear or
-     perspective: a mark printed on a flat page does not bend. -->
+<!-- The count is the score, and 8 or more passes the gate, so 5 is a no.
+     On documents the line is stricter than the gate: after a Bad vote a
+     page must beat the best-fitting Bad's count (#4367); before one, a fit
+     must also be tight, or it scores half (#4440). The fit allows shift,
+     turn and uniform scale, and no shear or perspective: a mark printed on a
+     flat page does not bend. -->

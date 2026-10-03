@@ -21,9 +21,9 @@
  * the picture says where, and in what order.
  *
  * A target is resolved in Node, with Playwright's locators, rather than in the
- * page: that is what lets a callout name "the dataset row called photos" rather
- * than only a CSS selector, and `photos` is a prefix of `photos-prod`, so a
- * substring match would box the wrong row. Forms a target can take:
+ * page: that is what lets a callout name "the dataset row called photos-train"
+ * rather than only a CSS selector, and `photos` is a prefix of both of the
+ * deck's piles, so a substring match can box the wrong row. Forms a target can take:
  *
  *   '.btn-good'                                  first visible match
  *   { selector, hasText }                        …whose text contains hasText

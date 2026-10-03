@@ -15,8 +15,8 @@
 <!-- **a** — Same corpus, same candidate, same <span class="cut">line</span>,
      same sentence. -->
 
-<!-- **b** — The check: five items drawn uniformly at random from the
-     candidate — from anywhere in it, not its top — and the user votes on
+<!-- **b** — The check, as the floor shipped it: five items drawn uniformly
+     at random from the candidate — from anywhere in it, not its top — and the user votes on
      them. Uniform is the whole trick: a pick the model did not choose is a
      sample the model cannot bias. The app shows them as a check, never as the
      ranking. -->
@@ -31,17 +31,15 @@
      and it says so naming no cause, because a sparse corpus and a weak model
      fail it alike. Five of five would read 55 to 100: confirmed. -->
 
-<!-- **e** — Three states, and the line never falls back. *Unchecked* before a
-     check; *confirmed* when the range clears the floor; *short* when it does
-     not, keeping the 32 it checked and the range that says how close. The
-     fallback this replaces returned about 2,300 items at 2% right. Lower
-     floors grow the candidate — 64 at 25%, 128 at 10% — and a short round
-     halves it and draws five fresh; higher floors cost more picks, 11 at 75%
-     and 29 at 90%. -->
+<!-- **e** — The floor's three states: *unchecked* before a check,
+     *confirmed* when the range cleared the floor, *short* when it did not —
+     and the line never fell back. The fallback it replaced returned about
+     2,300 items at 2% right. -->
 
-<!-- Measured on the rank frames at 0.44% prevalence, floor 50%: five votes,
-     confirmed in 28% of sessions, the 32 returned 53% right on average, the
-     range holds the truth 99% of the time and is 0.57 wide — that width *is*
-     the honest answer. At 10%: twelve votes, 53 items back, 40% right, on the
-     floor in 84% of sessions. Nobody votes in a headless run — autorun, the
-     CLI — so those export the unchecked candidate. -->
+<!-- What ships now differs (#4388, #4413), and the gauge on this figure is
+     the floor's. The picks are still uniform, but walked in bands — 8, 8 and
+     16 under the 32, five picks each, each band's range at α over the bands
+     — going deeper while the estimated F-beta rises and keeping the band
+     where it peaks. Two states, unchecked and checked, and it reports
+     precision and recall in words. Headless runs export the unchecked
+     set. -->
