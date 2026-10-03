@@ -28,8 +28,10 @@ derived from two things only:
   derived from it, and more labels from any dataset improve the model.
 
 The threshold is the cut at which the expected F-beta of the kept set peaks
-(:func:`corpus_cut`): the expected true positives from the labels' Good
-component at that prevalence, the returned size counted on the corpus itself.  No count is
+(:func:`corpus_cut`): each item's chance of being a positive from a 3-part
+fit (the labels' Good and Bad components and the corpus's bulk), the total
+positives from the 2-part estimate, the returned size counted on the corpus
+itself.  No count is
 drawn on any corpus: a corpus with no positives returns at most its own few
 high-scoring negatives.
 
@@ -191,32 +193,31 @@ def labels_line_threshold(
     return _sigmoid(float(x[i]))
 
 
-def corpus_cut(model: ClassScoreModel, unvoted_share: float, scores_desc: np.ndarray, beta: float) -> float:
+def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_positives: float, beta: float) -> float:
     """The cut maximising expected F-*beta* over what it would really return from a corpus (#4452).
 
-    For the cut at each unvoted item, best first, ``R`` is how many items it
-    returns (counted, not modelled), the expected true positives
-    ``TP = min(p N S1, R)`` (``p`` the positives' share among the unvoted,
-    ``S1`` the labels' Good component's share at or above that score) and
-    ``F = (1 + b^2) TP / (b^2 p N + R)``.  A normal for the negatives' tail
-    under-counted the high-scoring negatives and cut too low (precision 0.44
-    at beta 1 in the first pricing run); the corpus's own counts carry its
-    tail as it is.  A cut that returns nothing scores 0, so a corpus with no
-    positives keeps at most its single best item.  Returns the score of the
-    last kept item; with nothing worth keeping, a score above every item.
+    Items best first: the cut after the k-th returns ``R = k`` (counted),
+    holds ``TP`` = the sum of its items' chances of being positive
+    (:func:`corpus_posteriors`), out of *total_positives* in the corpus;
+    ``F = (1 + b^2) TP / (b^2 P + R)``.  The chances come from the 3-part fit
+    (honest precision near the top); the total from the 2-part estimate with
+    its counted bound (honest about the positives deeper down, which the
+    Goods a session found - its easiest - under-represent).  Each piece is
+    the model that is right about it; priced offline on 900 saved heads it
+    beat both alone at every preset and on a smaller Train pool.  A cut that
+    returns nothing scores 0; with nothing worth keeping, a score above every
+    item.
     """
-    from scipy.stats import norm  # noqa: PLC0415
-
     s = np.asarray(scores_desc, dtype=np.float64)
     n = s.size
     if n == 0:
         return 1.0 + 1e-9
     b2 = float(beta) * float(beta)
-    pos = min(max(float(unvoted_share), PREVALENCE_MIN), PREVALENCE_MAX) * n
-    s1 = norm.sf((_logit(s) - model.mu_pos) / model.sigma)
+    tp = np.cumsum(np.asarray(posteriors_desc, dtype=np.float64))
+    pos = max(float(total_positives), float(tp[-1]))
     r = np.arange(1, n + 1, dtype=np.float64)
-    tp = np.minimum(pos * s1, r)
-    f = (1.0 + b2) * tp / (b2 * pos + r)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        f = np.nan_to_num((1.0 + b2) * tp / (b2 * pos + r), nan=0.0)
     k = int(np.argmax(f))
     if not f[k] > 0:
         return 1.0 + 1e-9
@@ -270,6 +271,48 @@ def fit_corpus(
     return float(n_good) + float(r.sum()), CorpusNegatives(mu0, s0)
 
 
+def corpus_posteriors(model: ClassScoreModel, unvoted_scores: Any, *, iterations: int = 300) -> np.ndarray:
+    """Each unvoted item's chance of being a positive, under a 3-part fit of the corpus (#4452).
+
+    The labels' Good component and the labels' Bad component keep their
+    shapes (what the labels know: the Bads sit near the line, exactly where
+    the cut is decided); a normal for the corpus's bulk below them is fitted
+    with all three shares.  Modelling the negatives near the line by the
+    Bads is what makes the precision near the top honest: with the bulk
+    alone, the top of a ranking read as all positive and beta barely moved
+    the cut.  In the order of *unvoted_scores*.
+    """
+    from scipy.stats import norm  # noqa: PLC0415
+
+    x = _logit(_finite_unit(unvoted_scores))
+    if x.size == 0:
+        return np.zeros(0)
+    mu0 = float(np.median(x))
+    s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), MIN_LOGIT_SIGMA)
+    w1, wb = 0.01, 0.05
+    r1 = np.zeros_like(x)
+    for _ in range(iterations):
+        a1 = w1 * norm.pdf(x, model.mu_pos, model.sigma)
+        ab = wb * norm.pdf(x, model.mu_neg, model.sigma)
+        a0 = max(1.0 - w1 - wb, 1e-9) * norm.pdf(x, mu0, s0)
+        tot = a1 + ab + a0
+        with np.errstate(invalid="ignore", divide="ignore"):
+            r1 = np.nan_to_num(a1 / tot, nan=0.0)
+            rb = np.nan_to_num(ab / tot, nan=0.0)
+        r0 = 1.0 - r1 - rb
+        nw1 = min(max(float(r1.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
+        nwb = min(max(float(rb.mean()), PREVALENCE_MIN), 0.9)
+        s_r0 = float(r0.sum())
+        if s_r0 > 1e-12:
+            mu0 = min(float((r0 * x).sum()) / s_r0, model.mu_neg)
+            s0 = max(math.sqrt(float((r0 * (x - mu0) ** 2).sum()) / s_r0), MIN_LOGIT_SIGMA)
+        done = abs(nw1 - w1) < 1e-8 and abs(nwb - wb) < 1e-7
+        w1, wb = nw1, nwb
+        if done:
+            break
+    return r1
+
+
 def estimate_positives(model: ClassScoreModel, unvoted_scores: Any, n_good: int, prior: float | None = None) -> float:
     """How many positives a corpus holds: its Good votes plus the EM estimate among its unvoted items (:func:`fit_corpus`)."""
     del prior  # the corpus fit starts from a fixed small share
@@ -292,10 +335,12 @@ class LabelsLine:
     negatives: CorpusNegatives | None = None
     unvoted_share: float | None = None
     unvoted_scores: np.ndarray | None = field(default=None, compare=False, repr=False)
+    unvoted_posteriors: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     def threshold(self, beta: float) -> float:
-        if self.unvoted_scores is not None and self.unvoted_share is not None:
-            return corpus_cut(self.model, self.unvoted_share, self.unvoted_scores, beta)
+        if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
+            total = self.unvoted_share * self.unvoted_scores.size
+            return corpus_cut(self.unvoted_posteriors, self.unvoted_scores, total, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
 
     def on_corpus(
@@ -357,7 +402,9 @@ def _line_on(
     share = min(share, _BOUND_MARGIN * _counted_share_bound(model, unvoted))
     positives = n_good + share * unvoted.size
     prevalence = min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX)
-    return LabelsLine(model, prevalence, negatives, float(share), np.sort(unvoted)[::-1].copy())
+    order = np.argsort(-unvoted, kind="stable")
+    post = corpus_posteriors(model, unvoted)
+    return LabelsLine(model, prevalence, negatives, float(share), unvoted[order].copy(), post[order].copy())
 
 
 def corpus_fit(
@@ -442,6 +489,7 @@ __all__ = [
     "class_score_model",
     "corpus_cut",
     "corpus_fit",
+    "corpus_posteriors",
     "corpus_prevalence",
     "estimate_positives",
     "fit_labels_line",

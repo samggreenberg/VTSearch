@@ -167,3 +167,17 @@ class TestFindOnACorpusWithNoPositives:
         kept_train = int((_corpus(seed=1) >= train.threshold(1.0)).sum())
         kept_find = int((other >= find.threshold(1.0)).sum())
         assert kept_find == pytest.approx(kept_train, rel=0.35, abs=5)
+
+
+class TestTheCutFollowsTheBalance:
+    def test_a_precision_lean_keeps_less_and_a_recall_lean_more(self):
+        """#4452: the shipped counted cut kept ~the same set at every beta (54/57/63 at 1/2, 1, 2); the cut from the
+        3-part posteriors and the 2-part total moves with beta, as the oracle's does."""
+        rng = np.random.default_rng(11)
+        corpus = np.r_[
+            _sig(rng.normal(-4, 1.0, 5000)), _sig(rng.normal(-1.0, 1.0, 800)), _sig(rng.normal(1.5, 1.2, 40))
+        ]
+        line = fit_labels_line(_orderings(), corpus, None, {})
+        assert line is not None and line.unvoted_posteriors is not None
+        kept = [int((corpus >= line.threshold(b)).sum()) for b in (0.5, 1.0, 2.0)]
+        assert kept[0] <= kept[1] <= kept[2] and kept[0] < kept[2], kept
