@@ -32,7 +32,7 @@ The head used to be a small MLP with its width auto-sized by `_auto_hidden_dim(n
 
 The move from there to the SVM keeps that same linear boundary and changes only the objective that places it. A maximum-margin fit is decided by the votes nearest the boundary and is indifferent to how far the easy ones sit beyond it, whereas logistic regression keeps paying attention to every example — which is why the two place a visibly different line on the same handful of votes. Measurements in a separate environment put the SVM's ranking clearly ahead of the logistic head's; **why** it wins (better-behaved scores near the cut? more tolerance of a mis-vote?) is still open, and is the subject of follow-up sweeps. Until those land, the shipped head is the one that measures best.
 
-Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `head="mlp"`; see [`docs/EVAL.md`](EVAL.md)) and in unit tests; neither is reachable from the app. The Stage-2 structural-verification classifier (`vtscore/training/structural_similarity.py`) is a separate feature and keeps its own MLP.
+Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `head="mlp"`; see [`docs/EVAL.md`](EVAL.md)) and in unit tests; neither is reachable from the app. Structural search's Stage 2 (`vtscore/training/structural_similarity.py`) is a separate feature and trains no scorer: since #4169 it ranks a shortlisted page by the inliers its best template verifies.
 
 ## Training Configuration
 
@@ -45,7 +45,7 @@ Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `
 | **Batching** | Full-batch | All labeled data in one solve |
 | **Reproducibility** | `random_state=seed` | liblinear is deterministic given the seed (default 42); the fit runs on CPU |
 
-`TRAIN_EPOCHS`, `TRAIN_PATIENCE`, `MLP_DROPOUT` and `MLP_LABEL_SMOOTHING` no longer touch a production fit — they configure the BCE gradient loop, which now only the eval arms and the structural-verification classifier run.
+`TRAIN_EPOCHS`, `TRAIN_PATIENCE`, `MLP_DROPOUT` and `MLP_LABEL_SMOOTHING` no longer touch a production fit — they configure the BCE gradient loop, which now only the eval arms run.
 
 ### Class Weighting
 

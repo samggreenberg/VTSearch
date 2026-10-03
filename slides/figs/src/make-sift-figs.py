@@ -85,7 +85,15 @@ from vtscore.media.structural import (  # noqa: E402
     SiftMatcher,
     ratio_test_matches,
 )
+from vtscore.media.structural_tiles import (  # noqa: E402
+    MIN_TILE_KP,
+    TILE_LAYERS,
+    load_tile_projection,
+    tile_vectors,
+    tile_windows,
+)
 from vtscore.training.structural_similarity import filter_features_to_box  # noqa: E402
+from vtscore.training.structural_stage1 import example_queries  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -145,16 +153,15 @@ EXPECT = {
     "budget_inliers_8192": 101,
     "tile_page_keypoints": 7685,
     "tile_on_crest": 442,
-    "tile_best_keypoints": 760,
+    # The best tile is the app's pick through `tile_projection_v1`, which only
+    # a machine holding that asset can run, so these two are not pinned yet
+    # (#4455). `tiles_fig` refuses to draw until they are.
+    "tile_best_keypoints": None,
+    "tile_best_crest": None,
     "ranked": (101, 91, 91),
     "found_by_query": 6,
     "found_by_vote": 32,
 }
-
-#: The tile layout `scripts/experiments/fullmarks/stage1_cell.py` measured
-#: (#3928): a quarter of the page wide, 18% tall, stride half a tile, keeping
-#: tiles with at least 20 keypoints.
-TILE_W, TILE_H, TILE_MIN_KEYPOINTS = 0.25, 0.18, 20
 
 #: The cold-start gate: fewer than this many agreeing keypoints is "no".
 GATE = 8
@@ -292,27 +299,41 @@ def fit(template: Page, target: Page) -> Fit:
     )
 
 
-def best_tile(p: Page, q: Page) -> tuple[tuple[float, float], int]:
-    """The tile that scores the page, as `((x0, y0), keypoints in it)`.
+def _in_window(kp: np.ndarray, window: tuple[float, float, float, float]) -> np.ndarray:
+    """Which normalised keypoints a tile holds: `raw_tiles`' own test, half-open on the far edges."""
+    x0, y0, x1, y1 = window
+    return (kp[:, 0] >= x0) & (kp[:, 0] < x1) & (kp[:, 1] >= y0) & (kp[:, 1] < y1)
 
-    The rule is #3928's: a VLAD vector per tile against the shipped codebook,
-    and the page scores its best tile's cosine with the query's VLAD.
+
+def best_tile(p: Page, q: Page) -> tuple[tuple[float, float, float, float], np.ndarray]:
+    """The tile the app scores the page by, as `(x0, y0, x1, y1)` normalised, and which keypoints it holds.
+
+    Nothing here re-implements Stage 1. The page's tiles are `tile_vectors`
+    over its compacted features, which is what the embedding stage stores and
+    tiles from; the query is `example_queries`, the app's own crop query; both
+    go through the cached `tile_projection_v1`, so a checkout without it stops
+    here with the command that rebuilds it. The tiles are cut from every layer
+    in `TILE_LAYERS`, so the winner may be a coarse tile or a fine one.
+
+    `tile_vectors` does not say which keypoints a tile holds, so the windows
+    are enumerated again, in its order, to learn that; the count check is what
+    keeps the enumeration and `raw_tiles` in step.
     """
-    from vtscore.media.structural import aggregate_vlad, load_vlad_codebook
-
-    codebook = load_vlad_codebook()
-    want = aggregate_vlad(q.features.descriptors_f32(), codebook)
-    kp, desc = p.features.keypoints_f32(), p.features.descriptors_f32()
-    best: tuple[float, tuple[float, float], int] = (-2.0, (0.0, 0.0), 0)
-    for y0 in np.arange(0, 1 - TILE_H + 1e-9, TILE_H / 2):
-        for x0 in np.arange(0, 1 - TILE_W + 1e-9, TILE_W / 2):
-            inside = (kp[:, 0] >= x0) & (kp[:, 0] < x0 + TILE_W) & (kp[:, 1] >= y0) & (kp[:, 1] < y0 + TILE_H)
-            if inside.sum() < TILE_MIN_KEYPOINTS:
-                continue
-            cosine = float(want @ aggregate_vlad(desc[inside], codebook))
-            if cosine > best[0]:
-                best = (cosine, (float(x0), float(y0)), int(inside.sum()))
-    return best[1], best[2]
+    stored = p.features.compact()
+    tiles = tile_vectors(stored, load_tile_projection())
+    queries = example_queries([q.features])
+    if queries is None:
+        raise SystemExit("tiles: the query crop gave no Stage-1 query")
+    best = int(np.argmax((tiles.vectors.astype(np.float32) @ queries.T).max(axis=1)))
+    kp = stored.keypoints_f32()
+    windows = [w for width, height in TILE_LAYERS for w in tile_windows(width, height)]
+    kept = [(w, inside) for w in windows if (inside := _in_window(kp, w)).sum() >= MIN_TILE_KP]
+    if len(kept) != tiles.count:
+        raise SystemExit(
+            f"tiles: enumerated {len(kept)} tiles, but `tile_vectors` made {tiles.count}. "
+            "`best_tile` has drifted from `raw_tiles`."
+        )
+    return kept[best]
 
 
 # --------------------------------------------------------------------------
@@ -709,7 +730,9 @@ def stages_fig() -> None:
         front = _stack(ax, HAYSTACK, 0.7, 2.45, 2.35, 0.12)
         cx = 0.7 + 4 * 0.12 + front.width / 2
         text(ax, cx, 1.35, "every page", ha="center", size=COUNT_PT, fontweight="bold")
-        text(ax, cx, 0.92, "one vector each", ha="center")
+        # Not "one vector each": a document page is cut into tiles, and region
+        # voting tiles photos too, so a page may carry many (#4445).
+        text(ax, cx, 0.92, "made into vectors", ha="center")
         if stage >= 2:
             _arrow(ax, 3.25, 5.75, 3.4)
             text(ax, 4.5, 3.9, "Stage 1", ha="center", size=COUNT_PT, fontweight="bold")
@@ -751,20 +774,21 @@ def tiles_fig() -> None:
     pts = p.keypoints_px()
     x, y, w, h = box
     on = (pts[:, 0] >= x) & (pts[:, 0] <= x + w) & (pts[:, 1] >= y) & (pts[:, 1] <= y + h)
-    (tx, ty), in_tile = best_tile(p, query())
+    (tx0, ty0, tx1, ty1), in_tile = best_tile(p, query())
     pw, ph = p.size
-    assert (p.features.count, int(on.sum()), in_tile) == (
-        EXPECT["tile_page_keypoints"],
-        EXPECT["tile_on_crest"],
-        EXPECT["tile_best_keypoints"],
-    ), (p.features.count, int(on.sum()), in_tile)
-    tile_px = (tx * pw, ty * ph, TILE_W * pw, TILE_H * ph)
-    in_tile_mask = (
-        (pts[:, 0] >= tile_px[0])
-        & (pts[:, 0] < tile_px[0] + tile_px[2])
-        & (pts[:, 1] >= tile_px[1])
-        & (pts[:, 1] < tile_px[1] + tile_px[3])
-    )
+    got = {
+        "tile_page_keypoints": p.features.count,
+        "tile_on_crest": int(on.sum()),
+        "tile_best_keypoints": int(in_tile.sum()),
+        "tile_best_crest": int((in_tile & on).sum()),
+    }
+    want = {k: EXPECT[k] for k in got}
+    if got != want:
+        raise SystemExit(
+            f"tiles: drew {got}, but EXPECT pins {want}. Pin the new counts, and update the "
+            "shares slides/fragments/logo-tiles.md quotes from them."
+        )
+    n_tile, n_crest = got["tile_best_keypoints"], got["tile_best_crest"]
 
     def draw(ax: Axes, stage: int) -> None:
         left = draw_scan(ax, p.image, 0.7, 1.05, height=4.4, fade=0.6)
@@ -776,16 +800,21 @@ def tiles_fig() -> None:
         if stage < 2:
             return
         right = draw_scan(ax, p.image, 7.0, 1.05, height=4.4, fade=0.6)
-        for gx in np.arange(0, 1 + 1e-9, TILE_W / 2):
-            ax.plot(*right.xy([[gx * pw, 0], [gx * pw, ph]]).T, color=RULE, lw=1.0, zorder=2)
-        for gy in np.arange(0, 1 + 1e-9, TILE_H / 2):
-            ax.plot(*right.xy([[0, gy * ph], [pw, gy * ph]]).T, color=RULE, lw=1.0, zorder=2)
-        draw_dots(ax, right, pts[in_tile_mask & ~on], color=SOFT, size=1.3)
-        draw_dots(ax, right, pts[on], color=GREEN, size=1.6)
-        tx0, ty0, tw, th = (int(v) for v in tile_px)
-        draw_box(ax, right, (tx0, ty0, tw, th), color=GREEN, lw=2.6)
+        # Each layer's tiles start on a grid of half a tile, and the fine layer's
+        # grid holds the coarse one's, so the coarse lines are drawn over it, heavier.
+        for k, (tw, th) in enumerate(TILE_LAYERS):
+            lw, z = (1.2, 2.0) if k == 0 else (0.6, 1.5)
+            for gx in np.arange(0, 1 + 1e-9, tw / 2):
+                ax.plot(*right.xy([[gx * pw, 0], [gx * pw, ph]]).T, color=RULE, lw=lw, zorder=z)
+            for gy in np.arange(0, 1 + 1e-9, th / 2):
+                ax.plot(*right.xy([[0, gy * ph], [pw, gy * ph]]).T, color=RULE, lw=lw, zorder=z)
+        # Only what the winning tile's vector sums over.
+        draw_dots(ax, right, pts[in_tile & ~on], color=SOFT, size=1.3)
+        draw_dots(ax, right, pts[in_tile & on], color=GREEN, size=1.6)
+        tile_px = (round(tx0 * pw), round(ty0 * ph), round((tx1 - tx0) * pw), round((ty1 - ty0) * ph))
+        draw_box(ax, right, tile_px, color=GREEN, lw=2.6)
         text(ax, 7.0, 0.7, "one vector per tile", size=COUNT_PT, fontweight="bold")
-        text(ax, 7.0, 0.28, f"the crest: {int(on.sum())} of its tile's {in_tile}, {on.sum() / in_tile:.0%}")
+        text(ax, 7.0, 0.28, f"the crest: {n_crest} of its tile's {n_tile}, {n_crest / n_tile:.0%}")
 
     build("logo-tiles", draw, 2)
 
