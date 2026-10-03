@@ -20,7 +20,7 @@ anything to measure.  It asserts the provenance directly (a fitted
 cut) and, so the assertion cannot pass vacuously, that the pooled conformal cut
 over the same fold orderings is a different number.
 
-Labels follow `test_find_floor_recut.py`: 6 good / 6 bad keeps the
+Labels follow `test_find_balance_recut.py`: 6 good / 6 bad keeps the
 calibration folds non-separable, leaving ids 13-20 as the haystack the
 population estimator is fitted on.
 """
@@ -50,8 +50,8 @@ def _load_saved_detector(client, name: str):
     return ctx
 
 
-def test_reloaded_detector_starts_on_the_floors_set(client, schedule_only, floor_preference):
-    from vtscore.state.core import human_voted_ids
+def test_reloaded_detector_starts_on_the_balances_set(client):
+    from vtscore.state.core import detector_balance_state, human_voted_ids
 
     ctx = _load_saved_detector(client, "reload-anchored")
 
@@ -59,11 +59,13 @@ def test_reloaded_detector_starts_on_the_floors_set(client, schedule_only, floor
         "the registry load path must fit the fold-anchored population estimator; "
         "without it a resumed session would start on the pooled conformal cut"
     )
-    # Under the floor the line keeps the floor's starting candidate of the
-    # haystack the load scored (#4272), and acquisition re-cuts the anchored
-    # estimator from it.
+    # Under the balance the line keeps the balance's unchecked set of the
+    # haystack the load scored (#4272, #4413), and acquisition re-cuts the
+    # anchored estimator from it.
     assert ctx.line_ranking is not None
-    assert ctx.threshold == ctx.line_ranking.threshold_for(32, human_voted_ids(ctx))
+    state = detector_balance_state(ctx, 1.0)
+    assert state is not None
+    assert ctx.threshold == ctx.line_ranking.threshold_for(state["count"], human_voted_ids(ctx))
 
 
 def test_reloaded_threshold_is_not_the_pooled_conformal_cut(client):

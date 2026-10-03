@@ -289,32 +289,3 @@ def planted_fold_anchored_cut(n_pos_per_fold: int):
     cut = fit_fold_anchored_cut(haystacks, orderings, pool)
     assert cut is not None and len(cut.fold_orderings) == 2
     return cut
-
-
-def planted_spot_check(ctx, min_precision: float, *, right: bool = True, seed: int = 1):
-    """A finished spot check of *ctx*'s floor at *min_precision*, its votes cast on *ctx* (#4272, #4388).
-
-    Every pick is voted *right* (the walk confirms the whole unvoted ranking)
-    or wrong (it ends short on the first band).
-    The votes land as the check route lands them - good / bad votes, verified
-    in Find mode - and the result is parked on the context with its
-    fingerprint taken after them, exactly as a real check leaves it.
-    """
-    from vtscore.state.core import human_voted_ids  # noqa: PLC0415
-    from vtscore.training.thresholds import SpotCheck  # noqa: PLC0415
-
-    ranking = ctx.line_ranking
-    assert ranking is not None, "plant a check on a context whose retrain parked a ranking"
-    unvoted = tuple(int(i) for i in ranking.unvoted_ids(human_voted_ids(ctx)))
-    check = SpotCheck.start(unvoted, min_precision, seed=seed)
-    while check.running:
-        votes = {cid: right for cid in check.pending}
-        for cid, ok in votes.items():
-            (ctx.good_votes if ok else ctx.bad_votes)[cid] = None
-            (ctx.bad_votes if ok else ctx.good_votes).pop(cid, None)
-            if ctx.find_mode:
-                ctx.verified_ids[cid] = None
-        check.record(votes)
-    check.fingerprint = ranking.fingerprint(check.k, human_voted_ids(ctx))
-    ctx.precision_check = check
-    return check

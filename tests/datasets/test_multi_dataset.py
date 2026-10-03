@@ -6,6 +6,7 @@ import numpy as np
 from tests import load_detector_and_wait as _load_detector_and_wait
 
 from vtsearch.state_proxies import _ProxyDict
+from vtscore.config import DEFAULT_BETA
 from vtscore.state.core import (
     DatasetContext,
     DetectorContext,
@@ -59,7 +60,8 @@ class TestDetectorContext:
         assert ctx.last_learned_scores == {}
         assert ctx.textsort_suggestions == []
         assert ctx.find_initial_labels == {}
-        assert ctx.min_precision is None and not ctx.min_precision_seeded
+        assert ctx.beta == DEFAULT_BETA and not ctx.beta_seeded
+        assert not hasattr(ctx, "min_precision")
         assert ctx.training_medias == {}
         assert ctx.model is None
         assert ctx.threshold == 0.5
@@ -554,23 +556,23 @@ class TestScalarContextState:
         set_thread_detector_context(det_a)
         assert _get_click_counter() == 10  # preserved
 
-    def test_min_precision_per_detector(self):
-        """The precision floor is per-detector (an operating point)."""
-        from vtscore.state.core import _get_min_precision, _set_min_precision
+    def test_beta_per_detector(self):
+        """The balance is per-detector (an operating point)."""
+        from vtscore.state.core import _get_beta, _set_beta
 
-        det_a = DetectorContext("floor_det_a")
+        det_a = DetectorContext("balance_det_a")
         register_detector_context(det_a)
         set_thread_detector_context(det_a)
-        _set_min_precision(0.75)
+        _set_beta(2.0)
 
-        det_b = DetectorContext("floor_det_b")
+        det_b = DetectorContext("balance_det_b")
         register_detector_context(det_b)
         set_thread_detector_context(det_b)
-        _set_min_precision(0.25)
+        _set_beta(0.5)
 
-        assert _get_min_precision() == (True, 0.25)
+        assert _get_beta() == (True, 0.5)
         set_thread_detector_context(det_a)
-        assert _get_min_precision() == (True, 0.75)
+        assert _get_beta() == (True, 2.0)
 
     def test_display_name_per_dataset(self):
         from vtscore.state.core import _get_dataset_display_name, _set_dataset_display_name

@@ -1107,7 +1107,7 @@ class TestLiveModelReuse:
         model, threshold, smart_threshold = _prog_cache().live_models[key]
         assert model is not None
         assert isinstance(threshold, float)
-        # Under a floor the line keeps a set, not an inclusion (#4272), so Smart
+        # Under a balance the line keeps a set, not an inclusion (#4272), so Smart
         # re-cuts the model at its own Inclusion 0 cut (#4243).
         from vtscore.detectors.cost_trend import SMART_INCLUSION
         from vtscore.state.core import get_active_detector_context, recut_detector_threshold

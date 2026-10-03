@@ -362,13 +362,6 @@
             },
             "type": "object"
           },
-          "line_preference": {
-            "enum": [
-              "floor",
-              "balance"
-            ],
-            "type": "string"
-          },
           "max_concurrent_dataset_downloads": {
             "readOnly": true,
             "type": "integer"
@@ -376,9 +369,6 @@
           "max_concurrent_dataset_embeddings": {
             "readOnly": true,
             "type": "integer"
-          },
-          "min_precision": {
-            "type": "number"
           },
           "panel_pct_left": {
             "additionalProperties": {
@@ -781,7 +771,9 @@
       "BalanceRequest": {
         "additionalProperties": false,
         "properties": {
-          "beta": {}
+          "beta": {
+            "type": "number"
+          }
         },
         "required": [
           "beta"
@@ -804,9 +796,6 @@
           "fbeta": {
             "nullable": true,
             "type": "number"
-          },
-          "line_preference": {
-            "type": "string"
           },
           "n_returned": {
             "nullable": true,
@@ -847,7 +836,6 @@
           "beta",
           "count",
           "fbeta",
-          "line_preference",
           "n_returned",
           "precision",
           "recall",
@@ -3956,9 +3944,6 @@
           "detector_name": {
             "type": "string"
           },
-          "floor": {
-            "$ref": "#/components/schemas/FloorState"
-          },
           "good_count": {
             "type": "integer"
           },
@@ -3979,7 +3964,6 @@
           "bad_count",
           "balance",
           "detector_name",
-          "floor",
           "good_count",
           "ok",
           "results",
@@ -4129,9 +4113,6 @@
           "culled_false_pos": {
             "type": "integer"
           },
-          "floor": {
-            "$ref": "#/components/schemas/FloorState"
-          },
           "n_returned": {
             "type": "integer"
           },
@@ -4181,7 +4162,6 @@
           "confirmed_good",
           "corrections",
           "culled_false_pos",
-          "floor",
           "n_returned",
           "n_scored",
           "precision_curve",
@@ -4194,40 +4174,6 @@
           "verified_count",
           "verified_kept_good",
           "verified_precision"
-        ],
-        "type": "object"
-      },
-      "FloorState": {
-        "additionalProperties": false,
-        "properties": {
-          "count": {
-            "type": "integer"
-          },
-          "min_precision": {
-            "type": "number"
-          },
-          "range": {
-            "$ref": "#/components/schemas/LikelyRange",
-            "nullable": true
-          },
-          "schedule": {
-            "$ref": "#/components/schemas/CheckSchedule"
-          },
-          "status": {
-            "enum": [
-              "unchecked",
-              "confirmed",
-              "short"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "count",
-          "min_precision",
-          "range",
-          "schedule",
-          "status"
         ],
         "type": "object"
       },
@@ -4905,10 +4851,6 @@
           "error": {
             "type": "string"
           },
-          "floor": {
-            "$ref": "#/components/schemas/FloorState",
-            "nullable": true
-          },
           "has_more_below": {
             "type": "boolean"
           },
@@ -5380,60 +5322,6 @@
         ],
         "type": "object"
       },
-      "MinPrecisionRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "min_precision": {}
-        },
-        "required": [
-          "min_precision"
-        ],
-        "type": "object"
-      },
-      "MinPrecisionResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "count": {
-            "type": "integer"
-          },
-          "min_precision": {
-            "type": "number"
-          },
-          "n_returned": {
-            "nullable": true,
-            "type": "integer"
-          },
-          "range": {
-            "$ref": "#/components/schemas/LikelyRange",
-            "nullable": true
-          },
-          "schedule": {
-            "$ref": "#/components/schemas/CheckSchedule"
-          },
-          "status": {
-            "enum": [
-              "unchecked",
-              "confirmed",
-              "short"
-            ],
-            "type": "string"
-          },
-          "threshold": {
-            "nullable": true,
-            "type": "number"
-          }
-        },
-        "required": [
-          "count",
-          "min_precision",
-          "n_returned",
-          "range",
-          "schedule",
-          "status",
-          "threshold"
-        ],
-        "type": "object"
-      },
       "OkMessage": {
         "additionalProperties": false,
         "properties": {
@@ -5538,15 +5426,11 @@
           "check": {
             "$ref": "#/components/schemas/PrecisionCheckState",
             "nullable": true
-          },
-          "floor": {
-            "$ref": "#/components/schemas/FloorState"
           }
         },
         "required": [
           "balance",
-          "check",
-          "floor"
+          "check"
         ],
         "type": "object"
       },
@@ -5561,7 +5445,6 @@
             "type": "integer"
           },
           "beta": {
-            "nullable": true,
             "type": "number"
           },
           "candidate": {
@@ -5585,10 +5468,6 @@
           },
           "labelled": {
             "type": "integer"
-          },
-          "min_precision": {
-            "nullable": true,
-            "type": "number"
           },
           "picks": {
             "items": {
@@ -5622,8 +5501,6 @@
           "status": {
             "enum": [
               "running",
-              "confirmed",
-              "short",
               "checked",
               "cancelled"
             ],
@@ -5633,14 +5510,16 @@
         "required": [
           "band",
           "bands",
+          "beta",
           "candidate",
           "direction",
           "estimate",
+          "fbeta",
           "labelled",
-          "min_precision",
           "picks",
           "picks_per_round",
           "range",
+          "recall",
           "right",
           "round",
           "rounds",
@@ -6410,16 +6289,6 @@
             "type": "boolean"
           },
           "last_embedder_per_media_type": {},
-          "line_preference": {
-            "enum": [
-              "floor",
-              "balance"
-            ],
-            "type": "string"
-          },
-          "min_precision": {
-            "type": "number"
-          },
           "panel_pct_left": {},
           "panel_pct_right": {},
           "popup_metadata_shown": {},
@@ -6964,10 +6833,6 @@
           },
           "detector_name": {
             "type": "string"
-          },
-          "floor": {
-            "$ref": "#/components/schemas/FloorState",
-            "nullable": true
           },
           "hits": {
             "items": {
@@ -8467,7 +8332,7 @@
         ]
       },
       "post": {
-        "description": "A pure cutoff knob: under the balance preference the active detector's\nline moves to the set the new beta keeps (no retrain) and, in Find mode,\nthe unverified items re-split; under the floor preference the value is\nstored and draws nothing until the preference is switched.",
+        "description": "A pure cutoff knob: the active detector's line moves to the set the new\nbeta keeps (no retrain) and, in Find mode, the unverified items re-split\nover the frozen scores.  The new line comes back in the same round trip,\nwith the balance's state: ``unchecked`` until a spot check runs at this\nbeta (``/api/precision-check``), then ``checked`` with the check's likely\nranges.",
         "operationId": "set_balance_route",
         "requestBody": {
           "content": {
@@ -12631,7 +12496,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and reports what the\nprecision floor says about the current line (``floor``), so the chart can\nmark the floor and say whether the line keeps it.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items - at\nlog-spaced return counts (see :mod:`vtsearch.routes.detectors._find_precision`).\nIt carries no model-based estimate (#4360).\nPure read; no new state.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and reports what the\nbalance says about the current line (``balance``): the beta it was cut at\nand what a spot check found.\n\nThe **Kept rate** (``verified_precision``) is the exception to \"treat\nunverified as verified\": it counts only the items the user checked, since\ncounting every unchecked match as right would read 99% whatever the checks\nfound.  The **precision curve** charts how right the returned set is against\nhow much is returned - verified precision on the checked items - at\nlog-spaced return counts (see :mod:`vtsearch.routes.detectors._find_precision`).\nIt carries no model-based estimate (#4360).\nPure read; no new state.",
         "operationId": "find_stats",
         "responses": {
           "200": {
@@ -13171,7 +13036,7 @@
     },
     "/api/learned-sort": {
       "post": {
-        "description": "Training is GIL-bound and ran inline used to stall every other request\nserved by the small ``gthread`` pool (votes polls, thumbnails, and even\nmedia bytes).  The endpoint now hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, floor and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
+        "description": "Training is GIL-bound and ran inline used to stall every other request\nserved by the small ``gthread`` pool (votes polls, thumbnails, and even\nmedia bytes).  The endpoint now hands the work off to a background daemon\nthread and returns immediately with a ``job_id``; clients poll\n:func:`learned_sort_result` until ``status == \"done\"``.\n\nA small signature cache short-circuits the no-op case: when the votes,\ndetector, balance and thresholding settings are unchanged from the\nmost recent successful run, the previous result is returned directly.\n\nTests can pass ``{\"wait\": true}`` in the body to block until the job\ncompletes and receive the result inline.  The frontend leaves it false.",
         "operationId": "learned_sort",
         "requestBody": {
           "content": {
@@ -13940,69 +13805,6 @@
         ]
       }
     },
-    "/api/min-precision": {
-      "get": {
-        "deprecated": true,
-        "description": "The floor draws the line only under ``line_preference: \"floor\"`` (``PUT\n/api/settings``); the balance (``/api/balance``) is the preference since\n#4413.  Kept for one release.",
-        "operationId": "get_min_precision_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MinPrecisionResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Deprecated (#4413): get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws.",
-        "tags": [
-          "sorting"
-        ]
-      },
-      "post": {
-        "deprecated": true,
-        "description": "The floor is the preference only under ``line_preference: \"floor\"``\n(``PUT /api/settings``); ``/api/balance`` is the control since #4413, and\nthis route goes next release.  Under the floor it is a pure cutoff knob:\nthe active detector's line moves to the set the new floor keeps (no\nretrain) and, in Find mode, the unverified items re-split over the frozen\nscores.  The new line comes back in the same round trip, with the floor's\nstate: ``unchecked`` until a spot check runs at this floor\n(``/api/precision-check``), then ``confirmed`` or ``short`` with the\ncheck's likely range.  Under the balance the value is stored and draws\nnothing.  Every detector has a floor, so ``null`` is refused.",
-        "operationId": "set_min_precision_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MinPrecisionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MinPrecisionResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Deprecated (#4413): set the precision floor, a fraction clamped to ``[0.01, 1]``.",
-        "tags": [
-          "sorting"
-        ]
-      }
-    },
     "/api/precision-check": {
       "get": {
         "operationId": "get_precision_check",
@@ -14021,7 +13823,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "The active detector's spot check (running, else the last finished) and the floor's state.",
+        "summary": "The active detector's spot check (running, else the last finished) and the balance's state.",
         "tags": [
           "precision_check"
         ]
@@ -14045,7 +13847,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Abandon the running check.  Its votes so far stay ordinary votes; the floor's state is as it was.",
+        "summary": "Abandon the running check.  Its votes so far stay ordinary votes; the balance's state is as it was.",
         "tags": [
           "precision_check"
         ]
@@ -14053,7 +13855,7 @@
     },
     "/api/precision-check/start": {
       "post": {
-        "description": "The walk is over the unvoted items of the ranking the detector last\nscored, in rank order, fixed for the whole check, and starts at the bands\nthat hold the floor's starting count (32 at 50% and above, 128 at 10%).\nDeals the first band's picks.  A check already running is replaced.  The\nlast finished result stays in force until this check ends.",
+        "description": "The walk is over the unvoted items of the ranking the detector last\nscored, in rank order, fixed for the whole check, and starts at the bands\nthat hold the balance's cap (the top 32 at beta 1 and below, 128 above).\nDeals the first band's picks.  A check already running is replaced.  The\nlast finished result stays in force until this check ends.",
         "operationId": "start_precision_check",
         "responses": {
           "200": {
@@ -14073,7 +13875,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Start a spot check of the active detector's floor over its current ranking.",
+        "summary": "Start a spot check of the active detector's line at its balance, over its current ranking.",
         "tags": [
           "precision_check"
         ]
@@ -14081,7 +13883,7 @@
     },
     "/api/precision-check/votes": {
       "post": {
-        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the band is labelled the walk moves on: the next\nband the set under test still owes is dealt, or the set is decided and the\nwalk goes deeper (a new band is dealt), shallower, or ends.  The response\ncarries the check's new state and the floor's, whose line moves to the set\na finished check ended on.",
+        "description": "Each vote is an ordinary label on the item (provenance ``check``): it\ntrains the model, persists to the labelset, and in Find mode verifies the\nitem.  Once every pick of the band is labelled the walk moves on: the next\nband the set under test still owes is dealt, or the set is decided and the\nwalk goes deeper (a new band is dealt), shallower, or ends.  The response\ncarries the check's new state and the balance's, whose line a finished\ncheck re-draws (to the set it ended on under ``trim``).",
         "operationId": "vote_precision_check",
         "requestBody": {
           "content": {
@@ -15570,11 +15372,11 @@
       "name": "medias"
     },
     {
-      "description": "Text / example / learned sort, votes, precision floor, safe-thresholds, coverage atlas.",
+      "description": "Text / example / learned sort, votes, balance, safe-thresholds, coverage atlas.",
       "name": "sorting"
     },
     {
-      "description": "The precision floor's spot check: draw picks, take the votes, report how close the line got.",
+      "description": "The balance's spot check: draw picks, take the votes, report how close the line got.",
       "name": "precision_check"
     },
     {
