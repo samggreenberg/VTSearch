@@ -156,9 +156,19 @@ differs from the photo paths, and the owner settled how its review works:
   - the structural path has no precision-floor estimator, so a P-cut is the
     best cut of the same ranking with precision ≥ P (an oracle). Say so
     wherever it appears.
-- **Repeats:** one closed-loop run per class. The path is deterministic given
-  the crop, so per-image claims rest on one observation and are labelled
-  single-observation.
+- **Repeats:** two closed-loop runs per class (owner, 2026-10-03, #4457; was one):
+  the second with `--swap-halves`, which clicks in the first run's test half and
+  scores on its click half. The path is deterministic given the crop and the
+  halves, so each replicate is one observation per class; per-image claims are
+  labelled single-observation.
+- **The balance (owner, 2026-10-03, #4457):** the structural line ignores beta
+  (#4458), so one set of sessions serves every beta. The review scores it at
+  beta 0.5 / 1 / 2: the returned set's F-beta as a share of the best cut's
+  (`returned_at_beta.png`, the "returned set at each balance" table), as the
+  photo headline does.
+- **Hardware:** run on the app's GPU type (a V100 today), and report retrain
+  time from it (`retrain.png`). One comparison (#4457, different nodes) put
+  an L40S at about half the V100's p90.
 - **No ceiling** ("full-label" notch) in structural mode for now. The Headroom
   section is omitted, and the curves end at the last click.
 - **No spot check:** the structural path has none, so that section is omitted.

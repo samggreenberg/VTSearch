@@ -42,3 +42,12 @@ def test_floor_cuts_take_the_deepest_cut_that_still_meets_p(sd):
 def test_no_positive_left_reads_as_missing_not_zero(sd):
     out = sd.cut_metrics(np.zeros(5, dtype=bool))
     assert np.isnan(out["best_f1"]) and np.isnan(out["recall_at_p50"])
+
+
+def test_the_best_cut_at_each_balance_moves_with_beta(sd):
+    # The structural line ignores beta, so every beta is scored on the same sessions (#4413).
+    out = sd.cut_metrics(HITS)
+    assert out["best_fb1"] == pytest.approx(out["best_f1"])
+    assert out["best_fb05"] == pytest.approx(1.25 * 3 / (0.25 * 4 + 4))  # precision-leaning: stop at depth 4
+    assert out["best_fb2"] == pytest.approx(5 * 4 / (4 * 4 + 8))  # recall-leaning: take all 8
+    assert sd.beta_tag(0.5) == "05" and sd.beta_tag(1.0) == "1" and sd.beta_tag(2.0) == "2"

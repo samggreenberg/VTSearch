@@ -57,6 +57,20 @@ import vote_curve as vc  # noqa: E402
 from app_replay_tiled import _extract  # noqa: E402
 
 FLOORS = (0.1, 0.5, 0.9)
+#: The balance's presets (#4413). The structural line ignores beta today, so one set of sessions
+#: is scored at every beta: the returned set's F-beta and the best F-beta any cut reaches.
+BETAS = (0.5, 1.0, 2.0)
+
+
+def beta_tag(beta: float) -> str:
+    """Column suffix for *beta*: 0.5 -> "05", 1.0 -> "1", 2.0 -> "2"."""
+    return f"{beta:g}".replace(".", "")
+
+
+def f_beta(tp: Any, k: Any, pos: int, beta: float) -> Any:
+    """F-beta of a set of *k* pages holding *tp* of *pos* positives (scalars or arrays)."""
+    b2 = beta * beta
+    return (1 + b2) * tp / (b2 * pos + k)
 
 
 def in_test_half(page_id: str, salt: str = "sota-documents") -> bool:
@@ -126,6 +140,8 @@ def cut_metrics(hits: np.ndarray) -> dict[str, float]:
     out: dict[str, float] = {}
     if pos == 0:
         out["best_f1"] = float("nan")
+        for beta in BETAS:
+            out[f"best_fb{beta_tag(beta)}"] = float("nan")
         for p in FLOORS:
             out[f"recall_at_p{int(p * 100)}"] = out[f"k_at_p{int(p * 100)}"] = float("nan")
         return out
@@ -134,6 +150,8 @@ def cut_metrics(hits: np.ndarray) -> dict[str, float]:
     precision = tp / k
     f1 = 2 * tp / (k + pos)
     out["best_f1"] = float(f1.max())
+    for beta in BETAS:
+        out[f"best_fb{beta_tag(beta)}"] = float(f_beta(tp, k, pos, beta).max())
     for p in FLOORS:
         ok = np.flatnonzero(precision >= p)
         deepest = int(ok.max()) if ok.size else -1
@@ -395,7 +413,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             hits = positive[rest]
             ap_now = vc.average_precision(rest, positive)
             # The returned set is what the app returns: scores at or above the line it hands back.
-            g_prec, g_rec, g_f1, g_k = set_metrics(rest_score >= line, hits)
+            accept = rest_score >= line
+            g_prec, g_rec, g_f1, g_k = set_metrics(accept, hits)
+            g_tp, g_pos = int((accept & hits).sum()), int(hits.sum())
+            gate_fb = {
+                f"gate_fb{beta_tag(b)}": float(f_beta(g_tp, g_k, g_pos, b)) if (g_k + g_pos) else float("nan")
+                for b in BETAS
+            }
             steps.append(
                 {
                     "class_id": cid,
@@ -412,6 +436,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "gate_recall": g_rec,
                     "gate_f1": g_f1,
                     "gate_k": g_k,
+                    **gate_fb,
                     "line": line,
                     **cut_metrics(hits),
                     "retrain_s": round(retrain_s, 2),
