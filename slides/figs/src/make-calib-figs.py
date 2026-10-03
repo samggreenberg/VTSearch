@@ -61,6 +61,7 @@ from vtscore.training.thresholds import (
     gmm_cut_from_fit,
     inclusion_cost_weights,
 )
+from vtscore.training.thresholds.spot_check import CHECK_ALPHA, fbeta_score, likely_range, range_tail
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -5047,31 +5048,29 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
     return fig
 
 
-# ── the precision-floor pair (#4244) ─────────────────────────────────────────
+# ── the balance's line and its spot check (#4244, #4413, #4444) ──────────────
 
 #: The two figures that close the Preference section share one drawing: the
-#: corpus ranked as a strip of items, the candidate the floor works on
-#: bracketed at its top, and the line at the candidate's foot. `calib-floor-ask`
-#: states the floor and shows why the session's own votes cannot certify it;
-#: `calib-floor-check` runs the spot check on the same strip. Same canvas and
-#: same rows, so the strip does not move between the two slides.
+#: corpus ranked as a strip of items, the set the line keeps bracketed at its
+#: top, and the line at that set's foot. `calib-floor-ask` says what the
+#: Threshold control says before anyone checks, and shows why the session's
+#: own votes cannot vouch for the kept set; `calib-floor-check` runs the spot
+#: check on the same strip. Same canvas and same rows, so the strip does not
+#: move between the two slides. (The names are the precision floor's, which
+#: the pair drew first.)
 #: Each figure's canvas is exactly what it draws, because `tight_box` crops to
 #: the canvas: the axes fill it, so a short figure on a tall canvas would keep
 #: a band of white under its last line (#3265). Every row is measured *down
 #: from the canvas top*, so the two share their top rows — statement, vote row,
-#: strip, candidate, line — and differ only in how far below the strip they go.
+#: strip, kept set, line — and differ only in how far below the strip they go.
 FLOOR_ASK_CANVAS_H = 6.35
-FLOOR_CHECK_CANVAS_H = 10.1
-#: How many items the strip shows, and how many of them the candidate is: the
-#: top 32 unvoted items, which is the check's candidate at every floor from 50%
-#: up (#4272). Forty-eight leaves a third of the strip below the line, enough
-#: to read the candidate as the *top* of something rather than as all of it.
-FLOOR_ITEMS = 48
+FLOOR_CHECK_CANVAS_H = 8.65
+#: How many items the strip shows, and how many of them the line keeps: the
+#: top 32 nobody has voted on, the balance's cap at the middle and right-hand
+#: radios (#4413). Sixty-four is the kept set plus the band the check's first
+#: deeper step audits, so that band is exactly the strip's left half (#4444).
+FLOOR_ITEMS = 64
 FLOOR_K = 32
-#: The floor the figures are drawn at — the default every detector starts with —
-#: and the level the check is tested at.
-FLOOR_X = 0.5
-FLOOR_ALPHA = 0.05
 #: The strip's geometry. It starts at the left margin and spans the canvas:
 #: the strip sits low enough that the title notch falls above it, so the top
 #: row needs no indent; the statement above it is what has to start right of
@@ -5083,67 +5082,58 @@ FLOOR_STATEMENT_DROP = 0.75
 #: The row above the strip that both figures label: the model's votes on one
 #: slide, the picks on the other.
 FLOOR_ROW_LABEL_DROP = 1.85
-#: The spot check's five picks, as strip indices — all inside the candidate
-#: (the top 32 of 48 are indices 16–47) and spread through it rather than
-#: crowding its top, which is the one thing about the picks the slide has to
-#: show. Four come back right: the check falls short of 50%, which is the
-#: common outcome at COCO Better's prevalence and the state the copy has to be
-#: honest about.
-FLOOR_PICKS = (18, 25, 31, 38, 45)
-FLOOR_PICK_VOTES = (True, True, False, True, True)
+#: The ✓s and ✗s over the strip. At 64 items neighbouring cells are 12.5pt
+#: apart and a bold 22pt ✗ is 12.8pt wide, so the panel size would print two
+#: neighbouring picks over each other; at this size they keep 3pt between them.
+FLOOR_MARK_PT = VOTE_MARK_PT
 #: The session's own votes, at the strip positions their scores fall on: a
 #: cluster around the line, where autopilot asks the hard questions, and a
 #: cluster at the top, where it asks for likely matches. They are drawn *above*
 #: the strip because they are not in it — the strip is the unvoted corpus.
 FLOOR_MODEL_VOTES = (
-    (3, False),
-    (6, False),
-    (9, True),
-    (11, False),
-    (13, True),
     (15, False),
-    (17, True),
-    (20, False),
-    (44, True),
-    (46, True),
-    (47, True),
+    (19, False),
+    (23, True),
+    (25, False),
+    (28, True),
+    (31, False),
+    (33, True),
+    (37, False),
+    (60, True),
+    (62, True),
+    (63, True),
 )
+#: The balance the check is drawn at: the middle radio, every detector's
+#: default, where a check is advisory — it audits and reports, and the line
+#: keeps its count (#4427).
+FLOOR_BETA = 1.0
+#: The walk's count of the ranking's positives, which turns the picks' shares
+#: into recall: the mixture's, fixed when the check starts. Schematic, set so
+#: the kept set holds about half of them.
+FLOOR_CHECK_POSITIVES = 35.0
+#: The check's bands, as ranks from the top, ``[first, end)``: the three that
+#: hold the kept set, then the one its first deeper step audits. The figure
+#: prints no band's size and no count of picks, so a change to either touches
+#: the presenter notes and not the drawing (#4444).
+FLOOR_BANDS = ((0, 8), (8, 16), (16, 32), (32, 64))
+FLOOR_KEPT_BANDS = 3
+#: Each band's picks, as strip indices, and the user's vote on each. Drawn
+#: uniformly within the band, so some land side by side. The share right falls
+#: down the ranking, four of five in the top band to one of five past the line,
+#: which is what makes the walk's deeper step worse (`_floor_walk`).
+FLOOR_BAND_PICKS = (
+    ((56, True), (58, True), (59, False), (61, True), (63, True)),
+    ((48, False), (50, True), (51, True), (53, False), (55, True)),
+    ((33, False), (37, True), (40, False), (42, False), (46, True)),
+    ((2, False), (9, False), (15, True), (21, False), (27, False)),
+)
+#: How far above the strip the band brackets sit: clear of the tallest vote
+#: mark under them (a 16pt ✗ is 0.31 units over its 0.10 lift) by a label gap.
+FLOOR_BAND_LIFT = 0.70
+#: The walk row under the line: how far below the line's foot its arrows run.
+FLOOR_WALK_DROP = 0.55
 FLOOR_ASK_STAGES = 3
 FLOOR_CHECK_STAGES = 5
-
-
-def _binomial_tail(s: int, n: int, p: float) -> float:
-    """P(X ≥ s) for X ~ Binomial(n, p)."""
-    return float(sum(math.comb(n, k) * p**k * (1 - p) ** (n - k) for k in range(s, n + 1)))
-
-
-def clopper_pearson(s: int, n: int, tail: float) -> tuple[float, float]:
-    """The range the control shows for `s` right of `n` uniform picks, each tail at `tail`.
-
-    The same interval `analyze_floor_candidate_4267.likely_range` prices — the
-    one-sided Clopper–Pearson bounds at level `tail` on each side — computed
-    here by bisection on the exact binomial tail rather than through scipy, so
-    the figure generators keep to the project's own dependencies. Its lower
-    end is the very bound the check is tested at, which is why a check confirms
-    the floor iff that end clears it.
-    """
-    if not 0 <= s <= n:
-        raise ValueError(f"{s} right of {n}")
-
-    def solve(hits: int) -> float:
-        # The p at which P(X ≥ hits) = tail; the tail rises monotonically in p.
-        lo, hi = 0.0, 1.0
-        for _ in range(200):
-            mid = (lo + hi) / 2
-            if _binomial_tail(hits, n, mid) < tail:
-                lo = mid
-            else:
-                hi = mid
-        return (lo + hi) / 2
-
-    lower = 0.0 if s == 0 else solve(s)
-    upper = 1.0 if s == n else 1.0 - solve(n - s)
-    return lower, upper
 
 
 def floor_ask_fig() -> None:
@@ -5165,14 +5155,18 @@ def floor_ask_fig() -> None:
 
 
 def floor_check_fig() -> None:
-    """The spot check that earns the floor's promise, and its three states (#4244, #4272).
+    """The spot check on the kept set: the band walk, and what it says (#4388, #4413, #4427).
 
-    Five stages: the same candidate; five picks drawn uniformly from it; their
-    votes; the likely range those votes support, against the floor; and the
-    three states the control can end in. The range is the shipped rule's —
-    `clopper_pearson` at the check's own level — so the numbers on the drawing
-    are the ones the control would show for these five votes.
+    Five stages: the same kept set and line as `calib-floor-ask`; the ranking
+    cut into bands, and picks drawn at random from each band the kept set
+    holds; the user's votes on them; the walk's step one band deeper and its
+    step one band shallower, both worse, so it ends on the kept set; and what
+    the control says once checked, with the line where it was — at the middle
+    radio a check informs the line and does not move it. The reading is the
+    app's own range over these votes (`_floor_check_reading`), so its numbers
+    are the ones the control would show for them.
     """
+    _floor_walk()
     final = _floor_stage(FLOOR_CHECK_STAGES, "check")
     box = tight_box(final)
     for stage in range(1, FLOOR_CHECK_STAGES):
@@ -5189,8 +5183,7 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of one of the pair."""
     top = FLOOR_ASK_CANVAS_H if variant == "ask" else FLOOR_CHECK_CANVAS_H
     fig, ax = _incl_figure(top)
-    voted = dict(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True)) if variant == "check" and stage >= 3 else {}
-    rows = _floor_first_stage(ax, top, voted)
+    rows = _floor_first_stage(ax, top)
     if variant == "ask":
         _floor_ask_stages(ax, stage, rows)
     else:
@@ -5198,11 +5191,10 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     return fig
 
 
-def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict:
-    """The sentence, the corpus, the candidate and the line: both figures' first page.
+def _floor_first_stage(ax: plt.Axes, top: float) -> dict:
+    """The sentence, the corpus, the kept set and the line: both figures' first page.
 
-    Returns the rows the later stages hang off. `voted` names strip cells drawn
-    as cast votes rather than unlabeled media — the check's picks, once voted.
+    Returns the rows the later stages hang off.
     """
     cell_w = FLOOR_STRIP_W / FLOOR_ITEMS
     strip_top = top - FLOOR_STRIP_DROP
@@ -5224,15 +5216,14 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
         color=INK,
     )
     for index in range(FLOOR_ITEMS):
-        kind = "unlabeled" if index not in voted else ("good" if voted[index] else "bad")
-        _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, kind)
+        _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled")
     # The axis, named the way every score axis in the deck is: best on the right.
-    # Under the strip's left third, which nothing else uses; above it is where
+    # Under the strip's left end, which nothing else uses; above it is where
     # the two figures draw their votes.
     ax.text(
         FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
     )
-    # The candidate: a bracket under the top 32, named once.
+    # The kept set: a bracket under the top 32, named once.
     brace_y = strip_y0 - 0.42
     ax.plot(
         [line_x, line_x, cand_x1, cand_x1],
@@ -5250,7 +5241,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
         fontsize=15,
         color=INK,
     )
-    # The line, at the candidate's foot, in the palette's blue: it is the shipped
+    # The line, at the kept set's foot, in the palette's blue: it is the shipped
     # decision, and the one thing on the drawing the fragment names in colour.
     line_bottom = strip_y0 - 1.15
     ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=BLUE, linewidth=2.6, zorder=6)
@@ -5261,6 +5252,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
         "row_label_y": top - FLOOR_ROW_LABEL_DROP,
         "brace_y": brace_y,
         "line_x": line_x,
+        "line_bottom": line_bottom,
         "cand_x1": cand_x1,
     }
 
@@ -5274,7 +5266,7 @@ def _floor_vote_marks(ax: plt.Axes, rows: dict, votes: tuple[tuple[int, bool], .
             "✓" if good else "✗",
             ha="center",
             va="bottom",
-            fontsize=VOTE_PANEL_MARK_PT,
+            fontsize=FLOOR_MARK_PT,
             color=GREEN if good else RED,
             fontweight="bold",
         )
@@ -5286,7 +5278,7 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
     if stage >= 2:
         _floor_vote_marks(ax, rows, FLOOR_MODEL_VOTES)
         ax.text(
-            (rows["line_x"] + rows["cand_x1"]) / 2 - 1.0,
+            INCL_CANVAS_W / 2 + 2.0,
             rows["row_label_y"],
             "the session's own votes, at their scores: where the model chose to look",
             ha="center",
@@ -5307,109 +5299,182 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         )
 
 
+def _floor_band_cells(band: int) -> range:
+    """The strip indices of check band *band*, worst first."""
+    first, end = FLOOR_BANDS[band]
+    return range(FLOOR_ITEMS - end, FLOOR_ITEMS - first)
+
+
+def _floor_band_positives(bands: int) -> float:
+    """The walk's estimate of the positives in the top *bands* bands: each band's share right times its size."""
+    total = 0.0
+    for band in range(bands):
+        first, end = FLOOR_BANDS[band]
+        votes = [good for _index, good in FLOOR_BAND_PICKS[band]]
+        total += (end - first) * sum(votes) / len(votes)
+    return total
+
+
+def _floor_walk() -> tuple[float, float, float]:
+    """The walk's F-beta estimate one band shallower, at the kept set, and one band deeper.
+
+    `fbeta_score` is the app's: the estimated positives over the walk's count of
+    them. The figure draws both steps as worse, and this is where that claim is
+    checked against the votes it draws.
+    """
+    n_pos = FLOOR_CHECK_POSITIVES
+    shallower, kept, deeper = (
+        fbeta_score(_floor_band_positives(b), FLOOR_BANDS[b - 1][1], n_pos, FLOOR_BETA)
+        for b in (FLOOR_KEPT_BANDS - 1, FLOOR_KEPT_BANDS, FLOOR_KEPT_BANDS + 1)
+    )
+    assert shallower < kept > deeper, (shallower, kept, deeper)
+    return shallower, kept, deeper
+
+
+def _floor_found_words(mid: float) -> str:
+    """The recall range's midpoint in words, as the control words it (`foundWords`, `line-balance.ts`)."""
+    for bound, words in (
+        (0.15, "few of them found"),
+        (0.375, "about a quarter of them found"),
+        (0.625, "about half of them found"),
+        (0.875, "about three quarters of them found"),
+    ):
+        if mid < bound:
+            return words
+    return "nearly all of them found"
+
+
+def _floor_check_reading() -> str:
+    """What the Threshold control says once the check has run, for the votes the figure draws.
+
+    The app's own ranges (`SpotCheck.range` and `recall_range`): each kept
+    band's Clopper–Pearson interval at the walk's split tail, `likely_range` at
+    `range_tail`, weighted by the band's size — over the kept set for precision
+    and over the walk's count of positives for recall. Worded as the control's
+    state line (`balanceSummary`), and rounded the way it rounds.
+    """
+    k = FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][1]
+    assert k == FLOOR_K, k
+    tail = range_tail(FLOOR_KEPT_BANDS, CHECK_ALPHA)
+    lo = hi = 0.0
+    labelled = 0
+    for band in range(FLOOR_KEPT_BANDS):
+        first, end = FLOOR_BANDS[band]
+        votes = [good for _index, good in FLOOR_BAND_PICKS[band]]
+        part = likely_range(sum(votes), len(votes), end - first, tail)
+        lo += (end - first) * part.lo
+        hi += (end - first) * part.hi
+        labelled += len(votes)
+    n_pos = FLOOR_CHECK_POSITIVES
+    found = _floor_found_words((min(1.0, lo / n_pos) + min(1.0, hi / n_pos)) / 2)
+    percent = "–".join(f"{math.floor(100 * x / k + 0.5):d}" for x in (lo, hi))
+    return f"Checked · likely {percent}% right, {found} (checked {labelled}) · {FLOOR_K} kept"
+
+
+def _floor_band_bracket(ax: plt.Axes, rows: dict, band: int) -> None:
+    """A bracket over check band *band*, above its picks' votes: where the band starts and ends.
+
+    Inset a little at each end, so two neighbouring bands read as two brackets.
+    """
+    cells = _floor_band_cells(band)
+    x0 = _floor_cell_x(cells.start) + 0.06
+    x1 = _floor_cell_x(cells.stop) - 0.06
+    y = rows["strip_top"] + FLOOR_BAND_LIFT
+    ax.plot([x0, x0, x1, x1], [y - 0.12, y, y, y - 0.12], color=INK, linewidth=1.6, zorder=5)
+
+
+def _floor_walk_arrow(ax: plt.Axes, x_from: float, x_to: float, y: float, label: str) -> None:
+    """One step the walk tried and did not take: a dashed arrow from the line, its verdict under it."""
+    head_l, head_w = 0.32, 0.26
+    sign = 1.0 if x_to > x_from else -1.0
+    ax.plot([x_from, x_to - sign * head_l], [y, y], color=INK, linewidth=1.8, linestyle=(0, (4, 3)), zorder=5)
+    ax.add_patch(
+        Polygon(
+            [(x_to, y), (x_to - sign * head_l, y + head_w / 2), (x_to - sign * head_l, y - head_w / 2)],
+            closed=True,
+            facecolor=INK,
+            edgecolor="none",
+            zorder=5,
+        )
+    )
+    ax.text((x_from + x_to) / 2, y - head_w / 2 - LABEL_GAP, label, ha="center", va="top", fontsize=15, color=INK)
+
+
 def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
-    """Stages 2–5 of `calib-floor-check`: picks, votes, the range, the states."""
+    """Stages 2–5 of `calib-floor-check`: the picks, their votes, the walk, the reading."""
     cell_w, strip_top = rows["cell_w"], rows["strip_top"]
-    cand_cx = (rows["line_x"] + rows["cand_x1"]) / 2
-    # ── stage 2: five picks, uniform within the candidate ─────────────────────
+    strip_y0 = strip_top - FLOOR_STRIP_H
+    kept_picks = tuple(pick for band in FLOOR_BAND_PICKS[:FLOOR_KEPT_BANDS] for pick in band)
+    deeper_picks = FLOOR_BAND_PICKS[FLOOR_KEPT_BANDS]
+    for band, picks in enumerate(FLOOR_BAND_PICKS):
+        assert all(index in _floor_band_cells(band) for index, _good in picks), band
+    # ── stage 2: the bands the kept set holds, and a few picks from each ──────
     if stage >= 2:
-        for index in FLOOR_PICKS:
-            _acq_cell(ax, _floor_cell_x(index), strip_top - FLOOR_STRIP_H, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
+        for band in range(FLOOR_KEPT_BANDS):
+            _floor_band_bracket(ax, rows, band)
+        for index, _good in kept_picks:
+            _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
         ax.text(
-            cand_cx,
+            (rows["line_x"] + rows["cand_x1"]) / 2,
             rows["row_label_y"],
-            f"{len(FLOOR_PICKS)} picks, drawn uniformly from the candidate",
+            "a few picks, drawn at random from each band",
             ha="center",
             va="bottom",
             fontsize=15,
             color=INK,
         )
     # ── stage 3: the user's votes on them ─────────────────────────────────────
-    right = sum(FLOOR_PICK_VOTES)
     if stage >= 3:
-        _floor_vote_marks(ax, rows, tuple(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True)))
-        ax.text(
-            rows["cand_x1"],
-            rows["row_label_y"],
-            f"{right} of {len(FLOOR_PICKS)} right",
-            ha="right",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-        )
-    # ── stage 4: the range those votes support, against the floor ─────────────
-    lo, hi = clopper_pearson(right, len(FLOOR_PICKS), FLOOR_ALPHA)
-    gauge_y = rows["brace_y"] - 1.85
+        _floor_vote_marks(ax, rows, kept_picks)
+    # ── stage 4: the walk — one band deeper, one band shallower, both worse ───
+    walk_y = rows["line_bottom"] - FLOOR_WALK_DROP
     if stage >= 4:
-        _floor_gauge(ax, gauge_y, lo, hi)
+        _floor_band_bracket(ax, rows, FLOOR_KEPT_BANDS)
+        for index, _good in deeper_picks:
+            _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
+        _floor_vote_marks(ax, rows, deeper_picks)
+        # Both steps leave from the line: its own blue, carried down dashed to
+        # the walk row, so the two arrows read as two moves of one line rather
+        # than as one arrow with two heads.
+        line_x = rows["line_x"]
+        ax.plot(
+            [line_x] * 2,
+            [walk_y, rows["line_bottom"]],
+            color=BLUE,
+            linewidth=2.0,
+            linestyle=(0, (2, 2)),
+            zorder=6,
+        )
+        shallower_x = _floor_cell_x(FLOOR_ITEMS - FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][0])
+        _floor_walk_arrow(ax, line_x - 0.2, FLOOR_STRIP_X0, walk_y, "a band deeper: worse")
+        _floor_walk_arrow(ax, line_x + 0.2, shallower_x, walk_y, "a band shallower: worse")
+    # ── stage 5: what the control says, and what the check did to the line ───
+    if stage >= 5:
+        reading_y = walk_y - 1.45
         ax.text(
             INCL_CANVAS_W / 2,
-            gauge_y - 1.15,
-            f"“Aimed at 50%: likely {round(100 * lo):d}–{round(100 * hi):d}% right (checked {len(FLOOR_PICKS)}).”",
+            reading_y,
+            f"“{_floor_check_reading()}”",
             ha="center",
             va="center",
             fontsize=17,
             color=INK,
         )
-    # ── stage 5: the three states ─────────────────────────────────────────────
-    if stage >= 5:
-        states = (
-            ("unchecked", "nobody has voted on the candidate yet; no range"),
-            ("confirmed", "the range's lower end clears the floor"),
-            ("short", f"it does not: the line keeps the {FLOOR_K} it checked, and says how close"),
-        )
-        name_x = INCL_CANVAS_W / 2 - 3.2
-        for row, (name, meaning) in enumerate(states):
-            y = gauge_y - 2.25 - row * 0.62
-            ax.text(name_x, y, name, ha="right", va="top", fontsize=15, color=INK, fontweight="bold")
-            ax.text(name_x + 0.25, y, "— " + meaning, ha="left", va="top", fontsize=15, color=INK)
-
-
-def _floor_gauge(ax: plt.Axes, gauge_y: float, lo: float, hi: float) -> None:
-    """A 0–100% axis carrying the likely range as a bar, and the floor as a notch."""
-    gauge_x0, gauge_w = FLOOR_STRIP_X0 + 3.6, FLOOR_STRIP_W - 3.6
-    _range_line(ax, gauge_x0, gauge_x0 + gauge_w, gauge_y, z=3)
-    ax.text(gauge_x0 - LABEL_GAP - 0.1, gauge_y, "likely right", ha="right", va="center", fontsize=16, color=INK)
-    for frac, name in ((0.0, "0%"), (1.0, "100%")):
-        ax.text(
-            gauge_x0 + frac * gauge_w,
-            gauge_y - RANGE_FOOT - LABEL_GAP,
-            name,
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=SOFT,
-        )
-    # The range: a bar on the axis, its ends named — except an end that all but
-    # touches an end of the axis, which takes the axis's own label rather than
-    # printing "99%" over "100%".
-    ax.plot(
-        [gauge_x0 + lo * gauge_w, gauge_x0 + hi * gauge_w],
-        [gauge_y] * 2,
-        color=INK,
-        linewidth=9,
-        solid_capstyle="butt",
-        zorder=4,
-    )
-    for frac in (lo, hi):
-        if min(frac, 1.0 - frac) < 0.05:
-            continue
-        ax.text(
-            gauge_x0 + frac * gauge_w,
-            gauge_y - RANGE_FOOT - LABEL_GAP,
-            f"{round(100 * frac):d}%",
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=INK,
-            fontweight="bold",
-        )
-    # The floor, marked above the axis the way every cut in the deck is: a
-    # notch and a name. It is the line's blue because it is what the line was
-    # asked for.
-    floor_x = gauge_x0 + FLOOR_X * gauge_w
-    ax.plot([floor_x] * 2, [gauge_y, gauge_y + 0.42], color=BLUE, linewidth=2.6, zorder=5)
-    ax.text(floor_x, gauge_y + 0.42 + LABEL_GAP, "the floor, 50%", ha="center", va="bottom", fontsize=15, color=INK)
+        for row, words in enumerate(
+            (
+                "At the middle and right-hand radios a check informs the line and does not move it;",
+                "at the left-hand one it may only trim the line, never deepen it.",
+            )
+        ):
+            ax.text(
+                INCL_CANVAS_W / 2,
+                reading_y - 0.75 - row * 0.55,
+                words,
+                ha="center",
+                va="center",
+                fontsize=15,
+                color=INK,
+            )
 
 
 if __name__ == "__main__":

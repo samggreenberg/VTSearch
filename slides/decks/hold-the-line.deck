@@ -56,8 +56,9 @@ slides:
   split-fraction
 
   # 3 — Preference: why a line needs one, the prices that choose it, the
-  # three-radio balance that asks for them (#4413), and what the line can and
-  # cannot claim before anyone checks. Present tense throughout: the deck says
+  # three-radio balance that asks for them (#4413), what the line can and
+  # cannot claim before anyone checks, and what a check says about it without
+  # moving it (#4427). Present tense throughout: the deck says
   # what the app does, and the slider that came before the balance is in the
   # appendix after The End.
   # Second Cut stays last: the acquisition cut is measured from wherever the
@@ -66,8 +67,7 @@ slides:
   inclusion-rank
   inclusion-cost
   floor-ask
-  # floor-check — out until #4427 settles: it still draws the precision
-  # floor's check, and the band walk that replaced it may still change.
+  floor-check
   inclusion-acq
 
   # 4 — Exploration: the Coverage Atlas, how autopilot decides what to ask
