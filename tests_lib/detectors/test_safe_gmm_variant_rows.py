@@ -316,3 +316,22 @@ class TestCutDiagnosticFrame:
     def test_no_diagnostic_rows_without_a_sink(self):
         rows = _run_safe("max_patch")
         assert rows  # the run still works with cut_diag_sink=None
+
+
+class TestTheDefaultArmDrawsTheLabelsLine:
+    """#4452: under the app's default balance the shipped arm draws the labels' line and the test side models Find.
+
+    The first pricing run of the labels line drew the old count line on every
+    cell: the harness's fold scores are float32, and the class model's
+    ``isinstance(float)`` filter dropped every one of them, so no model was ever
+    fitted.  This runs the shipped fused configuration at the default balance.
+    """
+
+    def test_base_rows_carry_both_prevalences_and_find_cuts_the_withheld_half(self):
+        rows = _run_safe_uncached("max_patch", min_precision=None)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        assert base, "no base rows"
+        drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
+        assert drawn, "the default arm never drew the labels' line"
+        assert all(np.isfinite(r["find_prevalence"]) and 0.0 < r["find_prevalence"] <= 0.5 for r in drawn)
+        assert all(np.isfinite(r["train_threshold"]) for r in drawn)

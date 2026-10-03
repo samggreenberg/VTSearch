@@ -122,14 +122,22 @@ def class_score_model(orderings: Sequence[tuple[Sequence[float], Sequence[float]
     """
     if not orderings:
         return None
-    pos: list[float] = []
-    neg: list[float] = []
+    pos_parts: list[np.ndarray] = []
+    neg_parts: list[np.ndarray] = []
     for scores, labels in orderings:
-        for s, y in zip(scores, labels):
-            if not (isinstance(s, (int, float)) and math.isfinite(s) and 0.0 <= s <= 1.0):
-                continue
-            (pos if y >= 0.5 else neg).append(float(s))
-    if not pos or not neg:
+        # Any numeric dtype: the app's folds hold Python floats, the eval
+        # harness's float32 arrays (an isinstance check on ``float`` silently
+        # dropped every float32 score).
+        s = np.asarray(scores, dtype=np.float64).ravel()
+        y = np.asarray(labels, dtype=np.float64).ravel()
+        n = min(s.size, y.size)
+        s, y = s[:n], y[:n]
+        ok = np.isfinite(s) & (s >= 0.0) & (s <= 1.0)
+        pos_parts.append(s[ok & (y >= 0.5)])
+        neg_parts.append(s[ok & (y < 0.5)])
+    pos = np.concatenate(pos_parts) if pos_parts else np.empty(0)
+    neg = np.concatenate(neg_parts) if neg_parts else np.empty(0)
+    if pos.size == 0 or neg.size == 0:
         return None
     xp, xn = _logit(pos), _logit(neg)
     mu_pos, mu_neg = float(xp.mean()), float(xn.mean())

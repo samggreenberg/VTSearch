@@ -59,6 +59,14 @@ class TestTheClassModel:
         m = class_score_model([([0.99, 0.99, 0.01, 0.01], [1.0, 1.0, 0.0, 0.0])])
         assert m is not None and m.sigma >= 0.25
 
+    def test_any_numeric_dtype_is_read(self):
+        """The eval harness's folds hold float32 arrays; an isinstance(float) filter dropped them all (#4452)."""
+        clean = class_score_model(_orderings())
+        f32 = [(np.asarray(s, dtype=np.float32), np.asarray(y, dtype=np.float32)) for s, y in _orderings()]
+        model = class_score_model(f32)
+        assert model is not None and clean is not None
+        assert model.n_pos == clean.n_pos and model.mu_pos == pytest.approx(clean.mu_pos, abs=1e-5)
+
     def test_unscorable_sentinels_are_ignored(self):
         clean = class_score_model(_orderings())
         noisy = [(list(s) + [-1.0, float("nan")], list(y) + [1.0, 0.0]) for s, y in _orderings()]
