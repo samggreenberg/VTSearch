@@ -119,6 +119,15 @@ class TestTiledStage1:
         assert calls == ["empty", "measure"]
         assert "scoring on the CPU" in caplog.text
 
+    def test_a_seeded_crop_queries_whole_and_a_page_by_its_tiles(self, tiled):
+        # #4170: a crop's tiles are fragments of the mark, so a seeded crop is one whole-VLAD query.
+        snap = tiled(2)
+        page = s1.vote_queries({0: None}, snap, {})
+        assert page is not None and page.shape[0] == snap[0]["tile_vectors"].count > 1
+        snap[0] = dict(snap[0], seeded_example=True)
+        crop = s1.vote_queries({0: None}, snap, {})
+        assert crop is not None and crop.shape == (1, DIM)
+
     def test_the_matrix_is_stacked_once_per_loaded_page_set(self, tiled):
         snap = tiled(4)
         first = s1._tile_matrix(snap)
