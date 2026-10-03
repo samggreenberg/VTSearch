@@ -1,8 +1,8 @@
 """A precision floor's line, read off where the positives sit in a ranking (#4357).
 
 A floor *P*'s line keeps a **set**: the top *K* of the ranking, where *K* is the
-floor's unchecked starting candidate (``check_schedule(P).candidate``: the top
-128 at 10%, 64 at 25%, 32 at 50% and above; #4272).  So how good the line is,
+floor's unchecked starting candidate (the top 128 at 10%, 64 at 25%, 32 at 50%
+and above; #4272; ``analyze_line_estimate_4383.floor_schedule``).  So how good the line is,
 and how good the best cut on the same ranking could have been, depends on the
 positives' ranks and on nothing else.  That is what a rank frame records
 (``task_NNNN__rankframes.csv``, ``vtscore.eval.voting_columns.RANK_FRAME_COLUMNS``)
@@ -21,7 +21,7 @@ from collections.abc import Sequence
 import numpy as np
 
 #: The floors the app offers, left to right along its control
-#: (``FLOOR_PRESETS`` in ``frontend/src/app/utils/line-floor.ts``, #4298).
+#: (the floor presets the app offered, #4298).
 FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
 
 
@@ -55,10 +55,14 @@ def ranks_from_scores(ids: Sequence[int], scores: Sequence[float], labels: Seque
 
 
 def kept_count(floor: float, n: int) -> int:
-    """How many items the line at *floor* keeps on a corpus of *n*: the unchecked candidate."""
-    from vtscore.training.thresholds import check_schedule  # noqa: PLC0415
+    """How many items the line at *floor* keeps on a corpus of *n*: the unchecked candidate.
 
-    return int(min(check_schedule(floor).candidate, n))
+    ``32 * 2**max(0, floor(log2(0.5 / P)))``, the precision floor's schedule
+    (``analyze_line_estimate_4383.floor_schedule``), capped at *n*.
+    """
+    import math  # noqa: PLC0415
+
+    return int(min(32 * 2 ** max(0, math.floor(math.log2(0.5 / floor) + 1e-9)), n))
 
 
 def top_k_right(ranks: np.ndarray, k: int) -> int:

@@ -254,9 +254,9 @@ are summarised in
 | `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 | `precision_floor_cut`                     | The largest set whose #4220-estimated precision clears a floor; off the line's path since #4272, and off the Find Stats chart since #4360 |
-| `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `floor_line`) |
-| `check_schedule` / `SpotCheck` / `likely_range` | The precision floor's spot check (#4272): the candidate, rounds and picks a floor costs, the check itself, and the likely range a checked set carries |
-| `LineRanking` / `floor_line` / `floor_state` | The ranking a detector's line keeps a set of, the line the floor draws over it, and the state every response carries |
+| `reporting_line`                          | The estimator's own line at an operating point; the app hands it no estimate any more (see `balance_line`) |
+| `balance_schedule` / `SpotCheck` / `likely_range` | The balance's spot check (#4272, #4413): the cap, bands and picks a walk costs, the walk itself, and the likely ranges a checked set carries |
+| `LineRanking` / `balance_line` / `balance_state` | The ranking a detector's line keeps a set of, the line the balance draws over it, and the state every response carries |
 
 ### `text_sort_threshold(scores, rule=None)`
 
@@ -398,8 +398,7 @@ threshold = threshold_from_folds(folds, inclusion_value=0)   # cheap: a quantile
 
 `CalibrationFolds` is a `NamedTuple` of `(orderings, fallback, models)`. Pass
 `holdout_sink=[]` to either call to also receive, per fold, the training row
-behind each held-out score, so a caller can tell which votes a fold held out
-(the precision floor calibrates only on the learned sort's own draws).
+behind each held-out score, so a caller can tell which votes a fold held out.
 `calibration_folds_cached` memoises it on `det_ctx.calibration_cache` under a
 deterministic key built from `X_list`, `y_list`, the calibrate settings,
 `hidden_dim`, and any `score_rows_by_group` - so a re-cut at another
@@ -447,9 +446,8 @@ back entirely to the GMM threshold.
 
 ### `precision_floor_cut(floor, corpus_scores, pool_scores, fold_orderings, fold_haystacks, ...)`
 
-`vtscore/training/thresholds/precision_floor.py`. The cut a detector draws when
-its precision floor is set (#4245; the control is #4224), ported from the
-estimator #4220 measured
+`vtscore/training/thresholds/precision_floor.py`. The #4220 estimator's cut
+(#4245), ported from the estimator #4220 measured
 ([`docs/experiments/2026-09-28-precision-frames-4220/REPORT.md`](../../../docs/experiments/2026-09-28-precision-frames-4220/REPORT.md)).
 It returns the largest top-*k* of the corpus whose **lower-bound** estimated
 precision is at least `floor`:
@@ -496,27 +494,37 @@ internal unit, not a user preference (#4269) - the app passes
 `PRECISION_FLOOR_FALLBACK_INCLUSION`, and a re-cut passes the acquisition or
 Smart inclusion. With a floor it says what the #4220 estimate says: a floor
 that is `promised` draws the estimate's own threshold, one that promises
-nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **The app no
-longer draws its line here under a floor** (#4272): it hands `reporting_line`
-no estimate, and draws the floor's line with `floor_line` below. The returned
+nothing draws the `PRECISION_FLOOR_FALLBACK_INCLUSION` (0) cut. **The app
+does not draw its line here** (#4272, #4413): it passes `min_precision=None`
+and no estimate, and draws the balance's line with `balance_line` below,
+coming here only when there is no balance or no ranking to keep a set of. The
+returned
 `ReportingLine` carries the verdict, and `line_inclusion` gives the inclusion
 Autopilot's acquisition offset starts from - derived from the line itself when
 no inclusion drew it.
 
-### The spot check: `check_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `floor_line`, `floor_state`
+### The spot check: `balance_schedule`, `SpotCheck`, `likely_range`, `LineRanking`, `balance_line`, `balance_state`
 
-`vtscore/training/thresholds/spot_check.py` (#4272; the #4267 ruling, priced in
-[`docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md`](../../../docs/experiments/2026-09-29-floor-candidate-4267/REPORT.md)).
-Under a precision floor *X* the line keeps a **set**, and a spot check of
-uniform random picks from it measures how much of it is right; the check's
+`vtscore/training/thresholds/spot_check.py` (#4272; the band walk of #4388,
+stopped at the F-beta peak by #4413 and priced in
+[`docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md`](../../../docs/experiments/2026-10-01-fbeta-line-4411/REPORT.md)).
+The line's preference is a **balance**: F-beta's *beta*, with the presets
+`BALANCE_PRESETS` (0.5, 1, 2; `DEFAULT_BETA` 1) and any value in
+`[BETA_MIN, BETA_MAX]` = `[0.25, 4]` accepted. Under a balance the line keeps
+a **set**, and a spot check of uniform random picks from it estimates how much
+of it is right and how much of the corpus's positives it found; the precision
 range comes only from those picks, never from a model.
 
-- `check_schedule(X)` is what a check costs: the starting candidate
-  `K = 32 * 2**max(0, floor(log2(0.5 / X)))` (128 at 10%, 64 at 25%, 32 at
-  50% and above), the rounds `R = log2(K / 32) + 1`, and the picks a round
-  `m = max(5, ceil(ln(alpha / R) / ln X))` (5 at 10-50%, 11 at 75%, 29 at
-  90%) at `CHECK_ALPHA = 0.05`. `rounds_for(k)` sizes the rounds to a
-  candidate a small corpus truncated.
+- `balance_schedule(beta)` is the cap and what a walk from it costs: the
+  starting candidate `K` (`CHECK_BASE_CANDIDATE`, the top 32, at beta <= 1;
+  `CHECK_RECALL_CANDIDATE`, the top 128, above it), the bands that hold it
+  (`rounds_for(K)`: 3 for 32, 5 for 128), and the picks a band
+  (`CHECK_MIN_PICKS`, 5). `check_shape(beta)` is how a check treats the line
+  (#4427): `CHECK_ADVISORY` at beta <= 1 (the walk informs the line and never
+  moves it), `CHECK_TRIM` above (the walk may only step shallower, and the
+  line takes its end). `resolve_line_knobs(beta)` resolves an eval arm's knob:
+  `None` is `DEFAULT_BETA`, `NO_BALANCE` (`"off"`) is no balance (the
+  Inclusion arm), and a number is validated.
 - `LineRanking.from_scores(ids, scores, voted)` is the ranking the line is
   drawn over: sorted, unscorable items dropped, the trainer's voted items
   marked. `candidate(count, also_voted)` is the top *count* unvoted ids,
@@ -525,33 +533,52 @@ range comes only from those picks, never from a model.
   so the item clears its own line however it is compared), `above(threshold)`
   the count at or above it, and `fingerprint(count, also_voted)` the set's
   identity for the `stale` flag.
-- `SpotCheck.start(ranking_ids, P, start_count=None)` fixes the unvoted
-  ranking, cuts it into bands (`band_edges`: the top 8, the next 8, 16, 32,
-  ...), and deals the first band's picks (`draw`); `record({id: right})` takes
-  a band's labels and, once the band is audited, deals the next band the set
-  under test owes or decides it: one band deeper while the band-weighted share
-  of right picks (`estimate()`) meets the floor, one shallower while it does
-  not, stopping on the first reversal. It ends `FLOOR_CONFIRMED` on the
-  deepest set that met the floor (a band edge) or `FLOOR_SHORT` on the first
-  band (#4388). `range()` is the set's likely range, its bands' intervals
-  weighted by size; `as_dict()` the state a client sees (the band pending, the
-  set's `bands`, the walk's `direction`, the `estimate`);
-  `is_stale(ranking, also_voted)` whether the set moved since the check.
-  `CHECK_PROVENANCE` is the provenance its votes are recorded with.
+- `mixture_positives(ranking, labels, also_voted)` is the vote-anchored
+  mixture's count of positives among the unvoted items (`mixture_posterior`,
+  fitted once per ranking and memoised on it), `walk_positives(...)` the
+  count a walk reads recall against (the mixture's, else the cap lowered to
+  what is unvoted, #4419), and `fbeta_count(ranking, beta, labels,
+  also_voted)` the count at which the mixture's F-beta peaks: the unchecked
+  line's proposal.
+- `SpotCheck.start_balance(ranking_ids, beta, n_pos, *, seed=None,
+  start_count=None)` fixes the unvoted ranking and *n_pos*, cuts the ranking
+  into bands (`band_edges`: the top 8, the next 8, 16, 32, ...), starts at the
+  bands holding the cap, and deals the first band's picks (`draw`);
+  `record({id: right})` takes a band's labels and, once the band is audited,
+  deals the next band the set under test owes or decides it. The set's F-beta
+  estimate (`fbeta_estimate()`) is its band-stratified positives - each
+  band's share of right picks (`estimate()` is the set's) times the band's
+  size - over *n_pos*. The walk goes one band deeper while the estimate rises
+  and ends on the peak the first time it falls; from a start whose first
+  deeper step falls, it goes one band shallower while the estimate does not
+  fall. Under `trim` it only steps shallower from the start. It ends
+  `BALANCE_CHECKED` on the peak's band edge, a tie keeping the smaller set.
+  `range()` and `recall_range()` are the set's likely precision and recall
+  ranges, its bands' intervals weighted by size (recall over *n_pos*);
+  `as_dict()` the state a client sees (the band pending, the set's `bands`,
+  the walk's `direction`, the `estimate`, `fbeta`, `recall`);
+  `is_stale(ranking, also_voted)` whether the set moved since the check. The
+  other keywords (`picks`, `tol`, `fine`, `guard`, `shallow_only`) are
+  #4427's harness arms, all off in the app. `CHECK_PROVENANCE` is the
+  provenance its votes are recorded with.
 - `likely_range(right, labelled, candidate, tail)` is a Clopper-Pearson
   interval with each tail at `range_tail(bands)` = alpha / bands (split over
   the set's bands, so their size-weighted mean holds by the union bound),
   exact once the labels cover the band; `clopper_pearson_lower` / `_upper` are
   the bounds.
-- `floor_count(X, result)`, `floor_line(ranking, X, result, also_voted)` and
-  `floor_state(X, result, ranking, also_voted)` are the rule the app's retrain,
-  re-cut and the eval harness's default arm share: the set the finished check
-  ended on (`applicable_result`: a result belongs to the floor it was run at),
-  else the starting candidate, and the `FloorState` every response carries
-  (`status` in `FLOOR_STATES`: `unchecked` / `confirmed` / `short`, `count`,
-  `range`, `stale`, `schedule`).
+- `balance_count(beta, result, proposal, shape)`, `balance_line(ranking,
+  beta, result, also_voted, proposal, shape)` and `balance_state(beta,
+  result, ranking, also_voted, proposal, shape)` are the rule the app's
+  retrain, re-cut and the eval harness's default arm share: the set the
+  finished walk ended on where the check's shape lets it move the line
+  (`applicable_balance`: a result belongs to the beta it was run at), else the
+  unchecked count - the cap, lowered to the *proposal* (`fbeta_count`) - and
+  the `BalanceState` every response carries (`status` in `BALANCE_STATES`:
+  `unchecked` / `checked`, `count`, `precision`, `recall`, `fbeta`, `stale`,
+  `schedule`, `shape`, `audited`). `aim_words(state)` names the balance in a
+  message (`at F1`).
 
-`scripts/check-eval-app-sync.py` pins `check_schedule`, `likely_range` and
+`scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
 
 ---

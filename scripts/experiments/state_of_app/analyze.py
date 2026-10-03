@@ -919,7 +919,7 @@ def returned_at_p_md(cells: pd.DataFrame, lines: pd.DataFrame) -> list[str]:
         "the same sessions, which is exact only while a session ignores P (a review runs one set of sessions "
         "per P, #4408)."
         if own
-        else "The sessions' own floor is not recorded."
+        else "These sessions aimed at no floor (a balance, since #4413); every P here is read off them."
     )
     if lines.empty or not lines[lines["point"] != "text"]["precision"].notna().any():
         return ["## The returned set at each P", "", who, "", "*No rank frames: only click 0 is known.*", ""]

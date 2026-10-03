@@ -1,11 +1,8 @@
-"""The balance as a setting and a per-detector preference (#4413, step 2).
+"""The balance as a setting and a per-detector preference (#4413).
 
-``beta`` is per detector and seeded from the user's setting on first read,
-as the floor is; ``line_preference`` says which of the two draws the line (the
-balance by default since the switch's last step; the floor is deprecated).
-Under the balance a change of beta re-cuts every loaded detector at its own
-beta without a retrain; under the floor it moves nothing.  The detector's
-balance state is the wire shape beside ``threshold``.
+``beta`` is per detector and seeded from the user's setting on first read.  A
+change of beta re-cuts every loaded detector at its own beta without a
+retrain.  The detector's balance state is the wire shape beside ``threshold``.
 """
 
 from __future__ import annotations
@@ -13,9 +10,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tests_lib.sorting.test_mixture_count import _two_populations
-from vtscore.config import DEFAULT_BETA, DEFAULT_LINE_PREFERENCE
-from vtscore.state import get_beta, get_line_preference, set_beta, set_line_preference
+from tests_lib.sorting.test_mixture import _two_populations
+from vtscore.config import DEFAULT_BETA
+from vtscore.state import get_beta, line_knobs, register_setting_persister, set_beta
 from vtscore.state.core import (
     DetectorContext,
     detector_balance_positives,
@@ -31,7 +28,8 @@ from vtscore.training.thresholds import (
     CHECK_ADVISORY,
     CHECK_TRIM,
     BALANCE_CHECKED,
-    FLOOR_UNCHECKED,
+    BALANCE_UNCHECKED,
+    PRECISION_FLOOR_FALLBACK_INCLUSION,
     LineRanking,
     SpotCheck,
     balance_count,
@@ -57,7 +55,13 @@ class TestTheSetting:
         set_thread_detector_context(ctx)
         assert get_beta() == DEFAULT_BETA == 1.0
         assert ctx.beta_seeded and ctx.beta == DEFAULT_BETA
-        assert get_line_preference() == DEFAULT_LINE_PREFERENCE == "balance"
+        assert line_knobs() == {"beta": DEFAULT_BETA}
+
+    @pytest.mark.usefixtures("no_balance")
+    def test_a_cleared_user_balance_seeds_none(self):
+        """A library caller's ``CoreConfig(beta=None)``: no balance, and the line is the Inclusion 0 cut."""
+        set_thread_detector_context(DetectorContext("det-seed-none"))
+        assert get_beta() is None and line_knobs() == {"beta": None}
 
     @pytest.mark.parametrize("bad", [0.0, 0.2, 5.0, -1.0])
     def test_a_balance_outside_the_range_is_refused(self, bad):
@@ -65,17 +69,21 @@ class TestTheSetting:
         with pytest.raises(ValueError, match="beta must be in"):
             set_beta(bad)
 
-    def test_an_unknown_preference_is_refused(self):
-        with pytest.raises(ValueError, match="line_preference must be one of"):
-            set_line_preference("inclusion")
-
-    def test_under_the_floor_a_balance_change_moves_no_line(self, floor_preference):
-        ctx = _ctx("det-beta-under-floor")
+    def test_setting_it_persists_and_recuts_the_active_detector(self):
+        persisted: list = []
+        register_setting_persister("beta", persisted.append)
+        ctx = _ctx("det-beta-set")
         set_thread_detector_context(ctx)
         register_detector_context(ctx)
         set_beta(2.0)
-        assert ctx.beta == 2.0 and ctx.beta_seeded
-        assert ctx.threshold == -999.0, "the floor draws the line; beta is stored for when the balance does"
+        assert persisted == [2.0] and ctx.beta == 2.0 and ctx.beta_seeded
+        assert ctx.threshold == recut_detector_threshold(ctx, beta=2.0) != -999.0
+
+    @pytest.mark.parametrize("key", ["min_precision", "line_preference"])
+    def test_the_precision_floors_setting_keys_are_gone(self, key):
+        """#4421: the floor's keys went with it, so a host still wiring one hears about it."""
+        with pytest.raises(ValueError, match="Unknown setting key"):
+            register_setting_persister(key, lambda _v: None)
 
 
 class TestTheLine:
@@ -98,12 +106,11 @@ class TestTheLine:
     def test_a_balance_serves_no_inclusion_so_smart_recuts_at_its_own(self):
         """Under a balance the line keeps a set, not an inclusion (#4243, #4413): Smart re-cuts at Inclusion 0."""
         from vtscore.state.core import detector_line_inclusion
-        from vtscore.training.thresholds import PRECISION_FLOOR_FALLBACK_INCLUSION
 
         ctx = _ctx("det-line-inclusion")
         assert detector_line_inclusion(ctx, None) == PRECISION_FLOOR_FALLBACK_INCLUSION
-        assert detector_line_inclusion(ctx, None, 1.0) is None
-        assert detector_line_inclusion(ctx, 0.5, None) is None
+        for beta in (0.5, 1.0, 2.0):
+            assert detector_line_inclusion(ctx, beta) is None, "a set, not an inclusion, drew the line"
 
     def test_the_recut_under_a_balance_keeps_the_mixtures_argmax_under_the_cap(self):
         ctx = _ctx()
@@ -153,7 +160,7 @@ class TestTheLine:
         assert state["audited"] == check.k and state["count"] != check.k or state["audited"] == state["count"]
         assert ctx.line_ranking.threshold_for(state["count"], voted) == unchecked
         assert state["precision"]["stale"] is False and state["recall"]["lo"] <= state["recall"]["hi"]
-        assert detector_balance_state(ctx, 2.0)["status"] == FLOOR_UNCHECKED, "a result belongs to its balance"
+        assert detector_balance_state(ctx, 2.0)["status"] == BALANCE_UNCHECKED, "a result belongs to its balance"
 
     def test_a_finished_balance_walk_at_beta_two_trims_and_the_line_takes_its_end(self):
         """#4427: above beta 1 the walk may only step shallower, and the line keeps the set it ended on."""
@@ -170,7 +177,7 @@ class TestTheLine:
     def test_the_state_before_a_check(self):
         ctx = _ctx()
         state = detector_balance_state(ctx, 1.0)
-        assert state["status"] == FLOOR_UNCHECKED and state["beta"] == 1.0
+        assert state["status"] == BALANCE_UNCHECKED and state["beta"] == 1.0
         assert state["count"] == balance_count(1.0, None, detector_balance_proposal(ctx, 1.0))
         assert state["precision"] is None and state["recall"] is None and state["fbeta"] is None
         assert state["schedule"]["candidate"] == 32
@@ -184,11 +191,20 @@ class TestTheLine:
         unseeded = _ctx("det-unseeded-beta")
         register_detector_context(unseeded)
 
-        recompute_detector_thresholds(None, beta=1.0)
+        recompute_detector_thresholds(1.0)
 
         assert mine.threshold == recut_detector_threshold(mine, beta=2.0)
         assert unseeded.threshold == recut_detector_threshold(unseeded, beta=1.0)
         assert mine.threshold != -999.0 and unseeded.threshold != -999.0
+
+    def test_a_detector_with_no_balance_keeps_the_inclusion_zero_cut(self):
+        """No balance (a library caller's): the re-cut is the Inclusion 0 cut; with nothing fitted to re-derive, the line stays."""
+        mine = _ctx("det-no-beta")
+        mine.beta, mine.beta_seeded = None, True
+        register_detector_context(mine)
+        recompute_detector_thresholds(1.0)
+        assert mine.threshold == -999.0, "no fitted cut to re-derive and no balance: the line stays"
+        assert detector_balance_state(mine, None) is None
 
     def test_with_no_ranking_a_balance_falls_through_to_the_inclusion_fallbacks(self):
         bare = DetectorContext("det-bare-recut")

@@ -111,11 +111,11 @@ def resolve_or_train_detector(
     embedder produces no patch grid every bag holds one row and the whole path
     collapses to the historical single-vector behaviour.
 
-    The precision floor is a pure cutoff knob: a change does **not** retrain or
+    The balance is a pure cutoff knob: a change does **not** retrain or
     drop the MLP, it re-derives the threshold from the cached estimators.
     ``train_from_labelset`` passes the detector context down to
     :func:`~vtscore.detectors.training.train_and_threshold`, which caches them
-    on it — without that cache a later floor change can't move the cutoff (it
+    on it — without that cache a later balance change can't move the cutoff (it
     would silently no-op).
 
     *on_progress* receives the training progress (the
@@ -135,9 +135,8 @@ def resolve_or_train_detector(
 
     *ctx_sink*, when given, receives the detector context whose head and
     threshold are returned - the loaded one, or the throwaway a never-loaded
-    detector trains on - so a caller can ask what the precision floor says
-    about that threshold (:func:`vtscore.state.core.detector_floor_state`,
-    #4247).  Nothing is appended when no head is returned.
+    detector trains on - so a caller can ask what the balance says about that
+    threshold (:func:`vtscore.state.core.detector_balance_state`, #4247).  Nothing is appended when no head is returned.
     """
     report = on_progress if on_progress is not None else update_find_progress
     from vtscore.datasets.labelset import LabelSet

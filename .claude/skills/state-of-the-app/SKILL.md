@@ -36,23 +36,12 @@ same edit.
   cut of the same ranking reaches** (`returned_at_beta.png`, the "returned set
   at each balance" table), with its precision and recall beside it. Sessions
   run at `SOTA_BETA=0.5|1|2` (the eval's `CALIB_BETA` arm): this is the
-  standing recipe. The harness's default arm (neither `SOTA_BETA` nor
-  `SOTA_FLOOR`) is the app's default, the balance at beta 1, since #4413's
-  step 6 switched `line_preference` to the balance. The per-floor sessions
-  below are the **floor-era control** (#4408): run them to compare against
-  the floor era, not as the review.
-- **The floor-era control: one set of sessions per precision floor P, the
-  returned set scored at its own P (owner, 2026-10-01 02:20, #4408).** "The quality of our
-  RETURNS matters more than the quality of our RANK." F1 cannot see P (the 50%
-  and 90% lines keep nearly the same set and got the same F1), so the headline
-  is, per P over clicks, the set the app returns **when it aims for P**: its
-  **precision against P** (below P breaks the promise; far above it leaves
-  recall behind) and its **recall against the oracle's recall at P** (the most
-  any cut of the same ranking returns at or above P). Sessions at P = 10%, 50%
-  and 90% (`SOTA_FLOOR`), each analyzed on its own, then `perp.py` reads each P
-  off its own run. AP stays as the ranking's measure; F1 is secondary. The
-  2026-10-01 review read 10% and 90% off P = 50% sessions; that is exact only
-  while a session ignores P.
+  standing recipe. The harness's default arm (no `SOTA_BETA`) is the app's
+  default, the balance at beta 1. "The quality of our RETURNS matters more
+  than the quality of our RANK" (owner, 2026-10-01 02:20, #4408): AP stays as
+  the ranking's measure. The precision floor's per-P sessions (`SOTA_FLOOR`,
+  read by `perp.py`) went with the floor (#4421); `perp.py` still reads the
+  floor-era runs already on disk.
 - **A review runs Binary Photo only by default (owner, 2026-09-26).** Region
   Photo is so slow (~5 h a seed) that it runs only when the owner asks for it
   explicitly: "We'll do that explicitly at some point when we need it." Never
@@ -175,8 +164,6 @@ bash launch.sh cells                                  # login node: the full arr
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 # per beta (#4413, the standing recipe): SOTA_BETA=0.5|1|2 on prepare / redo / analyze -> <date>-b05/-b1/-b2
-# per floor (#4408, the floor-era control): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
-python perp.py --run 0.1=<p10>/analysis-binary --run 0.5=<p50>/analysis-binary --run 0.9=<p90>/analysis-binary --out <dir>
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 

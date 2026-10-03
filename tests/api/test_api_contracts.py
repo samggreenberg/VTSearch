@@ -230,20 +230,27 @@ class TestLearnedSortContract:
             assert isinstance(entry["score"], (int, float))
 
 
-class TestMinPrecisionContract:
-    """GET/POST /api/min-precision response shape."""
+class TestBalanceContract:
+    """GET/POST /api/balance response shape."""
 
-    def test_get_returns_the_floor(self, client):
-        resp = client.get("/api/min-precision")
+    def test_get_returns_the_balance(self, client):
+        resp = client.get("/api/balance")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert isinstance(data["min_precision"], (int, float))
+        assert isinstance(data["beta"], (int, float))
         assert "status" in data and "threshold" in data
+        assert "line_preference" not in data and "min_precision" not in data
 
-    def test_post_returns_the_floor(self, client):
-        resp = client.post("/api/min-precision", json={"min_precision": 0.75})
+    def test_post_returns_the_balance(self, client):
+        resp = client.post("/api/balance", json={"beta": 2.0})
         assert resp.status_code == 200
-        assert resp.get_json()["min_precision"] == 0.75
+        assert resp.get_json()["beta"] == 2.0
+
+    def test_the_min_precision_endpoint_is_gone(self, client):
+        """The precision floor is retired (#4421)."""
+        # 405 for the POST: the SPA fallback answers GET on any path.
+        assert client.get("/api/min-precision").status_code == 404
+        assert client.post("/api/min-precision", json={"min_precision": 0.5}).status_code in (404, 405)
 
     def test_the_inclusion_endpoint_is_gone(self, client):
         """Inclusion is retired as a user preference (#4269)."""
@@ -632,11 +639,11 @@ class TestErrorResponseFormat:
         data = resp.get_json()
         assert "errors" in data
 
-    def test_400_min_precision_error_is_json(self, client):
+    def test_400_balance_error_is_json(self, client):
         # The sorting blueprint returns flask-smorest's standard error
         # envelope: type mismatches surface as 422 with a per-field
         # ``errors`` dict, not the legacy ``{"error": str}`` shape.
-        resp = client.post("/api/min-precision", json={"min_precision": "not_a_number"})
+        resp = client.post("/api/balance", json={"beta": "not_a_number"})
         assert resp.status_code == 422
         data = resp.get_json()
         assert "errors" in data

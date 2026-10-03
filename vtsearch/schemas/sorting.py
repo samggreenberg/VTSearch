@@ -1,4 +1,4 @@
-"""Schemas for the sorting / voting / precision-floor APIs.
+"""Schemas for the sorting / voting / balance APIs.
 
 Covers the routes in ``vtsearch/routes/sorting.py``:
 
@@ -13,12 +13,12 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
 * ``GET  /api/textsort-suggestions``          -> :class:`TextsortSuggestionsResponseSchema`
 * ``POST /api/textsort-suggestions``          -> :class:`TextsortSuggestionRequestSchema` ->
                                                 :class:`OkResponseSchema`
-* ``GET  /api/min-precision``                 -> :class:`MinPrecisionResponseSchema`
-* ``POST /api/min-precision``                 -> :class:`MinPrecisionRequestSchema` ->
-                                                :class:`MinPrecisionResponseSchema`
+* ``GET  /api/balance``                       -> :class:`BalanceResponseSchema`
+* ``POST /api/balance``                       -> :class:`BalanceRequestSchema` ->
+                                                :class:`BalanceResponseSchema`
 
-and the precision floor's spot check in ``vtsearch/routes/precision_check.py``
-(#4272):
+and the balance's spot check in ``vtsearch/routes/precision_check.py``
+(#4272, #4413):
 
 * ``GET  /api/precision-check``                -> :class:`PrecisionCheckResponseSchema`
 * ``POST /api/precision-check/start``          -> :class:`PrecisionCheckResponseSchema`
@@ -41,7 +41,7 @@ schema serialise either path without coercing keys.
 
 from __future__ import annotations
 
-from marshmallow import Schema, ValidationError, fields, validate
+from marshmallow import Schema, fields, validate
 
 
 # ---------------------------------------------------------------------------
@@ -57,23 +57,15 @@ class OkResponseSchema(Schema):
 
 from vtscore.training.thresholds.spot_check import (
     BALANCE_CHECKED,
+    BALANCE_STATES,
     CHECK_CANCELLED,
     CHECK_RUNNING,
     CHECK_SHAPES,
-    FLOOR_STATES,
 )
 
-#: The states a balance can report (#4413); mirrors
-#: :data:`vtscore.training.thresholds.BALANCE_STATES`.
-BALANCE_STATES = (FLOOR_STATES[0], BALANCE_CHECKED)
-
-#: The states a precision floor can report (#4272); mirrors
-#: :data:`vtscore.training.thresholds.FLOOR_STATES`.
-PRECISION_FLOOR_STATES = FLOOR_STATES
-
 #: The states a spot check can be in: its rounds still being voted on, ended
-#: on one of the floor's two checked states or the balance's one, or abandoned.
-PRECISION_CHECK_STATES = (CHECK_RUNNING, *FLOOR_STATES[1:], BALANCE_CHECKED, CHECK_CANCELLED)
+#: on the balance's checked state, or abandoned.
+PRECISION_CHECK_STATES = (CHECK_RUNNING, BALANCE_CHECKED, CHECK_CANCELLED)
 
 
 class LikelyRangeSchema(Schema):
@@ -95,35 +87,11 @@ class LikelyRangeSchema(Schema):
 
 
 class CheckScheduleSchema(Schema):
-    """What a spot check at this floor costs: its starting candidate, rounds and picks a round."""
+    """What a spot check at this balance costs: its starting candidate, rounds and picks a round."""
 
     candidate = fields.Integer(required=True)
     rounds = fields.Integer(required=True)
     picks = fields.Integer(required=True)
-
-
-class FloorStateSchema(Schema):
-    """What the precision floor says about the line a response carries (#4247, #4272).
-
-    Rides beside ``threshold`` on every response that draws a detector's line.
-    Built by :func:`vtscore.state.core.detector_floor_state`.
-    """
-
-    # The detector's floor.  Every detector has one (#4269).
-    min_precision = fields.Float(required=True)
-    # ``unchecked``: no spot check has run at this floor, and the line keeps
-    # the floor's starting candidate.  ``confirmed``: the last check's range
-    # clears the floor.  ``short``: it ended below the floor, and the line
-    # keeps the top 32 it ended on.  The line always keeps a set.
-    status = fields.String(required=True, validate=validate.OneOf(PRECISION_FLOOR_STATES))
-    # How many unvoted items the line keeps: the check's confirmed set, the
-    # top 32 after a short check, or the starting candidate (128 at 10%, 64 at
-    # 25%, 32 at 50% and above), capped by the corpus.
-    count = fields.Integer(required=True)
-    # The check's likely range for the kept set; ``null`` while unchecked.
-    range = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
-    # What a check at this floor would cost.
-    schedule = fields.Nested(CheckScheduleSchema, required=True)
 
 
 class BalanceStateSchema(Schema):
@@ -282,9 +250,7 @@ class LearnedSortResponseSchema(Schema):
     # The acquisition cut Autopilot samples around; this is the only sort with a
     # detector behind it, so the only one that carries one.
     acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
-    # What the precision floor says about ``threshold`` (#4247), on ``done``,
-    # and what the balance says (#4413).
-    floor = fields.Nested(FloorStateSchema, required=False, allow_none=True)
+    # What the balance says about ``threshold`` (#4247, #4413), on ``done``.
     balance = fields.Nested(BalanceStateSchema, required=False, allow_none=True)
 
 
@@ -340,33 +306,6 @@ class TextsortSuggestionRequestSchema(Schema):
     text = fields.String(required=True)
 
 
-def _validate_numeric(value):
-    """Reject booleans, ``null`` and non-numeric values for the floor.
-
-    Booleans are a subclass of ``int`` in Python; without this guard
-    ``true`` / ``false`` would sneak through as ``1`` / ``0``.
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValidationError("Must be a number.")
-
-
-# ---------------------------------------------------------------------------
-# /api/min-precision
-# ---------------------------------------------------------------------------
-
-
-class MinPrecisionResponseSchema(FloorStateSchema):
-    """Response for the deprecated ``GET|POST /api/min-precision``: the floor state, plus the line it draws (#4413)."""
-
-    # The line the detector draws: the last item of the set the floor keeps.
-    # ``null`` when no detector has a threshold.
-    threshold = fields.Float(required=True, allow_none=True)
-    # How many items of the ranking the detector last scored - voted items
-    # included - sit at or above ``threshold``.  ``null`` before a retrain has
-    # scored one.
-    n_returned = fields.Integer(required=True, allow_none=True)
-
-
 # ---------------------------------------------------------------------------
 # /api/precision-check
 # ---------------------------------------------------------------------------
@@ -381,16 +320,15 @@ class CheckBandSchema(Schema):
 
 
 class PrecisionCheckStateSchema(Schema):
-    """A spot check of the active detector's floor: the band being audited, the set under test, labels and range (#4272, #4388)."""
+    """A balance walk of the active detector's line: the band being audited, the set under test, labels and ranges (#4272, #4388, #4413)."""
 
     status = fields.String(required=True, validate=validate.OneOf(PRECISION_CHECK_STATES))
-    # The floor the check is (or was) measuring.
-    # The floor a floor walk runs at; ``null`` on a balance walk (#4413), which
-    # carries ``beta``, its F-beta estimate and the set's recall range instead.
-    min_precision = fields.Float(required=True, allow_none=True)
-    beta = fields.Float(required=False, allow_none=True)
-    fbeta = fields.Float(required=False, allow_none=True)
-    recall = fields.Nested(LikelyRangeSchema, required=False, allow_none=True)
+    # The balance the walk runs at, its F-beta estimate for the set under test
+    # (``null`` while a band of it is still unaudited) and the set's likely
+    # recall range (``null`` before any label).
+    beta = fields.Float(required=True)
+    fbeta = fields.Float(required=True, allow_none=True)
+    recall = fields.Nested(LikelyRangeSchema, required=True, allow_none=True)
     # The round being voted on (1-based; one round per band audited) and how
     # many bands the ranking has in all.
     round = fields.Integer(required=True)
@@ -422,12 +360,10 @@ class PrecisionCheckStateSchema(Schema):
 
 
 class PrecisionCheckResponseSchema(Schema):
-    """Response for every ``/api/precision-check`` verb: the floor's state and the check, if any."""
+    """Response for every ``/api/precision-check`` verb: the balance's state and the check, if any."""
 
-    # The floor's state for the line, exactly as every other carrier reports it.
-    floor = fields.Nested(FloorStateSchema, required=True)
-    # The balance's state for the line (#4413); which of the two draws it is
-    # the ``line_preference`` setting.
+    # The balance's state for the line (#4413), exactly as every other carrier
+    # reports it.
     balance = fields.Nested(BalanceStateSchema, required=True)
     # The running check, or the last finished one; ``null`` when there is
     # neither.
@@ -456,24 +392,14 @@ class BalanceResponseSchema(BalanceStateSchema):
     # and how many items of its last ranking sit at or above it.
     threshold = fields.Float(required=True, allow_none=True)
     n_returned = fields.Integer(required=True, allow_none=True)
-    # Which preference draws the line: ``floor`` or ``balance``.
-    line_preference = fields.String(required=True)
 
 
 class BalanceRequestSchema(Schema):
     """Body for ``POST /api/balance``."""
 
-    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 0.5 / 1 / 2).
-    beta = fields.Raw(required=True, validate=_validate_numeric)
-
-
-class MinPrecisionRequestSchema(Schema):
-    """Body for the deprecated ``POST /api/min-precision`` (#4413)."""
-
-    # A fraction in ``(0, 1]``, clamped to ``[0.01, 1]``.  ``null`` is refused:
-    # every detector has a floor (#4269).  ``fields.Raw`` plus a numeric check
-    # rather than ``fields.Float`` so a boolean is refused too.
-    min_precision = fields.Raw(required=True, validate=_validate_numeric)
+    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 0.5 / 1 / 2).  ``null``,
+    # a boolean, a non-numeric string and ``NaN`` / ``Infinity`` are refused.
+    beta = fields.Float(required=True)
 
 
 # ---------------------------------------------------------------------------

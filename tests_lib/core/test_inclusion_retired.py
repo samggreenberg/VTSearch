@@ -1,6 +1,6 @@
 """Inclusion is retired as a user preference, and pinned to 0 on the library surface (#4269).
 
-The precision floor is the operating point.  Inclusion survives only as the
+The balance is the operating point (#4413).  Inclusion survives only as the
 internal unit the threshold machinery measures cuts in, so the public names
 that used to set it keep importing - an out-of-tree caller is not broken on
 import - but accept only ``0``, with a ``DeprecationWarning``.  Any other value
@@ -34,7 +34,7 @@ class TestTheStateAccessors:
 
     @pytest.mark.parametrize("value", [3, -1, 10])
     def test_set_inclusion_refuses_any_other_value(self, value):
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             state.set_inclusion(value)
 
     def test_the_old_recompute_hook_accepts_only_zero(self):
@@ -42,7 +42,7 @@ class TestTheStateAccessors:
 
         with pytest.warns(DeprecationWarning):
             recompute_detector_thresholds_for_inclusion(0)
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             recompute_detector_thresholds_for_inclusion(4)
 
     def test_a_detector_context_has_no_inclusion(self):
@@ -78,7 +78,7 @@ class TestCoreConfig:
             _config(inclusion=0)
 
     def test_any_other_value_is_refused(self):
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             _config(inclusion=2)
 
 
@@ -88,21 +88,21 @@ class TestTheTrainingEntryPoints:
     def test_train_and_score(self):
         from vtscore.detectors.training import train_and_score
 
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             train_and_score({}, {}, {}, inclusion_value=3)
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             train_and_score({}, {}, {}, 3)
 
     def test_labelset_train_and_score(self):
         from vtscore.detectors.labelset_training import labelset_train_and_score
 
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             labelset_train_and_score(None, None, media_type="audio", clips_dict={}, inclusion_value=-2)  # type: ignore[arg-type]
 
     def test_the_learned_sort(self):
         from vtscore.detectors.learned_sort import build_learned_sort_signature, run_learned_sort
 
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             build_learned_sort_signature(
                 det_ctx=None,
                 ds_ctx=None,
@@ -115,7 +115,7 @@ class TestTheTrainingEntryPoints:
                 calibration_fraction_value=None,
                 inclusion_value=1,
             )
-        with pytest.raises(ValueError, match="min_precision"):
+        with pytest.raises(ValueError, match="set_beta"):
             run_learned_sort(
                 det_ctx=None,
                 ds_ctx=None,

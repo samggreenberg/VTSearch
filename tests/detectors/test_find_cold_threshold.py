@@ -443,11 +443,11 @@ class TestEveryMediaGetsAVerdict:
 
 
 class TestColdFindTrainsUnderTheUsersSettings:
-    def test_it_cuts_at_the_users_floor_and_calibration(self, monkeypatch, floor_preference):
+    def test_it_cuts_at_the_users_balance_and_calibration(self, monkeypatch):
         """A cold detector is trained the way the load and learned-sort paths train it.
 
         The cold path called ``labelset_train_and_score`` with its defaults, so
-        every cold Find was cut with no floor over two calibration splits,
+        every cold Find was cut with no balance over two calibration splits,
         whatever the user had set - while the *live* path over the same detector
         used the user's line.  One labelset should mean one detector either way.
         No Inclusion reaches it: that is no longer a user preference (#4269).
@@ -461,7 +461,7 @@ class TestColdFindTrainsUnderTheUsersSettings:
 
         def _from_settings(cls, settings_path=None):
             return dataclasses.replace(
-                real_from_settings(settings_path), min_precision=0.75, calibrate_count=3, calibration_fraction=0.4
+                real_from_settings(settings_path), beta=2.0, calibrate_count=3, calibration_fraction=0.4
             )
 
         monkeypatch.setattr(config_mod.CoreConfig, "from_settings", classmethod(_from_settings))
@@ -477,6 +477,6 @@ class TestColdFindTrainsUnderTheUsersSettings:
 
         assert seen, "the cold path never trained"
         assert "inclusion_value" not in seen[0]
-        assert seen[0]["min_precision"] == 0.75
+        assert seen[0]["beta"] == 2.0 and "min_precision" not in seen[0]
         assert seen[0]["calibrate_count"] == 3
         assert seen[0]["calibration_fraction"] == 0.4

@@ -390,7 +390,7 @@ describe('FindViewComponent (balance supersession)', () => {
     vi.advanceTimersByTime(200);
     const req = httpMock.expectOne('/api/balance');
     expect(req.request.body).toEqual({ beta: 0.5 });
-    req.flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.7, n_returned: 1, line_preference: 'balance' });
+    req.flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.7, n_returned: 1 });
     expect(sortState.threshold).toBe(0.7);
     expect(sortState.balance?.status).toBe('checked');
     expect(sortState.balance?.beta).toBe(0.5);
@@ -418,7 +418,7 @@ describe('FindViewComponent (balance supersession)', () => {
     expect(stale.cancelled).toBe(true);
     const fresh = httpMock.expectOne('/api/balance');
     expect(fresh.request.body).toEqual({ beta: 0.5 });
-    fresh.flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.9, n_returned: 1, line_preference: 'balance' });
+    fresh.flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.9, n_returned: 1 });
     expect(sortState.threshold).toBe(0.9);
   });
 
@@ -440,7 +440,7 @@ describe('FindViewComponent (balance supersession)', () => {
     vi.advanceTimersByTime(200);
     const retry = httpMock.expectOne('/api/balance');
     expect(retry.request.body).toEqual({ beta: 2 });
-    retry.flush({ ...wireBalance('checked', { beta: 2 }), threshold: 0.6, n_returned: 1, line_preference: 'balance' });
+    retry.flush({ ...wireBalance('checked', { beta: 2 }), threshold: 0.6, n_returned: 1 });
     expect(sortState.threshold).toBe(0.6);
   });
 
@@ -770,7 +770,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       vi.advanceTimersByTime(200);
       httpMock
         .expectOne((req) => req.url === '/api/balance' && req.method === 'POST')
-        .flush({ ...wireBalance(status, { beta: 0.5 }), threshold: 0.5, n_returned: 2, line_preference: 'balance' });
+        .flush({ ...wireBalance(status, { beta: 0.5 }), threshold: 0.5, n_returned: 2 });
       expect(sortState.threshold).toBe(0.5);
       expect(sortState.balance?.status).toBe(status);
       expect(sortState.balance?.beta).toBe(0.5);
@@ -783,7 +783,7 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       vi.advanceTimersByTime(200);
       httpMock
         .expectOne((req) => req.url === '/api/balance' && req.method === 'POST')
-        .flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.3, n_returned: 3, line_preference: 'balance' });
+        .flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.3, n_returned: 3 });
       expect(sortState.threshold).toBe(0.3);
       expect(sortState.balance?.status).toBe('checked');
       expect(view().unverifiedGoodIds()).toEqual([1, 2, 3]);

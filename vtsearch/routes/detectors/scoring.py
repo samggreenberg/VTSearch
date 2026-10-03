@@ -88,21 +88,20 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
     head reused as it was (:func:`~vtscore.detectors.model_loading.cached_head_is_current`)
     brings none when the last one was dropped - by a dataset switch, or by
     ending a Find session - and then the pass drew the stored score cut rather
-    than the set the floor keeps, and a spot check had nothing to draw from.
+    than the set the balance keeps, and a spot check had nothing to draw from.
     So a pass with no ranking builds one from the scores it just computed, with
     the votes a person had cast before it marked voted, as training marks the
-    labelset's items, and draws the line at the set the floor keeps.  A
-    ranking training has just stored is left alone.  Returns the threshold to
+    labelset's items, and draws the line at the set the balance keeps (#4413).
+    A ranking training has just stored is left alone.  Returns the threshold to
     use: *threshold* unchanged when there was a ranking already, or no set to
     keep.
     """
     from vtscore.state.core import (  # noqa: PLC0415
         detector_balance_proposal,
-        detector_line_proposal,
         get_active_detector_context,
         human_voted_ids,
     )
-    from vtscore.training.thresholds import LineRanking, balance_line, floor_line  # noqa: PLC0415
+    from vtscore.training.thresholds import LineRanking, balance_line  # noqa: PLC0415
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
@@ -110,21 +109,15 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
         return threshold
     voted = human_voted_ids(det_ctx)
     det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
-    knobs = line_knobs()
-    beta, floor = knobs["beta"], knobs["min_precision"]
-    if beta is not None:  # the balance draws the line (#4413)
-        kept = balance_line(
-            det_ctx.line_ranking,
-            beta,
-            det_ctx.precision_check,
-            voted,
-            proposal=detector_balance_proposal(det_ctx, beta),
-        )
-        return threshold if kept is None else kept
-    if floor is None:
+    beta = line_knobs()["beta"]
+    if beta is None:
         return threshold
-    kept = floor_line(
-        det_ctx.line_ranking, floor, det_ctx.precision_check, voted, proposal=detector_line_proposal(det_ctx, floor)
+    kept = balance_line(
+        det_ctx.line_ranking,
+        beta,
+        det_ctx.precision_check,
+        voted,
+        proposal=detector_balance_proposal(det_ctx, beta),
     )
     return threshold if kept is None else kept
 
@@ -311,15 +304,15 @@ def find_label(body: dict):
         from vtscore.state.core import get_active_detector_context
 
         labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
-        # The floor's set is drawn on the Stage-1 scores.  A structural re-rank
+        # The balance's set is drawn on the Stage-1 scores.  A structural re-rank
         # then replaces both the ranking and the cut with its classifier's
-        # boundary, as it does on every other path: it has no floor line.
+        # boundary, as it does on every other path: it has no balance line.
         threshold = _keep_line_ranking(results, threshold)
         results, threshold = maybe_labelset_structural_rerank(
             get_active_detector_context(), labelset, results, threshold, snap
         )
         # Store the final (post-rerank) cutoff on the context so server-side reads of
-        # the Find cutoff — the work-queue / boundary-walk endpoints, floor
+        # the Find cutoff — the work-queue / boundary-walk endpoints, balance
         # re-thresholding — agree with the labels this pass just applied. A no-op for
         # the non-structural path (threshold unchanged), authoritative for the
         # structural one.
@@ -350,7 +343,7 @@ def find_label(body: dict):
         # verified item the retrained detector now disagrees with reads as a
         # correction rather than vanishing.
         set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
-        # Freeze the single-pass scores so the line (the precision floor's)
+        # Freeze the single-pass scores so the line (the balance's)
         # re-thresholds without re-scoring, and the Stats precision curve can
         # read them.
         set_find_scores({entry["id"]: entry["score"] for entry in results})
@@ -394,16 +387,14 @@ def find_label(body: dict):
         # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
         # frontend onto them + windowing this response is the remaining slice (see
         # docs/plans/scalability.md S3/S17/S19).
-        from vtscore.state.core import detector_balance_state, detector_floor_state  # noqa: PLC0415
-        from vtsearch.state import get_beta, get_min_precision  # noqa: PLC0415
+        from vtscore.state.core import detector_balance_state  # noqa: PLC0415
+        from vtsearch.state import get_beta  # noqa: PLC0415
 
         return {
             "ok": True,
             "results": results,
             "threshold": round(threshold, 4),
-            # What the floor says about the line (#4272) and what the balance
-            # says (#4413); the line_preference setting names the one that drew it.
-            "floor": detector_floor_state(det_ctx, get_min_precision()),
+            # What the balance says about the line (#4272, #4413).
             "balance": detector_balance_state(det_ctx, get_beta()),
             "good_count": good_count,
             "bad_count": bad_count,
@@ -423,8 +414,8 @@ def find_stats():
     that's the price of not verifying every item - but it reports the real
     counts.  Crosses each item's adopted label against the detector's original
     call (``find_initial_labels``) for a 2x2 confusion, and reports what the
-    precision floor says about the current line (``floor``), so the chart can
-    mark the floor and say whether the line keeps it.
+    balance says about the current line (``balance``): the beta it was cut at
+    and what a spot check found.
 
     The **Kept rate** (``verified_precision``) is the exception to "treat
     unverified as verified": it counts only the items the user checked, since
@@ -435,9 +426,9 @@ def find_stats():
     It carries no model-based estimate (#4360).
     Pure read; no new state.
     """
-    from vtscore.state.core import detector_balance_state, detector_floor_state, get_active_detector_context
+    from vtscore.state.core import detector_balance_state, get_active_detector_context
     from vtsearch.routes.detectors._find_precision import curve_counts, verified_precision_at
-    from vtsearch.state import get_beta, get_min_precision
+    from vtsearch.state import get_beta
 
     det_ctx = get_active_detector_context()
     good = det_ctx.good_votes
@@ -500,9 +491,7 @@ def find_stats():
         "verified_called_good": len(verified_called_good),
         "verified_kept_good": verified_kept,
         "threshold": round(det_ctx.threshold, 4),
-        # The floor the line was cut at, and whether it keeps it (#4246); the
-        # balance, and what its check found (#4413).
-        "floor": detector_floor_state(det_ctx, get_min_precision()),
+        # The balance the line was cut at, and what its check found (#4246, #4413).
         "balance": detector_balance_state(det_ctx, get_beta()),
         "n_scored": len(ranked),
         "n_returned": n_returned,

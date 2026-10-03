@@ -214,31 +214,33 @@ bags and a scoring population that differs from *snap*):
    provided (the haystack the mixture is fitted on).  Without one, the
    cross-calibration cut ships alone.
 
-Returns `(model, threshold)`. The function reads `get_min_precision`,
-`get_calibrate_count`, and `get_calibration_fraction` from `vtscore.state`;
-those getters resolve through `CoreConfig`, so library consumers running
-outside an app must register a `register_core_config_builder` provider.
+Returns `(model, threshold)`. The function reads `line_knobs` (the active
+detector's balance, `get_beta`), `get_calibrate_count`, and
+`get_calibration_fraction` from `vtscore.state`; those getters resolve
+through `CoreConfig`, so library consumers running outside an app must
+register a `register_core_config_builder` provider.
 Passing `det_ctx` caches the fold orderings and the fitted estimator on it so
 a later re-cut can re-derive the threshold without retraining. It also parks
 the ranking the line keeps a set of (`line_ranking`, #4272). It no longer
 builds the #4220 estimate (#4362), so `precision_floor_cache` stays `None`.
-Under a floor
-the threshold keeps a set - the top *count* unvoted items of the haystack, the
-set the detector's last spot check ended on or the floor's starting candidate
-- and with no floor it is the Inclusion 0 cut. `calibrating_groups` is
-deprecated and ignored (#4362): it chose the votes that estimate could use as
-evidence. Leave it unset; passing it emits a `DeprecationWarning`.
+Under a balance the threshold keeps a set - the top *count* unvoted items of
+the haystack, the set the detector's last spot check ended on (where the
+check's shape lets it move the line) or the mixture's F-beta argmax under the
+balance's cap - and with no balance it is the Inclusion 0 cut.
+`calibrating_groups` is deprecated and ignored (#4362): it chose the votes
+that estimate could use as evidence. Leave it unset; passing it emits a
+`DeprecationWarning`.
 
 ### `train_and_score(...)`
 
 `vtscore/detectors/training.py`:
 `train_and_score(clips_dict, good_votes, bad_votes, inclusion_value=None,
 calibrate_count=2, calibration_fraction=None, vote_region_boxes=None,
-det_ctx=None, min_precision=None)`. Vote-aware online trainer; returns
-`(results, threshold, model)`. *min_precision* is the precision floor to cut
-at (`None`: the Inclusion 0 cut). *inclusion_value* is **deprecated**
-(#4269): leave it unset; `0` is accepted with a `DeprecationWarning` and any
-other value raises `ValueError`.
+det_ctx=None, beta=None)`. Vote-aware online trainer; returns
+`(results, threshold, model)`. *beta* is the balance to cut at, F-beta's beta
+in `[0.25, 4]` (`None`: no balance, the Inclusion 0 cut). *inclusion_value*
+is **deprecated** (#4269): leave it unset; `0` is accepted with a
+`DeprecationWarning` and any other value raises `ValueError`.
 
 - `results` - list of `{"id": cid, "score": rounded_float, "best_region": [...]?}`
   dicts, sorted by raw score descending.
@@ -461,7 +463,7 @@ missing. `haystack_for(embedder_name)` may return a `Haystack` to
 calibrate the threshold on a different population than *snap* (the CLI
 uses it for converted / re-clipped scoring sets).
 
-### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, min_precision=None)`
+### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, beta=None)`
 
 `vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
@@ -639,7 +641,7 @@ Every entry point resolves its cache through the active
   average but noisy between retrains). The arithmetic lives in
   `vtscore.detectors.cost_trend`, which the eval harness calls too. Every cost
   is priced at `SMART_INCLUSION` (0: FPR + FNR), at the model's own cut for
-  that inclusion (`smart_cut`), whatever line the floor draws, so one
+  that inclusion (`smart_cut`), whatever line the balance draws, so one
   window never mixes models cut under different rules (issue #4243).
 - **Stable** - prediction flips between successive detectors, counted over
   the still-unlabeled pool with the *whole* pool as denominator. Only

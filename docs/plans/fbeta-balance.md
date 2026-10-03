@@ -10,8 +10,9 @@ have users self-categorize by F-beta. We'd find the threshold based on F-beta
 and progress the SVM based on that F-beta threshold and everything." Ruled:
 **switch to F-beta.**
 
-This supersedes `min-precision.md` as the line's design. What carries over
-from the floor is the machinery: the band walk with uniform audits, the
+This supersedes the precision floor's design (#4224, #4267, #4383, #4389;
+the floor and its plan were removed in #4421, and git history keeps both).
+What carries over from the floor is the machinery: the band walk with uniform audits, the
 vote-anchored mixture as the no-vote fallback, the memoised `LineRanking`,
 the per-preference review. What changes is the stop rule, the no-vote rule,
 what the state reports, and the words.
@@ -36,10 +37,7 @@ what the state reports, and the words.
 - **The preference is a balance, `beta`.** Three presets: **precision-leaning
   0.5**, **balanced 1** (the default), **recall-leaning 2**; any beta in
   `[0.25, 4]` is accepted. It is per detector, seeded from the user setting,
-  as the floor was. `min_precision` is retired as a preference: accepted for
-  one release as a deprecated alias that maps a preset floor to the nearest
-  preset beta (90% -> 0.5, 50% -> 1, 10% -> 2) with a `DeprecationWarning`,
-  refused otherwise.
+  as the floor was.
 - **The line keeps a set**, as it has since #4272: the top *count* unvoted
   items of the ranking the last retrain scored.
   - **Checked:** the band edge where the walk's F-beta estimate peaked.
@@ -153,19 +151,11 @@ is the PR this revision belongs to; step 5's acquisition cut shipped on
 - **The Find Stats chart draws no floor line.** Its legend reads `Line:
   checked (48 kept)` or `Line: the top 32, unchecked`.
 - **The states are `unchecked` and `checked`.** There is no `short`.
-- **`min_precision` and `/api/min-precision` are deprecated, not aliased.**
-  They draw the line only under `line_preference: "floor"`
-  (`PUT /api/settings`), stay for one release, and are removed next release.
-  There is no mapping from a floor to a beta: the floor's presets never were
-  an F-beta (#4411). Every response carries both a `floor` and a `balance`
-  object for that release.
 - **Headless runs export the preference's unchecked set and say so:** the
   `detector_unchecked` event reads `Detector 'det' exports its top 32
-  unchecked (at F1); nobody is here to check it.` under the balance, and
-  carries `beta` beside `min_precision`.
+  unchecked (at F1); nobody is here to check it.`, and carries `beta`.
 - **The eval's default arm is the balance at beta 1**
-  (`simulate_voting_iterations(beta=None, min_precision=None)`;
-  `CALIB_BETA` unset); `CALIB_BETA=0.5|1|2` pins a balance, and
-  `CALIB_MIN_PRECISION=<P>` is the floor arm. The State-of-the-App review
-  runs one set of sessions per beta (`SOTA_BETA`); the per-floor sessions
-  (`SOTA_FLOOR`, #4408) are the floor-era control.
+  (`simulate_voting_iterations(beta=None)`; `CALIB_BETA` unset);
+  `CALIB_BETA=0.5|1|2` pins a balance, and `CALIB_BETA=off` is the Inclusion
+  arm. The State-of-the-App review runs one set of sessions per beta
+  (`SOTA_BETA`).

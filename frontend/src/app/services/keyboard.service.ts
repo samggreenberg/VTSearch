@@ -19,7 +19,7 @@ export interface KeyboardAction {
 
 /**
  * A claim on the vote keys, held by a step that votes on items of its own
- * while it is open: the precision floor's spot check (#4273). While a claim
+ * while it is open: the balance's spot check (#4273, #4413). While a claim
  * is held, ←/→ vote and ↓/↑ navigate for its holder, even from inside a modal,
  * and nothing reaches {@link KeyboardService.action$} - the ranked list behind
  * the step never sees them.

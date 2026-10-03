@@ -73,13 +73,13 @@ def _spy_fit_sizes(monkeypatch) -> list[tuple[int, ...]]:
     return captured
 
 
-@pytest.mark.usefixtures("no_precision_floor")
+@pytest.mark.usefixtures("no_balance")
 class TestExclusionEqualsRemoval:
     """``voted_ids`` over the full snap == the same snap without those media.
 
-    A property of the fold-anchored cut, so it is pinned with no precision
-    floor.  Under a floor it deliberately does not hold: the floor ranks its
-    corpus against the whole haystack, voted items included (#4245, #4221).
+    A property of the fold-anchored cut, so it is pinned with no balance.
+    Under one it deliberately does not hold: the balance keeps a set of the
+    ranking, which marks the voted items rather than dropping them (#4272).
     """
 
     def test_threshold_matches_a_snap_without_the_votes(self):

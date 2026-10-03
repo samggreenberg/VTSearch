@@ -152,18 +152,15 @@ everywhere except those held votes.
   "results": [{"id": 0, "score": 0.9812}, ...],
   "threshold": 0.5,
   "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
-  "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "good_count": 42,
   "bad_count": 458,
   "detector_name": "Dog Barks"
 }
 ```
 
-`balance` and `floor` are the [line state](labeling.md#the-line-state) of
-`threshold`: the set the Good/Bad split keeps, and what a spot check found
-on it. The `line_preference` setting says which of the two drew the line
-(the balance by default; the floor is deprecated and rides along for one
-release). A fresh pass is `unchecked` until a check runs. On
+`balance` is the [line state](labeling.md#the-line-state) of `threshold`:
+the set the Good/Bad split keeps, and what a spot check found on it. A fresh
+pass is `unchecked` until a check runs. On
 patch-region-aware datasets each result additionally carries `best_region`.
 Errors: **400** (no medias loaded, or detector has no labels), **404**
 (detector not found), **409** (active dataset can't supply the detector's
@@ -191,7 +188,6 @@ demand, and returns one result column per detector.
       "detector_name": "Dog Barks",
       "threshold": 0.5,
       "balance": {"beta": 1.0, "status": "unchecked", "count": 32, "precision": null, "recall": null, "fbeta": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
-      "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
       "total_hits": 42,
       "hits": [{"id": 0, "score": 0.98}, ...],
       "negative_hits": [{"id": 7, "score": 0.02}, ...]
@@ -201,13 +197,11 @@ demand, and returns one result column per detector.
 }
 ```
 
-Each detector's `balance` and `floor` are the
-[line state](labeling.md#the-line-state) of its `threshold` (`null` only when
-there was no trained context to ask). Nobody can vote in a headless run, so
-every detector exports its preference's `unchecked` line - under the balance,
-the mixture's F-beta argmax capped at 32 (beta 1 and 0.5) or 128 (beta 2);
-under the deprecated floor, the smaller of the starting candidate and the
-mixture's count (#4389) - and the server logs that the set was never checked.
+Each detector's `balance` is the [line state](labeling.md#the-line-state) of
+its `threshold` (`null` only when there was no trained context to ask).
+Nobody can vote in a headless run, so every detector exports its `unchecked`
+line - the mixture's F-beta argmax capped at 32 (beta 1 and 0.5) or 128
+(beta 2) - and the server logs that the set was never checked.
 
 When an exporter is configured for Auto-Find, an `auto_export` object
 (`{exporter, success, message?/error?, open_url?}` plus any exporter-specific
@@ -243,8 +237,8 @@ GET /api/find/stats
 
 Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
 confusion of the adopted label vs. the detector's original call, the Kept rate,
-what the balance (and the deprecated floor) says about the line, and the
-precision curve the Stats chart draws.
+what the balance says about the line, and the precision curve the Stats chart
+draws.
 
 →
 ```json
@@ -258,7 +252,6 @@ precision curve the Stats chart draws.
   "verified_precision": 0.82, "verified_called_good": 17, "verified_kept_good": 14,
   "threshold": 0.5, "n_scored": 500, "n_returned": 45, "stale": false,
   "balance": {"beta": 1.0, "status": "checked", "count": 48, "precision": {"lo": 0.55, "hi": 0.8, "labelled": 15, "right": 10, "stale": false}, "recall": {"lo": 0.3, "hi": 0.6, "labelled": 15, "right": 10, "stale": false}, "fbeta": 0.61, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
-  "floor": {"min_precision": 0.5, "status": "unchecked", "count": 32, "range": null, "schedule": {"candidate": 32, "rounds": 3, "picks": 5}},
   "precision_curve": [
     {"n_returned": 1, "threshold": 0.98, "checked": 1, "checked_good": 1,
      "verified_precision": 1.0}, ...
@@ -277,12 +270,10 @@ precision curve the Stats chart draws.
   most of its "at least" promises once its reference pool is consistent
   (#4256), so the only range the chart shows for unchecked items is the spot
   check's, in `balance` (#4360, #4413).
-- `balance` and `floor` are the [line state](labeling.md#the-line-state) of
-  the line at `threshold`: the set the line keeps, and the spot check's
-  likely ranges for it. The chart's legend says which it is (`Line: checked
-  (48 kept)` or `Line: the top 32, unchecked`); it draws no floor line any
-  more. The `floor` object is the deprecated preference's reading of the same
-  line, carried for one release.
+- `balance` is the [line state](labeling.md#the-line-state) of the line at
+  `threshold`: the set the line keeps, and the spot check's likely ranges for
+  it. The chart's legend says which it is (`Line: checked (48 kept)` or
+  `Line: the top 32, unchecked`).
 - `stale` is `true` once corrections have been folded into the detector since
   this Find run scored.
 

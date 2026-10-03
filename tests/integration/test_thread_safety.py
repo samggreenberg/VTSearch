@@ -269,11 +269,11 @@ class TestConcurrentApplyLabel:
                 assert i in bad_votes
 
 
-class TestConcurrentSetMinPrecision:
-    """Verify that concurrent set_min_precision keeps in-memory and on-disk state in sync."""
+class TestConcurrentSetBeta:
+    """Verify that concurrent set_beta keeps in-memory and on-disk state in sync."""
 
-    def test_concurrent_set_min_precision_memory_disk_sync(self, isolated_settings):
-        """After concurrent writes, the in-memory floor must equal the persisted value."""
+    def test_concurrent_set_beta_memory_disk_sync(self, isolated_settings):
+        """After concurrent writes, the in-memory balance must equal the persisted value."""
         num_threads = 20
         iterations = 30
         errors = []
@@ -281,11 +281,11 @@ class TestConcurrentSetMinPrecision:
         def worker(value):
             try:
                 for _ in range(iterations):
-                    _state.set_min_precision(value)
+                    _state.set_beta(value)
             except Exception as e:
                 errors.append(e)
 
-        threads = [threading.Thread(target=worker, args=(0.1 + 0.2 * (i % 5),)) for i in range(num_threads)]
+        threads = [threading.Thread(target=worker, args=(0.5 + 0.5 * (i % 5),)) for i in range(num_threads)]
         for th in threads:
             th.start()
         for th in threads:
@@ -293,8 +293,8 @@ class TestConcurrentSetMinPrecision:
 
         assert not errors
         # The critical invariant: in-memory value must match the on-disk value.
-        in_memory = _state.get_min_precision()
-        on_disk = _settings_mod.get_min_precision()
+        in_memory = _state.get_beta()
+        on_disk = _settings_mod.get_beta()
         assert in_memory == on_disk
 
 
