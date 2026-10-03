@@ -384,10 +384,12 @@ def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:
         )
         steps = thr[(thr["category"] == cat) & (thr["point"] == "step")].set_index("t")
         c = curves[curves["category"] == cat].set_index("t")
-        for _, r in ordinary.iterrows():
-            want = f1(float(r["precision"]), float(r["recall"]))
-            assert steps.loc[int(r["t"]), "thr_fbeta"] == pytest.approx(want)
-            assert c.loc[int(r["t"]), "thr_fbeta"] == pytest.approx(want)
+        for t, precision, recall in zip(
+            ordinary["t"].tolist(), ordinary["precision"].tolist(), ordinary["recall"].tolist(), strict=True
+        ):
+            want = f1(float(precision), float(recall))
+            assert steps.loc[int(t), "thr_fbeta"] == pytest.approx(want)
+            assert c.loc[int(t), "thr_fbeta"] == pytest.approx(want)
         assert np.isnan(c.loc[0, "thr_fbeta"]), "no threshold before the first trained click"
         fin = thr[(thr["category"] == cat) & (thr["point"] == "final")].iloc[0]
         assert fin["thr_fbeta"] == pytest.approx(want_final) and fin["beta"] == 1.0

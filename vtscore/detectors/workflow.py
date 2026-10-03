@@ -114,7 +114,7 @@ def apply_and_retrain(  # noqa: C901
                 calibration_fraction=get_calibration_fraction(),
                 vote_region_boxes=region_boxes,
                 det_ctx=det_ctx,
-                **line_knobs(),  # the balance draws the line (#4413)
+                beta=line_knobs()["beta"],  # the balance draws the line (#4413)
             )
             # This head sees only the labels resolvable in this dataset.  Its
             # signature matches the saved labelset exactly when that is all the
