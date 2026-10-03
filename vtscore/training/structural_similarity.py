@@ -70,6 +70,12 @@ K trade-off for an instance-search tool.
 
 STRUCTURAL_DECISION_THRESHOLD = 0.5
 
+#: Decimals a verification score is stored with, and the line is rounded to the same way
+#: (#4464): an unrounded line dropped pages at exactly the Bad ceiling + 1 inliers whenever
+#: their stored score rounded down. At 6 decimals two adjacent inlier counts stay apart up
+#: to ~2,800 inliers (n / (n + 8) moves by 8 / ((n + 8)(n + 9))); at 4 only to ~275.
+SCORE_DECIMALS = 6
+
 #: Geometry cuts for the returned set before a detector's first Bad vote (#4440). Until
 #: then #4367's Bad ceiling is just the 8-inlier gate, which passes hard negatives on
 #: documents. A fit must also have inlier ratio >= this and median reprojection error <=
@@ -333,7 +339,7 @@ def structural_rerank(
             box = stats.inlier_box
         new = dict(entry)
         stage1 = float(new.get(score_key, 0.0) or 0.0)
-        new[score_key] = round(verification, 4)
+        new[score_key] = round(verification, SCORE_DECIMALS)
         if box is not None:
             new["best_region"] = [float(c) for c in box]
         else:
@@ -597,7 +603,7 @@ def _bad_ceiling_threshold(
         return STRUCTURAL_DECISION_THRESHOLD
     fits = cache.best_many(templates, bads, matcher)
     ceiling = max((s.inlier_count if s.model_ok else 0) for s in fits)
-    return scorer.threshold_for(max(scorer.min_inliers, ceiling + 1))
+    return round(scorer.threshold_for(max(scorer.min_inliers, ceiling + 1)), SCORE_DECIMALS)
 
 
 def _rerank_growing(

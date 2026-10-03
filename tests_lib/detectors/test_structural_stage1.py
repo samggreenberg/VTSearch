@@ -299,6 +299,13 @@ class TestBadCeiling:
         _out, gate = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx)
         assert gate == 0.5
 
+    def test_a_page_at_exactly_the_ceiling_plus_one_is_returned(self, tiled, monkeypatch):
+        # #4464: 11 / 19 = 0.578947..., which a 4-decimal score rounded down below the unrounded line.
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 11, 2: 10, 3: 10, 4: 9, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out, thresh = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None})
+        assert {e["id"] for e in out if e["score"] >= thresh} == {0, 1}
+
     def test_a_bad_that_does_not_fit_leaves_the_gate(self, tiled, monkeypatch):
         snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
         results = [{"id": mid, "score": 0.0} for mid in snap]
