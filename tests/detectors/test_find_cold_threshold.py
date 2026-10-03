@@ -151,18 +151,19 @@ class TestColdFindCutsOnTheCorpusItDecides:
     def test_the_corpus_prevalence_moves_verdicts(self, monkeypatch):
         """#4452: the line is the labels' class model at the prevalence estimated on the Find corpus.
 
-        Guard the guard: if the corpus's estimate is pinned to a rare target,
-        the same labels admit fewer of the same corpus - so handing the
-        estimator this corpus (the assertion above) is what sets the verdicts.
+        Guard the guard: pin the corpus's estimate to a common target and the
+        same labels admit more of the same corpus - so handing the estimator
+        this corpus (the assertion above) is what sets the verdicts.
         """
         import vtscore.training.thresholds.labels_line as labels_line_mod
 
         corpus = _cold_corpus()
         shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
-        monkeypatch.setattr(labels_line_mod, "corpus_prevalence", lambda *_a, **_k: 1e-6)
-        rare, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
-        assert len(rare) < len(shipped), (
-            f"the shipped line admitted {len(shipped)} of {len(corpus)} and the rare-target line {len(rare)}"
+        real_fit = labels_line_mod.corpus_fit
+        monkeypatch.setattr(labels_line_mod, "corpus_fit", lambda *a, **k: (0.5, real_fit(*a, **k)[1]))
+        common, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
+        assert len(common) > len(shipped), (
+            f"the shipped line admitted {len(shipped)} of {len(corpus)} and the common-target line {len(common)}"
         )
 
 

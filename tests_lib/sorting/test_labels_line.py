@@ -126,6 +126,23 @@ class TestThePrevalence:
         assert corpus_prevalence(m, [], [], {}) is None
 
 
+class TestTheCorpusSide:
+    def test_a_weak_head_and_high_bads_do_not_run_the_prevalence_away(self):
+        """keyboard@small, the first pricing cells: two Goods barely above Bads picked near the line, and the old
+        EM (negatives modelled by the Bads) estimated 34% for a 0.44% target.  The bulk is fitted on the corpus."""
+        rng = np.random.default_rng(5)
+        orderings = [(list(_sig([0.5, 0.7])) + list(_sig(rng.normal(0.0, 0.8, 20))), [1.0] * 2 + [0.0] * 20)]
+        corpus = np.r_[_sig(rng.normal(-1.5, 1.4, 5800)), _sig(rng.normal(0.4, 0.8, 25))]
+        line = fit_labels_line(orderings, corpus, None, {})
+        assert line is not None and line.prevalence < 0.05
+        assert int((corpus >= line.threshold(1.0)).sum()) < 1000
+
+    def test_the_negatives_are_the_corpus_bulk(self):
+        line = fit_labels_line(_orderings(), _corpus(), None, {})
+        assert line is not None and line.negatives is not None
+        assert line.negatives.mu == pytest.approx(-4.0, abs=0.3) and line.negatives.sigma == pytest.approx(1.2, abs=0.3)
+
+
 class TestFindOnACorpusWithNoPositives:
     def test_the_line_keeps_next_to_nothing_where_the_count_kept_thirty(self):
         """#4452's case: 200 images, no positives; the count line kept 26-32 at beta <= 1."""

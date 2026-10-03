@@ -15,9 +15,11 @@ derived from two things only:
   the posterior is monotone in the score and the line is a single cut.  Any
   embedder re-derives this from the same labels; the same embedder and labels
   re-derive the same model, since every fit is seeded.
-* **How common the target is in the corpus being decided.**  Estimated on
-  that corpus with the same class model (:func:`estimate_positives`, an EM over
-  its unvoted scores, its Good votes counted as they are).  Train estimates it
+* **How common the target is in the corpus being decided, and what its
+  negatives look like.**  Estimated on that corpus (:func:`fit_corpus`): its
+  unvoted scores are a mixture of the labels' Good component (fixed) and a
+  normal for the corpus's own bulk of negatives, fitted with their share; its
+  Good votes count as they are.  Train estimates it
   on the dataset it trains on and Find on the dataset it searches; the owner's
   working assumption (2026-10-02) is that a Find corpus has the properties of
   the Train corpus, so the two estimates - and the two lines - agree, and when
@@ -149,89 +151,124 @@ def class_score_model(orderings: Sequence[tuple[Sequence[float], Sequence[float]
     return ClassScoreModel(mu_pos, mu_neg, sigma, int(xp.size), int(xn.size))
 
 
-def labels_line_threshold(model: ClassScoreModel, prevalence: float, beta: float) -> float:
+@dataclass(frozen=True)
+class CorpusNegatives:
+    """The negatives of the corpus being decided: a normal on the logit scale, fitted there (#4452)."""
+
+    mu: float
+    sigma: float
+
+
+def labels_line_threshold(
+    model: ClassScoreModel, prevalence: float, beta: float, negatives: CorpusNegatives | None = None
+) -> float:
     """The score at which the kept set's expected F-*beta* peaks, in a corpus at *prevalence*.
 
     With ``S1`` and ``S0`` the shares of positives and negatives at or above a
     cut, a corpus at prevalence ``p`` keeps ``p S1`` true and ``(1 - p) S0``
     false matches per item, and misses ``p (1 - S1)``, so
-    ``F = (1 + b^2) p S1 / (p S1 + b^2 p + (1 - p) S0)``.  Searched on a fine
-    logit grid around the two class means; a tie keeps the higher cut.
-    Nothing here reads the corpus the line will be applied to.
+    ``F = (1 + b^2) p S1 / (p S1 + b^2 p + (1 - p) S0)``.  ``S1`` is the labels'
+    Good component; ``S0`` the corpus's *negatives* when given (the fit
+    :func:`fit_corpus` makes), else the labels' Bad component.  Searched on a
+    fine logit grid; a tie keeps the higher cut.
     """
     p = min(max(float(prevalence), PREVALENCE_MIN), PREVALENCE_MAX)
     b2 = float(beta) * float(beta)
-    lo = min(model.mu_neg, model.mu_pos) - _SEARCH_SPREADS * model.sigma
-    hi = max(model.mu_neg, model.mu_pos) + _SEARCH_SPREADS * model.sigma
+    mu0, s0 = (negatives.mu, negatives.sigma) if negatives is not None else (model.mu_neg, model.sigma)
+    lo = min(mu0 - _SEARCH_SPREADS * s0, model.mu_pos - _SEARCH_SPREADS * model.sigma)
+    hi = max(mu0 + _SEARCH_SPREADS * s0, model.mu_pos + _SEARCH_SPREADS * model.sigma)
     x = np.linspace(lo, hi, _SEARCH_POINTS)
     from scipy.stats import norm  # noqa: PLC0415
 
     s1 = norm.sf((x - model.mu_pos) / model.sigma)
-    s0 = norm.sf((x - model.mu_neg) / model.sigma)
+    s0_ = norm.sf((x - mu0) / s0)
     with np.errstate(invalid="ignore", divide="ignore"):
-        f = (1.0 + b2) * p * s1 / (p * s1 + b2 * p + (1.0 - p) * s0)
+        f = (1.0 + b2) * p * s1 / (p * s1 + b2 * p + (1.0 - p) * s0_)
     f = np.nan_to_num(f, nan=0.0)
     best = float(f.max())
     i = int(np.flatnonzero(f >= best - 1e-12).max())
     return _sigmoid(float(x[i]))
 
 
-def estimate_positives(
+def fit_corpus(
     model: ClassScoreModel,
     unvoted_scores: Any,
     n_good: int,
-    prior: float | None = None,
     *,
-    iterations: int = 200,
-    tol: float = 1e-8,
-) -> float:
-    """How many positives a corpus holds: its Good votes plus the EM estimate among its unvoted items.
+    iterations: int = 500,
+    tol: float = 1e-9,
+) -> tuple[float, CorpusNegatives]:
+    """How many positives a corpus holds, and its negatives: ``(Good votes + EM positives, CorpusNegatives)``.
 
-    The EM (Saerens, Latinne & Decaestecker, 2002) finds the prevalence of
-    the unvoted remainder that the class model's posteriors average to.  It
-    starts from *prior* when there is one.
+    The corpus's unvoted scores are a two-part mixture: positives distributed
+    as the labels' Good component (fixed - what the labels know), negatives a
+    normal fitted here jointly with their share (the corpus's own bulk).  The
+    labels' Bads are not the negatives' distribution: active learning picks
+    them near the line, far above the bulk, and modelling the bulk with them
+    let the prevalence run away (34% for a 0.44% target on the first pricing
+    cells).  Fitting the bulk on the corpus keeps a corpus with no positives
+    at a share near zero.
     """
-    s = _finite_unit(unvoted_scores)
-    if s.size == 0:
-        return float(n_good)
-    pi = min(max(float(prior) if prior is not None else 0.01, PREVALENCE_MIN), PREVALENCE_MAX)
+    from scipy.stats import norm  # noqa: PLC0415
+
+    x = _logit(_finite_unit(unvoted_scores))
+    if x.size == 0:
+        return float(n_good), CorpusNegatives(model.mu_neg, model.sigma)
+    mu0 = float(np.median(x))
+    s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), MIN_LOGIT_SIGMA)
+    pi = 0.01
+    r = np.zeros_like(x)
     for _ in range(iterations):
-        new = float(model.posterior(s, pi).mean())
-        new = min(max(new, PREVALENCE_MIN), PREVALENCE_MAX)
-        if abs(new - pi) < tol:
-            pi = new
+        f1 = pi * norm.pdf(x, model.mu_pos, model.sigma)
+        f0 = (1.0 - pi) * norm.pdf(x, mu0, s0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            r = np.nan_to_num(f1 / (f1 + f0), nan=0.0)
+        new_pi = min(max(float(r.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
+        w = 1.0 - r
+        sw = float(w.sum())
+        if sw <= 0:
             break
-        pi = new
-    return float(n_good) + float(model.posterior(s, pi).sum())
+        new_mu0 = min(float((w * x).sum()) / sw, model.mu_pos)
+        new_s0 = max(math.sqrt(float((w * (x - new_mu0) ** 2).sum()) / sw), MIN_LOGIT_SIGMA)
+        done = abs(new_pi - pi) < tol and abs(new_mu0 - mu0) < 1e-7 and abs(new_s0 - s0) < 1e-7
+        pi, mu0, s0 = new_pi, new_mu0, new_s0
+        if done:
+            break
+    return float(n_good) + float(r.sum()), CorpusNegatives(mu0, s0)
+
+
+def estimate_positives(model: ClassScoreModel, unvoted_scores: Any, n_good: int, prior: float | None = None) -> float:
+    """How many positives a corpus holds: its Good votes plus the EM estimate among its unvoted items (:func:`fit_corpus`)."""
+    del prior  # the corpus fit starts from a fixed small share
+    return fit_corpus(model, unvoted_scores, n_good)[0]
 
 
 @dataclass(frozen=True)
 class LabelsLine:
-    """What a retrain leaves for the line: the labels' class model and the prevalence estimated on a corpus."""
+    """What a retrain leaves for the line: the labels' class model, and the corpus's prevalence and negatives."""
 
     model: ClassScoreModel
     prevalence: float
+    negatives: CorpusNegatives | None = None
 
     def threshold(self, beta: float) -> float:
-        return labels_line_threshold(self.model, self.prevalence, beta)
+        return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
 
     def on_corpus(
         self, scores: Any, ids: Iterable[int] | None = None, labels: Mapping[int, bool] | None = None
     ) -> "LabelsLine":
-        """The same class model with the prevalence re-estimated on another corpus (a Find pass over a new dataset)."""
-        p = corpus_prevalence(self.model, scores, ids, labels, prior=self.prevalence)
-        return LabelsLine(self.model, self.prevalence if p is None else p)
+        """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
+        fit = corpus_fit(self.model, scores, ids, labels)
+        return self if fit is None else LabelsLine(self.model, fit[0], fit[1])
 
 
-def corpus_prevalence(
+def corpus_fit(
     model: ClassScoreModel,
     scores: Any,
     ids: Iterable[int] | None = None,
     labels: Mapping[int, bool] | None = None,
-    *,
-    prior: float | None = None,
-) -> float | None:
-    """The prevalence *model* estimates for a corpus: its Good votes plus the EM among its unvoted items, over its size.
+) -> tuple[float, CorpusNegatives] | None:
+    """``(prevalence, negatives)`` for a corpus: its Good votes plus the EM positives over its size, and its bulk.
 
     *labels* are the votes that sit in this corpus (``True`` = Good); a Find
     corpus usually holds none.  ``None`` for a corpus with no scorable item.
@@ -245,8 +282,22 @@ def corpus_prevalence(
     voted = dict(labels or {})
     unvoted = np.array([s for i, s, k in zip(id_list, a, keep) if k and int(i) not in voted], dtype=np.float64)
     n_good = sum(1 for i, k in zip(id_list, keep) if k and voted.get(int(i)) is True)
-    positives = estimate_positives(model, unvoted, n_good, prior=prior)
-    return min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX)
+    positives, negatives = fit_corpus(model, unvoted, n_good)
+    return min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX), negatives
+
+
+def corpus_prevalence(
+    model: ClassScoreModel,
+    scores: Any,
+    ids: Iterable[int] | None = None,
+    labels: Mapping[int, bool] | None = None,
+    *,
+    prior: float | None = None,
+) -> float | None:
+    """The prevalence :func:`corpus_fit` estimates for a corpus; ``None`` with no scorable item."""
+    del prior
+    fit = corpus_fit(model, scores, ids, labels)
+    return None if fit is None else fit[0]
 
 
 def _in_sample_ordering(
@@ -289,10 +340,10 @@ def fit_labels_line(
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
     if model is None:
         return None
-    p = corpus_prevalence(model, corpus_scores, corpus_ids, labels)
-    if p is None:
+    fit = corpus_fit(model, corpus_scores, corpus_ids, labels)
+    if fit is None:
         return None
-    return LabelsLine(model, p)
+    return LabelsLine(model, fit[0], fit[1])
 
 
 __all__ = [
@@ -300,8 +351,10 @@ __all__ = [
     "PREVALENCE_MAX",
     "PREVALENCE_MIN",
     "ClassScoreModel",
+    "CorpusNegatives",
     "LabelsLine",
     "class_score_model",
+    "corpus_fit",
     "corpus_prevalence",
     "estimate_positives",
     "fit_labels_line",
