@@ -458,7 +458,7 @@ build `(X, y)`, run `train_and_threshold`, store the result on
 `det_ctx.model_labels_sig` with the labelset's signature. Returns `True` on success,
 `False` when fewer than 2 cached vectors exist or one class is
 missing. `haystack_for(embedder_name)` may return a `Haystack` to
-estimate the line's prevalence on a different population than *snap* (the
+fit the line's corpus side on a different population than *snap* (the
 CLI uses it for converted / re-clipped scoring sets); the class model the
 line is cut from comes from the labels either way (#4452).
 

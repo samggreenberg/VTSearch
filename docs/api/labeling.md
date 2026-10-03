@@ -38,12 +38,12 @@ as the floor was.
 
 Since #4452 the line comes **from the labels alone**, so an exported labelset
 draws it again on any corpus: the calibration folds' held-out scores of the
-votes give a class model (two normals of one spread on the logit scale), the
-model's EM over the unvoted scores of the corpus being decided gives its
-prevalence (the Train dataset in Train, the searched dataset in Find, AutoRun
-and the CLI), and the threshold is the score where the kept set's expected
-F-beta peaks at that prevalence ([`docs/ML.md`](../ML.md#threshold-calibration)
-has the model). There is no count and no cap: the line keeps every unvoted
+votes give a class model (two normals of one spread on the logit scale);
+fits over the unvoted scores of the corpus being decided (the Train dataset in
+Train, the searched dataset in Find, AutoRun and the CLI) give how many
+positives it holds and each item's chance of being one; and the threshold is
+the cut where the expected F-beta of what it would return from that corpus
+peaks ([`docs/ML.md`](../ML.md#threshold-calibration) has the model). There is no count and no cap: the line keeps every unvoted
 item at or above the threshold, which on a corpus with nothing like the
 target can be none. A detector whose folds support no class model (too few
 votes, one class) keeps its retrain's fallback cut, never a count.

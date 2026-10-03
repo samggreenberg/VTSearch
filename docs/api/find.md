@@ -164,8 +164,8 @@ everywhere except those held votes.
 on it. The `line_preference` setting says which of the two drew the line
 (the balance by default; the floor is deprecated and rides along for one
 release). Under the balance the threshold is the labels' line (#4452): the
-class model the detector's labels give its head, with the prevalence
-re-estimated on this dataset's scores - what a Train on a dataset like this
+class model the detector's labels give its head, with the corpus side (how
+many positives, each item's chance) re-fitted on this dataset's scores - what a Train on a dataset like this
 one would draw. Nothing is counted on the scored corpus, so a dataset with
 nothing like the target can come back with no Good split at all. A fresh pass
 is `unchecked` until a check runs. On
@@ -210,7 +210,7 @@ Each detector's `balance` and `floor` are the
 [line state](labeling.md#the-line-state) of its `threshold` (`null` only when
 there was no trained context to ask). Nobody can vote in a headless run, so
 every detector exports its preference's `unchecked` line - under the balance,
-the labels' line with the prevalence estimated on the active dataset, the
+the labels' line with the corpus side fitted on the active dataset, the
 same line a Find there draws (#4452); under the deprecated floor, the smaller
 of the starting candidate and the mixture's count (#4389) - and the server
 logs that the set was never checked.
