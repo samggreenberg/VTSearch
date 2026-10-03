@@ -132,13 +132,17 @@ slides:
   # documents changed: the keypoint budget, the shortlist and why a page
   # vector cannot build one, and the votes. Tiles shipped after these slides
   # were drawn (#4378, #4415): the notes say so, and the tiles figure still
-  # draws the old single-layer pick until #4455 pins the app's own.
+  # draws the old single-layer pick until #4455 pins the app's own. Last,
+  # where the line goes on documents: Goods rank, Bads set the line (#4367),
+  # and tight fits hold it before the first Bad (#4440), charted from the
+  # three runs' committed CSVs (`make-logo-line-fig.py`).
   logo-keypoints
   logo-match
   logo-budget
   logo-stages
   logo-tiles
   logo-votes
+  logo-line
 
   # 8 — Step by Step: the tool as a how-to (#4202). Section 1 shows the same
   # session as an argument; this shows it as instructions, every click marked
