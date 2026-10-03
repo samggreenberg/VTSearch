@@ -249,18 +249,44 @@ def corpus_prevalence(
     return min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX)
 
 
+def _in_sample_ordering(
+    scores: Any, ids: Iterable[int] | None, labels: Mapping[int, bool]
+) -> tuple[list[float], list[float]]:
+    """The head's scores of the labelled items in a corpus, as one ``(scores, labels)`` ordering."""
+    a = np.asarray(scores, dtype=np.float64)
+    id_list = list(ids) if ids is not None else list(range(a.size))
+    out_s: list[float] = []
+    out_y: list[float] = []
+    for i, s in zip(id_list, a):
+        y = labels.get(int(i))
+        if y is not None:
+            out_s.append(float(s))
+            out_y.append(1.0 if y else 0.0)
+    return out_s, out_y
+
+
 def fit_labels_line(
     orderings: Sequence[tuple[Sequence[float], Sequence[float]]] | None,
     corpus_scores: Any,
     corpus_ids: Iterable[int] | None = None,
     labels: Mapping[int, bool] | None = None,
 ) -> LabelsLine | None:
-    """The labelset's line for a retrain over a corpus; ``None`` when the folds cannot support a class model.
+    """The labelset's line for a retrain over a corpus; ``None`` when the labels cannot support a class model.
 
     The class model comes from the folds' held-out scores of the labels; the
     prevalence from the corpus the retrain scored (:func:`corpus_prevalence`).
+
+    **Too few labels to calibrate.**  The folds need two Goods to hold one out;
+    with one (a small target early in a session) they fall back and hold
+    nothing.  The class model needs only one: the spread is pooled with the
+    Bads.  So the head's own scores of the labelled items in this corpus stand
+    in - in-sample, so the Goods sit high and the line leans precise, which is
+    the safe side.  Still the labels alone, never a count on the corpus: the
+    fallback before this kept thousands of a corpus at its prevalence (#4452).
     """
     model = class_score_model(orderings)
+    if model is None and labels:
+        model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
     if model is None:
         return None
     p = corpus_prevalence(model, corpus_scores, corpus_ids, labels)

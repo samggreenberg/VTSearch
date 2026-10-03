@@ -55,6 +55,19 @@ class TestTheClassModel:
         assert class_score_model(orderings) is None
         assert fit_labels_line(orderings, [0.5, 0.6]) is None
 
+    def test_one_good_is_enough_through_the_labels_in_sample_scores(self):
+        """Folds that held nothing out (one Good): the head's scores of the labelled items stand in (#4452)."""
+        scores = _corpus()
+        ids = list(range(scores.size))
+        top = int(np.argmax(scores))
+        lows = [int(i) for i in np.argsort(scores)[:40]]
+        labels = {top: True, **dict.fromkeys(lows, False)}
+        line = fit_labels_line([], scores, ids, labels)
+        assert line is not None and line.model.n_pos == 1 and line.model.n_neg == 40
+        assert fit_labels_line([], scores, ids, {top: True}) is None, "no Bad: no model"
+        kept = int((scores >= line.threshold(1.0)).sum())
+        assert kept < 200, "never the thousands the population fallback kept"
+
     def test_perfect_separation_keeps_a_minimum_spread(self):
         m = class_score_model([([0.99, 0.99, 0.01, 0.01], [1.0, 1.0, 0.0, 0.0])])
         assert m is not None and m.sigma >= 0.25
