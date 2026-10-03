@@ -261,14 +261,10 @@ found; nobody can vote in a headless run, so the run exports the unchecked
 set as it is. The run prints a line naming the detector and the size of the
 set - `Detector 'det' exports its top 32 unchecked (at F1); nobody is here to
 check it.` - which is a `detector_unchecked` event under
-`--progress-format json` carrying `beta` beside `min_precision`, and every
+`--progress-format json` carrying `beta`, `status` and `count`, and every
 result the detector produces carries a `balance` object beside its
 `threshold` (`status` `unchecked`, with `count`), which the JSON exporters
 write out with the hits. See [the line state](api/labeling.md#the-line-state).
-The deprecated precision floor (`min_precision`; the `floor` object, which
-still rides beside `balance` for one release) draws the line instead only
-when the `line_preference` setting is `floor`, and the event then reads
-`(aiming at 25% right)`.
 
 **How to get the files:**
 

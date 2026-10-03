@@ -25,8 +25,8 @@ on the left act on only the matches you haven't checked yet. What they send
 is whatever the line keeps at that moment: the unchecked starting set, or
 the set a spot check ended on. An AutoRun of the same detector has nobody to
 check it, so it sends the unchecked starting set and says so, with a
-`balance` entry beside the threshold (and the older `floor` entry alongside
-it for now) in the formats that write out the full results.
+`balance` entry beside the threshold in the formats that write out the full
+results.
 
 ## Step 1: Choose what to send
 

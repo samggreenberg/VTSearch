@@ -231,8 +231,7 @@ not list every commit. Use `git log` for the full history.
   move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
   or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
   on-screen control that replaces the stepper arrives in #4246. New endpoint:
-  `GET|POST /api/min-precision`; see
-  [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
+  `GET|POST /api/min-precision` (removed with the floor, #4421).
 
 - **An unpromised line says so** (issue #4247). When a detector can't yet
   promise its precision floor - too little evidence, or no cut on the
@@ -245,8 +244,7 @@ not list every commit. Use `git log` for the full history.
   record that it was unpromised, in the log and as a `floor` entry beside
   each detector's `threshold`. Every response that carries a detector's
   line (the learned sort, `/api/find-label`, `/api/auto-detect`) now
-  carries that `floor` too; see
-  [the floor state](docs/api/labeling.md#the-floor-state).
+  carries that `floor` too (replaced by `balance`, #4413, #4421).
 
 - **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
   pages under `docs/user/howto/` each walk through one task click by click,

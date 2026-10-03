@@ -56,7 +56,7 @@
     "harness": "107b8ec9007651c51bec2b4e30649d2013de40510615bf022965aaf66df6ac19"
   },
   "thresholds.balance_default": {
-    "app": "44eb57b5b6627bd4a279c6cfb1002b552add033d57b9a746fa60aa82ed6acec5",
+    "app": "15f91c543aa7ddff60f9cd0dfaeb5cb31f4d92be569dc7c111a172fb4f7ef46a",
     "harness": "d0b51afbd08669364ad3fd916134bb5abf5604d59e1adfeb138e8099bf5d66f5"
   },
   "thresholds.fold_anchored_fit_then_cut": {

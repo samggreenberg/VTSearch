@@ -308,7 +308,9 @@ MIRRORS: list[Mirror] = [
         ),
         divergence=(
             "INTENTIONAL: the harness accepts 'off' (the Inclusion arm) and a pinned beta where the "
-            "app has per-user settings; the DEFAULT arm passes None and resolves here."
+            "app has per-user settings; the DEFAULT arm passes None and resolves here. The app's own "
+            "'no balance' is a library caller's CoreConfig(beta=None), which line_knobs hands on as "
+            "beta None - the harness's 'off'; the app itself always sets a balance."
         ),
     ),
     Mirror(

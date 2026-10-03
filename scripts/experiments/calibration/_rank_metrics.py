@@ -21,7 +21,7 @@ from collections.abc import Sequence
 import numpy as np
 
 #: The floors the app offers, left to right along its control
-#: (``FLOOR_PRESETS`` in ``frontend/src/app/utils/line-floor.ts``, #4298).
+#: (the floor presets the app offered, #4298).
 FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
 
 
