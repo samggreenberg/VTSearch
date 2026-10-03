@@ -258,6 +258,14 @@ def vote_queries(
         if box is not None and (raw := box_vlad(feats, box)) is not None:
             rows.append(project_query(projection, raw))
             continue
+        if media.get("seeded_example"):
+            # A crop seeded as a Good (#4170's --seed-crop whole): the whole crop is the mark, so it
+            # queries as one VLAD, as the example sort does. Its tiles would be fragments of the mark.
+            # The app's seeded examples carry no local_features today, so only the review sets this.
+            from vtscore.media.structural import aggregate_vlad, load_vlad_codebook  # noqa: PLC0415
+
+            rows.append(project_query(projection, aggregate_vlad(feats.descriptors_f32(), load_vlad_codebook())))
+            continue
         # No box: the page's own tiles, so whichever part of it the mark is on can match.
         stored = media.get("tile_vectors")
         tiles = stored if stored is not None else tile_vectors(feats, projection)

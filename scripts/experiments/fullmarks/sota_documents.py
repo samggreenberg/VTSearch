@@ -271,6 +271,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="click in the test half and score on the click half: a second replicate per class (#4432)",
     )
+    ap.add_argument(
+        "--seed-crop",
+        choices=("tiles", "whole"),
+        help="#4170 candidate: the query crop stays a Good vote (no box) all session, its Stage-1 query either "
+        "its tiles or its whole VLAD",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
@@ -320,6 +326,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "projection": st.PROJECTION_NAME,
                 "stoplist": args.stoplist or "off",
                 "swap_halves": args.swap_halves,
+                "seed_crop": args.seed_crop,
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
             },
@@ -351,6 +358,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             continue
         snap = {p: snap_all[p] for p in pool_ids}
         crop = _extract(classes[cid]["query_crop"])
+        # #4170 candidate: the crop stays a Good vote all session. (The app's seeded examples carry no
+        # ``local_features``, so today the structural path drops the crop at the first page Good.)
+        seeded: dict[str, None] = {}
+        if args.seed_crop:
+            crop_id = f"crop:{cid}"
+            snap[crop_id] = {
+                "embedder": "sift_vlad_doc",
+                "local_features": crop,
+                "tile_vectors": tile_vectors(crop, projection),
+                "seeded_example": args.seed_crop == "whole",
+            }
+            seeded[crop_id] = None
         placeholder = [{"id": p, "score": 0.0} for p in pool_ids]
         det_ctx = DetectorContext(detector_id=f"sota-{f.stem}", media_type="image")
         goods: dict[str, None] = {}
@@ -360,8 +379,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         t_class = time.time()
         for v in range(args.max_v + 1):
             t1 = time.time()
-            if goods:
-                ranked, line = maybe_structural_rerank(placeholder, 0.5, snap, goods, boxes, det_ctx, bad_votes=bads)
+            if goods or seeded:
+                ranked, line = maybe_structural_rerank(
+                    placeholder, 0.5, snap, {**seeded, **goods}, boxes, det_ctx, bad_votes=bads
+                )
+                ranked = [e for e in ranked if e["id"] in col]  # the seeded crop is not a pool page
             else:
                 ranked, line = maybe_structural_rerank_example(placeholder, 0.5, snap, crop)
             retrain_s = time.time() - t1
