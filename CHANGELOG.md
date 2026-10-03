@@ -282,6 +282,22 @@ not list every commit. Use `git log` for the full history.
   Pipeline files take `import_labels.create: true` and
   `import_labels.media_type`.
 
+### Removed
+
+- **The precision floor** (issue #4421). The precision/recall balance
+  (#4413) is the only preference the line is drawn at, so the floor it
+  replaced goes now rather than a release later. Removed: the `min_precision`
+  and `line_preference` settings (a saved settings file that still holds them
+  loads as before and the keys are ignored), `GET|POST /api/min-precision`,
+  and the `floor` object every response that carries a detector's line sent
+  beside `balance` - the learned sort's result, `/api/find-label`,
+  `/api/find/stats`, the auto-detect, AutoRun and command-line results, and
+  every `/api/precision-check` verb. Those carry `balance` alone, and the spot
+  check runs only the balance's walk (its `check` object has no
+  `min_precision`, and its status is `running`, `checked` or `cancelled`).
+  `GET|POST /api/balance` no longer reports `line_preference`, and the
+  OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
+
 ### Fixed
 
 - **On a small dataset, a spot check under the precision/recall balance no
