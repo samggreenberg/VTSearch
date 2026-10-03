@@ -160,6 +160,10 @@ class TestFindOnACorpusWithNoPositives:
         """The owner's working assumption: a Find corpus has the Train corpus's properties."""
         train = fit_labels_line(_orderings(), _corpus(seed=1), None, {})
         assert train is not None
-        find = train.on_corpus(_corpus(seed=7))
+        other = _corpus(seed=7)
+        find = train.on_corpus(other)
         assert find.prevalence == pytest.approx(train.prevalence, rel=0.35)
-        assert find.threshold(1.0) == pytest.approx(train.threshold(1.0), abs=0.03)
+        # The cut is counted on each corpus, so compare what it keeps, not the score it lands on.
+        kept_train = int((_corpus(seed=1) >= train.threshold(1.0)).sum())
+        kept_find = int((other >= find.threshold(1.0)).sum())
+        assert kept_find == pytest.approx(kept_train, rel=0.35, abs=5)

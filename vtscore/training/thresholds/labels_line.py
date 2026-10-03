@@ -27,8 +27,9 @@ derived from two things only:
   Only the labels travel: the labelset is the evidence, never a number
   derived from it, and more labels from any dataset improve the model.
 
-The threshold is the score at which the expected F-beta of the kept set peaks
-for a corpus at that prevalence (:func:`labels_line_threshold`).  No count is
+The threshold is the cut at which the expected F-beta of the kept set peaks
+(:func:`corpus_cut`): the expected true positives from the labels' Good
+component at that prevalence, the returned size counted on the corpus itself.  No count is
 drawn on any corpus: a corpus with no positives returns at most its own few
 high-scoring negatives.
 
@@ -41,7 +42,7 @@ pricing in ``docs/experiments`` measures what that costs on the objective.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -190,6 +191,38 @@ def labels_line_threshold(
     return _sigmoid(float(x[i]))
 
 
+def corpus_cut(model: ClassScoreModel, unvoted_share: float, scores_desc: np.ndarray, beta: float) -> float:
+    """The cut maximising expected F-*beta* over what it would really return from a corpus (#4452).
+
+    For the cut at each unvoted item, best first, ``R`` is how many items it
+    returns (counted, not modelled), the expected true positives
+    ``TP = min(p N S1, R)`` (``p`` the positives' share among the unvoted,
+    ``S1`` the labels' Good component's share at or above that score) and
+    ``F = (1 + b^2) TP / (b^2 p N + R)``.  A normal for the negatives' tail
+    under-counted the high-scoring negatives and cut too low (precision 0.44
+    at beta 1 in the first pricing run); the corpus's own counts carry its
+    tail as it is.  A cut that returns nothing scores 0, so a corpus with no
+    positives keeps at most its single best item.  Returns the score of the
+    last kept item; with nothing worth keeping, a score above every item.
+    """
+    from scipy.stats import norm  # noqa: PLC0415
+
+    s = np.asarray(scores_desc, dtype=np.float64)
+    n = s.size
+    if n == 0:
+        return 1.0 + 1e-9
+    b2 = float(beta) * float(beta)
+    pos = min(max(float(unvoted_share), PREVALENCE_MIN), PREVALENCE_MAX) * n
+    s1 = norm.sf((_logit(s) - model.mu_pos) / model.sigma)
+    r = np.arange(1, n + 1, dtype=np.float64)
+    tp = np.minimum(pos * s1, r)
+    f = (1.0 + b2) * tp / (b2 * pos + r)
+    k = int(np.argmax(f))
+    if not f[k] > 0:
+        return 1.0 + 1e-9
+    return float(s[k])
+
+
 def fit_corpus(
     model: ClassScoreModel,
     unvoted_scores: Any,
@@ -245,21 +278,86 @@ def estimate_positives(model: ClassScoreModel, unvoted_scores: Any, n_good: int,
 
 @dataclass(frozen=True)
 class LabelsLine:
-    """What a retrain leaves for the line: the labels' class model, and the corpus's prevalence and negatives."""
+    """What a retrain leaves for the line: the labels' class model and the corpus side it was cut on.
+
+    *prevalence* is the positives' share of the whole corpus (its Good votes
+    counted); *unvoted_share* their share among its unvoted items, and
+    *unvoted_scores* those items' scores, best first - what the counted cut
+    (:func:`corpus_cut`) reads.  With no scores (a line built by hand) the cut
+    falls back to the parametric one.
+    """
 
     model: ClassScoreModel
     prevalence: float
     negatives: CorpusNegatives | None = None
+    unvoted_share: float | None = None
+    unvoted_scores: np.ndarray | None = field(default=None, compare=False, repr=False)
 
     def threshold(self, beta: float) -> float:
+        if self.unvoted_scores is not None and self.unvoted_share is not None:
+            return corpus_cut(self.model, self.unvoted_share, self.unvoted_scores, beta)
         return labels_line_threshold(self.model, self.prevalence, beta, self.negatives)
 
     def on_corpus(
         self, scores: Any, ids: Iterable[int] | None = None, labels: Mapping[int, bool] | None = None
     ) -> "LabelsLine":
         """The same class model with the corpus side re-fitted on another corpus (a Find pass over a new dataset)."""
-        fit = corpus_fit(self.model, scores, ids, labels)
-        return self if fit is None else LabelsLine(self.model, fit[0], fit[1])
+        line = _line_on(self.model, scores, ids, labels)
+        return self if line is None else line
+
+
+#: The smallest share of the labels' Good component a cut must hold for the
+#: counted bound on the prevalence to read it (below it, ``R / S1`` is noise).
+_BOUND_MIN_S1 = 0.05
+#: The counted bound guards against a runaway estimate rather than replacing
+#: it: the Goods a session found are its easiest positives, so ``S1`` reads
+#: high and the bound reads low (0.24% for a 0.43% target on a clean corpus).
+#: The mixture's estimate stands unless it exceeds the bound by this factor.
+_BOUND_MARGIN = 2.0
+
+
+def _counted_share_bound(model: ClassScoreModel, unvoted: np.ndarray) -> float:
+    """An upper bound on the positives' share among the unvoted items, from counts alone (#4452).
+
+    A cut that returns ``R`` items holds at most ``R`` positives, and the
+    labels say a share ``S1`` of all positives clear it, so the corpus holds
+    at most ``R / S1`` positives - for every cut.  The tightest bound comes
+    from cuts high enough that few negatives clear them, whatever the bulk's
+    shape: it caps the mixture's estimate where a heavy upper tail of
+    negatives would otherwise be read as positives.
+    """
+    from scipy.stats import norm  # noqa: PLC0415
+
+    n = unvoted.size
+    if n == 0:
+        return PREVALENCE_MAX
+    sd = np.sort(unvoted)[::-1]
+    s1 = norm.sf((_logit(sd) - model.mu_pos) / model.sigma)
+    ok = s1 >= _BOUND_MIN_S1
+    if not ok.any():
+        return PREVALENCE_MAX
+    r = np.arange(1, n + 1, dtype=np.float64)
+    return float(np.min(r[ok] / s1[ok]) / n)
+
+
+def _line_on(
+    model: ClassScoreModel, scores: Any, ids: Iterable[int] | None, labels: Mapping[int, bool] | None
+) -> "LabelsLine | None":
+    a = np.asarray(scores, dtype=np.float64)
+    keep = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
+    n_items = int(keep.sum())
+    if n_items == 0:
+        return None
+    id_list = list(ids) if ids is not None else list(range(a.size))
+    voted = dict(labels or {})
+    unvoted = np.array([s for i, s, k in zip(id_list, a, keep) if k and int(i) not in voted], dtype=np.float64)
+    n_good = sum(1 for i, k in zip(id_list, keep) if k and voted.get(int(i)) is True)
+    positives, negatives = fit_corpus(model, unvoted, n_good)
+    share = (positives - n_good) / unvoted.size if unvoted.size else 0.0
+    share = min(share, _BOUND_MARGIN * _counted_share_bound(model, unvoted))
+    positives = n_good + share * unvoted.size
+    prevalence = min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX)
+    return LabelsLine(model, prevalence, negatives, float(share), np.sort(unvoted)[::-1].copy())
 
 
 def corpus_fit(
@@ -273,17 +371,8 @@ def corpus_fit(
     *labels* are the votes that sit in this corpus (``True`` = Good); a Find
     corpus usually holds none.  ``None`` for a corpus with no scorable item.
     """
-    a = np.asarray(scores, dtype=np.float64)
-    keep = np.isfinite(a) & (a >= 0.0) & (a <= 1.0)
-    n_items = int(keep.sum())
-    if n_items == 0:
-        return None
-    id_list = list(ids) if ids is not None else list(range(a.size))
-    voted = dict(labels or {})
-    unvoted = np.array([s for i, s, k in zip(id_list, a, keep) if k and int(i) not in voted], dtype=np.float64)
-    n_good = sum(1 for i, k in zip(id_list, keep) if k and voted.get(int(i)) is True)
-    positives, negatives = fit_corpus(model, unvoted, n_good)
-    return min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX), negatives
+    line = _line_on(model, scores, ids, labels)
+    return None if line is None or line.negatives is None else (line.prevalence, line.negatives)
 
 
 def corpus_prevalence(
@@ -340,10 +429,7 @@ def fit_labels_line(
         model = class_score_model([_in_sample_ordering(corpus_scores, corpus_ids, labels)])
     if model is None:
         return None
-    fit = corpus_fit(model, corpus_scores, corpus_ids, labels)
-    if fit is None:
-        return None
-    return LabelsLine(model, fit[0], fit[1])
+    return _line_on(model, corpus_scores, corpus_ids, labels)
 
 
 __all__ = [
@@ -354,6 +440,7 @@ __all__ = [
     "CorpusNegatives",
     "LabelsLine",
     "class_score_model",
+    "corpus_cut",
     "corpus_fit",
     "corpus_prevalence",
     "estimate_positives",

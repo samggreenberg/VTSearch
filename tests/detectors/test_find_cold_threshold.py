@@ -159,8 +159,10 @@ class TestColdFindCutsOnTheCorpusItDecides:
 
         corpus = _cold_corpus()
         shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
-        real_fit = labels_line_mod.corpus_fit
-        monkeypatch.setattr(labels_line_mod, "corpus_fit", lambda *a, **k: (0.5, real_fit(*a, **k)[1]))
+        real_fit = labels_line_mod.fit_corpus
+        monkeypatch.setattr(
+            labels_line_mod, "fit_corpus", lambda m, u, g, **k: (g + 0.5 * len(u), real_fit(m, u, g, **k)[1])
+        )
         common, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
         assert len(common) > len(shipped), (
             f"the shipped line admitted {len(shipped)} of {len(corpus)} and the common-target line {len(common)}"
