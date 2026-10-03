@@ -1058,6 +1058,7 @@ def _evaluate_on_test(
     scored_sink: "list[Any] | None" = None,
     find_line: Any = None,
     beta: float | None = None,
+    out: "dict[str, Any] | None" = None,
 ) -> dict[str, float]:
     """Score *test_ids* with *step* and return the per-step metrics.
 
@@ -1111,6 +1112,8 @@ def _evaluate_on_test(
     labels_arr = np.asarray(true_labels, dtype=np.float64)
     if find_line is not None and beta is not None:
         threshold = float(find_line.on_corpus(scores_arr).threshold(float(beta)))
+        if out is not None:
+            out["find_threshold"] = threshold
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
         detection_metrics,
         inclusion_weights,
@@ -1224,6 +1227,7 @@ def _calibration_metric_rows(
         on_test = find_line.on_corpus(base_scores)
         find_prevalence = on_test.prevalence
         threshold = float(on_test.threshold(float(details["beta"])))
+        details["find_threshold"] = threshold
     # dump: calibration path -- `ids` is aligned with base_scores and labels.
     maybe_dump_predictions(clips_dict, list(ids), base_scores, list(labels), threshold, target_category)
     base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
@@ -3127,6 +3131,7 @@ def simulate_voting_iterations(  # noqa: C901
             elif offset_cut is not None:
                 acq_threshold = offset_cut
 
+        details.pop("find_threshold", None)
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
         # metrics row, but both paths score the same test set here.
@@ -3176,6 +3181,7 @@ def simulate_voting_iterations(  # noqa: C901
                 scored_sink=scored,
                 find_line=details.get("find_line"),
                 beta=details.get("beta"),
+                out=details,
             )
             if emit_calibration_metrics and trainer != APP_TRAINER and scored:
                 # A standalone trainer has no style, so it never reaches the
@@ -3193,7 +3199,9 @@ def simulate_voting_iterations(  # noqa: C901
         # not this one.
         band_metrics = _band_metrics(
             step,
-            threshold,
+            # The size bands are cohorts of the withheld half, so they are cut
+            # where Find cuts it (#4452); the Train side's threshold otherwise.
+            details.get("find_threshold", threshold),
             unfiltered,
             band_cohorts if test_bands else None,
             region_aware=region_aware,

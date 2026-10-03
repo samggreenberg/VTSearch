@@ -117,7 +117,7 @@ class ClassScoreModel:
         }
 
 
-def class_score_model(orderings: Sequence[tuple[Sequence[float], Sequence[float]]] | None) -> ClassScoreModel | None:
+def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScoreModel | None:
     """The class model the calibration folds' held-out scores imply; ``None`` when they cannot support one.
 
     *orderings* are :attr:`CalibrationFolds.orderings`: per fold, the held-out
@@ -221,7 +221,10 @@ def corpus_cut(posteriors_desc: np.ndarray, scores_desc: np.ndarray, total_posit
     k = int(np.argmax(f))
     if not f[k] > 0:
         return 1.0 + 1e-9
-    return float(s[k])
+    # Between the last kept item and the first dropped one, not on an item: the
+    # same image scored by another path (a size-band cohort, a re-scored Find
+    # pass) can differ in the last bits and would flip sides of a cut placed on it.
+    return float(s[k]) if k + 1 >= n else float((s[k] + s[k + 1]) / 2.0)
 
 
 def fit_corpus(
@@ -299,13 +302,13 @@ def corpus_posteriors(model: ClassScoreModel, unvoted_scores: Any, *, iterations
         with np.errstate(invalid="ignore", divide="ignore"):
             r1 = np.nan_to_num(a1 / tot, nan=0.0)
             rb = np.nan_to_num(ab / tot, nan=0.0)
-        r0 = 1.0 - r1 - rb
+        r0 = np.clip(1.0 - r1 - rb, 0.0, 1.0)  # rounding can push the remainder a hair below 0
         nw1 = min(max(float(r1.mean()), PREVALENCE_MIN), PREVALENCE_MAX)
         nwb = min(max(float(rb.mean()), PREVALENCE_MIN), 0.9)
         s_r0 = float(r0.sum())
         if s_r0 > 1e-12:
             mu0 = min(float((r0 * x).sum()) / s_r0, model.mu_neg)
-            s0 = max(math.sqrt(float((r0 * (x - mu0) ** 2).sum()) / s_r0), MIN_LOGIT_SIGMA)
+            s0 = max(math.sqrt(max(float((r0 * (x - mu0) ** 2).sum()) / s_r0, 0.0)), MIN_LOGIT_SIGMA)
         done = abs(nw1 - w1) < 1e-8 and abs(nwb - wb) < 1e-7
         w1, wb = nw1, nwb
         if done:
@@ -453,7 +456,7 @@ def _in_sample_ordering(
 
 
 def fit_labels_line(
-    orderings: Sequence[tuple[Sequence[float], Sequence[float]]] | None,
+    orderings: Sequence[tuple[Any, Any]] | None,
     corpus_scores: Any,
     corpus_ids: Iterable[int] | None = None,
     labels: Mapping[int, bool] | None = None,

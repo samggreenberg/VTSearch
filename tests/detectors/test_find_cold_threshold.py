@@ -159,10 +159,8 @@ class TestColdFindCutsOnTheCorpusItDecides:
 
         corpus = _cold_corpus()
         shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
-        real_fit = labels_line_mod.fit_corpus
-        monkeypatch.setattr(
-            labels_line_mod, "fit_corpus", lambda m, u, g, **k: (g + 0.5 * len(u), real_fit(m, u, g, **k)[1])
-        )
+        # Every image a sure positive: the counted cut keeps the whole corpus.
+        monkeypatch.setattr(labels_line_mod, "corpus_posteriors", lambda _m, u, **_k: np.ones(np.asarray(u).size))
         common, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
         assert len(common) > len(shipped), (
             f"the shipped line admitted {len(shipped)} of {len(corpus)} and the common-target line {len(common)}"
