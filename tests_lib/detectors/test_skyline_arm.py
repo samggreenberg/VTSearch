@@ -15,6 +15,8 @@ Everything runs on small synthetic single-vector datasets - no model downloads.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -403,7 +405,7 @@ def test_the_ceilings_frame_records_finds_labels_line_from_its_full_labels():
     ids = sorted(medias)
     sim_ids, test_ids = ids[0::2], ids[1::2]
     sink: list = []
-    kwargs = dict(trainer="app", head="linear_svm", style_obj=WholeImageStyle(), region_voting=False, input_dim=DIM,
+    kwargs: dict[str, Any] = dict(trainer="app", head="linear_svm", style_obj=WholeImageStyle(), region_voting=False, input_dim=DIM,
                   calibrate_count=2, calibration_fraction=0.5)  # fmt: skip
     rows = _skyline_arm_rows(
         [SKYLINE_TRAIN_FULL], medias, "cat0", sim_ids, test_ids, 0, seed=0, rank_frame_sink=sink, **kwargs
