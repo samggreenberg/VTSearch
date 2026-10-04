@@ -1,11 +1,14 @@
 """Does the dry-run stop hold across size and prevalence? The robustness grid of #4488.
 
-Each cell is a tier (s / m / l: 5k, 50k, 200k pages, the same positives) and a fraction of positives
-kept (``sota_documents.py --thin``), with two replicates of ``--stop-log`` sessions. Per cell, for
-the dry run (16 clicks in a row without a Good):
+Each cell is a tier (s / m / l: 5k, 50k, 200k pages; the same positives for 27 of 36 classes, while 9
+recurring logos gain positives with the tier) and a fraction of positives kept (``sota_documents.py
+--thin``), with two replicates of ``--stop-log`` sessions. Per cell, for the dry run (16 clicks in a
+row without a Good):
 
 * the share of sessions that stop by click 50, and the stop click (median, range);
-* click-half positives left unfound at the stop, positive-weighted and per-session mean;
+* click-half positives left unfound at the stop, positive-weighted and per-session mean; and,
+  descriptive only, how many of those clicking on to the last click found (what the stop forgoes)
+  and how many it never found;
 * AP at the last click minus AP at the stop (median, and the share of stopping sessions losing > 0.05);
 * the returned set's F1 at the last click minus at the stop.
 
@@ -32,14 +35,24 @@ MAX_BIG_LOSS_SHARE = 0.10
 
 
 def cell_metrics(sessions: Sequence[sr.Session]) -> dict[str, Any]:
-    stops: list[tuple[int, int, int, float, float]] = []  # (click, left, positives, ap_loss, f1_loss)
+    # (click, left, positives, ap_loss, f1_loss, found after the stop by the last click)
+    stops: list[tuple[int, int, int, float, float, int]] = []
     for s in sessions:
         t = sr.signals(s, 0, 0.01)[2]
         if t is None:
             continue
         last = max(s.ap)
         found = sum(s.labels[:t])
-        stops.append((t, s.positives - found, s.positives, s.ap[last] - s.ap[t], s.f1[last] - s.f1.get(t, np.nan)))
+        stops.append(
+            (
+                t,
+                s.positives - found,
+                s.positives,
+                s.ap[last] - s.ap[t],
+                s.f1[last] - s.f1.get(t, np.nan),
+                sum(s.labels) - found,
+            )
+        )
     n = len(sessions)
     if not stops:
         return {"sessions": n, "stopped": 0}
@@ -47,6 +60,10 @@ def cell_metrics(sessions: Sequence[sr.Session]) -> dict[str, Any]:
     pos = sum(x[2] for x in stops)
     losses = np.array([x[3] for x in stops])
     return {
+        # Descriptive, not the bar: of the unfound, those clicking on to the last click found
+        # (what the stop forgoes inside the horizon), and those still unfound there.
+        "forgone_weighted": sum(x[5] for x in stops) / pos if pos else 0.0,
+        "unfound_at_last_weighted": (left - sum(x[5] for x in stops)) / pos if pos else 0.0,
         "sessions": n,
         "stopped": len(stops),
         "stop_share": len(stops) / n,
@@ -74,17 +91,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         sessions = [s for i, d in enumerate(dirs.split(",")) for s in sr.load(Path(d), f"rep{i + 1}")]
         rows.append({"tier": tier, "thin": float(thin), **cell_metrics(sessions)})
     lines = [
-        "| tier | positives kept | sessions | stop by 50 | stop click, median (range) | unfound (weighted / mean) | AP lost: median, share > 0.05 | F1 lost (mean) | holds |",
-        "|---|---:|---:|---:|---|---|---|---:|---|",
+        "| tier | positives kept | sessions | stop by 50 | stop click, median (range) | unfound (weighted / mean) | of which: found by 50 / never | AP lost: median, share > 0.05 | F1 lost (mean) | holds |",
+        "|---|---:|---:|---:|---|---|---|---|---:|---|",
     ]
     for r in rows:
         if not r.get("stopped"):
-            lines.append(f"| {r['tier']} | {r['thin']:g} | {r['sessions']} | 0% | — | — | — | — | — |")
+            lines.append(f"| {r['tier']} | {r['thin']:g} | {r['sessions']} | 0% | — | — | — | — | — | — |")
             continue
         lines.append(
             f"| {r['tier']} | {r['thin']:g} | {r['sessions']} | {r['stop_share']:.0%} | "
             f"{r['median_click']:.0f} ({r['min_click']}–{r['max_click']}) | "
             f"{r['unfound_weighted']:.1%} / {r['unfound_mean']:.1%} | "
+            f"{r['forgone_weighted']:.1%} / {r['unfound_at_last_weighted']:.1%} | "
             f"{r['ap_loss_median']:+.3f}, {r['big_loss_share']:.0%} | {r['f1_loss_mean']:+.3f} | "
             f"{'yes' if r['holds'] else '**no**'} |"
         )
