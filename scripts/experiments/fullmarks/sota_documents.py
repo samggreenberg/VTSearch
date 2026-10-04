@@ -353,6 +353,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         help="#4170 candidate: the query crop stays a Good vote (no box) all session, its Stage-1 query either "
         "its tiles or its whole VLAD",
     )
+    ap.add_argument("--beta", type=float, default=None, help="the balance passed to the app's structural line (#4458)")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
@@ -402,6 +403,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "projection": st.PROJECTION_NAME,
                 "stoplist": args.stoplist or "off",
                 "swap_halves": args.swap_halves,
+                "beta": args.beta,
                 "seed_crop": args.seed_crop,
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -457,7 +459,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             t1 = time.time()
             if goods or seeded:
                 ranked, line = maybe_structural_rerank(
-                    placeholder, 0.5, snap, {**seeded, **goods}, boxes, det_ctx, bad_votes=bads
+                    placeholder, 0.5, snap, {**seeded, **goods}, boxes, det_ctx, bad_votes=bads, beta=args.beta
                 )
                 ranked = [e for e in ranked if e["id"] in col]  # the seeded crop is not a pool page
             else:

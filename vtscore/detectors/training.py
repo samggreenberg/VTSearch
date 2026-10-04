@@ -1566,7 +1566,7 @@ def train_and_score(
     from vtscore.training.structural_similarity import maybe_structural_rerank  # noqa: PLC0415
 
     results, threshold = maybe_structural_rerank(
-        results, threshold, clips_dict, good_votes, region_boxes, det_ctx, bad_votes=bad_votes
+        results, threshold, clips_dict, good_votes, region_boxes, det_ctx, bad_votes=bad_votes, beta=beta
     )
     return results, threshold, model
 
