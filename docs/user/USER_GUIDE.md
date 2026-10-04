@@ -748,6 +748,25 @@ run it over another dataset. Nothing happens on its own, and the
 dialog only appears for the run that trained the detector - coming
 back later to refine it further will not raise it again.
 
+### Document collections stop on a dry run
+
+On a collection of document pages, where a detector finds logos and
+stamps by matching their shape, Autopilot has four phases instead of
+five. After the initial goods and bads, **Find More Goods.** offers the
+detector's own best matches, re-ranked after every vote, with no
+20-good target. It ends when **16 of them in a row were not good**:
+the top of the ranking has run dry, and the documents the detector can
+find are likely found. That is **Done!**, with the same **Detector
+Trained** dialog. There is no Refine Boundary or Explore Diversity
+phase.
+
+The phase's light counts that run (yellow from 8, green at 16), and a
+good match starts the count again. On the Manual tab the three status
+indicators give way to one readout, **Dry run n/16**: your votes in a
+row since the last good one. This stop was measured on FullMarks
+document sessions at 5,000 to 200,000 pages, and with a quarter of the
+matches removed (issue #4488).
+
 ### The collapsed bar
 
 You can collapse Autopilot to a thin strip that just shows the

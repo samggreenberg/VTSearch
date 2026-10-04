@@ -312,6 +312,30 @@ otherwise the last snapshot is returned at once with `stale: true` (counts and
 `span` live, `smart` / `stable` lagging) and the cache is advanced by a
 background worker for a later poll.
 
+`stop_rule` names what ends labeling: `"lights"` (the three metrics above) or,
+on a document collection whose pages carry tiles (`sift_vlad_doc`), `"dry_run"`
+(issue #4488). A document collection's response is computed from the vote order
+alone, so it is never stale; `smart`, `stable` and `span` read `"off"`, and
+`dry_run` carries the stop:
+
+```json
+{
+  "stop_rule": "dry_run",
+  "dry_run": {"status": "yellow", "reason": "9 of 16 votes in a row without a Good.", "run": 9, "target": 16},
+  "smart": {"status": "off", "reason": "..."},
+  "stable": {"status": "off", "reason": "..."},
+  "span": {"status": "off", "reason": "..."},
+  "good_count": 3,
+  "bad_count": 13,
+  "total_count": 16,
+  "stale": false
+}
+```
+
+`run` counts the standing non-Good votes cast since the last Good: each media's
+last vote, in vote order. It is red until half of `target`, yellow from there,
+and green at `target` once the labelset holds a Good.
+
 > **Metric-id naming note.** The third indicator is keyed **`span`** in this
 > `labeling-status` response, but the `metric` query/body parameter on
 > `indicator-score-history` and `eval/train-and-score` (below) uses

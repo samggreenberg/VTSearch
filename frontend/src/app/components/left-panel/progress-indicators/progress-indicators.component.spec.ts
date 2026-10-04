@@ -212,4 +212,35 @@ describe('ProgressIndicatorsComponent', () => {
     expect(buttons[1].getAttribute('data-status')).toBe('yellow');
     expect(buttons[2].getAttribute('data-status')).toBe('red');
   });
+
+  describe('on a document dataset (#4488)', () => {
+    const off = { status: 'off' };
+
+    beforeEach(async () => {
+      fixture.componentRef.setInput('labelingStatus', {
+        good_count: 3,
+        bad_count: 13,
+        total_count: 16,
+        smart: off,
+        stable: off,
+        span: off,
+        stop_rule: 'dry_run',
+        dry_run: { status: 'yellow', run: 9, target: 16 },
+      });
+      await settleZoneless(fixture);
+    });
+
+    it('shows one dry-run readout in place of the three lights', () => {
+      const indicators = fixture.nativeElement.querySelectorAll('.labeling-indicator');
+      expect(indicators.length).toBe(1);
+      expect(indicators[0].textContent).toContain('Dry run 9/16');
+      expect(indicators[0].getAttribute('data-status')).toBe('yellow');
+      expect(fixture.nativeElement.querySelector('button.labeling-indicator')).toBeNull();
+    });
+
+    it('says what the count means', () => {
+      expect(component.dryRunTooltip).toContain('since the last good one');
+      expect(component.dryRunTooltip).toContain('At 16');
+    });
+  });
 });

@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Document collections stop on a dry run** (issue #4488). On a collection
+  of document pages (`sift_vlad_doc`), Autopilot runs four phases: after the
+  initial goods and bads it offers the detector's own best matches, re-ranked
+  after every vote and with no 20-good target, until 16 in a row are not good;
+  then it is **Done!** and says **Detector Trained**. There is no Refine Boundary
+  or Explore Diversity phase there. On the Manual tab the Smart, Stable and
+  Diverse indicators give way to one readout, **Dry run n/16**. Those
+  indicators scored a page-vector model the document ranking does not use, at
+  the structural detector's threshold. `GET /api/labeling-status` gains
+  `stop_rule` and `dry_run`.
+
 - **The Threshold's outer radios lean further** (issue #4448). The False
   Positives radio is now F-beta at 4 (was 2) and the False Negatives radio
   F-beta at 1/4 (was 1/2); the middle stays balanced. On the same detector the

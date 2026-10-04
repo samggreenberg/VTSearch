@@ -237,6 +237,80 @@ describe('AutopilotStateService', () => {
     });
   });
 
+  describe('a document dataset stops on the dry run (#4488)', () => {
+    const off: StatusIndicator = { status: 'off' };
+    const documentStatus: LabelingStatusResponse = {
+      ...makeStatus(off, off, off),
+      stop_rule: 'dry_run',
+      dry_run: { status: 'red', run: 0, target: 16 },
+    };
+
+    function enterDocumentWalk(retrainMode = false): void {
+      service.activate(retrainMode);
+      service.updateFromLabelingStatus(documentStatus);
+      service.checkPhaseTransition(3, 0);
+      service.checkPhaseTransition(3, 4);
+      expect(service.state.phase).toBe('more');
+    }
+
+    it('reads the stop rule off the labeling status', () => {
+      service.activate();
+      service.updateFromLabelingStatus(documentStatus);
+      expect(service.state.dryRunStop).toBe(true);
+      service.updateFromLabelingStatus(makeStatus(off, off, off));
+      expect(service.state.dryRunStop).toBe(false);
+    });
+
+    it('is done after moreDryRun misses in a row, with no Boundary or Diversity step', () => {
+      enterDocumentWalk();
+      let bad = 4;
+      for (let i = 0; i < 15; i++) {
+        service.checkPhaseTransition(3, ++bad);
+        expect(service.state.phase).toBe('more');
+      }
+      service.checkPhaseTransition(3, ++bad);
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('walks past the twenty-Good target', () => {
+      enterDocumentWalk();
+      service.checkPhaseTransition(25, 4);
+      expect(service.state.phase).toBe('more');
+    });
+
+    it('ignores the lights', () => {
+      enterDocumentWalk();
+      const green: StatusIndicator = { status: 'green' };
+      service.updateFromLabelingStatus({ ...documentStatus, smart: green, stable: green, span: green });
+      service.checkPhaseTransition(3, 5);
+      expect(service.state.phase).toBe('more');
+    });
+
+    it('walks in retrain mode too, and still stops', () => {
+      enterDocumentWalk(true);
+      let bad = 4;
+      for (let i = 0; i < 16; i++) service.checkPhaseTransition(3, ++bad);
+      expect(service.state.phase).toBe('done');
+    });
+
+    it('a Good restarts the run', () => {
+      enterDocumentWalk();
+      let bad = 4;
+      for (let i = 0; i < 15; i++) service.checkPhaseTransition(3, ++bad);
+      service.checkPhaseTransition(4, bad);
+      for (let i = 0; i < 15; i++) service.checkPhaseTransition(4, ++bad);
+      expect(service.state.phase).toBe('more');
+      expect(service.state.moreMisses).toBe(15);
+    });
+
+    it('is exhausted when the dataset runs out before the run does', () => {
+      service.activate();
+      service.updateFromLabelingStatus(documentStatus);
+      service.checkPhaseTransition(5, 4, 9);
+      expect(service.state.phase).toBe('exhausted');
+    });
+  });
+
   it('should transition from hard to new when smart and stable are green', () => {
     service.activate();
     service.checkPhaseTransition(3, 0);

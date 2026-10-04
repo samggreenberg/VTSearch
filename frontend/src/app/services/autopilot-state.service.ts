@@ -21,6 +21,14 @@ export interface AutopilotState {
   moreMisses: number;
   /** The walk has ended (target met, ran dry, or skipped) and never resumes. */
   moreDone: boolean;
+  /**
+   * The dataset's labeling stops on the dry run, not the lights (#4488): a
+   * document (tiled structural) dataset, whose labeling status says
+   * ``stop_rule: 'dry_run'``. There the walk draws off the detector's own
+   * ranking, has no Good target, and its run of ``moreDryRun`` misses is the
+   * stop: Good, Bad, More, then Done, with no Boundary or Diversity step.
+   */
+  dryRunStop: boolean;
   smartStatus: string;
   stableStatus: string;
   /**
@@ -58,6 +66,7 @@ const INITIAL_STATE: AutopilotState = {
   moreDryRun: 16,
   moreMisses: 0,
   moreDone: false,
+  dryRunStop: false,
   smartStatus: '',
   stableStatus: '',
   stablePlateau: false,
@@ -208,6 +217,7 @@ export class AutopilotStateService {
     const current = this.stateSubject.value;
     this.stateSubject.next({
       ...current,
+      dryRunStop: status.stop_rule === 'dry_run',
       smartStatus: status.smart.status || '',
       stableStatus: status.stable.status || '',
       stablePlateau: status.stable['plateau'] === true,
@@ -246,7 +256,7 @@ export class AutopilotStateService {
     // in Bads alone is a miss. Repeated checks with unchanged counts are no-ops.
     const prev = this.lastCounts;
     this.lastCounts = { good: goodCount, bad: badCount };
-    if (prev && st.phase === 'more' && !st.moreDone) {
+    if (prev && st.phase === 'more' && (st.dryRunStop || !st.moreDone)) {
       if (goodCount > prev.good) {
         st = { ...st, moreMisses: 0 };
       } else if (badCount > prev.bad) {
@@ -280,6 +290,14 @@ export class AutopilotStateService {
       nextPhase = 'good';
     } else if (badCount < effBadTarget) {
       nextPhase = 'bad';
+    } else if (st.dryRunStop) {
+      // A document dataset (#4488): the walk is the rest of the run, with no
+      // Good target, and running dry is Done. It walks in retrain mode too,
+      // where the latched ``moreDone`` would otherwise skip it: the run of
+      // misses is the stop, so it is the only history that counts here.
+      if (st.moreMisses >= st.moreDryRun) nextPhase = 'done';
+      else if (remainingUnlabeled === 0) nextPhase = 'exhausted';
+      else nextPhase = 'more';
     } else if (!st.moreDone && goodCount < effMoreTarget) {
       nextPhase = 'more';
     } else if (st.smartStatus === 'green' && st.stableStatus === 'green' && st.spanStatus === 'green') {

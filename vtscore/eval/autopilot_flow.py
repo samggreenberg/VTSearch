@@ -231,6 +231,8 @@ def next_phase(
     bad_target: int = BAD_TARGET,
     more_target: int = MORE_TARGET,
     more_done: bool = False,
+    dry_run_stop: bool = False,
+    ran_dry: bool = False,
 ) -> Phase:
     """Port of ``AutopilotStateService.checkPhaseTransition``.
 
@@ -243,6 +245,11 @@ def next_phase(
     phase, exactly as it does in the app.  The one exception is the ``more``
     walk: whether it has run dry is history, not a count, so the caller holds
     it and passes *more_done* (see :class:`AutopilotFlow`).
+
+    *dry_run_stop* is a document dataset (the labeling status's
+    ``stop_rule == "dry_run"``, #4488): the walk has no Good target, runs in
+    retrain mode too, and *ran_dry* (its run of misses complete) is ``done``.
+    The indicators are not read.
     """
     # Cap each target at the most votes of that class the collection could still
     # yield, so a tiny dataset can still advance past the initial phases instead
@@ -254,6 +261,12 @@ def next_phase(
         return "good"
     if bad_count < eff_bad_target:
         return "bad"
+    if dry_run_stop:
+        if ran_dry:
+            return "done"
+        if remaining_unlabeled == 0:
+            return "exhausted"
+        return "more"
     if not more_done and good_count < min(more_target, good_count + remaining_unlabeled):
         return "more"
     if smart == "green" and stable == "green" and span == "green":
@@ -396,11 +409,15 @@ class AutopilotFlow:
         more_dry_run: int = MORE_DRY_RUN,
         span_green: int | None = None,
         startup: Optional[StartupState] = None,
+        dry_run_stop: bool = False,
     ):
         self.good_target = good_target
         self.bad_target = bad_target
         self.more_target = more_target
         self.more_dry_run = more_dry_run
+        #: A document dataset (#4488): the walk is the rest of the run and its
+        #: dry run is ``done`` (see :func:`next_phase`).
+        self.dry_run_stop = dry_run_stop
         #: The ``more`` walk's history, as the app keeps it: consecutive walk
         #: picks without a positive, and whether the walk has ended (met its
         #: target or ran dry).  A vote's outcome is read the way the app reads
@@ -570,6 +587,8 @@ class AutopilotFlow:
             bad_target=0 if self.startup is not None else self.bad_target,
             more_target=0 if self.startup is not None else self.more_target,
             more_done=self.more_done,
+            dry_run_stop=self.dry_run_stop,
+            ran_dry=self.more_misses >= self.more_dry_run,
         )
         if self.phase not in ("good", "bad", "more"):
             # The walk ends once the machine has moved past it - its target met
@@ -583,11 +602,12 @@ class AutopilotFlow:
 
         The app's phase check sees only vote counts, so it reads the outcome off
         them: a rise in the Good count is a hit, a rise in the Bad count alone is
-        a miss.  Only votes cast *in* the walk count.
+        a miss.  Only votes cast *in* the walk count; on a document dataset the
+        walk counts even once ``more_done`` has latched, since there it is the stop.
         """
         prev_good, prev_bad = self._counts
         self._counts = (good_count, bad_count)
-        if self.phase != "more" or self.more_done:
+        if self.phase != "more" or (self.more_done and not self.dry_run_stop):
             return
         if good_count > prev_good:
             self.more_misses = 0
