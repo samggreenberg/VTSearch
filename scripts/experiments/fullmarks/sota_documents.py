@@ -86,39 +86,111 @@ def in_test_half(page_id: str, salt: str = "sota-documents") -> bool:
 # --------------------------------------------------------------------------
 
 
-def load_or_extract(ids: list[str], paths: dict[str, str], cache: Optional[Path], tier: str, workers: int) -> dict:
-    """``{page id: compact StructuralFeatures}``, read from *cache* when it holds every page."""
+def _from_cache_files(ids: list[str], cache: Path) -> dict:
+    """Every page of *ids* any ``features-*.npz`` under *cache* holds (a larger tier can reuse a smaller one's)."""
     from vtscore.media.structural import StructuralFeatures  # noqa: PLC0415
 
-    f = cache / f"features-{tier}.npz" if cache else None
-    if f is not None and f.exists():
+    want, found = set(ids), {}
+    for f in sorted(cache.glob("features-*.npz")):
+        if not want - set(found):
+            break
         z = np.load(f, allow_pickle=False)
         cached = [str(p) for p in z["page_ids"]]
-        if set(ids) <= set(cached):
-            kp, desc, starts = z["keypoints"], z["descriptors"], np.append(z["starts"], len(z["keypoints"]))
-            index = {p: i for i, p in enumerate(cached)}
-            return {
-                p: StructuralFeatures(
-                    keypoints=kp[starts[index[p]] : starts[index[p] + 1]],
-                    descriptors=desc[starts[index[p]] : starts[index[p] + 1]],
-                )
-                for p in ids
-            }
+        need = [(i, p) for i, p in enumerate(cached) if p in want and p not in found]
+        if not need:
+            continue
+        kp, desc, starts = z["keypoints"], z["descriptors"], np.append(z["starts"], len(z["keypoints"]))
+        for i, p in need:
+            found[p] = StructuralFeatures(
+                keypoints=kp[starts[i] : starts[i + 1]], descriptors=desc[starts[i] : starts[i + 1]]
+            )
+    return found
+
+
+def _tile_cache_path(cache: Path, tier: str, st: Any) -> Path:
+    layers = "_".join(f"{w:g}x{h:g}" for w, h in st.TILE_LAYERS)
+    return cache / f"tiles-{tier}-{st.PROJECTION_NAME}-{layers}-k{st.MIN_TILE_KP}.npz"
+
+
+def _cached_tiles(ids: list[str], cache: Path, tier: str, st: Any) -> dict:
+    """The tiles a previous run saved for this tier, projection and tile layout, if it covers *ids*."""
+    f = _tile_cache_path(cache, tier, st)
+    if not f.exists():
+        return {}
+    z = np.load(f, allow_pickle=False)
+    cached = [str(p) for p in z["page_ids"]]
+    if not set(ids) <= set(cached):
+        return {}
+    starts = np.append(z["starts"], len(z["vectors"]))
+    vec, box = z["vectors"], z["boxes"]
+    out = {}
+    for i, p in enumerate(cached):
+        a, b = starts[i], starts[i + 1]
+        out[p] = st.TileVectors(vec[a:b], box[a:b])
+    return out
+
+
+def _save_tiles(tiles: dict, ids: list[str], cache: Path, tier: str, st: Any) -> None:
+    counts = np.array([tiles[p].vectors.shape[0] for p in ids], dtype=np.int64)
+    f = _tile_cache_path(cache, tier, st)
+    tmp = f.with_suffix(".tmp.npz")
+    np.savez(
+        tmp,
+        page_ids=np.array(ids),
+        starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
+        vectors=np.concatenate([tiles[p].vectors for p in ids]),
+        boxes=np.concatenate([tiles[p].boxes for p in ids]),
+    )
+    tmp.replace(f)
+
+
+def thin_pool(cid: str, pool_ids: list[str], positive: np.ndarray, keep: float) -> tuple[list[str], np.ndarray]:
+    """The pool with only a seeded fraction *keep* of its positives (at least one); the rest leave the pool.
+
+    The kept positives are the first by ``sha256("thin:<class>:<page>")``, so a run is reproducible and a
+    smaller fraction keeps a subset of a larger one's.
+    """
+    import hashlib  # noqa: PLC0415
+    import math  # noqa: PLC0415
+
+    pos = [p for p, y in zip(pool_ids, positive) if y]
+    ranked = sorted(pos, key=lambda p: hashlib.sha256(f"thin:{cid}:{p}".encode()).hexdigest())
+    drop = set(ranked[max(1, math.ceil(keep * len(pos))) :])
+    mask = np.array([p not in drop for p in pool_ids])
+    return [p for p, m in zip(pool_ids, mask) if m], positive[mask]
+
+
+def load_or_extract(ids: list[str], paths: dict[str, str], cache: Optional[Path], tier: str, workers: int) -> dict:
+    """``{page id: compact StructuralFeatures}``: what the cache files hold, plus the missing pages extracted.
+
+    A page found in any ``features-*.npz`` under *cache* is read from it, so a larger tier reuses the
+    smaller tiers' files. Pages no file holds are extracted and saved as their own
+    ``features-<tier>-part-<n>.npz``, so no existing file is ever rewritten.
+    """
+    found = _from_cache_files(ids, cache) if cache is not None else {}
+    missing = [p for p in ids if p not in found]
+    if not missing:
+        return found
     with get_context("fork").Pool(workers) as pool:
-        feats = dict(zip(ids, pool.map(_extract, [paths[p] for p in ids], chunksize=8)))
-    if f is not None:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        counts = np.array([feats[p].count for p in ids], dtype=np.int64)
-        tmp = f.with_suffix(".tmp.npz")
-        np.savez(
-            tmp,
-            page_ids=np.array(ids),
-            starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
-            keypoints=np.concatenate([feats[p].keypoints for p in ids]),
-            descriptors=np.concatenate([feats[p].descriptors for p in ids]),
-        )
-        tmp.replace(f)
-    return feats
+        extracted = dict(zip(missing, pool.map(_extract, [paths[p] for p in missing], chunksize=8)))
+    if cache is not None:
+        save_features(extracted, missing, cache / f"features-{tier}-part-{len(list(cache.glob('features-*.npz')))}.npz")
+    return {**found, **extracted}
+
+
+def save_features(feats: dict, ids: list[str], f: Path) -> None:
+    """Write *ids*' features to *f* in the cache format (atomically)."""
+    f.parent.mkdir(parents=True, exist_ok=True)
+    counts = np.array([feats[p].count for p in ids], dtype=np.int64)
+    tmp = f.with_suffix(".tmp.npz")
+    np.savez(
+        tmp,
+        page_ids=np.array(ids),
+        starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
+        keypoints=np.concatenate([feats[p].keypoints for p in ids]),
+        descriptors=np.concatenate([feats[p].descriptors for p in ids]),
+    )
+    tmp.replace(f)
 
 
 # --------------------------------------------------------------------------
@@ -356,6 +428,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     ap.add_argument("--beta", type=float, default=None, help="the balance passed to the app's structural line (#4458)")
     ap.add_argument(
+        "--thin",
+        type=float,
+        default=1.0,
+        help="#4488: keep this seeded fraction of each class's positives in the pool (prevalence knob)",
+    )
+    ap.add_argument(
         "--stop-log",
         action="store_true",
         help="#4488: write stop_log.jsonl - per click the line and the unlabelled pages above it",
@@ -387,8 +465,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     projection = load_tile_projection()
     from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
 
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:  # numpy releases the GIL while tiling
-        tiles = dict(zip(ids, pool.map(lambda p: tile_vectors(feats[p], projection), ids)))
+    tiles = _cached_tiles(ids, args.feature_cache, args.tier, st) if args.feature_cache else {}
+    if len(tiles) < len(ids):
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:  # numpy releases the GIL while tiling
+            tiles = dict(zip(ids, pool.map(lambda p: tile_vectors(feats[p], projection), ids)))
+        if args.feature_cache:
+            _save_tiles(tiles, ids, args.feature_cache, args.tier, st)
     snap_all = {
         pid: {"embedder": "sift_vlad_doc", "local_features": feats[pid], "tile_vectors": tiles[pid]} for pid in ids
     }
@@ -410,6 +492,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "stoplist": args.stoplist or "off",
                 "swap_halves": args.swap_halves,
                 "beta": args.beta,
+                "thin": args.thin,
                 "seed_crop": args.seed_crop,
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -433,6 +516,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         z = np.load(f)
         pool_ids = [str(p) for p in z["pool_ids"]]
         positive = z["positives"].astype(bool)
+        if args.thin < 1.0:
+            pool_ids, positive = thin_pool(cid, pool_ids, positive, args.thin)
         if not positive.any():
             continue
         col = {p: i for i, p in enumerate(pool_ids)}

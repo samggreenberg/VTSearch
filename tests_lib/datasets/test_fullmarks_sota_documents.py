@@ -51,3 +51,16 @@ def test_the_best_cut_at_each_balance_moves_with_beta(sd):
     assert out["best_fb025"] == pytest.approx(1.0625 * 1 / (0.0625 * 4 + 1))  # precision-leaning: stop at depth 1
     assert out["best_fb4"] == pytest.approx(17 * 4 / (16 * 4 + 8))  # recall-leaning: take all 8
     assert sd.beta_tag(0.25) == "025" and sd.beta_tag(1.0) == "1" and sd.beta_tag(4.0) == "4"
+
+
+def test_thinning_keeps_a_seeded_nested_fraction_of_positives(sd):
+    pool = [f"p{i:02d}" for i in range(20)]
+    positive = np.array([i % 2 == 0 for i in range(20)])  # 10 positives
+    ids_q, pos_q = sd.thin_pool("c", pool, positive, 0.25)
+    ids_h, _pos_h = sd.thin_pool("c", pool, positive, 0.5)
+    assert int(pos_q.sum()) == 3  # ceil(0.25 * 10)
+    assert len(ids_q) == 13  # the 10 negatives stay
+    kept_q = {p for p, y in zip(ids_q, pos_q) if y}
+    assert kept_q <= set(ids_h)  # a smaller fraction keeps a subset of a larger one's
+    assert sd.thin_pool("c", pool, positive, 0.25)[0] == ids_q  # reproducible
+    assert int(sd.thin_pool("c", pool, positive, 0.01)[1].sum()) == 1  # never below one
