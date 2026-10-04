@@ -463,7 +463,7 @@ class BalanceResponseSchema(BalanceStateSchema):
 class BalanceRequestSchema(Schema):
     """Body for ``POST /api/balance``."""
 
-    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 0.5 / 1 / 2).
+    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 1/4 / 1 / 4, #4448).
     beta = fields.Raw(required=True, validate=_validate_numeric)
 
 

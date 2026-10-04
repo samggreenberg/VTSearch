@@ -28,10 +28,13 @@ the line should make the most of (#4413, the owner's ruling of 2026-10-01,
 priced by #4411 in
 [`REPORT.md`](../experiments/2026-10-01-fbeta-line-4411/REPORT.md)). The
 app's Threshold control offers three presets as unnumbered radios along a
-False Positives to False Negatives spectrum: **2** (recall-leaning, the left
+False Positives to False Negatives spectrum: **4** (recall-leaning, the left
 radio: the line returns the most, with more wrong ones in it), **1**
-(balanced, the default) and **0.5** (precision-leaning, the right radio:
-only the surest, missing more). The API takes any beta in `[0.25, 4]`; a
+(balanced, the default) and **1/4** (precision-leaning, the right radio:
+only the surest, missing more). The ends were 2 and 0.5 until #4448; the
+control shows a stored balance off the list on its nearest radio in log
+space, a tie going to the radio that leans further, so a stored 2 or 0.5
+keeps its side. The API takes any beta in `[0.25, 4]`; a
 number outside it is clamped, and a boolean, non-number or `null` is a 422.
 The balance is kept per detector and seeded from the user's `beta` setting,
 as the floor was.

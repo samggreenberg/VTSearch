@@ -145,7 +145,7 @@ DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", 
 DEFAULT_MIN_PRECISION = 0.5
 
 #: The balance the line is drawn at by default (#4413): F-beta's beta, 1 =
-#: precision and recall weighed equally.  The presets are 0.5 / 1 / 2.  As with
+#: precision and recall weighed equally.  The presets are 1/4 / 1 / 4 (#4448).  As with
 #: the floor, ``vtscore.training.thresholds.DEFAULT_BETA`` re-exports it.
 DEFAULT_BETA = 1.0
 

@@ -10,6 +10,10 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`BALANCE_PRESETS` is `(0.25, 1.0, 4.0)`** (issue #4448; was
+  `(0.5, 1.0, 2.0)`): the presets' ends are `BETA_MIN` and `BETA_MAX`. The
+  spot check's start (`balance_schedule`) is unchanged: 32 at beta <= 1, 128
+  above.
 - **The balance's line from the labels alone** (issue #4452). New
   `vtscore.training.thresholds.labels_line`: `ClassScoreModel` /
   `class_score_model` (the calibration folds' held-out Good and Bad scores as

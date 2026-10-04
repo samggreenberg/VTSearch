@@ -120,7 +120,7 @@ will take in the results against how many right ones you will accept
 missing - and the line is drawn where that balance is best: the middle radio
 weighs the two mistakes equally, the False Positives radio counts a miss as
 the dearer mistake, the False Negatives radio a wrong item. (For the
-statisticians: the three are F-beta at 2, 1 and 0.5.)
+statisticians: the three are F-beta at 4, 1 and 1/4.)
 
 The line is where your labels put it. VTSearch holds out each of your votes
 in turn, scores it with a detector that never saw it, and learns from those

@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Threshold's outer radios lean further** (issue #4448). The False
+  Positives radio is now F-beta at 4 (was 2) and the False Negatives radio
+  F-beta at 1/4 (was 1/2); the middle stays balanced. On the same detector the
+  three now keep about 81, 47 and 26 images where they kept 58, 47 and 38, so
+  the choice makes a visible difference. A detector saved on an old outer
+  radio shows on the new one on the same side.
 - **The Threshold's line comes from your labels alone, in Train and in Find**
   (issue #4452). The line under a balance is no longer a count of the top of
   the ranking: VTSearch learns from your votes' held-out scores how high a
