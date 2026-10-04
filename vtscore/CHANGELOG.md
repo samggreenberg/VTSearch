@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The labels line's spread floor follows the corpus** (issue #4492).
+  `class_score_model` keeps the raw pooled spread (`ClassScoreModel.sigma_raw`,
+  `floored()`); once a corpus is known, the class model and the corpus's
+  negative bulk are floored at `RELATIVE_SIGMA_FLOOR` (0.5) × that corpus's
+  robust logit spread (`corpus_sigma_floor`) rather than an absolute 0.25.
+  `fit_corpus` and `corpus_posteriors` take the floor as `floor=`. The
+  parametric fallback, with no corpus, keeps `MIN_LOGIT_SIGMA`.
 - **The full-label ceiling's rank frame records Find's labels line** (issue
   #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
   calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
