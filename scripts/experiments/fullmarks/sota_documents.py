@@ -152,6 +152,39 @@ def _save_tiles(tiles: dict, ids: list[str], cache: Path, tier: str, st: Any) ->
 _SHARDS: dict[str, Any] = {}
 
 
+def _upload_shards(matrix: np.ndarray, n_gpu: int) -> list[tuple[int, int, Any]]:
+    """A new matrix's row shards, one per GPU, after handing the old ones back to the devices.
+
+    As the app's path does on a new matrix, the cached candidate descriptors (#4469) go too. Their
+    live blocks sit inside segments the allocator cannot release, and over 22 classes those grew to
+    16 GiB on GPU 0 and left the next shard no room (tier l, 2026-10-04). One retry after a release.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.media.structural import release_device_descriptors  # noqa: PLC0415
+
+    bounds = np.linspace(0, matrix.shape[0], n_gpu + 1).astype(np.int64)
+    for attempt in (1, 2):
+        _SHARDS.clear()
+        release_device_descriptors()
+        for i in range(n_gpu):
+            torch.cuda.set_device(i)
+            torch.cuda.empty_cache()
+        torch.cuda.set_device(0)
+        try:
+            return [
+                (int(lo), int(hi), torch.from_numpy(matrix[lo:hi]).to(f"cuda:{i}"))
+                for i, (lo, hi) in enumerate(zip(bounds[:-1], bounds[1:]))
+            ]
+        except torch.OutOfMemoryError:
+            if attempt == 2:
+                raise
+            import gc  # noqa: PLC0415
+
+            gc.collect()
+    raise AssertionError("unreachable")
+
+
 def sharded_gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[np.ndarray]:
     """Tiled Stage 1's page scores with the tile matrix split across every visible GPU (#4488, tier l).
 
@@ -167,17 +200,7 @@ def sharded_gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.
         return None
     key = f"{id(matrix)}:{matrix.shape}"
     if _SHARDS.get("key") != key:
-        _SHARDS.clear()
-        for i in range(n_gpu):
-            torch.cuda.set_device(i)
-            torch.cuda.empty_cache()
-        bounds = np.linspace(0, matrix.shape[0], n_gpu + 1).astype(np.int64)
-        parts = [
-            (int(lo), int(hi), torch.from_numpy(matrix[lo:hi]).to(f"cuda:{i}"))
-            for i, (lo, hi) in enumerate(zip(bounds[:-1], bounds[1:]))
-        ]
-        torch.cuda.set_device(0)
-        _SHARDS.update(key=key, parts=parts)
+        _SHARDS.update(key=key, parts=_upload_shards(matrix, n_gpu))
     best = np.empty(matrix.shape[0], dtype=np.float32)
     chunk = 262_144
     for lo, hi, tiles in _SHARDS["parts"]:
