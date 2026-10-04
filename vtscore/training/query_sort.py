@@ -167,11 +167,12 @@ def example_sort_from_paths(file_paths: list[Path]) -> tuple[list[dict], float]:
     # Any crop was already applied to the file above, so it restricts the
     # template.
     if getattr(emb, "supports_geometric_verification", False):
+        from vtscore.state import get_beta
         from vtscore.training.structural_similarity import maybe_structural_rerank_example
 
         example_features = [emb.local_features_forward(m) for m in medias]
         results, threshold = maybe_structural_rerank_example(
-            results, threshold, snap, example_features, score_key="similarity"
+            results, threshold, snap, example_features, score_key="similarity", beta=get_beta()
         )
 
     return results, threshold

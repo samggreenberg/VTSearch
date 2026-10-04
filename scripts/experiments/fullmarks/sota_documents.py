@@ -464,7 +464,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 )
                 ranked = [e for e in ranked if e["id"] in col]  # the seeded crop is not a pool page
             else:
-                ranked, line = maybe_structural_rerank_example(placeholder, 0.5, snap, crop)
+                ranked, line = maybe_structural_rerank_example(placeholder, 0.5, snap, crop, beta=args.beta)
             retrain_s = time.time() - t1
             order = np.array([col[e["id"]] for e in ranked])
             score = np.array([float(e["score"]) for e in ranked])
