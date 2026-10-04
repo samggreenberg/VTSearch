@@ -271,7 +271,7 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
 (e.g. `2026-09-27-state-of-the-app-binary-photo`) and carries these sections, in this order:
 
 1. **Headline: the returned set at each balance, from its own sessions**
-   (#4413): per beta (0.5 / 1 / 2) over clicks, the returned set's F-beta as
+   (#4413): per beta at the app's presets (1/4 / 1 / 4, #4448) over clicks, the returned set's F-beta as
    a share of the best F-beta any cut of the same ranking reaches
    (`returned_at_beta.png`, the "returned set at each balance" table), with
    its precision and recall beside it, text → 25 → 50 → final → ceiling. The

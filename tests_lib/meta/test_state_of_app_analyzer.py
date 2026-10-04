@@ -512,6 +512,21 @@ def test_no_check_pick_is_credited_as_a_click(run) -> None:
     assert "help_ap" in inf.columns
 
 
+def test_an_advisory_check_is_scored_on_the_set_it_audited() -> None:
+    """#4474: under the advisory check the range describes the audited set, which is not the set the line keeps."""
+    sa = _load("sota_analyze", _SOTA / "analyze.py")
+    check = pd.DataFrame(
+        [{"t": 160, "floor_count": 8, "check_audited": 16, "range_lo": 0.4, "range_hi": 0.9, "floor_status": "checked"}]
+    )
+    last = {"n_pool": 100, "pool_pos_ranks": "0 1 2 3 9 12"}  # 4 positives in the top 8, 6 in the top 16
+    out = sa._check_columns(check, last, None)
+    assert out["check_k"] == 16 and out["check_truth"] == pytest.approx(6 / 16)
+    assert out["check_covered"] == 0.0, "0.375 lies below the range"
+    floor = check.drop(columns="check_audited").assign(floor_status="confirmed")
+    out = sa._check_columns(floor, last, None)
+    assert out["check_k"] == 8 and out["check_truth"] == pytest.approx(4 / 8), "a floor walk's end is the kept set"
+
+
 def test_the_check_is_reported_against_its_own_truth(run, rm) -> None:
     for idx, cat in enumerate(CATS):
         row = run["cells"].loc[cat]
