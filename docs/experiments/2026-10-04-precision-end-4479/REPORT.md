@@ -8,7 +8,8 @@ returns a **subset** of beta 1's set?
 **Answer: almost.** By class-split CV the rule gains +0.084 [+0.044, +0.126] share of the best cut
 over clicks 0–25, and every click from 5 to 50 is clearly positive. But click 3's lower bound is
 −0.023, which misses the pre-registered per-click limit of −0.02 by 0.003. By the rule set in
-advance it does not ship. **The owner decides whether to override.**
+advance it does not ship. **The owner overrode the bar and shipped it (2026-10-04),** on the
+strength of the overall gain, the clearly positive later clicks, and the end-to-end result.
 
 ## The rule
 
