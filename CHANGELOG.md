@@ -17,6 +17,12 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Find returns a real set from the first clicks** (issue #4492). Early in a
+  session the Threshold's line used to keep a single image for about 15 clicks,
+  because the model of your labels was held to a fixed minimum width that an
+  early detector's scores are narrower than. The minimum now follows the
+  collection's own spread, so after a handful of votes the line keeps a set of
+  sensible size: at balanced, around 30 to 45 images where it kept 1.
 - **The Threshold's outer radios lean further** (issue #4448). The False
   Positives radio is now F-beta at 4 (was 2) and the False Negatives radio
   F-beta at 1/4 (was 1/2); the middle stays balanced. On the same detector the
