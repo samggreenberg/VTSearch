@@ -37,8 +37,8 @@ if [[ -n "${SOTA_FLOOR:-}" ]]; then
   export CALIB_MIN_PRECISION="$SOTA_FLOOR"
   _PTAG="-p$(python3 -c "import sys; print(round(float(sys.argv[1]) * 100))" "$SOTA_FLOOR")"
 fi
-# The balance (#4413): SOTA_BETA=0.5|1|2 runs every session at that F-beta
-# balance (-b05, -b1, -b2); the review's sessions run once per beta.
+# The balance (#4413): SOTA_BETA=0.25|1|4, the app's presets (#4448), runs every
+# session at that F-beta balance (-b025, -b1, -b4); the review's sessions run once per beta.
 if [[ -n "${SOTA_BETA:-}" ]]; then
   export CALIB_BETA="$SOTA_BETA"
   _PTAG="-b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$SOTA_BETA")"

@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The rank frames record the app's line at the app's presets** (issue
+  #4471). `RANK_FRAME_BETAS` is `(0.25, 1.0, 4.0)` (was `(0.5, 1.0, 2.0)`),
+  with columns `test_line_k_b025` / `_b1` / `_b4`. Under the default arm the
+  count is what the labels line (#4452) keeps on the test half, from the same
+  fit the headline row cuts at the run's beta (so the two agree exactly), or
+  what the retrain's fallback cut keeps when no class model exists; it can be
+  0. A forced `walk_shape` arm still records the count line.
 - **`BALANCE_PRESETS` is `(0.25, 1.0, 4.0)`** (issue #4448; was
   `(0.5, 1.0, 2.0)`): the presets' ends are `BETA_MIN` and `BETA_MAX`. The
   spot check's start (`balance_schedule`) is unchanged: 32 at beta <= 1, 128

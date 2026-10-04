@@ -446,22 +446,30 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     "test_line_k_p10",
     "test_line_k_p50",
     "test_line_k_p90",
-    #: The same for the balance's line (#4413) at each preset beta in
-    #: :data:`RANK_FRAME_BETAS`: the mixture's F-beta argmax under the cap on
-    #: the test half plus the session's votes.  -1 without a session line.
-    "test_line_k_b05",
+    #: The same for the balance's line at each preset beta in
+    #: :data:`RANK_FRAME_BETAS` (#4471).  Under the app's labels line (#4452)
+    #: what it keeps on the test half, its corpus side fitted there as Find
+    #: fits it - the count at the run's own beta is the headline's returned
+    #: set - or, with no class model that step, what the retrain's fallback
+    #: cut keeps; 0 when the line keeps nothing.  Under a forced check shape
+    #: (``walk_shape``) the count line's: the mixture's F-beta argmax under the
+    #: cap on the test half plus the session's votes (#4413).  -1 without a
+    #: session line.  Runs before #4471 recorded the count line at 0.5 / 1 / 2.
+    "test_line_k_b025",
     "test_line_k_b1",
-    "test_line_k_b2",
+    "test_line_k_b4",
 )
 
 #: The floors the rank frame records the shipped line's count at (the presets).
 RANK_FRAME_FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
-#: The balances it records the balance line's count at (the presets, #4413).
-RANK_FRAME_BETAS: tuple[float, ...] = (0.5, 1.0, 2.0)
+#: The balances it records the balance line's count at: the app's presets,
+#: ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a test pins
+#: the two together, so the analysis follows the app).
+RANK_FRAME_BETAS: tuple[float, ...] = (0.25, 1.0, 4.0)
 
 
 def beta_tag(beta: float) -> str:
-    """``b05`` / ``b1`` / ``b2``: the column suffix a balance's metrics carry."""
+    """``b025`` / ``b1`` / ``b4``: the column suffix a balance's metrics carry."""
     return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
 
 
