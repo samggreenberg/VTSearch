@@ -87,29 +87,30 @@ that aimed at 1/4, and so on.
 ![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.png)
 
 **The returned set, one rule per row.** "App line" is what each sort's own
-line in the app returns: the text sort's blind GMM cut, the detector's labels
-line, and the full-label model's threshold as the harness applied it.
+line in the app returns: the text sort's blind GMM cut and the detector's
+labels line. The full-label ceiling has no app line yet: the harness cuts it
+at the retired cost oracle on the test labels, which is neither Train's
+threshold (Find cannot see it) nor Find's line (#4486), so that cell is blank.
 "Top-K" is set-constant at the old cap on every sort: 32 at beta ≤ 1, 128 at
 beta 4. Compare within a rule, never across. Detector rows are the last click
 before the check.
 
 | preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels | returned at 150, median / text sort |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 1/4 | app line | 0.01 | 0.36 | 0.47 | **0.57** | 0.21 | 35 / 4,500 |
+| 1/4 | app line | 0.01 | 0.36 | 0.47 | **0.57** | — | 35 / 4,500 |
 | 1/4 | top 32 | 0.47 | 0.42 | 0.49 | **0.57** | 0.62 | 32 / 32 |
-| 1 | app line | 0.02 | 0.26 | 0.38 | **0.48** | 0.28 | 48 / 4,500 |
+| 1 | app line | 0.02 | 0.26 | 0.38 | **0.48** | — | 48 / 4,500 |
 | 1 | top 32 | 0.38 | 0.34 | 0.39 | **0.46** | 0.50 | 32 / 32 |
-| 4 | app line | 0.15 | 0.32 | 0.46 | **0.55** | 0.59 | 79 / 4,500 |
+| 4 | app line | 0.15 | 0.32 | 0.46 | **0.55** | — | 79 / 4,500 |
 | 4 | top 128 | 0.49 | 0.40 | 0.47 | **0.56** | 0.62 | 128 / 128 |
 
 Two things the rules show together. Under the app's own lines the detector
 wins at every point from click 4 on, because the text sort's line returns
 most of the corpus. Under top-K the ranking alone is compared, and 150
 clicks of detector beat the text sort by 0.08 to 0.10 at every preset. The
-full-label model's own line is the odd row: at beta 1 it returns about 840
-images at precision 0.20 (F1 0.28 against a best cut of 0.58), which says
-the labels line mis-sizes its set even when every label is known; that is
-filed as a finding, not a fix.
+ceiling's app-line cell is blank because the harness never draws Find's line
+for the full-label model; #4486 adds it, and until then the ceiling is read
+under top-K only.
 
 **The ranking** barely depends on the preset (the beta-1 sessions):
 
@@ -274,10 +275,9 @@ Three of these four were harmful in the 2026-10-01 review too. They are what
   overtakes the text sort's by click 6. The fix is an estimate that stays
   honest when the only Goods so far are the easiest ones; a set-constant
   floor would hide it and does not scale with the Find corpus (owner).
-- **The full-label model's own line under-sizes its set.** With every label
-  known it returns about 840 images at F1 0.28 against a best cut of 0.58
-  (beta 1). The line's model of where positives sit is off even with
-  perfect labels.
+- **#4486: give the ceiling Find's line.** The harness cuts the full-label
+  model at the retired cost oracle on the test labels, so the review cannot
+  yet say what Find would return with every label known.
 - **#4482: priced.** Per vote, check-style picks are worth about twice
   Autopilot's late clicks (+0.047 for 22 picks at click 100 against +0.023
   for 50 clicks), and they add up rather than substitute.
