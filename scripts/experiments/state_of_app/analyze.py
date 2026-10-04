@@ -62,7 +62,8 @@ check's own columns only.  "Final" is the last *ordinary* step, the curves stop
 there, and no check pick is credited as a click.  The check's truth is the
 share right of the set its range describes: the top ``check_k`` of the pool's
 unvoted ranking at the last ordinary step (the ``last`` rank frame), which is
-the candidate the check drew its picks from.  What the check *should* certify
+the candidate the check drew its picks from.  Under the advisory check that is
+the set it audited (``check_audited``, #4427), not the set the line keeps.  What the check *should* certify
 is #4358's ruling; until then this reports what it does certify.
 
 **How a click is credited (owner, 2026-09-23).** The harness scores the test
@@ -282,7 +283,13 @@ def _check_columns(check: pd.DataFrame | None, last_frame: dict | None, check_pi
     if check is None or check.empty:
         return {"check_status": "", "check_votes": 0}
     end = check.sort_values("t").iloc[-1]
-    k = int(_f(end.get("floor_count"))) if np.isfinite(_f(end.get("floor_count"))) else -1
+    # The range describes the set the walk audited (#4427): under the advisory
+    # check (every balance since #4452) that is not the set the line keeps, so
+    # the truth is read on ``check_audited`` when the row records one. A floor
+    # walk records none; its end is the kept set (``floor_count``).
+    audited = _f(end.get("check_audited"))
+    kept = _f(end.get("floor_count"))
+    k = int(audited) if np.isfinite(audited) and audited >= 1 else (int(kept) if np.isfinite(kept) else -1)
     lo, hi = _f(end.get("range_lo")), _f(end.get("range_hi"))
     truth = nan
     if last_frame is not None and k > 0 and int(last_frame["n_pool"]) > 0:
