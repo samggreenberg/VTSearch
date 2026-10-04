@@ -355,6 +355,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "its tiles or its whole VLAD",
     )
     ap.add_argument("--beta", type=float, default=None, help="the balance passed to the app's structural line (#4458)")
+    ap.add_argument(
+        "--stop-log",
+        action="store_true",
+        help="#4488: write stop_log.jsonl - per click the line and the unlabelled pages above it",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
@@ -469,6 +474,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             order = np.array([col[e["id"]] for e in ranked])
             score = np.array([float(e["score"]) for e in ranked])
             labelled = {col[p] for p in (*goods, *bads)}
+            if args.stop_log:
+                above = [int(i) for i, sc in zip(order, score) if sc >= line and int(i) not in labelled]
+                with (args.out / "stop_log.jsonl").open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"class_id": cid, "v": v, "line": float(line), "above": above}) + "\n")
             keep = test[order]
             rest, rest_score = order[keep], score[keep]
             hits = positive[rest]
@@ -538,6 +547,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 {
                     "class_id": cid,
                     "click": v + 1,
+                    # The detector's call on this page before the click (#4488's Smart).
+                    "score_before": float(score[int(np.flatnonzero(order == nxt)[0])]),
+                    "line_before": float(line),
+                    "page_index": int(nxt),
                     "page_id": pid,
                     "label": label,
                     "stage1_rank": int(np.flatnonzero(order == nxt)[0]),
