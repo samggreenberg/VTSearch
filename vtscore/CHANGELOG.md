@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The full-label ceiling's rank frame records Find's labels line** (issue
+  #4486). `_skyline_arm_rows` draws the labels line from the skyline's own
+  calibration folds (`_skyline_fit_and_score(details_sink=...)`), fits its
+  corpus side on the withheld half, and records what it keeps at each preset
+  (`test_line_k_b025/b1/b4`); it was -1. The skyline row itself is unchanged:
+  still the oracle's cut on the test labels.
 - **The rank frames record the app's line at the app's presets** (issue
   #4471). `RANK_FRAME_BETAS` is `(0.25, 1.0, 4.0)` (was `(0.5, 1.0, 2.0)`),
   with columns `test_line_k_b025` / `_b1` / `_b4`. Under the default arm the
