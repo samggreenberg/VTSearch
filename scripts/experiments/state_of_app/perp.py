@@ -10,7 +10,11 @@ P only from its own sessions:
   the 50% run is given, the same P read off the 50% sessions is drawn light, so
   the figure shows what running each P on its own changed.
 * With ``--kind balance`` the runs are keyed by beta (#4413): ``returned_at_own_beta.png`` (the
-  returned set's F-beta as a share of the best cut, per beta over clicks) and ``perbeta_summary.md``.
+  returned set's F-beta as a share of the best cut, per beta over clicks), ``objective_at_own_beta.png``
+  (the objective over clicks, with the end after the check) and ``perbeta_summary.md``: the objective
+  first (#4427: F-beta of the withheld set above the app's threshold, before and after the check, with
+  the returned set's size), then the returned set from the rank frames, the early dip against the
+  typed query's set, and the spot check (#4474).
 * ``perp_summary.md`` -- per P and point (text, 25, 50, final, ceiling):
   precision, its gap to P, the share of runs meeting P, recall, the oracle's
   recall at P and the share of it returned; then each P's sessions' AP and
@@ -127,7 +131,10 @@ def _beta_tag(beta: float) -> str:
 
 
 def figure_balance(runs: dict[float, Path], out: Path) -> None:
-    """Per beta, over clicks: the returned set's F-beta as a share of the best cut, each beta off its own sessions (#4413)."""
+    """Per beta, over clicks: the returned set's F-beta as a share of the best cut, each beta off its own sessions (#4413).
+
+    The typed query's level (click 0) is drawn dashed: the detector's set has to climb back to it (#4474).
+    """
     betas = sorted(runs)
     fig, axes = plt.subplots(1, len(betas), figsize=(4.4 * len(betas), 3.9), facecolor=SURFACE, sharey=True)
     axes = [axes] if len(betas) == 1 else list(axes)
@@ -141,6 +148,8 @@ def figure_balance(runs: dict[float, Path], out: Path) -> None:
         ax.annotate(f"{m.iloc[-1]:.2f}", (m.index[-1], m.iloc[-1]), xytext=(4, 0), textcoords="offset points",
                     va="center", color=INK, fontsize=8)  # fmt: skip
         ax.axhline(1.0, color=INK, ls=":", lw=1.2)
+        if 0 in m.index:
+            ax.axhline(float(m.loc[0]), color=INK, ls="--", lw=0.9, alpha=0.6)
         ax.set_title(f"beta = {beta:g}: F-beta / best cut", color=INK, fontsize=10, loc="left")
         _axes(ax)
         ax.set_ylim(0, 1.05)
@@ -151,11 +160,111 @@ def figure_balance(runs: dict[float, Path], out: Path) -> None:
     plt.close(fig)
 
 
+def figure_objective(runs: dict[float, Path], out: Path) -> None:
+    """Per beta, over clicks: the objective (#4427), unchecked at each click, and the end after the check."""
+    betas = sorted(runs)
+    fig, axes = plt.subplots(1, len(betas), figsize=(4.4 * len(betas), 3.9), facecolor=SURFACE, sharey=True)
+    axes = [axes] if len(betas) == 1 else list(axes)
+    for ax, beta in zip(axes, betas, strict=True):
+        c = pd.read_csv(runs[beta] / "curves.csv")
+        cells = pd.read_csv(runs[beta] / "cells.csv")
+        trained = cells[~cells["never_trained"].astype(bool)]
+        if "thr_fbeta" in c:
+            m = c.groupby("t")["thr_fbeta"].mean().dropna()
+            ax.plot(m.index, m.to_numpy(), color="#2a6fdb", lw=2, label="unchecked, at each click")
+            if "thr_fbeta_final" in trained and len(m):
+                ax.scatter([m.index.max() + 6], [trained["thr_fbeta_final"].mean()], color="#d9480f", zorder=3,
+                           label="after the check")  # fmt: skip
+        ax.set_title(f"beta = {beta:g}: the objective", color=INK, fontsize=10, loc="left")
+        _axes(ax)
+        ax.set_xlabel("clicks", color=INK)
+    axes[0].set_ylabel("F-beta of the withheld set above the threshold", color=INK)
+    axes[-1].legend(fontsize=8, frameon=False, loc="lower right")
+    fig.tight_layout()
+    fig.savefig(out / "objective_at_own_beta.png", dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+
+
+def _objective_rows(runs: dict[float, Path]) -> pd.DataFrame:
+    """Per beta, off its own sessions: the objective before and after the check, and what the line returned."""
+    rows = []
+    for beta, d in sorted(runs.items()):
+        c = pd.read_csv(d / "cells.csv")
+        c = c[~c["never_trained"].astype(bool)]
+        if "thr_fbeta_final" not in c:
+            continue
+        effect = c["thr_fbeta_final"] - c["thr_fbeta_unchecked"]
+        se = effect.std() / max(len(effect), 1) ** 0.5
+        rows.append({
+            "beta": f"{beta:g}",
+            "runs": len(c),
+            "F at 25": c.get("thr_fbeta_25", pd.Series(dtype=float)).mean(),
+            "F at 50": c.get("thr_fbeta_50", pd.Series(dtype=float)).mean(),
+            "F unchecked": c["thr_fbeta_unchecked"].mean(),
+            "F after the check": c["thr_fbeta_final"].mean(),
+            "check's effect": f"{effect.mean():+.3f} ± {se:.3f}",
+            "precision after": c["thr_precision_final"].mean(),
+            "recall after": c["thr_recall_final"].mean(),
+            "returned median, unchecked / after": f"{c['thr_returned_unchecked'].median():.0f} / {c['thr_returned_final'].median():.0f}",
+            "over 200, unchecked / after": f"{(c['thr_returned_unchecked'] > 200).mean():.0%} / {(c['thr_returned_final'] > 200).mean():.0%}",
+            "check votes": c["check_votes"].mean() if "check_votes" in c else float("nan"),
+        })  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
+    """Per beta: the returned set's share of the best cut at the typed query (click 0), its low, and its recovery."""
+    rows = []
+    for beta, d in sorted(runs.items()):
+        col = f"fb_share_{_beta_tag(beta)}"
+        c = pd.read_csv(d / "curves.csv")
+        if col not in c:
+            continue
+        m = c.groupby("t")[col].mean().dropna()
+        if 0 not in m.index or len(m) < 2:
+            continue
+        low_t = int(m.loc[1:].idxmin())
+        back = m.loc[low_t:][m.loc[low_t:] >= m.loc[0]]
+        rows.append({
+            "beta": f"{beta:g}", "typed query": m.loc[0], "lowest": m.loc[low_t], "at click": low_t,
+            "at 10": m.get(10, float("nan")), "at 25": m.get(25, float("nan")),
+            "back at the typed query's level by click": int(back.index[0]) if len(back) else "not by the end",
+        })  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def _check_rows(runs: dict[float, Path]) -> pd.DataFrame:
+    """Per beta: the spot check's votes, its range and how often the range held the audited set's truth."""
+    rows = []
+    for beta, d in sorted(runs.items()):
+        c = pd.read_csv(d / "cells.csv")
+        if "check_votes" not in c:
+            continue
+        c = c[c["check_votes"].fillna(0) > 0]
+        rows.append({
+            "beta": f"{beta:g}", "checks": len(c), "votes": c["check_votes"].mean(),
+            "range lo": c["range_lo"].mean(), "range hi": c["range_hi"].mean(),
+            "width": (c["range_hi"] - c["range_lo"]).mean(), "truth": c["check_truth"].mean(),
+            "covered": c["check_covered"].mean(),
+        })  # fmt: skip
+    return pd.DataFrame(rows)
+
+
 def summary_balance(runs: dict[float, Path], out: Path) -> None:
     from analyze import returned_at_beta  # noqa: PLC0415
 
     md = [
-        "# The returned set at each balance, each read off its own sessions (#4413)",
+        "# Each balance read off its own sessions (#4413)",
+        "",
+        "## The objective",
+        "",
+        "F-beta at the sessions' own beta of the withheld images above the app's threshold (#4427): at 25 and "
+        "50 clicks, at the last click before the spot check (`unchecked`), and after the check and its votes; "
+        "the check's paired effect; the returned set's size.",
+        "",
+        _md(_objective_rows(runs).round(3), index=False),
+        "",
+        "## The returned set at each balance (rank frames)",
         "",
         "`fbeta` against `oracle_fbeta` (the best any cut of the same ranking reaches; `fb_share` = fbeta / "
         "oracle), with `k`, `precision` and `recall`. Points: text sort, 25 and 50 clicks, the end, full labels.",
@@ -169,7 +278,21 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
         rows.append(t)
     table = pd.concat(rows, ignore_index=True)
     table["point"] = pd.Categorical(table["point"].astype(str), HEADLINE_POINTS, ordered=True)
-    md += [_md(table, index=False)]
+    md += [_md(table, index=False), ""]
+    md += [
+        "## The early dip",
+        "",
+        "The returned set's share of the best cut, mean over runs: the typed query's set at click 0, the "
+        "detector's lowest, and the click by which it is back at the typed query's level.",
+        "",
+        _md(_dip_rows(runs).round(3), index=False),
+        "",
+        "## The spot check",
+        "",
+        "`truth` is the share right of the set the check audited (#4474); `covered` is how often the range held it.",
+        "",
+        _md(_check_rows(runs).round(3), index=False),
+    ]
     (out / "perbeta_summary.md").write_text("\n".join(md) + "\n")
 
 
@@ -185,6 +308,7 @@ def main(argv: list[str] | None = None) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     if args.kind == "balance":
         figure_balance(runs, args.out)
+        figure_objective(runs, args.out)
         summary_balance(runs, args.out)
     else:
         figure(runs, args.out)

@@ -190,6 +190,7 @@ bash launch.sh cells                                  # login node: the full arr
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
+python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
 # per floor (#4408, the floor-era control): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
 python perp.py --run 0.1=<p10>/analysis-binary --run 0.5=<p50>/analysis-binary --run 0.9=<p90>/analysis-binary --out <dir>
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/

@@ -492,6 +492,25 @@ def test_perp_reads_each_p_off_its_own_run(run, tmp_path) -> None:
     assert "| 10% |" in md and "| 90% |" in md and "50% (read at 90%)" in md
 
 
+def test_perp_reads_each_beta_off_its_own_run(run, tmp_path) -> None:
+    """``perp.py --kind balance`` (#4474): the objective first, then the returned set, the early dip and the check."""
+    out = tmp_path / "perbeta"
+    a = run["exp"] / "analysis"
+    subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
+        [sys.executable, str(_SOTA / "perp.py"), "--kind", "balance", "--run", f"0.25={a}", "--run", f"1={a}",
+         "--run", f"4={a}", "--out", str(out)],
+        check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    for png in ("returned_at_own_beta.png", "objective_at_own_beta.png"):
+        assert (out / png).stat().st_size > 0
+    md = (out / "perbeta_summary.md").read_text()
+    sections = ["## The objective", "## The returned set at each balance", "## The early dip", "## The spot check"]
+    assert all(s_ in md for s_ in sections) and [md.index(s_) for s_ in sections] == sorted(
+        md.index(s_) for s_ in sections
+    )
+    assert "| 0.25 |" in md and "| 4 |" in md
+
+
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:
     for idx, cat in enumerate(CATS):
         main = _main_frame(run["exp"], idx)
