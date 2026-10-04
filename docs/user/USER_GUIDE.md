@@ -122,14 +122,19 @@ weighs the two mistakes equally, the False Positives radio counts a miss as
 the dearer mistake, the False Negatives radio a wrong item. (For the
 statisticians: the three are F-beta at 2, 1 and 0.5.)
 
-The line always keeps a set: the top of the ranking, among the items you
-haven't voted on. How many it keeps depends on the Threshold: up to the top
-128 on the False Positives radio, and up to the top 32 on the middle and
-False Negatives radios - fewer when the detector's own estimate of its scores,
-anchored on your votes, says the balance peaks sooner. Until you **check**
-that set, nothing has measured how much of it is right or how much of what
-is there it found, and the note under the Threshold says so: **Top 32 kept,
-unchecked** (or however many it kept).
+The line is where your labels put it. VTSearch holds out each of your votes
+in turn, scores it with a detector that never saw it, and learns from those
+scores how high a match and how high a non-match tend to score. It then
+estimates how common matches are in the collection in front of you, and
+draws the line where the balance your radio asks for is best for a
+collection like that. The line keeps every item above it that you haven't
+voted on - as many as clear it, and on a collection with nothing like your
+target, few or none. Nothing caps it at a fixed number. Because the line comes
+from your labels, it travels with them: export the detector, run Find with
+it on another collection, and VTSearch draws the line the same way there.
+Until you **check** the items above the line, nothing has measured how much
+of them is right or how much of what is there they found, and the note under
+the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
 
 **The spot check.** In Train, click **Check 5 picks** beside the note.
 VTSearch cuts the list you haven't voted on into bands from the top (the top
@@ -148,9 +153,9 @@ The picks come in the order they were drawn, which is random, with no rank
 and no score. They are a sample from the band, not the top of the list. A
 round is 5 picks from one band, whatever the radio.
 
-The check **walks** the list. It starts with the bands that make up the set
-the line keeps (the top 32 on the middle and False Negatives radios, the top
-128 on False Positives), one round each. Once those are in, it weighs the
+The check **walks** the list. It starts with the top bands (the top 32 on
+the middle and False Negatives radios, the top 128 on False Positives), one
+round each. Once those are in, it weighs the
 picks by the size of their bands to estimate how many of the set are right,
 reads that against the detector's own count of how many matches the whole
 list holds to estimate how many it found, and scores the set on the balance
@@ -158,20 +163,23 @@ your radio asks for. While a longer list scores better, the check says
 **Better so far: checking the next 32** and draws from the next band down;
 the first time a longer list scores worse it says **Past the peak: checking
 a shorter list** and steps back without drawing again. It ends on the set
-where the balance peaked, or at either end of the list, and the line keeps
-that set. On a long list of good matches the line can end up keeping
-hundreds; on a short or sparse one, as few as 8. The check's last screen
-says what it found - **Checked: likely 55–80% right, about half of them
-found (checked 15).** and **The line keeps these 48: the set where the
-check's balance peaked. The ranges are what the picks say about them.** -
-and the note under the Threshold then shows the same result:
+where the balance peaked, or at either end of the list: on a long list of
+good matches that can be hundreds, on a short or sparse one as few as 8.
+**The check does not move the line**: it measures, and your picks become
+votes that the next retrain learns from like any other, but the line stays
+where your labels put it. The check's last screen says what it found -
+**Checked the top 48: likely 55–80% right, about half of them found (checked
+15).** and **The line keeps its 30, where your labels put it: the check
+informs the line and does not move it. The ranges are what the picks say
+about the top 48.** - and the note under the Threshold then shows the same
+result:
 
 - **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  48 kept** - the check ended on the top 48, and the line keeps them. The
-  range is how much of the set is likely right; the phrase after it is how
-  much of what the list holds the set likely found (**few of them**, **about
-  a quarter**, **about half**, **about three quarters** or **nearly all of
-  them**). The note names no cause for a poor result: a dataset with very few
+  30 kept** - the check measured the top 48, and the line keeps 30. The
+  range is how much of the checked set is likely right; the phrase after it
+  is how much of what the list holds that set likely found (**few of them**,
+  **about a quarter**, **about half**, **about three quarters** or **nearly
+  all of them**). Hovering the note says which set the check measured. The note names no cause for a poor result: a dataset with very few
   matches and a detector that can't yet tell them apart look the same from
   here.
 
@@ -190,8 +198,8 @@ top 32, unchecked**).
 
 **A range measures the list as it was when you checked it.** Your check
 votes are ordinary votes, so they train the detector like any other. Later
-votes retrain it, and the line then follows the new ranking at the same
-count, so the items at the line change. The range stays on screen as it
+votes retrain it, and the line moves with what your labels now say, so the
+items at the line change. The range stays on screen as it
 was, and hovering it says it was measured before your later votes. **Check**
 again for a fresh one: a check needs something to have changed since the
 last, and any vote does that. A check belongs to the radio it was run on:
@@ -204,8 +212,8 @@ finished stay as votes.
 Everything that uses the matches works on the line in every state: the
 *Unverified Good* count, the Find review walk, **To Dataset**, **Export**
 and **Browse** all act on the items above it. An AutoRun or command-line run
-has nobody to vote, so it can't be checked: it exports the unchecked
-starting set and records it as unchecked, with a line in the run's log and a
+has nobody to vote, so it can't be checked: it exports the line your labels
+draw for that collection and records it as unchecked, with a line in the run's log and a
 `balance` entry beside the threshold in exports that carry the full results
 (see [the command-line guide](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
 
@@ -1063,9 +1071,11 @@ runs).
 
 - **Left pane** - the **work queue** of items the detector hasn't been
   confirmed on yet, ranked by score, under the same
-  [Threshold](#3-threshold) you set while labeling. The line through it
-  keeps the set the Threshold keeps, and the note under the Threshold says
-  what a check found on it; see
+  [Threshold](#3-threshold) you set while labeling. The line through it is
+  the Threshold's line drawn from your labels for this collection (it
+  estimates how common matches are here), so a collection with nothing like
+  your target shows few or none above it; the note under the Threshold says
+  what a check found; see
   [How close the line got](#how-close-the-line-got).
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you
   verify the current item just like you vote during training.

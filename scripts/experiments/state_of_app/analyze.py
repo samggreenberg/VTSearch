@@ -308,6 +308,15 @@ def _check_columns(check: pd.DataFrame | None, last_frame: dict | None, check_pi
 
 
 def _fbeta_pr(precision: float, recall: float, beta: float) -> float:
+    """F-beta from precision and recall; an empty returned set (no precision, recall 0) scores 0, not NaN.
+
+    A line that keeps nothing of a corpus that holds positives found none of
+    them: its F-beta is 0.  Reading it as NaN dropped the cell from every
+    mean, which flattered whichever line kept nothing most often (#4452: 18
+    cells of 702 at beta 1 for the count line, 27 for the labels line).
+    """
+    if np.isfinite(recall) and not np.isfinite(precision) and recall == 0:
+        return 0.0
     if not (np.isfinite(precision) and np.isfinite(recall)):
         return float("nan")
     b2 = beta * beta

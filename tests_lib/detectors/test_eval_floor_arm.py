@@ -222,7 +222,8 @@ class TestTheBalanceArm:
         steps = [r for r in rows if r["phase"] not in ("check", "")]
         assert steps and all(r["beta"] == 1.0 and math.isnan(r["min_precision"]) for r in steps)
         assert all(r["floor_status"] == FLOOR_UNCHECKED for r in steps)
-        assert all(1 <= r["floor_count"] <= min(32, r["n_remainder"]) for r in steps), "the cap holds"
+        # No cap since #4452: the labels' line keeps what clears it, possibly none.
+        assert all(0 <= r["floor_count"] <= r["n_remainder"] for r in steps)
 
     def test_the_check_is_the_f_beta_walk_and_ends_checked(self):
         rows, picks = self._run(beta=1.0)

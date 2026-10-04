@@ -10,6 +10,32 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The balance's line from the labels alone** (issue #4452). New
+  `vtscore.training.thresholds.labels_line`: `ClassScoreModel` /
+  `class_score_model` (the calibration folds' held-out Good and Bad scores as
+  two normals of one spread on the logit scale; the head's in-sample scores
+  stand in with one Good), `estimate_positives`, `corpus_fit` and
+  `corpus_prevalence` (a 2-part fit of a corpus's unvoted scores, the labels'
+  Good component fixed and the bulk of negatives fitted as `CorpusNegatives`,
+  guarded by a counted bound), `corpus_posteriors` (each unvoted item's chance
+  of being a positive, from a 3-part fit with the labels' Bad component),
+  `corpus_cut` (the cut maximising expected F-beta with TP the running sum of
+  those chances, the total from the 2-part fit and the returned size counted;
+  between items), `labels_line_threshold` (the parametric cut at a prevalence,
+  for a line with no corpus scores), `LabelsLine` (`threshold(beta)`,
+  `on_corpus(...)` to re-fit the corpus side on another corpus) and
+  `fit_labels_line`. Every retrain fits it
+  and parks it on `DetectorContext.labels_line`; under a balance it is the
+  line (no count, no cap), the re-cut moves it with beta, and a Find over a
+  new dataset re-fits only the corpus side. `balance_state(...,
+  threshold=)` counts what a threshold keeps of the ranking; `check_shape`
+  is `advisory` at every beta. The eval harness's default arm draws the same
+  line on the sim set and cuts the withheld half at Find's threshold; its base
+  calibration rows gain `train_threshold`, `train_prevalence` and
+  `find_prevalence`, and a forced `walk_shape` runs the count line as an arm.
+  `simulate_voting_iterations` gains `sim_size` (train on a seeded subsample
+  of the sim set) and `test_score_sink` (the withheld half's scores and
+  labels, for Find scenarios drawn after the run).
 - **A balance walk's effect on the line follows the preset** (issue #4427).
   `check_shape(beta)` is `advisory` at beta <= 1 and `trim` above:
   `balance_count` / `balance_line` ignore a finished walk under `advisory`

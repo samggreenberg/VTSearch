@@ -155,7 +155,7 @@ export class SpotCheckModalComponent implements OnInit {
     if (b.shape === 'advisory') {
       const audited = (b.audited ?? b.count).toLocaleString();
       return (
-        `The line keeps its ${kept}, the balance's own count: at this balance the check informs the line and does not move it. ` +
+        `The line keeps its ${kept}, where your labels put it: the check informs the line and does not move it. ` +
         `The ranges are what the picks say about the top ${audited}.`
       );
     }

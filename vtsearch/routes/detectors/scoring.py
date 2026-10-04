@@ -95,14 +95,18 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
     ranking training has just stored is left alone.  Returns the threshold to
     use: *threshold* unchanged when there was a ranking already, or no set to
     keep.
+
+    Under the balance (#4452) nothing is counted on this corpus: the line is
+    the labels' class model with the prevalence re-estimated on these scores,
+    which is what a cold Find over the same corpus computes; the ranking only
+    reports how many the line keeps here.
     """
     from vtscore.state.core import (  # noqa: PLC0415
-        detector_balance_proposal,
         detector_line_proposal,
         get_active_detector_context,
         human_voted_ids,
     )
-    from vtscore.training.thresholds import LineRanking, balance_line, floor_line  # noqa: PLC0415
+    from vtscore.training.thresholds import LineRanking, floor_line  # noqa: PLC0415
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
@@ -112,15 +116,22 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
     det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
     knobs = line_knobs()
     beta, floor = knobs["beta"], knobs["min_precision"]
-    if beta is not None:  # the balance draws the line (#4413)
-        kept = balance_line(
-            det_ctx.line_ranking,
-            beta,
-            det_ctx.precision_check,
-            voted,
-            proposal=detector_balance_proposal(det_ctx, beta),
+    if beta is not None and det_ctx.labels_line is not None:
+        # The labels' line (#4452): the class model the labels gave the head,
+        # with the prevalence re-estimated on this corpus as a cold Find would
+        # (the same EM over its scores) - never a count drawn on it.  The
+        # ranking stays for the line's state: how many it keeps here.
+        det_ctx.labels_line = det_ctx.labels_line.on_corpus(
+            [r["score"] for r in results],
+            [r["id"] for r in results],
+            {cid: True for cid in det_ctx.good_votes if cid in voted}
+            | {cid: False for cid in det_ctx.bad_votes if cid in voted},
         )
-        return threshold if kept is None else kept
+        return float(det_ctx.labels_line.threshold(beta))
+    if beta is not None:
+        # No class model behind this head (too few votes, one class): the
+        # threshold the retrain stored stands - no count on this corpus (#4452).
+        return threshold
     if floor is None:
         return threshold
     kept = floor_line(

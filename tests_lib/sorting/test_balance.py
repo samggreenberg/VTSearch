@@ -333,14 +333,15 @@ class TestTheWalk:
 
 
 class TestTheCheckShape:
-    def test_the_shape_follows_the_preset(self):
-        """#4427's pricing: advisory at beta <= 1, trim above; the walk's default direction follows it."""
-        assert [check_shape(b) for b in (0.25, 0.5, 1.0, 2.0, 4.0)] == [CHECK_ADVISORY] * 3 + [CHECK_TRIM] * 2
+    def test_the_check_is_advisory_at_every_preset(self):
+        """#4452: the line comes from the labels, so a walk's end (a count on one corpus) never moves it."""
+        assert [check_shape(b) for b in (0.25, 0.5, 1.0, 2.0, 4.0)] == [CHECK_ADVISORY] * 5
         ranking, _ = _planted(52)
         unvoted = ranking.unvoted_ids().tolist()
-        assert not SpotCheck.start_balance(unvoted, 1.0, 52.0).shallow_only, "advisory: the full walk, as audit"
-        assert SpotCheck.start_balance(unvoted, 2.0, 52.0).shallow_only, "trim: shallower only"
-        assert not SpotCheck.start_balance(unvoted, 2.0, 52.0, shallow_only=False).shallow_only, "forced"
+        assert not SpotCheck.start_balance(unvoted, 2.0, 52.0).shallow_only, "the full walk, as an audit"
+        assert SpotCheck.start_balance(unvoted, 2.0, 52.0, shallow_only=True).shallow_only, (
+            "a harness arm may force trim"
+        )
 
 
 class TestTheLineAndTheState:
@@ -364,9 +365,11 @@ class TestTheLineAndTheState:
         assert check_shape(1.0) == CHECK_ADVISORY and balance_count(1.0, check, proposal=3) == 3
         assert balance_count(1.0, check, proposal=3, shape=CHECK_TRIM) == 64, "the full walk's end, forced"
         assert balance_count(2.0, check, proposal=3) == 3, "another balance is unchecked until it is walked"
-        trim = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 2.0, 52.0, seed=0), positives)
-        assert check_shape(2.0) == CHECK_TRIM and trim.shallow_only, "above 1 the walk may only trim"
-        assert balance_count(2.0, trim, proposal=3) == trim.k, "and its end is the line"
+        trim = _finish(
+            SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 2.0, 52.0, seed=0, shallow_only=True), positives
+        )
+        assert balance_count(2.0, trim, proposal=3) == 3, "advisory at beta 2 too (#4452)"
+        assert balance_count(2.0, trim, proposal=3, shape=CHECK_TRIM) == trim.k, "a forced trim takes the walk's end"
         floor_walk = _finish(SpotCheck.start(ranking.unvoted_ids().tolist(), 0.5, seed=0), positives)
         assert applicable_balance(1.0, floor_walk) is None, "a floor's result never serves a balance"
         # And the other way: a balance walk's NaN floor must not compare equal to every floor.

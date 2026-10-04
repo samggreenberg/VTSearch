@@ -458,8 +458,9 @@ build `(X, y)`, run `train_and_threshold`, store the result on
 `det_ctx.model_labels_sig` with the labelset's signature. Returns `True` on success,
 `False` when fewer than 2 cached vectors exist or one class is
 missing. `haystack_for(embedder_name)` may return a `Haystack` to
-calibrate the threshold on a different population than *snap* (the CLI
-uses it for converted / re-clipped scoring sets).
+fit the line's corpus side on a different population than *snap* (the
+CLI uses it for converted / re-clipped scoring sets); the class model the
+line is cut from comes from the labels either way (#4452).
 
 ### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, inclusion_value=None, calibrate_count=2, calibration_fraction=None, rows=None, on_progress=None, min_precision=None)`
 

@@ -22,10 +22,11 @@ import type { BalanceState } from '../generated/api-client/models/balance-state'
 export type BalanceStatus = 'unchecked' | 'checked';
 
 /**
- * How a check treats the line at this balance (#4427): `advisory` at beta 1
- * and below - the walk audits and reports, its votes stay votes, and the line
- * keeps the balance's own count - or `trim` above - the walk may only step
- * shallower from the bands holding the line, and the line keeps its end.
+ * How a check treats the line (#4427, #4452): `advisory` - the walk audits and
+ * reports, its votes stay votes, and the line stays where the labels put it.
+ * Since #4452 the server sends `advisory` at every balance, because the line
+ * comes from the labels alone; `trim` (the walk may only step shallower, and
+ * the line keeps its end) is kept for a server that still sends it.
  */
 export type BalanceShape = 'advisory' | 'trim';
 
@@ -234,7 +235,7 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
     return (
       `A check of ${p.labelled} random picks from the top ${audited} found ${p.right} right, ` +
       `so likely ${rangePercent(p)} of them are, with likely ${rangePercent(r)} of all the matches among them. ` +
-      `The line keeps its ${kept}, the balance's own count: at this balance a check informs the line and does not move it.` +
+      `The line keeps its ${kept}, where your labels put it: a check informs the line and does not move it.` +
       staleNote(p)
     );
   }
@@ -268,7 +269,7 @@ export function checkTitle(balance: LineBalance | null): string {
   }
   return (
     `Vote on ${cost}: the check goes deeper while the balance keeps improving and shorter while it does not, ` +
-    `and reports what it found; at this balance it informs the line and does not move it. Your votes count as ordinary votes.`
+    `and reports what it found; it informs the line and does not move it. Your votes count as ordinary votes.`
   );
 }
 

@@ -29,7 +29,6 @@ from vtscore.state.core import (
 )
 from vtscore.training.thresholds import (
     CHECK_ADVISORY,
-    CHECK_TRIM,
     BALANCE_CHECKED,
     FLOOR_UNCHECKED,
     LineRanking,
@@ -155,17 +154,17 @@ class TestTheLine:
         assert state["precision"]["stale"] is False and state["recall"]["lo"] <= state["recall"]["hi"]
         assert detector_balance_state(ctx, 2.0)["status"] == FLOOR_UNCHECKED, "a result belongs to its balance"
 
-    def test_a_finished_balance_walk_at_beta_two_trims_and_the_line_takes_its_end(self):
-        """#4427: above beta 1 the walk may only step shallower, and the line keeps the set it ended on."""
+    def test_a_finished_balance_walk_at_beta_two_is_advisory_too(self):
+        """#4452: the line comes from the labels at every preset; a walk at beta 2 audits and never moves it."""
         ctx = _ctx()
-        voted = human_voted_ids(ctx)
+        before = recut_detector_threshold(ctx, beta=2.0)
         check = self._walk(ctx, 2.0)
-        assert check.shallow_only and check.k <= check.start_k
+        assert not check.shallow_only, "the full walk, as an audit"
         ctx.precision_check = check
-        assert recut_detector_threshold(ctx, beta=2.0) == ctx.line_ranking.threshold_for(check.k, voted)
+        assert recut_detector_threshold(ctx, beta=2.0) == before
         state = detector_balance_state(ctx, 2.0)
-        assert state["status"] == BALANCE_CHECKED and state["shape"] == CHECK_TRIM
-        assert state["count"] == state["audited"] == check.k
+        assert state["status"] == BALANCE_CHECKED and state["shape"] == CHECK_ADVISORY
+        assert state["audited"] == check.k
 
     def test_the_state_before_a_check(self):
         ctx = _ctx()

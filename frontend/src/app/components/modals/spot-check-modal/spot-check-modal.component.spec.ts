@@ -292,7 +292,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
         'Checked the top 32: likely 55–100% right, about half of them found (checked 15).',
       );
       expect(text()).toContain(
-        "The line keeps its 32, the balance's own count: at this balance the check informs the line and does not move it. " +
+        "The line keeps its 32, where your labels put it: the check informs the line and does not move it. " +
           'The ranges are what the picks say about the top 32.',
       );
       expect(dots().length).toBe(0);
@@ -329,7 +329,7 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       expect(el().querySelector('.check-result-headline')!.textContent).toContain(
         'Checked the top 8: likely 0–45% right, few of them found (checked 5).',
       );
-      expect(text()).toContain("The line keeps its 8, the balance's own count");
+      expect(text()).toContain("The line keeps its 8, where your labels put it");
       expect(text()).not.toMatch(/\bshort\b|\bfell\b|\bmet\b|confirmed|threshold/i);
       // The copy names no cause: it is true of a sparse corpus and a weak model alike.
       expect(text()).not.toMatch(/sparse|weak|too few|model/i);

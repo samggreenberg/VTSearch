@@ -1027,6 +1027,11 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 #: line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
+#: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
+#: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
+#: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).
+SAVE_TEST_SCORES = os.environ.get("CALIB_SAVE_TEST_SCORES", "").strip().lower() in ("1", "true", "yes")
+SIM_SIZE = int(os.environ["CALIB_SIM_SIZE"]) if os.environ.get("CALIB_SIM_SIZE", "").strip() else None
 
 _ACQ_P_CROSSING_ENV = os.environ.get("CALIB_ACQ_P_CROSSING", "").strip().lower()
 ACQ_P_CROSSING: float | str | None

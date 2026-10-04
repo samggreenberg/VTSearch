@@ -201,6 +201,37 @@ def _preference_line(
     return None
 
 
+def _labels_line(
+    folds: Any,
+    final_scores: list[float],
+    final_ids: list[int] | None,
+    labels: "Mapping[int, bool] | None",
+    beta: float,
+    det_ctx: Any,
+) -> float | None:
+    """The balance's line from the labels (#4452), parked on *det_ctx*; ``None`` with no class model.
+
+    The class model the calibration folds' held-out scores of the votes imply,
+    cut where the expected F-beta peaks at the prevalence that model estimates
+    on the corpus this retrain scored - the Train dataset in Train, the
+    searched one in Find, AutoRun and the CLI.  The same labels and embedder
+    give the same model everywhere; no count is drawn on any corpus.  ``None``
+    (too few votes, one class) leaves the caller's fallbacks, which admit
+    nothing when the folds never split.
+    """
+    from vtscore.training.thresholds import fit_labels_line  # noqa: PLC0415
+
+    line = fit_labels_line(
+        folds.orderings if folds.fallback is None else None,
+        final_scores,
+        final_ids if final_ids is not None else range(len(final_scores)),
+        labels,
+    )
+    if det_ctx is not None:
+        det_ctx.labels_line = line
+    return None if line is None else float(line.threshold(beta))
+
+
 def _fused_threshold(
     xcal_threshold: float,
     folds: Any,
@@ -366,9 +397,16 @@ def _fused_threshold(
             ",".join(str(i) for i in cut.fold_iterations),
         )
 
-    kept = _preference_line(ranking, det_ctx, min_precision, beta, labels)
-    if kept is not None:
-        return kept
+    # Fitted on every retrain, so a later switch to the balance re-cuts it
+    # without a retrain; drawn only under the balance.
+    labels_kept = _labels_line(folds, final_scores, final_ids, labels, beta if beta is not None else 1.0, det_ctx)
+    if beta is not None:
+        if labels_kept is not None:
+            return labels_kept
+    else:
+        kept = _preference_line(ranking, det_ctx, min_precision, beta, labels)
+        if kept is not None:
+            return kept
     line = reporting_line(cut, None, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=None)
     if line.threshold is not None:
         return line.threshold

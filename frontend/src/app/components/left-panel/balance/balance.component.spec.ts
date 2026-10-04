@@ -158,7 +158,7 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(stateText()!.textContent).toContain('Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept');
       // Beta 0.5 is an advisory check (#4427): the ranges describe the audited set, the line keeps its own count.
       expect(stateText()!.getAttribute('title')).toContain('5 random picks from the top 32');
-      expect(stateText()!.getAttribute('title')).toContain('at this balance a check informs the line and does not move it');
+      expect(stateText()!.getAttribute('title')).toContain('a check informs the line and does not move it');
     });
 
     it('reads the count off the result, never the preset', async () => {
