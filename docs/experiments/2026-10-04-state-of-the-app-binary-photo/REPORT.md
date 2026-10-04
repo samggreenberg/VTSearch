@@ -51,17 +51,19 @@ that aimed at 1/4, and so on.
    returns a median of 26 images at precision 0.70 and recall 0.40. The
    balanced preset returns 47 at 0.57 and 0.54. The recall preset returns 80
    at 0.42 and 0.68.
-2. **The spot check is worth more per vote than Autopilot's late clicks.**
-   Paired within sessions, clicks 100 to 150 add +0.023 ± 0.003 at every
-   preset. The check's 21 to 31 uniform picks add +0.037 ± 0.004,
-   +0.034 ± 0.003 and +0.036 ± 0.003 at 1/4, 1 and 4, and cut the share of
-   runs returning more than 200 images from 6/19/31% to 1/6/26%. #4482
-   priced the trade at beta 1: a session that stops at 125 clicks and checks
-   beats one that clicks to 150 without checking, by +0.025 at about equal
-   votes; 150 clicks plus the check is still best, by 0.009 over 100 plus
-   the check. (An earlier draft read the 100-to-150 gain as +0.002 to
-   +0.005 off two columns with different denominators: the 26 sessions
-   whose first Good came after click 100 have no line at 100.)
+2. **Per pick, a uniform band pick is worth several Autopilot picks.** The
+   check's 21 to 31 uniform picks add +0.037 ± 0.004, +0.034 ± 0.003 and
+   +0.036 ± 0.003 at 1/4, 1 and 4 when taken at click 150, and cut the share
+   of runs returning more than 200 images from 6/19/31% to 1/6/26%. At beta
+   1, taken at click 100 instead, the check's 22 picks add +0.047, while 50
+   more Autopilot picks from there add +0.023 (paired; #4482). The eval
+   stops at 150 as a computational compromise, not because users do: they
+   stop when they are bored or the app stops them. So this is a statement
+   about what a pick is worth wherever a user is, and #4482 prices pick mixes
+   as curves to 200 clicks rather than a "last N clicks" trade. (An earlier
+   draft read the 100-to-150 gain as +0.002 to +0.005 off two columns with
+   different denominators: the 26 sessions whose first Good came after click
+   100 have no line at 100.)
 3. **The early session, read apples to apples (owner, 2026-10-04): one
    thresholding rule on both sorts.** Under each sort's **own line in the
    app**, the text sort's blind GMM cut returns about 4,500 of the 10,900
@@ -87,30 +89,37 @@ that aimed at 1/4, and so on.
 ![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.png)
 
 **The returned set, one rule per row.** "App line" is what each sort's own
-line in the app returns: the text sort's blind GMM cut and the detector's
-labels line. The full-label ceiling has no app line yet: the harness cuts it
-at the retired cost oracle on the test labels, which is neither Train's
-threshold (Find cannot see it) nor Find's line (#4486), so that cell is blank.
+line in the app returns: the text sort's blind GMM cut, the detector's labels
+line, and for the full-label ceiling the line Find would draw from every
+training label (#4486: the labels line from its own calibration folds, its
+corpus side fitted on the withheld half; the skyline's own row is cut at an
+oracle on the test labels, which no Find could draw).
 "Top-K" is set-constant at the old cap on every sort: 32 at beta ≤ 1, 128 at
 beta 4. Compare within a rule, never across. Detector rows are the last click
 before the check.
 
 | preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels | returned at 150, median / text sort |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 1/4 | app line | 0.01 | 0.36 | 0.47 | **0.57** | — | 35 / 4,500 |
+| 1/4 | app line | 0.01 | 0.36 | 0.47 | **0.57** | 0.47 | 35 / 4,500 |
 | 1/4 | top 32 | 0.47 | 0.42 | 0.49 | **0.57** | 0.62 | 32 / 32 |
-| 1 | app line | 0.02 | 0.26 | 0.38 | **0.48** | — | 48 / 4,500 |
+| 1 | app line | 0.02 | 0.26 | 0.38 | **0.48** | 0.44 | 48 / 4,500 |
 | 1 | top 32 | 0.38 | 0.34 | 0.39 | **0.46** | 0.50 | 32 / 32 |
-| 4 | app line | 0.15 | 0.32 | 0.46 | **0.55** | — | 79 / 4,500 |
+| 4 | app line | 0.15 | 0.32 | 0.46 | **0.55** | 0.61 | 79 / 4,500 |
 | 4 | top 128 | 0.49 | 0.40 | 0.47 | **0.56** | 0.62 | 128 / 128 |
 
 Two things the rules show together. Under the app's own lines the detector
 wins at every point from click 4 on, because the text sort's line returns
 most of the corpus. Under top-K the ranking alone is compared, and 150
-clicks of detector beat the text sort by 0.08 to 0.10 at every preset. The
-ceiling's app-line cell is blank because the harness never draws Find's line
-for the full-label model; #4486 adds it, and until then the ceiling is read
-under top-K only.
+clicks of detector beat the text sort by 0.08 to 0.10 at every preset.
+
+**With every label known, Find's line goes too deep (#4490).** The ceiling's
+ranking is better (AP 0.55 against 0.51), yet under its own line it scores
+below the 150-click session at beta 1/4 and 1. Paired over 702 sessions, the
+gap is −0.11 at 1/4 and −0.041 at 1. It returns a median of 140 images at
+beta 1, at precision 0.38, where the session returns 49. Only beta 4, which
+rewards depth, gains (+0.054). The likely mechanism is #4466's: with complete
+labels the Bads are mostly easy negatives, so the class model's normals
+underestimate the negatives' upper tail and the cut runs deep.
 
 **The ranking** barely depends on the preset (the beta-1 sessions):
 
@@ -275,12 +284,13 @@ Three of these four were harmful in the 2026-10-01 review too. They are what
   overtakes the text sort's by click 6. The fix is an estimate that stays
   honest when the only Goods so far are the easiest ones; a set-constant
   floor would hide it and does not scale with the Find corpus (owner).
-- **#4486: give the ceiling Find's line.** The harness cuts the full-label
-  model at the retired cost oracle on the test labels, so the review cannot
-  yet say what Find would return with every label known.
-- **#4482: priced.** Per vote, check-style picks are worth about twice
-  Autopilot's late clicks (+0.047 for 22 picks at click 100 against +0.023
-  for 50 clicks), and they add up rather than substitute.
+- **#4490: with every label known, Find's labels line goes too deep.** The
+  ceiling's line returns a median of 140 images at precision 0.38 at beta 1,
+  and loses 0.041 to the 150-click session's line on a better ranking.
+- **#4482: what a uniform band pick is worth against an Autopilot pick,
+  at every click a user might stop.** At click 100 a uniform pick was worth
+  about 4 to 5 Autopilot picks. The next step prices Autopilot mixing
+  uniform band picks in throughout, read as curves to 200 clicks.
 - **#4483: a tighter check range.** The current one is honest but 0.65 to 0.71
   wide.
 - **#4404: correct early Bad votes that share a cue with the class.** The same

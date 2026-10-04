@@ -21,6 +21,14 @@ studies that the review points at.
 Keep these unless the owner changes them, and record any change here in the
 same edit.
 
+- **The eval's horizon is not the user's (owner, 2026-10-04, #4482):** the
+  review runs 150 clicks as a computational compromise. Users stop when they
+  are bored or the app stops them, before 150 or after it. Never frame a
+  finding or an A/B as "the last N clicks" or "stop at click N"; read the
+  app as curves over the click a user has reached, and aim at getting the
+  most users to the best detector wherever they stop. Arms that ask about
+  late-session behaviour should run past 150 (to 200) rather than treat 150
+  as an end.
 - **Apples to apples (owner, 2026-10-04, #4474):** a comparison between the
   text sort and the detector uses ONE thresholding rule on both sides. Never
   let "text sort" mean "text sort at a fixed count" while "detector" means
