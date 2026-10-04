@@ -149,6 +149,46 @@ def _save_tiles(tiles: dict, ids: list[str], cache: Path, tier: str, st: Any) ->
     tmp.replace(f)
 
 
+_SHARDS: dict[str, Any] = {}
+
+
+def sharded_gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[np.ndarray]:
+    """Tiled Stage 1's page scores with the tile matrix split across every visible GPU (#4488, tier l).
+
+    A 200k-page tile matrix (~36 GB fp16) fits no single 32 GB card, and the app's GPU path then
+    scores on the CPU. Splitting it by rows across GPUs keeps the same float32 matmul and max per
+    tile; only where the rows live changes. A harness-only stand-in for
+    ``structural_stage1._gpu_page_scores``.
+    """
+    import torch  # noqa: PLC0415
+
+    n_gpu = torch.cuda.device_count()
+    if n_gpu == 0:
+        return None
+    key = f"{id(matrix)}:{matrix.shape}"
+    if _SHARDS.get("key") != key:
+        _SHARDS.clear()
+        for i in range(n_gpu):
+            torch.cuda.set_device(i)
+            torch.cuda.empty_cache()
+        bounds = np.linspace(0, matrix.shape[0], n_gpu + 1).astype(np.int64)
+        parts = [
+            (int(lo), int(hi), torch.from_numpy(matrix[lo:hi]).to(f"cuda:{i}"))
+            for i, (lo, hi) in enumerate(zip(bounds[:-1], bounds[1:]))
+        ]
+        torch.cuda.set_device(0)
+        _SHARDS.update(key=key, parts=parts)
+    best = np.empty(matrix.shape[0], dtype=np.float32)
+    chunk = 262_144
+    for lo, hi, tiles in _SHARDS["parts"]:
+        q = torch.from_numpy(np.ascontiguousarray(queries, dtype=np.float32)).to(tiles.device).T
+        out = torch.empty(hi - lo, dtype=torch.float32, device=tiles.device)
+        for a in range(0, hi - lo, chunk):
+            out[a : a + chunk] = (tiles[a : a + chunk].float() @ q).amax(dim=1)
+        best[lo:hi] = out.cpu().numpy()
+    return np.maximum.reduceat(best, starts)
+
+
 def thin_pool(cid: str, pool_ids: list[str], positive: np.ndarray, keep: float) -> tuple[list[str], np.ndarray]:
     """The pool with only a seeded fraction *keep* of its positives (at least one); the rest leave the pool.
 
@@ -433,6 +473,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     ap.add_argument("--beta", type=float, default=None, help="the balance passed to the app's structural line (#4458)")
     ap.add_argument(
+        "--shard-stage1",
+        action="store_true",
+        help="#4488: split tiled Stage 1's tile matrix across every visible GPU (tier l on 32 GB cards)",
+    )
+    ap.add_argument(
         "--thin",
         type=float,
         default=1.0,
@@ -445,6 +490,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
+    if args.shard_stage1:
+        import vtscore.training.structural_stage1 as s1_mod  # noqa: PLC0415
+
+        s1_mod._gpu_page_scores = sharded_gpu_page_scores
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
 
     if args.tile_layers == "coarse":
