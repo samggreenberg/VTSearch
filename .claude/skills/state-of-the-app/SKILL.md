@@ -166,11 +166,17 @@ differs from the photo paths, and the owner settled how its review works:
   scores on its click half. The path is deterministic given the crop and the
   halves, so each replicate is one observation per class; per-image claims are
   labelled single-observation.
-- **The balance (owner, 2026-10-03, #4457):** the structural line ignores beta
-  (#4458), so one set of sessions serves every beta. The review scores it at
-  beta 0.5 / 1 / 2: the returned set's F-beta as a share of the best cut's
-  (`returned_at_beta.png`, the "returned set at each balance" table), as the
-  photo headline does.
+- **The balance (owner, 2026-10-03, #4457; presets 1/4, 1, 4 since #4472):**
+  the review scores the returned set at beta 1/4, 1 and 4: its F-beta as a
+  share of the best cut's (`returned_at_beta.png`, the "returned set at each
+  balance" table), at the photo headline's presets. Since #4458 the structural
+  line follows beta from beta 2 up (the recall end adds pages above a
+  per-detector floor) and reorders a few loose fits before the first Bad, so
+  a beta-4 session can differ from a beta-1 session. Run two session sets:
+  - the default run serves beta 1/4 and 1, whose line is the same;
+  - `sota_documents.py --beta 4` serves beta 4.
+
+  Read each beta's row from its own run.
 - **Hardware:** run on the app's GPU type (a V100 today), and report retrain
   time from it (`retrain.png`). One comparison (#4457, different nodes) put
   an L40S at about half the V100's p90.

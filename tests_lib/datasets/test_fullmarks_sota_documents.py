@@ -48,6 +48,6 @@ def test_the_best_cut_at_each_balance_moves_with_beta(sd):
     # The structural line ignores beta, so every beta is scored on the same sessions (#4413).
     out = sd.cut_metrics(HITS)
     assert out["best_fb1"] == pytest.approx(out["best_f1"])
-    assert out["best_fb05"] == pytest.approx(1.25 * 3 / (0.25 * 4 + 4))  # precision-leaning: stop at depth 4
-    assert out["best_fb2"] == pytest.approx(5 * 4 / (4 * 4 + 8))  # recall-leaning: take all 8
-    assert sd.beta_tag(0.5) == "05" and sd.beta_tag(1.0) == "1" and sd.beta_tag(2.0) == "2"
+    assert out["best_fb025"] == pytest.approx(1.0625 * 1 / (0.0625 * 4 + 1))  # precision-leaning: stop at depth 1
+    assert out["best_fb4"] == pytest.approx(17 * 4 / (16 * 4 + 8))  # recall-leaning: take all 8
+    assert sd.beta_tag(0.25) == "025" and sd.beta_tag(1.0) == "1" and sd.beta_tag(4.0) == "4"

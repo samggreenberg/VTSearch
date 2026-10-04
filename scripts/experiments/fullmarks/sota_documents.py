@@ -57,13 +57,14 @@ import vote_curve as vc  # noqa: E402
 from app_replay_tiled import _extract  # noqa: E402
 
 FLOORS = (0.1, 0.5, 0.9)
-#: The balance's presets (#4413). The structural line ignores beta today, so one set of sessions
-#: is scored at every beta: the returned set's F-beta and the best F-beta any cut reaches.
-BETAS = (0.5, 1.0, 2.0)
+#: The balance's presets (#4413, #4472). Every run is scored at every beta: the returned set's
+#: F-beta and the best F-beta any cut reaches. The structural line follows beta only from beta 2
+#: up (#4458), so the default run serves beta 1/4 and 1, and a ``--beta 4`` run serves beta 4.
+BETAS = (0.25, 1.0, 4.0)
 
 
 def beta_tag(beta: float) -> str:
-    """Column suffix for *beta*: 0.5 -> "05", 1.0 -> "1", 2.0 -> "2"."""
+    """Column suffix for *beta*: 0.25 -> "025", 1.0 -> "1", 4.0 -> "4"."""
     return f"{beta:g}".replace(".", "")
 
 

@@ -41,7 +41,7 @@ INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 BLUE, ORANGE, GREEN, PINK = "#2a78d6", "#eb6834", "#1baf7a", "#e87ba4"
 FLOORS = (10, 50, 90)
 #: The balance's presets (#4413) and their column suffixes in ``steps.csv``.
-BETAS = (("0.5", "05"), ("1", "1"), ("2", "2"))
+BETAS = (("1/4", "025"), ("1", "1"), ("4", "4"))
 
 
 def _num(x: Any) -> float:
@@ -137,7 +137,7 @@ def balance(steps: list[dict[str, Any]]) -> str:
 
     The structural line ignores beta, so every beta reads the same sessions and the same set.
     """
-    if not steps or "gate_fb05" not in steps[0]:
+    if not steps or "gate_fb025" not in steps[0]:
         return ""
     points = [("click 0 (example sort)", 0), ("10 clicks", 10), ("25 clicks", 25), ("final", None)]
     out = [
@@ -225,7 +225,7 @@ def figures(steps: list[dict[str, Any]], out: Path) -> None:
     fig.savefig(out / "line_at_floors.png")
     plt.close(fig)
 
-    if "gate_fb05" in steps[0]:
+    if "gate_fb025" in steps[0]:
         for r in steps:
             for _b, tag in BETAS:
                 r[f"share_{tag}"] = _share(r, tag)
