@@ -323,35 +323,52 @@ def returned_at_p(curves: pd.DataFrame, cells: pd.DataFrame, steps: pd.DataFrame
     return True
 
 
-def returned_at_beta(curves: pd.DataFrame, cells: pd.DataFrame, balance_steps: pd.DataFrame, out: Path) -> bool:
+def returned_at_beta(
+    curves: pd.DataFrame,
+    cells: pd.DataFrame,
+    balance_steps: pd.DataFrame,
+    out: Path,
+    balances: pd.DataFrame | None = None,
+) -> bool:
     """The returned set at each balance over clicks (#4413): its F-beta as a share of the best cut.
 
     One panel per beta the analysis read (the app's presets, 1/4 / 1 / 4 since
     #4448; an older analysis has 0.5 / 1 / 2): the share, with 1.0 (the best
-    cut) dotted; read at click 0 and at the clicks a rank frame was recorded.
-    A balance the run's sessions did not aim at is titled so.
+    cut) dotted; read at click 0 (the text sort) and at the clicks a rank frame
+    was recorded. Solid: each sort's own line in the app (the text sort's blind
+    GMM cut at click 0, the detector's labels line after); dashed: set-constant
+    top-K on both (owner, 2026-10-04: one rule per comparison). A balance the
+    run's sessions did not aim at is titled so.
     """
-    if balance_steps is None or balance_steps.empty or "fb_share_b1" not in curves:
+    del curves  # the share is read off the balance tables, which carry the rule
+    if balance_steps is None or balance_steps.empty or balances is None or balances.empty:
         return False
-    at = sorted({0, *balance_steps["t"].astype(int).unique().tolist()})
+    if "rule" not in balance_steps:  # an analysis from before the rule column: the app's line only
+        balance_steps = balance_steps.assign(rule="app line")
+        balances = balances.assign(rule="app line")
     own = set(cells["session_beta"].dropna().round(4)) if "session_beta" in cells else set()
-    betas = [
-        (b, "b" + (f"{b:g}".replace(".", "") if b < 1 else f"{b:g}")) for b in sorted(balance_steps["beta"].unique())
-    ]
+    betas = sorted(balance_steps["beta"].unique())
     fig, axes = plt.subplots(
         1, len(betas), figsize=(13 * len(betas) / 3, 3.9), facecolor=SURFACE, sharey=True, squeeze=False
     )
     axes = axes[0]
-    for j, (beta, tag) in enumerate(betas):
+    text = balances[balances["point"].astype(str) == "text"]
+    for j, beta in enumerate(betas):
         ax = axes[j]
         for arm, color in COLORS.items():
-            c = curves[(curves["arm"] == arm) & curves["t"].isin(at)]
-            if c.empty or f"fb_share_{tag}" not in c:
-                continue
-            m = c.groupby("t")[f"fb_share_{tag}"].mean()
-            ax.plot(m.index, m.to_numpy(), color=color, marker="o", markersize=2.5, lw=2, label=arm)
-            ax.annotate(f"{m.iloc[-1]:.2f}", (m.index[-1], m.iloc[-1]), xytext=(4, 0), textcoords="offset points",
-                        va="center", color=INK, fontsize=8)  # fmt: skip
+            for rule, ls in (("app line", "-"), ("top-K", "--")):
+                s = balance_steps[
+                    (balance_steps["arm"] == arm) & (balance_steps["beta"] == beta) & (balance_steps["rule"] == rule)
+                ]
+                if s.empty:
+                    continue
+                t0 = text[(text["arm"] == arm) & (text["beta"] == beta) & (text["rule"] == rule)]["fb_share"].mean()
+                m = pd.concat([pd.Series({0: t0}), s.groupby("t")["fb_share"].mean()]).sort_index()
+                ax.plot(
+                    m.index, m.to_numpy(), color=color, ls=ls, marker="o", markersize=2.5, lw=2, label=f"{arm}, {rule}"
+                )
+                ax.annotate(f"{m.iloc[-1]:.2f}", (m.index[-1], m.iloc[-1]), xytext=(4, 0), textcoords="offset points",
+                            va="center", color=INK, fontsize=8)  # fmt: skip
         ax.axhline(1.0, color=INK, ls=":", lw=1.2)
         aimed = "these sessions' balance" if round(beta, 4) in own else "read off sessions at another preference"
         ax.set_title(f"beta = {beta:g} ({aimed})", color=INK, fontsize=10, loc="left")
@@ -454,7 +471,11 @@ def main() -> int:
         print("no rank frames in this run: returned_at_p.png skipped")
     bs_path = args.analysis / "balance_steps.csv"
     balance_steps = pd.read_csv(bs_path) if bs_path.exists() and bs_path.stat().st_size > 1 else pd.DataFrame()
-    if not returned_at_beta(curves, cells, balance_steps, args.out / "returned_at_beta.png"):
+    b_path = args.analysis / "balances.csv"
+    balances = (
+        pd.read_csv(b_path, dtype={"point": str}) if b_path.exists() and b_path.stat().st_size > 1 else pd.DataFrame()
+    )
+    if not returned_at_beta(curves, cells, balance_steps, args.out / "returned_at_beta.png", balances):
         print("no rank frames in this run: returned_at_beta.png skipped")
     ps_path = args.analysis / "pool_steps.csv"
     pool_steps = pd.read_csv(ps_path) if ps_path.exists() and ps_path.stat().st_size > 1 else pd.DataFrame()

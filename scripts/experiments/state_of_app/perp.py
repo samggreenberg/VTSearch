@@ -133,31 +133,53 @@ def _beta_tag(beta: float) -> str:
 def figure_balance(runs: dict[float, Path], out: Path) -> None:
     """Per beta, over clicks: the returned set's F-beta as a share of the best cut, each beta off its own sessions (#4413).
 
-    The typed query's level (click 0) is drawn dashed: the detector's set has to climb back to it (#4474).
+    Click 0 is the text sort. Solid: each sort's own line in the app (the text sort's blind GMM cut, the
+    detector's labels line); dashed: set-constant top-K on both. One rule per comparison (owner, 2026-10-04).
     """
     betas = sorted(runs)
     fig, axes = plt.subplots(1, len(betas), figsize=(4.4 * len(betas), 3.9), facecolor=SURFACE, sharey=True)
     axes = [axes] if len(betas) == 1 else list(axes)
     for ax, beta in zip(axes, betas, strict=True):
-        tag = _beta_tag(beta)
-        c = pd.read_csv(runs[beta] / "curves.csv")
-        steps = pd.read_csv(runs[beta] / "balance_steps.csv")
-        clicks = sorted({0, *steps["t"].astype(int).unique().tolist()})
-        m = c[c["t"].isin(clicks)].groupby("t")[f"fb_share_{tag}"].mean()
-        ax.plot(m.index, m.to_numpy(), color="#2a6fdb", lw=2, marker="o", ms=2.5, label="its own sessions")
-        ax.annotate(f"{m.iloc[-1]:.2f}", (m.index[-1], m.iloc[-1]), xytext=(4, 0), textcoords="offset points",
-                    va="center", color=INK, fontsize=8)  # fmt: skip
+        for rule, series in _share_by_rule(runs[beta], beta).items():
+            ls = "-" if rule == "app line" else "--"
+            ax.plot(series.index, series.to_numpy(), color="#2a6fdb", ls=ls, lw=2, marker="o", ms=2.5, label=rule)
+            ax.annotate(f"{series.iloc[-1]:.2f}", (series.index[-1], series.iloc[-1]), xytext=(4, 0),
+                        textcoords="offset points", va="center", color=INK, fontsize=8)  # fmt: skip
         ax.axhline(1.0, color=INK, ls=":", lw=1.2)
-        if 0 in m.index:
-            ax.axhline(float(m.loc[0]), color=INK, ls="--", lw=0.9, alpha=0.6)
         ax.set_title(f"beta = {beta:g}: F-beta / best cut", color=INK, fontsize=10, loc="left")
         _axes(ax)
         ax.set_ylim(0, 1.05)
         ax.set_xlabel("clicks", color=INK)
     axes[0].set_ylabel("F-beta of the returned set / best cut", color=INK)
+    axes[-1].legend(fontsize=8, frameon=False, loc="lower right")
     fig.tight_layout()
     fig.savefig(out / "returned_at_own_beta.png", dpi=150, facecolor=SURFACE)
     plt.close(fig)
+
+
+def _by_rule(d: Path, beta: float) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """``(balances at the text point, balance_steps)`` for *beta*, each with a ``rule`` column."""
+    steps = pd.read_csv(d / "balance_steps.csv")
+    bal = pd.read_csv(d / "balances.csv", dtype={"point": str})
+    if "rule" not in steps:  # an analysis from before the rule column: the app's line only
+        steps = steps.assign(rule="app line")
+        bal = bal.assign(rule="app line")
+    steps = steps[steps["beta"].round(4) == round(beta, 4)]
+    bal = bal[(bal["beta"].round(4) == round(beta, 4)) & (bal["point"] == "text")]
+    return bal, steps
+
+
+def _share_by_rule(d: Path, beta: float) -> dict[str, pd.Series]:
+    """Per rule: the returned set's share of the best cut over clicks, the text sort at click 0."""
+    bal, steps = _by_rule(d, beta)
+    out = {}
+    for rule in ("app line", "top-K"):
+        s = steps[steps["rule"] == rule]
+        if s.empty:
+            continue
+        t0 = float(bal[bal["rule"] == rule]["fb_share"].mean())
+        out[rule] = pd.concat([pd.Series({0: t0}), s.groupby("t")["fb_share"].mean()]).sort_index()
+    return out
 
 
 def figure_objective(runs: dict[float, Path], out: Path) -> None:
@@ -213,35 +235,29 @@ def _objective_rows(runs: dict[float, Path]) -> pd.DataFrame:
 
 
 def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
-    """Per beta: the returned set's share of the best cut at the typed query (click 0), its low, and its recovery."""
+    """Per beta and rule: the text sort's set at click 0 against the detector's over clicks, the same rule on both."""
     rows = []
     for beta, d in sorted(runs.items()):
-        col = f"fb_share_{_beta_tag(beta)}"
-        c = pd.read_csv(d / "curves.csv")
-        if col not in c:
-            continue
-        m = c.groupby("t")[col].mean().dropna()
-        if 0 not in m.index or len(m) < 2:
-            continue
-        low_t = int(m.loc[1:].idxmin())
-        back = m.loc[low_t:][m.loc[low_t:] >= m.loc[0]]
-        # In absolute terms (#4384): the line's F-beta against the typed query's set's, and what it returned.
-        steps = pd.read_csv(d / "balance_steps.csv")
-        steps = steps[steps["beta"].round(4) == round(beta, 4)]
-        bal = pd.read_csv(d / "balances.csv", dtype={"point": str})
-        bal = bal[(bal["beta"].round(4) == round(beta, 4)) & (bal["point"] == "text")]
-        f = steps.groupby("t")["fbeta"].mean()
-        k = steps.groupby("t")["k"].median()
-        text_f = float(bal["fbeta"].mean()) if len(bal) else float("nan")
-        back_f = f[f >= text_f] if len(f) else f
-        rows.append({
-            "beta": f"{beta:g}", "typed query, share": m.loc[0], "lowest share": m.loc[low_t], "at click": low_t,
-            "share at 25": m.get(25, float("nan")),
-            "back at the typed query's share by click": int(back.index[0]) if len(back) else "not by the end",
-            "typed query's set, F": text_f, "line F at 5 / 10 / 25": " / ".join(f"{f.get(t, float('nan')):.2f}" for t in (5, 10, 25)),
-            "returned median at 5 / 10 / 25": " / ".join(f"{k.get(t, float('nan')):.0f}" for t in (5, 10, 25)),
-            "line F at the typed query's by click": int(back_f.index[0]) if len(back_f) else "not by the end",
-        })  # fmt: skip
+        bal, steps = _by_rule(d, beta)
+        for rule, m in _share_by_rule(d, beta).items():
+            s = steps[steps["rule"] == rule]
+            t_rows = bal[bal["rule"] == rule]
+            f = s.groupby("t")["fbeta"].mean()
+            k = s.groupby("t")["k"].median()
+            text_f = float(t_rows["fbeta"].mean()) if len(t_rows) else float("nan")
+            text_k = float(t_rows["k"].median()) if len(t_rows) else float("nan")
+            low_t = int(m.loc[1:].idxmin()) if len(m) > 1 else 0
+            back = m.loc[low_t:][m.loc[low_t:] >= m.loc[0]]
+            back_f = f[f >= text_f]
+            rows.append({
+                "beta": f"{beta:g}", "rule": rule,
+                "text sort: F": text_f, "text sort: returned": text_k, "text sort: share of best": m.loc[0],
+                "detector: F at 5 / 10 / 25": " / ".join(f"{f.get(t, float('nan')):.2f}" for t in (5, 10, 25)),
+                "detector: returned at 5 / 10 / 25": " / ".join(f"{k.get(t, float('nan')):.0f}" for t in (5, 10, 25)),
+                "detector F >= text sort's by click": int(back_f.index[0]) if len(back_f) else "not by the end",
+                "lowest share": m.loc[low_t], "at click": low_t,
+                "share >= text sort's by click": int(back.index[0]) if len(back) else "not by the end",
+            })  # fmt: skip
     return pd.DataFrame(rows)
 
 
@@ -278,8 +294,12 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
         "",
         "## The returned set at each balance (rank frames)",
         "",
-        "`fbeta` against `oracle_fbeta` (the best any cut of the same ranking reaches; `fb_share` = fbeta / "
-        "oracle), with `k`, `precision` and `recall`. Points: text sort, 25 and 50 clicks, the end, full labels.",
+        "One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's own line in the app - "
+        "the text sort's blind GMM cut, the detector's labels line (#4452), the full-label model's threshold. "
+        "`top-K`: set-constant at the old cap (32 at beta <= 1, 128 above) on every sort. Compare the text sort "
+        "and the detector within a rule, never across. `fbeta` against `oracle_fbeta` (the best any cut of the "
+        "same ranking reaches; `fb_share` = fbeta / oracle), with `k`, `precision` and `recall`. Points: text "
+        "sort, 25 and 50 clicks, the end, full labels.",
         "",
     ]
     rows = []
@@ -294,9 +314,10 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
     md += [
         "## The early dip",
         "",
-        "The returned set against the typed query's set (the top 32, or 128 above beta 1), mean over runs: as a "
-        "share of the best cut (which rises with the clicks), and in absolute F-beta with what the line returned "
-        "(#4384: the line, not the ranking, is what trails the typed query early).",
+        "The detector's returned set against the text sort's, the same rule on both sides (#4384): under "
+        "`app line` the text sort's blind GMM cut against the detector's labels line; under `top-K` the old cap "
+        "on both. F-beta, what each returned, and the click by which the detector's F-beta reaches the text "
+        "sort's; then the share of the best cut, which rises with the clicks.",
         "",
         _md(_dip_rows(runs).round(3), index=False),
         "",

@@ -138,6 +138,20 @@ CEILING = "skyline_train_full"
 LINE_METRICS = ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
 #: The balance's metrics, as ``_rank_metrics.balance_metrics`` names them (#4413).
 BALANCE_METRICS = ("k", "precision", "recall", "fbeta", "oracle_fbeta", "fb_share")
+#: How a balance row was thresholded (owner, 2026-10-04: apples to apples - a comparison
+#: between the text sort and the detector uses ONE rule on both sides).
+#: ``app line``: what each sort's own line in the app returns - the text sort's blind GMM
+#: cut, the detector's labels line (#4452), the full-label model's threshold.
+#: ``top-K``: set-constant, the balance's old cap (32 at beta <= 1, 128 above) on every sort;
+#: shown for both sorts or neither, never as the text sort's stand-in for a line.
+RULE_APP, RULE_TOP = "app line", "top-K"
+RULES = (RULE_APP, RULE_TOP)
+
+
+def balance_cap(beta: float) -> int:
+    return 32 if beta <= 1.0 else 128
+
+
 #: THE objective (owner, 2026-10-01): the withheld images above the app's threshold, as F-beta at the session's
 #: beta.  Every session row carries the test set's precision / recall at that row's threshold; the last ordinary
 #: row is the unchecked line, the last ``check`` row the line after the walk and its votes.  Unlike the rank-count
@@ -240,7 +254,16 @@ def text_scores(baseline: Path | None) -> dict[tuple, dict[str, float]]:
     out = {}
     for r in tb.to_dict("records"):
         key = (r["dataset"], r["category"], r["embedder"], int(r["seed"]))
-        out[key] = {"text_ap": _f(r.get("text_AP")), **{c: _f(r.get(c)) for c in cols}}
+        out[key] = {
+            "text_ap": _f(r.get("text_AP")),
+            **{c: _f(r.get(c)) for c in cols},
+            # The text sort's own line in the app (the blind GMM cut), as text_baseline.py scored it.
+            "text_gmm_precision": _f(r.get("text_precision")),
+            "text_gmm_recall": _f(r.get("text_recall")),
+            "text_gmm_fpr": _f(r.get("text_fpr")),
+            "n_test": _f(r.get("n_test")),
+            "n_test_pos": _f(r.get("n_test_pos")),
+        }
     return out
 
 
@@ -255,10 +278,45 @@ def _text_line(text: dict[str, float], floor: float) -> dict[str, float]:
 
 
 def _text_balance(text: dict[str, float], beta: float) -> dict[str, float]:
+    """The text sort's top-K (the cap) at *beta*, as ``text_baseline.py`` scored it."""
     return {m: text.get(f"text_{m}_{beta_tag(beta)}", np.nan) for m in BALANCE_METRICS}
 
 
-def _balance_at(frame: dict | None, beta: float) -> dict[str, float]:
+def _pr_balance(
+    precision: float, recall: float, fpr: float, n_pos: float, n_neg: float, beta: float, oracle: float
+) -> dict[str, float]:
+    """A returned set known by its precision, recall and false-positive rate: F-beta, its size, its share of *oracle*."""
+    nan = float("nan")
+    if not (np.isfinite(precision) or np.isfinite(recall)) or not np.isfinite(n_pos):
+        return {m: nan for m in BALANCE_METRICS}
+    recall = recall if np.isfinite(recall) else 0.0
+    k = recall * n_pos + (fpr if np.isfinite(fpr) else 0.0) * n_neg
+    f = _fbeta_pr(precision, recall, beta)
+    return {
+        "k": k,
+        "precision": precision if k > 0 else nan,
+        "recall": recall,
+        "fbeta": f,
+        "oracle_fbeta": oracle,
+        "fb_share": f / oracle if (np.isfinite(oracle) and oracle > 0) else nan,
+    }
+
+
+def _text_app_line(text: dict[str, float], beta: float) -> dict[str, float]:
+    """The text sort's own line in the app, the blind GMM cut (``text_sort_threshold``), at *beta*."""
+    return _pr_balance(
+        text.get("text_gmm_precision", np.nan),
+        text.get("text_gmm_recall", np.nan),
+        text.get("text_gmm_fpr", np.nan),
+        text.get("n_test_pos", np.nan),
+        text.get("n_test", np.nan) - text.get("n_test_pos", np.nan),
+        beta,
+        text.get(f"text_oracle_fbeta_{beta_tag(beta)}", np.nan),
+    )
+
+
+def _balance_at(frame: dict | None, beta: float, k: int | None = -1) -> dict[str, float]:
+    """The returned set off a rank frame at *beta*: the frame's recorded line (*k* = -1), or the top *k*."""
     if frame is None:
         return {m: np.nan for m in BALANCE_METRICS}
     return balance_metrics(
@@ -266,8 +324,22 @@ def _balance_at(frame: dict | None, beta: float) -> dict[str, float]:
         int(frame["n_test"]),
         int(frame["n_test_pos"]),
         beta,
-        frame_beta_k(frame, beta),
+        frame_beta_k(frame, beta) if k == -1 else k,
     )
+
+
+def _balance_rows(
+    text: dict[str, float], frame: dict | None, use_text: bool, beta: float, sky_m: dict | None = None
+) -> list[tuple[str, dict[str, float]]]:
+    """``[(rule, metrics)]`` for one point at *beta*: the app's own line and the top-K cap."""
+    if use_text:
+        return [(RULE_APP, _text_app_line(text, beta)), (RULE_TOP, _text_balance(text, beta))]
+    top = _balance_at(frame, beta, balance_cap(beta))
+    if sky_m is not None:  # the ceiling: the full-label model's threshold, as the harness applied it
+        app = _pr_balance(sky_m["precision"], sky_m["recall"], sky_m["fpr"], sky_m["n_test_pos"], sky_m["n_test_neg"], beta, top["oracle_fbeta"])  # fmt: skip
+    else:
+        app = _balance_at(frame, beta)
+    return [(RULE_APP, app), (RULE_TOP, top)]
 
 
 def _goods_by(picks: pd.DataFrame, upto: float) -> int:
@@ -454,8 +526,11 @@ def run_tables(
             if len(b):
                 beta_of[tuple(k)] = float(b.iloc[0])
     skyd: dict[tuple, float] = {}
+    skym: dict[tuple, dict] = {}
     for r in sky.to_dict("records") if not sky.empty else []:
-        skyd[(r["dataset"], r["category"], r["embedder"], r["style"], int(r["seed"]))] = _f(r.get("average_precision"))
+        k_ = (r["dataset"], r["category"], r["embedder"], r["style"], int(r["seed"]))
+        skyd[k_] = _f(r.get("average_precision"))
+        skym[k_] = {c: _f(r.get(c)) for c in ("precision", "recall", "fpr", "n_test_pos", "n_test_neg")}
 
     keys = set(series) | set(clicks_by) | set(skyd)
     cells, lines, steps_out, balances, balance_steps, pools, pool_steps, thresholds = [], [], [], [], [], [], [], []
@@ -550,9 +625,9 @@ def run_tables(
                 lines.append({**ident, "point": point, "t": t, "floor": x, **m})
                 if x == DEFAULT_FLOOR:
                     at_default[point] = m
-            for b in BETAS:  # the returned set at each balance (#4413)
-                mb = _text_balance(text, b) if use_text else _balance_at(frame, b)
-                balances.append({**ident, "point": point, "t": t, "beta": b, **mb})
+            for b in BETAS:  # the returned set at each balance (#4413), under each rule (apples to apples)
+                for rule, mb in _balance_rows(text, frame, use_text, b, skym.get(key) if point == "ceiling" else None):
+                    balances.append({**ident, "point": point, "t": t, "beta": b, "rule": rule, **mb})
             # The user's own corpus at that click (#4427): the ceiling has no session, the text sort no line.
             if point != "ceiling":
                 count = (
@@ -581,8 +656,9 @@ def run_tables(
                 m = line_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), x, frame_k(fr, x))
                 steps_out.append({**ident, "t": int(fr["t"]), "floor": x, **m})
             for b in BETAS:
-                mb = balance_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), b, frame_beta_k(fr, b))
-                balance_steps.append({**ident, "t": int(fr["t"]), "beta": b, **mb})
+                for rule, kk in ((RULE_APP, frame_beta_k(fr, b)), (RULE_TOP, balance_cap(b))):
+                    mb = balance_metrics(ranks, int(fr["n_test"]), int(fr["n_test_pos"]), b, kk)
+                    balance_steps.append({**ident, "t": int(fr["t"]), "beta": b, "rule": rule, **mb})
             t_fr = int(fr["t"])
             mp = _pool_at(fr, counts.get(t_fr, float("nan")), _goods_by(clicks, t_fr), own_beta)
             pool_steps.append({**ident, "t": t_fr, "beta": own_beta, **mp})
@@ -657,12 +733,14 @@ def curves(
             )
     # The balance's curves (#4413), keyed by ("b", beta) beside the floors.
     if balances is not None and not balances.empty:
-        for r in balances[balances["point"].astype(str) == "text"].to_dict("records"):
+        app = balances[balances["rule"] == RULE_APP] if "rule" in balances else balances
+        for r in app[app["point"].astype(str) == "text"].to_dict("records"):
             text_val[(r["arm"], r["category"], int(r["seed"]), ("b", float(r["beta"])))] = {
                 m: r[m] for m in BALANCE_CURVE_METRICS
             }
     if balance_steps is not None and not balance_steps.empty:
-        for (arm, cat, seed, beta), g in balance_steps.groupby(["arm", "category", "seed", "beta"]):
+        app_steps = balance_steps[balance_steps["rule"] == RULE_APP] if "rule" in balance_steps else balance_steps
+        for (arm, cat, seed, beta), g in app_steps.groupby(["arm", "category", "seed", "beta"]):
             g = g.sort_values("t")
             run_val[(arm, cat, int(seed), ("b", float(beta)))] = (
                 g["t"].to_numpy(),
@@ -1064,7 +1142,8 @@ def in_hand_table(pools: pd.DataFrame, balances: pd.DataFrame | None, by: list[s
     )
     if balances is not None and not balances.empty:
         own = p[[*by, "point", "beta", "category", "seed"]].drop_duplicates()
-        b = balances.merge(own, on=[*by, "point", "beta", "category", "seed"], how="inner")
+        app = balances[balances["rule"] == RULE_APP] if "rule" in balances else balances
+        b = app.merge(own, on=[*by, "point", "beta", "category", "seed"], how="inner")
         if not b.empty:
             b["point"] = pd.Categorical(b["point"], pts, ordered=True)
             fresh = b.groupby([*by, "point"], observed=True)["fb_share"].mean().round(3).rename("fresh_fb_share")
@@ -1104,8 +1183,11 @@ def returned_at_beta(balances: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     """The returned set per *by* x beta x point under the balance (#4413): F-beta over the best cut."""
     b = balances[balances["point"].isin(HEADLINE_POINTS)].copy()
     b["point"] = pd.Categorical(b["point"], HEADLINE_POINTS, ordered=True)
+    if "rule" not in b:
+        b["rule"] = RULE_APP
+    b["rule"] = pd.Categorical(b["rule"], RULES, ordered=True)
     return (
-        b.groupby([*by, "beta", "point"], observed=True)
+        b.groupby([*by, "rule", "beta", "point"], observed=True)
         .agg(
             k=("k", "mean"),
             precision=("precision", "mean"),
@@ -1141,14 +1223,16 @@ def returned_at_beta_md(cells: pd.DataFrame, balances: pd.DataFrame) -> list[str
     return [
         "## The returned set at each balance: F-beta over the best cut",
         "",
-        "The set the app returns when it aims for a balance (F-beta's beta at the app's presets: "
+        "The set each sort returns at a balance (F-beta's beta at the app's presets: "
         + ", ".join(f"{b:g}" for b in BETAS)
-        + "; #4448), on the fresh test half: the labels line (#4452) with its corpus side fitted there, as "
-        "Find draws it, so at the sessions' own beta it is the objective's returned set. Its `fbeta` against "
-        "`oracle_fbeta`, the best any cut of the same ranking reaches (`fb_share` = fbeta / oracle); `k`, "
-        "`precision` and `recall` beside it, and `empty`, the share of runs whose line keeps nothing (scored "
-        "F-beta 0, precision left out). The text sort and the ceiling keep the balance's cap (32 at beta <= 1, "
-        "128 above). " + who,
+        + "; #4448), on the fresh test half, under ONE rule per row (owner, 2026-10-04: apples to apples). "
+        "`app line`: the text sort's own line in the app (the blind GMM cut), the detector's labels line "
+        "(#4452) with its corpus side fitted on the test half as Find draws it (at the sessions' own beta, the "
+        "objective's returned set), and the full-label model's threshold. `top-K`: set-constant at the old cap "
+        "(32 at beta <= 1, 128 above) on every sort. Compare text and detector within a rule, never across. "
+        "`fbeta` against `oracle_fbeta`, the best any cut of the same ranking reaches (`fb_share` = fbeta / "
+        "oracle); `k`, `precision` and `recall` beside it, and `empty`, the share of runs whose line keeps "
+        "nothing (scored F-beta 0, precision left out). " + who,
         "",
         _md(returned_at_beta(balances, ["arm"])),
         "",
