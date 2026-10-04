@@ -427,12 +427,12 @@ describe('LeftPanelComponent', () => {
     });
 
     it('shows the balance, its state and the count the line returns', () => {
-      fixture.componentRef.setInput('beta', 0.5);
-      fixture.componentRef.setInput('balance', lineBalance('checked', { beta: 0.5 }));
+      fixture.componentRef.setInput('beta', 0.25);
+      fixture.componentRef.setInput('balance', lineBalance('checked', { beta: 0.25 }));
       fixture.componentRef.setInput('returned', 212);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const checked = el.querySelector('.find-balance-row input[type="radio"]:checked') as HTMLInputElement;
-      expect(checked.value).toBe('0.5');
+      expect(checked.value).toBe('0.25');
       expect(el.querySelector('.find-balance-row .balance-state')!.textContent).toContain(
         'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept',
       );
@@ -441,8 +441,8 @@ describe('LeftPanelComponent', () => {
     it('forwards a picked balance as betaChange', () => {
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const emitted = vi.spyOn(component.betaChange, 'emit');
-      (el.querySelector('.find-balance-row input[type="radio"][value="0.5"]') as HTMLInputElement).click();
-      expect(emitted).toHaveBeenCalledWith(0.5);
+      (el.querySelector('.find-balance-row input[type="radio"][value="0.25"]') as HTMLInputElement).click();
+      expect(emitted).toHaveBeenCalledWith(0.25);
     });
   });
 

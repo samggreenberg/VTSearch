@@ -32,7 +32,7 @@
      False Negatives track and three radios, no word or number on any of
      them. Left returns the most and lets more wrong ones in, like the 1:4
      price; right returns only the surest and misses more, like 4:1; the
-     middle sits between. Underneath they are F-beta's β — 2, 1 and 0.5 — and
+     middle sits between. Underneath they are F-beta's β — 4, 1 and 1/4 (#4448) — and
      the line keeps the set with the best estimated F-beta. It sits down with
      the prices because that is all it sets: the trade, not a place on the
      ranking. (#4413) -->
