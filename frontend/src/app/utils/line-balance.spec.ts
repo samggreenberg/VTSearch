@@ -82,9 +82,9 @@ describe('line-balance (#4413)', () => {
     });
   });
 
-  describe('the balance presets (#4413, #4298, #4317)', () => {
+  describe('the balance presets (#4413, #4298, #4317, #4448)', () => {
     it('offers three balances, left to right from false positives to false negatives, symmetric about the balanced middle', () => {
-      expect(BALANCE_PRESETS.map((p) => p.value)).toEqual([2, 1, 0.5]);
+      expect(BALANCE_PRESETS.map((p) => p.value)).toEqual([4, 1, 0.25]);
       expect(BALANCE_PRESETS[0].hint).toMatch(/^Toward false positives/);
       expect(BALANCE_PRESETS[1].hint).toBe('Between the two');
       expect(BALANCE_PRESETS[2].hint).toMatch(/^Toward false negatives/);
@@ -96,32 +96,35 @@ describe('line-balance (#4413)', () => {
       expect(isBalancePreset(0.1)).toBe(false);
       expect(isBalancePreset(0.9)).toBe(false);
       expect(isBalancePreset(1.5)).toBe(false);
+      // The presets before #4448.
+      expect(isBalancePreset(0.5)).toBe(false);
+      expect(isBalancePreset(2)).toBe(false);
     });
 
     it.each<[number, number]>([
-      [8, 2],
-      [4, 2],
-      [1.5, 2],
-      [1.3, 1],
+      [8, 4],
+      [4, 4],
+      [2.4, 4],
+      [1.9, 1],
       [1, 1],
-      [0.75, 1],
-      [0.6, 0.5],
-      [0.25, 0.5],
-      [0.01, 0.5],
+      [0.6, 1],
+      [0.45, 0.25],
+      [0.25, 0.25],
+      [0.01, 0.25],
     ])('snaps %s to the nearest preset in log space, %s', (stored, snapped) => {
       expect(nearestBalancePreset(stored).value).toBe(snapped);
     });
 
-    it('measures in log space: 1.5 is nearer 2 than 1, as 0.75 is nearer 1 than 0.5', () => {
-      // In linear terms 1.5 is equidistant; as a ratio it is closer to 2.
-      expect(nearestBalancePreset(1.5).value).toBe(2);
-      expect(nearestBalancePreset(0.75).value).toBe(1);
+    it('measures in log space: 2.4 is nearer 4 than 1, and 0.6 nearer 1 than 1/4', () => {
+      // In linear terms each is nearer the other preset; as a ratio it is not.
+      expect(nearestBalancePreset(2.4).value).toBe(4);
+      expect(nearestBalancePreset(0.6).value).toBe(1);
     });
 
-    it('breaks a tie toward the higher beta', () => {
-      // The log-space midpoints: sqrt(2) between 2 and 1, sqrt(0.5) between 1 and 0.5.
-      expect(nearestBalancePreset(Math.SQRT2).value).toBe(2);
-      expect(nearestBalancePreset(Math.SQRT1_2).value).toBe(1);
+    it('breaks a tie toward the preset that leans further, so the old presets keep their side', () => {
+      // The log-space midpoints are 2 (between 4 and 1) and 0.5 (between 1 and 1/4): the presets before #4448.
+      expect(nearestBalancePreset(2).value).toBe(4);
+      expect(nearestBalancePreset(0.5).value).toBe(0.25);
     });
 
     it('shows a beta with no log as the balanced default', () => {

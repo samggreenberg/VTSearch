@@ -31,7 +31,7 @@ type Dot = 'green' | 'yellow' | 'none';
  * floor's, #4246). Mounted in the Find row and the Manual tab.
  *
  * A horizontal spectrum from False Positives to False Negatives, with three
- * radios under it (`BALANCE_PRESETS`: beta 2, 1 and 0.5, left to right), one
+ * radios under it (`BALANCE_PRESETS`: beta 4, 1 and 1/4, left to right), one
  * centred under each third. No radio carries a word or a number: where it
  * sits on the spectrum is the whole message, and its tooltip says it in
  * words. A balance promises only a direction (#4298): the line is the set

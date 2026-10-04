@@ -50,8 +50,8 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(root().querySelector('select')).toBeNull();
     });
 
-    it('offers three radios under it, beta 2 / 1 / 0.5 left to right, starting at the balanced middle', () => {
-      expect(radios().map((r) => r.value)).toEqual(['2', '1', '0.5']);
+    it('offers three radios under it, beta 4 / 1 / 0.25 left to right, starting at the balanced middle', () => {
+      expect(radios().map((r) => r.value)).toEqual(['4', '1', '0.25']);
       expect(checkedValue()).toBe('1');
       // One grid column per third of the spectrum, each radio centred in its own.
       expect(root().querySelectorAll('.spectrum-radios > .spectrum-radio').length).toBe(3);
@@ -78,7 +78,7 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
 
     it('follows the value through every transition', async () => {
-      for (const value of [0.5, 2, 1]) {
+      for (const value of [0.25, 4, 1]) {
         await show(value);
         expect(checkedValue()).toBe(String(value));
       }
@@ -87,7 +87,7 @@ describe('BalanceComponent (#4413, #4317)', () => {
     it('emits the picked balance as a beta', () => {
       const emitted = vi.spyOn(component.valueChange, 'emit');
       radios()[0].click();
-      expect(emitted).toHaveBeenCalledExactlyOnceWith(2);
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(4);
     });
 
     it('shows the balance the host holds, not the click: a dropped pick leaves it where it was', async () => {
@@ -96,8 +96,8 @@ describe('BalanceComponent (#4413, #4317)', () => {
       await settleZoneless(fixture);
       // The host never took the pick (Find drops one mid-pass).
       expect(checkedValue()).toBe('1');
-      await show(0.5);
-      expect(checkedValue()).toBe('0.5');
+      await show(0.25);
+      expect(checkedValue()).toBe('0.25');
     });
 
     it('does not re-emit the balance it already shows', () => {
@@ -117,10 +117,11 @@ describe('BalanceComponent (#4413, #4317)', () => {
   /** A stored balance off the list: one set through the CLI or the API. */
   describe('a stored balance off the list', () => {
     it.each<[number, number]>([
-      [4, 2],
-      [1.5, 2],
+      [8, 4],
+      [2, 4],
+      [1.5, 1],
       [0.75, 1],
-      [0.25, 0.5],
+      [0.5, 0.25],
     ])('shows %s on the nearest radio in log space, %s, and snaps to it', async (stored, snapped) => {
       const emitted = vi.spyOn(component.valueChange, 'emit');
       await show(stored);
@@ -130,18 +131,18 @@ describe('BalanceComponent (#4413, #4317)', () => {
 
     it('waits for a running sort before it snaps', async () => {
       const emitted = vi.spyOn(component.valueChange, 'emit');
-      await show(4, null, null, true);
+      await show(2, null, null, true);
       expect(emitted).not.toHaveBeenCalled();
-      expect(checkedValue()).toBe('2');
+      expect(checkedValue()).toBe('4');
 
       fixture.componentRef.setInput('busy', false);
       await settleZoneless(fixture);
-      expect(emitted).toHaveBeenCalledExactlyOnceWith(2);
+      expect(emitted).toHaveBeenCalledExactlyOnceWith(4);
     });
 
     it('leaves a preset alone', async () => {
       const emitted = vi.spyOn(component.valueChange, 'emit');
-      for (const value of [2, 1, 0.5]) await show(value);
+      for (const value of [4, 1, 0.25]) await show(value);
       expect(emitted).not.toHaveBeenCalled();
     });
   });
@@ -153,21 +154,21 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
 
     it('says a checked line is checked, with the share right, how many were found in words, and the count kept', async () => {
-      await show(0.5, lineBalance('checked', { beta: 0.5 }), 1234);
+      await show(0.25, lineBalance('checked', { beta: 0.25 }), 1234);
       expect(state()!.getAttribute('data-status')).toBe('green');
       expect(stateText()!.textContent).toContain('Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept');
-      // Beta 0.5 is an advisory check (#4427): the ranges describe the audited set, the line keeps its own count.
+      // An advisory check (#4427, every beta since #4452): the ranges describe the audited set, the line keeps its own count.
       expect(stateText()!.getAttribute('title')).toContain('5 random picks from the top 32');
       expect(stateText()!.getAttribute('title')).toContain('a check informs the line and does not move it');
     });
 
     it('reads the count off the result, never the preset', async () => {
-      await show(2, lineBalance('checked', { beta: 2, count: 64 }));
+      await show(4, lineBalance('checked', { beta: 4, count: 64 }));
       expect(stateText()!.textContent).toContain('64 kept');
     });
 
     it('says an unchecked line keeps the starting candidate', async () => {
-      await show(2, lineBalance('unchecked', { beta: 2, count: 128 }), 300);
+      await show(4, lineBalance('unchecked', { beta: 4, count: 128 }), 300);
       expect(state()!.getAttribute('data-status')).toBe('yellow');
       expect(stateText()!.textContent).toContain('Top 128 kept, unchecked');
       expect(stateText()!.getAttribute('title')).toContain('nothing has measured how much of it is right');
@@ -183,9 +184,9 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
 
     it('prices a check off the schedule, rounds and all, on the check button', async () => {
-      await show(2, lineBalance('unchecked', { beta: 2, count: 128, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
+      await show(4, lineBalance('unchecked', { beta: 4, count: 128, schedule: { candidate: 128, rounds: 5, picks: 5 } }));
       expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('5 random picks a band, walking the list from the top 128');
-      // Beta 2 trims (#4427): the walk only steps to a shorter list.
+      // A trim-shaped state (#4427's beta-2 shape for the count line; the fixture still sends it above beta 1).
       expect(root().querySelector('.balance-check-btn')!.getAttribute('title')).toContain('steps to a shorter list while the balance does not fall');
     });
 
@@ -206,8 +207,8 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
 
     it('describes the line it was cut at, not a pick still on its way to the server', async () => {
-      await show(0.5, lineBalance('unchecked', { beta: 1, count: 40 }), 40);
-      expect(checkedValue()).toBe('0.5');
+      await show(0.25, lineBalance('unchecked', { beta: 1, count: 40 }), 40);
+      expect(checkedValue()).toBe('0.25');
       expect(stateText()!.textContent).toContain('Top 40 kept');
     });
   });
@@ -229,7 +230,7 @@ describe('BalanceComponent (#4413, #4317)', () => {
     });
 
     it('reads the pick count off the schedule: 5 a band at the false-negatives end too (#4388)', async () => {
-      await show(0.5, lineBalance('checked', { beta: 0.5, schedule: { candidate: 32, rounds: 3, picks: 5 } }));
+      await show(0.25, lineBalance('checked', { beta: 0.25, schedule: { candidate: 32, rounds: 3, picks: 5 } }));
       expect(checkBtn()!.textContent!.trim()).toBe('Check 5 picks');
     });
 

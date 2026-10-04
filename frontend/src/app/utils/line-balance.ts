@@ -120,17 +120,20 @@ export interface BalancePreset {
  * The balances the control offers, left to right along its spectrum (#4413;
  * the spectrum is #4298's and #4317's): three radios under the thirds of a
  * False Positives - False Negatives bar, with no word or number on any of
- * them. Beta 2 leans to recall (toward False Positives: the most returned,
- * with more wrong ones in it), 1 is balanced, 0.5 leans to precision (toward
- * False Negatives: only the surest, and more missed). A place on the spectrum
+ * them. Beta 4 leans to recall (toward False Positives: the most returned,
+ * with more wrong ones in it), 1 is balanced, 1/4 leans to precision (toward
+ * False Negatives: only the surest, and more missed). The ends are the owner's
+ * pick of 2026-10-03 on #4448, priced on #4452's line: past 1/3 and 3 each end
+ * buys at most 0.02 more of what it leans toward, and 1/4 and 4 are the ends
+ * of the range the backend accepts (they were 0.5 and 2 before). A place on the spectrum
  * promises only a direction; what a check measures (its likely ranges) stays
  * a number. The backend takes any positive beta; the control snaps one
  * outside this list to the nearest (see {@link nearestBalancePreset}).
  */
 export const BALANCE_PRESETS: readonly BalancePreset[] = [
-  { value: 2, hint: 'Toward false positives: return the most, with more wrong ones in it' },
+  { value: 4, hint: 'Toward false positives: return the most, with more wrong ones in it' },
   { value: 1, hint: 'Between the two' },
-  { value: 0.5, hint: 'Toward false negatives: return only the surest, and miss more' },
+  { value: 0.25, hint: 'Toward false negatives: return only the surest, and miss more' },
 ];
 
 /**
@@ -146,18 +149,24 @@ export function isBalancePreset(b: number): boolean {
 }
 
 /**
- * The preset closest to `b` in log space (beta is a ratio: 2 is as far from 1
- * as 0.5 is), for a stored balance the control does not offer (one set
- * through the CLI or the API). A tie goes to the higher beta. A beta that is
- * not a positive number has no log, and shows as the balanced default.
+ * The preset closest to `b` in log space (beta is a ratio: 4 is as far from 1
+ * as 1/4 is), for a stored balance the control does not offer (one set
+ * through the CLI or the API, or a preset from before #4448). A tie goes to
+ * the preset farther from the balanced middle, so a stored lean keeps its
+ * side: 2 and 0.5, the presets before #4448, sit exactly halfway in log space
+ * and show as 4 and 1/4, not as balanced. A beta that is not a positive number
+ * has no log, and shows as the balanced default.
  */
 export function nearestBalancePreset(b: number): BalancePreset {
   if (!(b > 0)) return BALANCE_PRESETS.find((preset) => preset.value === DEFAULT_BETA)!;
   const target = Math.log(b);
   const distance = (preset: BalancePreset) => Math.abs(Math.log(preset.value) - target);
-  // The presets run from the highest beta down, so on a tie (within floating
-  // point) the one already held, the higher, stays.
-  return BALANCE_PRESETS.reduce((best, preset) => (distance(preset) < distance(best) - 1e-9 ? preset : best));
+  const lean = (preset: BalancePreset) => Math.abs(Math.log(preset.value));
+  return BALANCE_PRESETS.reduce((best, preset) => {
+    const closer = distance(preset) - distance(best);
+    // A tie (within floating point) goes to the preset that leans further.
+    return closer < -1e-9 || (closer <= 1e-9 && lean(preset) > lean(best)) ? preset : best;
+  });
 }
 
 /** "11–73%" for a range: what a check measured stays a number (#4298). */

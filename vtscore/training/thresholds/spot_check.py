@@ -96,9 +96,12 @@ FLOOR_STATES = (FLOOR_UNCHECKED, FLOOR_CONFIRMED, FLOOR_SHORT)
 
 #: The balance (#4413): the user's precision/recall preference as F-beta's beta.
 #: The presets are precision-leaning, balanced and recall-leaning; any beta in
-#: ``[BETA_MIN, BETA_MAX]`` is accepted.  A finished balance walk is ``checked``:
-#: a balance has nothing to fall short of, so there is no ``short``.
-BALANCE_PRESETS: tuple[float, ...] = (0.5, 1.0, 2.0)
+#: ``[BETA_MIN, BETA_MAX]`` is accepted.  The ends are the range's own ends, 1/4
+#: and 4 (the owner's pick of 2026-10-03 on #4448, priced on #4452's line: past
+#: 1/3 and 3 each end buys at most 0.02 more of what it leans toward); they were
+#: 0.5 and 2.  A finished balance walk is ``checked``: a balance has nothing to
+#: fall short of, so there is no ``short``.
+BALANCE_PRESETS: tuple[float, ...] = (0.25, 1.0, 4.0)
 DEFAULT_BETA = 1.0
 BETA_MIN, BETA_MAX = 0.25, 4.0
 #: How a check treats the line at a balance (#4427's pricing, 2026-10-02):

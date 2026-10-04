@@ -410,7 +410,7 @@ class UserSettings(BaseModel):
     # == "floor"``; kept one release, then removed with the floor.
     min_precision: Annotated[float, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
     # The balance (#4413): F-beta's beta, clamped to ``[0.25, 4]`` (the presets
-    # are 0.5 precision-leaning, 1 balanced, 2 recall-leaning).  Draws the line
+    # are 1/4 precision-leaning, 1 balanced, 4 recall-leaning, #4448).  Draws the line
     # when ``line_preference`` is ``"balance"``; the floor draws it otherwise.
     beta: Annotated[float, _clamp(0.25, 4.0)] = DEFAULT_BETA
     line_preference: LinePreference = DEFAULT_LINE_PREFERENCE

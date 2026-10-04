@@ -19,6 +19,8 @@ from tests_lib.sorting.test_mixture_count import _two_populations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
     BALANCE_PRESETS,
+    BETA_MAX,
+    BETA_MIN,
     CHECK_ADVISORY,
     CHECK_TRIM,
     DEFAULT_BETA,
@@ -75,9 +77,12 @@ class TestTheArithmetic:
         assert fbeta_score(0, 0, 0, 1.0) == 0.0
 
     def test_the_presets_and_their_caps(self):
-        assert BALANCE_PRESETS == (0.5, 1.0, 2.0) and DEFAULT_BETA == 1.0
-        assert balance_schedule(0.5).candidate == balance_schedule(1.0).candidate == check_schedule(0.5).candidate == 32
-        assert balance_schedule(2.0).candidate == check_schedule(0.1).candidate == 128
+        assert BALANCE_PRESETS == (0.25, 1.0, 4.0) and DEFAULT_BETA == 1.0
+        assert BALANCE_PRESETS[0] == BETA_MIN and BALANCE_PRESETS[-1] == BETA_MAX  # #4448: the ends are the range's
+        assert (
+            balance_schedule(0.25).candidate == balance_schedule(1.0).candidate == check_schedule(0.5).candidate == 32
+        )
+        assert balance_schedule(4.0).candidate == check_schedule(0.1).candidate == 128
 
     @pytest.mark.parametrize("bad", [0.0, 0.1, 5.0, -1.0])
     def test_a_balance_outside_the_range_is_refused(self, bad):
@@ -194,7 +199,7 @@ class TestTheWalk:
             check = SpotCheck.start_balance(ranking.unvoted_ids().tolist(), beta, 52.0, seed=0)
             kept[beta] = _finish(check, positives).k
             assert kept[beta] == _best_edge(check, positives, beta)
-        assert kept[0.5] <= kept[1.0] <= kept[2.0]
+        assert kept[0.25] <= kept[1.0] <= kept[4.0]
 
     def test_an_all_wrong_ranking_ends_at_the_first_band_never_short(self):
         """Nothing right anywhere: the estimate ties at 0, and ties keep the smaller set, down to the first band."""
