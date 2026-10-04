@@ -31,12 +31,16 @@ same edit.
     text sort.
 - **The preference is a balance, beta, and a review runs one set of sessions
   per beta (owner, 2026-10-01 03:42, #4413, after #4411's pricing).** The
-  headline is, per beta (0.5 precision-leaning, 1 balanced, 2 recall-leaning)
-  over clicks, the returned set's **F-beta as a share of the best F-beta any
-  cut of the same ranking reaches** (`returned_at_beta.png`, the "returned set
-  at each balance" table), with its precision and recall beside it. Sessions
-  run at `SOTA_BETA=0.5|1|2` (the eval's `CALIB_BETA` arm): this is the
-  standing recipe. The harness's default arm (neither `SOTA_BETA` nor
+  headline is, per beta at the app's presets (1/4 precision-leaning, 1
+  balanced, 4 recall-leaning: the owner's pick of 2026-10-03 on #4448; they
+  were 0.5 / 1 / 2) over clicks, the returned set's **F-beta as a share of
+  the best F-beta any cut of the same ranking reaches** (`returned_at_beta.png`,
+  the "returned set at each balance" table), with its precision and recall
+  beside it, and the share of runs whose line keeps nothing (`empty`).
+  Sessions run at `SOTA_BETA=0.25|1|4` (the eval's `CALIB_BETA` arm): this is
+  the standing recipe. The analyzer's betas follow the app's presets
+  (`_rank_metrics.BETAS` is the harness's `RANK_FRAME_BETAS`, which a test
+  pins to `BALANCE_PRESETS`, #4471). The harness's default arm (neither `SOTA_BETA` nor
   `SOTA_FLOOR`) is the app's default, the balance at beta 1, since #4413's
   step 6 switched `line_preference` to the balance. The per-floor sessions
   below are the **floor-era control** (#4408): run them to compare against
@@ -88,8 +92,9 @@ same edit.
   ground-truth box (owner ruling on #3321).
 - **Metrics (owner, 2026-09-30, #4357): no FPR + FNR anywhere.** #4223
   retired that objective, and since #4272 the default arm's line is a kept
-  set (the floor's until #4413; now the balance's at beta 1, the mixture's
-  F-beta argmax capped at 32), so a review scored in cost reads the change
+  set (the floor's until #4413; then the balance's count line, the mixture's
+  F-beta argmax capped at 32; since #4452 the balance's labels line), so a
+  review scored in cost reads the change
   of objective as a regression. Cost is gone from the
   headline, the tables and the figures, not moved to an appendix.
   **The precision floor is written *P*, not *X*** (owner, 2026-09-30).
@@ -184,7 +189,7 @@ CALIB_MEM=12G bash launch.sh subset "airplane,dining table,book"   # login node:
 bash launch.sh cells                                  # login node: the full array, BOTH paths; a Binary-only review uses redo ranges (below)
 bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
-# per beta (#4413, the standing recipe): SOTA_BETA=0.5|1|2 on prepare / redo / analyze -> <date>-b05/-b1/-b2
+# per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 # per floor (#4408, the floor-era control): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
 python perp.py --run 0.1=<p10>/analysis-binary --run 0.5=<p50>/analysis-binary --run 0.9=<p90>/analysis-binary --out <dir>
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
@@ -220,14 +225,18 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   default arm (rank frames plus the end-of-run check): a Binary run takes
   7.5–12 min and ~1.1 GB at 2 CPUs.
 - **The line on a fresh corpus is the shipped one** (#4402): the rank frames
-  record how many the unchecked line keeps on the test half
-  (`test_line_k_b05/b1/b2`: the mixture's F-beta argmax under the balance's
-  cap, #4413; `test_line_k_p10/p50/p90`: the smaller of the schedule's count
-  and the vote-anchored mixture's, #4389), and `_rank_metrics.frame_k` reads
-  it. A run
-  from before c5f55732c has no such column, and the analyzer then reads the
-  schedule's count, which is not the app's line any more: **re-run it, don't
-  re-analyze it.** Recording it is a pure read; the 2026-09-30 re-run was
+  record how many the unchecked line keeps on the test half.
+  `test_line_k_b025/b1/b4` (#4471) is the labels line (#4452) at each
+  preset, its corpus side fitted on the test half as Find fits it; at the
+  sessions' own beta it is the objective's returned set exactly. It can be 0,
+  which the analyzer reads as an empty set (F-beta 0), not as a missing
+  count. `test_line_k_p10/p50/p90` is the floor's: the smaller of the
+  schedule's count and the vote-anchored mixture's, #4389.
+  `_rank_metrics.frame_k` / `frame_beta_k` read them. A run from before
+  c5f55732c has no such column, and one from before #4471 recorded the
+  retired count line at 0.5 / 1 / 2; the analyzer then reads the balance's
+  cap, which is not the app's line any more: **re-run it, don't re-analyze
+  it.** Recording it is a pure read; the 2026-09-30 re-run was
   identical to the run without it, click for click.
 - **Smoke the analyzer in a scratch directory.** `analyze.sh` writes
   `text_baseline.csv` into the run directory and reuses it when it has the

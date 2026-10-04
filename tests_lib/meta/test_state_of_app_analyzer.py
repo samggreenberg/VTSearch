@@ -450,6 +450,28 @@ def test_the_balance_metric_peaks_at_the_balance_by_construction(rm) -> None:
     assert rm.balance_metrics(ranks, 2000, n_pos, 0.5, None)["k"] == 32
 
 
+def test_a_line_that_keeps_nothing_is_read_as_empty_not_as_the_cap(rm) -> None:
+    """#4471: the labels line (#4452) can keep nothing; a recorded 0 is an empty set, -1 or no column is unrecorded."""
+    ranks = np.array([0, 2, 3, 7, 30])
+    tag = rm.beta_tag(1.0)
+    assert rm.frame_beta_k({f"test_line_k_{tag}": 0}, 1.0) == 0
+    assert rm.frame_beta_k({f"test_line_k_{tag}": -1}, 1.0) is None
+    assert rm.frame_beta_k({}, 1.0) is None
+    m = rm.balance_metrics(ranks, 2000, 5, 1.0, 0)
+    assert (m["k"], m["recall"], m["fbeta"], m["fb_share"]) == (0, 0.0, 0.0, 0.0)
+    assert np.isnan(m["precision"]), "no returned set, no precision"
+    assert m["oracle_fbeta"] == pytest.approx(rm.oracle_fbeta(ranks, 5, 1.0))
+    assert np.isnan(rm.balance_metrics(np.array([], dtype=int), 2000, 0, 1.0, 0)["fbeta"]), "no positives: undefined"
+
+
+def test_the_review_reads_the_apps_presets(rm) -> None:
+    """#4471: the analyzer's betas are the harness's, which are the app's presets (1/4, 1, 4 since #4448)."""
+    from vtscore.training.thresholds import BALANCE_PRESETS
+
+    assert tuple(rm.BETAS) == BALANCE_PRESETS
+    assert [rm.beta_tag(b) for b in rm.BETAS] == ["b025", "b1", "b4"]
+
+
 def test_each_run_records_the_floor_its_sessions_aimed_at(run) -> None:
     """``session_floor`` is the run's CALIB_MIN_PRECISION: pinned to 0.5 here (the default arm is the balance, #4413)."""
     trained = run["cells"][~run["cells"]["never_trained"].astype(bool)]

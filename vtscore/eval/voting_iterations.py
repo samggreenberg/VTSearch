@@ -990,6 +990,29 @@ def _fresh_corpus_line(
     return counts
 
 
+def _labels_line_counts(test_scores: Any, find_on_test: Any, fallback_threshold: float | None) -> dict[str, int]:
+    """What the app's labels line keeps on the test half at each preset beta (#4452, #4471).
+
+    *find_on_test* is the labels line with its corpus side fitted on the test
+    half - Find's own fit, the one the headline row cuts at the run's beta -
+    so the count at the run's beta is the headline's returned set exactly.
+    With no class model this step the retrain's *fallback_threshold* draws
+    the line, the same set at every beta.  A count can be 0: the line may
+    keep nothing.  -1 with neither.  ``score >= threshold``, as the headline
+    reads it.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS  # noqa: PLC0415
+
+    s = np.asarray(test_scores, dtype=np.float64)
+    out: dict[str, int] = {}
+    for b in RANK_FRAME_BETAS:
+        thr = float(find_on_test.threshold(b)) if find_on_test is not None else fallback_threshold
+        out[f"b{b:g}"] = int(np.count_nonzero(s >= thr)) if thr is not None and np.isfinite(thr) else -1
+    return out
+
+
 def _rank_frame(
     kind: str,
     t: int,
@@ -1000,6 +1023,8 @@ def _rank_frame(
     voted: "Iterable[int]" = (),
     pool_labels: "dict[int, float] | None" = None,
     vote_labels: "dict[int, bool] | None" = None,
+    find_on_test: Any = None,
+    fallback_threshold: float | None = None,
 ) -> dict[str, Any]:
     """Where the positives sit in the test half's ranking and in the session's unvoted pool (#4357).
 
@@ -1009,7 +1034,11 @@ def _rank_frame(
     pool's top *K* unvoted is the candidate the spot check samples.  With the
     session's votes (*vote_labels*, ``True`` = Good) it also records how many
     the shipped unchecked line keeps on the test half at each preset floor
-    (:func:`_fresh_corpus_line`, #4389); -1 without them.  Pure read.
+    (:func:`_fresh_corpus_line`, #4389); -1 without them.  At each preset
+    beta it records the arm's balance line: under the app's labels line
+    (*find_on_test* or *fallback_threshold*, #4452) what that line keeps
+    (:func:`_labels_line_counts`), else the count line a forced check shape
+    draws.  Pure read.
     See :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS`.
     """
     import numpy as np  # noqa: PLC0415
@@ -1032,6 +1061,8 @@ def _rank_frame(
     }
     if pool_ranking is not None and vote_labels:
         line_k = _fresh_corpus_line(test, pool_ranking, vote_labels)
+    if find_on_test is not None or fallback_threshold is not None:
+        line_k.update(_labels_line_counts(test_scores, find_on_test, fallback_threshold))
     return {
         "kind": kind,
         "t": int(t),
@@ -1228,6 +1259,8 @@ def _calibration_metric_rows(
         find_prevalence = on_test.prevalence
         threshold = float(on_test.threshold(float(details["beta"])))
         details["find_threshold"] = threshold
+        # The same fit, for the rank frames' count at every preset beta (#4471).
+        details["find_on_test"] = on_test
     # dump: calibration path -- `ids` is aligned with base_scores and labels.
     maybe_dump_predictions(clips_dict, list(ids), base_scores, list(labels), threshold, target_category)
     base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
@@ -2509,6 +2542,8 @@ def simulate_voting_iterations(  # noqa: C901
     walk_shape_resolved = resolve_walk_shape(walk_shape, beta)
     # What the line reads a finished walk as: the app's shape when the arm names none; the full walk's end moves the line.
     line_shape = None if walk_shape is None else (CHECK_TRIM if walk_shape == WALK_SHAPE_FULL else walk_shape)
+    # The arm draws the app's labels line (#4452): a balance with no forced check shape.
+    labels_arm = beta is not None and line_shape is None
     _check_inclusion_arm(inclusion, floor, beta)
     # The acquisition cut's rule (#4409): the shipped argmax factor under a
     # balance unless the arm says otherwise, the offset everywhere else.
@@ -3132,6 +3167,7 @@ def simulate_voting_iterations(  # noqa: C901
                 acq_threshold = offset_cut
 
         details.pop("find_threshold", None)
+        details.pop("find_on_test", None)
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
         # metrics row, but both paths score the same test set here.
@@ -3358,6 +3394,15 @@ def simulate_voting_iterations(  # noqa: C901
                     "voted": frozenset(good_votes) | frozenset(bad_votes),
                     "pool_labels": pool_labels,
                     "vote_labels": {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                    # The labels line's arm (#4452): Find's fit on the withheld
+                    # half, or with no class model this step the retrain's
+                    # fallback cut, which keeps the same set at every beta.
+                    "find_on_test": details.get("find_on_test") if labels_arm else None,
+                    "fallback_threshold": (
+                        float(threshold)
+                        if labels_arm and details.get("find_on_test") is None and threshold is not None
+                        else None
+                    ),
                 }
                 if rank_frame_steps and t in rank_frame_steps:
                     rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})

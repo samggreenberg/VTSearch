@@ -33,9 +33,18 @@ cd "$CALIB"
 # the same text sort whichever path the clicks then take.
 BASELINE="$EXP/text_baseline.csv"
 # A baseline from before #4357 has no line columns, and one from before #4363
-# has no F1 or p-tagged ones; rebuild it rather than
+# has no F1 or p-tagged ones; one from before #4471 has the old presets' betas
+# (0.5 / 1 / 2) and not the ones the analyzer reads. Rebuild it rather than
 # leave every click-0 line blank.
-if [[ ! -s "$BASELINE" ]] || ! head -1 "$BASELINE" | grep -q text_f1_p50 || ! head -1 "$BASELINE" | grep -q text_fb_share_b1; then
+_BETA_COLS=$(python -c "from _rank_metrics import BETAS, beta_tag; print(' '.join(f'text_fb_share_{beta_tag(b)}' for b in BETAS))")
+_stale_baseline() {
+  [[ ! -s "$BASELINE" ]] && return 0
+  local header c
+  header=$(head -1 "$BASELINE")
+  for c in text_f1_p50 $_BETA_COLS; do [[ ",$header," == *",$c,"* ]] || return 0; done
+  return 1
+}
+if _stale_baseline; then
   # SigLIP only: the region path opens on SigLIP's text sort too, so one
   # baseline serves both, and it avoids reading the 7.5 GB patch cell.
   CALIB_COCO_BETTER_EMBEDDERS=siglip python text_baseline.py --results "$EXP/results" --out "$BASELINE"

@@ -326,16 +326,22 @@ def returned_at_p(curves: pd.DataFrame, cells: pd.DataFrame, steps: pd.DataFrame
 def returned_at_beta(curves: pd.DataFrame, cells: pd.DataFrame, balance_steps: pd.DataFrame, out: Path) -> bool:
     """The returned set at each balance over clicks (#4413): its F-beta as a share of the best cut.
 
-    One panel per beta (0.5 / 1 / 2): the share, with 1.0 (the best cut) dotted;
-    read at click 0 and at the clicks a rank frame was recorded. A balance the
-    run's sessions did not aim at is titled so.
+    One panel per beta the analysis read (the app's presets, 1/4 / 1 / 4 since
+    #4448; an older analysis has 0.5 / 1 / 2): the share, with 1.0 (the best
+    cut) dotted; read at click 0 and at the clicks a rank frame was recorded.
+    A balance the run's sessions did not aim at is titled so.
     """
     if balance_steps is None or balance_steps.empty or "fb_share_b1" not in curves:
         return False
     at = sorted({0, *balance_steps["t"].astype(int).unique().tolist()})
     own = set(cells["session_beta"].dropna().round(4)) if "session_beta" in cells else set()
-    betas = ((0.5, "b05"), (1.0, "b1"), (2.0, "b2"))
-    fig, axes = plt.subplots(1, 3, figsize=(13, 3.9), facecolor=SURFACE, sharey=True)
+    betas = [
+        (b, "b" + (f"{b:g}".replace(".", "") if b < 1 else f"{b:g}")) for b in sorted(balance_steps["beta"].unique())
+    ]
+    fig, axes = plt.subplots(
+        1, len(betas), figsize=(13 * len(betas) / 3, 3.9), facecolor=SURFACE, sharey=True, squeeze=False
+    )
+    axes = axes[0]
     for j, (beta, tag) in enumerate(betas):
         ax = axes[j]
         for arm, color in COLORS.items():

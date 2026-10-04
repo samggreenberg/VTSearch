@@ -1106,6 +1106,8 @@ def returned_at_beta(balances: pd.DataFrame, by: list[str]) -> pd.DataFrame:
             fbeta=("fbeta", "mean"),
             oracle_fbeta=("oracle_fbeta", "mean"),
             fb_share=("fb_share", "mean"),
+            # The labels line (#4452) can keep nothing; its precision is then undefined and left out of the mean.
+            empty=("k", lambda k: float((k == 0).mean())),
             runs=("fbeta", "count"),
         )
         .round(3)
@@ -1132,10 +1134,14 @@ def returned_at_beta_md(cells: pd.DataFrame, balances: pd.DataFrame) -> list[str
     return [
         "## The returned set at each balance: F-beta over the best cut",
         "",
-        "The set the app returns when it aims for a balance (F-beta's beta: 0.5 precision-leaning, 1 "
-        "balanced, 2 recall-leaning), on the fresh test half: its `fbeta` against `oracle_fbeta`, the best "
-        "any cut of the same ranking reaches (`fb_share` = fbeta / oracle); `k`, `precision` and `recall` "
-        "beside it. The text sort and the ceiling keep the balance's cap (32 at beta <= 1, 128 above). " + who,
+        "The set the app returns when it aims for a balance (F-beta's beta at the app's presets: "
+        + ", ".join(f"{b:g}" for b in BETAS)
+        + "; #4448), on the fresh test half: the labels line (#4452) with its corpus side fitted there, as "
+        "Find draws it, so at the sessions' own beta it is the objective's returned set. Its `fbeta` against "
+        "`oracle_fbeta`, the best any cut of the same ranking reaches (`fb_share` = fbeta / oracle); `k`, "
+        "`precision` and `recall` beside it, and `empty`, the share of runs whose line keeps nothing (scored "
+        "F-beta 0, precision left out). The text sort and the ceiling keep the balance's cap (32 at beta <= 1, "
+        "128 above). " + who,
         "",
         _md(returned_at_beta(balances, ["arm"])),
         "",
