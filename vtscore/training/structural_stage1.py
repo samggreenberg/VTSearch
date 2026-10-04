@@ -148,6 +148,10 @@ def _gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray
         key = (id(matrix), matrix.shape)
         if _GPU_CACHE.get("key") != key:
             _GPU_CACHE.clear()
+            # A new matrix is a new page set: the cached candidate descriptors (#4469) belong to the old one.
+            from vtscore.media.structural import release_device_descriptors  # noqa: PLC0415
+
+            release_device_descriptors()
             # Hand the previous matrix (and anything else cached but unused) back to the device first:
             # memory PyTorch's allocator holds does not count as free, and on a 32 GB card that
             # alone failed this check from the second matrix on (#4170).
