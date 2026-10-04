@@ -146,7 +146,7 @@ class TestExampleSortFromPathsStructural:
         query = _fill_active_medias()
         calls: list[list] = []
 
-        def _fake_rerank(results, threshold, snap, example_features, *, score_key):
+        def _fake_rerank(results, threshold, snap, example_features, *, score_key, beta=None):
             calls.append(list(example_features))
             return results, threshold
 

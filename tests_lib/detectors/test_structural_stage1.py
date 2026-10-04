@@ -382,8 +382,49 @@ class TestRecallEnd:
         snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
         results = [{"id": mid, "score": 0.0} for mid in snap]
         _o, t_none = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None})
-        _o, t_half = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=0.25)
-        assert t_none == t_half == pytest.approx(31 / 39, abs=1e-6)
+        _o, t_one = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=1.0)
+        assert t_none == t_one == pytest.approx(31 / 39, abs=1e-6)
+
+
+class TestPrecisionEnd:
+    """#4479: at beta 1/4 the returned set is the beta-1 set above the precision floor."""
+
+    def _setup(self, tiled, monkeypatch, inliers_by_page):
+        snap = tiled(6)
+        matcher = _CountingMatcher({id(snap[mid]["local_features"]): n for mid, n in inliers_by_page.items()})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = line_ranking = None
+
+        return snap, Ctx()
+
+    def test_the_line_rises_above_the_ceiling_by_the_margin(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 33, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out1, t1 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=1.0)
+        out_q, t_q = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=0.25)
+        # Ceiling 30: beta 1 keeps >= 31 inliers; beta 1/4 keeps >= 35 (ceiling + 4 + 1), so page 2 (33) leaves.
+        assert t1 == pytest.approx(31 / 39, abs=1e-6) and t_q == pytest.approx(35 / 43, abs=1e-6)
+        kept1 = {e["id"] for e in out1 if e["score"] >= t1}
+        kept_q = {e["id"] for e in out_q if e["score"] >= t_q}
+        assert kept_q <= kept1 and kept1 - kept_q == {2}
+
+    def test_the_floor_follows_the_goods_own_fits(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 33, 3: 3, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        # Goods 0 and 1 fit each other with 90 and 60: median 75, floor ceil(37.5) = 38, no Bad yet.
+        _out, t = maybe_structural_rerank(results, 0.5, snap, {0: None, 1: None}, {}, ctx, beta=0.25)
+        assert t == pytest.approx(38 / 46, abs=1e-6)
+
+    def test_click_0_rises_to_16_inliers(self, tiled, monkeypatch):
+        snap, _ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 20, 2: 12, 3: 3, 4: 3, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        crop = snap[0]["local_features"]
+        _o, t1 = maybe_structural_rerank_example(results, 0.5, snap, crop, beta=1.0)
+        _o, t_q = maybe_structural_rerank_example(results, 0.5, snap, crop, beta=0.25)
+        assert t1 == 0.5 and t_q == pytest.approx(16 / 24, abs=1e-6)
 
 
 class TestStoplist:
