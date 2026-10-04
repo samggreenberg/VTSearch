@@ -13,13 +13,17 @@ import numpy as np
 import pytest
 
 from vtscore.training.thresholds import (
+    RELATIVE_SIGMA_FLOOR,
+    ClassScoreModel,
     LabelsLine,
     class_score_model,
     corpus_prevalence,
+    corpus_sigma_floor,
     estimate_positives,
     fit_labels_line,
     labels_line_threshold,
 )
+from vtscore.training.thresholds.labels_line import MIN_LOGIT_SIGMA, _line_on
 
 
 def _sig(x):
@@ -181,3 +185,80 @@ class TestTheCutFollowsTheBalance:
         assert line is not None and line.unvoted_posteriors is not None
         kept = [int((corpus >= line.threshold(b)).sum()) for b in (0.5, 1.0, 2.0)]
         assert kept[0] <= kept[1] <= kept[2] and kept[0] < kept[2], kept
+
+
+# ---------------------------------------------------------------------------
+# The spread floor follows the corpus (#4492)
+# ---------------------------------------------------------------------------
+
+
+def _compressed_session(scale: float, seed: int = 0):
+    """An early head's corpus: every logit score within ~0.3 of the bulk, positives just above it.
+
+    Returns (class model as the folds would give it, corpus scores, labels), with every logit multiplied by
+    *scale* - the same ranking and the same labels on a wider or narrower score scale.
+    """
+    from scipy.special import expit
+
+    rng = np.random.default_rng(seed)
+    n_neg, n_pos = 10_000, 45
+    x_neg = rng.normal(-0.12, 0.09, n_neg)
+    x_pos = rng.normal(0.30, 0.10, n_pos)
+    x = np.r_[x_neg, x_pos] * scale
+    y = np.r_[np.zeros(n_neg, int), np.ones(n_pos, int)]
+    # The folds' held-out votes: a few Goods near the positives, a few Bads near the line.
+    goods = rng.normal(0.36, 0.06, 4) * scale
+    bads = rng.normal(0.05, 0.06, 4) * scale
+    ordering = (expit(np.r_[goods, bads]), np.r_[np.ones(4), np.zeros(4)])
+    return class_score_model([ordering]), expit(x), y
+
+
+def test_a_compressed_corpus_is_read_on_its_own_scale():
+    """#4492: an early head squeezes the corpus; an absolute 0.25 floor read no positives, the corpus's own reads them."""
+    model, scores, y = _compressed_session(1.0)
+    assert model is not None and model.sigma_raw is not None and model.sigma_raw < MIN_LOGIT_SIGMA
+    line = _line_on(model, scores, None, {})
+    kept = scores >= line.threshold(1.0)
+    est = line.prevalence * scores.size
+    assert 15 <= est <= 135, f"the positives are estimated near the truth (45), not at zero: {est:.1f}"
+    assert kept.sum() >= 10 and (kept & (y == 1)).sum() >= 0.5 * kept.sum(), "a real returned set, mostly right"
+
+
+def test_the_line_does_not_depend_on_the_logit_scale():
+    """#4492: the same ranking and labels on a wider score scale keep the same set - a floor in logit units did not."""
+    kept = []
+    for scale in (1.0, 3.0):
+        model, scores, _ = _compressed_session(scale)
+        line = _line_on(model, scores, None, {})
+        kept.append(int((scores >= line.threshold(1.0)).sum()))
+    assert abs(kept[0] - kept[1]) <= max(2, 0.1 * kept[0]), kept
+
+
+def test_a_model_floors_afresh_on_each_corpus():
+    """The labels' model keeps its raw spread; each corpus floors it, so on_corpus does not inherit a Train floor."""
+    model, scores, _ = _compressed_session(1.0)
+    line = _line_on(model, scores, None, {})
+    assert line.model.sigma_raw == model.sigma_raw, "the line keeps the labels' unfloored model"
+    assert model.floored(0.05).sigma == max(model.sigma_raw, 0.05)
+    assert model.floored(0.5).sigma == 0.5
+    wide = scores**0.25  # another corpus, another spread
+    assert corpus_sigma_floor(wide) != corpus_sigma_floor(scores)
+    assert line.on_corpus(wide) is not None
+
+
+def test_a_saved_model_without_a_raw_spread_still_loads():
+    """Models saved before #4492 carry no sigma_raw; their sigma is taken as given."""
+    old = {"mu_pos": 0.4, "mu_neg": -0.6, "sigma": 0.25, "n_pos": 5, "n_neg": 20}
+    m = ClassScoreModel(**old)
+    assert m.sigma_raw is None and m.floored(0.1).sigma == 0.25
+    assert ClassScoreModel(**m.as_dict()) == m
+
+
+def test_the_corpus_floor_is_relative_and_bounded():
+    from scipy.special import expit
+
+    x = np.random.default_rng(1).normal(0.0, 0.2, 5000)
+    f = corpus_sigma_floor(expit(x))
+    assert f == pytest.approx(RELATIVE_SIGMA_FLOOR * 0.2, rel=0.08)
+    assert corpus_sigma_floor(np.full(10, 0.5)) > 0, "a corpus of one score still has a floor"
+    assert corpus_sigma_floor(np.array([])) == MIN_LOGIT_SIGMA
