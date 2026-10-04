@@ -218,6 +218,7 @@ def test_a_compressed_corpus_is_read_on_its_own_scale():
     model, scores, y = _compressed_session(1.0)
     assert model is not None and model.sigma_raw is not None and model.sigma_raw < MIN_LOGIT_SIGMA
     line = _line_on(model, scores, None, {})
+    assert line is not None
     kept = scores >= line.threshold(1.0)
     est = line.prevalence * scores.size
     assert 15 <= est <= 135, f"the positives are estimated near the truth (45), not at zero: {est:.1f}"
@@ -229,7 +230,9 @@ def test_the_line_does_not_depend_on_the_logit_scale():
     kept = []
     for scale in (1.0, 3.0):
         model, scores, _ = _compressed_session(scale)
+        assert model is not None
         line = _line_on(model, scores, None, {})
+        assert line is not None
         kept.append(int((scores >= line.threshold(1.0)).sum()))
     assert abs(kept[0] - kept[1]) <= max(2, 0.1 * kept[0]), kept
 
@@ -237,7 +240,9 @@ def test_the_line_does_not_depend_on_the_logit_scale():
 def test_a_model_floors_afresh_on_each_corpus():
     """The labels' model keeps its raw spread; each corpus floors it, so on_corpus does not inherit a Train floor."""
     model, scores, _ = _compressed_session(1.0)
+    assert model is not None and model.sigma_raw is not None
     line = _line_on(model, scores, None, {})
+    assert line is not None
     assert line.model.sigma_raw == model.sigma_raw, "the line keeps the labels' unfloored model"
     assert model.floored(0.05).sigma == max(model.sigma_raw, 0.05)
     assert model.floored(0.5).sigma == 0.5
