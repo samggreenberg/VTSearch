@@ -51,37 +51,65 @@ that aimed at 1/4, and so on.
    returns a median of 26 images at precision 0.70 and recall 0.40. The
    balanced preset returns 47 at 0.57 and 0.54. The recall preset returns 80
    at 0.42 and 0.68.
-2. **The spot check is worth more than the last 50 clicks.** Clicks 100 to
-   150 add 0.002 to 0.005. The check's 21 to 31 uniform picks add
-   +0.037 ± 0.004, +0.034 ± 0.003 and +0.036 ± 0.003 at 1/4, 1 and 4, and cut
-   the share of runs returning more than 200 images from 6/19/31% to
-   1/6/26%. That gap is the A/B in #4482.
-3. **For the first 85 to 100 clicks, the detector returns a worse set than
-   typing the query did.** The typed query's top 32 (128 at beta 4) reaches
-   70 to 74% of the best cut's F-beta. The detector's set falls to **14% at
-   click 7** at beta 1 (13% at 4, 27% at click 4 at 1/4), is at 45 to 51% at
-   click 25, and is back at the typed query's level only by click 100, 95 and
-   85. This is #4384 seen on the returned set: early detectors rank worse than
-   the query, and their weak labels make the line over-return (#4466).
+2. **The spot check is worth more per vote than Autopilot's late clicks.**
+   Paired within sessions, clicks 100 to 150 add +0.023 ± 0.003 at every
+   preset. The check's 21 to 31 uniform picks add +0.037 ± 0.004,
+   +0.034 ± 0.003 and +0.036 ± 0.003 at 1/4, 1 and 4, and cut the share of
+   runs returning more than 200 images from 6/19/31% to 1/6/26%. #4482
+   priced the trade at beta 1: a session that stops at 125 clicks and checks
+   beats one that clicks to 150 without checking, by +0.025 at about equal
+   votes; 150 clicks plus the check is still best, by 0.009 over 100 plus
+   the check. (An earlier draft read the 100-to-150 gain as +0.002 to
+   +0.005 off two columns with different denominators: the 26 sessions
+   whose first Good came after click 100 have no line at 100.)
+3. **The early session, read apples to apples (owner, 2026-10-04): one
+   thresholding rule on both sorts.** Under each sort's **own line in the
+   app**, the text sort's blind GMM cut returns about 4,500 of the 10,900
+   images (F1 0.02), and the detector's labels line returns a median of
+   **one image for its first 15 clicks** (F1 0.03 at clicks 4 to 7, 0.22 at
+   15). Both are useless early, and the detector's is the less bad one from
+   click 4 at beta 1 (2 at 1/4, 15 at 4). Under **set-constant top 32 on
+   both** (128 at beta 4), the detector's ranking overtakes the text sort's
+   at click 6 (0.40 at click 10 against the text sort's 0.38; at beta 4,
+   click 40). Earlier drafts compared the detector's line with the text
+   sort's top 32 and read "worse than the typed query for 35 to 50 clicks";
+   that crossed rules and is withdrawn. What stands: for about 15 clicks the
+   labels line (#4452) has no idea how many positives there are. The opening
+   takes its Goods from the top of the text sort, the class model puts
+   positives far above where most of them sit, and Find's prevalence
+   estimate reads 0.0000 against a true 0.43%, so the cut keeps the one
+   image it is surest of. The ranking is not the cause: its best cut matches
+   the text sort's from click 7, and AP's dip (0.42 → 0.26 at click 4, back
+   by 43) is the same as in the 2026-09-30 review. #4452 was priced at click
+   150 and on Find corpora, never on the early session. The ranking's own
+   dip is #4384.
 
-![The returned set's share of the best cut, per preset](figures/returned_at_own_beta.png)
+![The returned set's share of the best cut, per preset; solid: each sort's own line, dashed: top-K on both](figures/returned_at_own_beta.png)
 
-| preset | point | F-beta | share of best cut | precision | recall | returned, median | p90 |
+**The returned set, one rule per row.** "App line" is what each sort's own
+line in the app returns: the text sort's blind GMM cut, the detector's labels
+line, and the full-label model's threshold as the harness applied it.
+"Top-K" is set-constant at the old cap on every sort: 32 at beta ≤ 1, 128 at
+beta 4. Compare within a rule, never across. Detector rows are the last click
+before the check.
+
+| preset | rule | text sort | 25 clicks | 50 clicks | 150 clicks | full labels | returned at 150, median / text sort |
 |---:|---|---:|---:|---:|---:|---:|---:|
-| 1/4 | typed query | 0.47 | 0.70 | 0.49 | 0.31 | 32 | 32 |
-| 1/4 | 150 clicks | 0.57 | 0.72 | 0.62 | 0.43 | 35 | 130 |
-| 1/4 | full labels | 0.62 | 0.81 | 0.64 | 0.41 | 32 | 32 |
-| 1 | typed query | 0.38 | 0.71 | 0.49 | 0.31 | 32 | 32 |
-| 1 | 150 clicks | 0.48 | 0.74 | 0.51 | 0.56 | 48 | 490 |
-| 1 | full labels | 0.50 | 0.84 | 0.64 | 0.41 | 32 | 32 |
-| 4 | typed query | 0.49 | 0.74 | 0.21 | 0.53 | 128 | 128 |
-| 4 | 150 clicks | 0.55 | 0.78 | 0.40 | 0.68 | 79 | 1,400 |
-| 4 | full labels | 0.62 | 0.86 | 0.27 | 0.68 | 128 | 128 |
+| 1/4 | app line | 0.01 | 0.36 | 0.47 | **0.57** | 0.21 | 35 / 4,500 |
+| 1/4 | top 32 | 0.47 | 0.42 | 0.49 | **0.57** | 0.62 | 32 / 32 |
+| 1 | app line | 0.02 | 0.26 | 0.38 | **0.48** | 0.28 | 48 / 4,500 |
+| 1 | top 32 | 0.38 | 0.34 | 0.39 | **0.46** | 0.50 | 32 / 32 |
+| 4 | app line | 0.15 | 0.32 | 0.46 | **0.55** | 0.59 | 79 / 4,500 |
+| 4 | top 128 | 0.49 | 0.40 | 0.47 | **0.56** | 0.62 | 128 / 128 |
 
-These rows come from the rank frames at the last click before the check. The
-typed query and the full-label model drew no line in a session, so they are
-read at the balance's old cap (32 at beta ≤ 1, 128 above). They show where a
-sort's top set lands, not what the app would return.
+Two things the rules show together. Under the app's own lines the detector
+wins at every point from click 4 on, because the text sort's line returns
+most of the corpus. Under top-K the ranking alone is compared, and 150
+clicks of detector beat the text sort by 0.08 to 0.10 at every preset. The
+full-label model's own line is the odd row: at beta 1 it returns about 840
+images at precision 0.20 (F1 0.28 against a best cut of 0.58), which says
+the labels line mis-sizes its set even when every label is known; that is
+filed as a finding, not a fix.
 
 **The ranking** barely depends on the preset (the beta-1 sessions):
 
@@ -239,11 +267,20 @@ Three of these four were harmful in the 2026-10-01 review too. They are what
 
 ## What to A/B next
 
-- **#4482: spend late clicks the way the check does.** Clicks 100 to 150 add
-  +0.002 to +0.005. The check's ~25 uniform picks add +0.035.
-- **#4384: the first detector returns a worse set than the typed query for 85
-  to 100 clicks.** The returned set's share of the best cut falls from about
-  0.72 to 0.14 at click 7.
+- **The early session's line (#4384, on the returned set):** the labels line
+  returns one image for its first 15 clicks because its prevalence estimate
+  collapses under the opening's labels. Apples to apples it is still less
+  bad than the text sort's own line from click 4, and the ranking beneath it
+  overtakes the text sort's by click 6. The fix is an estimate that stays
+  honest when the only Goods so far are the easiest ones; a set-constant
+  floor would hide it and does not scale with the Find corpus (owner).
+- **The full-label model's own line under-sizes its set.** With every label
+  known it returns about 840 images at F1 0.28 against a best cut of 0.58
+  (beta 1). The line's model of where positives sit is off even with
+  perfect labels.
+- **#4482: priced.** Per vote, check-style picks are worth about twice
+  Autopilot's late clicks (+0.047 for 22 picks at click 100 against +0.023
+  for 50 clicks), and they add up rather than substitute.
 - **#4483: a tighter check range.** The current one is honest but 0.65 to 0.71
   wide.
 - **#4404: correct early Bad votes that share a cue with the class.** The same

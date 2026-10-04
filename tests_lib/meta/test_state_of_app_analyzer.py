@@ -207,6 +207,12 @@ def _baseline(path: Path, rm) -> dict:
     for i, cat in enumerate([*CATS, "cat9@small"]):
         row = {"dataset": "coco_better", "embedder": "siglip", "category": cat, "seed": 0, "supports_text": 1}
         row["text_AP"] = 0.1 + i / 10
+        # The text sort's own line in the app (the blind GMM cut), as text_baseline.py records it (#4474).
+        row["n_test"] = 1000
+        row["n_test_pos"] = 10 + i
+        row["text_precision"] = round(0.05 + i / 50, 6)
+        row["text_recall"] = round(0.9 - i / 50, 6)
+        row["text_fpr"] = round(0.1 + i / 100, 6)
         for x in rm.FLOORS:
             for j, m in enumerate(
                 ("k", "precision", "shortfall", "meets", "recall", "oracle_recall", "f1", "oracle_f1")
@@ -328,9 +334,35 @@ def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> No
         for b in rm.BETAS:
             tag = rm.beta_tag(b)
             text = balances[(balances["category"] == cat) & (balances["point"] == "text") & (balances["beta"] == b)]
-            assert text["fb_share"].iloc[0] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
-            assert c.loc[0, f"fb_share_{tag}"] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
+            # Two rules per point (#4474, owner 2026-10-04): the text sort's top-K is the baseline's cap reading;
+            # its app line is the blind GMM cut; the curves carry the app's line.
+            assert set(text["rule"]) == {"app line", "top-K"}
+            top = text[text["rule"] == "top-K"].iloc[0]
+            assert top["fb_share"] == pytest.approx(run["text"][cat][f"text_fb_share_{tag}"])
+            app = text[text["rule"] == "app line"].iloc[0]
+            tb = run["text"][cat]
+            want_f = (
+                (1 + b * b)
+                * tb["text_precision"]
+                * tb["text_recall"]
+                / (b * b * tb["text_precision"] + tb["text_recall"])
+            )
+            assert app["fbeta"] == pytest.approx(want_f), "the text sort's app line is its GMM cut"
+            assert app["k"] == pytest.approx(
+                tb["text_recall"] * tb["n_test_pos"] + tb["text_fpr"] * (tb["n_test"] - tb["n_test_pos"])
+            )
+            assert app["fb_share"] == pytest.approx(want_f / tb[f"text_oracle_fbeta_{tag}"])
+            assert c.loc[0, f"fb_share_{tag}"] == pytest.approx(app["fb_share"]), "the curves carry the app's line"
+            cap = 32 if b <= 1 else 128
             for f in frames.query("kind == 'step'").to_dict("records"):
+                top_step = steps[
+                    (steps["category"] == cat)
+                    & (steps["t"] == f["t"])
+                    & (steps["beta"] == b)
+                    & (steps["rule"] == "top-K")
+                ].iloc[0]
+                assert top_step["k"] == min(cap, int(f["n_test"])), "top-K: the cap on the detector too"
+                steps_app = steps[steps["rule"] == "app line"]
                 want = rm.balance_metrics(
                     rm.parse_ranks(f["test_pos_ranks"]),
                     int(f["n_test"]),
@@ -338,12 +370,15 @@ def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> No
                     b,
                     rm.frame_beta_k(f, b),
                 )
-                got = steps[(steps["category"] == cat) & (steps["t"] == f["t"]) & (steps["beta"] == b)].iloc[0]
+                got = steps_app[
+                    (steps_app["category"] == cat) & (steps_app["t"] == f["t"]) & (steps_app["beta"] == b)
+                ].iloc[0]
                 for m in ("k", "fbeta", "fb_share", "precision", "recall"):
                     assert got[m] == pytest.approx(want[m]), (cat, b, m)
                 assert c.loc[int(f["t"]), f"fb_share_{tag}"] == pytest.approx(want["fb_share"])
                 assert 0.0 <= want["fb_share"] <= 1.0 + 1e-9
             final = balances[(balances["category"] == cat) & (balances["point"] == "final") & (balances["beta"] == b)]
+            final = final[final["rule"] == "app line"]
             last = frames.query("kind == 'last'").iloc[0]
             want = rm.balance_metrics(
                 rm.parse_ranks(last["test_pos_ranks"]),
@@ -356,6 +391,39 @@ def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> No
     assert "## The returned set at each balance: F-beta over the best cut" in run["summary"]
     assert "These sessions aimed at a floor, not a balance" in run["summary"]
     assert run["cells"]["session_beta"].isna().all(), "a floor run records no session beta"
+
+
+def test_each_rule_thresholds_both_sorts_the_same_way() -> None:
+    """Owner, 2026-10-04: a text-vs-detector comparison uses one rule on both sides."""
+    sa = _load("sota_analyze_rules", _SOTA / "analyze.py")
+    # The text sort: its app line is the blind GMM cut (precision, recall, fpr); its top-K the cap.
+    text = {"text_gmm_precision": 0.5, "text_gmm_recall": 0.8, "text_gmm_fpr": 0.004, "n_test": 1000.0, "n_test_pos": 10.0,
+            "text_oracle_fbeta_b1": 0.9, "text_k_b1": 32, "text_fbeta_b1": 0.4, "text_precision_b1": 0.2,
+            "text_recall_b1": 0.64, "text_fb_share_b1": 0.4 / 0.9}  # fmt: skip
+    rows = dict(sa._balance_rows(text, None, True, 1.0))
+    assert set(rows) == {"app line", "top-K"}
+    assert rows["app line"]["k"] == pytest.approx(0.8 * 10 + 0.004 * 990)
+    assert rows["app line"]["fbeta"] == pytest.approx(2 * 0.5 * 0.8 / 1.3)
+    assert rows["app line"]["fb_share"] == pytest.approx(rows["app line"]["fbeta"] / 0.9)
+    assert rows["top-K"]["k"] == 32 and rows["top-K"]["fbeta"] == pytest.approx(0.4)
+    # The detector: its app line is what the frame recorded; its top-K the cap, whatever the frame says.
+    frame = {
+        "test_pos_ranks": "0 1 5 40 300",
+        "n_test": 1000,
+        "n_test_pos": 5,
+        "test_line_k_b1": 3,
+        "test_line_k_b4": 3,
+    }
+    rows = dict(sa._balance_rows(text, frame, False, 1.0))
+    assert rows["app line"]["k"] == 3 and rows["top-K"]["k"] == 32
+    assert rows["app line"]["oracle_fbeta"] == rows["top-K"]["oracle_fbeta"], "one ranking, one best cut"
+    rows4 = dict(sa._balance_rows(text, frame, False, 4.0))
+    assert rows4["top-K"]["k"] == 128
+    # The ceiling: the full-label model's own threshold, with the frame's best cut as the oracle.
+    sky = {"precision": 1.0, "recall": 0.6, "fpr": 0.0, "n_test_pos": 5.0, "n_test_neg": 995.0}
+    rows = dict(sa._balance_rows(text, frame, False, 1.0, sky))
+    assert rows["app line"]["k"] == pytest.approx(3.0) and rows["app line"]["precision"] == 1.0
+    assert rows["top-K"]["k"] == 32
 
 
 def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:

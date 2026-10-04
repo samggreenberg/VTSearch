@@ -21,6 +21,21 @@ studies that the review points at.
 Keep these unless the owner changes them, and record any change here in the
 same edit.
 
+- **Apples to apples (owner, 2026-10-04, #4474):** a comparison between the
+  text sort and the detector uses ONE thresholding rule on both sides. Never
+  let "text sort" mean "text sort at a fixed count" while "detector" means
+  "detector at its line". The analyzer's balance tables carry a `rule`:
+  `app line` (what each sort's own line in the app returns: the text sort's
+  blind GMM cut, the detector's labels line, the full-label model's
+  threshold), the primary reading; and `top-K` (set-constant at the old cap,
+  32 at beta <= 1 and 128 above, on every sort), a secondary view shown for
+  both sorts or neither. The owner is skeptical a set-constant line will ever
+  ship (it does not scale with the Find corpus), so the report leads with the
+  app lines. The text sort's blind cut returns most of the corpus (F1 0.02 on
+  COCO Better); its top 32 happens to be a near-oracle count on this bench
+  (about 50 positives a cell), which is why the count line looked good early
+  and why #4452 found it fails on other corpus sizes.
+
 - **Bench:** `coco_better`, every class at every size: all 144 cells
   (`CALIB_CATEGORY_MODE=all`). The data is the bench, not the subject. Classes
   and bands are strata to report across; a study about the data itself is out
