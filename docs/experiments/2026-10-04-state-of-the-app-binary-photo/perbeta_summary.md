@@ -12,7 +12,7 @@ F-beta at the sessions' own beta of the withheld images above the app's threshol
 
 ## The returned set at each balance (rank frames)
 
-One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's own line in the app - the text sort's blind GMM cut, the detector's labels line (#4452), the full-label model's threshold. `top-K`: set-constant at the old cap (32 at beta <= 1, 128 above) on every sort. Compare the text sort and the detector within a rule, never across. `fbeta` against `oracle_fbeta` (the best any cut of the same ranking reaches; `fb_share` = fbeta / oracle), with `k`, `precision` and `recall`. Points: text sort, 25 and 50 clicks, the end, full labels.
+One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's own line in the app - the text sort's blind GMM cut, the detector's labels line (#4452); the ceiling has none yet (#4486). `top-K`: set-constant at the old cap (32 at beta <= 1, 128 above) on every sort. Compare the text sort and the detector within a rule, never across. `fbeta` against `oracle_fbeta` (the best any cut of the same ranking reaches; `fb_share` = fbeta / oracle), with `k`, `precision` and `recall`. Points: text sort, 25 and 50 clicks, the end, full labels.
 
 | sessions_at | arm | rule | beta | point | k | precision | recall | fbeta | oracle_fbeta | fb_share | empty | runs |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -20,7 +20,7 @@ One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's 
 | beta 0.25 | SigLIP binary | app line | 0.25 | 25 | 971.272 | 0.546 | 0.332 | 0.362 | 0.526 | 0.514 | 0.0 | 720 |
 | beta 0.25 | SigLIP binary | app line | 0.25 | 50 | 754.232 | 0.543 | 0.46 | 0.466 | 0.582 | 0.616 | 0.0 | 720 |
 | beta 0.25 | SigLIP binary | app line | 0.25 | final | 185.024 | 0.618 | 0.449 | 0.571 | 0.668 | 0.724 | 0.0 | 720 |
-| beta 0.25 | SigLIP binary | app line | 0.25 | ceiling | 841.765 | 0.204 | 0.931 | 0.209 | 0.713 | 0.246 | 0.0 | 720 |
+| beta 0.25 | SigLIP binary | app line | 0.25 | ceiling |  |  |  |  | 0.713 |  | 0.0 | 0 |
 | beta 0.25 | SigLIP binary | top-K | 0.25 | text | 32.0 | 0.487 | 0.313 | 0.471 | 0.556 | 0.696 | 0.0 | 720 |
 | beta 0.25 | SigLIP binary | top-K | 0.25 | 25 | 32.0 | 0.43 | 0.277 | 0.416 | 0.526 | 0.616 | 0.0 | 720 |
 | beta 0.25 | SigLIP binary | top-K | 0.25 | 50 | 32.0 | 0.506 | 0.326 | 0.489 | 0.582 | 0.682 | 0.0 | 720 |
@@ -30,7 +30,7 @@ One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's 
 | beta 1 | SigLIP binary | app line | 1.0 | 25 | 1426.617 | 0.486 | 0.444 | 0.256 | 0.386 | 0.473 | 0.0 | 720 |
 | beta 1 | SigLIP binary | app line | 1.0 | 50 | 1198.9 | 0.46 | 0.566 | 0.384 | 0.457 | 0.632 | 0.0 | 720 |
 | beta 1 | SigLIP binary | app line | 1.0 | final | 374.806 | 0.51 | 0.576 | 0.476 | 0.535 | 0.747 | 0.0 | 720 |
-| beta 1 | SigLIP binary | app line | 1.0 | ceiling | 841.765 | 0.204 | 0.931 | 0.278 | 0.578 | 0.401 | 0.0 | 720 |
+| beta 1 | SigLIP binary | app line | 1.0 | ceiling |  |  |  |  | 0.578 |  | 0.0 | 0 |
 | beta 1 | SigLIP binary | top-K | 1.0 | text | 32.0 | 0.487 | 0.313 | 0.38 | 0.45 | 0.714 | 0.0 | 720 |
 | beta 1 | SigLIP binary | top-K | 1.0 | 25 | 32.0 | 0.43 | 0.276 | 0.336 | 0.386 | 0.705 | 0.0 | 720 |
 | beta 1 | SigLIP binary | top-K | 1.0 | 50 | 32.0 | 0.504 | 0.325 | 0.394 | 0.457 | 0.724 | 0.0 | 720 |
@@ -40,7 +40,7 @@ One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's 
 | beta 4 | SigLIP binary | app line | 4.0 | 25 | 1788.8 | 0.364 | 0.54 | 0.322 | 0.479 | 0.547 | 0.0 | 720 |
 | beta 4 | SigLIP binary | app line | 4.0 | 50 | 1768.949 | 0.35 | 0.669 | 0.455 | 0.545 | 0.706 | 0.0 | 720 |
 | beta 4 | SigLIP binary | app line | 4.0 | final | 825.131 | 0.395 | 0.697 | 0.551 | 0.625 | 0.796 | 0.0 | 720 |
-| beta 4 | SigLIP binary | app line | 4.0 | ceiling | 841.765 | 0.204 | 0.931 | 0.594 | 0.692 | 0.829 | 0.0 | 720 |
+| beta 4 | SigLIP binary | app line | 4.0 | ceiling |  |  |  |  | 0.692 |  | 0.0 | 0 |
 | beta 4 | SigLIP binary | top-K | 4.0 | text | 128.0 | 0.207 | 0.531 | 0.486 | 0.566 | 0.739 | 0.0 | 720 |
 | beta 4 | SigLIP binary | top-K | 4.0 | 25 | 128.0 | 0.172 | 0.442 | 0.404 | 0.479 | 0.7 | 0.0 | 720 |
 | beta 4 | SigLIP binary | top-K | 4.0 | 50 | 128.0 | 0.202 | 0.517 | 0.473 | 0.545 | 0.74 | 0.0 | 720 |

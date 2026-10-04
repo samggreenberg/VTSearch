@@ -295,7 +295,7 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
         "## The returned set at each balance (rank frames)",
         "",
         "One rule per row (owner, 2026-10-04: apples to apples). `app line`: each sort's own line in the app - "
-        "the text sort's blind GMM cut, the detector's labels line (#4452), the full-label model's threshold. "
+        "the text sort's blind GMM cut, the detector's labels line (#4452); the ceiling has none yet (#4486). "
         "`top-K`: set-constant at the old cap (32 at beta <= 1, 128 above) on every sort. Compare the text sort "
         "and the detector within a rule, never across. `fbeta` against `oracle_fbeta` (the best any cut of the "
         "same ranking reaches; `fb_share` = fbeta / oracle), with `k`, `precision` and `recall`. Points: text "

@@ -26,8 +26,10 @@ same edit.
   let "text sort" mean "text sort at a fixed count" while "detector" means
   "detector at its line". The analyzer's balance tables carry a `rule`:
   `app line` (what each sort's own line in the app returns: the text sort's
-  blind GMM cut, the detector's labels line, the full-label model's
-  threshold), the primary reading; and `top-K` (set-constant at the old cap,
+  blind GMM cut, the detector's labels line; the ceiling has none until
+  #4486 gives it Find's line, since the harness cuts the skyline at the
+  retired cost oracle on the test labels, so its row is blank), the primary
+  reading; and `top-K` (set-constant at the old cap,
   32 at beta <= 1 and 128 above, on every sort), a secondary view shown for
   both sorts or neither. The owner is skeptical a set-constant line will ever
   ship (it does not scale with the Find corpus), so the report leads with the
