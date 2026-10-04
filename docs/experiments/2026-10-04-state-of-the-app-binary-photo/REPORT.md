@@ -51,18 +51,33 @@ that aimed at 1/4, and so on.
    returns a median of 26 images at precision 0.70 and recall 0.40. The
    balanced preset returns 47 at 0.57 and 0.54. The recall preset returns 80
    at 0.42 and 0.68.
-2. **The spot check is worth more than the last 50 clicks.** Clicks 100 to
-   150 add 0.002 to 0.005. The check's 21 to 31 uniform picks add
-   +0.037 ± 0.004, +0.034 ± 0.003 and +0.036 ± 0.003 at 1/4, 1 and 4, and cut
-   the share of runs returning more than 200 images from 6/19/31% to
-   1/6/26%. That gap is the A/B in #4482.
-3. **For the first 85 to 100 clicks, the detector returns a worse set than
-   typing the query did.** The typed query's top 32 (128 at beta 4) reaches
-   70 to 74% of the best cut's F-beta. The detector's set falls to **14% at
-   click 7** at beta 1 (13% at 4, 27% at click 4 at 1/4), is at 45 to 51% at
-   click 25, and is back at the typed query's level only by click 100, 95 and
-   85. This is #4384 seen on the returned set: early detectors rank worse than
-   the query, and their weak labels make the line over-return (#4466).
+2. **The spot check is worth more per vote than Autopilot's late clicks.**
+   Paired within sessions, clicks 100 to 150 add +0.023 ± 0.003 at every
+   preset. The check's 21 to 31 uniform picks add +0.037 ± 0.004,
+   +0.034 ± 0.003 and +0.036 ± 0.003 at 1/4, 1 and 4, and cut the share of
+   runs returning more than 200 images from 6/19/31% to 1/6/26%. #4482
+   priced the trade at beta 1: a session that stops at 125 clicks and checks
+   beats one that clicks to 150 without checking, by +0.025 at about equal
+   votes; 150 clicks plus the check is still best, by 0.009 over 100 plus
+   the check. (An earlier draft read the 100-to-150 gain as +0.002 to
+   +0.005 off two columns with different denominators: the 26 sessions
+   whose first Good came after click 100 have no line at 100.)
+3. **For the first 35 to 50 clicks, the app returns a worse set than the
+   typed query's top 32 would, and the line is why.** At beta 1 the line
+   returns a median of **one image for the first 15 clicks** (F1 0.03 at
+   clicks 4 to 7, 0.22 at 15) and reaches the typed query's F1 of 0.38 only
+   at click 40 (35 at beta 1/4, 50 at beta 4). The ranking is not the cause:
+   its best cut matches the typed query's best cut from click 7 (0.44 vs
+   0.45), and AP's dip (0.42 → 0.26 at click 4, back by 43) is the same as in
+   the 2026-09-30 review, whose count line kept 32 and was at the typed
+   query's level from click 10. The cause is the labels line (#4452) under
+   the opening's labels: the first Goods come from the top of the text sort,
+   so the class model puts positives far above where most of them sit, and
+   Find's prevalence estimate reads 0.0000 for 15 clicks against a true
+   0.43%. #4452 was priced at click 150 and on Find corpora, never on the
+   early session. Measured as a share of the best cut, the set is back at the
+   typed query's share only by click 85 to 100, because the best cut keeps
+   rising (`returned_at_own_beta.png`). The ranking's own dip is #4384.
 
 ![The returned set's share of the best cut, per preset](figures/returned_at_own_beta.png)
 
@@ -239,11 +254,15 @@ Three of these four were harmful in the 2026-10-01 review too. They are what
 
 ## What to A/B next
 
-- **#4482: spend late clicks the way the check does.** Clicks 100 to 150 add
-  +0.002 to +0.005. The check's ~25 uniform picks add +0.035.
-- **#4384: the first detector returns a worse set than the typed query for 85
-  to 100 clicks.** The returned set's share of the best cut falls from about
-  0.72 to 0.14 at click 7.
+- **The early session's line (#4384, on the returned set):** the labels line
+  returns one image for 15 clicks and trails the typed query's top 32 for 35
+  to 50. A floor of the old cap under the line, priced offline from the rank
+  frames, matches the old count line from click 7 and keeps the line's late
+  gains (0.49–0.50 at 100–150 clicks against 0.47–0.48 for the cap alone),
+  but it brings back the count on an empty corpus that #4452 removed.
+- **#4482: priced.** Per vote, check-style picks are worth about twice
+  Autopilot's late clicks (+0.047 for 22 picks at click 100 against +0.023
+  for 50 clicks), and they add up rather than substitute.
 - **#4483: a tighter check range.** The current one is honest but 0.65 to 0.71
   wide.
 - **#4404: correct early Bad votes that share a cue with the class.** The same

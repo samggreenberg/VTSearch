@@ -34,13 +34,13 @@ F-beta at the sessions' own beta of the withheld images above the app's threshol
 
 ## The early dip
 
-The returned set's share of the best cut, mean over runs: the typed query's set at click 0, the detector's lowest, and the click by which it is back at the typed query's level.
+The returned set against the typed query's set (the top 32, or 128 above beta 1), mean over runs: as a share of the best cut (which rises with the clicks), and in absolute F-beta with what the line returned (#4384: the line, not the ranking, is what trails the typed query early).
 
-| beta | typed query | lowest | at click | at 10 | at 25 | back at the typed query's level by click |
-|---|---|---|---|---|---|---|
-| 0.25 | 0.696 | 0.266 | 4 | 0.333 | 0.512 | 100 |
-| 1 | 0.714 | 0.144 | 7 | 0.192 | 0.454 | 95 |
-| 4 | 0.739 | 0.133 | 7 | 0.203 | 0.49 | 85 |
+| beta | typed query, share | lowest share | at click | share at 25 | back at the typed query's share by click | typed query's set, F | line F at 5 / 10 / 25 | returned median at 5 / 10 / 25 | line F at the typed query's by click |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.25 | 0.696 | 0.266 | 4 | 0.512 | 100 | 0.471 | 0.19 / 0.23 / 0.42 | 1 / 1 / 12 | 35 |
+| 1 | 0.714 | 0.144 | 7 | 0.454 | 95 | 0.38 | 0.03 / 0.08 / 0.29 | 1 / 1 / 27 | 40 |
+| 4 | 0.739 | 0.133 | 7 | 0.49 | 85 | 0.486 | 0.03 / 0.11 / 0.35 | 1 / 1 / 56 | 50 |
 
 ## The spot check
 

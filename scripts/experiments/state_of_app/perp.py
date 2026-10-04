@@ -225,10 +225,22 @@ def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
             continue
         low_t = int(m.loc[1:].idxmin())
         back = m.loc[low_t:][m.loc[low_t:] >= m.loc[0]]
+        # In absolute terms (#4384): the line's F-beta against the typed query's set's, and what it returned.
+        steps = pd.read_csv(d / "balance_steps.csv")
+        steps = steps[steps["beta"].round(4) == round(beta, 4)]
+        bal = pd.read_csv(d / "balances.csv", dtype={"point": str})
+        bal = bal[(bal["beta"].round(4) == round(beta, 4)) & (bal["point"] == "text")]
+        f = steps.groupby("t")["fbeta"].mean()
+        k = steps.groupby("t")["k"].median()
+        text_f = float(bal["fbeta"].mean()) if len(bal) else float("nan")
+        back_f = f[f >= text_f] if len(f) else f
         rows.append({
-            "beta": f"{beta:g}", "typed query": m.loc[0], "lowest": m.loc[low_t], "at click": low_t,
-            "at 10": m.get(10, float("nan")), "at 25": m.get(25, float("nan")),
-            "back at the typed query's level by click": int(back.index[0]) if len(back) else "not by the end",
+            "beta": f"{beta:g}", "typed query, share": m.loc[0], "lowest share": m.loc[low_t], "at click": low_t,
+            "share at 25": m.get(25, float("nan")),
+            "back at the typed query's share by click": int(back.index[0]) if len(back) else "not by the end",
+            "typed query's set, F": text_f, "line F at 5 / 10 / 25": " / ".join(f"{f.get(t, float('nan')):.2f}" for t in (5, 10, 25)),
+            "returned median at 5 / 10 / 25": " / ".join(f"{k.get(t, float('nan')):.0f}" for t in (5, 10, 25)),
+            "line F at the typed query's by click": int(back_f.index[0]) if len(back_f) else "not by the end",
         })  # fmt: skip
     return pd.DataFrame(rows)
 
@@ -282,8 +294,9 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
     md += [
         "## The early dip",
         "",
-        "The returned set's share of the best cut, mean over runs: the typed query's set at click 0, the "
-        "detector's lowest, and the click by which it is back at the typed query's level.",
+        "The returned set against the typed query's set (the top 32, or 128 above beta 1), mean over runs: as a "
+        "share of the best cut (which rises with the clicks), and in absolute F-beta with what the line returned "
+        "(#4384: the line, not the ranking, is what trails the typed query early).",
         "",
         _md(_dip_rows(runs).round(3), index=False),
         "",
