@@ -1,0 +1,92 @@
+{
+  "0.25": {
+    "passes": false,
+    "fold0": {
+      "t": 20,
+      "q": 0.5,
+      "d": null,
+      "geo0": false,
+      "geo1": true,
+      "geo2": false,
+      "tail": null
+    },
+    "fold1": {
+      "t": 16,
+      "q": 0.25,
+      "d": 4,
+      "geo0": false,
+      "geo1": true,
+      "geo2": false,
+      "tail": null
+    },
+    "final": {
+      "t": 16,
+      "q": 0.5,
+      "d": 4,
+      "geo0": false,
+      "geo1": true,
+      "geo2": false,
+      "tail": null
+    }
+  },
+  "1": {
+    "passes": false,
+    "fold0": {
+      "t": 10,
+      "q": 0.25,
+      "d": 4,
+      "geo0": false,
+      "geo1": true,
+      "geo2": false,
+      "tail": null
+    },
+    "fold1": {
+      "t": 16,
+      "q": 0.25,
+      "d": -2,
+      "geo0": false,
+      "geo1": false,
+      "geo2": false,
+      "tail": null
+    },
+    "final": {
+      "t": 12,
+      "q": 0.25,
+      "d": 4,
+      "geo0": false,
+      "geo1": true,
+      "geo2": false,
+      "tail": null
+    }
+  },
+  "4": {
+    "passes": true,
+    "fold0": {
+      "t": 10,
+      "q": 0.25,
+      "d": null,
+      "geo0": false,
+      "geo1": false,
+      "geo2": false,
+      "tail": null
+    },
+    "fold1": {
+      "t": 10,
+      "q": 0.25,
+      "d": null,
+      "geo0": false,
+      "geo1": false,
+      "geo2": false,
+      "tail": null
+    },
+    "final": {
+      "t": 10,
+      "q": 0.25,
+      "d": null,
+      "geo0": false,
+      "geo1": false,
+      "geo2": false,
+      "tail": null
+    }
+  }
+}

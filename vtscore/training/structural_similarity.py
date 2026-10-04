@@ -31,6 +31,7 @@ embedder registry are imported lazily so the pure data helpers
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Optional
@@ -75,6 +76,17 @@ STRUCTURAL_DECISION_THRESHOLD = 0.5
 #: their stored score rounded down. At 6 decimals two adjacent inlier counts stay apart up
 #: to ~2,800 inliers (n / (n + 8) moves by 8 / ((n + 8)(n + 9))); at 4 only to ~275.
 SCORE_DECIMALS = 6
+
+#: The recall end of the balance (#4458, owner 2026-10-03). From beta >= RECALL_BETA (nearer the
+#: preset 4 than 1, in log space) the returned set is the beta-1 line's set plus every verified page
+#: with at least max(RECALL_MIN_INLIERS, ceil(RECALL_GOOD_FRACTION x the Goods' median leave-one-out
+#: inliers)) inliers, whatever the Bad ceiling and the geometry cuts say. Class-split CV on FullMarks
+#: tier m chose the floor for beta 4 (both folds alike); the union with the beta-1 set keeps the
+#: slider monotone: F4 share of the best cut +0.066 [+0.030, +0.109] over clicks 0-25, no click worse.
+#: Beta 1/4 and 1 keep the shipped line (round 2 found no rule that passed for them).
+RECALL_BETA = 2.0
+RECALL_MIN_INLIERS = 10
+RECALL_GOOD_FRACTION = 0.25
 
 #: Geometry cuts for the returned set before a detector's first Bad vote (#4440). Until
 #: then #4367's Bad ceiling is just the 8-inlier gate, which passes hard negatives on
@@ -248,6 +260,9 @@ class VerificationScorer:
     #: reprojection error scores half its value, below the line but in the same order.
     ratio_min: Optional[float] = None
     reproj_max: Optional[float] = None
+    #: With geometry cuts, a fit with at least this many inliers is not demoted however loose
+    #: it is: the recall end of the balance keeps it (#4458).
+    loose_ok_from: Optional[int] = None
 
     def score(self, stats: MatchStats) -> float:
         """The score for *stats*; 0 when RANSAC found no sane model."""
@@ -257,6 +272,8 @@ class VerificationScorer:
         loose = (self.ratio_min is not None and stats.inlier_ratio < self.ratio_min) or (
             self.reproj_max is not None and stats.median_reproj_error > self.reproj_max
         )
+        if loose and self.loose_ok_from is not None and stats.inlier_count >= self.loose_ok_from:
+            return value
         return value / 2.0 if loose else value
 
     def threshold_for(self, inliers: float) -> float:
@@ -405,6 +422,7 @@ def maybe_structural_rerank(
     score_key: str = "score",
     feature_snap: Optional[dict[Any, dict]] = None,
     bad_votes: Any = None,
+    beta: Optional[float] = None,
 ) -> tuple[list[dict], float]:
     """Apply the Stage-2 re-rank when the active dataset is structural.
 
@@ -493,7 +511,10 @@ def maybe_structural_rerank(
         threshold_out = _bad_ceiling_threshold(
             list(zip(template_keys, [tpl for _, tpl in templates])), bad_votes, feat_snap, matcher, cache
         )
-    scorer = _line_scorer(template_keys is not None, bad_votes, feat_snap)
+    threshold_out, recall_floor = _recall_line(
+        threshold_out, beta, template_keys, [tpl for _, tpl in templates], good_votes, feat_snap, matcher, cache
+    )
+    scorer = _line_scorer(template_keys is not None, bad_votes, feat_snap, loose_ok_from=recall_floor)
     reranked = _rerank_growing(
         results,
         snap,
@@ -571,15 +592,65 @@ def _stoplist(
     return out, tags
 
 
-def _line_scorer(tiled: bool, bad_votes: Any, feature_snap: dict[Any, dict]) -> VerificationScorer:
+def _line_scorer(
+    tiled: bool, bad_votes: Any, feature_snap: dict[Any, dict], *, loose_ok_from: Optional[int] = None
+) -> VerificationScorer:
     """The scorer behind the returned set: geometry cuts on a tiled dataset with no Bad vote yet (#4440).
 
     Until a Bad exists the Bad ceiling is only the 8-inlier gate, so a verified page
     must also fit tightly (:data:`GEOMETRY_RATIO_MIN`, :data:`GEOMETRY_REPROJ_MAX`).
+    At the recall end of the balance a fit with *loose_ok_from* inliers passes loose (#4458).
     """
     if tiled and not any(_local_features(feature_snap.get(b)) for b in (bad_votes or ())):
-        return VerificationScorer(ratio_min=GEOMETRY_RATIO_MIN, reproj_max=GEOMETRY_REPROJ_MAX)
+        return VerificationScorer(
+            ratio_min=GEOMETRY_RATIO_MIN, reproj_max=GEOMETRY_REPROJ_MAX, loose_ok_from=loose_ok_from
+        )
     return VerificationScorer()
+
+
+def _recall_line(
+    threshold: float,
+    beta: Optional[float],
+    template_keys: Optional[Sequence[Any]],
+    template_features: list[StructuralFeatures],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+) -> tuple[float, Optional[int]]:
+    """``(line, floor)`` for the balance (#4458): at the recall end the beta-1 *threshold* or the floor's.
+
+    Below :data:`RECALL_BETA`, or off a tiled dataset, it is *threshold* unchanged and no floor.
+    """
+    if template_keys is None or cache is None or beta is None or beta < RECALL_BETA:
+        return threshold, None
+    floor = _recall_floor(list(zip(template_keys, template_features)), good_votes, feature_snap, matcher, cache)
+    return min(threshold, round(VerificationScorer().threshold_for(floor), SCORE_DECIMALS)), floor
+
+
+def _recall_floor(
+    templates: list[tuple[Any, StructuralFeatures]],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> int:
+    """The recall end's inlier floor (#4458): max(10, ceil(0.25 x the Goods' median leave-one-out inliers)).
+
+    A Good's leave-one-out fit is its best fit to the other Goods' templates, so the floor follows how
+    well this detector's own marks match each other: a faint mark's floor stays at 10.
+    """
+    loo: list[int] = []
+    for g in good_votes:
+        feats = _local_features(feature_snap.get(g))
+        others = [(k, t) for k, t in templates if k[0] != g]
+        if feats is None or feats.count == 0 or not others:
+            continue
+        (stats,) = cache.best_many(others, [(g, feats)], matcher)
+        loo.append(stats.inlier_count if stats.model_ok else 0)
+    if len(loo) < 2:
+        return RECALL_MIN_INLIERS
+    return max(RECALL_MIN_INLIERS, math.ceil(RECALL_GOOD_FRACTION * float(np.median(loo))))
 
 
 def _bad_ceiling_threshold(

@@ -8,6 +8,7 @@ untouched.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 import numpy as np
@@ -320,6 +321,69 @@ class TestBadCeiling:
         results = [{"id": mid, "score": 0.0} for mid in snap]
         _out, thresh = maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, bad_votes={3: None})
         assert thresh == 0.5
+
+
+class TestRecallEnd:
+    """#4458: at beta 4 the returned set is the beta-1 set plus every verified page above the recall floor."""
+
+    def _setup(self, tiled, monkeypatch, inliers_by_page, loose=()):
+        snap = tiled(6)
+        by_id = {id(snap[mid]["local_features"]): n for mid, n in inliers_by_page.items()}
+        loose_ids = {id(snap[mid]["local_features"]) for mid in loose}
+
+        class Matcher(_CountingMatcher):
+            def verify(self, template, candidate):
+                stats = super().verify(template, candidate)
+                if id(candidate) in loose_ids:
+                    return dataclasses.replace(stats, inlier_ratio=0.3)
+                return stats
+
+        matcher = Matcher(by_id)
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = line_ranking = None
+
+        return snap, Ctx()
+
+    @staticmethod
+    def _returned(out, thresh):
+        return {e["id"] for e in out if e["score"] >= thresh}
+
+    def test_the_line_drops_to_the_floor_below_the_bad_ceiling(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out1, t1 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=1.0)
+        out4, t4 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=4.0)
+        # One Good: no leave-one-out median, so the floor is 10; page 4 (12 inliers) joins at beta 4.
+        assert t1 == pytest.approx(31 / 39, abs=1e-6) and t4 == pytest.approx(10 / 18, abs=1e-6)
+        assert self._returned(out1, t1) == {0, 1, 2}
+        assert self._returned(out1, t1) <= self._returned(out4, t4) and 4 in self._returned(out4, t4)
+
+    def test_the_floor_follows_the_goods_own_fits(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        # Goods 0 and 1 fit each other with 90 and 60 inliers: median 75, floor ceil(18.75) = 19.
+        out, t = maybe_structural_rerank(results, 0.5, snap, {0: None, 1: None}, {}, ctx, bad_votes={3: None}, beta=4.0)
+        assert t == pytest.approx(19 / 27, abs=1e-6)
+        assert 4 not in self._returned(out, t) and 2 in self._returned(out, t)
+
+    def test_before_a_bad_a_loose_fit_above_the_floor_is_kept(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 3, 2: 3, 3: 3, 4: 12, 5: 9}, loose=(4, 5))
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out1, t1 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, beta=1.0)
+        out4, t4 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, beta=4.0)
+        assert t1 == t4 == 0.5
+        assert self._returned(out1, t1) == {0}  # H1: loose fits fall below the line
+        assert self._returned(out4, t4) == {0, 4}  # 12 >= the floor of 10; page 5 (9, loose) stays out
+
+    def test_no_balance_is_the_shipped_line(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        _o, t_none = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None})
+        _o, t_half = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=0.25)
+        assert t_none == t_half == pytest.approx(31 / 39, abs=1e-6)
 
 
 class TestStoplist:
