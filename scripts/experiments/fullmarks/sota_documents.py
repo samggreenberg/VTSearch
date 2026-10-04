@@ -86,12 +86,17 @@ def in_test_half(page_id: str, salt: str = "sota-documents") -> bool:
 # --------------------------------------------------------------------------
 
 
-def _from_cache_files(ids: list[str], cache: Path) -> dict:
-    """Every page of *ids* any ``features-*.npz`` under *cache* holds (a larger tier can reuse a smaller one's)."""
+def _from_cache_files(ids: list[str], cache: Path, tier: str = "") -> dict:
+    """Every page of *ids* any ``features-*.npz`` under *cache* holds (a larger tier can reuse a smaller one's).
+
+    The tier's own file is read first, then the rest smallest first, so a small tier never loads a big file.
+    """
     from vtscore.media.structural import StructuralFeatures  # noqa: PLC0415
 
     want, found = set(ids), {}
-    for f in sorted(cache.glob("features-*.npz")):
+    files = [f for f in cache.glob("features-*.npz") if ".tmp" not in f.name]
+    files.sort(key=lambda f: (f.name != f"features-{tier}.npz", f.stat().st_size))
+    for f in files:
         if not want - set(found):
             break
         z = np.load(f, allow_pickle=False)
@@ -167,7 +172,7 @@ def load_or_extract(ids: list[str], paths: dict[str, str], cache: Optional[Path]
     smaller tiers' files. Pages no file holds are extracted and saved as their own
     ``features-<tier>-part-<n>.npz``, so no existing file is ever rewritten.
     """
-    found = _from_cache_files(ids, cache) if cache is not None else {}
+    found = _from_cache_files(ids, cache, tier) if cache is not None else {}
     missing = [p for p in ids if p not in found]
     if not missing:
         return found
