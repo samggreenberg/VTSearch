@@ -173,7 +173,8 @@ class TestDeviceDescriptorCache:
         structural._DEVICE_DESCRIPTORS[id(fresh)] = (weakref.ref(dead), stale)
         structural._DEVICE_DESCRIPTOR_BYTES[0] = stale.nbytes
         out = structural._device_descriptors(fresh, "cpu", cache=True)
-        assert out.dtype == torch.float32 and bool((out == 7).all())
+        assert out.dtype == torch.float32
+        assert torch.equal(out, torch.full((3, 4), 7.0))
 
     def test_the_least_recently_used_pages_go_past_the_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from vtscore.media import structural

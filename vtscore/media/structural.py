@@ -34,11 +34,14 @@ import weakref
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol, Sequence, runtime_checkable
+from typing import TYPE_CHECKING, Optional, Protocol, Sequence, runtime_checkable
 
 import numpy as np
 
 from vtscore.config import MAX_STRUCTURAL_DETECT_PIXELS
+
+if TYPE_CHECKING:
+    import torch
 
 # --------------------------------------------------------------------------
 # Constants (pinned by the pre-impl spike; see the design doc's open questions)
@@ -370,7 +373,7 @@ _MATCH_CHUNK_ELEMENTS = 32_000_000
 #: array's id never returns another page's descriptors. A retrain verifies each new template
 #: against the same ~2,000 shortlisted pages; converting and uploading them again for every
 #: template was ~80% of a Good click's retrain on a V100 node.
-_DEVICE_DESCRIPTORS: "OrderedDict[int, tuple[weakref.ref, object]]" = OrderedDict()
+_DEVICE_DESCRIPTORS: "OrderedDict[int, tuple[weakref.ref[np.ndarray], torch.Tensor]]" = OrderedDict()
 _DEVICE_DESCRIPTOR_BYTES = [0]
 #: The cache's budget on the device; least recently used pages go first.
 DEVICE_DESCRIPTOR_LIMIT_BYTES = 4 * 2**30
@@ -382,7 +385,7 @@ def release_device_descriptors() -> None:
     _DEVICE_DESCRIPTOR_BYTES[0] = 0
 
 
-def _device_descriptors(desc: np.ndarray, dev: str, cache: bool) -> object:
+def _device_descriptors(desc: np.ndarray, dev: str, cache: bool) -> "torch.Tensor":
     """*desc* as a float32 tensor on *dev*; with *cache*, the stored array stays on the device."""
     import torch  # noqa: PLC0415
 
@@ -395,14 +398,14 @@ def _device_descriptors(desc: np.ndarray, dev: str, cache: bool) -> object:
         stored = hit[1]
     else:
         if hit is not None:  # the id now belongs to another array
-            _DEVICE_DESCRIPTOR_BYTES[0] -= hit[1].nbytes  # type: ignore[attr-defined]
+            _DEVICE_DESCRIPTOR_BYTES[0] -= hit[1].nbytes
         stored = torch.from_numpy(np.ascontiguousarray(desc)).to(dev)
         _DEVICE_DESCRIPTORS[key] = (weakref.ref(desc), stored)
         _DEVICE_DESCRIPTOR_BYTES[0] += stored.nbytes
         while _DEVICE_DESCRIPTOR_BYTES[0] > DEVICE_DESCRIPTOR_LIMIT_BYTES and len(_DEVICE_DESCRIPTORS) > 1:
             _old_key, (_ref, old) = _DEVICE_DESCRIPTORS.popitem(last=False)
-            _DEVICE_DESCRIPTOR_BYTES[0] -= old.nbytes  # type: ignore[attr-defined]
-    return stored.float()  # type: ignore[attr-defined]  # widened on the device; uint8 values are exact
+            _DEVICE_DESCRIPTOR_BYTES[0] -= old.nbytes
+    return stored.float()  # widened on the device; uint8 values are exact
 
 
 def _match_device() -> str:
