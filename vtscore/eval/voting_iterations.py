@@ -1038,7 +1038,8 @@ def _rank_frame(
     beta it records the arm's balance line: under the app's labels line
     (*find_on_test* or *fallback_threshold*, #4452) what that line keeps
     (:func:`_labels_line_counts`), else the count line a forced check shape
-    draws.  Pure read.
+    draws.  A full-label skyline passes its own labels line as
+    *find_on_test* (#4486).  Pure read.
     See :data:`~vtscore.eval.voting_columns.RANK_FRAME_COLUMNS`.
     """
     import numpy as np  # noqa: PLC0415
@@ -1363,6 +1364,7 @@ def _skyline_fit_and_score(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    details_sink: dict[str, Any] | None = None,
 ) -> tuple[dict[int, float], StepModel, dict[str, float], float]:
     """Train one fully-supervised head and score *score_ids* with it.
 
@@ -1381,11 +1383,15 @@ def _skyline_fit_and_score(
     point into the trainer that only the skyline uses, which is exactly the kind
     of near-copy this module keeps out.
 
+    *details_sink*, when given, receives the trainer's details: its calibration
+    folds' held-out orderings, from which the full-label model's labels line is
+    drawn (#4486).
+
     Returns ``({media_id: score}, step, timings, test_score_seconds)``.
     """
     from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
 
-    step, _threshold, _n_labels, timings, _details = _train_and_calibrate(
+    step, _threshold, _n_labels, timings, details = _train_and_calibrate(
         trainer,
         dict.fromkeys(good_ids),
         dict.fromkeys(bad_ids),
@@ -1400,12 +1406,28 @@ def _skyline_fit_and_score(
         style_obj=style_obj,
         emit_calibration_metrics=False,
     )
+    if details_sink is not None:
+        details_sink.update(details)
     assert step.torch_model is not None  # v1 runs the styled torch path only
     t_score = time.monotonic()
     ids, flat, seg = style_obj.node_scores(step.torch_model, {cid: clips_dict[cid] for cid in score_ids})
     pooled = cm.segment_max_pool(flat, seg)
     score_seconds = time.monotonic() - t_score
     return ({cid: float(v) for cid, v in zip(ids, pooled, strict=True)}, step, timings, score_seconds)
+
+
+def _ceiling_find_line(details: dict[str, Any], score_map: dict[int, float], ordered_test: list[int]) -> Any:
+    """The ceiling's Find line (#4486): what a Find on the withheld half returns with every training label known.
+
+    The labels line from the full-label model's own calibration folds (*details*, the trainer's), its corpus
+    side fitted on the withheld half, which holds no votes: the same rule the session rows are read under.
+    The skyline row itself stays at the oracle's cut on the test labels, which other studies read; only the
+    rank frame carries this line.  ``None`` when the folds support no class model.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    test_scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
+    return fit_labels_line(details.get("fold_orderings") or None, test_scores, ordered_test, {})
 
 
 def _skyline_arm_rows(
@@ -1470,13 +1492,25 @@ def _skyline_arm_rows(
     )
     wf, wn = cm.inclusion_weights(inclusion)
 
-    def _row(name: str, score_map: dict[int, float], step: StepModel, timings: dict[str, float], secs: float):
+    def _row(
+        name: str,
+        score_map: dict[int, float],
+        step: StepModel,
+        timings: dict[str, float],
+        secs: float,
+        find_on_test: Any = None,
+    ):
         scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
         o_thr, _o_cost, _o_fpr, _o_fnr = cm.oracle_cut(scores, test_labels, wf, wn)
         if not np.isfinite(o_thr):
             return None
         if rank_frame_sink is not None:
-            rank_frame_sink.append({**(rank_ident or {}), **_rank_frame(name, 0, ordered_test, scores, test_labels)})
+            rank_frame_sink.append(
+                {
+                    **(rank_ident or {}),
+                    **_rank_frame(name, 0, ordered_test, scores, test_labels, find_on_test=find_on_test),
+                }
+            )
         row = operating_metrics(
             scores,
             test_labels,
@@ -1511,6 +1545,7 @@ def _skyline_arm_rows(
         sim_pos = [cid for cid in sorted(sim_ids) if media_is_positive(clips_dict[cid], target_category)]
         sim_neg = [cid for cid in sorted(sim_ids) if not media_is_positive(clips_dict[cid], target_category)]
         if sim_pos and sim_neg:
+            sky_details: dict[str, Any] = {}
             score_map, step, timings, secs = _skyline_fit_and_score(
                 sim_pos,
                 sim_neg,
@@ -1525,8 +1560,12 @@ def _skyline_arm_rows(
                 inclusion=inclusion,
                 calibrate_count=calibrate_count,
                 calibration_fraction=calibration_fraction,
+                details_sink=sky_details,
             )
-            row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs)
+            find_line = (
+                _ceiling_find_line(sky_details, score_map, ordered_test) if rank_frame_sink is not None else None
+            )
+            row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs, find_on_test=find_line)
             if row is not None:
                 rows.append(row)
 

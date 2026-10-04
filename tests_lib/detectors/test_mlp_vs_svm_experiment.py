@@ -412,7 +412,8 @@ class TestRankFrames:
             returned = r["recall"] * r["n_test_pos"] + r["fpr"] * r["n_test_neg"]
             assert f["test_line_k_b1"] == round(returned), (f["kind"], f["t"])
             assert 0 <= f["test_line_k_b025"] <= f["test_line_k_b1"] <= f["test_line_k_b4"] <= f["n_test"]
-        assert [sink[-1][f"test_line_k_{t}"] for t in ("b025", "b1", "b4")] == [-1, -1, -1], "a skyline drew no line"
+        sky = [sink[-1][f"test_line_k_{t}"] for t in ("b025", "b1", "b4")]
+        assert all(k >= 0 for k in sky) and sky == sorted(sky), "the ceiling records Find's labels line (#4486)"
 
     def test_a_forced_check_shape_frames_the_count_line(self):
         """#4413: under ``walk_shape`` the mixture's F-beta argmax under the balance's cap, on the same corpus and fit."""
@@ -432,7 +433,8 @@ class TestRankFrames:
             for b in RANK_FRAME_BETAS:
                 want = min(balance_count(b, None, fbeta_count(corpus, b, labels)), n_test)
                 assert f[f"test_line_k_{beta_tag(b)}"] == want, (f["t"], b)
-        assert [sink[-1][f"test_line_k_{t}"] for t in ("b025", "b1", "b4")] == [-1, -1, -1], "a skyline drew no line"
+        sky = [sink[-1][f"test_line_k_{t}"] for t in ("b025", "b1", "b4")]
+        assert all(k >= 0 for k in sky) and sky == sorted(sky), "the ceiling records Find's labels line (#4486)"
 
     def test_recording_does_not_change_the_run(self):
         plain = self._run(None, None)

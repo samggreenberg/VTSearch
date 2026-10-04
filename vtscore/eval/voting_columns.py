@@ -453,8 +453,9 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     #: set - or, with no class model that step, what the retrain's fallback
     #: cut keeps; 0 when the line keeps nothing.  Under a forced check shape
     #: (``walk_shape``) the count line's: the mixture's F-beta argmax under the
-    #: cap on the test half plus the session's votes (#4413).  -1 without a
-    #: session line.  Runs before #4471 recorded the count line at 0.5 / 1 / 2.
+    #: cap on the test half plus the session's votes (#4413).  The full-label
+    #: skyline records Find's labels line from its own labels (#4486).  -1
+    #: with no line.  Runs before #4471 recorded the count line at 0.5 / 1 / 2.
     "test_line_k_b025",
     "test_line_k_b1",
     "test_line_k_b4",

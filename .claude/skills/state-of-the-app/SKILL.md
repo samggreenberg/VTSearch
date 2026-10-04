@@ -21,14 +21,23 @@ studies that the review points at.
 Keep these unless the owner changes them, and record any change here in the
 same edit.
 
+- **The eval's horizon is not the user's (owner, 2026-10-04, #4482):** the
+  review runs 150 clicks as a computational compromise. Users stop when they
+  are bored or the app stops them, before 150 or after it. Never frame a
+  finding or an A/B as "the last N clicks" or "stop at click N"; read the
+  app as curves over the click a user has reached, and aim at getting the
+  most users to the best detector wherever they stop. Arms that ask about
+  late-session behaviour should run past 150 (to 200) rather than treat 150
+  as an end.
 - **Apples to apples (owner, 2026-10-04, #4474):** a comparison between the
   text sort and the detector uses ONE thresholding rule on both sides. Never
   let "text sort" mean "text sort at a fixed count" while "detector" means
   "detector at its line". The analyzer's balance tables carry a `rule`:
   `app line` (what each sort's own line in the app returns: the text sort's
-  blind GMM cut, the detector's labels line; the ceiling has none until
-  #4486 gives it Find's line, since the harness cuts the skyline at the
-  retired cost oracle on the test labels, so its row is blank), the primary
+  blind GMM cut, the detector's labels line, and for the full-label ceiling
+  Find's labels line drawn from its full labels, #4486; the skyline's own row
+  is still cut at the retired oracle on the test labels, which no Find could
+  draw, so a ceiling frame from before #4486 reads blank), the primary
   reading; and `top-K` (set-constant at the old cap,
   32 at beta <= 1 and 128 above, on every sort), a secondary view shown for
   both sorts or neither. The owner is skeptical a set-constant line will ever

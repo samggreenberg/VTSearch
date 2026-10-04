@@ -419,13 +419,16 @@ def test_each_rule_thresholds_both_sorts_the_same_way() -> None:
     assert rows["app line"]["oracle_fbeta"] == rows["top-K"]["oracle_fbeta"], "one ranking, one best cut"
     rows4 = dict(sa._balance_rows(text, frame, False, 4.0))
     assert rows4["top-K"]["k"] == 128
-    # The ceiling has no app line yet (#4486: the harness cuts it at the cost oracle on the test labels,
-    # which is neither Train's threshold nor Find's line): the row is blank but for the ranking's best cut.
+    # The ceiling (#4486): its app line is Find's labels line, as its frame recorded it; a frame from
+    # before #4486 recorded none (-1), and the row is blank but for the ranking's best cut.
     sky = {"precision": 1.0, "recall": 0.6, "fpr": 0.0, "n_test_pos": 5.0, "n_test_neg": 995.0}
     rows = dict(sa._balance_rows(text, frame, False, 1.0, sky))
+    assert rows["app line"]["k"] == 3, "the line the ceiling's frame recorded, not the skyline's oracle cut"
+    assert rows["top-K"]["k"] == 32
+    old = {**frame, "test_line_k_b1": -1}
+    rows = dict(sa._balance_rows(text, old, False, 1.0, sky))
     assert all(np.isnan(rows["app line"][m]) for m in ("k", "fbeta", "precision", "recall", "fb_share"))
     assert rows["app line"]["oracle_fbeta"] == rows["top-K"]["oracle_fbeta"]
-    assert rows["top-K"]["k"] == 32
 
 
 def test_the_objective_is_the_withheld_set_above_the_threshold(run) -> None:

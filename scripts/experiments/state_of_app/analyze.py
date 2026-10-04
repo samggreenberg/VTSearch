@@ -141,8 +141,9 @@ BALANCE_METRICS = ("k", "precision", "recall", "fbeta", "oracle_fbeta", "fb_shar
 #: How a balance row was thresholded (owner, 2026-10-04: apples to apples - a comparison
 #: between the text sort and the detector uses ONE rule on both sides).
 #: ``app line``: what each sort's own line in the app returns - the text sort's blind GMM
-#: cut, the detector's labels line (#4452). The ceiling has none yet: the harness cuts the
-#: skyline at the retired cost oracle on the test labels (#4486), so its row is blank.
+#: cut, the detector's labels line (#4452), and for the full-label ceiling Find's labels
+#: line drawn from its full labels (#4486; a run from before #4486 has none, and the row is
+#: blank rather than read off the skyline's oracle cut on the test labels).
 #: ``top-K``: set-constant, the balance's old cap (32 at beta <= 1, 128 above) on every sort;
 #: shown for both sorts or neither, never as the text sort's stand-in for a line.
 RULE_APP, RULE_TOP = "app line", "top-K"
@@ -336,13 +337,13 @@ def _balance_rows(
     if use_text:
         return [(RULE_APP, _text_app_line(text, beta)), (RULE_TOP, _text_balance(text, beta))]
     top = _balance_at(frame, beta, balance_cap(beta))
-    if sky_m is not None:
-        # The ceiling has no app line yet: the harness cuts the skyline at the retired cost
-        # oracle on the TEST labels (neither Train's threshold, which Find cannot see, nor
-        # Find's line). Until #4486 gives it Find's labels line, the row carries only the
-        # ranking's best cut.
+    if sky_m is not None and (frame is None or frame_beta_k(frame, beta) is None):
+        # A ceiling frame from before #4486 records no line: the harness cut the skyline at
+        # the retired oracle on the TEST labels, which is neither Train's threshold (Find
+        # cannot see it) nor Find's line. The row carries only the ranking's best cut.
         app = {**{m: float("nan") for m in BALANCE_METRICS}, "oracle_fbeta": top["oracle_fbeta"]}
     else:
+        # The detector's labels line, or the ceiling's Find line from its full labels (#4486).
         app = _balance_at(frame, beta)
     return [(RULE_APP, app), (RULE_TOP, top)]
 
@@ -1233,8 +1234,8 @@ def returned_at_beta_md(cells: pd.DataFrame, balances: pd.DataFrame) -> list[str
         + "; #4448), on the fresh test half, under ONE rule per row (owner, 2026-10-04: apples to apples). "
         "`app line`: the text sort's own line in the app (the blind GMM cut), the detector's labels line "
         "(#4452) with its corpus side fitted on the test half as Find draws it (at the sessions' own beta, the "
-        "objective's returned set); the ceiling has none yet (the harness cuts it at the retired error-rate oracle on "
-        "the test labels, #4486), so its app-line row is blank. `top-K`: set-constant at the old cap "
+        "objective's returned set), and for the full-label ceiling Find's labels line from its full labels "
+        "(#4486; blank on runs from before it). `top-K`: set-constant at the old cap "
         "(32 at beta <= 1, 128 above) on every sort. Compare text and detector within a rule, never across. "
         "`fbeta` against `oracle_fbeta`, the best any cut of the same ranking reaches (`fb_share` = fbeta / "
         "oracle); `k`, `precision` and `recall` beside it, and `empty`, the share of runs whose line keeps "
