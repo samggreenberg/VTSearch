@@ -198,7 +198,7 @@ Every verified flip is classified by the quadrant it occurred in:
 
 - The left work queue gains tier headers (§6.2) in place of pure score order; tier 1 keeps the shipped marginal-first auto-advance within itself.
 - Blob review rides the existing VTSBrowse canvas: color hex tiles by median T(x) (or scan-LLR of the tile's items), one click sends a blob to the verify flow. The shipped browse-canvas Verified Good/Bad buttons (find-verification Phase 4) already do bulk verification of a canvas selection — blob review is that feature pointed at scan-reported regions instead of hand-drawn ones.
-- The Stats modal gains: a **domain-overlap chip** ("31% of this dataset is outside the training domain at the 95% level; 12% sits in evidence vacuums"), and coverage-corrected precision/recall **with intervals** from §6.3 alongside (or replacing) the flood-filled numbers.
+- The Find view's result pane (the Stats modal until #4524) gains: a **domain-overlap chip** ("31% of this dataset is outside the training domain at the 95% level; 12% sits in evidence vacuums"), and coverage-corrected precision/recall **with intervals** from §6.3 alongside (or replacing) the flood-filled numbers.
 - The detector's score histogram on its training haystack (a few dozen floats) joins the artifact so the score-drift alarm [23][24] can fire before any verification happens.
 
 ## 7. Thread 4 in detail: the portable artifact
@@ -292,7 +292,7 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 
 <!-- item-sep -->
 
-2. **v1 — in-session atlas, remaining parts**: the structure itself shipped (see Background), and the domain-shift report is now surfaced in the Find Stats modal as a **Training-domain overlap** section (a reference-dataset picker + an atypical-share chip; shown when another loaded dataset shares the active embedder). Still owed from this phase: the tiered work queue, the §5 blob scan, and VTSBrowse coloring by typicality.
+2. **v1 — in-session atlas, remaining parts**: the structure itself shipped (see Background), and the domain-shift report is now surfaced in the Find view's result pane (the Stats modal until #4524) as a **Training-domain overlap** section (a reference-dataset picker + an atypical-share chip; shown when another loaded dataset shares the active embedder). Still owed from this phase: the tiered work queue, the §5 blob scan, and VTSBrowse coloring by typicality.
 
 <!-- item-sep -->
 

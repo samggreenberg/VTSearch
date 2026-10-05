@@ -449,6 +449,8 @@ class LineTest:
     _rank: dict[int, int] = field(default_factory=dict, repr=False, compare=False)
     _generator: Any = field(default=None, repr=False, compare=False)
     _cache: list[Any] = field(default_factory=list, repr=False, compare=False)
+    #: The joint draws every estimate rests on, keyed on :attr:`_version`.
+    _counts: list[Any] = field(default_factory=list, repr=False, compare=False)
 
     @classmethod
     def start(
@@ -575,6 +577,7 @@ class LineTest:
     def _invalidate(self) -> None:
         self._version += 1
         self._cache.clear()
+        self._counts.clear()
 
     def _band_draws(self, b: int, rng: np.random.Generator, n: int, extra: tuple[int, int] | None = None) -> np.ndarray:
         """*n* draws of band *b*'s count of positives: its picks, plus its unlabelled items at a drawn share.
@@ -639,9 +642,8 @@ class LineTest:
         key = (self._version, beta)
         if self._cache and self._cache[0] == key:
             return self._cache[1]
-        rng = _rng(TEST_DRAW_SEED)
         n, alpha = self.budgets.draws, self.budgets.alpha
-        counts = self._draw_all(rng, n)
+        counts = self._base_draws()
         precision, recall, fbeta = self._summarise(counts, beta, alpha)
         above = [b.index for b in self.above]
         below = [b.index for b in self.below]
@@ -687,8 +689,37 @@ class LineTest:
         return self._expected_shrink(b, self._base_draws())
 
     def _base_draws(self) -> np.ndarray:
-        """The joint draws :meth:`estimates` rests on, for the look-ahead to refresh one band of."""
-        return self._draw_all(_rng(TEST_DRAW_SEED), self.budgets.draws)
+        """The joint draws :meth:`estimates` rests on (cached until the next label), for the look-ahead to refresh one band of."""
+        if not self._counts or self._counts[0] != self._version:
+            self._counts[:] = [self._version, self._draw_all(_rng(TEST_DRAW_SEED), self.budgets.draws)]
+        return self._counts[1]
+
+    def estimate_at(self, count: int, beta: float | None = None) -> EdgeEstimate:
+        """What the line would ship if it kept the top *count*, from the same draws (the verdict's **Lean the Threshold**).
+
+        Exact at a band edge, where it is :attr:`LineEstimates.at_edges`'
+        entry; inside a band the band's positives are split in proportion to
+        how much of it the top *count* takes, which is the band resolution the
+        picks have.  *beta* defaults to the test's.  A count past the corpus
+        keeps all of it.
+        """
+        beta = self.beta if beta is None else float(beta)
+        k = max(0, min(int(count), self.size))
+        counts = self._base_draws()
+        n, alpha = counts.shape[1], self.budgets.alpha
+        total = counts.sum(axis=0)
+        running = np.zeros(n)
+        for band in self._bands:
+            if band.hi <= k:
+                running = running + counts[band.index]
+            elif band.lo < k:
+                running = running + counts[band.index] * ((k - band.lo) / band.size)
+        kf = float(k)
+        p = running / kf if kf > 0 else np.zeros(n)
+        r = np.where(total > 0, running / np.maximum(total, _EPS), 0.0)
+        fb = (1.0 + beta * beta) * running / np.maximum(beta * beta * total + kf, _EPS)
+        side = ABOVE if k <= self.line_count else BELOW
+        return EdgeEstimate(k, side, _estimate(p, alpha), _estimate(r, alpha), _estimate(fb, alpha))
 
     def _expected_shrink(self, b: int, base: np.ndarray) -> float:
         size, labelled, right = self.band_counts(b)

@@ -586,7 +586,10 @@ the app's routes and the eval harness both call.
   by its picks, the difference estimator under the band design) with the
   unreached tail taken from the model as a point and flagged
   `tail_from_model`; and `found`, the recall range in the spot check's words
-  (`found_words`, cut at 15 / 37.5 / 62.5 / 87.5 percent).
+  (`found_words`, cut at 15 / 37.5 / 62.5 / 87.5 percent). `estimate_at(count,
+  beta=None)` reads the same draws at any count (#4524): exact at a band edge,
+  a band's positives split in proportion inside one, which is how the verdict
+  reports the line each balance preset would ship.
 - `next_band()` is the allocation rule. Above the line, every band once from
   the band holding the line upward, then the band whose next round would
   shrink the F-beta range most in expectation (`expected_shrink`, a

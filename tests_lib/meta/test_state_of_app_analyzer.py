@@ -596,9 +596,9 @@ def test_the_returned_sets_path_is_read_at_each_click_and_after_the_check(run, t
     cells = run["cells"]
     for idx, cat in enumerate(CATS):
         main = _main_frame(run["exp"], idx).sort_values("t")
-        ordinary = main[main["phase"].astype(str) != "check"]
+        ordinary = main.loc[main["phase"].astype(str).ne("check")]
         for c in (25, 50):
-            at = ordinary[ordinary["t"] <= c]
+            at = ordinary.loc[ordinary["t"].le(c)]
             if not len(at):
                 continue
             last = at.iloc[-1]

@@ -1,7 +1,7 @@
 # Test mode: Find becomes a decision, not a browse (#4520)
 
-**Status:** design, decided. The test sample (#4527) has shipped; nothing
-else here has. #4520 asks three
+**Status:** design, decided. The test sample (#4527) and the Test autopilot
+inside the Find view (#4524) have shipped; the rest has not. #4520 asks three
 questions: how a "Test" would work, how the open Find interface becomes a
 constrained Test interface, and which metric and statistics it needs. This
 file is the answer; the owner settled its open decisions on 2026-10-05, and
@@ -14,12 +14,13 @@ rather than replaces:
   `vtsearch/routes/detectors/scoring.py`) scores a dataset, draws the balance's
   line on that corpus, flood-fills every item with the detector's call, and
   opens a three-pane view whose work queue walks the line alternately above and
-  below it. Votes there are session-only (`find_mode` keeps them out of the
-  labelset), reach the detector only through **Add Corrections**, and feed a
-  Stats modal (`frontend/src/app/components/modals/find-stats-modal/`) whose
-  *Kept rate* and *Checked by you* curve count only what the walk happened to
-  serve. The walk is biased toward the line by design, so neither number
-  estimates anything about the set as a whole, and the modal says so.
+  below it (the **Review** tab since #4524, beside the Test autopilot's). Votes
+  there are session-only (`find_mode` keeps them out of the labelset) and reach
+  the detector only through **Add Corrections**. They used to feed a Stats
+  modal whose *Kept rate* and *Checked by you* curve counted only what the walk
+  happened to serve; the walk is biased toward the line by design, so neither
+  number estimated anything about the set as a whole. #4524 retired the modal
+  into the Test autopilot's result pane.
 - **The spot check** (`vtscore/training/thresholds/spot_check.py`,
   `vtsearch/routes/precision_check.py`,
   `frontend/src/app/components/modals/spot-check-modal/`) is the only measured
@@ -256,7 +257,7 @@ Each is independently shippable. The test sample and the eval arm carry no visib
 
 <!-- item-sep -->
 
-- [ ] #4524 — Test mode: the Test autopilot inside the Find view, with Find kept as a Review tab (Opus)
+- [x] #4524 — Test mode: the Test autopilot inside the Find view, with Find kept as a Review tab (Opus)
 
 <!-- item-sep -->
 

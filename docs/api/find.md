@@ -242,6 +242,105 @@ Runs live in memory only, and only the most recent few, so **404** covers an
 unknown run, another user's, one that has aged out, and any from before a
 restart alike.
 
+### Test the line
+
+```
+GET  /api/line-test
+POST /api/line-test/start
+POST /api/line-test/votes
+POST /api/line-test/unvote
+POST /api/line-test/cancel
+```
+
+**All but `GET` require** `X-Detector-Id`.
+
+Test mode's test of the line the Find pass drew (#4524; the design is
+`docs/plans/test-mode.md`, the statistics
+`vtscore/training/thresholds/line_test.py`). The question is *if this line
+went to AutoRun, what share of what it ships would be right, and what share of
+the real matches would it ship?* The answer comes from **uniform picks within
+rank bands** on both sides of the line, never from the ranking's top or from
+the model: the user votes each pick, and the picks say, as likely ranges, the
+line's precision and recall on this corpus and F-beta at the balance. Unlike
+the [spot check](labeling.md#the-spot-check), a test never moves the line and
+never trains: the ranking is frozen for the whole test, which is what makes the
+band design valid.
+
+Every verb returns the same body:
+
+```json
+{
+  "balance": {"beta": 1.0, "status": "unchecked", "count": 64, "...": "..."},
+  "threshold": 0.43, "line_count": 64,
+  "test": {
+    "phase": "matches",
+    "report": {"phase": "matches", "matches_stop": null, "misses_stop": null,
+               "matches_width": 0.41, "misses_width": 0.38, "picks_above": 5, "picks_below": 0},
+    "beta": 1.0, "line_count": 64, "size": 1200,
+    "round": 2, "picks_per_round": 5,
+    "band": {"index": 2, "side": "above", "lo": 17, "hi": 32},
+    "picks": [412, 77, 903, 15, 260],
+    "labelled": 5,
+    "bands": [{"index": 0, "side": "above", "lo": 1, "hi": 8, "labelled": 0, "right": 0, "range": null}, "..."],
+    "estimates": {
+      "beta": 1.0,
+      "precision": {"point": 0.78, "lo": 0.58, "hi": 0.96},
+      "recall": {"point": 0.52, "lo": 0.31, "hi": 0.74},
+      "fbeta": {"point": 0.62, "lo": 0.45, "hi": 0.79},
+      "found": "about half of them found",
+      "positives_above": {"point": 50.1, "lo": 37, "hi": 61},
+      "positives_below": {"point": 46.3, "lo": 20, "hi": 80},
+      "tail_positives": 12.4, "tail_from_model": true,
+      "labelled": 5,
+      "at_edges": [{"count": 8, "side": "above", "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
+    },
+    "budgets": {"matches_width": 0.2, "misses_width": 0.25, "matches_picks": 40, "misses_picks": 40,
+                "picks_per_round": 5, "dry_run_share": 0.05, "model_weight": 5, "alpha": 0.05}
+  },
+  "stale": false, "moved": false,
+  "presets": [{"beta": 0.25, "count": 31, "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
+}
+```
+
+- **`start`** freezes the ranking off the pass's frozen scores (best first)
+  and the line at the detector's threshold (`line_count` items at or above
+  it), takes the labels line's chance per item as the auxiliary below the line
+  when the detector has a class model, and deals the first round. A test
+  already running is replaced; a finished test of the same line is returned
+  as it is. **409** with no Find pass to test.
+- **`votes`** takes `{"votes": [{"id": 412, "label": "good"}, ...]}` on the
+  round's `picks`. Each vote is a **session vote** with provenance `test`:
+  verified in Find mode (it lands in the Review tab's piles) and kept out of
+  the labelset like every Find vote, never a training label. The test records
+  it against the pick's band and the ranges move; a partial round waits for
+  the rest, and a whole round deals the next. **400** for an id that is not
+  one of the round's picks; **409** with no test running.
+- **`unvote`** takes `{"id": 412}` and takes one vote of the current round
+  back (the ↓ key): the pick returns to `picks` and its session vote is
+  lifted. **400** for a vote not of this round.
+- **`cancel`** drops a running test; its votes so far stay session votes. A
+  finished test is left as it is. Always **200**.
+
+`test.phase` is derived from the sample on every read
+(`vtscore.training.thresholds.line_phase`): `matches` (precision, picks from
+the bands above the line, the band holding the line first, then the band
+whose round would narrow the F-beta range most), `misses` (recall, a walk
+down the bands below the line with a dry-run stop), `done`, or `nothing`
+(the line keeps fewer items than one round). `report` says why each finished
+phase ended (`width`, `budget`, `exhausted`, `dry_run`) and carries the
+ranges' current widths for the app's phase lights. `estimates` is every
+number from one set of joint draws, and `null` when there is nothing to test;
+`at_edges` re-estimates the line at every band edge from the same draws.
+
+`presets` is the line each balance preset (beta 1/4, 1, 4) would draw on this
+corpus and what the picks already taken say it would ship - the verdict's
+**Lean the Threshold** - and is empty before a test or when the detector has
+no class model to draw a line at another balance with. `stale` is `true`
+once corrections have been folded into the detector since the test (the
+detector has now seen the test set); `moved` once the line no longer keeps the
+set the test measured (the balance changed, or the ranking did). A fresh
+`/api/find-label` pass, a vote clear and a dataset switch all drop the test.
+
 ### Find stats (detector evaluation)
 
 ```
@@ -251,7 +350,9 @@ GET /api/find/stats
 Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
 confusion of the adopted label vs. the detector's original call, the Kept rate,
 what the balance (and the deprecated floor) says about the line, and the
-precision curve the Stats chart draws.
+checked-precision curve. The app's result pane reads the 2×2 once a
+[test of the line](#test-the-line) is done; the curve it draws is the test's,
+not this one.
 
 →
 ```json

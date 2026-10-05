@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A test's draws are read at any count** (issue #4524). `LineTest.estimate_at(count,
+  beta=None)` returns the `EdgeEstimate` the line would ship if it kept the top *count*,
+  from the same joint draws as `estimates()`: exact at a band edge, a band's positives
+  split in proportion inside one. The draws are cached until the next label. The app's
+  Test verdict reads it for the line each balance preset would draw.
+
 - **The CPU Stage 1 keeps a float32 tile matrix** (issue #4514). `_float32_matrix` converts the
   fp16 matrix once per page set (torch's vectorised conversion), `_cpu_page_max` multiplies it
   directly, and `exact_page_scores` reads it when present. numpy's per-call conversion was 95%

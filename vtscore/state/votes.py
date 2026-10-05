@@ -56,6 +56,7 @@ def clear_votes() -> None:
         ctx.precision_check = None
         ctx.precision_check_run = None
         ctx.check_ended_votes = None
+        ctx.line_test = None
         # Everything that *made* this a Find session is gone, so the flag that
         # says "these votes are scoring output" must go too.  Leaving it set
         # would keep suppressing labelset write-back

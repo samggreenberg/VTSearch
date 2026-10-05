@@ -1,0 +1,122 @@
+// The Test autopilot's steps, drawn exactly as Train's (`autopilot-panel`):
+// the same row, marker and light rules, so the two guided flows read as one.
+
+.line-test-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding-top: var(--space-sm);
+}
+
+.autopilot-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.ap-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+
+  &.active {
+    background: var(--accent-highlight-bg);
+    border-color: var(--accent-highlight-border);
+  }
+
+  &.done .ap-step-content {
+    opacity: 0.7;
+  }
+
+  &.future {
+    opacity: 0.4;
+  }
+}
+
+.ap-step-marker {
+  flex-shrink: 0;
+  width: 18px;
+  height: 1lh;
+  font-size: var(--font-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ap-check {
+  display: flex;
+  color: var(--status-green-dot);
+}
+
+.ap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--indicator-dot);
+}
+
+.ap-light {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  color: var(--status-red-dot);
+  background: currentColor;
+  box-shadow: 0 0 4px currentColor;
+
+  &[data-color="yellow"] {
+    color: var(--status-yellow-dot);
+  }
+}
+
+.ap-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
+.ap-step-label {
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+  cursor: help;
+}
+
+.ap-step-detail {
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.autopilot-exhausted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2xs);
+  padding: var(--space-md) var(--space-sm);
+}
+
+.ap-exhausted-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-good);
+}
+
+.ap-exhausted-title {
+  margin: 0;
+  font-size: var(--font-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.ap-exhausted-detail {
+  margin: 0;
+  font-size: var(--font-2xs);
+  color: var(--text-muted);
+}

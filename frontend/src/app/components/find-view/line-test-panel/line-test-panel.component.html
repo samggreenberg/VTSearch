@@ -1,0 +1,52 @@
+<div class="line-test-panel" role="region" aria-label="Test autopilot phases">
+  @if (nothing()) {
+    <div class="autopilot-exhausted" role="status">
+      <span class="ap-exhausted-check" aria-hidden="true"><vt-icon type="check" [size]="16"></vt-icon></span>
+      <p class="ap-exhausted-title">Nothing to test</p>
+      <p class="ap-exhausted-detail">
+        The line keeps fewer items than one round of picks, so no sample can say anything about it.
+        Move the Threshold toward False Positives, or train the detector further.
+      </p>
+    </div>
+  } @else {
+    <div class="autopilot-steps">
+      @for (step of steps(); track step.phase) {
+        <div
+          class="ap-step"
+          [class.done]="step.state === 'done'"
+          [class.active]="step.state === 'active'"
+          [class.future]="step.state === 'future'"
+          [attr.data-phase]="step.phase"
+        >
+          <div class="ap-step-marker">
+            @if (step.state === 'done') {
+              <span class="ap-check" title="Complete" aria-label="Complete"><vt-icon type="check" [size]="14"></vt-icon></span>
+            } @else if (step.light; as light) {
+              @if (light.color === 'green') {
+                <span class="ap-check" role="img" [attr.aria-label]="'Step progress: green'" [title]="light.title">
+                  <vt-icon type="check" [size]="14"></vt-icon>
+                </span>
+              } @else {
+                <span
+                  class="ap-light"
+                  [attr.data-color]="light.color"
+                  [attr.aria-label]="'Step progress: ' + light.color"
+                  [title]="light.title"
+                  role="img"
+                ></span>
+              }
+            } @else {
+              <span class="ap-dot" title="Upcoming step" aria-label="Upcoming step"></span>
+            }
+          </div>
+          <div class="ap-step-content">
+            <span class="ap-step-label" [title]="step.intent">{{ step.label }}</span>
+            @if (step.detail) {
+              <span class="ap-step-detail">{{ step.detail }}</span>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

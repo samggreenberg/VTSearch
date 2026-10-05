@@ -5044,6 +5044,462 @@
         ],
         "type": "object"
       },
+      "LineTestBand": {
+        "additionalProperties": false,
+        "properties": {
+          "hi": {
+            "type": "integer"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "labelled": {
+            "type": "integer"
+          },
+          "lo": {
+            "type": "integer"
+          },
+          "range": {
+            "$ref": "#/components/schemas/LikelyRange",
+            "nullable": true
+          },
+          "right": {
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "above",
+              "below"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "hi",
+          "index",
+          "labelled",
+          "lo",
+          "range",
+          "right",
+          "side"
+        ],
+        "type": "object"
+      },
+      "LineTestBudgets": {
+        "additionalProperties": false,
+        "properties": {
+          "alpha": {
+            "type": "number"
+          },
+          "dry_run_share": {
+            "type": "number"
+          },
+          "matches_picks": {
+            "type": "integer"
+          },
+          "matches_width": {
+            "type": "number"
+          },
+          "misses_picks": {
+            "type": "integer"
+          },
+          "misses_width": {
+            "type": "number"
+          },
+          "model_weight": {
+            "type": "number"
+          },
+          "picks_per_round": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "alpha",
+          "dry_run_share",
+          "matches_picks",
+          "matches_width",
+          "misses_picks",
+          "misses_width",
+          "model_weight",
+          "picks_per_round"
+        ],
+        "type": "object"
+      },
+      "LineTestEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "fbeta": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "found": {
+            "type": "string"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "recall": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "side": {
+            "enum": [
+              "above",
+              "below"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "fbeta",
+          "found",
+          "precision",
+          "recall",
+          "side"
+        ],
+        "type": "object"
+      },
+      "LineTestEstimate": {
+        "additionalProperties": false,
+        "properties": {
+          "hi": {
+            "type": "number"
+          },
+          "lo": {
+            "type": "number"
+          },
+          "point": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "hi",
+          "lo",
+          "point"
+        ],
+        "type": "object"
+      },
+      "LineTestEstimates": {
+        "additionalProperties": false,
+        "properties": {
+          "at_edges": {
+            "items": {
+              "$ref": "#/components/schemas/LineTestEdge"
+            },
+            "type": "array"
+          },
+          "beta": {
+            "type": "number"
+          },
+          "fbeta": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "found": {
+            "type": "string"
+          },
+          "labelled": {
+            "type": "integer"
+          },
+          "positives_above": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "positives_below": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "recall": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "tail_from_model": {
+            "type": "boolean"
+          },
+          "tail_positives": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at_edges",
+          "beta",
+          "fbeta",
+          "found",
+          "labelled",
+          "positives_above",
+          "positives_below",
+          "precision",
+          "recall",
+          "tail_from_model",
+          "tail_positives"
+        ],
+        "type": "object"
+      },
+      "LineTestPreset": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {
+            "type": "number"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "fbeta": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "found": {
+            "type": "string"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "recall": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          }
+        },
+        "required": [
+          "beta",
+          "count",
+          "fbeta",
+          "found",
+          "precision",
+          "recall"
+        ],
+        "type": "object"
+      },
+      "LineTestReport": {
+        "additionalProperties": false,
+        "properties": {
+          "matches_stop": {
+            "enum": [
+              "width",
+              "budget",
+              "exhausted",
+              "dry_run",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "matches_width": {
+            "nullable": true,
+            "type": "number"
+          },
+          "misses_stop": {
+            "enum": [
+              "width",
+              "budget",
+              "exhausted",
+              "dry_run",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "misses_width": {
+            "nullable": true,
+            "type": "number"
+          },
+          "phase": {
+            "enum": [
+              "score",
+              "matches",
+              "misses",
+              "done",
+              "nothing"
+            ],
+            "type": "string"
+          },
+          "picks_above": {
+            "type": "integer"
+          },
+          "picks_below": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "matches_stop",
+          "matches_width",
+          "misses_stop",
+          "misses_width",
+          "phase",
+          "picks_above",
+          "picks_below"
+        ],
+        "type": "object"
+      },
+      "LineTestResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "balance": {
+            "$ref": "#/components/schemas/BalanceState"
+          },
+          "line_count": {
+            "type": "integer"
+          },
+          "moved": {
+            "type": "boolean"
+          },
+          "presets": {
+            "items": {
+              "$ref": "#/components/schemas/LineTestPreset"
+            },
+            "type": "array"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "test": {
+            "$ref": "#/components/schemas/LineTestState",
+            "nullable": true
+          },
+          "threshold": {
+            "nullable": true,
+            "type": "number"
+          }
+        },
+        "required": [
+          "balance",
+          "line_count",
+          "moved",
+          "presets",
+          "stale",
+          "test",
+          "threshold"
+        ],
+        "type": "object"
+      },
+      "LineTestRoundBand": {
+        "additionalProperties": false,
+        "properties": {
+          "hi": {
+            "type": "integer"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "lo": {
+            "type": "integer"
+          },
+          "side": {
+            "enum": [
+              "above",
+              "below"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "hi",
+          "index",
+          "lo",
+          "side"
+        ],
+        "type": "object"
+      },
+      "LineTestState": {
+        "additionalProperties": false,
+        "properties": {
+          "band": {
+            "$ref": "#/components/schemas/LineTestRoundBand",
+            "nullable": true
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/components/schemas/LineTestBand"
+            },
+            "type": "array"
+          },
+          "beta": {
+            "type": "number"
+          },
+          "budgets": {
+            "$ref": "#/components/schemas/LineTestBudgets"
+          },
+          "estimates": {
+            "$ref": "#/components/schemas/LineTestEstimates",
+            "nullable": true
+          },
+          "labelled": {
+            "type": "integer"
+          },
+          "line_count": {
+            "type": "integer"
+          },
+          "phase": {
+            "enum": [
+              "score",
+              "matches",
+              "misses",
+              "done",
+              "nothing"
+            ],
+            "type": "string"
+          },
+          "picks": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "picks_per_round": {
+            "type": "integer"
+          },
+          "report": {
+            "$ref": "#/components/schemas/LineTestReport"
+          },
+          "round": {
+            "type": "integer"
+          },
+          "size": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "band",
+          "bands",
+          "beta",
+          "budgets",
+          "estimates",
+          "labelled",
+          "line_count",
+          "phase",
+          "picks",
+          "picks_per_round",
+          "report",
+          "round",
+          "size"
+        ],
+        "type": "object"
+      },
+      "LineTestUnvoteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "LineTestVotesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "votes": {
+            "items": {
+              "$ref": "#/components/schemas/PrecisionCheckVote"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "votes"
+        ],
+        "type": "object"
+      },
       "LocalizeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -13359,6 +13815,169 @@
         ]
       }
     },
+    "/api/line-test": {
+      "get": {
+        "operationId": "get_line_test",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "The active detector's test of the line (running, else the last finished) and the balance's state.",
+        "tags": [
+          "line_test"
+        ]
+      }
+    },
+    "/api/line-test/cancel": {
+      "post": {
+        "operationId": "cancel_line_test",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Abandon the running test.  Its votes so far stay session votes; a finished test is left as it is.",
+        "tags": [
+          "line_test"
+        ]
+      }
+    },
+    "/api/line-test/start": {
+      "post": {
+        "description": "The ranking is the pass's frozen scores, best first, and the line keeps\nthe items at or above the detector's threshold; both are fixed for the\nwhole test.  The labels line's chance per item is the auxiliary below the\nline, when the detector has one.  Deals the first round.  A test already\nrunning is replaced; a finished test of the same line is returned as it\nis, since its picks already say what a new one would (resuming from\nkept picks across sessions is #4526).",
+        "operationId": "start_line_test",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "409": {
+            "description": "No Find pass to test: score the dataset first."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Start a test of the line the Find pass drew.",
+        "tags": [
+          "line_test"
+        ]
+      }
+    },
+    "/api/line-test/unvote": {
+      "post": {
+        "operationId": "unvote_line_test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineTestUnvoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Not a vote of the current round."
+          },
+          "409": {
+            "description": "No test is running."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Take back one vote of the current round (the \u2193 key): the pick goes back to pending, and its session vote is lifted.",
+        "tags": [
+          "line_test"
+        ]
+      }
+    },
+    "/api/line-test/votes": {
+      "post": {
+        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.",
+        "operationId": "vote_line_test",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LineTestVotesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "A vote on an item that is not one of this round's picks."
+          },
+          "409": {
+            "description": "No test is running."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Record votes on the running test's picks.",
+        "tags": [
+          "line_test"
+        ]
+      }
+    },
     "/api/localize": {
       "post": {
         "operationId": "run_localize",
@@ -15639,6 +16258,10 @@
     {
       "description": "The precision floor's spot check: draw picks, take the votes, report how close the line got.",
       "name": "precision_check"
+    },
+    {
+      "description": "Test mode's test of the line: draw picks, take the votes, report what the line would ship.",
+      "name": "line_test"
     },
     {
       "description": "Recent (dataset, detector) labelling sessions per user.",
