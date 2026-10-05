@@ -64,7 +64,7 @@ describe('line-balance (#4413)', () => {
 
     it('reads a line a check cannot walk (#4489), and takes a server that sends no flag as offering one', () => {
       const wire = { beta: 1, status: 'unchecked', count: 32, precision: null, recall: null, fbeta: null, schedule: { candidate: 32, rounds: 1, picks: 5 }, shape: 'advisory', audited: null };
-      expect(lineBalanceFrom({ ...wire, checkable: false } as BalanceState)!.checkable).toBe(false);
+      expect(lineBalanceFrom({ ...wire, checkable: false } as unknown as BalanceState)!.checkable).toBe(false);
       expect(lineBalanceFrom(wire as unknown as BalanceState)!.checkable).toBe(true);
     });
 
