@@ -12,9 +12,11 @@ import { AutoRunTaskInfo, LoadingTask } from '../models/api.models';
 
 /**
  * `AutoRunService` owns the end of a background AutoRun (#4252): a run this
- * tab started from the dataset ⋯ menu opens its results; any other run of the
- * user's (an import's) is announced with a toast that opens them. Other
- * users' runs, failed runs, and runs already handled are left alone.
+ * tab started (the dataset ⋯ menu, or the Dashboard's big AutoRun button,
+ * #4529) opens its results unless the dialog already shows another run; any
+ * other run of the user's (an import's) is announced with a toast that opens
+ * them. Other users' runs, failed runs, and runs already handled are left
+ * alone.
  */
 describe('AutoRunService', () => {
   let service: AutoRunService;
@@ -75,7 +77,7 @@ describe('AutoRunService', () => {
 
   it('opens the results of a run this tab started, once it finishes', () => {
     service.run('ds1');
-    expect(registryApi.runAutorun).toHaveBeenCalledWith('ds1');
+    expect(registryApi.runAutorun).toHaveBeenCalledWith('ds1', undefined);
 
     loadingTasks$.next([finished({ status: 'loading' }, info({ trigger: 'manual' }))]);
     expect(findApi.getAutorunRun).not.toHaveBeenCalled();
@@ -83,6 +85,60 @@ describe('AutoRunService', () => {
     loadingTasks$.next([finished({}, info({ trigger: 'manual' }))]);
     expect(findApi.getAutorunRun).toHaveBeenCalledWith('_autorun_1', expect.anything());
     expect(service.results()).toEqual(run);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it('passes the picked detectors through to the run (the big AutoRun button)', () => {
+    service.run('ds1', ['m1', 'm2']);
+    expect(registryApi.runAutorun).toHaveBeenCalledWith('ds1', ['m1', 'm2']);
+  });
+
+  it("announces a requested run instead of replacing another run's open results", () => {
+    registryApi.runAutorun
+      .mockReturnValueOnce(of({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' }))
+      .mockReturnValueOnce(of({ ok: true, message: 'AutoRun started', task_id: '_autorun_2' }));
+    service.run('ds1', ['m1']);
+    service.run('ds2', ['m1']);
+
+    loadingTasks$.next([finished({}, info({ trigger: 'manual' }))]);
+    expect(service.results()).toEqual(run);
+    expect(findApi.getAutorunRun).toHaveBeenCalledTimes(1);
+
+    const second = info({ run_id: '_autorun_2', trigger: 'manual', dataset_id: 'ds2', dataset_name: 'Frogs' });
+    loadingTasks$.next([finished({}, second)]);
+    expect(findApi.getAutorunRun).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success.mock.calls[0][0].message).toBe('AutoRun found 5 hits in "Frogs"');
+  });
+
+  it('opens only the first of two requested runs that land together', () => {
+    const pending = new Subject<typeof run>();
+    findApi.getAutorunRun.mockReturnValue(pending);
+    registryApi.runAutorun
+      .mockReturnValueOnce(of({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' }))
+      .mockReturnValueOnce(of({ ok: true, message: 'AutoRun started', task_id: '_autorun_2' }));
+    service.run('ds1', ['m1']);
+    service.run('ds2', ['m1']);
+
+    // The first fetch is still in flight when the second run is seen.
+    loadingTasks$.next([
+      finished({}, info({ trigger: 'manual' })),
+      finished({}, info({ run_id: '_autorun_2', trigger: 'manual', dataset_id: 'ds2', dataset_name: 'Frogs' })),
+    ]);
+    expect(findApi.getAutorunRun).toHaveBeenCalledTimes(1);
+    expect(findApi.getAutorunRun).toHaveBeenCalledWith('_autorun_1', expect.anything());
+    expect(toast.success).toHaveBeenCalledTimes(1);
+
+    pending.next(run);
+    expect(service.results()).toEqual(run);
+  });
+
+  it('opens a requested run again once the dialog is closed', () => {
+    service.openResults('_autorun_0');
+    service.closeResults();
+    service.run('ds1', ['m1']);
+    loadingTasks$.next([finished({}, info({ trigger: 'manual' }))]);
+    expect(findApi.getAutorunRun).toHaveBeenLastCalledWith('_autorun_1', expect.anything());
     expect(toast.success).not.toHaveBeenCalled();
   });
 

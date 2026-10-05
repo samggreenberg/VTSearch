@@ -256,6 +256,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **An AutoRun button on the Dashboard runs the selected detectors on the selected datasets**
+  (issue #4529). A third big button beside **Train** and **Find**, enabled on Find's rule (a
+  dataset and a detector ticked, one media type, every detector trained), starts a background
+  AutoRun on every ticked dataset with every ticked detector, loading a dataset first if
+  needed. Drafts run as they are, without moving to the AutoRun tab. The first run to finish
+  opens the AutoRun Results dialog and later ones offer **View results**. The API route behind
+  it, `POST /api/datasets/registry/<id>/autorun`, takes an optional `detector_ids` list; without
+  it, the dataset ⋯ **Run AutoRun** still runs the AutoRun tab.
+
 - **A deployment can list its own docs in the Help modal** (issue #4310). An
   operator who adds plugins or extensions points users at the docs for them
   with a new `docs_links` key in `data/settings.json`: an ordered list of

@@ -15,13 +15,18 @@ import { ToastService } from './toast.service';
  * The server runs a user's AutoRun detectors on a dataset in two situations:
  * when a web import finishes (unless the Add Dataset dialog's **Run AutoRun**
  * box was unticked) and when the user picks **Run AutoRun** from a dataset's
- * ⋯ menu ({@link run}). Either way the run is a `loading-tasks` row keyed to
- * the dataset, so its progress and Cancel button already show inline on the
- * Dashboard; this service handles the ending. It watches for AutoRun rows
- * reaching `idle` and, for the user who started them:
+ * ⋯ menu ({@link run}). The Dashboard's big **AutoRun** button starts one run
+ * per ticked dataset through the same {@link run}, with the ticked detectors
+ * in place of the AutoRun list (#4529). Either way the run is a
+ * `loading-tasks` row keyed to the dataset, so its progress and Cancel button
+ * already show inline on the Dashboard; this service handles the ending. It
+ * watches for AutoRun rows reaching `idle` and, for the user who started them:
  *
- *  - a run this tab started from the ⋯ menu opens the AutoRun Results dialog
- *    straight away (the user asked for it and is waiting on it);
+ *  - a run this tab started opens the AutoRun Results dialog straight away
+ *    (the user asked for it and is waiting on it), unless the dialog is
+ *    already showing another run - the button's runs land one per dataset -
+ *    in which case it is announced as below rather than replacing what the
+ *    user is reading;
  *  - any other run - an import's, or a ⋯ run from another tab - announces
  *    itself with a toast whose **View results** button opens the dialog, since
  *    it finishes on its own schedule, possibly while the user is elsewhere;
@@ -49,6 +54,10 @@ export class AutoRunService {
   /** Finished runs already acted on: SSE re-sends every row on each heartbeat
    *  until the task ages out, and a run must be announced once. */
   private readonly handled = new Set<string>();
+  /** A results fetch is in flight, so the dialog is spoken for even before
+   *  {@link results} is set: two runs landing in one SSE batch must not both
+   *  open it, the second replacing the first. */
+  private opening = false;
 
   constructor() {
     this.auth.status$.subscribe((status) => (this.currentUser = status?.user ?? ''));
@@ -60,12 +69,12 @@ export class AutoRunService {
     });
   }
 
-  /** Run the current user's AutoRun detectors on a loaded dataset; the results
-   *  dialog opens when the run finishes. A refusal (no AutoRun detector
-   *  applies, the dataset is not loaded) is toasted by the global error
-   *  interceptor with the server's reason. */
-  run(datasetId: string): void {
-    this.registryApi.runAutorun(datasetId).subscribe({
+  /** Run AutoRun on a loaded dataset: the current user's AutoRun detectors,
+   *  or exactly *detectorIds* when given. The results dialog opens when the
+   *  run finishes. A refusal (no detector applies, the dataset is not loaded)
+   *  is toasted by the global error interceptor with the server's reason. */
+  run(datasetId: string, detectorIds?: string[]): void {
+    this.registryApi.runAutorun(datasetId, detectorIds).subscribe({
       next: (res) => {
         if (res.task_id) this.openWhenDone.add(res.task_id);
       },
@@ -77,13 +86,19 @@ export class AutoRunService {
     // A 404 here is not a failed request but an expired run (the server keeps
     // only a few, and none across a restart): say that instead of the raw error.
     const context = new HttpContext().set(SKIP_ERROR_TOAST, true);
+    this.opening = true;
     this.findApi.getAutorunRun(runId, context).subscribe({
-      next: (run) => this.results.set(run),
-      error: () =>
+      next: (run) => {
+        this.opening = false;
+        this.results.set(run);
+      },
+      error: () => {
+        this.opening = false;
         this.toast.warning({
           message: 'These AutoRun results are no longer available',
           detail: 'The server keeps only its most recent runs, and none from before a restart.',
-        }),
+        });
+      },
     });
   }
 
@@ -109,7 +124,9 @@ export class AutoRunService {
         });
         continue;
       }
-      if (openNow) {
+      // A run the user asked for opens, unless the dialog already shows (or
+      // is fetching) another: then the toast keeps this one a click away.
+      if (openNow && !this.opening && this.results() === null) {
         this.openResults(info.run_id);
       } else {
         this.announce(info);

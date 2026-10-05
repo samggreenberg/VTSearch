@@ -3,8 +3,9 @@
 Covers :mod:`vtsearch.autorun_detectors` end to end through its two routes:
 
 - ``POST /api/datasets/registry/<dataset_id>/autorun`` starts a run of the
-  caller's AutoRun detectors on a loaded dataset, as a ``loading-tasks`` task
-  keyed to that dataset;
+  caller's AutoRun detectors (or, given ``detector_ids``, of the detectors
+  those ids name) on a loaded dataset, as a ``loading-tasks`` task keyed to
+  that dataset;
 - ``GET /api/autorun/runs/<run_id>`` serves the kept results to the user who
   started the run.
 
@@ -235,6 +236,99 @@ class TestRunAutoRunRoute:
 
         assert final["autorun"]["auto_export"]["success"] is True, final["autorun"]
         assert out.exists()
+
+
+class TestRunPickedDetectors:
+    """``detector_ids``: the Dashboard's big AutoRun button runs the ticked detectors (#4529)."""
+
+    @staticmethod
+    def _post(client, dataset_id: str, detector_ids):
+        return client.post(f"/api/datasets/registry/{dataset_id}/autorun", json={"detector_ids": detector_ids})
+
+    def test_runs_only_the_picked_detectors_drafts_included(self, client):
+        entry, _ctx = _registered_copy("Picked")
+        _autorun_detector("ar-listed")
+        draft_id = setup_trainable_model_in_registry("ar-draft", good_ids=GOOD, bad_ids=BAD, snap=snapshot_medias())
+
+        resp = self._post(client, entry["id"], [draft_id])
+        assert resp.status_code == 200, resp.get_json()
+        task_id = resp.get_json()["task_id"]
+        final = wait_for_loading_task(task_id)
+
+        assert final["error"] is None, final
+        assert final["autorun"]["trigger"] == "manual"
+        run = get_autorun_run(task_id, "default")
+        assert run is not None
+        assert set(run["results"]) == {"ar-draft"}, "the AutoRun list must not ride along"
+        assert settings.get_autofind_detectors() == ["ar-listed"], "a picked draft is not moved to AutoRun"
+
+    def test_runs_with_no_autorun_list_at_all(self, client):
+        entry, _ctx = _registered_copy("No list")
+        first = setup_trainable_model_in_registry("pick-1", good_ids=GOOD, bad_ids=BAD, snap=snapshot_medias())
+        second = setup_trainable_model_in_registry("pick-2", good_ids=GOOD, bad_ids=BAD, snap=snapshot_medias())
+
+        resp = self._post(client, entry["id"], [first, second, first])
+        assert resp.status_code == 200, resp.get_json()
+        task_id = resp.get_json()["task_id"]
+        final = wait_for_loading_task(task_id)
+
+        assert final["error"] is None, final
+        assert final["autorun"]["detectors_run"] == 2, "a repeated id runs once"
+        run = get_autorun_run(task_id, "default")
+        assert run is not None
+        assert set(run["results"]) == {"pick-1", "pick-2"}
+
+    def test_empty_list_is_400_and_starts_nothing(self, client):
+        entry, _ctx = _registered_copy("Empty pick")
+        _autorun_detector()
+        resp = self._post(client, entry["id"], [])
+        assert resp.status_code == 400
+        assert "Select at least one detector" in resp.get_json()["message"]
+        assert _autorun_tasks() == []
+
+    def test_unknown_id_is_404(self, client):
+        entry, _ctx = _registered_copy("Unknown pick")
+        resp = self._post(client, entry["id"], ["no-such-detector"])
+        assert resp.status_code == 404
+        assert _autorun_tasks() == []
+
+    def test_another_users_private_detector_is_404(self, client):
+        from vtscore.detectors.registry import register_detector
+
+        entry, _ctx = _registered_copy("Private pick")
+        theirs = register_detector(name="theirs", media_type="audio", num_training=6, created_by="someone-else")
+        resp = self._post(client, entry["id"], [theirs["id"]])
+        assert resp.status_code == 404
+        assert _autorun_tasks() == []
+
+    def test_picked_detectors_of_another_media_type_is_400(self, client):
+        entry, _ctx = _registered_copy("Audio only")
+        image_id = setup_trainable_model_in_registry(
+            "pick-image", good_ids=GOOD, bad_ids=BAD, snap=snapshot_medias(), media_type="image"
+        )
+        resp = self._post(client, entry["id"], [image_id])
+        assert resp.status_code == 400
+        assert "None of the selected detectors are for audio datasets" in resp.get_json()["message"]
+
+    @pytest.mark.parametrize("bad", [[1, 2], "det-id", {"id": "x"}])
+    def test_non_list_of_strings_is_422(self, client, bad):
+        entry, _ctx = _registered_copy("Malformed pick")
+        assert self._post(client, entry["id"], bad).status_code == 422
+
+    def test_plan_refuses_a_name_and_ids_together(self):
+        with pytest.raises(ValueError, match="not both"):
+            autorun_mod.plan_autorun(snapshot_medias(), detector_name="x", detector_ids=["y"])
+
+    def test_explicit_null_runs_the_autorun_list(self, client):
+        entry, _ctx = _registered_copy("Null pick")
+        _autorun_detector("ar-null")
+        resp = self._post(client, entry["id"], None)
+        assert resp.status_code == 200, resp.get_json()
+        task_id = resp.get_json()["task_id"]
+        assert wait_for_loading_task(task_id)["error"] is None
+        run = get_autorun_run(task_id, "default")
+        assert run is not None
+        assert set(run["results"]) == {"ar-null"}
 
 
 class TestAutoRunAfterImport:

@@ -196,14 +196,11 @@ before Done.
 
 ## 4. What Find becomes
 
-The Dashboard's big button reads **Test**. A third big button, **Find**, is
-the AutoRun run on the selected datasets and detectors: it takes every ticked
-dataset and every ticked detector of one media type, runs the background
-AutoRun task per dataset (`vtsearch/autorun_detectors.py` already does this
-from the row menu, one dataset at a time) and opens the AutoRun Results
-dialog. It is a button, not a view; the issue's P.S. says so and nothing in
-the code wants more. It can ship before the rename, labelled **AutoRun** while today's Find is still
-on the Dashboard, and the rename relabels it Find. The row menu's **Run AutoRun** stays.
+The Dashboard's big button reads **Test**. The third big button, labelled
+**AutoRun** while today's Find is still on the Dashboard (it runs the
+background AutoRun task on every ticked dataset with every ticked detector,
+and is a button, not a view), is relabelled **Find**. The row menu's **Run
+AutoRun** stays.
 
 The *Scoring a dataset* and *Find* sections of the user guide become a
 *Testing a detector* section; the step-by-step's Step 4 becomes the test. The
@@ -234,8 +231,7 @@ App tier:
 
 - Routes under `vtsearch/routes/` for start, round votes, cancel and state,
   on the pattern of `vtsearch/routes/precision_check.py`, minus the line move
-  and the training write. The Dashboard's multi-select Find needs no new route
-  for the per-dataset AutoRun task.
+  and the training write.
 - The Test view and its phase panel, the right-pane result, the Review tab,
   the route rename, the Dashboard buttons, the hint text.
 - The persisted verdict on the detector, and its two readers.

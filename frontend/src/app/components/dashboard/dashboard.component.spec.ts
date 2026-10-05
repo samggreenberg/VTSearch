@@ -721,6 +721,112 @@ describe('DashboardComponent', () => {
     });
   });
 
+  describe('AutoRun button (#4529)', () => {
+    const audioDatasets = [
+      { id: 'd1', name: 'DS1', media_type: 'audio', loaded: true },
+      { id: 'd2', name: 'DS2', media_type: 'audio', loaded: true },
+    ];
+    const audioDetectors = [
+      { id: 'm1', name: 'M1', media_type: 'audio', num_training: 5 },
+      { id: 'm2', name: 'M2', media_type: 'audio', num_training: 5 },
+    ];
+
+    function autorunButton(): HTMLButtonElement {
+      fixture.detectChanges();
+      const buttons = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.dashboard-actions button'),
+      );
+      const button = buttons.find((b) => b.textContent?.trim() === 'AutoRun');
+      expect(button).toBeTruthy();
+      return button!;
+    }
+
+    it('sits in the action bar beside Train and Find', () => {
+      flushInitialRequests();
+      autorunButton();
+      const labels = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.dashboard-actions button'),
+      ).map((b) => b.textContent?.trim());
+      expect(labels).toEqual(['Train', 'Find', 'AutoRun']);
+    });
+
+    it('is disabled, with the hint Find gives, until a dataset and a detector are ticked', () => {
+      flushInitialRequests();
+      expect(component.autorunEnabled).toBe(false);
+      expect(component.autorunHint).toBe('Select a dataset and detector above.');
+      expect(autorunButton().disabled).toBe(true);
+    });
+
+    it('is enabled for every ticked dataset and every ticked detector of one media type', () => {
+      flushInitialRequests(audioDatasets, audioDetectors);
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      selection.selectOnly('detector', ['m1', 'm2']);
+      expect(component.autorunEnabled).toBe(true);
+      expect(autorunButton().disabled).toBe(false);
+    });
+
+    it('is disabled on a media type mismatch across the ticked rows', () => {
+      flushInitialRequests(
+        [...audioDatasets, { id: 'd3', name: 'Pics', media_type: 'image', loaded: true }],
+        audioDetectors,
+      );
+      selection.selectOnly('dataset', ['d1', 'd3']);
+      selection.selectOnly('detector', ['m1']);
+      expect(component.autorunEnabled).toBe(false);
+      expect(component.autorunHint).toBe('Media type mismatch');
+    });
+
+    it('is disabled while any ticked detector is untrained', () => {
+      flushInitialRequests(audioDatasets, [...audioDetectors, { id: 'm3', name: 'New', media_type: 'audio', num_training: 0 }]);
+      selection.selectOnly('dataset', ['d1']);
+      selection.selectOnly('detector', ['m1', 'm3']);
+      expect(component.autorunEnabled).toBe(false);
+      expect(component.autorunHint).toBe('Selected detector has no training labels');
+    });
+
+    it('starts one run per ticked dataset, restricted to the ticked detectors', () => {
+      flushInitialRequests(audioDatasets, audioDetectors);
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      selection.selectOnly('detector', ['m1', 'm2']);
+
+      component.onAutorun();
+
+      for (const id of ['d1', 'd2']) {
+        const req = httpMock.expectOne(`/api/datasets/registry/${id}/autorun`);
+        expect(req.request.method).toBe('POST');
+        expect(req.request.body).toEqual({ detector_ids: ['m1', 'm2'] });
+        req.flush({ ok: true, message: 'AutoRun started', task_id: `_autorun_${id}` });
+      }
+    });
+
+    it('loads an unloaded ticked dataset before running on it', () => {
+      flushInitialRequests([{ id: 'd1', name: 'Cold', media_type: 'audio', loaded: false }], [audioDetectors[0]]);
+
+      component.onAutorun();
+
+      // An empty task_id means the load needed no background work.
+      httpMock.expectOne('/api/datasets/registry/d1/load').flush({ ok: true, message: 'Already loaded', task_id: '' });
+      const req = httpMock.expectOne('/api/datasets/registry/d1/autorun');
+      expect(req.request.body).toEqual({ detector_ids: ['m1'] });
+      req.flush({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' });
+    });
+
+    it('does nothing while disabled', () => {
+      flushInitialRequests(audioDatasets, [{ id: 'm3', name: 'New', media_type: 'audio', num_training: 0 }]);
+      selection.selectOnly('dataset', ['d1']);
+      component.onAutorun();
+      httpMock.expectNone((r) => r.url.endsWith('/autorun'));
+    });
+
+    it("leaves the row menu's Run AutoRun on the AutoRun list (no body)", () => {
+      flushInitialRequests([audioDatasets[0]]);
+      component.runAutorun(audioDatasets[0]);
+      const req = httpMock.expectOne('/api/datasets/registry/d1/autorun');
+      expect(req.request.body).toBeNull();
+      req.flush({ ok: true, message: 'AutoRun started', task_id: '_autorun_1' });
+    });
+  });
+
   it('should rename a dataset', () => {
     const datasets = [{ id: 'd1', name: 'Old', media_type: 'audio' }];
     flushInitialRequests(datasets);
