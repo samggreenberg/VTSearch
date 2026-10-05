@@ -554,6 +554,59 @@ range comes only from those picks, never from a model.
 `scripts/check-eval-app-sync.py` pins `check_schedule`, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
 
+### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`
+
+`vtscore/training/thresholds/line_test.py` (#4527; the first slice of Test
+mode, `docs/plans/test-mode.md`). Test mode asks of a detector on a corpus it
+never trained on what share of what its line ships would be right and what
+share of the real matches it would ship, as likely ranges from uniform picks
+within rank bands; this module is the sample, its estimators, the allocation
+rule and the phase machine, pure statistics over ids, ranks and labels that
+the app's routes and the eval harness both call.
+
+- `LineTest.start(ranking_ids, line_count, beta, posteriors=None, budgets=,
+  seed=None, labels=None)` freezes the ranking and the line (the top
+  `line_count`), cuts both sides into bands (`line_bands`: the spot check's
+  `band_edges` from the top for the matches, the same doubling from the line
+  downward for the misses) and takes `posteriors`, the labels line's chance
+  per item, as the auxiliary below the line. `labels` restores picks already
+  taken on the same ranking. `draw()` deals a round (`budgets.picks_per_round`,
+  5) from the band `next_band()` names, uniformly without replacement (a
+  census of a band no larger than a round); `record({id: match})` takes the
+  labels; `unrecord(id)` takes one back; `pick_band` records which band each
+  pick came from.
+- `estimates()` is every number from one set of joint Monte Carlo draws
+  (`LineEstimates`): per band, a Beta posterior on the share right under the
+  Jeffreys prior (`JEFFREYS`, 1/2) with the unlabelled items drawn binomially
+  at it, so a censused band is exact; `precision`, `recall` and `fbeta` of the
+  line as a point and a central `1 - alpha` range (`TEST_ALPHA`, 95%;
+  `Estimate.point` / `lo` / `hi` / `width` / `holds`); `at_edges`, the same
+  three at every band edge on both sides, which *Lean the Threshold* reads;
+  `positives_below`, model-assisted (each reached band's model mass corrected
+  by its picks, the difference estimator under the band design) with the
+  unreached tail taken from the model as a point and flagged
+  `tail_from_model`; and `found`, the recall range in the spot check's words
+  (`found_words`, cut at 15 / 37.5 / 62.5 / 87.5 percent).
+- `next_band()` is the allocation rule. Above the line, every band once from
+  the band holding the line upward, then the band whose next round would
+  shrink the F-beta range most in expectation (`expected_shrink`, a
+  pre-posterior over the round's outcomes on the same draws: the greedy face
+  of Neyman allocation). Below the line, `misses_walk()`: the first band
+  under the line, then deeper while the band just audited turned up a match
+  or holds a posterior mass that is not negligible against the positives found
+  above (`budgets.dry_run_share` of them); a dry band with little mass is a
+  dry run that ends the walk.
+- `line_phase(test)` / `test.phase()` derives the phase from state
+  (`PhaseReport`): `nothing` when the line keeps fewer items than a round;
+  `matches` until the precision range is at or under `budgets.matches_width`
+  after a round, the bands above are exhausted, or `budgets.matches_picks` is
+  spent; `misses` until the recall range is under `budgets.misses_width`, the
+  walk ends (`exhausted` or `dry_run`), or `budgets.misses_picks` is spent;
+  then `done`. The stop reasons are `STOP_REASONS`, the phases `PHASES`.
+  `LineBudgets`' defaults are the plan's proposals; #4523 prices them.
+- `TEST_PROVENANCE` is the provenance a test's vote is recorded with
+  (`flow: test`); a test vote never trains the detector.
+
 ---
 
 ## SVM

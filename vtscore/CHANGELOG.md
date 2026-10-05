@@ -229,6 +229,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The test sample** (issue #4527; the first slice of Test mode,
+  `docs/plans/test-mode.md`). `vtscore.training.thresholds.line_test`: `LineTest`
+  freezes a ranking and its line, cuts both sides into the spot check's doubling
+  bands, deals uniform rounds (`draw` / `record` / `unrecord`) and records each
+  pick's band; `estimates()` is the line's precision, recall and F-beta as
+  joint Monte Carlo ranges from per-band Beta posteriors under the Jeffreys
+  prior, re-estimated at every band edge (`at_edges`), with the positives below
+  the line model-assisted by the labels line's posteriors and the unreached
+  tail taken from the model and flagged; `next_band()` is the allocation rule
+  (every band above the line once from the line upward, then the greatest
+  expected shrink of the F-beta range; below the line a walk with a dry-run
+  stop); `line_phase` the phase machine and stop rule (width, budget,
+  exhaustion, dry run; `nothing` under one round), parameterised by
+  `LineBudgets`, whose defaults are the plan's proposals. `found_words` is the
+  spot check's recall phrase. `vote_provenance.FLOWS` gains `test`
+  (`TEST_PROVENANCE`): a test vote never trains.
+
 - **The balance's `gate` state** (issue #4505), additive: `BALANCE_GATE`
   (`"gate"`) joins `BALANCE_STATES`, and `gate_balance_state(beta, passed,
   also_voted=())` builds it - a structural detector's line, the verification
