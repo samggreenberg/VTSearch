@@ -340,6 +340,16 @@ Browser, and clears it with the pair state.
   runs, and after a pick lands it re-reads the test so the result reports
   the line `moved`. **Add Corrections** marks it `stale` (the detector has
   now seen the test set), as `find_eval_stale` always did.
+- The verdict is kept on the detector server-side (#4526), so a `start` over
+  an unchanged ranking can come back already `done` with `test.kept_at` set:
+  the result pane says when those picks were taken, and the service re-reads
+  the votes, since the kept picks are session votes again. There is no
+  forget button: a retrain marks the verdict stale and a changed ranking
+  deals a fresh test, so nothing is owed to the user there
+  (`/api/line-test/forget` is the screenshot harness's reset). The two readers of the kept verdicts are the
+  detector Stats modal's *Tested on* section and the AutoRun tab's
+  `vt-detector-card`, which shows its row's `test_verdict` under the name;
+  both word it through `verdictLine` / `verdictTitle` in `utils/line-test.ts`.
 
 ### Browse view (`components/browse-*`)
 

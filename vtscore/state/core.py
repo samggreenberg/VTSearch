@@ -1110,8 +1110,10 @@ class DetectorContext:
         # Test mode's test of the line (``LineTest``, #4524): the one running
         # on this detector's Find session, or the last finished one, over the
         # frozen Find scores.  Picks, labels and band counts only - never
-        # serialised; the persisted verdict is #4526.  Goes wherever the
-        # spot check goes: a vote clear, a dataset switch, a fresh Find pass.
+        # serialised itself: a finished test's verdict is kept on the
+        # detector's JSON instead (``vtscore.detectors.line_verdicts``,
+        # #4526).  Goes wherever the spot check goes: a vote clear, a dataset
+        # switch, a fresh Find pass.
         "line_test",  # LineTest | None
         # How many votes the detector held when its last spot check ended,
         # finished or cancelled: the weak-separation rule's cooldown counts

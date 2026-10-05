@@ -25,6 +25,22 @@
       </tbody>
     </table>
 
+    <h3 class="section-title" title="What a test in Find measured this detector to ship, one line per dataset it was tested on: the share right as a range, and how many of all the matches it finds">Tested on</h3>
+    @if (stats.test_verdicts.length) {
+      <ul class="verdict-list">
+        @for (verdict of stats.test_verdicts; track verdict.dataset_id) {
+          <li class="verdict" [class.verdict--stale]="verdict.stale" [title]="verdictTitle(verdict)">
+            <span class="verdict-text">{{ verdictLine(verdict) }}</span>
+            @if (verdict.stale) {
+              <span class="stale-mark">⚠ out of date</span>
+            }
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="verdict-empty">Untested. Score a dataset it never trained on in Find, and the Autopilot tab tests it.</p>
+    }
+
     <h3 class="section-title">Creation</h3>
     <table class="data-table stats-table">
       <tbody>

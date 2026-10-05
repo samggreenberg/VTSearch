@@ -20,3 +20,32 @@
 
 // Section rhythm provided by the shared `.section-title` utility in
 // _components.scss.
+
+// *Tested on* (#4526): one kept verdict per line, a stale one dimmed and marked.
+.verdict-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verdict {
+  padding: var(--space-2xs) 0;
+  color: var(--text-primary);
+}
+
+.verdict--stale .verdict-text {
+  color: var(--text-muted);
+}
+
+.stale-mark {
+  margin-left: var(--space-sm);
+  color: var(--text-warning);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.verdict-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-style: italic;
+}

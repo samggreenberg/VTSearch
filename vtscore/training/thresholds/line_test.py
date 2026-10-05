@@ -443,6 +443,9 @@ class LineTest:
     #: Rounds recorded so far.
     rounds: int = 0
     seed: int | None = None
+    #: When the picks restored by :meth:`start` were taken, for a test resumed
+    #: from a verdict kept on the detector (#4526); ``None`` for a fresh test.
+    kept_at: float | None = None
     #: Bumped on every label change; the estimates cache is keyed on it.
     _version: int = field(default=0, repr=False, compare=False)
     _bands: tuple[Band, ...] = field(default=(), repr=False, compare=False)
@@ -884,6 +887,7 @@ class LineTest:
             "bands": bands,
             "estimates": None if self.nothing_to_test else self.estimates().as_dict(),
             "budgets": self.budgets.as_dict(),
+            "kept_at": self.kept_at,
         }
 
 

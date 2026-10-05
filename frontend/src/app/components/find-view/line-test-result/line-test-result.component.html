@@ -20,6 +20,9 @@
         <button type="button" class="btn btn--secondary btn--sm" (click)="testAgain.emit()">Test this line</button>
       </p>
     }
+    @if (keptNote()) {
+      <p class="result-note kept-note" role="note">{{ keptNote() }}</p>
+    }
 
     @if (estimates(); as est) {
       <!-- The headline: F-beta at the balance, and the two ranges under it with their lights. -->

@@ -1,6 +1,8 @@
 import type { LineTestEstimate } from '../generated/api-client/models/line-test-estimate';
 import type { LineTestResponse } from '../generated/api-client/models/line-test-response';
 import type { LineTestState } from '../generated/api-client/models/line-test-state';
+import type { LineTestVerdict } from '../generated/api-client/models/line-test-verdict';
+import { formatTimestamp } from './format-date';
 
 /**
  * Test mode's test of the line (#4524; the design is `docs/plans/test-mode.md`,
@@ -90,4 +92,28 @@ export function testLineState(response: LineTestResponse | null, lineCount: numb
   if (moved) title += ` The line has moved since: it keeps the top ${kept} now. Test again to measure it.`;
   if (stale) title += ' Corrections were added to the detector since, so it has now seen this test set.';
   return { text, title, dot: moved || stale ? 'yellow' : 'green' };
+}
+
+/**
+ * A verdict the detector keeps (#4526) in one line, as the Stats dialog's
+ * *Tested on* section and the Dashboard's AutoRun tab read it:
+ * "drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)".
+ */
+export function verdictLine(verdict: LineTestVerdict): string {
+  const date = formatTimestamp(verdict.tested_at, { withTime: false });
+  const picks = `${verdict.labelled} pick${verdict.labelled === 1 ? '' : 's'}`;
+  return `${verdict.dataset_name || 'a dataset'}: likely ${estimatePercent(verdict.precision)} right, ${verdict.found} (${picks}, ${date})`;
+}
+
+/** The hover text for a kept verdict: what was measured, and why a stale one no longer describes the detector. */
+export function verdictTitle(verdict: LineTestVerdict): string {
+  const measured = verdict.line_count.toLocaleString();
+  let title =
+    `A test of ${verdict.labelled} random picks found the top ${measured} of ${verdict.size.toLocaleString()} ` +
+    `likely ${estimatePercent(verdict.precision)} right, with likely ${estimatePercent(verdict.recall)} of all the matches among them; ` +
+    `F-beta at its balance, ${fbetaHeadline(verdict.fbeta)}.`;
+  if (verdict.stale) {
+    title += ' Out of date: the detector has been retrained since, so the ranking these picks were drawn from no longer exists. Test it again to measure it as it is.';
+  }
+  return title;
 }

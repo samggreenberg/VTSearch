@@ -2953,6 +2953,10 @@
             },
             "type": "array"
           },
+          "test_verdict": {
+            "$ref": "#/components/schemas/LineTestVerdict",
+            "nullable": true
+          },
           "text_query": {
             "type": "string"
           }
@@ -3138,6 +3142,12 @@
             },
             "type": "array"
           },
+          "test_verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/LineTestVerdict"
+            },
+            "type": "array"
+          },
           "text_query": {
             "type": "string"
           }
@@ -3157,6 +3167,7 @@
           "num_positive_resolved",
           "num_total",
           "readers",
+          "test_verdicts",
           "text_query"
         ],
         "type": "object"
@@ -5421,6 +5432,10 @@
             "$ref": "#/components/schemas/LineTestEstimates",
             "nullable": true
           },
+          "kept_at": {
+            "nullable": true,
+            "type": "number"
+          },
           "labelled": {
             "type": "integer"
           },
@@ -5462,6 +5477,7 @@
           "beta",
           "budgets",
           "estimates",
+          "kept_at",
           "labelled",
           "line_count",
           "phase",
@@ -5482,6 +5498,62 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "LineTestVerdict": {
+        "additionalProperties": false,
+        "properties": {
+          "beta": {
+            "type": "number"
+          },
+          "dataset_id": {
+            "type": "string"
+          },
+          "dataset_name": {
+            "type": "string"
+          },
+          "fbeta": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "found": {
+            "type": "string"
+          },
+          "labelled": {
+            "type": "integer"
+          },
+          "line_count": {
+            "type": "integer"
+          },
+          "precision": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "recall": {
+            "$ref": "#/components/schemas/LineTestEstimate"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "tested_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "beta",
+          "dataset_id",
+          "dataset_name",
+          "fbeta",
+          "found",
+          "labelled",
+          "line_count",
+          "precision",
+          "recall",
+          "size",
+          "stale",
+          "tested_at"
         ],
         "type": "object"
       },
@@ -11135,7 +11207,7 @@
     },
     "/api/detectors/registry": {
       "get": {
-        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.",
+        "description": "Detectors are user-shared like datasets: each entry is the creator's plus\nanyone the creator added to ``readers`` (or everyone via ``\"*\"``). The\nresponse also carries ``created_by``, ``readers``, and ``is_owner`` so the\ndashboard can render the access column and gate the security button.\nAn AutoRun detector also carries ``test_verdict``, the newest test\nverdict it keeps (#4526), for the AutoRun tab to show beside it; drafts\nleave it out, so the listing reads no detector file it does not need.",
         "operationId": "list_registered_detectors",
         "responses": {
           "200": {
@@ -11621,7 +11693,7 @@
     },
     "/api/detectors/registry/{detector_id}/stats": {
       "get": {
-        "description": "Counts/metadata only \u2014 no embeddings or MLP weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project.",
+        "description": "Counts/metadata only \u2014 no embeddings or MLP weights are read or\nreturned (the labelset file is the canonical persisted form). The\n``num_positive_resolved`` / ``active_dataset_name`` pair reports how\nmuch of the positive set the Browse button could currently project;\n``test_verdicts`` is every test verdict the detector keeps, one per tested\ndataset, newest first and marked stale once the detector has been\nretrained since (#4526).",
         "operationId": "get_detector_stats",
         "responses": {
           "200": {
@@ -13863,9 +13935,37 @@
         ]
       }
     },
+    "/api/line-test/forget": {
+      "post": {
+        "description": "A reset, not a user action: the app never calls it.  A user has no need\nto, because a retrain already marks the verdict stale, a changed ranking\nalready deals a fresh test (whose verdict replaces the kept one at Done),\nand on an unchanged ranking a second test of the same budget measures\nnothing the first did not.  The screenshot harness calls it between shots,\nso a shot that reaches Done does not leave the next one resuming on the\nsame pair.  A finished test in memory goes with it; its picks stay session\nvotes, as a cancelled test's do.  A running test is left as it is.  200\nwhether or not a verdict was kept; 500 only when the detector file cannot\nbe rewritten.",
+        "operationId": "forget_line_test",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LineTestResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "500": {
+            "description": "The detector file could not be rewritten."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Forget the verdict the detector keeps for this dataset (#4526), so the next start deals a fresh test.",
+        "tags": [
+          "line_test"
+        ]
+      }
+    },
     "/api/line-test/start": {
       "post": {
-        "description": "The ranking is the pass's frozen scores, best first, and the line keeps\nthe items at or above the detector's threshold; both are fixed for the\nwhole test.  The labels line's chance per item is the auxiliary below the\nline, when the detector has one.  Deals the first round.  A test already\nrunning is replaced; a finished test of the same line is returned as it\nis, since its picks already say what a new one would (resuming from\nkept picks across sessions is #4526).",
+        "description": "The ranking is the pass's frozen scores, best first, and the line keeps\nthe items at or above the detector's threshold; both are fixed for the\nwhole test.  The labels line's chance per item is the auxiliary below the\nline, when the detector has one.  Deals the first round.  A test already\nrunning is replaced; a finished test of the same line is returned as it\nis, since its picks already say what a new one would.  So is a verdict\nthe detector keeps for this dataset (#4526), when it is not stale and its\npicks were drawn from this very ranking and line: the test resumes from\nthem (``kept_at`` says when they were taken), and they are session votes\nagain, in the Review tab's piles, as they were when they were cast.",
         "operationId": "start_line_test",
         "responses": {
           "200": {
@@ -13936,7 +14036,7 @@
     },
     "/api/line-test/votes": {
       "post": {
-        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.",
+        "description": "Each vote is a session vote on the item (provenance ``test``): verified in\nFind mode, so it lands in the Review tab's piles, and kept out of the\nlabelset like every Find vote.  The test records it against the pick's\nband and the ranges move.  A partial round waits for the rest; once the\nround is whole the next round is dealt, or the test is done.  The vote\nthat finishes it keeps its verdict on the detector (#4526).",
         "operationId": "vote_line_test",
         "requestBody": {
           "content": {

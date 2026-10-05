@@ -1205,6 +1205,20 @@ ways out, as the **Detector Trained** dialog does in Train:
   keeps the call *you* made. See
   [Check and correct a detector's calls](howto/check-and-correct.md).
 
+**The verdict is kept on the detector.** Reaching Done saves it with the
+detector, one verdict per collection it was tested on (testing the same
+collection again replaces it): the ranges, the balance, the date, and the
+picks with what you said about each, never a score. The detector's **Stats**
+lists it under *Tested on*, and an AutoRun detector shows its latest under its
+name on the Dashboard. Once the detector is retrained (more votes in Train,
+**Add Corrections**, imported labels), the ranking those picks were drawn
+from no longer exists, so the verdict is marked *out of date*; it stays, so
+you can see what the detector used to ship. Open Find on a collection you
+tested before, with the detector and its ranking unchanged, and the test
+picks up where it left off: the kept picks come back, already in the Review
+tab's piles, and the result says when you took them, so there is nothing to
+vote again.
+
 Under the verdict, **Your checks** sets the detector's calls against the
 answers the collection has now (the test's picks and anything you verified in
 Review): matches you both agree on, wrong matches you took out, matches the
@@ -1398,7 +1412,12 @@ with bulk-action and per-card controls.
     retrain, or label import until you pick **Move to Drafts** from the
     **⋯** menu to unfreeze them. Read-only actions (**Load**, **Browse
     positives**, **Stats**, **Export labels**) stay available, and
-    **Find** works as usual.
+    **Find** works as usual. Under each name is the latest
+    [test verdict](#the-result) the detector keeps (*Tested on
+    drawings-new: likely 70-85% right, about half of them found (34
+    picks, 2026-10-05)*), marked *Out of date* if it was retrained
+    since, or *Untested*: an AutoRun detector ships its matches
+    unchecked, and this is what it was measured to ship.
 
   A detector lives on exactly one tab at a time, and every user
   curates their own AutoRun list. The typical loop: build and test a

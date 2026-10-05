@@ -128,6 +128,9 @@ class LineTestStateSchema(Schema):
     # ``null`` when there is nothing to test.
     estimates = fields.Nested(LineTestEstimatesSchema, required=True, allow_none=True)
     budgets = fields.Nested(LineTestBudgetsSchema, required=True)
+    # When the test resumed from a verdict the detector keeps (#4526): the
+    # epoch seconds its picks were taken at.  ``null`` for a test begun afresh.
+    kept_at = fields.Float(required=True, allow_none=True)
 
 
 class LineTestPresetSchema(Schema):
@@ -161,6 +164,35 @@ class LineTestResponseSchema(Schema):
     # already taken (``Lean the Threshold``); empty before a test, or when
     # the detector has no class model to draw a line at another balance with.
     presets = fields.List(fields.Nested(LineTestPresetSchema), required=True)
+
+
+class LineTestVerdictSchema(Schema):
+    """A finished test's verdict as the detector keeps it (#4526), summarised for a reader.
+
+    One per tested dataset (:mod:`vtscore.detectors.line_verdicts`): the
+    ranges and F-beta at Done, the balance and line they were measured at, and
+    how many picks they rest on.  ``stale``: the detector was retrained since
+    (its labels changed), so the ranking the picks were drawn from no longer
+    exists; the verdict stays, flagged.
+    """
+
+    dataset_id = fields.String(required=True)
+    # The dataset's registered name now, else the one kept with the verdict.
+    dataset_name = fields.String(required=True)
+    # Epoch seconds the test finished at.
+    tested_at = fields.Float(required=True)
+    beta = fields.Float(required=True)
+    # The line kept the top ``line_count`` of the ``size`` items scored.
+    line_count = fields.Integer(required=True)
+    size = fields.Integer(required=True)
+    # The picks the ranges rest on.
+    labelled = fields.Integer(required=True)
+    precision = fields.Nested(LineTestEstimateSchema, required=True)
+    recall = fields.Nested(LineTestEstimateSchema, required=True)
+    fbeta = fields.Nested(LineTestEstimateSchema, required=True)
+    # The recall range in the spot check's words.
+    found = fields.String(required=True)
+    stale = fields.Boolean(required=True)
 
 
 class LineTestVotesRequestSchema(Schema):

@@ -125,7 +125,11 @@ def list_registered_detectors():
     anyone the creator added to ``readers`` (or everyone via ``"*"``). The
     response also carries ``created_by``, ``readers``, and ``is_owner`` so the
     dashboard can render the access column and gate the security button.
+    An AutoRun detector also carries ``test_verdict``, the newest test
+    verdict it keeps (#4526), for the AutoRun tab to show beside it; drafts
+    leave it out, so the listing reads no detector file it does not need.
     """
+    from vtscore.detectors.line_verdicts import verdict_summaries
     from vtscore.detectors.registry import get_loaded_detector_ids, list_detectors_for_user
     from vtsearch.settings import get_autofind_detectors
 
@@ -169,6 +173,9 @@ def list_registered_detectors():
         if "examples" not in entry:
             det_data = _read_detector(_detector_path(entry.get("name", ""))) or {}
             entry["examples"] = det_data.get("examples", [])
+        if entry["autofind"]:
+            latest = verdict_summaries(_read_detector(_detector_path(entry.get("name", ""))), latest_only=True)
+            entry["test_verdict"] = latest[0] if latest else None
     return {"detectors": entries}
 
 
@@ -1166,9 +1173,13 @@ def get_detector_stats(detector_id: str):
     Counts/metadata only — no embeddings or MLP weights are read or
     returned (the labelset file is the canonical persisted form). The
     ``num_positive_resolved`` / ``active_dataset_name`` pair reports how
-    much of the positive set the Browse button could currently project.
+    much of the positive set the Browse button could currently project;
+    ``test_verdicts`` is every test verdict the detector keeps, one per tested
+    dataset, newest first and marked stale once the detector has been
+    retrained since (#4526).
     """
     from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.line_verdicts import verdict_summaries
     from vtscore.detectors.registry import (
         can_user_access_detector,
         get_detector,
@@ -1229,6 +1240,7 @@ def get_detector_stats(detector_id: str):
         "created_by": entry.get("created_by", "default") or "default",
         "readers": entry.get("readers", []) or [],
         "autofind": name in set(get_autofind_detectors()),
+        "test_verdicts": verdict_summaries(data),
     }
 
 
