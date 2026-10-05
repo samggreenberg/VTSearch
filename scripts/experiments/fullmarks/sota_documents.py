@@ -86,39 +86,179 @@ def in_test_half(page_id: str, salt: str = "sota-documents") -> bool:
 # --------------------------------------------------------------------------
 
 
-def load_or_extract(ids: list[str], paths: dict[str, str], cache: Optional[Path], tier: str, workers: int) -> dict:
-    """``{page id: compact StructuralFeatures}``, read from *cache* when it holds every page."""
+def _from_cache_files(ids: list[str], cache: Path, tier: str = "") -> dict:
+    """Every page of *ids* any ``features-*.npz`` under *cache* holds (a larger tier can reuse a smaller one's).
+
+    The tier's own file is read first, then the rest smallest first, so a small tier never loads a big file.
+    """
     from vtscore.media.structural import StructuralFeatures  # noqa: PLC0415
 
-    f = cache / f"features-{tier}.npz" if cache else None
-    if f is not None and f.exists():
+    want, found = set(ids), {}
+    files = [f for f in cache.glob("features-*.npz") if ".tmp" not in f.name]
+    files.sort(key=lambda f: (f.name != f"features-{tier}.npz", f.stat().st_size))
+    for f in files:
+        if not want - set(found):
+            break
         z = np.load(f, allow_pickle=False)
         cached = [str(p) for p in z["page_ids"]]
-        if set(ids) <= set(cached):
-            kp, desc, starts = z["keypoints"], z["descriptors"], np.append(z["starts"], len(z["keypoints"]))
-            index = {p: i for i, p in enumerate(cached)}
-            return {
-                p: StructuralFeatures(
-                    keypoints=kp[starts[index[p]] : starts[index[p] + 1]],
-                    descriptors=desc[starts[index[p]] : starts[index[p] + 1]],
-                )
-                for p in ids
-            }
+        need = [(i, p) for i, p in enumerate(cached) if p in want and p not in found]
+        if not need:
+            continue
+        kp, desc, starts = z["keypoints"], z["descriptors"], np.append(z["starts"], len(z["keypoints"]))
+        for i, p in need:
+            found[p] = StructuralFeatures(
+                keypoints=kp[starts[i] : starts[i + 1]], descriptors=desc[starts[i] : starts[i + 1]]
+            )
+    return found
+
+
+def _tile_cache_path(cache: Path, tier: str, st: Any) -> Path:
+    layers = "_".join(f"{w:g}x{h:g}" for w, h in st.TILE_LAYERS)
+    return cache / f"tiles-{tier}-{st.PROJECTION_NAME}-{layers}-k{st.MIN_TILE_KP}.npz"
+
+
+def _cached_tiles(ids: list[str], cache: Path, tier: str, st: Any) -> dict:
+    """The tiles a previous run saved for this tier, projection and tile layout, if it covers *ids*."""
+    f = _tile_cache_path(cache, tier, st)
+    if not f.exists():
+        return {}
+    z = np.load(f, allow_pickle=False)
+    cached = [str(p) for p in z["page_ids"]]
+    if not set(ids) <= set(cached):
+        return {}
+    starts = np.append(z["starts"], len(z["vectors"]))
+    vec, box = z["vectors"], z["boxes"]
+    out = {}
+    for i, p in enumerate(cached):
+        a, b = starts[i], starts[i + 1]
+        out[p] = st.TileVectors(vec[a:b], box[a:b])
+    return out
+
+
+def _save_tiles(tiles: dict, ids: list[str], cache: Path, tier: str, st: Any) -> None:
+    counts = np.array([tiles[p].vectors.shape[0] for p in ids], dtype=np.int64)
+    f = _tile_cache_path(cache, tier, st)
+    tmp = f.with_suffix(".tmp.npz")
+    np.savez(
+        tmp,
+        page_ids=np.array(ids),
+        starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
+        vectors=np.concatenate([tiles[p].vectors for p in ids]),
+        boxes=np.concatenate([tiles[p].boxes for p in ids]),
+    )
+    tmp.replace(f)
+
+
+_SHARDS: dict[str, Any] = {}
+
+
+def _upload_shards(matrix: np.ndarray, n_gpu: int) -> list[tuple[int, int, Any]]:
+    """A new matrix's row shards, one per GPU, after handing the old ones back to the devices.
+
+    As the app's path does on a new matrix, the cached candidate descriptors (#4469) go too. Their
+    live blocks sit inside segments the allocator cannot release, and over 22 classes those grew to
+    16 GiB on GPU 0 and left the next shard no room (tier l, 2026-10-04). One retry after a release.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.media.structural import release_device_descriptors  # noqa: PLC0415
+
+    bounds = np.linspace(0, matrix.shape[0], n_gpu + 1).astype(np.int64)
+    for attempt in (1, 2):
+        _SHARDS.clear()
+        release_device_descriptors()
+        for i in range(n_gpu):
+            torch.cuda.set_device(i)
+            torch.cuda.empty_cache()
+        torch.cuda.set_device(0)
+        try:
+            return [
+                (int(lo), int(hi), torch.from_numpy(matrix[lo:hi]).to(f"cuda:{i}"))
+                for i, (lo, hi) in enumerate(zip(bounds[:-1], bounds[1:]))
+            ]
+        except torch.OutOfMemoryError:
+            if attempt == 2:
+                raise
+            import gc  # noqa: PLC0415
+
+            gc.collect()
+    raise AssertionError("unreachable")
+
+
+def sharded_gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[np.ndarray]:
+    """Tiled Stage 1's page scores with the tile matrix split across every visible GPU (#4488, tier l).
+
+    A 200k-page tile matrix (~36 GB fp16) fits no single 32 GB card, and the app's GPU path then
+    scores on the CPU. Splitting it by rows across GPUs keeps the same float32 matmul and max per
+    tile; only where the rows live changes. A harness-only stand-in for
+    ``structural_stage1._gpu_page_scores``.
+    """
+    import torch  # noqa: PLC0415
+
+    n_gpu = torch.cuda.device_count()
+    if n_gpu == 0:
+        return None
+    key = f"{id(matrix)}:{matrix.shape}"
+    if _SHARDS.get("key") != key:
+        _SHARDS.update(key=key, parts=_upload_shards(matrix, n_gpu))
+    best = np.empty(matrix.shape[0], dtype=np.float32)
+    chunk = 262_144
+    for lo, hi, tiles in _SHARDS["parts"]:
+        q = torch.from_numpy(np.ascontiguousarray(queries, dtype=np.float32)).to(tiles.device).T
+        out = torch.empty(hi - lo, dtype=torch.float32, device=tiles.device)
+        for a in range(0, hi - lo, chunk):
+            out[a : a + chunk] = (tiles[a : a + chunk].float() @ q).amax(dim=1)
+        best[lo:hi] = out.cpu().numpy()
+    return np.maximum.reduceat(best, starts)
+
+
+def thin_pool(cid: str, pool_ids: list[str], positive: np.ndarray, keep: float) -> tuple[list[str], np.ndarray]:
+    """The pool with only a seeded fraction *keep* of its positives (at least one); the rest leave the pool.
+
+    The kept positives are the first by ``sha256("thin:<class>:<page>")``, so a run is reproducible and a
+    smaller fraction keeps a subset of a larger one's.
+    """
+    import hashlib  # noqa: PLC0415
+    import math  # noqa: PLC0415
+
+    pos = [p for p, y in zip(pool_ids, positive) if y]
+    ranked = sorted(pos, key=lambda p: hashlib.sha256(f"thin:{cid}:{p}".encode()).hexdigest())
+    drop = set(ranked[max(1, math.ceil(keep * len(pos))) :])
+    mask = np.array([p not in drop for p in pool_ids])
+    return [p for p, m in zip(pool_ids, mask) if m], positive[mask]
+
+
+def load_or_extract(ids: list[str], paths: dict[str, str], cache: Optional[Path], tier: str, workers: int) -> dict:
+    """``{page id: compact StructuralFeatures}``: what the cache files hold, plus the missing pages extracted.
+
+    A page found in any ``features-*.npz`` under *cache* is read from it, so a larger tier reuses the
+    smaller tiers' files. Pages no file holds are extracted and saved as their own
+    ``features-<tier>-part-<n>.npz``, so no existing file is ever rewritten.
+    """
+    found = _from_cache_files(ids, cache, tier) if cache is not None else {}
+    missing = [p for p in ids if p not in found]
+    if not missing:
+        return found
     with get_context("fork").Pool(workers) as pool:
-        feats = dict(zip(ids, pool.map(_extract, [paths[p] for p in ids], chunksize=8)))
-    if f is not None:
-        f.parent.mkdir(parents=True, exist_ok=True)
-        counts = np.array([feats[p].count for p in ids], dtype=np.int64)
-        tmp = f.with_suffix(".tmp.npz")
-        np.savez(
-            tmp,
-            page_ids=np.array(ids),
-            starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
-            keypoints=np.concatenate([feats[p].keypoints for p in ids]),
-            descriptors=np.concatenate([feats[p].descriptors for p in ids]),
-        )
-        tmp.replace(f)
-    return feats
+        extracted = dict(zip(missing, pool.map(_extract, [paths[p] for p in missing], chunksize=8)))
+    if cache is not None:
+        save_features(extracted, missing, cache / f"features-{tier}-part-{len(list(cache.glob('features-*.npz')))}.npz")
+    return {**found, **extracted}
+
+
+def save_features(feats: dict, ids: list[str], f: Path) -> None:
+    """Write *ids*' features to *f* in the cache format (atomically)."""
+    f.parent.mkdir(parents=True, exist_ok=True)
+    counts = np.array([feats[p].count for p in ids], dtype=np.int64)
+    tmp = f.with_suffix(".tmp.npz")
+    np.savez(
+        tmp,
+        page_ids=np.array(ids),
+        starts=np.concatenate([[0], np.cumsum(counts)[:-1]]),
+        keypoints=np.concatenate([feats[p].keypoints for p in ids]),
+        descriptors=np.concatenate([feats[p].descriptors for p in ids]),
+    )
+    tmp.replace(f)
 
 
 # --------------------------------------------------------------------------
@@ -355,8 +495,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "its tiles or its whole VLAD",
     )
     ap.add_argument("--beta", type=float, default=None, help="the balance passed to the app's structural line (#4458)")
+    ap.add_argument(
+        "--shard-stage1",
+        action="store_true",
+        help="#4488: split tiled Stage 1's tile matrix across every visible GPU (tier l on 32 GB cards)",
+    )
+    ap.add_argument(
+        "--thin",
+        type=float,
+        default=1.0,
+        help="#4488: keep this seeded fraction of each class's positives in the pool (prevalence knob)",
+    )
+    ap.add_argument(
+        "--stop-log",
+        action="store_true",
+        help="#4488: write stop_log.jsonl - per click the line and the unlabelled pages above it",
+    )
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
+    if args.shard_stage1:
+        import vtscore.training.structural_stage1 as s1_mod  # noqa: PLC0415
+
+        s1_mod._gpu_page_scores = sharded_gpu_page_scores
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
 
     if args.tile_layers == "coarse":
@@ -382,8 +542,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     projection = load_tile_projection()
     from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
 
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:  # numpy releases the GIL while tiling
-        tiles = dict(zip(ids, pool.map(lambda p: tile_vectors(feats[p], projection), ids)))
+    tiles = _cached_tiles(ids, args.feature_cache, args.tier, st) if args.feature_cache else {}
+    if len(tiles) < len(ids):
+        with ThreadPoolExecutor(max_workers=args.workers) as pool:  # numpy releases the GIL while tiling
+            tiles = dict(zip(ids, pool.map(lambda p: tile_vectors(feats[p], projection), ids)))
+        if args.feature_cache:
+            _save_tiles(tiles, ids, args.feature_cache, args.tier, st)
     snap_all = {
         pid: {"embedder": "sift_vlad_doc", "local_features": feats[pid], "tile_vectors": tiles[pid]} for pid in ids
     }
@@ -405,6 +569,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "stoplist": args.stoplist or "off",
                 "swap_halves": args.swap_halves,
                 "beta": args.beta,
+                "thin": args.thin,
                 "seed_crop": args.seed_crop,
                 "classes": args.classes,
                 "started": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -428,6 +593,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         z = np.load(f)
         pool_ids = [str(p) for p in z["pool_ids"]]
         positive = z["positives"].astype(bool)
+        if args.thin < 1.0:
+            pool_ids, positive = thin_pool(cid, pool_ids, positive, args.thin)
         if not positive.any():
             continue
         col = {p: i for i, p in enumerate(pool_ids)}
@@ -469,6 +636,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             order = np.array([col[e["id"]] for e in ranked])
             score = np.array([float(e["score"]) for e in ranked])
             labelled = {col[p] for p in (*goods, *bads)}
+            if args.stop_log:
+                above = [int(i) for i, sc in zip(order, score) if sc >= line and int(i) not in labelled]
+                with (args.out / "stop_log.jsonl").open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"class_id": cid, "v": v, "line": float(line), "above": above}) + "\n")
             keep = test[order]
             rest, rest_score = order[keep], score[keep]
             hits = positive[rest]
@@ -538,6 +709,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 {
                     "class_id": cid,
                     "click": v + 1,
+                    # The detector's call on this page before the click (#4488's Smart).
+                    "score_before": float(score[int(np.flatnonzero(order == nxt)[0])]),
+                    "line_before": float(line),
+                    "page_index": int(nxt),
                     "page_id": pid,
                     "label": label,
                     "stage1_rank": int(np.flatnonzero(order == nxt)[0]),
