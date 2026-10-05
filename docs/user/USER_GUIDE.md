@@ -765,7 +765,9 @@ good match starts the count again. On the Manual tab the three status
 indicators give way to one readout, **Dry run n/16**: your votes in a
 row since the last good one. This stop was measured on FullMarks
 document sessions at 5,000 to 200,000 pages, and with a quarter of the
-matches removed (issue #4488).
+matches removed (issue #4488). In the largest collections some matches
+rank too low for any amount of clicking to reach (issue #4493), so a
+dry run there means the detector has found what it can.
 
 ### The collapsed bar
 
