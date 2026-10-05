@@ -589,9 +589,11 @@ def run_tables(
         after = _threshold_at(last_chk if last_chk is not None else last_ord, own_beta)
         for c in CHECKPOINTS:
             at = ord_rows[ord_rows["t"] <= c] if ord_rows is not None else None
-            row[f"thr_fbeta_{c}"] = _threshold_at(at.iloc[-1] if at is not None and len(at) else None, own_beta)[
-                "thr_fbeta"
-            ]
+            point = _threshold_at(at.iloc[-1] if at is not None and len(at) else None, own_beta)
+            # The returned set's path through the session (#4519): F-beta, and the
+            # precision, recall and size behind it, at each checkpoint.
+            for m in ("fbeta", "precision", "recall", "returned"):
+                row[f"thr_{m}_{c}"] = point[f"thr_{m}"]
         row["thr_fbeta_unchecked"] = unchecked["thr_fbeta"]
         row["thr_returned_unchecked"] = unchecked["thr_returned"]
         row["thr_fbeta_final"] = after["thr_fbeta"]

@@ -315,7 +315,11 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
    floor-era control (#4408), when it was run: precision against P and recall
    against the oracle's recall at P (`perp.py`: `returned_at_own_p.png`,
    `perp_summary.md`; per run, `returned_at_p.png`), with the share of
-   sessions meeting P. Then the ranking: mean text-only AP, AP at 25 and 50
+   sessions meeting P. The returned set's **path through the session** (#4519): per preset,
+   its precision against its recall at 25, 50, 100 and 150 clicks and
+   after the check (`perp.py --kind balance`: `precision_recall_path.png`,
+   `precision_recall_path.csv`, and the "returned set through the session"
+   table), which the deck's Photo Finish panel draws. Then the ranking: mean text-only AP, AP at 25 and 50
    clicks, the final AP against the ceiling's, with Goods found at the same
    points. F1 at the line (`f1_over_clicks.png`) is secondary: it cannot see
    the balance.

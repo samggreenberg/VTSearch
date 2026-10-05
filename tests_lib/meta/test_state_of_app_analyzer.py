@@ -574,14 +574,48 @@ def test_perp_reads_each_beta_off_its_own_run(run, tmp_path) -> None:
          "--run", f"4={a}", "--out", str(out)],
         check=True, capture_output=True, text=True,
     )  # fmt: skip
-    for png in ("returned_at_own_beta.png", "objective_at_own_beta.png"):
+    for png in ("returned_at_own_beta.png", "objective_at_own_beta.png", "precision_recall_path.png"):
         assert (out / png).stat().st_size > 0
     md = (out / "perbeta_summary.md").read_text()
-    sections = ["## The objective", "## The returned set at each balance", "## The early dip", "## The spot check"]
+    sections = [
+        "## The objective",
+        "## The returned set through the session",
+        "## The returned set at each balance",
+        "## The early dip",
+        "## The spot check",
+    ]
     assert all(s_ in md for s_ in sections) and [md.index(s_) for s_ in sections] == sorted(
         md.index(s_) for s_ in sections
     )
     assert "| 0.25 |" in md and "| 4 |" in md
+
+
+def test_the_returned_sets_path_is_read_at_each_click_and_after_the_check(run, tmp_path) -> None:
+    """#4519: cells.csv carries the returned set's precision, recall and size at every checkpoint, read off the
+    last ordinary row by that click; perp.py's path table takes them per beta, ending on the point after the check."""
+    cells = run["cells"]
+    for idx, cat in enumerate(CATS):
+        main = _main_frame(run["exp"], idx).sort_values("t")
+        ordinary = main[main["phase"].astype(str) != "check"]
+        for c in (25, 50):
+            at = ordinary[ordinary["t"] <= c]
+            if not len(at):
+                continue
+            last = at.iloc[-1]
+            assert cells.loc[cat, f"thr_precision_{c}"] == pytest.approx(float(last["precision"]))
+            assert cells.loc[cat, f"thr_recall_{c}"] == pytest.approx(float(last["recall"]))
+    out = tmp_path / "path"
+    a = run["exp"] / "analysis"
+    subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
+        [sys.executable, str(_SOTA / "perp.py"), "--kind", "balance", "--run", f"1={a}", "--out", str(out)],
+        check=True, capture_output=True, text=True,
+    )  # fmt: skip
+    path = pd.read_csv(out / "precision_recall_path.csv")
+    assert path["point"].astype(str).tolist() == ["25", "50", "100", "150", "after the check"]
+    trained = cells[~cells["never_trained"].astype(bool)]
+    end = path[path["point"] == "after the check"].iloc[0]
+    assert end["precision"] == pytest.approx(trained["thr_precision_final"].mean())
+    assert end["recall"] == pytest.approx(trained["thr_recall_final"].mean())
 
 
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:

@@ -35,6 +35,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -234,6 +235,63 @@ def _objective_rows(runs: dict[float, Path]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+#: The returned set's path through a session (#4519): these clicks, then after the end-of-run check.
+PATH_CLICKS = (25, 50, 100, 150)
+
+
+def _path_rows(runs: dict[float, Path]) -> pd.DataFrame:
+    """Per beta, off its own sessions: the returned set's precision, recall and F-beta at each click of
+    :data:`PATH_CLICKS` and after the check (#4519, the owner's precision-recall curves).
+
+    Means over the trained runs that had a line by that click; ``returned`` is the median size.  A run
+    analyzed before #4519 has no per-click precision or recall, and its rows read NaN.
+    """
+    rows = []
+    for beta, d in sorted(runs.items()):
+        c = pd.read_csv(d / "cells.csv")
+        c = c[~c["never_trained"].astype(bool)]
+        points = [(str(t), f"_{t}") for t in PATH_CLICKS] + [("after the check", "_final")]
+        for point, suffix in points:
+            col = lambda m, s=suffix: c.get(f"thr_{m}{s}", pd.Series(np.nan, index=c.index))  # noqa: E731
+            have = col("fbeta").notna()
+            rows.append({
+                "beta": f"{beta:g}",
+                "point": point,
+                "precision": col("precision")[have].mean(),
+                "recall": col("recall")[have].mean(),
+                "fbeta": col("fbeta")[have].mean(),
+                "returned, median": col("returned")[have].median(),
+                "runs": int(have.sum()),
+            })  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def figure_path(runs: dict[float, Path], out: Path) -> None:
+    """``precision_recall_path.png`` (#4519): per beta, the returned set's (recall, precision) at each click of
+    :data:`PATH_CLICKS`, joined in order, ending on the point after the check (✓)."""
+    rows = _path_rows(runs)
+    fig, ax = plt.subplots(figsize=(5.6, 4.6), facecolor=SURFACE)
+    for (beta, g), color in zip(rows.groupby("beta", sort=False), ("#2a6fdb", "#d9480f", "#2b8a3e", "#7048e8")):
+        g = g.dropna(subset=["precision", "recall"])
+        if g.empty:
+            continue
+        ax.plot(g["recall"], g["precision"], color=color, lw=1.8, marker="o", ms=4, label=f"beta {beta}")
+        for _, r in g.iterrows():
+            tag = "✓" if r["point"] == "after the check" else str(r["point"])
+            ax.annotate(tag, (r["recall"], r["precision"]), textcoords="offset points", xytext=(4, 4),
+                        fontsize=7, color=color)  # fmt: skip
+    ax.set_xlabel("recall of the returned set", color=INK)
+    ax.set_ylabel("precision of the returned set", color=INK)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_title("the returned set through the session", color=INK, fontsize=10, loc="left")
+    _axes(ax)
+    ax.legend(fontsize=8, frameon=False, loc="lower left")
+    fig.tight_layout()
+    fig.savefig(out / "precision_recall_path.png", dpi=150, facecolor=SURFACE)
+    plt.close(fig)
+
+
 def _dip_rows(runs: dict[float, Path]) -> pd.DataFrame:
     """Per beta and rule: the text sort's set at click 0 against the detector's over clicks, the same rule on both."""
     rows = []
@@ -281,6 +339,8 @@ def _check_rows(runs: dict[float, Path]) -> pd.DataFrame:
 def summary_balance(runs: dict[float, Path], out: Path) -> None:
     from analyze import returned_at_beta  # noqa: PLC0415
 
+    path = _path_rows(runs)
+    path.to_csv(out / "precision_recall_path.csv", index=False)
     md = [
         "# Each balance read off its own sessions (#4413)",
         "",
@@ -291,6 +351,15 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
         "the check's paired effect; the returned set's size.",
         "",
         _md(_objective_rows(runs).round(3), index=False),
+        "",
+        "## The returned set through the session",
+        "",
+        "Per beta, the precision and recall of the same withheld set at 25, 50, 100 and 150 clicks and after "
+        "the check (#4519): the path a preset's returned set takes as the user clicks "
+        "(`precision_recall_path.png`, `precision_recall_path.csv`). Means over the trained runs with a line "
+        "by that click; `returned` is the median size.",
+        "",
+        _md(path.round(3), index=False),
         "",
         "## The returned set at each balance (rank frames)",
         "",
@@ -344,6 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.kind == "balance":
         figure_balance(runs, args.out)
         figure_objective(runs, args.out)
+        figure_path(runs, args.out)
         summary_balance(runs, args.out)
     else:
         figure(runs, args.out)
