@@ -115,10 +115,49 @@ class TestTiledStage1:
         s1._GPU_CACHE.clear()
         matrix = np.zeros((1000, DIM), dtype=np.float16)
         with caplog.at_level("WARNING", logger=s1._log.name):
-            out = s1._gpu_page_scores(matrix, np.array([0, 500]), np.zeros((1, DIM), dtype=np.float32))
+            out = s1._gpu_page_max(matrix, np.array([0, 500]), np.zeros((1, DIM), dtype=np.float32))
         assert out is None
         assert calls == ["empty", "measure"]
         assert "scoring on the CPU" in caplog.text
+
+    def test_each_page_keeps_its_first_best_tile_and_the_query_that_gave_it(self):
+        # #4481: the pair the exact score is recomputed from.
+        best = np.array([0.2, 0.9, 0.9, 0.5, 0.1, 0.7], dtype=np.float32)
+        best_query = np.array([0, 2, 1, 0, 1, 3])
+        pm = s1.page_max_from_tiles(best, best_query, np.array([0, 3, 3, 4]))  # page 1 has no tiles
+        np.testing.assert_array_equal(pm.score, np.array([0.9, -np.inf, 0.5, 0.7], dtype=np.float32))
+        np.testing.assert_array_equal(pm.tile, [1, -1, 3, 5])
+        np.testing.assert_array_equal(pm.query, [2, 0, 0, 3])
+
+    def test_exact_scores_are_the_best_pair_in_float64(self):
+        rng = np.random.default_rng(1)
+        matrix = rng.standard_normal((12, DIM)).astype(np.float16)
+        queries = rng.standard_normal((3, DIM)).astype(np.float32)
+        starts = np.array([0, 4, 9])
+        pm = s1._cpu_page_max(matrix, starts, queries)
+        exact = s1.exact_page_scores(matrix, queries, pm)
+        brute = [
+            max(float(np.dot(matrix[r].astype(np.float64), q.astype(np.float64))) for r in range(a, b) for q in queries)
+            for a, b in zip(starts, [4, 9, 12])
+        ]
+        np.testing.assert_allclose(exact, brute, rtol=0, atol=1e-12)
+
+    def test_the_order_does_not_move_with_float32_noise_in_the_device_scores(self, tiled, monkeypatch):
+        # #4481: two GPU types gave the same best pairs but cosines a few ulps apart, which
+        # reordered near-equal pages. The order now comes from the pairs, recomputed exactly.
+        snap = tiled(6)
+        queries = snap[2]["tile_vectors"].vectors[:2].astype(np.float32)
+        monkeypatch.setattr(s1, "_cuda", lambda: False)
+        reference = s1.tiled_stage1(snap, queries)
+        cpu = s1._cpu_page_max
+
+        def jittered(matrix, starts, q):
+            pm = cpu(matrix, starts, q)
+            noise = np.random.default_rng(7).uniform(-1e-6, 1e-6, size=pm.score.shape).astype(np.float32)
+            return s1.PageMax(pm.score + noise, pm.tile, pm.query)
+
+        monkeypatch.setattr(s1, "_gpu_page_max", jittered)
+        assert s1.tiled_stage1(snap, queries) == reference
 
     def test_a_seeded_crop_queries_whole_and_a_page_by_its_tiles(self, tiled):
         # #4170: a crop's tiles are fragments of the mark, so a seeded crop is one whole-VLAD query.
