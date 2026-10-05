@@ -10,11 +10,11 @@
      above. The ranking gets the widest column and the biggest thumbnails,
      because it is what this screen is for. -->
 
-<!-- Look at what is on either side. Not books and not-books — a bedroom
-     with a bookcase by the television, a dining room, a kitchen shelf of
-     cookbooks, a man with a bicycle *above* the line, a bathroom floor with
-     an Elmo board book sitting right at it, and a woman on her phone, a cat
-     at a laptop and a sandwich just below. Out at the ends of the ranking the
+<!-- Look at what is on either side. Not books and not-books — a party
+     with a bookcase behind the game controllers, a man on a bicycle, a
+     living room lined with shelves, and a sandwich sitting right at the line
+     *above* it; another sandwich, a sitting room and a cat at a laptop just
+     below. Out at the ends of the ranking the
      detector is right and it is boring; here it is neither, and this is the
      only part of the list a person's opinion could still change. -->
 
