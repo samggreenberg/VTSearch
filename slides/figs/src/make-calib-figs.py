@@ -5674,16 +5674,18 @@ DOC_MARK_PAGES = (11, 14, 18, 23, 28, 31, 35, 39, 44, 50, 57, 65, 74)
 DOC_OTHER_PAGES = (8, 12, 15, 17, 19, 24)
 #: Pages closer than this many counts stack, so no two dots overlap.
 DOC_STACK_GAP = 2.0
-#: Rows, in canvas units: the Good votes and the Bad votes; the Good pages and
-#: the Bad pages; one row per radio, top to bottom the precision end, the
-#: middle, the recall end — the order `calib-fbeta` stacks the same three
-#: balances in. Votes and pages are each split into a Good row over a Bad row,
-#: the way Cross Examination splits D₀ (#4517): which kind a mark is reads off
-#: its row, and red against green is only a second way of saying it.
-DOC_VOTE_ROWS_Y = (7.95, 7.0)
-DOC_PAGE_ROWS_Y = (6.05, 5.1)
+#: Rows, in canvas units: the votes; the pages; one row per radio, top to
+#: bottom the precision end, the middle, the recall end — the order
+#: `calib-fbeta` stacks the same three balances in. Votes and pages each get
+#: one line, Good above it and Bad below (#4533), so which kind a mark is reads
+#: off its side of the line as well as its colour, and which of the two rows it
+#: is reads off its shape: a vote is a ✓ or a ✗, a page is a hatched dot.
+DOC_VOTE_ROW_Y = 7.55
+DOC_PAGE_ROW_Y = 5.6
 DOC_RADIO_Y = (3.75, 2.5, 1.25)
 DOC_DOT_R = 0.15
+#: How far a mark sits off its row's line, above or below.
+DOC_MARK_GAP = 0.06
 
 
 def _doc_lines() -> dict[float, tuple[int, str]]:
@@ -5727,69 +5729,68 @@ def doc_balance_fig() -> None:
     save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
 
 
+def _hatched_dot(ax: plt.Axes, xy: tuple[float, float], r: float, good: bool, z: float = 4) -> None:
+    """A Good or Bad item as a hollow dot, hatched the way `_data_block` hatches its halves.
+
+    A solid green or red dot reads as a vote (#4533); the hatch says what kind
+    an item is without saying that anybody voted on it. The Bad hatch is drawn
+    at the Good one's density rather than `_data_block`'s sparser one: a dot
+    is small enough that half as many lines leaves a single stroke across it,
+    which reads as a "no entry" sign rather than as a fill.
+    """
+    colour, hatch = (GREEN, "//////") if good else (RED, "\\\\\\\\\\\\")
+    ax.add_patch(Circle(xy, r, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=1.3, zorder=z))
+
+
 def _doc_rows(ax: plt.Axes, x0: float, w: float, at) -> None:
-    """Stage 1 of the document-balance figure: the votes and the verified pages, Good over Bad.
+    """Stage 1 of the document-balance figure: the votes and the verified pages, each Good over Bad.
 
     *at* maps an inlier count to canvas x on the axis every row shares.
     """
 
-    def row_kind(y: float, noun: str, good: bool) -> None:
-        ax.text(
-            x0 - 0.35,
-            y,
-            f"{'Good' if good else 'Bad'} {noun}",
-            ha="right",
-            va="center",
-            fontsize=16,
-            color=GREEN if good else RED,
-        )
+    def row_name(y: float, noun: str) -> None:
+        ax.text(x0 - 0.35, y, noun, ha="right", va="center", fontsize=16, color=INK)
 
-    for (counts, good), y in zip(((DOC_GOODS, True), (DOC_BADS, False)), DOC_VOTE_ROWS_Y, strict=True):
-        _range_line(ax, x0, x0 + w, y, z=3)
-        # Sitting on their row's line, as the pages sit on theirs: every mark
-        # is above the line it belongs to, so no row's marks hang between two.
+    y = DOC_VOTE_ROW_Y
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for counts, good in ((DOC_GOODS, True), (DOC_BADS, False)):
         for count in counts:
             ax.text(
                 at(count),
-                y + 0.06,
+                y + DOC_MARK_GAP if good else y - DOC_MARK_GAP,
                 "✓" if good else "✗",
                 ha="center",
-                va="bottom",
+                va="bottom" if good else "top",
                 fontsize=20,
                 color=GREEN if good else RED,
                 fontweight="bold",
             )
-        row_kind(y + 0.25, "votes", good)
+    row_name(y, "Votes")
     ax.text(
         x0 + w,
-        DOC_VOTE_ROWS_Y[0] + 0.6,
-        "inliers, few to many",
+        DOC_VOTE_ROW_Y + 0.6,
+        "Inliers, few to many",
         ha="right",
         va="bottom",
         fontsize=FBETA_AXIS_LABEL_PT,
         color=SOFT,
     )
-    # One dot per page on its own row's line. Pages closer than
-    # `DOC_STACK_GAP` counts would stack a level up, though with the rows split
-    # none of the drawing's pages are that close.
-    for (counts, good), y in zip(((DOC_MARK_PAGES, True), (DOC_OTHER_PAGES, False)), DOC_PAGE_ROWS_Y, strict=True):
-        _range_line(ax, x0, x0 + w, y, z=3)
+    # One dot per page, Good above the line and Bad below. Pages closer than
+    # `DOC_STACK_GAP` counts on one side would stack a level further out,
+    # though none of the drawing's pages are that close.
+    y = DOC_PAGE_ROW_Y
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for counts, good in ((DOC_MARK_PAGES, True), (DOC_OTHER_PAGES, False)):
+        side = 1 if good else -1
         placed: list[tuple[float, int]] = []
         for count in sorted(counts):
             level = 0
             while any(lvl == level and abs(count - c) < DOC_STACK_GAP for c, lvl in placed):
                 level += 1
             placed.append((count, level))
-            ax.add_patch(
-                Circle(
-                    (at(count), y + DOC_DOT_R + 0.08 + level * (2 * DOC_DOT_R + 0.06)),
-                    DOC_DOT_R,
-                    facecolor=GREEN if good else RED,
-                    edgecolor="none",
-                    zorder=4,
-                )
-            )
-        row_kind(y + 0.2, "pages", good)
+            offset = DOC_DOT_R + DOC_MARK_GAP + 0.04 + level * (2 * DOC_DOT_R + 0.06)
+            _hatched_dot(ax, (at(count), y + side * offset), DOC_DOT_R, good)
+    row_name(y, "Pages")
 
 
 def _doc_stage(stage: int) -> plt.Figure:
@@ -5823,7 +5824,7 @@ def _doc_stage(stage: int) -> plt.Figure:
         # Half a count below the lowest page kept, so the cut sits between two
         # integer counts rather than on one.
         cut = at(first - 0.5)
-        ax.plot([cut, cut], [y, DOC_PAGE_ROWS_Y[0]], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+        ax.plot([cut, cut], [y, DOC_PAGE_ROW_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
         ax.plot([cut, x0 + w], [y, y], color=INK, linewidth=weight, solid_capstyle="butt", zorder=3)
         ax.plot([cut] * 2, [y - 0.18, y + 0.18], color=INK, linewidth=2.4, zorder=3)
         kept = [mark for count, mark in pages if count >= first]
