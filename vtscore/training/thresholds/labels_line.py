@@ -66,6 +66,11 @@ MIN_LOGIT_SIGMA = 0.25
 RELATIVE_SIGMA_FLOOR = 0.5
 #: The smallest floor a corpus can set: a corpus of one score has no spread.
 _MIN_CORPUS_FLOOR = 1e-3
+#: Labels whose Good and Bad scores sit fewer spreads apart than this separate
+#: weakly (:attr:`LabelsLine.separation`, #4466, #4496).  Below it a session
+#: returns too much: over 200 withheld images in 37-77% of such sessions from
+#: click 5 on, against 2-18% above it, and no cut rescues its F.
+WEAK_SEPARATION_D = 1.5
 #: How far past the class means, in spreads, the threshold search reaches.
 _SEARCH_SPREADS = 8.0
 #: Points on the threshold search's logit grid.
@@ -371,6 +376,19 @@ class LabelsLine:
     unvoted_share: float | None = None
     unvoted_scores: np.ndarray | None = field(default=None, compare=False, repr=False)
     unvoted_posteriors: np.ndarray | None = field(default=None, compare=False, repr=False)
+    #: The class model's spread as this corpus floors it (#4492); ``None`` on a line built by hand.
+    spread: float | None = None
+
+    @property
+    def separation(self) -> float:
+        """How many spreads apart the labels' Good and Bad scores sit: d' = (Good mean - Bad mean) / spread.
+
+        The spread is the one the line was cut with, the class model's own
+        floored on this corpus, so the value is free of the logit scale.  Below
+        :data:`WEAK_SEPARATION_D` the labels separate weakly (#4496).
+        """
+        spread = self.model.sigma if self.spread is None else self.spread
+        return (self.model.mu_pos - self.model.mu_neg) / spread if spread > 0 else float("inf")
 
     def threshold(self, beta: float) -> float:
         if self.unvoted_scores is not None and self.unvoted_posteriors is not None and self.unvoted_share is not None:
@@ -443,7 +461,9 @@ def _line_on(
     order = np.argsort(-unvoted, kind="stable")
     post = corpus_posteriors(fitted, unvoted, floor=floor)
     # The labels' model is kept unfloored, so a Find on another corpus floors it afresh.
-    return LabelsLine(model, prevalence, negatives, float(share), unvoted[order].copy(), post[order].copy())
+    return LabelsLine(
+        model, prevalence, negatives, float(share), unvoted[order].copy(), post[order].copy(), fitted.sigma
+    )
 
 
 def corpus_fit(
@@ -521,6 +541,7 @@ def fit_labels_line(
 __all__ = [
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",
+    "WEAK_SEPARATION_D",
     "PREVALENCE_MAX",
     "PREVALENCE_MIN",
     "ClassScoreModel",

@@ -87,6 +87,7 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
+    WEAK_SEPARATION_D,
     LineRanking,
     SpotCheck,
     balance_line,
@@ -2101,6 +2102,9 @@ def simulate_voting_iterations(  # noqa: C901
     walk_guard: Optional[float] = None,
     walk_shape: Optional[str] = None,
     spot_check: str = "end",
+    weak_separation: float = WEAK_SEPARATION_D,
+    weak_min_t: int = 10,
+    weak_repeat: int = 0,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2493,8 +2497,20 @@ def simulate_voting_iterations(  # noqa: C901
             where the retrain moved it.  Until then every row reports the
             ``unchecked`` starting candidate, which is exactly what a headless
             run exports.  ``"off"`` never checks: the whole run is the
-            unchecked line.  Ignored on the Inclusion arm, and when nothing is
-            left unvoted to check.
+            unchecked line.  ``"weak"`` (#4496) is ``"end"`` plus a check the
+            app prompts: at the first ordinary step from *weak_min_t* votes
+            on whose labels line separates weakly
+            (:attr:`~vtscore.training.thresholds.LabelsLine.separation` below
+            *weak_separation*), the user checks then and there.  Its picks are
+            clicks: they count in ``t`` and the voting budget, and their rows
+            carry ``phase == "prompt"``, so they read as ordinary clicks.  With
+            *weak_repeat* > 0 the prompt returns once that many votes have
+            been cast since the last prompted check ended, while the labels
+            still separate weakly; 0 prompts once.  Ignored on the Inclusion
+            arm, and when nothing is left unvoted to check.
+        weak_separation: The d' below which ``spot_check="weak"`` prompts.
+        weak_min_t: The fewest votes before ``spot_check="weak"`` prompts.
+        weak_repeat: Votes after a prompted check before it may prompt again; 0 never.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2925,8 +2941,8 @@ def simulate_voting_iterations(  # noqa: C901
             }
         )
 
-    if spot_check not in ("end", "off"):
-        raise ValueError(f"spot_check must be 'end' or 'off', got {spot_check!r}")
+    if spot_check not in ("end", "off", "weak"):
+        raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
     # The floor's spot check (#4272), run once the voting steps are spent: the
     # simulated user checks the line as the app's check step does, its picks
     # answered from ground truth and cast as votes.  ``line_ranking`` is the
@@ -2946,55 +2962,82 @@ def simulate_voting_iterations(  # noqa: C901
     last_ordinary: dict[str, Any] | None = None
     # ``t`` counts every vote cast, the check's included: one per ordinary
     # step, a round's worth per check round.
+    # #4496: under ``spot_check="weak"`` the app prompts a check when the labels
+    # separate weakly.  ``check_phase`` stamps the running check's rows and
+    # picks: ``"prompt"`` for a prompted check (clicks), ``"check"`` for the
+    # end-of-run one.
+    check_phase = "check"
+    end_checked = False
+    weak_due = False
+    last_weak_check: int | None = None
+
+    def _start_check() -> "SpotCheck | None":
+        """The app's check over the line's unvoted ranking; ``None`` with nothing unvoted in it."""
+        assert line_ranking is not None
+        # The whole unvoted ranking, in rank order: the walk's bands are cut
+        # from it (#4388), and it starts at the floor's schedule.
+        candidate = tuple(int(i) for i in line_ranking.unvoted_ids(set(good_votes) | set(bad_votes)))
+        if not candidate:
+            return None
+        # Seeded off the run's own RNG, after every trajectory draw, so a
+        # run without the check is byte-identical up to here.
+        if beta is not None:
+            # The balance walk (#4413): recall read against the mixture's
+            # count of the unvoted ranking's positives, or the balance's cap
+            # when the mixture has no estimate (#4419), as the app does.
+            n_pos = walk_positives(
+                line_ranking,
+                beta,
+                {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+                set(good_votes) | set(bad_votes),
+            )
+            return SpotCheck.start_balance(
+                candidate,
+                beta,
+                n_pos,
+                seed=int(rng.randint(2**31 - 1)),
+                picks=walk_picks,
+                tol=walk_tol,
+                fine=walk_fine,
+                guard=walk_guard,
+                shallow_only=walk_shape_resolved == CHECK_TRIM,
+            )
+        return SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
+
     t = 0
     while True:
         picks: list[int] | None = None
         if check is not None and check.running:
             picks = list(check.pending)
-        elif t >= n_steps or not pool:
-            # The voting steps are spent.  Check the line once, if the run
-            # checks at all and there is a ranking with something unvoted in it.
-            if spot_check != "end" or check is not None or (floor is None and beta is None) or line_ranking is None:
-                break
-            # The whole unvoted ranking, in rank order: the walk's bands are cut
-            # from it (#4388), and it starts at the floor's schedule.
-            candidate = tuple(int(i) for i in line_ranking.unvoted_ids(set(good_votes) | set(bad_votes)))
-            if not candidate:
-                break
-            # Seeded off the run's own RNG, after every trajectory draw, so a
-            # run without the check is byte-identical up to here.
-            if beta is not None:
-                # The balance walk (#4413): recall read against the mixture's
-                # count of the unvoted ranking's positives, or the balance's cap
-                # when the mixture has no estimate (#4419), as the app does.
-                n_pos = walk_positives(
-                    line_ranking,
-                    beta,
-                    {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
-                    set(good_votes) | set(bad_votes),
-                )
-                check = SpotCheck.start_balance(
-                    candidate,
-                    beta,
-                    n_pos,
-                    seed=int(rng.randint(2**31 - 1)),
-                    picks=walk_picks,
-                    tol=walk_tol,
-                    fine=walk_fine,
-                    guard=walk_guard,
-                    shallow_only=walk_shape_resolved == CHECK_TRIM,
-                )
-            else:
-                check = SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
-            picks = list(check.pending)
-            if not picks:
-                break
+        else:
+            if weak_due and t < n_steps and pool and line_ranking is not None:
+                # The labels separate weakly (#4496): the user checks now, and
+                # the check's picks are clicks.
+                weak_due = False
+                last_weak_check = t
+                started = _start_check()
+                if started is not None and started.pending:
+                    check, check_phase = started, "prompt"
+                    picks = list(check.pending)
+            if picks is None and (t >= n_steps or not pool):
+                # The voting steps are spent.  Check the line once, if the run
+                # checks at all and there is a ranking with something unvoted in it.
+                if spot_check == "off" or end_checked or (floor is None and beta is None) or line_ranking is None:
+                    break
+                end_checked = True
+                started = _start_check()
+                if started is None:
+                    break
+                check, check_phase = started, "check"
+                picks = list(check.pending)
+                if not picks:
+                    break
 
         if picks is not None:
             # A check round: every pick is answered at once.  The candidate was
             # fixed at the start, so the retrain each round triggers cannot
             # move what the next round samples.
-            phase = "check"
+            phase = check_phase
             startup_round, startup_cut = -1, None
             round_votes = {cid: _cast(cid, phase) for cid in picks}
             t = len(good_votes) + len(bad_votes)
@@ -3003,6 +3046,8 @@ def simulate_voting_iterations(  # noqa: C901
             is_positive = round_votes[picks[-1]]
             assert check is not None and line_ranking is not None
             check.record(round_votes)
+            if check.finished and check_phase == "prompt":
+                last_weak_check = t
             if check.finished:
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
@@ -3121,6 +3166,15 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             )
             line_ranking = details.get("line_ranking")
+            if spot_check == "weak" and picks is None:
+                weak_line = details.get("find_line")
+                if (
+                    weak_line is not None
+                    and t >= weak_min_t
+                    and weak_line.separation < weak_separation
+                    and (last_weak_check is None or (weak_repeat > 0 and t - last_weak_check >= weak_repeat))
+                ):
+                    weak_due = True
             if live_threshold is not None:
                 # A retired rung replaces the shipped cut, and the fit it
                 # replaced is dropped with it so acquisition cannot re-cut an
@@ -3234,7 +3288,7 @@ def simulate_voting_iterations(  # noqa: C901
                 test_score_sink.append(
                     {
                         "t": int(t),
-                        "phase": "check" if picks is not None else (flow.phase if flow is not None else ""),
+                        "phase": check_phase if picks is not None else (flow.phase if flow is not None else ""),
                         "scores": np.asarray(calibration[1], dtype=np.float32),
                         "labels": np.asarray(calibration[2], dtype=np.int8),
                         "train_threshold": float(threshold),
@@ -3372,7 +3426,7 @@ def simulate_voting_iterations(  # noqa: C901
             # bounded by the votes' share of the haystack.
             "n_haystack": len(sim_ids),
             "n_remainder": len(pool),
-            "phase": "check" if picks is not None else (flow.phase if flow is not None else ""),
+            "phase": check_phase if picks is not None else (flow.phase if flow is not None else ""),
             # The three lights behind that phase (#3560).  Already computed by
             # `flow.update` above and previously discarded; the phase alone
             # cannot say whether Smart or Stable is what holds a run in `hard`.

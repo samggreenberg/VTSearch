@@ -149,6 +149,9 @@ ENVX="$ENVX CALIB_ACQ_INCLUSION_OFFSET=${CALIB_ACQ_INCLUSION_OFFSET:-} CALIB_ACQ
 ENVX="$ENVX CALIB_WALK_PICKS=${CALIB_WALK_PICKS:-} CALIB_WALK_TOL=${CALIB_WALK_TOL:-} CALIB_WALK_FINE=${CALIB_WALK_FINE:-}"
 ENVX="$ENVX CALIB_WALK_GUARD=${CALIB_WALK_GUARD:-} CALIB_WALK_SHAPE=${CALIB_WALK_SHAPE:-}"
 ENVX="$ENVX CALIB_SAVE_TEST_SCORES=${CALIB_SAVE_TEST_SCORES:-} CALIB_SIM_SIZE=${CALIB_SIM_SIZE:-}"
+# When the simulated user checks (#4496): empty is the end-of-run check; `weak` adds the prompt on weak separation.
+ENVX="$ENVX CALIB_SPOT_CHECK=${CALIB_SPOT_CHECK:-} CALIB_WEAK_D=${CALIB_WEAK_D:-} CALIB_WEAK_MIN_T=${CALIB_WEAK_MIN_T:-}"
+ENVX="$ENVX CALIB_WEAK_REPEAT=${CALIB_WEAK_REPEAT:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).
