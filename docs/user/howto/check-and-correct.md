@@ -12,8 +12,13 @@ where to click, in order.
 
 ## Step 1: Check the pictures the detector is least sure of
 
-Find opens on the picture the detector finds hardest to call, the one right on
-its line between *match* and *not a match*. For each picture:
+Find opens on its **Autopilot** tab, which tests the line with random picks
+(see [Find: testing and reviewing](../USER_GUIDE.md#find-testing-and-reviewing)).
+Every pick you answer there is a check too, and lands in the piles below. To
+check the pictures *you* choose, click **Review** at the top of the left-hand
+panel: the ranked list appears, and Find brings up the picture it finds
+hardest to call, the one right on its line between *match* and *not a match*.
+For each picture:
 
 1. Look at it in the middle of the screen. To check a different one, click it
    in the list on the left.
@@ -25,7 +30,7 @@ its line between *match* and *not a match*. For each picture:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/correct-verify.dark.webp" />
-  <img src="../assets/correct-verify.light.webp" alt="Step 1: (1) the picture Find is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad" width="720" />
+  <img src="../assets/correct-verify.light.webp" alt="Step 1, on the Review tab: (1) the picture Find is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad" width="720" />
 </picture>
 
 Start at the line and work outwards: that is where the detector's mistakes
@@ -41,10 +46,12 @@ list on the left.
 ## Step 2: Hand your corrections to the detector
 
 A *correction* is any picture whose answer now differs from the detector's
-original call. To teach the detector those:
+original call, whether you answered it as a pick on the Autopilot tab or
+here. To teach the detector those:
 
 1. Click **Add Corrections to Detector**, at the bottom of the right-hand
-   panel.
+   panel (the verdict on the Autopilot tab offers the same under **Add
+   Corrections and retrain**).
 2. Click **Add Corrections** in the dialog that asks you to confirm.
 
 <picture>
@@ -54,7 +61,8 @@ original call. To teach the detector those:
 
 A message in the corner says how many corrections were added. Nothing is
 re-scored yet: the pictures on screen keep the calls they already had, and
-the detector's **Stats** are marked *out of date* until you run Find again.
+the test result on the Autopilot tab is marked *out of date* until you run
+Find again, since the detector has now seen the pictures it was tested on.
 If every picture you checked agreed with the detector, the message says there
 was nothing to add.
 
@@ -77,10 +85,11 @@ search:
   <img src="../assets/step-find.light.webp" alt="Tick (1) the dataset and (2) the detector, then (3) Find" width="720" />
 </picture>
 
-The detector learns from your corrections and scores the dataset again. Every
-picture you checked keeps the answer *you* gave it, so running Find again
-never undoes your work; the rest are called afresh, and the pictures near the
-new line are the ones worth checking next.
+The detector learns from your corrections and scores the dataset again, and
+the Autopilot tab tests the new line afresh. Every picture you checked keeps
+the answer *you* gave it, so running Find again never undoes your work; the
+rest are called afresh, and the pictures near the new line are the ones worth
+checking next.
 
 Your checked pictures stay with this dataset only while you keep working on
 it: opening the detector on a different dataset (with **Train** or **Find**)
@@ -92,9 +101,9 @@ before you move on.
 - [Catch the borderline matches](borderline-matches.md): review the pictures
   either side of the line, and move the **Threshold** toward **False
   Positives** to let more in.
-- [Decide how far to trust a detector](trust-a-detector.md): the **Stats**
+- [Decide how far to trust a detector](trust-a-detector.md): the test result
   behind these calls.
 - [Send your matches somewhere](export-matches.md): export the matches, checked
   or not.
-- [Find: scoring and verifying](../USER_GUIDE.md#find-scoring-and-verifying),
+- [Find: testing and reviewing](../USER_GUIDE.md#find-testing-and-reviewing),
   in the user guide, describes every part of the Find screen.

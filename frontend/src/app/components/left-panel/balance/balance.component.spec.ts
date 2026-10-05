@@ -41,6 +41,30 @@ describe('BalanceComponent (#4413, #4317)', () => {
   const stateText = () => root().querySelector('.balance-state-text');
   const hints = () => root().querySelectorAll('vt-field-hint-icon');
 
+  describe('in Test (#4524)', () => {
+    it('freezes the radios while a test phase runs, and says why', async () => {
+      await show(1, lineBalance('unchecked'));
+      fixture.componentRef.setInput('locked', true);
+      await settleZoneless(fixture);
+      expect(radios().every((r) => r.disabled)).toBe(true);
+      expect((root().querySelector('.spectrum-radio') as HTMLElement).title).toContain('frozen while a test phase runs');
+      const emitted = vi.spyOn(component.valueChange, 'emit');
+      component.onPick({ target: radios()[0] } as unknown as Event, 4);
+      expect(emitted).not.toHaveBeenCalled();
+      expect(checkedValue()).toBe('1');
+    });
+
+    it('shows the host\'s state line in place of the check\'s, with its dot', async () => {
+      await show(1, lineBalance('checked'));
+      fixture.componentRef.setInput('lineState', { text: 'Untested · top 64 kept', title: 'No test yet.', dot: 'yellow' });
+      await settleZoneless(fixture);
+      expect(stateText()!.textContent).toContain('Untested · top 64 kept');
+      expect(stateText()!.textContent).not.toContain('Checked');
+      expect((stateText() as HTMLElement).title).toBe('No test yet.');
+      expect(state()!.getAttribute('data-status')).toBe('yellow');
+    });
+  });
+
   describe('the spectrum (#4317)', () => {
     it('reads "Threshold:", from False Positives to False Negatives', () => {
       expect(root().querySelector('.balance-label')!.textContent!.trim()).toBe('Threshold:');

@@ -30,6 +30,7 @@ import { MediaTypeCapabilityService } from '../../services/media-type-capability
 import { SortMode, SelectMode, SortedItem } from '../../services/sort-state.service';
 import { allItemsLabeled } from '../../utils/all-labeled';
 import { DEFAULT_BETA, type LineBalance } from '../../utils/line-balance';
+import type { TestLineState } from '../../utils/line-test';
 
 export type { SortMode, SelectMode, SortedItem };
 
@@ -108,8 +109,19 @@ export class LeftPanelComponent implements OnInit {
    * (the parent flips this back to ``false`` once both label classes exist).
    */
   readonly autopilotDisabled = input(false);
-  /** 'label' = full labeling UI (default), 'find' = simplified media-only view */
+  /** 'label' = full labeling UI (default), 'find' = the Find view's Autopilot / Review tabs (#4524) */
   readonly panelMode = input<'label' | 'find'>('label');
+  /**
+   * Find's tab (#4524): `autopilot` is the Test autopilot, whose phase panel the
+   * host projects as `[findAutopilot]`; `review` is today's Find in full, the
+   * ranked work queue under the line. The host owns it, since the centre and
+   * right panes switch with it.
+   */
+  readonly findTab = input<'autopilot' | 'review'>('autopilot');
+  /** Find: the balance is frozen while a test phase runs (#4524). */
+  readonly balanceLocked = input(false);
+  /** Find: the balance control's state line, this corpus's test result or untested (#4524). */
+  readonly balanceLineState = input<TestLineState | null>(null);
   /** Disable all interaction (used during Find scoring). */
   readonly disabled = input(false);
   /** Display name of the current dataset. */
@@ -152,6 +164,8 @@ export class LeftPanelComponent implements OnInit {
   readonly autopilotRefocus = output<void>();
   readonly autopilotToggleCollapse = output<void>();
   readonly autopilotEnabledChange = output<boolean>();
+  /** Find: the user picked a tab (#4524). */
+  readonly findTabChange = output<'autopilot' | 'review'>();
 
   readonly mediaListComponent = viewChild(MediaListComponent);
 

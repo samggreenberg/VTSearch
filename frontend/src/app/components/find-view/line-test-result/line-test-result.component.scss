@@ -1,24 +1,41 @@
-// `.error-text` and `.section-title` are genuinely shared (`_components.scss`);
-// `.stats-table` is the shared `.data-table` primitive (`_data-table.scss`).
-// `.loading-text`, `.stat-label`, `.stat-value` stay view-encapsulated per
-// stats modal. The confusion-matrix deltas below are unique to this modal.
+// The Stats modal's content, live, in place of the two piles. `.section-title`
+// and `.error-text` are shared (`_components.scss`); `.stats-table` is the
+// `.data-table` primitive (`_data-table.scss`). The lights are the Autopilot
+// panel's (`.ap-light`), so the two guided flows read as one.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.line-test-result {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-lg);
+  font-size: var(--font-sm);
+}
+
+.result-note,
+.domain-note,
+.loading-text {
+  margin: var(--space-xs) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
 
 .loading-text {
-  color: var(--text-muted);
   font-style: italic;
 }
 
-.stat-label {
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.stat-value {
-  color: var(--text-primary);
-}
-
 .stale-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
   margin: 0 0 var(--space-md);
   padding: var(--space-sm) var(--space-md);
   border-left: 3px solid var(--text-warning);
@@ -27,10 +44,109 @@
   color: var(--text-warning);
   font-size: var(--font-sm);
   line-height: 1.4;
+}
 
-  strong {
-    font-weight: var(--weight-semibold);
+.result-headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin-bottom: var(--space-sm);
+}
+
+.headline-label {
+  font-size: var(--font-2xs);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: help;
+}
+
+.headline-value {
+  font-size: var(--font-xl);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ranges {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  margin: 0;
+}
+
+.range-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+
+  dt {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    min-width: 5em;
+    color: var(--text-secondary);
+    cursor: help;
   }
+
+  dd {
+    margin: 0;
+    font-weight: var(--weight-medium);
+    color: var(--text-primary);
+  }
+}
+
+.ap-light {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  color: var(--status-red-dot);
+  background: currentColor;
+  box-shadow: 0 0 4px currentColor;
+
+  &[data-color="yellow"] {
+    color: var(--status-yellow-dot);
+  }
+
+  &[data-color="green"] {
+    color: var(--status-green-dot);
+  }
+}
+
+.verdict {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.exits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+}
+
+.exit-btn {
+  width: 100%;
+}
+
+.presets .current td {
+  color: var(--text-primary);
+}
+
+.preset-btn.active {
+  cursor: default;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bands tr[data-side="below"] td:first-child {
+  color: var(--text-secondary);
 }
 
 .confusion {
@@ -60,7 +176,7 @@
   font-size: var(--font-sm);
 }
 
-// --- Training-domain overlap (coverage-atlas domain-shift) ---------------
+// --- Training-domain overlap and evidence coverage (the Stats modal's) -----
 
 .domain-overlap {
   margin-bottom: var(--space-md);
@@ -121,12 +237,7 @@
   line-height: 1.4;
 }
 
-.domain-note {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  line-height: 1.4;
-}
+// --- The band-resolution precision curve ------------------------------------
 
 .chart-wrap {
   margin-top: var(--space-sm);
@@ -134,7 +245,7 @@
 
 .precision-chart {
   width: 100%;
-  height: 170px;
+  height: 150px;
   cursor: crosshair;
 
   .axis,
@@ -149,28 +260,20 @@
     font-size: var(--font-xs);
   }
 
-  // The line: the last item of the set the balance keeps, drawn the same in
-  // every state.
   .current {
     stroke: var(--text-muted);
     stroke-width: 1;
   }
 
-  // The spot check's likely range for the set the line keeps (#4273), in the
-  // colour of what the user checked: the range comes from their picks alone.
+  // Each band edge's likely range, in the colour of what the user checked:
+  // the ranges come from their picks alone.
   .range-bar {
     fill: var(--chart-verified);
     opacity: var(--opacity-dim);
   }
 
-  .range-cap {
-    stroke: var(--chart-verified);
-    stroke-width: 2;
-  }
-
-  .crosshair {
-    stroke: var(--border-secondary);
-    stroke-width: 1;
+  .likely-range.hovered .range-bar {
+    opacity: 1;
   }
 
   .line-verified {
@@ -181,7 +284,6 @@
     stroke-linecap: round;
   }
 
-  // A ring in the surface color keeps the dot legible where it crosses a line.
   .dot-verified {
     fill: var(--chart-verified);
     stroke: var(--bg-surface);
@@ -194,7 +296,7 @@
   flex-wrap: wrap;
   gap: var(--space-md);
   margin-top: var(--space-xs);
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   color: var(--text-secondary);
 }
 
@@ -218,21 +320,9 @@
   background: var(--text-muted);
 }
 
-.swatch-range {
-  background: var(--chart-verified);
-  opacity: var(--opacity-dim);
-}
-
 .chart-readout {
   margin: var(--space-xs) 0 0;
   color: var(--text-secondary);
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
   font-variant-numeric: tabular-nums;
-}
-
-.chart-note {
-  margin: var(--space-xs) 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-sm);
-  line-height: 1.4;
 }

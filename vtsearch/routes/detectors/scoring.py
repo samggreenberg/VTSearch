@@ -375,6 +375,8 @@ def find_label(body: dict):
         # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
         # a prior corrections-to-detector fold no longer applies.
         det_ctx.find_eval_stale = False
+        # A test of the line was over the previous pass's scores (#4524).
+        det_ctx.line_test = None
         # The counts the client shows are the labels this pass *adopted*, which is
         # the threshold split everywhere except the verified items that held their
         # human vote.  ``replace_all`` left exactly this label set behind, so the

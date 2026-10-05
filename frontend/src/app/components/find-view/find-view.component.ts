@@ -1,4 +1,5 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
 import { EMPTY, Subject, timer } from 'rxjs';
@@ -9,11 +10,15 @@ import type { NavDirection } from '../../services/keyboard.service';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
 import { ProgressBarComponent } from '../progress-bar/progress-bar.component';
 import { ExportModalComponent } from '../modals/export-modal/export-modal.component';
-import { FindStatsModalComponent } from '../modals/find-stats-modal/find-stats-modal.component';
+import { LineTestPanelComponent } from './line-test-panel/line-test-panel.component';
+import { LineTestResultComponent } from './line-test-result/line-test-result.component';
+import { LineTestStageComponent } from './line-test-stage/line-test-stage.component';
 import type { LabelFilter } from '../../services/sorting-api.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DetectorsFindApiService } from '../../services/detectors-find-api.service';
 import { DatasetsCrudApiService } from '../../services/datasets-crud-api.service';
+import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
+import { LineTestSessionService } from '../../services/line-test-session.service';
 import { DashboardLoadingTasksService } from '../../services/dashboard-loading-tasks.service';
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
@@ -44,6 +49,7 @@ import {
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
 import { lineBalanceFrom } from '../../utils/line-balance';
+import { testLineState } from '../../utils/line-test';
 import {
   coerceFocusMode,
   coerceNonEmptyString,
@@ -70,16 +76,20 @@ const BALANCE_POST_DEBOUNCE_MS = 150;
     RightPanelComponent,
     ProgressBarComponent,
     ExportModalComponent,
-    FindStatsModalComponent,
+    LineTestPanelComponent,
+    LineTestStageComponent,
+    LineTestResultComponent,
   ],
   templateUrl: './find-view.component.html',
   styleUrl: './find-view.component.scss',
-  providers: [PairScopeService],
+  providers: [PairScopeService, LineTestSessionService],
 })
 export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private mediasApi = inject(MediasApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
   private datasetsCrudApi = inject(DatasetsCrudApiService);
+  private detectorsRegistryApi = inject(DetectorsRegistryApiService);
+  private router = inject(Router);
   private loadingTasksSvc = inject(DashboardLoadingTasksService);
   private toast = inject(ToastService);
   private dialog = inject(VtDialogService);
@@ -97,6 +107,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   browsePrep = inject(BrowseSubsetPrepService);
   /** Component-provided. Public: the header binds `pairScope.datasetName()`. */
   readonly pairScope = inject(PairScopeService);
+  /**
+   * Component-provided: the Test autopilot's session (#4524), the test of the
+   * line over this pair's Find pass. The three panes read it; the view starts
+   * it once the pass lands and the Autopilot tab is up.
+   */
+  readonly lineTest = inject(LineTestSessionService);
   private readonly mediaPrefetch = inject(MediaPrefetchService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
@@ -186,8 +202,24 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** Export modal visibility + the label filter it opens on. */
   showExport = false;
   exportFilter: LabelFilter = 'good';
-  /** Detector-evaluation Stats modal visibility. */
-  showStats = false;
+  /**
+   * The Find view's tab (#4524): **Autopilot**, the Test autopilot (the phase
+   * panel on the left, the current pick in the centre, the result on the
+   * right), or **Review**, today's Find in full (the ranked work queue, the
+   * boundary walk, the two piles). Train's Autopilot / Manual split applied to
+   * Test: the guided flow is the default, the open one a tab away.
+   */
+  readonly findTab = signal<'autopilot' | 'review'>('autopilot');
+  /**
+   * The balance control's state line (the owner's choice): this corpus's test
+   * result, or *untested*, never Train's check range. The kept count is the
+   * line's over the ranking on screen.
+   */
+  readonly balanceLineState = computed(() =>
+    testLineState(this.lineTest.response(), this.sortState.sortOrder ? this.sortState.aboveThreshold : null),
+  );
+  /** Bumped when the session's checks changed under a finished test, so the result pane re-reads them. */
+  readonly resultRefresh = signal(0);
 
   private readonly LEFT_MIN = 180;
   private readonly RIGHT_MIN = 150;
@@ -254,6 +286,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // The server re-thresholded the unverified items over the frozen
         // scores; pull the new good/bad split back for the left/right panes.
         this.voteState.loadVotes();
+        // A finished test measured the line as it was: the server now reports it moved.
+        if (this.lineTest.test()) this.lineTest.load();
       });
 
     // The icon size and the two focus modes are `computed`s now, so nothing has
@@ -327,6 +361,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const returningFromBrowse = this.browseSubset.consumeReturningToFind();
     if (!returningFromBrowse) {
       this.pairScope.clearPairState();
+      this.lineTest.clear();
+    } else {
+      // The test the server holds survives the trip to the Browser, as the
+      // ranking and the verifications do.
+      this.lineTest.load();
     }
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
@@ -372,6 +411,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // scoring subscription carries a `finalize` that resets the busy flag and
     // the progress poll as part of the teardown above.
     this.pairScope.resetForNewPair();
+    this.lineTest.clear();
     this.voteState.loadVotes();
     this.runFindLabel();
   }
@@ -466,6 +506,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
           this.advanceToBoundary();
           // Reload votes to reflect newly applied labels
           this.voteState.loadVotes();
+          // Score is done: the Test autopilot takes over on its tab.
+          this.startTestIfDue();
         },
         error: (err: any) => {
           // Extract the server error message so the user sees why scoring failed
@@ -615,6 +657,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   onBetaChange(value: number): void {
     if (this.sortState.sortBusy) return;
+    // Frozen within a test phase (#4524): moving the line would move the bands
+    // under the picks. Live between phases: before a test, and after Done.
+    if (this.lineTest.locked()) return;
     this.sortState.setBeta(value);
     this.betaRequests$.next(value);
   }
@@ -683,7 +728,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.queueEmptyNotified = true;
       this.toast.success({
         message: 'All items reviewed',
-        detail: 'Every item on both sides of the cutoff has been verified. Check Stats or Export your results.',
+        detail: 'Every item on both sides of the cutoff has been verified. Read the test result on the Autopilot tab, or Export your results.',
         dedupKey: 'find-queue-empty',
       });
     }
@@ -738,17 +783,66 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     return !order.some((item) => !verified.has(item.id));
   });
 
-  /** Open the detector-evaluation Stats modal. */
-  onStats(): void {
-    this.showStats = true;
+  // --- The Test autopilot (#4524) ---
+
+  /** The user picked a Find tab. Entering Autopilot with no test yet starts one, once the pass has landed. */
+  onFindTabChange(tab: 'autopilot' | 'review'): void {
+    this.findTab.set(tab);
+    this.startTestIfDue();
+  }
+
+  /** Start the test of the line when the Autopilot tab is up, the pass has landed, and no test exists. */
+  private startTestIfDue(): void {
+    if (this.findTab() !== 'autopilot' || this.sortState.sortBusy) return;
+    if (this.sortState.threshold == null || !this.sortState.sortOrder) return;
+    if (this.lineTest.test() || this.lineTest.busy()) return;
+    this.lineTest.start();
+  }
+
+  /** Test the line as it stands now: the balance moved it since the last test. */
+  onTestAgain(): void {
+    if (this.sortState.sortBusy) return;
+    this.lineTest.start();
+  }
+
+  /**
+   * The verdict's reason to exist: put the detector on the AutoRun list, so
+   * every dataset it runs over ships its matches unchecked at this balance,
+   * and head to the Dashboard, where the AutoRun tab reads the result.
+   */
+  onMoveToAutoRun(): void {
+    const modelId = this.activeContext.modelId;
+    if (!modelId) return;
+    const name = this.activeDetector.detectorName() || 'The detector';
+    this.detectorsRegistryApi
+      .setAutofind(modelId, true)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.toast.success({
+            message: `${name} is on AutoRun`,
+            detail: 'It runs over every dataset you import or run it on, and ships its matches at this balance.',
+            dedupKey: 'find-move-to-autorun',
+          });
+          void this.router.navigate(['/dashboard']);
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.toast.error({ message: err?.error?.message || 'Could not move the detector to AutoRun', dedupKey: 'find-move-to-autorun-error' });
+        },
+      });
+  }
+
+  /** Lean the Threshold to a preset the verdict priced: the same balance pick the control makes. */
+  onLean(beta: number): void {
+    this.onBetaChange(beta);
   }
 
   /**
    * Fold the corrections (items whose adopted label differs from the detector's
    * original call) into the active detector's labelset for future use. The
-   * current Find session stays frozen — its scores, queue, votes, and Stats keep
+   * current Find session stays frozen — its scores, queue, votes, and test result keep
    * showing the detector version that produced them — so the only visible effect
-   * is the Stats being flagged out of date. The retrained detector applies the
+   * is the test result being flagged out of date. The retrained detector applies the
    * next time the dataset is scored.
    */
   onAddCorrections(): void {
@@ -757,7 +851,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       .confirmDestructive(
         'Add your corrections to this detector?',
         "Every item you changed from the detector's call is added to its labelset, so the detector learns from them next time you score.\n" +
-          'Your current results and evaluation stay as they are — the Stats will be marked out of date — and nothing is re-scored now.',
+          'Your current results and the test result stay as they are — the result will be marked out of date — and nothing is re-scored now.',
         'Add Corrections',
       )
       .then((ok) => {
@@ -777,9 +871,12 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
               }
               this.toast.success({
                 message: `Added ${resp.corrections_added} correction${resp.corrections_added === 1 ? '' : 's'} to the detector`,
-                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; Stats are now marked out of date.`,
+                detail: `The detector now has ${resp.num_labels} label${resp.num_labels === 1 ? '' : 's'} and will use them next time you score. Your current results stay put; the test result is now marked out of date.`,
                 dedupKey: 'find-corrections-added',
               });
+              // The detector has now seen the test set: the result reads stale.
+              this.resultRefresh.update((n) => n + 1);
+              if (this.lineTest.test()) this.lineTest.load();
             },
             error: (err: { error?: { message?: string; error?: string } }) => {
               const body = err?.error;

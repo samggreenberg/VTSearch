@@ -254,7 +254,10 @@ peak since #4413) measures that line, in Train only. The control's "Check N
 picks" emits `check`; the left panel forwards it as `check`, and the label
 view hosts the modal behind a `showSpotCheck` signal. Find sets the control's
 `offerCheck` false and hosts no modal: it tests the balance Train set, and
-labelling more to set one is too late there (#4317).
+labelling more to set one is too late there (#4317); its own test of the line
+is the Test autopilot (below), and the control's state line there is the
+host's (`lineState`: this corpus's result, or untested) with the radios
+`locked` while a phase runs.
 **When a check is due** (#4496): the balance's `checkDue` (the server's
 `check_due`, `weak_check_due` on the labels line's `separation`) turns the
 control's button `btn--primary` and adds a `.balance-due` note. The label view
@@ -281,14 +284,62 @@ follows: a retrain moves the list under the result, which is what reports it
 the same in every state; the state and its likely range live in the balance
 control and on the Stats chart (which draws no horizontal line any more: a
 balance is a preference, not a precision to keep), and a stale range differs
-only in its tooltip.
+only in its tooltip. The Find view draws neither the range nor the Stats
+chart that used to carry it: its result pane draws the test's own ranges.
 
 ### Find view (`components/find-view/`)
 
-Multi-dataset × multi-detector search. Reuses the same three panels but drives
-them from find results rather than a single loaded dataset, and can hand a
-subset of result ids to Browse (`BrowseSubsetService`) so the positives of a
-Find run become their own projection.
+Scores the active pair's dataset with its detector (`POST /api/find-label`)
+and opens on two tabs in the left panel (`findTab`, owned by the view since
+the centre and right panes switch with it; #4524): **Autopilot**, the Test
+autopilot, and **Review**, today's Find in full (the ranked work queue under
+the line, the boundary walk, the Verified Good / Verified Bad piles, To
+Dataset / Export / Browse, which can hand a subset of result ids to Browse
+through `BrowseSubsetService`). Train's Autopilot / Manual split applied to
+testing: the guided flow is the default, the open one a tab away.
+
+**The Test autopilot** measures the line on the corpus in front of the user
+with uniform picks from rank bands on both sides of it (`docs/plans/test-mode.md`;
+the statistics are `vtscore/training/thresholds/line_test.py`, the routes
+`/api/line-test`). The server owns the sample and derives the phase on every
+read (`line_phase`), so nothing in the frontend accumulates it: the view's
+component-provided `LineTestSessionService` holds the last `/api/line-test`
+response plus the one thing the wire does not carry, the round *as dealt*
+(the stage's dots show every pick of the round with its vote, where the
+wire's `picks` are only the ones still pending). A vote goes out as it is
+cast, a fast voter's next one while the last is in flight, and the ↓ key
+sends an unvote; replies carry the whole state and can land out of order, so
+each is stamped with its request's sequence and an older one never
+overwrites a newer. The view starts the test once the pass lands and the
+Autopilot tab is up (`startTestIfDue`), reloads it on the way back from the
+Browser, and clears it with the pair state.
+
+- `vt-line-test-panel` (left, projected into the left panel as
+  `[findAutopilot]`, under the balance): Score, Check the matches, Check the
+  misses, Done, in the shape of `vt-autopilot-panel`, each with one light
+  (`widthLight`: red beyond twice the range's target width, yellow within
+  twice, green at or under). The ranked list is not shown while a test runs:
+  a pick is drawn from a band, and the list would show its rank (#4267).
+- `vt-line-test-stage` (centre): the current pick with Good and Bad, the
+  round's dots, the phase's prompt, through a `KeyboardService.captureVoteKeys`
+  claim held while it is on screen, as the spot-check modal's round, but as
+  the view rather than a modal over a list.
+- `vt-line-test-result` (right): the result as it forms, in place of the two
+  piles: the F-beta headline, the Right and Found ranges with their lights,
+  the band-resolution precision curve (which replaces the retired Stats
+  modal's *Checked by you* curve), the picks by band, and at Done the
+  verdict with its three exits (**Move to AutoRun**, which sets the
+  detector's autofind flag and heads to the Dashboard; **Lean the
+  Threshold**, the per-preset table the server prices from the same picks,
+  whose click is the control's own balance pick; **Add Corrections and
+  retrain**, the view's existing corrections path). The Stats modal's trust
+  chips (Training-domain overlap, Evidence coverage) and its 2×2 of the
+  session's checks live under the verdict, read once the test is done.
+- The balance is live between phases and frozen within one
+  (`LineTestSessionService.locked`): the view drops a pick while a phase
+  runs, and after a pick lands it re-reads the test so the result reports
+  the line `moved`. **Add Corrections** marks it `stale` (the detector has
+  now seen the test set), as `find_eval_stale` always did.
 
 ### Browse view (`components/browse-*`)
 

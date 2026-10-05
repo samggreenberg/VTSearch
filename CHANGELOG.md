@@ -15,6 +15,34 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **Find opens on a Test autopilot** (issue #4524). The Find view's left panel
+  now carries two tabs, the Train view's Autopilot / Manual split applied to
+  testing. **Autopilot** measures the detector's line on the collection in
+  front of you with random picks from rank bands on either side of it, five a
+  round, through the phases Score, Check the matches, Check the misses and
+  Done, each with a light; the right pane shows the result as it forms (the
+  balance's F-beta, the likely share right as a number, the share of all the
+  matches found in words, a precision-by-count chart at band resolution, the
+  picks by band) and at Done a verdict with three exits: **Move to AutoRun**,
+  **Lean the Threshold** (what each balance would ship, from the same picks)
+  and **Add Corrections and retrain**. **Review** is Find as it was: the ranked
+  list under the line, the boundary walk, the Verified Good / Verified Bad
+  piles, To Dataset, Export and Browse, with the test's picks already in the
+  piles. The Threshold is frozen while a test phase runs, and its note reads
+  this collection's result (or *untested*), never the check Train ran. Test
+  votes never train the detector; **Add Corrections** marks the result out of
+  date. New routes under `/api/line-test`.
+
+### Removed
+
+- **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
+  and Evidence coverage chips, its 2×2 of your checks and its precision chart
+  now live in the Autopilot tab's result pane; the chart draws the test's
+  ranges at every band edge instead of the *Checked by you* curve, which
+  counted only what the boundary walk happened to serve.
+
 ### Changed
 
 - **Document search without a GPU is ~9x faster per click at 50,000 pages** (issue #4514).
