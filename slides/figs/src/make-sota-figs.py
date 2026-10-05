@@ -13,18 +13,17 @@ way it read the first:
   an F at 4 are different scores);
 * **right** — the same three returned sets as precision against recall, which
   is the trade the radio sets, drawn on one pair of axes so the three can be
-  compared, square and on one scale (#4533). On documents, where the per-step
-  CSVs carry both at every click, each radio is a path through the session
-  (#4517): a circle at each of `DOC_PR_CLICKS` with the click count written in
-  it, joined in order, circle and path both in the radio's own weight (#4533).
-  The photo slide gets the same paths once its review commits precision and
-  recall per click (#4519); until then each radio is one circle, after the
-  spot check, with the check's ✓ in it.
+  compared, square and on one scale (#4533). Each radio is a path through the
+  session, circle and path both in the radio's own weight (#4533): on
+  documents (#4517) a circle at each of `DOC_PR_CLICKS` with the click count
+  written in it; on photos (#4519) circles at 25 and 50 clicks and the check's
+  ✓, with 100 and 150 as dots on the path (`PHOTO_CIRCLED` says why).
 
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
-`docs/experiments/2026-10-04-state-of-the-app-binary-photo/`). Its per-run
-data lives on the GRID, so the slide reads the report's own committed tables:
-the headline table in `REPORT.md` and the per-beta summary beside it.
+10 seeds, `docs/experiments/2026-10-05-state-of-the-app-binary-photo/`). Its
+per-run data lives on the GRID, so the slide reads what the report commits:
+`precision_recall_path.csv`, the returned set's F-beta, precision, recall and
+size at 25, 50, 100 and 150 clicks and after the check, per radio.
 
 The document slide is FullMarks v5.0, tier `m`, 36 classes, 50 clicks, two
 replicates, from the committed per-step CSVs of three runs of the app's own
@@ -60,7 +59,16 @@ SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 REPO = SRC.parents[2]
 EXPERIMENTS = REPO / "docs" / "experiments"
-PHOTO_REPORT = EXPERIMENTS / "2026-10-04-state-of-the-app-binary-photo"
+PHOTO_REPORT = EXPERIMENTS / "2026-10-05-state-of-the-app-binary-photo"
+#: The review's committed path through the session (#4519): per radio, the returned set at
+#: `PHOTO_CLICKS` and after the check, from `perp.py --kind balance` over 10 seeds.
+PHOTO_PATH = PHOTO_REPORT / "precision_recall_path.csv"
+#: The clicks the photo review reads the returned set at, before the check.
+PHOTO_CLICKS = (25, 50, 100, 150)
+#: The photo path's points that get a labelled circle. 100 and 150 sit within 0.01 to
+#: 0.04 of the set after the check on every radio, closer than a circle is wide, so
+#: they are dots on the path: a circle there would cover the check's ✓ (#4533's rule).
+PHOTO_CIRCLED = ("25", "50", "✓")
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -96,13 +104,13 @@ DOC_PR_CLICKS = (0, 10, 50)
 
 #: What the presenter notes quote, rounded as the notes say them.
 EXPECT = {
-    ("photos", 0.25, "after"): 0.62,
-    ("photos", 1.0, "after"): 0.52,
+    ("photos", 0.25, "after"): 0.64,
+    ("photos", 1.0, "after"): 0.53,
     ("photos", 4.0, "after"): 0.60,
-    ("photos", 0.25, "kept"): 26,
-    ("photos", 1.0, "kept"): 47,
+    ("photos", 0.25, "kept"): 21,
+    ("photos", 1.0, "kept"): 44,
     ("photos", 4.0, "kept"): 80,
-    ("photos", 0.25, "precision"): 0.70,
+    ("photos", 0.25, "precision"): 0.73,
     ("photos", 4.0, "recall"): 0.68,
     ("documents", 0.25, "precision"): 0.98,
     ("documents", 1.0, "precision"): 0.93,
@@ -156,29 +164,35 @@ def _table_rows(path: Path, first: str) -> list[list[str]]:
 
 
 def photo_data() -> dict[float, dict]:
-    """Per radio: F-beta at 25, 50, 100 and 150 clicks and after the check; and the checked set.
+    """Per radio: F-beta at `PHOTO_CLICKS` and after the check, the set after the check, and the path.
 
-    The curve is `REPORT.md`'s headline table; precision and recall after the
-    check are `perbeta_summary.md`'s, which carries them to three places.
+    All of it is the review's committed `precision_recall_path.csv` (#4519): means over
+    the trained runs with a line by that click, the returned size a median.
     """
-    names = {"1/4": 0.25, "1": 1.0, "4": 4.0}
-    head = {}
-    for cells in _table_rows(PHOTO_REPORT / "REPORT.md", r"1/4|1|4"):
-        # The headline table is the one whose rows read: preset, five Fs, a count, a share.
-        if len(cells) == 8 and cells[7].endswith("%"):
-            head[names[cells[0]]] = cells
-    summary = {float(c[0]): c for c in _table_rows(PHOTO_REPORT / "perbeta_summary.md", r"0\.25|1|4") if len(c) == 12}
-    if set(head) != {0.25, 1.0, 4.0} or set(summary) != {0.25, 1.0, 4.0}:
-        raise SystemExit("make-sota-figs: the photo report's tables are not where this script reads them")
+    by: dict[float, dict[str, dict[str, str]]] = {}
+    with PHOTO_PATH.open() as f:
+        for row in csv.DictReader(f):
+            by.setdefault(float(row["beta"]), {})[row["point"]] = row
+    points = [str(c) for c in PHOTO_CLICKS] + ["after the check"]
+    if set(by) != {0.25, 1.0, 4.0} or any(set(points) - set(by[b]) for b in by):
+        raise SystemExit(f"make-sota-figs: {PHOTO_PATH} does not carry every radio at every point")
     out = {}
-    for beta, cells in head.items():
+    for beta, rows in by.items():
+        path = [
+            {
+                "precision": float(rows[p]["precision"]),
+                "recall": float(rows[p]["recall"]),
+                "kept": int(round(float(rows[p]["returned, median"]))),
+                "label": "✓" if p == "after the check" else p,
+            }
+            for p in points
+        ]
         out[beta] = {
-            "clicks": [25, 50, 100, 150],
-            "f": [float(v) for v in cells[1:5]],
-            "after": float(cells[5]),
-            "kept": int(cells[6]),
-            "precision": float(summary[beta][7]),
-            "recall": float(summary[beta][8]),
+            "clicks": list(PHOTO_CLICKS),
+            "f": [float(rows[str(c)]["fbeta"]) for c in PHOTO_CLICKS],
+            "after": float(rows["after the check"]["fbeta"]),
+            "path": path,
+            **{k: path[-1][k] for k in ("precision", "recall", "kept")},
         }
     return out
 
@@ -212,6 +226,7 @@ def doc_data() -> dict[float, dict]:
                     "precision": float(np.nanmean(at[:, 1])),
                     "recall": float(at[:, 2].mean()),
                     "kept": int(np.median(at[:, 3])),
+                    "label": str(click),
                 }
             )
         out[beta] = {
@@ -256,7 +271,6 @@ PANEL_BOTTOM, PANEL_HEIGHT = 0.14, 0.58
 RIGHT_WIDTH = PANEL_HEIGHT * FIG_SIZE[1] / FIG_SIZE[0]
 RIGHT_AXES = (0.935 - RIGHT_WIDTH, PANEL_BOTTOM, RIGHT_WIDTH, PANEL_HEIGHT)
 LEFT_AXES = (0.085, PANEL_BOTTOM, 0.37, PANEL_HEIGHT)
-PR_LIM = (0.3, 1.0)
 
 #: A circle on the precision-recall panel, per radio: the edge is the radio's
 #: line weight from the left panel, and the type inside steps from light to
@@ -321,63 +335,50 @@ def _circle(ax: plt.Axes, x: float, y: float, beta: float, text: str) -> None:
 CIRCLE_LABEL_PT = CIRCLE_PT / 2 + 6
 
 
-def _pr_panel(fig: Figure, sets: dict[float, dict]) -> None:
-    """Precision against recall, one circle per radio after the check, each labelled with how many it kept.
-
-    The circle carries the check's ✓, as the left panel's last tick does: it
-    is the set after the spot check, which is the one point per radio the
-    photo review commits (#4519 brings the rest of the path).
-    """
-    ax = _pr_axes(fig, PR_LIM, [0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP)
-    xs = [sets[b]["recall"] for b, _, _ in RADIOS]
-    ax.plot(xs, [sets[b]["precision"] for b, _, _ in RADIOS], color=SOFT, lw=1.2, zorder=2)
-    for beta, label, _w in RADIOS:
-        s = sets[beta]
-        _circle(ax, s["recall"], s["precision"], beta, "✓")
-        ax.annotate(
-            f"{label} · {s['kept']} kept",
-            (s["recall"], s["precision"]),
-            xytext=(CIRCLE_LABEL_PT, 0),
-            textcoords="offset points",
-            ha="left",
-            va="center",
-            fontsize=16,
-            color=INK,
-            annotation_clip=False,
-        )
-
-
 #: The paths' axes: zoomed to where the document sets live, the same span on
 #: both so precision and recall still share a scale.
 PR_PATH_LIM = (0.5, 1.0)
+#: The photo paths' axes: every photo set lies between 0.27 and 0.73 on both.
+PHOTO_PR_LIM = (0.2, 0.8)
 
 
-def _pr_paths_panel(fig: Figure, sets: dict[float, dict]) -> None:
+def _pr_paths_panel(
+    fig: Figure,
+    sets: dict[float, dict],
+    lim: tuple[float, float] | None = None,
+    ticks: list[float] | None = None,
+    step: float = DOC_GRID_STEP,
+    circled: tuple[str, ...] | None = None,
+) -> None:
     """Precision against recall, one path per radio through the session's clicks.
 
     Each radio is drawn at the weight the left panel gives it, so a path and its
     F line are one object on two axes, and nothing joins the radios to one
     another: what the panel shows is how each one's set moves as votes arrive.
-    Each of `DOC_PR_CLICKS` is a circle with its click count in it, so the
-    points say when they are without a note to decode them (#4533), and each
-    path is labelled where it ends; how many each returns is in the notes, since
-    a count beside every end would not fit the panel.
+    Each point whose label is in *circled* (all of them by default) is a circle
+    with its label in it - a click count, or the check's ✓ - so the points say
+    when they are without a note to decode them (#4533); any other point is a
+    dot on the path. Each path is labelled where it ends; how many each returns
+    is in the notes, since a count beside every end would not fit the panel.
 
-    The middle and recall-end runs leave from one set, the query crop alone, so
-    that circle is drawn once, by the first radio to reach it.
+    A point two radios share - on documents, the query crop alone - is drawn
+    once, by the first radio to reach it.
     """
-    ax = _pr_axes(fig, PR_PATH_LIM, [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], DOC_GRID_STEP)
+    ax = _pr_axes(fig, lim or PR_PATH_LIM, ticks or [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], step)
     drawn: set[tuple[float, float]] = set()
     for beta, label, weight in RADIOS:
         path = sets[beta]["path"]
         xs = [point["recall"] for point in path]
         ys = [point["precision"] for point in path]
         ax.plot(xs, ys, color=INK, lw=weight, solid_capstyle="round", solid_joinstyle="round", zorder=3)
-        for click, x, y in zip(DOC_PR_CLICKS, xs, ys, strict=True):
+        for point, x, y in zip(path, xs, ys, strict=True):
             if (round(x, 3), round(y, 3)) in drawn:
                 continue
             drawn.add((round(x, 3), round(y, 3)))
-            _circle(ax, x, y, beta, str(click))
+            if circled is None or point["label"] in circled:
+                _circle(ax, x, y, beta, point["label"])
+            else:
+                ax.plot([x], [y], ls="none", marker="o", markersize=7, color=INK, zorder=4)
         ax.annotate(
             label,
             (xs[-1], ys[-1]),
@@ -463,7 +464,7 @@ def photo_figure(data: dict[float, dict], stage: int) -> Figure:
     )
     ax.set_xticklabels(["25", "50", "100", "150", "✓"])
     if stage >= 2:
-        _pr_panel(fig, data)
+        _pr_paths_panel(fig, data, PHOTO_PR_LIM, [0.2, 0.4, 0.6, 0.8], PHOTO_GRID_STEP, PHOTO_CIRCLED)
     return fig
 
 

@@ -37,6 +37,7 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import common
 
@@ -61,6 +62,8 @@ RUNGS: dict[str, dict] = {
     "r5_anchored": {"live_threshold": "shipped", "calibration_fraction": 0.5, "acq": False},
     "r6_split70": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": False},
     "r7_acq4": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": True},
+    # Today's app (#4519): the labels line at the default balance, everything production.
+    "r8_labels": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": True},
 }
 
 #: The clicks the paired table reads.  150 is the grid's horizon.
@@ -173,6 +176,22 @@ def filled_matrix(
     return out, shown_mask
 
 
+#: The app's balance presets (#4448): the returned set's F-beta at each is a curve
+#: beside the cost (#4519). A rung's cut does not depend on beta, so its three
+#: curves score one returned set three ways; today's app (r8) aims at beta 1.
+FBETAS: dict[str, float] = {"f025": 0.25, "f1": 1.0, "f4": 4.0}
+
+
+def fbeta(precision: Any, recall: Any, beta: float) -> Any:
+    """F-beta from a returned set's precision and recall; 0 where it returned nothing right."""
+    p = np.nan_to_num(np.asarray(precision, dtype=float))
+    r = np.asarray(recall, dtype=float)
+    b2 = beta * beta
+    den = b2 * p + r
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(den > 0, (1 + b2) * p * r / den, 0.0)
+
+
 def summarize(m: pd.DataFrame) -> pd.DataFrame:
     """Per-click mean, SE and count of a ``cell x t`` matrix."""
     n = m.notna().sum(axis=0)
@@ -214,6 +233,15 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     baseline = curves.text_sort_baseline(args.baseline)
     text_cost = {tuple(k): float(v) for k, v in baseline.groupby(CELL)["text_cost"].mean().items()}
     text_ap = {tuple(k): float(v) for k, v in baseline.groupby(CELL)["text_AP"].mean().items()}
+    # The text sort's own line (its blind GMM cut) anchors the F-beta curves, as the
+    # State of the App's `app line` rule does (#4474): the set a user sees before
+    # the app shows a detector.
+    text_f = {}
+    if {"text_precision", "text_recall"} <= set(baseline.columns):
+        per = baseline.groupby(CELL)[["text_precision", "text_recall"]].mean()
+        for tag, b in FBETAS.items():
+            vals = fbeta(per["text_precision"].to_numpy(), per["text_recall"].to_numpy(), b)
+            text_f[tag] = {tuple(k): float(v) for k, v in zip(per.index, vals, strict=True)}
 
     frames: dict[str, pd.DataFrame] = {}
     provs: dict[str, dict] = {}
@@ -228,6 +256,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             continue
         frame = frame.copy()
         frame["arm"] = label
+        if {"precision", "recall"} <= set(frame.columns):
+            for tag, b in FBETAS.items():
+                frame[tag] = fbeta(frame["precision"], frame["recall"], b)
         frames[label] = frame
         failures += premise_failures(label, frame)
     # Every rung must run on the same pool: the #4201 haystack arm is a second
@@ -258,6 +289,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
 
     mats: dict[str, pd.DataFrame] = {}
     ap_mats: dict[str, pd.DataFrame] = {}
+    f_mats: dict[str, dict[str, pd.DataFrame]] = {}
     curve_rows = []
     lines += [
         "| rung | cells | lost | of which missing | filled-only | coverage@10 | coverage@50 |",
@@ -285,6 +317,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         s["coverage"] = cov.to_numpy()
         s["ap_mean"] = s_ap["mean"].to_numpy()
         s["ap_se"] = s_ap["se"].to_numpy()
+        for tag in FBETAS:
+            if tag not in text_f or tag not in frame.columns:
+                continue
+            fm, _ = filled_matrix(frame, cells, text_cost, args.horizon, metric=tag, baseline_metric=text_f[tag])
+            f_mats.setdefault(tag, {})[label] = fm
+            s_f = summarize(fm)
+            s[f"{tag}_mean"] = s_f["mean"].to_numpy()
+            s[f"{tag}_se"] = s_f["se"].to_numpy()
         curve_rows.append(s)
         filled_only = len(cells) - len(present) if lost == 0 else 0
         lines.append(
@@ -292,8 +332,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             f"| {cov.get(10, np.nan):.2f} | {cov.get(50, np.nan):.2f} |"
         )
     lines.append("")
+    f_cols = [f"{tag}_{s}" for tag in FBETAS if tag in text_f for s in ("mean", "se")]
     curve = pd.concat(curve_rows, ignore_index=True)[
-        ["rung_order", "rung", "t", "mean", "se", "n", "coverage", "ap_mean", "ap_se"]
+        ["rung_order", "rung", "t", "mean", "se", "n", "coverage", "ap_mean", "ap_se", *f_cols]
     ]
     curve.to_csv(out / "progression_curve.csv", index=False, float_format="%.6g")
 
@@ -324,6 +365,23 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         star = "**" if r.resolvable else ""
         lines.append(f"| {r[0]} → {r[1]} | {r.at} | {r.n} | {star}{r.mean:+.2g}{star} | {r.se:.2g} |")
     lines += ["", "Bold = more than 2 SE from zero.", ""]
+    # The returned set's F1 (#4519): higher is better; the filled mean at checkpoints, then the steps.
+    if "f1" in f_mats:
+        lines += ["## The returned set's F1 (filled) at checkpoints", ""]
+        lines += ["| rung | " + " | ".join(f"t={t}" for t in pts) + " |", "|---|" + "---|" * len(pts)]
+        for label in f_mats["f1"]:
+            c = curve[curve["rung"] == label].set_index("t")
+            lines.append(f"| {label} | " + " | ".join(f"{c.loc[t, 'f1_mean']:.2g}" for t in pts) + " |")
+        lines += ["", "## Each rung against the one before, in F1 (ΔF1 = to − from; positive = the step helped)", ""]
+        lines += ["| from → to | at | n | Δ mean | SE |", "|---|---|---|---|---|"]
+        f_labels = [label for label in labels if label in f_mats["f1"]]
+        for prev, cur in zip(f_labels, f_labels[1:], strict=False):
+            for r in paired(f_mats["f1"][prev], f_mats["f1"][cur], args.horizon):
+                star = "**" if r["resolvable"] else ""
+                lines.append(
+                    f"| {prev} → {cur} | {r['at']} | {r['n']} | {star}{r['mean']:+.2g}{star} | {r['se']:.2g} |"
+                )
+        lines += [""]
     (out / "REPORT_progression.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 
