@@ -370,6 +370,7 @@ def _drop_line_ranking(det_ctx) -> None:
     det_ctx.line_ranking = None
     det_ctx.precision_check = None
     det_ctx.precision_check_run = None
+    det_ctx.check_ended_votes = None
 
 
 def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -> bool:
@@ -433,6 +434,7 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
         det_ctx.line_ranking = None
         det_ctx.precision_check = None
         det_ctx.precision_check_run = None
+        det_ctx.check_ended_votes = None
     return True
 
 

@@ -798,6 +798,9 @@
           "beta": {
             "type": "number"
           },
+          "check_due": {
+            "type": "boolean"
+          },
           "checkable": {
             "type": "boolean"
           },
@@ -825,6 +828,10 @@
           },
           "schedule": {
             "$ref": "#/components/schemas/CheckSchedule"
+          },
+          "separation": {
+            "nullable": true,
+            "type": "number"
           },
           "shape": {
             "enum": [
@@ -872,6 +879,9 @@
           "beta": {
             "type": "number"
           },
+          "check_due": {
+            "type": "boolean"
+          },
           "checkable": {
             "type": "boolean"
           },
@@ -892,6 +902,10 @@
           },
           "schedule": {
             "$ref": "#/components/schemas/CheckSchedule"
+          },
+          "separation": {
+            "nullable": true,
+            "type": "number"
           },
           "shape": {
             "enum": [

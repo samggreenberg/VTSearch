@@ -144,6 +144,16 @@ keys: → for Good, ← for Bad, and ↓ to go back and change one. The last vot
 of a round sends it, and the check moves to the next band. Find offers no
 check: it is where you test the Threshold you set here, not where you set it.
 
+**When your labels still overlap**, a check is worth doing now rather than
+later. If the detector scores your Good and Bad answers close together, the
+check button turns into the highlighted **Check 5 picks** and a note under the
+Threshold says your labels still overlap. A check's picks, spread evenly down
+the list, are exactly the answers that show the detector where its line falls.
+Autopilot runs the check itself at that point, once it has started learning
+from your answers, and asks again 25 answers later if your labels still
+overlap. Measured on COCO, sessions whose labels overlap returned far fewer
+wrong pictures and found more right ones for the same number of clicks.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/floor-check.dark.webp" />
   <img src="assets/floor-check.light.webp" alt="The spot check: a random pick from the set the line keeps, with a dot for each pick in the round and the Good / Bad buttons under it" width="720" />

@@ -160,6 +160,13 @@ class BalanceStateSchema(Schema):
     # unvoted.  ``POST /api/precision-check/start`` refuses those with a 409, so
     # a client offers no check where this is ``false``.
     checkable = fields.Boolean(required=True)
+    # How far apart the labels' Good and Bad scores sit, in spreads (d', #4496);
+    # ``null`` before a retrain has drawn the labels' line.
+    separation = fields.Float(allow_none=True)
+    # The labels separate weakly (d' below 1.5, from 10 votes, and 25 votes
+    # after the last check ended): Autopilot runs the check, the Train tab's
+    # Check button calls for one (``weak_check_due``, #4496).
+    check_due = fields.Boolean()
 
 
 # ---------------------------------------------------------------------------

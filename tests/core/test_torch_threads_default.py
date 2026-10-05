@@ -67,6 +67,15 @@ class TestAppPrelude:
         assert "OMP_NUM_THREADS" in head and "MKL_NUM_THREADS" in head
         assert "_THREADS_ENV" in head, "app.py must re-export the resolved count for vtscore.config"
 
+    def test_the_prelude_pins_openblas_kernels_before_numpy_loads(self):
+        """#4481: AVX-512 and AVX2 kernels round differently, which moved document rankings between nodes."""
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[2] / "app.py").read_text(encoding="utf-8")
+        head = src.split("# Configure structured logging", 1)[0]
+        assert 'os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")' in head, "a default, so an explicit value wins"
+        assert "import numpy" not in head and "import torch" not in head
+
 
 class TestSuiteRunsAtTheLibraryDefault:
     """The *test* process must not inherit the server's allocation-sized default.

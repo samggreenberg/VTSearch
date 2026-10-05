@@ -185,13 +185,13 @@ def _upload_shards(matrix: np.ndarray, n_gpu: int) -> list[tuple[int, int, Any]]
     raise AssertionError("unreachable")
 
 
-def sharded_gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[np.ndarray]:
-    """Tiled Stage 1's page scores with the tile matrix split across every visible GPU (#4488, tier l).
+def sharded_gpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[Any]:
+    """Tiled Stage 1's best (query, tile) pair per page, the tile matrix split across every visible GPU (#4488).
 
     A 200k-page tile matrix (~36 GB fp16) fits no single 32 GB card, and the app's GPU path then
     scores on the CPU. Splitting it by rows across GPUs keeps the same float32 matmul and max per
     tile; only where the rows live changes. A harness-only stand-in for
-    ``structural_stage1._gpu_page_scores``.
+    ``structural_stage1._gpu_page_max``, whose pairs the app recomputes exactly (#4481).
     """
     import torch  # noqa: PLC0415
 
@@ -201,15 +201,20 @@ def sharded_gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.
     key = f"{id(matrix)}:{matrix.shape}"
     if _SHARDS.get("key") != key:
         _SHARDS.update(key=key, parts=_upload_shards(matrix, n_gpu))
+    import vtscore.training.structural_stage1 as s1  # noqa: PLC0415
+
     best = np.empty(matrix.shape[0], dtype=np.float32)
+    best_query = np.empty(matrix.shape[0], dtype=np.int64)
     chunk = 262_144
     for lo, hi, tiles in _SHARDS["parts"]:
         q = torch.from_numpy(np.ascontiguousarray(queries, dtype=np.float32)).to(tiles.device).T
         out = torch.empty(hi - lo, dtype=torch.float32, device=tiles.device)
+        arg = torch.empty(hi - lo, dtype=torch.int64, device=tiles.device)
         for a in range(0, hi - lo, chunk):
-            out[a : a + chunk] = (tiles[a : a + chunk].float() @ q).amax(dim=1)
+            out[a : a + chunk], arg[a : a + chunk] = (tiles[a : a + chunk].float() @ q).max(dim=1)
         best[lo:hi] = out.cpu().numpy()
-    return np.maximum.reduceat(best, starts)
+        best_query[lo:hi] = arg.cpu().numpy()
+    return s1.page_max_from_tiles(best, best_query, starts)
 
 
 def thin_pool(cid: str, pool_ids: list[str], positive: np.ndarray, keep: float) -> tuple[list[str], np.ndarray]:
@@ -516,7 +521,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.shard_stage1:
         import vtscore.training.structural_stage1 as s1_mod  # noqa: PLC0415
 
-        s1_mod._gpu_page_scores = sharded_gpu_page_scores
+        s1_mod._gpu_page_max = sharded_gpu_page_max
     import vtscore.media.structural_tiles as st  # noqa: PLC0415
 
     if args.tile_layers == "coarse":

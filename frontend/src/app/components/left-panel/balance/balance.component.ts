@@ -15,6 +15,7 @@ import {
   DEFAULT_BETA,
   balanceExplanation,
   balanceSummary,
+  checkDueNote,
   checkLabel,
   checkTitle,
   isBalancePreset,
@@ -114,6 +115,9 @@ export class BalanceComponent {
   readonly explanation = computed(() => balanceExplanation(this.balance()));
   readonly checkText = computed(() => (this.offerCheck() ? checkLabel(this.balance()) : null));
   readonly checkHint = computed(() => checkTitle(this.balance()));
+  /** A check is due (#4496): the button calls for it, and a note says why. Never where no check is offered. */
+  readonly due = computed(() => this.offerCheck() && !!this.balance()?.checkDue);
+  readonly dueNote = computed(() => (this.due() ? checkDueNote(this.balance()) : null));
 
   readonly dot = computed<Dot>(() => {
     switch (this.balance()?.status) {

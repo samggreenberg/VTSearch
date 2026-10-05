@@ -78,6 +78,14 @@ export interface LineBalance {
    * it is left unvoted. The server refuses a check there, so none is offered.
    */
   checkable: boolean;
+  /** How far apart the labels' Good and Bad scores sit, in spreads (d'); null before a retrain has drawn the labels' line. */
+  separation: number | null;
+  /**
+   * The labels separate weakly enough that a spot check is due (#4496): Autopilot runs one, and the
+   * Train tab's Check button calls for one. The server decides (`weak_check_due`): d' below 1.5, from
+   * 10 votes on, and 25 votes after the last check ended.
+   */
+  checkDue: boolean;
 }
 
 const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked'];
@@ -110,6 +118,8 @@ export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBala
     audited: wire.audited ?? null,
     // A server from before #4489 sends no flag, and offered a check everywhere.
     checkable: wire.checkable !== false,
+    separation: wire.separation ?? null,
+    checkDue: wire.check_due ?? false,
   };
 }
 
@@ -276,6 +286,16 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
 export function checkLabel(balance: LineBalance | null): string | null {
   if (!balance?.checkable) return null;
   return balance.schedule ? `Check ${balance.schedule.picks} picks` : 'Check the line';
+}
+
+/**
+ * Why a check is due, when the server says one is (#4496): the labels separate weakly, and a check's
+ * picks, drawn evenly down the list, are the votes that teach the detector where its line falls.
+ * Null when none is due.
+ */
+export function checkDueNote(balance: LineBalance | null): string | null {
+  if (!balance?.checkDue) return null;
+  return 'Your Good and Bad labels still overlap. A check now teaches the detector where its line falls.';
 }
 
 /** The check affordance's tooltip: what a check does at this balance (#4427), and what it costs. */

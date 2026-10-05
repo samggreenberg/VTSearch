@@ -23,7 +23,7 @@ Library-tier. Every entry point is a no-op unless the snapshot carries tiles.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional, Sequence
+from typing import Any, NamedTuple, Optional, Sequence
 
 import numpy as np
 
@@ -132,13 +132,44 @@ def _tile_matrix(snap: dict[Any, dict]) -> tuple[list[Any], np.ndarray, np.ndarr
 _GPU_CACHE: dict[str, Any] = {}
 
 
-def _gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[np.ndarray]:
-    """:func:`_page_scores` on the GPU, or ``None`` when CUDA is absent or short of memory.
+class PageMax(NamedTuple):
+    """Each page's best (query, tile) pair: its float32 cosine, the tile's matrix row, and the query.
+
+    A page with no tiles has score ``-inf`` and tile ``-1``.
+    """
+
+    score: np.ndarray
+    tile: np.ndarray
+    query: np.ndarray
+
+
+def page_max_from_tiles(best: np.ndarray, best_query: np.ndarray, starts: np.ndarray) -> PageMax:
+    """Reduce per-tile maxima (*best*, and the query that gave each) to each page's best pair.
+
+    *starts* is each page's first row. A page's pair is its first tile holding the page's maximum.
+    """
+    n_rows = len(best)
+    counts = np.diff(np.append(starts, n_rows))
+    nonempty = counts > 0
+    score = np.full(len(starts), -np.inf, dtype=np.float32)
+    tile = np.full(len(starts), -1, dtype=np.int64)
+    if n_rows:
+        score[nonempty] = np.maximum.reduceat(best, starts[nonempty])
+        page_of_row = np.repeat(np.arange(len(starts)), counts)
+        rows = np.where(best == score[page_of_row], np.arange(n_rows), n_rows)
+        tile[nonempty] = np.minimum.reduceat(rows, starts[nonempty])
+    query = np.zeros(len(starts), dtype=np.int64)
+    query[tile >= 0] = np.asarray(best_query)[tile[tile >= 0]]
+    return PageMax(score, tile, query)
+
+
+def _gpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> Optional[PageMax]:
+    """:func:`_cpu_page_max` on the GPU, or ``None`` when CUDA is absent or short of memory.
 
     The fp16 tile matrix is copied to the device once per cached matrix and kept
     there. Each chunk is widened to float32 on the device before the matmul, so
-    the scores equal the CPU path's. At 50,000 pages this is milliseconds against
-    ~3.5 s on the CPU (#4391), which was most of a vote's retrain.
+    the scores equal the CPU path's up to the last bits. At 50,000 pages this is
+    milliseconds against ~3.5 s on the CPU (#4391), which was most of a vote's retrain.
     """
     if not _cuda():
         return None
@@ -175,37 +206,80 @@ def _gpu_page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray
             )
         tiles, page = _GPU_CACHE["tiles"], _GPU_CACHE["page"]
         q = torch.from_numpy(np.ascontiguousarray(queries, dtype=np.float32)).to("cuda").T  # (dim, Q)
-        best = torch.empty(tiles.shape[0], dtype=torch.float32, device="cuda")
-        for lo in range(0, tiles.shape[0], _CHUNK_ROWS):
-            best[lo : lo + _CHUNK_ROWS] = (tiles[lo : lo + _CHUNK_ROWS].float() @ q).amax(dim=1)
-        out = torch.full((_GPU_CACHE["pages"],), float("-inf"), device="cuda")
-        out.scatter_reduce_(0, page, best, reduce="amax", include_self=True)
-        return out.cpu().numpy()
+        n_rows = tiles.shape[0]
+        best = torch.empty(n_rows, dtype=torch.float32, device="cuda")
+        best_query = torch.empty(n_rows, dtype=torch.int64, device="cuda")
+        for lo in range(0, n_rows, _CHUNK_ROWS):
+            best[lo : lo + _CHUNK_ROWS], best_query[lo : lo + _CHUNK_ROWS] = (
+                tiles[lo : lo + _CHUNK_ROWS].float() @ q
+            ).max(dim=1)
+        score = torch.full((_GPU_CACHE["pages"],), float("-inf"), device="cuda")
+        score.scatter_reduce_(0, page, best, reduce="amax", include_self=True)
+        # Each page's first tile holding its maximum, the pair the exact score is recomputed from.
+        rows = torch.where(best == score[page], torch.arange(n_rows, device="cuda"), n_rows)
+        tile = torch.full((_GPU_CACHE["pages"],), n_rows, dtype=torch.int64, device="cuda")
+        tile.scatter_reduce_(0, page, rows, reduce="amin", include_self=True)
+        tile = torch.where(tile == n_rows, -1, tile)
+        query = torch.where(tile >= 0, best_query[tile.clamp(min=0)], 0)
+        return PageMax(score.cpu().numpy(), tile.cpu().numpy(), query.cpu().numpy())
     except Exception:  # noqa: BLE001 - any device failure falls back to the CPU path
         _log.warning("tiled Stage 1: GPU scoring failed; scoring on the CPU", exc_info=True)
         _GPU_CACHE.clear()
         return None
 
 
-def _page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> np.ndarray:
-    """Each page's best (query, tile) cosine, chunked so float32 never holds the whole matrix."""
-    on_gpu = _gpu_page_scores(matrix, starts, queries)
-    if on_gpu is not None:
-        return on_gpu
+def _cpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> PageMax:
+    """Each page's best (query, tile) pair, chunked so float32 never holds the whole matrix."""
     q = np.asarray(queries, dtype=np.float32).T  # (dim, Q)
     best = np.empty(matrix.shape[0], dtype=np.float32)
+    best_query = np.empty(matrix.shape[0], dtype=np.int64)
     for lo in range(0, matrix.shape[0], _CHUNK_ROWS):
         block = matrix[lo : lo + _CHUNK_ROWS].astype(np.float32) @ q
-        best[lo : lo + _CHUNK_ROWS] = block.max(axis=1)
-    return np.maximum.reduceat(best, starts)
+        arg = block.argmax(axis=1)
+        best[lo : lo + _CHUNK_ROWS] = block[np.arange(len(arg)), arg]
+        best_query[lo : lo + _CHUNK_ROWS] = arg
+    return page_max_from_tiles(best, best_query, starts)
+
+
+#: Pages per float64 batch when the best pairs are recomputed.
+_EXACT_CHUNK = 65_536
+
+
+def exact_page_scores(matrix: np.ndarray, queries: np.ndarray, pm: PageMax) -> np.ndarray:
+    """Each page's best pair recomputed in float64 on the CPU, so the order is the same on every device (#4481).
+
+    The float32 cosines differ in the last bits between GPU types (cuBLAS) and the
+    CPU, which reordered near-equal pages and, through the re-rank's Stage-1
+    tie-break, the verified head. One float64 dot product per page removes that;
+    only a page whose two best pairs tie within float32 noise can still differ.
+    """
+    out = np.full(len(pm.tile), -np.inf)
+    idx = np.flatnonzero(pm.tile >= 0)
+    q64 = np.asarray(queries, dtype=np.float64)
+    for lo in range(0, len(idx), _EXACT_CHUNK):
+        sel = idx[lo : lo + _EXACT_CHUNK]
+        out[sel] = np.einsum("ij,ij->i", matrix[pm.tile[sel]].astype(np.float64), q64[pm.query[sel]])
+    return out
+
+
+def _page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> np.ndarray:
+    """Each page's best (query, tile) cosine, found on the GPU when there is one and recomputed exactly."""
+    pm = _gpu_page_max(matrix, starts, queries)
+    if pm is None:
+        pm = _cpu_page_max(matrix, starts, queries)
+    return exact_page_scores(matrix, queries, pm)
 
 
 def tiled_stage1(snap: dict[Any, dict], queries: np.ndarray, score_key: str = "score") -> list[dict]:
-    """Every media in *snap*, best Stage-1 score first; pages without tiles come last at 0."""
+    """Every media in *snap*, best Stage-1 score first; pages without tiles come last at 0.
+
+    The order is on each page's exact (float64) best cosine, then on snapshot
+    order, so it does not depend on the device that found the best pair (#4481).
+    """
     ids, matrix, starts = _tile_matrix(snap)
-    scores = _page_scores(matrix, starts, queries) if ids else np.zeros(0, dtype=np.float32)
+    scores = _page_scores(matrix, starts, queries) if ids else np.zeros(0)
     order = np.argsort(-scores, kind="stable")
-    out = [{"id": ids[i], score_key: round(float(scores[i]), 4)} for i in order]
+    out = [{"id": ids[i], score_key: round(float(scores[i]), 4) if np.isfinite(scores[i]) else 0.0} for i in order]
     tiled = set(ids)
     out.extend({"id": mid, score_key: 0.0} for mid in snap if mid not in tiled)
     return out

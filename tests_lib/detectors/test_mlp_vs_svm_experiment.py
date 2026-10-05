@@ -325,6 +325,19 @@ class TestRankFrames:
             **knobs,
         )
 
+    def test_a_prompted_checks_rounds_are_clicks_and_carry_the_frames_they_reach(self):
+        """#4496: a weak-separation check's rounds jump five clicks; a requested frame lands on the row that reaches it."""
+        sink: list = []
+        rows = self._run(
+            tuple(range(2, 21)), sink, spot_check="weak", weak_separation=float("inf"), weak_min_t=2, weak_phase="any"
+        )
+        prompt_ts = [r["t"] for r in rows if r["phase"] == "prompt"]
+        assert prompt_ts, "the check was prompted"
+        steps = [f["t"] for f in sink if f["kind"] == "step"]
+        assert set(prompt_ts) <= set(steps), "every prompted round that reached a requested click left its frame"
+        assert steps == sorted(set(steps)) and steps[-1] == 20
+        assert max(r["t"] for r in rows if r["phase"] != "check") <= 20, "the prompted check stayed inside the budget"
+
     def test_step_last_and_skyline_frames(self):
         sink: list = []
         rows = self._run((10, 20), sink)

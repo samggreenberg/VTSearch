@@ -1027,13 +1027,19 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 #: line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
-#: When the simulated user checks (#4496): ``end`` (unset, the shipped harness), ``off``, or ``weak`` - the end check
-#: plus one the app prompts at the first click from ``CALIB_WEAK_MIN_T`` (10) whose labels separate weakly, d' below
-#: ``CALIB_WEAK_D`` (unset: ``WEAK_SEPARATION_D``, 1.5); ``CALIB_WEAK_REPEAT`` votes after it, it may prompt again (0: once).
-SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or "end"
+#: When the simulated user checks (#4496): unset is the harness's default, the app's (``weak``: the end-of-run check
+#: plus the one Autopilot runs at the first click from ``CALIB_WEAK_MIN_T`` whose labels separate weakly, d' below
+#: ``CALIB_WEAK_D``, and again ``CALIB_WEAK_REPEAT`` votes after it ends, 0 = once; unset, the app's constants);
+#: ``end`` (the end-of-run check only, the pre-#4496 harness) or ``off``.
+SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or None
 WEAK_D = _opt_float("CALIB_WEAK_D")
-WEAK_MIN_T = int(_opt_float("CALIB_WEAK_MIN_T") or 10)
-WEAK_REPEAT = int(_opt_float("CALIB_WEAK_REPEAT") or 0)
+_weak_min_t = _opt_float("CALIB_WEAK_MIN_T")
+WEAK_MIN_T = None if _weak_min_t is None else int(_weak_min_t)
+_weak_repeat = _opt_float("CALIB_WEAK_REPEAT")
+WEAK_REPEAT = None if _weak_repeat is None else int(_weak_repeat)
+#: Where the weak check may prompt (``CALIB_WEAK_PHASE``): ``any`` (unset) or ``learned`` - only once Autopilot has
+#: left its text-sort opening, where the app has no detector to read separation from (#4496).
+WEAK_PHASE = os.environ.get("CALIB_WEAK_PHASE", "").strip().lower() or None
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).

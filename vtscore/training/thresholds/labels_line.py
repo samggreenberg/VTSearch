@@ -71,6 +71,13 @@ _MIN_CORPUS_FLOOR = 1e-3
 #: returns too much: over 200 withheld images in 37-77% of such sessions from
 #: click 5 on, against 2-18% above it, and no cut rescues its F.
 WEAK_SEPARATION_D = 1.5
+#: The fewest votes before weak separation makes a spot check due (#4496): the
+#: first few labels separate noisily, and a check needs a line to walk.
+WEAK_CHECK_MIN_VOTES = 10
+#: Votes after a check ends before weak separation makes another due (#4496).
+#: Priced against prompting once: +0.013 to +0.027 at click 150 against +0.007
+#: to +0.010, for 28-35% of a prompted session's clicks spent checking.
+WEAK_CHECK_COOLDOWN = 25
 #: How far past the class means, in spreads, the threshold search reaches.
 _SEARCH_SPREADS = 8.0
 #: Points on the threshold search's logit grid.
@@ -404,6 +411,39 @@ class LabelsLine:
         return self if line is None else line
 
 
+def weak_check_due(
+    separation: float | None,
+    n_votes: int,
+    votes_at_last_check: int | None,
+    *,
+    threshold: float = WEAK_SEPARATION_D,
+    min_votes: int = WEAK_CHECK_MIN_VOTES,
+    cooldown: int | None = WEAK_CHECK_COOLDOWN,
+) -> bool:
+    """Whether the labels separate weakly enough that a spot check is due (#4496, the owner's ruling of 2026-10-05).
+
+    Due when the labels line's :attr:`LabelsLine.separation` is below
+    *threshold*, at least *min_votes* votes have been cast, and either no
+    check has ended yet or *cooldown* votes have been cast since the last one
+    ended (*votes_at_last_check*, the vote count when it ended; ``None``
+    before any).  ``cooldown=None`` makes a check due once at most.
+
+    The app's Autopilot runs the check when it is due and the Train tab's
+    Check button calls for it; the eval harness's default arm
+    (``spot_check="weak"``) runs it where this says, so both read this rule.
+    A weakly separated session's uniform picks within the line's bands are
+    better training votes than the acquisition picks they replace: priced at
+    equal clicks, +0.008 to +0.033 at click 20 and +0.023 to +0.049 at 50
+    over the three presets
+    (``docs/experiments/2026-10-05-weak-check-4496/REPORT.md``).
+    """
+    if separation is None or not separation < threshold or n_votes < min_votes:
+        return False
+    if votes_at_last_check is None:
+        return True
+    return cooldown is not None and n_votes - votes_at_last_check >= cooldown
+
+
 #: The smallest share of the labels' Good component a cut must hold for the
 #: counted bound on the prevalence to read it (below it, ``R / S1`` is noise).
 _BOUND_MIN_S1 = 0.05
@@ -541,7 +581,10 @@ def fit_labels_line(
 __all__ = [
     "MIN_LOGIT_SIGMA",
     "RELATIVE_SIGMA_FLOOR",
+    "WEAK_CHECK_COOLDOWN",
+    "WEAK_CHECK_MIN_VOTES",
     "WEAK_SEPARATION_D",
+    "weak_check_due",
     "PREVALENCE_MAX",
     "PREVALENCE_MIN",
     "ClassScoreModel",

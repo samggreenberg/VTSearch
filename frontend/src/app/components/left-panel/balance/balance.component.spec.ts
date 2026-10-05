@@ -252,6 +252,30 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(checkBtn()).toBeNull();
       expect(stateText()).not.toBeNull();
     });
+
+    describe('when the labels separate weakly (#4496)', () => {
+      const dueNote = () => (fixture.nativeElement as HTMLElement).querySelector('.balance-due');
+
+      it('calls for the check: the primary button and a note saying why', async () => {
+        await show(1, lineBalance('unchecked', { checkDue: true, separation: 0.8 }), 32);
+        expect(checkBtn()!.classList).toContain('btn--primary');
+        expect(checkBtn()!.classList).not.toContain('btn--toolbar');
+        expect(dueNote()!.textContent).toContain('still overlap');
+      });
+
+      it('stays a quiet toolbar button when no check is due', async () => {
+        await show(1, lineBalance('unchecked', { checkDue: false, separation: 3.1 }), 32);
+        expect(checkBtn()!.classList).toContain('btn--toolbar');
+        expect(dueNote()).toBeNull();
+      });
+
+      it('says nothing where no check is offered, even when one would be due', async () => {
+        fixture.componentRef.setInput('offerCheck', false);
+        await show(1, lineBalance('unchecked', { checkDue: true }), 32);
+        expect(checkBtn()).toBeNull();
+        expect(dueNote()).toBeNull();
+      });
+    });
   });
 
   describe('the "what does this mean" hint', () => {
