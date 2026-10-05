@@ -245,16 +245,37 @@ def _cpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -
 _EXACT_CHUNK = 65_536
 
 
+#: Float32 cosines of one page differ by ~1e-7 between devices; a page this close to the exact
+#: head's boundary is recomputed too, so the head never depends on which side of it a page fell.
+_EXACT_MARGIN = 1e-5
+
+
+def exact_head() -> int:
+    """How many top pages :func:`exact_page_scores` recomputes: twice the largest shortlist a policy verifies."""
+    return 2 * max(TILED_TOP_K, TILED_K_CAP)
+
+
 def exact_page_scores(matrix: np.ndarray, queries: np.ndarray, pm: PageMax) -> np.ndarray:
-    """Each page's best pair recomputed in float64 on the CPU, so the order is the same on every device (#4481).
+    """The head's best pairs recomputed in float64 on the CPU, so its order is the same on every device (#4481).
 
     The float32 cosines differ in the last bits between GPU types (cuBLAS) and the
     CPU, which reordered near-equal pages and, through the re-rank's Stage-1
     tie-break, the verified head. One float64 dot product per page removes that;
     only a page whose two best pairs tie within float32 noise can still differ.
+
+    Only the top :func:`exact_head` pages by float32 score (and any within
+    :data:`_EXACT_MARGIN` of the last) are recomputed; the rest keep their float32
+    score, below every recomputed one. At 50,000 pages recomputing all of them cost
+    ~0.2 s a call on a V100, against ~0.07 s for the scoring itself, and pages past
+    the shortlist are never verified, so their order only needs to be the right block.
     """
-    out = np.full(len(pm.tile), -np.inf)
-    idx = np.flatnonzero(pm.tile >= 0)
+    out = pm.score.astype(np.float64)
+    head = exact_head()
+    if len(out) > head:
+        threshold = np.partition(pm.score, len(out) - head)[len(out) - head] - _EXACT_MARGIN
+        idx = np.flatnonzero((pm.score >= threshold) & (pm.tile >= 0))
+    else:
+        idx = np.flatnonzero(pm.tile >= 0)
     q64 = np.asarray(queries, dtype=np.float64)
     for lo in range(0, len(idx), _EXACT_CHUNK):
         sel = idx[lo : lo + _EXACT_CHUNK]
@@ -273,8 +294,9 @@ def _page_scores(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) ->
 def tiled_stage1(snap: dict[Any, dict], queries: np.ndarray, score_key: str = "score") -> list[dict]:
     """Every media in *snap*, best Stage-1 score first; pages without tiles come last at 0.
 
-    The order is on each page's exact (float64) best cosine, then on snapshot
-    order, so it does not depend on the device that found the best pair (#4481).
+    The head's order is on each page's exact (float64) best cosine, then on
+    snapshot order, so it does not depend on the device that found the best pair
+    (#4481); past :func:`exact_head` pages the order is the float32 one.
     """
     ids, matrix, starts = _tile_matrix(snap)
     scores = _page_scores(matrix, starts, queries) if ids else np.zeros(0)

@@ -143,6 +143,22 @@ class TestTiledStage1:
         ]
         np.testing.assert_allclose(exact, brute, rtol=0, atol=1e-12)
 
+    def test_only_the_head_is_recomputed_and_it_stays_on_top(self, monkeypatch):
+        # Recomputing every page cost ~0.2 s a call at 50,000 pages; past the shortlist the
+        # float32 order is enough (#4481).
+        monkeypatch.setattr(s1, "TILED_TOP_K", 1)
+        monkeypatch.setattr(s1, "TILED_K_CAP", 1)  # a head of 2 pages
+        score = np.array([0.30, 0.90, 0.10, 0.80, 0.20], dtype=np.float32)
+        pm = s1.PageMax(score, np.array([0, 1, 2, 3, 4]), np.zeros(5, dtype=np.int64))
+        matrix = np.zeros((5, DIM), dtype=np.float16)
+        matrix[1, 0], matrix[3, 0] = 0.9, 0.8  # the exact values of the two head pages
+        out = s1.exact_page_scores(matrix, np.eye(1, DIM, dtype=np.float32), pm)
+        assert out[1] == pytest.approx(float(np.float16(0.9)), abs=0) and out[3] == pytest.approx(
+            float(np.float16(0.8)), abs=0
+        )
+        np.testing.assert_array_equal(out[[0, 2, 4]], score[[0, 2, 4]].astype(np.float64))
+        assert list(np.argsort(-out, kind="stable")[:2]) == [1, 3]
+
     def test_the_order_does_not_move_with_float32_noise_in_the_device_scores(self, tiled, monkeypatch):
         # #4481: two GPU types gave the same best pairs but cosines a few ulps apart, which
         # reordered near-equal pages. The order now comes from the pairs, recomputed exactly.
