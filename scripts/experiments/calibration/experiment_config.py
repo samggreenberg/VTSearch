@@ -1027,6 +1027,13 @@ WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true
 #: line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
+#: When the simulated user checks (#4496): ``end`` (unset, the shipped harness), ``off``, or ``weak`` - the end check
+#: plus one the app prompts at the first click from ``CALIB_WEAK_MIN_T`` (10) whose labels separate weakly, d' below
+#: ``CALIB_WEAK_D`` (unset: ``WEAK_SEPARATION_D``, 1.5); ``CALIB_WEAK_REPEAT`` votes after it, it may prompt again (0: once).
+SPOT_CHECK = os.environ.get("CALIB_SPOT_CHECK", "").strip().lower() or "end"
+WEAK_D = _opt_float("CALIB_WEAK_D")
+WEAK_MIN_T = int(_opt_float("CALIB_WEAK_MIN_T") or 10)
+WEAK_REPEAT = int(_opt_float("CALIB_WEAK_REPEAT") or 0)
 #: #4452's wider world: save the withheld half's scores (``CALIB_SAVE_TEST_SCORES=1``) at the last ordinary step
 #: and after the check, so Find corpora of any size and prevalence drawn from it are priced post hoc; and a smaller
 #: Train pool (``CALIB_SIM_SIZE``: a seeded subsample of the simulation half, the withheld half kept whole).

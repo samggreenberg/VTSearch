@@ -23,7 +23,7 @@ from vtscore.training.thresholds import (
     fit_labels_line,
     labels_line_threshold,
 )
-from vtscore.training.thresholds.labels_line import MIN_LOGIT_SIGMA, _line_on
+from vtscore.training.thresholds.labels_line import MIN_LOGIT_SIGMA, WEAK_SEPARATION_D, _line_on
 
 
 def _sig(x):
@@ -267,3 +267,26 @@ def test_the_corpus_floor_is_relative_and_bounded():
     assert f == pytest.approx(RELATIVE_SIGMA_FLOOR * 0.2, rel=0.08)
     assert corpus_sigma_floor(np.full(10, 0.5)) > 0, "a corpus of one score still has a floor"
     assert corpus_sigma_floor(np.array([])) == MIN_LOGIT_SIGMA
+
+
+def test_separation_is_read_in_the_spread_the_line_was_cut_with():
+    """#4496: d' = (Good mean - Bad mean) / spread, the spread the class model's own floored on the corpus."""
+    model, scores, _ = _compressed_session(1.0)
+    assert model is not None and model.sigma_raw is not None
+    line = _line_on(model, scores, None, {})
+    assert line is not None and line.spread is not None
+    assert line.spread == max(model.sigma_raw, corpus_sigma_floor(scores))
+    assert line.separation == pytest.approx((model.mu_pos - model.mu_neg) / line.spread)
+    # Free of the logit scale, as the line is.
+    wide, wide_scores, _ = _compressed_session(3.0)
+    assert wide is not None
+    wide_line = _line_on(wide, wide_scores, None, {})
+    assert wide_line is not None
+    assert wide_line.separation == pytest.approx(line.separation, rel=0.05)
+
+
+def test_a_line_built_by_hand_reads_separation_in_the_models_spread():
+    model = ClassScoreModel(mu_pos=1.0, mu_neg=-0.5, sigma=0.5, n_pos=3, n_neg=3)
+    assert LabelsLine(model, 0.01).separation == pytest.approx(3.0)
+    assert LabelsLine(ClassScoreModel(0.2, 0.0, 0.0, 1, 1), 0.01).separation == float("inf")
+    assert 1.0 < WEAK_SEPARATION_D < 3.0
