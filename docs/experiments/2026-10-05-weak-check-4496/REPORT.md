@@ -1,6 +1,6 @@
 # A spot check prompted when the labels separate weakly (#4496)
 
-**Status (2026-10-05):** priced end to end. Both arms win at every preset. Prompting again 25 votes after each prompted check is the better rule. How to ship it is the owner's call; see the end of this report.
+**Status (2026-10-05): shipped in PR #4503.** Both arms of round 1 win at every preset, and prompting again 25 votes after each prompted check is the better rule. The owner chose to ship it as a prompted check that Autopilot runs and the Train tab calls for. The app trains no detector during Autopilot's text-sort opening, so the shipped check runs only past it. Round 2 priced that arm: it keeps nearly all of the gain at click 150 and gives up the gain before about click 50. #4508 is the follow-up, a background retrain during the opening.
 
 ## The question
 
@@ -51,6 +51,26 @@ The objective is F-beta of the withheld half above Find's line, at the session's
 - **The ranking improves.** Final AP is +0.013 when prompting again and +0.004 to +0.005 when prompting once. AP at click 25 is +0.022. By the end, prompting again finds +1.4 to +1.6 more Goods.
 - **Before the first check pays off,** clicks 12 to 15 lose 0.001 to 0.003.
 
+## Round 2: only past Autopilot's opening, as shipped
+
+In round 1, 92% of the first prompts fell inside Autopilot's opening (`good`, `bad` and `more`, on the text or example sort). There the app trains no detector, so it has neither a separation to read nor a ranking to check. Round 2 re-ran "again after 25" with the prompt allowed only once the flow has left the opening (`weak_phase="learned"`), on the same 4,320 paired sessions. Runs are `2026-10-05-weakl-b025|b1|b4`; the green line in the figure.
+
+| preset | arm | 20 | 30 | 50 | 75 | 100 | 150 | after the check | final AP | Goods by the end |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1/4 | anywhere (round 1) | +0.033 | +0.043 | +0.049 | +0.034 | +0.026 | +0.027 | +0.010 | +0.013 | +1.4 |
+| 1/4 | **past the opening (shipped)** | 0.000 | 0.000 | +0.004 | +0.009 | +0.012 | +0.025 | +0.009 | +0.009 | +1.6 |
+| 1 | anywhere (round 1) | +0.016 | +0.027 | +0.029 | +0.024 | +0.017 | +0.018 | +0.010 | +0.012 | +1.6 |
+| 1 | **past the opening (shipped)** | 0.000 | 0.000 | +0.001 | +0.006 | +0.008 | +0.014 | +0.006 | +0.009 | +1.8 |
+| 4 | anywhere (round 1) | +0.008 | +0.023 | +0.023 | +0.017 | +0.011 | +0.013 | +0.005 | +0.013 | +1.6 |
+| 4 | **past the opening (shipped)** | 0.000 | 0.000 | −0.001 | +0.004 | +0.005 | +0.012 | +0.005 | +0.011 | +1.6 |
+
+- **Prompts come later and less often.** 47 to 48% of sessions are prompted, at a median first prompt of click 67, against 63% at click 22 in round 1. The median session first reaches a learned phase at click 45, and 83 sessions in 720 never do.
+- **What it keeps.** By click 150 the shipped check has nearly all of round 1's gain. It gets 70 to 90% of the final-AP gain and all of the extra Goods. It costs no Goods early: Goods by click 25 are unchanged.
+- **What it gives up.** Everything before about click 50, where most users who stop early would have gained +0.02 to +0.05. Recovering that needs a detector during the opening: #4508, a background retrain after each opening vote.
+- **Its click cost.** Prompted sessions spend a median of 40 picks on checks (23% of their first 150 clicks) at presets 1/4 and 1, and 60 (28%) at 4, in up to 3 checks.
+
+The harness was later changed for what shipped (PR #4503): a prompted check now must fit its opening bands in the votes left, and is cut off at the budget. Rounds 1 and 2 let a late prompt run up to about 20 votes past click 150. That touches only the "after the check" column and only sessions prompted after click 130.
+
 ## Costs
 
 - **Fewer Goods early.** Goods found by click 25 fall by 0.73 (11.0 → 10.3), because the check's picks are band-uniform, not Good-seeking. About 13 to 17% of them are Goods. They come back later: +1.4 to +1.6 Goods by the end when prompting again.
@@ -70,7 +90,7 @@ A session that never meets the trigger draws nothing extra from the random gener
 - **No bias:** their paired mean at click 150 is 0.000 to 0.001 ± 0.001, so the drift adds noise, not bias.
 - **Logged:** see `scripts/experiments/lessons/2026-10-04-cpu-vendor-drift-breaks-pairing.md`.
 
-## What it means, and the ship decision
+## What it means, and how it shipped
 
 For a weakly separated session, uniform picks within the line's bands are better training votes than the acquisition picks they replace. They teach the head the negatives inside and around the line, which acquisition never reaches. The gain lands where the user is (clicks 20 to 50) and stays.
 
@@ -79,13 +99,14 @@ The harness cannot tell how the picks are presented, so the same rule can ship i
 1. **A prompted check.** When `separation` < 1.5 (and again 25 votes after the last prompted check), the Train tab turns its Check button into a call to action, and Autopilot runs the check itself. This reuses the check modal and its ranges, but it interrupts the user.
 2. **Band-uniform acquisition.** When separation is weak, the next roughly 20 picks are drawn band-uniformly over the line's ranking, inside the ordinary voting flow, with no modal. The votes are the same; the user never sees a "check".
 
-Either needs `separation` in the balance payload. Nothing in the app reads it yet.
+Either needs `separation` in the balance payload. **The owner chose (1)**, with the check coming back 25 votes after the last one. PR #4503 built it past Autopilot's opening (round 2), and #4508 is the opening.
 
 ## Files
 
-- **Runs:** `/expscratch/sgreenberg/state-of-the-app/2026-10-04-weak-b025|b1|b4` (prompt once) and `2026-10-04-weakr-b025|b1|b4` (prompt again), against `2026-10-04-floor-b*`.
+- **Runs:** `/expscratch/sgreenberg/state-of-the-app/2026-10-04-weak-b025|b1|b4` (prompt once), `2026-10-04-weakr-b025|b1|b4` (prompt again) and `2026-10-05-weakl-b025|b1|b4` (again, past the opening only), against `2026-10-04-floor-b*`.
 - **Scripts** (`/expscratch/sgreenberg/check-weak/`):
   - `dprime.py`, `summarize.py` and `check_effect.py`: the offline trigger study.
   - `compare_weak.py`: the paired comparison.
   - `prompt_cost.py`: the clicks spent.
+  - `prompt_phase.py`: the Autopilot phase each prompt fired in.
   - `figure_weak.py`: the figure.
