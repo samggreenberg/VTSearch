@@ -1143,6 +1143,30 @@ class DatasetRegistryLoadResponseSchema(Schema):
     task_id = fields.String(load_default="")
 
 
+class DatasetAutorunRequestSchema(Schema):
+    """Body for ``POST /api/datasets/registry/<id>/autorun``.
+
+    The body is optional.  Without ``detector_ids`` the run scores with the
+    caller's AutoRun detectors (the dataset ⋯ **Run AutoRun**); with it, with
+    exactly the detectors those registry ids name, drafts included (the
+    Dashboard's big **AutoRun** button).  Declared as ``fields.Raw`` with
+    :func:`list_of_strings` so a non-string id is a 422 rather than coerced.
+    """
+
+    detector_ids = fields.Raw(
+        load_default=None,
+        validate=list_of_strings,
+        metadata={
+            "description": (
+                "Registry ids of the detectors to run, in place of the caller's AutoRun list. "
+                "Omit to run the AutoRun list."
+            ),
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    )
+
+
 class DatasetRegistryOkResponseSchema(Schema):
     """Bare ``{"ok": true}`` response (unload, delete)."""
 
@@ -1300,6 +1324,7 @@ __all__ = [
     "DashboardDiskUsageResponseSchema",
     "DashboardRamUsageResponseSchema",
     "DatasetAllImportersListResponseSchema",
+    "DatasetAutorunRequestSchema",
     "DatasetAvailableFilesResponseSchema",
     "DatasetClearResponseSchema",
     "DatasetCombineRequestSchema",

@@ -654,12 +654,21 @@ POST /api/datasets/registry/{dataset_id}/load
 
 ```
 POST /api/datasets/registry/{dataset_id}/autorun
+Content-Type: application/json
+
+{"detector_ids": ["<detector id>", "..."]}
 ```
 
 → `{"ok": true, "message": "AutoRun started", "task_id": "_autorun_…"}`
 
-Runs the caller's AutoRun detectors that apply to the (loaded) dataset in the
-background - the Dashboard's ⋯ **Run AutoRun**. The task reports on the
+Runs detectors that apply to the (loaded) dataset in the background. The body
+is optional. Without it (or with `detector_ids` omitted or `null`), the run
+uses the caller's AutoRun detectors - the Dashboard's ⋯ **Run AutoRun**. With
+`detector_ids`, it uses exactly the detectors those registry ids name, drafts
+included, and leaves the caller's AutoRun list alone - the Dashboard's big
+**AutoRun** button, which sends the ticked detectors once per ticked dataset.
+Detectors of another media type, or of an embedder type the dataset lacks, are
+skipped as for the AutoRun list. The task reports on the
 `loading-tasks` channel with the dataset's `dataset_id`, so it renders on the
 dataset's row, and carries an `autorun` block: `{run_id, owner, trigger,
 dataset_id, dataset_name}`, plus `detectors_run`, `total_hits`,
@@ -668,9 +677,11 @@ caller's Auto-Find exporter when one is set, and are served by
 [`GET /api/autorun/runs/{run_id}`](find.md#autorun-results). Cancel with
 `POST /api/dataset/cancel/{task_id}`.
 
-400 when none of the caller's AutoRun detectors applies (wrong media type, or
-an embedder type the dataset lacks); 403 if access is denied; 404 if the
-dataset is unknown; 409 if it is not loaded.
+400 when none of the detectors to run applies (wrong media type, or an
+embedder type the dataset lacks), or `detector_ids` is empty; 403 if access to
+the dataset is denied; 404 if the dataset is unknown, or a `detector_ids` entry
+names no detector the caller can access; 409 if the dataset is not loaded; 422
+if `detector_ids` is not a list of strings.
 
 ### Unload registered dataset
 

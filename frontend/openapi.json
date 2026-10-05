@@ -1563,6 +1563,21 @@
         ],
         "type": "object"
       },
+      "DatasetAutorunRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "detector_ids": {
+            "default": null,
+            "description": "Registry ids of the detectors to run, in place of the caller's AutoRun list. Omit to run the AutoRun list.",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
       "DatasetAvailableFilesResponse": {
         "additionalProperties": false,
         "properties": {
@@ -9939,8 +9954,18 @@
         }
       ],
       "post": {
-        "description": "The Dashboard's dataset \u22ef **Run AutoRun**.  Scores the dataset with every\ndetector on the caller's AutoRun list that applies to it, sends the results\nto their Auto-Find exporter when one is set, and keeps them for the AutoRun\nResults dialog (``GET /api/autorun/runs/<task_id>``).  Progress is reported\non the ``loading-tasks`` channel of ``GET /api/events`` under the returned\n``task_id``, on a task keyed to this dataset; its ``autorun`` block carries\nthe summary once it finishes.  Cancellable like any loading task.",
+        "description": "The Dashboard's dataset \u22ef **Run AutoRun** sends no body, and the run scores\nthe dataset with every detector on the caller's AutoRun list that applies\nto it.  The Dashboard's big **AutoRun** button sends ``detector_ids``, the\nticked detectors, and the run scores with those instead: drafts run as they\nare, without being moved to the AutoRun list.\n\nEither way the run sends the results to the caller's Auto-Find exporter\nwhen one is set, and keeps them for the AutoRun Results dialog\n(``GET /api/autorun/runs/<task_id>``).  Progress is reported on the\n``loading-tasks`` channel of ``GET /api/events`` under the returned\n``task_id``, on a task keyed to this dataset; its ``autorun`` block carries\nthe summary once it finishes.  Cancellable like any loading task.",
         "operationId": "run_dataset_autorun",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetAutorunRequest"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {
@@ -9953,22 +9978,25 @@
             "description": "OK"
           },
           "400": {
-            "description": "None of the caller's AutoRun detectors applies to this dataset (its media or embedder types)."
+            "description": "None of the detectors to run applies to this dataset (its media or embedder types), or ``detector_ids`` is empty."
           },
           "403": {
             "description": "Access denied for the current user."
           },
           "404": {
-            "description": "Dataset not found."
+            "description": "Dataset not found, or a ``detector_ids`` entry names no detector the caller can access."
           },
           "409": {
             "description": "Dataset is not currently loaded."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Run the caller's AutoRun detectors on a loaded dataset, in the background.",
+        "summary": "Run AutoRun on a loaded dataset, in the background.",
         "tags": [
           "datasets_registry"
         ]

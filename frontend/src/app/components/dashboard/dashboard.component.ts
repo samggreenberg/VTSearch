@@ -889,23 +889,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.autorunDetectors.filter((d) => d.media_type === dataset.media_type).length;
   }
 
-  /** The dataset ⋯ "Run AutoRun": run the user's AutoRun detectors on it now.
-   *  The run is a background task shown inline on the row, and its results
-   *  dialog opens when it finishes (`AutoRunService`). AutoRun scores a
-   *  dataset in memory, so an unloaded one is loaded first. */
-  runAutorun(dataset: DatasetRegistryEntry): void {
+  /** The dataset ⋯ "Run AutoRun": run the user's AutoRun detectors on it now,
+   *  or exactly *detectorIds* when given (the big AutoRun button, via
+   *  {@link onAutorun}). The run is a background task shown inline on the row,
+   *  and its results dialog opens when it finishes (`AutoRunService`). AutoRun
+   *  scores a dataset in memory, so an unloaded one is loaded first. */
+  runAutorun(dataset: DatasetRegistryEntry, detectorIds?: string[]): void {
     if (dataset.loaded) {
-      this.autorun.run(dataset.id);
+      this.autorun.run(dataset.id, detectorIds);
       return;
     }
     this.datasetsRegistryApi.loadRegistered(dataset.id).subscribe({
       next: (response) => {
         if (!response.task_id) {
-          this.autorun.run(dataset.id);
+          this.autorun.run(dataset.id, detectorIds);
           return;
         }
         // Fires once the load settles, and not at all if it fails.
-        this.loadingTasksSvc.startProgressPolling(response.task_id, () => this.autorun.run(dataset.id));
+        this.loadingTasksSvc.startProgressPolling(response.task_id, () =>
+          this.autorun.run(dataset.id, detectorIds),
+        );
       },
     });
   }
@@ -1307,14 +1310,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
   }
 
-  get findEnabled(): boolean {
-    if (this.resolvedSelectedDatasets.length < 1 || this.resolvedSelectedModels.length < 1) return false;
-    if (!this.findMediaTypesMatch()) return false;
-    if (this.hasUntrainedModel()) return false;
-    return true;
-  }
-
-  get findHint(): string {
+  /** Why the selection cannot be scored, or `''` when it can: at least one
+   *  dataset and one detector, one media type across every ticked row, and
+   *  every ticked detector trained. Find and AutoRun share this rule; Find
+   *  scores the first ticked pair, AutoRun every ticked dataset with every
+   *  ticked detector. */
+  private get scoreSelectionBlocker(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
     // "row above": selection means checking a table row — a dataset can be
@@ -1325,7 +1326,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (nModels === 0) return 'Select a detector in the table above.';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
     if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
-    return 'Score selected datasets with selected detectors';
+    return '';
+  }
+
+  get findEnabled(): boolean {
+    return this.scoreSelectionBlocker === '';
+  }
+
+  get findHint(): string {
+    return this.scoreSelectionBlocker || 'Score selected datasets with selected detectors';
+  }
+
+  /** The big AutoRun button (#4529): enabled on Find's rule. */
+  get autorunEnabled(): boolean {
+    return this.scoreSelectionBlocker === '';
+  }
+
+  get autorunHint(): string {
+    return (
+      this.scoreSelectionBlocker ||
+      'Run AutoRun on every selected dataset with every selected detector, and show the results as each run finishes'
+    );
   }
 
   get labelHint(): string {
@@ -1384,5 +1405,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // See `onLabel`; the route guard owns context + loading.
     this.findLoading.set(true);
     this.router.navigate(['/find', dataset.id, model.id]);
+  }
+
+  /** The big AutoRun button: one background AutoRun per ticked dataset, each
+   *  restricted to the ticked detectors (drafts run as they are, without
+   *  moving to the AutoRun tab). Not a view: the runs show inline on their
+   *  dataset rows, and `AutoRunService` opens the results as they land. */
+  onAutorun(): void {
+    if (!this.autorunEnabled) return;
+    const detectorIds = this.resolvedSelectedModels.map((m) => m.id);
+    for (const dataset of this.resolvedSelectedDatasets) {
+      this.runAutorun(dataset, detectorIds);
+    }
   }
 }

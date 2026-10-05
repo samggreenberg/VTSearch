@@ -225,7 +225,8 @@ This is the synchronous, scripted form. The Dashboard runs the same detectors
 in the **background** instead - after a web import (see the `autorun` flag
 under [Loading Datasets](datasets.md#loading-datasets)) and from a dataset's
 ⋯ **Run AutoRun**
-([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)) -
+([`POST /api/datasets/registry/{dataset_id}/autorun`](datasets.md#run-autorun-on-a-registered-dataset)),
+whose big **AutoRun** button runs the ticked detectors in their place -
 and keeps each run's results for the user who started it:
 
 ### AutoRun results

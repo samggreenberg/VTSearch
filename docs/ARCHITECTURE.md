@@ -419,7 +419,8 @@ VTSearch/
 │   ├── achievements_catalog.py     Static achievement declarations (no state machine)
 │   ├── autorun_processors.py       autorun_extractors / autorun_localizers CRUD
 │   ├── autorun_detectors.py        Runs a user's AutoRun detectors on a dataset: /api/auto-detect's core,
-│   │                               the background run after an import / from Run AutoRun, kept results
+│   │                               the background run after an import / from Run AutoRun / the AutoRun
+│   │                               button (ticked detectors), kept results
 │   ├── logging_config.py           Logging setup
 │   ├── diagnose.py                 One switch applying the diagnostic slow-request / GC log thresholds
 │   ├── torch_threads.py            Native-math thread count for the server process

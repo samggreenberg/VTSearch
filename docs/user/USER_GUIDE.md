@@ -584,6 +584,19 @@ detectors, and opens the AutoRun Results dialog when it is done. The
 item is greyed out when none of your AutoRun detectors are for that
 dataset's media type.
 
+To run detectors of your choosing instead - drafts included, without
+moving them to the AutoRun tab - tick them and the datasets to run them
+on, and click the big **AutoRun** button in the Dashboard's action bar,
+beside **Train** and **Find**. It is enabled on the same rule as
+**Find**: at least one dataset and one detector, all of one media type,
+and every ticked detector trained. Unlike Find it uses every ticked row:
+each ticked dataset gets its own run with every ticked detector, loading
+first if it isn't loaded, and shows on its own row. The first run to
+finish opens the AutoRun Results dialog; any that finish while the
+dialog is open announce themselves with a **View results** notice
+instead, so none of them is lost. Like every AutoRun, the runs also go
+to your Settings **Auto-Find** exporter when you have picked one.
+
 ### Pre-computed embeddings (.npz)
 
 If you have already embedded your media offline - for example with
@@ -1311,7 +1324,7 @@ with bulk-action and per-card controls.
   Drafts, where a new detector lands.
 
   Only detectors on the tab you're looking at can be selected, so
-  **Train** and **Find** always act on rows you can see. Switching
+  **Train**, **Find** and **AutoRun** always act on rows you can see. Switching
   tabs clears the detector selection, and picking a detector from the
   top bar switches to its tab.
 
@@ -1336,9 +1349,16 @@ against your selection.
 **Find** in the action bar to open the verification view (see
 [Find: scoring and verifying](#find-scoring-and-verifying)).
 
+**Running detectors unattended:** select any number of datasets and
+detectors of one media type, then click **AutoRun** in the action bar.
+It opens no view: each selected dataset gets a background run of every
+selected detector, shown on its row, and the results open in the
+**AutoRun Results** dialog as the runs finish (see
+[Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
+
 You can keep multiple datasets and multiple detectors loaded at once.
-Loading just pulls them into memory; the Train / Find buttons work
-on whichever rows you currently have selected.
+Loading just pulls them into memory; the Train / Find / AutoRun buttons
+work on whichever rows you currently have selected.
 
 ### Combining datasets and detectors
 
