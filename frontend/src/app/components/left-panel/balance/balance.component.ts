@@ -58,7 +58,9 @@ type Dot = 'green' | 'yellow' | 'none';
  * (#4273), in both states: it opens the spot check (`vt-spot-check-modal`,
  * hosted by the view), and after a finished check it runs a fresh one. Find
  * sets `offerCheck` false: it tests the balance Train set, and labelling more
- * to set one is too late there (#4317). A range that later votes have left
+ * to set one is too late there (#4317). A line a check cannot walk offers none
+ * either (`balance.checkable` false, #4489): a structural detector's, which is
+ * the verification gate's boundary rather than a cut on a ranking. A range that later votes have left
  * stale reads exactly as before; only its tooltip says so.
  *
  * Content marked `balanceActions` is projected onto the Threshold heading's
