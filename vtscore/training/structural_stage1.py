@@ -123,6 +123,7 @@ def _tile_matrix(snap: dict[Any, dict]) -> tuple[list[Any], np.ndarray, np.ndarr
     starts = np.concatenate([[0], np.cumsum(counts)[:-1]]).astype(np.int64)
     _MATRIX_CACHE.clear()  # one dataset at a time: the matrix is large
     _GPU_CACHE.clear()  # its device copy goes with it (the key is the matrix's id)
+    _CPU_CACHE.clear()  # and so does its float32 copy
     entry = (ids, matrix, starts)
     _MATRIX_CACHE[key] = entry
     return entry
@@ -130,6 +131,32 @@ def _tile_matrix(snap: dict[Any, dict]) -> tuple[list[Any], np.ndarray, np.ndarr
 
 #: The GPU copy of the cached tile matrix: ``(matrix key, fp16 tiles, page index per tile)``.
 _GPU_CACHE: dict[str, Any] = {}
+
+#: The CPU path's float32 copy of the cached tile matrix: ``(matrix key, float32 tiles)`` (#4514).
+_CPU_CACHE: dict[str, Any] = {}
+
+
+def _float32_matrix(matrix: np.ndarray) -> np.ndarray:
+    """The tile matrix in float32, converted once per page set for the CPU path (#4514).
+
+    numpy's half-to-float conversion ran at ~4 s per 262k-row chunk, and the CPU path
+    used to redo it for the whole matrix on every call: ~2 minutes a click at 50,000
+    pages. torch's vectorised conversion is ~25x faster, and keeping the result makes
+    each call a plain float32 matmul. It doubles the matrix's memory, only on the CPU path.
+    """
+    key = (id(matrix), matrix.shape)
+    if _CPU_CACHE.get("key") != key:
+        _CPU_CACHE.clear()
+        out = np.empty(matrix.shape, dtype=np.float32)
+        try:
+            import torch  # noqa: PLC0415
+
+            for lo in range(0, matrix.shape[0], _CHUNK_ROWS):
+                out[lo : lo + _CHUNK_ROWS] = torch.from_numpy(matrix[lo : lo + _CHUNK_ROWS]).float().numpy()
+        except ImportError:
+            out[...] = matrix  # numpy's own cast: slow, but once per page set
+        _CPU_CACHE.update(key=key, matrix=out)
+    return _CPU_CACHE["matrix"]
 
 
 class PageMax(NamedTuple):
@@ -229,12 +256,13 @@ def _gpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -
 
 
 def _cpu_page_max(matrix: np.ndarray, starts: np.ndarray, queries: np.ndarray) -> PageMax:
-    """Each page's best (query, tile) pair, chunked so float32 never holds the whole matrix."""
+    """Each page's best (query, tile) pair, over the float32 copy (:func:`_float32_matrix`), chunked."""
+    tiles = _float32_matrix(matrix)
     q = np.asarray(queries, dtype=np.float32).T  # (dim, Q)
     best = np.empty(matrix.shape[0], dtype=np.float32)
     best_query = np.empty(matrix.shape[0], dtype=np.int64)
     for lo in range(0, matrix.shape[0], _CHUNK_ROWS):
-        block = matrix[lo : lo + _CHUNK_ROWS].astype(np.float32) @ q
+        block = tiles[lo : lo + _CHUNK_ROWS] @ q
         arg = block.argmax(axis=1)
         best[lo : lo + _CHUNK_ROWS] = block[np.arange(len(arg)), arg]
         best_query[lo : lo + _CHUNK_ROWS] = arg
@@ -277,9 +305,11 @@ def exact_page_scores(matrix: np.ndarray, queries: np.ndarray, pm: PageMax) -> n
     else:
         idx = np.flatnonzero(pm.tile >= 0)
     q64 = np.asarray(queries, dtype=np.float64)
+    # The CPU path's float32 copy holds the same values and widens far faster than fp16 (#4514).
+    src = _CPU_CACHE["matrix"] if _CPU_CACHE.get("key") == (id(matrix), matrix.shape) else matrix
     for lo in range(0, len(idx), _EXACT_CHUNK):
         sel = idx[lo : lo + _EXACT_CHUNK]
-        out[sel] = np.einsum("ij,ij->i", matrix[pm.tile[sel]].astype(np.float64), q64[pm.query[sel]])
+        out[sel] = np.einsum("ij,ij->i", src[pm.tile[sel]].astype(np.float64), q64[pm.query[sel]])
     return out
 
 
