@@ -843,7 +843,8 @@
           "status": {
             "enum": [
               "unchecked",
-              "checked"
+              "checked",
+              "gate"
             ],
             "type": "string"
           },
@@ -917,7 +918,8 @@
           "status": {
             "enum": [
               "unchecked",
-              "checked"
+              "checked",
+              "gate"
             ],
             "type": "string"
           }

@@ -114,6 +114,7 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
         return threshold
     voted = human_voted_ids(det_ctx)
     det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
+    det_ctx.gate_passed = None  # a structural re-rank after this pass sets it afresh (#4505)
     knobs = line_knobs()
     beta, floor = knobs["beta"], knobs["min_precision"]
     if beta is not None and det_ctx.labels_line is not None:

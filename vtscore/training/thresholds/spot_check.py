@@ -112,7 +112,11 @@ CHECK_ADVISORY = "advisory"
 CHECK_TRIM = "trim"
 CHECK_SHAPES: tuple[str, ...] = (CHECK_ADVISORY, CHECK_TRIM)
 BALANCE_CHECKED = "checked"
-BALANCE_STATES = (FLOOR_UNCHECKED, BALANCE_CHECKED)
+#: A structural detector's line (#4505): the verification gate's boundary, not a
+#: cut on a ranking, so no check applies to it and it is neither unchecked nor
+#: checked.  Its count is what the gate passes (:func:`gate_balance_state`).
+BALANCE_GATE = "gate"
+BALANCE_STATES = (FLOOR_UNCHECKED, BALANCE_CHECKED, BALANCE_GATE)
 
 #: The surfacing provenance a check's vote is recorded with
 #: (:mod:`vtscore.datasets.vote_provenance`): the app's route and the eval
@@ -1338,7 +1342,8 @@ class BalanceState:
     """What the balance says about a detector's line: its state, the set's size and what the check estimated (#4413).
 
     The wire shape beside ``threshold`` under a balance, as :class:`FloorState`
-    is under a floor: ``status`` is ``unchecked`` or ``checked``; ``precision``
+    is under a floor: ``status`` is ``unchecked``, ``checked``, or ``gate`` on a
+    structural detector's line (:func:`gate_balance_state`); ``precision``
     and ``recall`` are the audited set's likely ranges; ``fbeta`` its estimate.
     Under the ``advisory`` shape (#4427) the audited set is the walk's end and
     the kept ``count`` is the unchecked rule's; under ``trim`` they coincide.
@@ -1474,8 +1479,36 @@ def balance_state(
     )
 
 
+def gate_balance_state(beta: float, passed: Iterable[int], also_voted: Iterable[int] = ()) -> BalanceState:
+    """The balance's state on a line the structural verification gate draws (#4505).
+
+    On a structural dataset the line is the gate's boundary, not a cut on a
+    ranking (:func:`~vtscore.training.structural_similarity.maybe_structural_rerank`
+    drops the ranking), so the count rule's 32 says nothing about it.  The
+    count is what the gate keeps: the *passed* items (those at or above its
+    threshold) that are not in *also_voted*.  ``status`` is ``gate``: no check
+    applies, so it carries no ranges, and ``checkable`` is ``False``.
+    """
+    voted = frozenset(int(v) for v in also_voted)
+    count = sum(1 for i in passed if int(i) not in voted)
+    return BalanceState(
+        float(beta),
+        BALANCE_GATE,
+        count,
+        None,
+        None,
+        None,
+        False,
+        balance_schedule(beta),
+        check_shape(beta),
+        None,
+        False,
+    )
+
+
 __all__ = [
     "BALANCE_CHECKED",
+    "BALANCE_GATE",
     "BALANCE_PRESETS",
     "BALANCE_STATES",
     "BETA_MAX",
@@ -1523,6 +1556,7 @@ __all__ = [
     "balance_count",
     "balance_line",
     "balance_state",
+    "gate_balance_state",
     "applicable_balance",
     "BalanceState",
     "DEFAULT_BETA",

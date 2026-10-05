@@ -299,12 +299,13 @@ export class FindStatsModalComponent implements OnInit {
     return r ? `Likely ${rangePercent(r)} right (checked ${r.labelled})` : '';
   }
 
-  /** The line's legend entry: whether a check ended on the set it keeps, or never ran. */
+  /** The line's legend entry: whether a check ended on the set it keeps, never ran, or the verification gate drew it. */
   get lineLegend(): string {
     const balance = this.lineBalance;
     if (!balance) return 'Line';
     const kept = balance.count.toLocaleString();
     if (balance.status === 'checked') return `Line: checked (${kept} kept)`;
+    if (balance.status === 'gate') return `Line: ${kept} pass the verification gate`;
     return `Line: the top ${kept}, unchecked`;
   }
 

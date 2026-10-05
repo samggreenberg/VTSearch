@@ -73,6 +73,14 @@ describe('line-balance (#4413)', () => {
       expect(lineBalanceFrom(wire as unknown as BalanceState)!.checkable).toBe(true);
     });
 
+    it('reads a structural detector\'s gate line (#4505), which no check walks', () => {
+      const wire = { beta: 1, status: 'gate', count: 7, precision: null, recall: null, fbeta: null, schedule: { candidate: 32, rounds: 1, picks: 5 }, shape: 'advisory', audited: null, checkable: false };
+      const balance = lineBalanceFrom(wire as unknown as BalanceState)!;
+      expect(balance.status).toBe('gate');
+      expect(balance.count).toBe(7);
+      expect(balance.checkable).toBe(false);
+    });
+
     it('reads the labels\' separation and whether a check is due (#4496)', () => {
       const wire = { beta: 1, status: 'unchecked', count: 40, precision: null, recall: null, fbeta: null, schedule: null, shape: 'advisory', audited: null, separation: 0.83, check_due: true };
       const balance = lineBalanceFrom(wire as unknown as BalanceState)!;
@@ -255,6 +263,15 @@ describe('line-balance (#4413)', () => {
       );
     });
 
+    it('says how many pass the verification gate on a structural line, not a top N unchecked (#4505)', () => {
+      const gate = lineBalance('gate', { count: 1234 });
+      expect(balanceSummary(gate)).toBe('1,234 pass the verification gate');
+      const why = balanceExplanation(gate)!;
+      expect(why).toContain('The verification gate draws this line: 1,234 items match one of your Good examples');
+      expect(why).toContain('so none applies');
+      for (const text of [balanceSummary(gate)!, why]) expect(text).not.toMatch(/unchecked|top \d/i);
+    });
+
     it('explains an unchecked line as unmeasured, pointing at no check (Find offers none, #4317)', () => {
       const why = balanceExplanation(lineBalance('unchecked', { count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }))!;
       expect(why).toBe('Unchecked: the line keeps the top 128, and nothing has measured how much of it is right.');
@@ -292,6 +309,7 @@ describe('line-balance (#4413)', () => {
       for (const status of ['unchecked', 'checked'] as const) {
         expect(checkLabel(lineBalance(status, { checkable: false }))).toBeNull();
       }
+      expect(checkLabel(lineBalance('gate'))).toBeNull();
     });
 
     it('says what a check does at this balance (#4427), and that its votes are votes', () => {

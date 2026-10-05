@@ -15,7 +15,7 @@ import pytest
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.state.core import detector_balance_state, get_active_detector_context, human_voted_ids
-from vtscore.training.thresholds import BALANCE_CHECKED, CHECK_ADVISORY
+from vtscore.training.thresholds import BALANCE_CHECKED, BALANCE_GATE, CHECK_ADVISORY
 from vtsearch.state import bad_votes, get_beta, get_line_preference, good_votes, snapshot_medias
 
 
@@ -158,6 +158,22 @@ class TestTheLineUnderTheBalance:
         assert client.get("/api/balance").get_json()["checkable"] is False
         assert client.get("/api/precision-check").get_json()["balance"]["checkable"] is False
         assert client.post("/api/precision-check/start", json={}).status_code == 409
+
+    def test_a_gate_line_reports_how_many_pass_the_gate(self, client):
+        """#4505: on a structural line the count is what the gate passes, not the count rule's 32."""
+        detector_id = _load_detector(client)
+        client.post("/api/find-label", json={"detector_id": detector_id})
+        ctx = get_active_detector_context()
+        unvoted = [cid for cid in snapshot_medias() if cid not in human_voted_ids(ctx)]
+        # What ``maybe_structural_rerank`` leaves on a structural detector.
+        ctx.line_ranking = None
+        ctx.gate_passed = frozenset(unvoted[:3])
+        for balance in (
+            client.get("/api/balance").get_json(),
+            client.get("/api/precision-check").get_json()["balance"],
+        ):
+            assert balance["status"] == BALANCE_GATE and balance["count"] == 3
+            assert balance["checkable"] is False and balance["precision"] is None
 
     def test_under_the_floor_a_check_is_still_the_floors(self, client, floor_preference):
         detector_id = _load_detector(client)

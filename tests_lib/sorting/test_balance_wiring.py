@@ -30,6 +30,7 @@ from vtscore.state.core import (
 from vtscore.training.thresholds import (
     CHECK_ADVISORY,
     BALANCE_CHECKED,
+    BALANCE_GATE,
     FLOOR_UNCHECKED,
     WEAK_CHECK_COOLDOWN,
     ClassScoreModel,
@@ -197,6 +198,36 @@ class TestTheLine:
         assert recut_detector_threshold(bare, 4, beta=1.0) is None
         with pytest.raises(ValueError, match="needs an inclusion"):
             recut_detector_threshold(bare)
+
+
+class TestTheGateLine:
+    """#4505: a structural detector's line is the verification gate's, and its state says how many pass."""
+
+    def _gated(self) -> DetectorContext:
+        ctx = DetectorContext("det-gate")
+        ctx.good_votes.update({0: None, 1: None})
+        ctx.bad_votes.update({50: None})
+        ctx.gate_passed = frozenset(range(10))  # what ``maybe_structural_rerank`` leaves
+        return ctx
+
+    def test_the_state_counts_the_unvoted_items_the_gate_passes(self):
+        state = detector_balance_state(self._gated(), 1.0)
+        assert state["status"] == BALANCE_GATE and state["count"] == 8
+        assert state["checkable"] is False and state["check_due"] is False
+        assert state["precision"] is None and state["audited"] is None
+
+    def test_a_ranking_drawn_after_the_gate_is_the_line(self):
+        ctx = self._gated()
+        ctx.line_ranking, _ = _two_populations(n_high=28)
+        assert detector_balance_state(ctx, 1.0)["status"] == FLOOR_UNCHECKED
+
+    def test_a_dataset_switch_clears_the_gate(self):
+        from vtscore.detectors.dataset_sync import _drop_line_ranking
+
+        ctx = self._gated()
+        _drop_line_ranking(ctx)
+        assert ctx.gate_passed is None, "media ids are per dataset"
+        assert detector_balance_state(ctx, 1.0)["status"] == FLOOR_UNCHECKED
 
 
 class TestTheWeakCheckPrompt:

@@ -52,8 +52,10 @@ type Dot = 'green' | 'yellow' | 'none';
  * line - the set the line keeps and what the spot check found there, never an
  * estimate from the model (owner, 2026-09-29, #4272): checked, with the
  * check's likely share right, how many of all the matches it found in words,
- * and the count kept; or the top N kept unchecked. Nothing is met or fallen
- * short of (#4413). There is no "off": every detector has a balance (#4269).
+ * and the count kept; or the top N kept unchecked; or, on a structural
+ * detector's line, how many pass the verification gate, with no dot, since no
+ * check applies there (#4505). Nothing is met or fallen short of (#4413).
+ * There is no "off": every detector has a balance (#4269).
  *
  * In Train, the check affordance sits beside that line, "Check 5 picks"
  * (#4273), in both states: it opens the spot check (`vt-spot-check-modal`,
@@ -125,6 +127,8 @@ export class BalanceComponent {
         return 'green';
       case 'unchecked':
         return 'yellow';
+      // A structural detector's gate line (#4505) has no check to invite or report.
+      case 'gate':
       default:
         return 'none';
     }

@@ -549,7 +549,21 @@ def maybe_structural_rerank(
         scorer=scorer,
         parents=parents,
     )
+    _record_gate(det_ctx, reranked, threshold_out, score_key)
     return reranked, threshold_out
+
+
+def _record_gate(det_ctx: Any, reranked: list[dict], threshold: float, score_key: str) -> None:
+    """Leave the pages the gate passes on *det_ctx*: what the balance counts on this line (#4505).
+
+    A set, never a ranking, since a check has no ranking to walk here.
+    """
+    if det_ctx is None:
+        return
+    try:
+        det_ctx.gate_passed = frozenset(r["id"] for r in reranked if float(r.get(score_key) or 0.0) >= threshold)
+    except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
+        pass
 
 
 #: Stop-list from Bad votes (#4170 / #4180, pre-registered arms): ``"off"`` (shipped),

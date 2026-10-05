@@ -5,7 +5,9 @@ import type { BalanceState } from '../generated/api-client/models/balance-state'
  * its check are #4272's and #4273's).
  *
  * The line always keeps a set: the top `count` unvoted items of the ranking.
- * It never falls back to a default cut.
+ * It never falls back to a default cut. A structural detector's line is the
+ * exception (`gate`, below): it is drawn by the verification gate, not on a
+ * ranking.
  *
  * - `unchecked`: no spot check has run at this balance. The set is the
  *   balance's starting candidate, and nothing has measured how much of it is
@@ -13,13 +15,16 @@ import type { BalanceState } from '../generated/api-client/models/balance-state'
  * - `checked`: a check walked the ranking and ended on the set where its
  *   estimate of the balance (F-beta) peaked; the line keeps that set, and the
  *   two ranges say what the picks found there.
+ * - `gate`: a structural detector's line (#4505), the verification gate's
+ *   boundary. The set is the `count` unvoted items the gate passes; a check
+ *   needs a ranking to sample, so none applies and there are no ranges.
  *
  * Nothing is met or fallen short of: a check just says what it estimated.
  * Every match, count and action works on the line in both states. The state
  * and its ranges show in the balance control; the line itself is drawn the
  * same in both.
  */
-export type BalanceStatus = 'unchecked' | 'checked';
+export type BalanceStatus = 'unchecked' | 'checked' | 'gate';
 
 /**
  * How a check treats the line (#4427, #4452): `advisory` - the walk audits and
@@ -88,7 +93,7 @@ export interface LineBalance {
   checkDue: boolean;
 }
 
-const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked'];
+const STATUSES: readonly BalanceStatus[] = ['unchecked', 'checked', 'gate'];
 
 function likelyRangeFrom(range: BalanceState['precision']): LikelyRange | null {
   return range
@@ -99,7 +104,7 @@ function likelyRangeFrom(range: BalanceState['precision']): LikelyRange | null {
 /**
  * The wire `balance` object, as a {@link LineBalance}; null when the response
  * carried none (a sort with no detector behind it), or a status outside the
- * two states.
+ * three states.
  */
 export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBalance | null {
   if (!wire) return null;
@@ -236,6 +241,7 @@ export function balanceSummary(balance: LineBalance | null): string | null {
   if (!balance) return null;
   const kept = balance.count.toLocaleString();
   if (balance.status === 'unchecked') return `Top ${kept} kept, unchecked`;
+  if (balance.status === 'gate') return `${kept} pass the verification gate`;
   const p = balance.precision;
   const r = balance.recall;
   return p && r
@@ -254,6 +260,12 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
   const kept = balance.count.toLocaleString();
   if (balance.status === 'unchecked') {
     return `Unchecked: the line keeps the top ${kept}, and nothing has measured how much of it is right.`;
+  }
+  if (balance.status === 'gate') {
+    return (
+      `The verification gate draws this line: ${kept} items match one of your Good examples geometrically, ` +
+      `not counting the ones you voted on. A spot check samples a ranked list, and this line has none, so none applies.`
+    );
   }
   const p = balance.precision;
   const r = balance.recall;
