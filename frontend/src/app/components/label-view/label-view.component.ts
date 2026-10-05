@@ -29,7 +29,7 @@ import { VoteHistoryService } from '../../services/vote-history.service';
 import { LabelsetStateService } from '../../services/labelset-state.service';
 import { SortStateService, SortMode, SelectMode } from '../../services/sort-state.service';
 import { SettingsStateService } from '../../services/settings-state.service';
-import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { AutopilotStateService, type AutopilotPhase } from '../../services/autopilot-state.service';
 import { EmbedderCapabilityService } from '../../services/embedder-capability.service';
 import { ActiveContextService } from '../../services/active-context.service';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -49,6 +49,14 @@ import { buildMediaContextMenuItems } from './media-context-menu-items';
 
 /** What armed a {@link LabelViewComponent.seedRankingIfUnranked} run. */
 type SeedTrigger = 'entry' | 'pair' | 'retrain';
+
+/** Autopilot's opening phases, on the text or example sort: no detector is trained there (#4496). */
+const AUTOPILOT_OPENING: ReadonlySet<AutopilotPhase> = new Set<AutopilotPhase>(['idle', 'good', 'bad', 'more']);
+
+/** What the spot check says when Autopilot opened it (#4496). */
+const AUTOPILOT_CHECK_INTRO =
+  'Your Good and Bad labels still overlap, so Autopilot is checking the line: a few picks drawn ' +
+  'evenly down the list teach the detector where it falls.';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -208,6 +216,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** The balance's spot check is open (#4273, #4413). */
   readonly showSpotCheck = signal(false);
+  /** Why the open spot check opened, when Autopilot ran it (#4496); null when the user asked for it. */
+  readonly spotCheckIntro = signal<string | null>(null);
 
   // Re-sort prompt state
   readonly showResortPrompt = signal(false);
@@ -310,6 +320,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // store then drops the stale picks and fetches the new ones. A prediction
     // that is still wrong at vote time costs one unused fetch, never a wrong
     // image: the store hands bytes back only for the URL they were fetched from.
+    // #4496: Autopilot checks when the server says one is due. The balance
+    // lands with each learned sort, and the check waits for the sort to settle.
+    effect(() => {
+      const due = this.sortState.balance?.checkDue ?? false;
+      if (!due || this.sortState.sortBusy) return;
+      untracked(() => this.runDueCheck());
+    });
     effect(() => {
       const id = this.mediaState.selectedId();
       const upcoming = this.sortRunner.peekUpcomingMedia(id, PREFETCH_DEPTH);
@@ -957,6 +974,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   /** The balance control's "Check N picks": open the spot check (#4273). */
   onSpotCheck(): void {
     if (this.sortState.sortBusy) return;
+    this.spotCheckIntro.set(null);
+    this.showSpotCheck.set(true);
+  }
+
+  /**
+   * Autopilot runs the spot check itself when the labels separate weakly (#4496): the server's
+   * `check_due`, read once a learned sort has landed. Only past Autopilot's opening: on the text or
+   * example sort no detector is trained, so there is neither a separation to read nor a list to
+   * check. Never over another step.
+   */
+  private runDueCheck(): void {
+    if (!this.autopilotStateService.running) return;
+    if (AUTOPILOT_OPENING.has(this.autopilotStateService.state.phase)) return;
+    if (this.showSpotCheck() || this.showResortPrompt()) return;
+    this.spotCheckIntro.set(AUTOPILOT_CHECK_INTRO);
     this.showSpotCheck.set(true);
   }
 
@@ -973,12 +1005,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (event.finished) this.sortRunner.refreshLine();
   }
 
-  /** The check closed, however it ended: catch up on anything it left behind. */
+  /** The check closed, however it ended: catch up on anything it left behind, and let Autopilot carry on. */
   onSpotCheckClosed(): void {
     this.showSpotCheck.set(false);
+    this.spotCheckIntro.set(null);
     this.voteState.loadVotes();
     this.labelsetState.refresh();
     this.sortRunner.refreshLine();
+    // The check's picks are votes, and the item in the centre may be one of them.
+    if (this.autopilotStateService.running) this.sortRunner.autoSelectNext();
   }
 
   // --- Media selection ---

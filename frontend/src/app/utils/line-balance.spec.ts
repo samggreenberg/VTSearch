@@ -5,6 +5,7 @@ import {
   DEFAULT_BETA,
   balanceExplanation,
   balanceSummary,
+  checkDueNote,
   checkLabel,
   checkTitle,
   foundWords,
@@ -41,6 +42,8 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 64, rounds: 2, picks: 5 },
         shape: 'advisory',
         audited: 128,
+        separation: null,
+        checkDue: false,
       });
     });
 
@@ -56,7 +59,19 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 128, rounds: 3, picks: 5 },
         shape: 'trim',
         audited: null,
+        separation: null,
+        checkDue: false,
       });
+    });
+
+    it('reads the labels\' separation and whether a check is due (#4496)', () => {
+      const wire = { beta: 1, status: 'unchecked', count: 40, precision: null, recall: null, fbeta: null, schedule: null, shape: 'advisory', audited: null, separation: 0.83, check_due: true };
+      const balance = lineBalanceFrom(wire as unknown as BalanceState)!;
+      expect(balance.separation).toBe(0.83);
+      expect(balance.checkDue).toBe(true);
+      expect(checkDueNote(balance)).toContain('still overlap');
+      expect(checkDueNote({ ...balance, checkDue: false })).toBeNull();
+      expect(checkDueNote(null)).toBeNull();
     });
 
     it('reads a range with no stale flag as current, and no schedule as none', () => {

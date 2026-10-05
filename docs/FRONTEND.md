@@ -255,6 +255,14 @@ picks" emits `check`; the left panel forwards it as `check`, and the label
 view hosts the modal behind a `showSpotCheck` signal. Find sets the control's
 `offerCheck` false and hosts no modal: it tests the balance Train set, and
 labelling more to set one is too late there (#4317).
+**When a check is due** (#4496): the balance's `checkDue` (the server's
+`check_due`, `weak_check_due` on the labels line's `separation`) turns the
+control's button `btn--primary` and adds a `.balance-due` note. The label view
+runs the check itself under Autopilot: an effect on the balance and
+`sortBusy` calls `runDueCheck()`, which opens the modal with an `intro` line
+once a learned sort has landed with `checkDue`, never in Autopilot's opening
+(`good`/`bad`/`more`, where no detector is trained) nor over another step;
+closing it advances Autopilot past any item the check voted.
 The modal owns the check's lifecycle against `/api/precision-check` and holds a
 round's votes locally until every pick has one, then sends the round whole. It
 takes the vote keys through `KeyboardService.captureVoteKeys`, a claim that
