@@ -21,15 +21,7 @@
       </p>
     }
     @if (keptNote()) {
-      <p class="result-note kept-note" role="note">
-        {{ keptNote() }}
-        <button
-          type="button"
-          class="btn btn--secondary btn--sm"
-          (click)="testAfresh.emit()"
-          title="Forget the kept test, and deal fresh picks over the same line. The kept result is gone even if you stop the new test part way."
-        >Forget it and test afresh</button>
-      </p>
+      <p class="result-note kept-note" role="note">{{ keptNote() }}</p>
     }
 
     @if (estimates(); as est) {

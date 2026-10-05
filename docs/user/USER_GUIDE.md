@@ -1217,8 +1217,7 @@ you can see what the detector used to ship. Open Find on a collection you
 tested before, with the detector and its ranking unchanged, and the test
 picks up where it left off: the kept picks come back, already in the Review
 tab's piles, and the result says when you took them, so there is nothing to
-vote again. **Forget it and test afresh** beside that note drops the kept test
-and deals fresh picks instead.
+vote again.
 
 Under the verdict, **Your checks** sets the detector's calls against the
 answers the collection has now (the test's picks and anything you verified in

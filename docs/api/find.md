@@ -329,9 +329,13 @@ Every verb returns the same body:
   finished test is left as it is. Always **200**.
 - **`forget`** drops the [kept verdict](#the-kept-verdict) for this dataset,
   and a finished test in memory with it, so the next `start` deals a fresh
-  test even over a ranking a kept verdict was drawn from (the app's *Forget it
-  and test afresh*). A running test is left as it is, and the forgotten
-  test's picks stay session votes. **200** whether or not anything was kept.
+  test even over a ranking a kept verdict was drawn from. It is a reset, which
+  the screenshot harness calls between shots; the app has no button for it,
+  because a retrain already marks a verdict stale, a changed ranking already
+  deals a fresh test, and a second test of an unchanged ranking measures
+  nothing the first did not. A running test is left as it is, and the
+  forgotten test's picks stay session votes. **200** whether or not anything
+  was kept.
 
 `test.phase` is derived from the sample on every read
 (`vtscore.training.thresholds.line_phase`): `matches` (precision, picks from

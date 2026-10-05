@@ -248,7 +248,8 @@ instead, since every commit on `dev` is effectively a new app release.)
   ranking its picks came from, and `kept_labels(ids, line_count)` gives them
   back only on that ranking and line. `keep_verdict(det_ctx, test, ...)` /
   `kept_verdict(det_ctx, dataset_id)` / `forget_verdict(det_ctx, dataset_id)`
-  read and write the active detector's file under `label_sync_write_lock`;
+  read and write the active detector's file under `label_sync_write_lock`
+  (`forget_verdict` is a reset; nothing in the app's flow needs it);
   `verdict_summaries(data)` is the readers' shape, with the stale mark.
   `LineTest` gains `kept_at`, when a resumed test's picks were taken
   (`None` for a fresh test), in `as_dict()` too.

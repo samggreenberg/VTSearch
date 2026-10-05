@@ -35,8 +35,9 @@ drawn from (:func:`ranking_digest`: the ids in rank order and the line's
 count).  A later test of the same dataset whose ranking and line match takes
 the kept picks back (:meth:`LineTestVerdict.kept_labels`), so the bands, the
 ranges and *Lean the Threshold*'s re-estimates are there again without a
-single new vote.  :func:`forget_verdict` drops a kept verdict, for a test
-afresh on the same ranking.
+single new vote.  :func:`forget_verdict` drops a kept verdict: a reset (the
+app's screenshot harness uses it between shots), since a user never needs
+one.
 """
 
 from __future__ import annotations
@@ -352,7 +353,7 @@ def keep_verdict(
 
 
 def forget_verdict(det_ctx: "DetectorContext", dataset_id: str) -> bool:
-    """Drop the verdict *det_ctx*'s detector keeps for *dataset_id*, so the next test there starts afresh.
+    """Drop the verdict *det_ctx*'s detector keeps for *dataset_id*, so the next test there starts afresh (a reset).
 
     ``True`` when there was one.  The same read-modify-write discipline as
     :func:`keep_verdict`; the file is not rewritten when there is nothing to drop.

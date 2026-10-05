@@ -25,8 +25,8 @@ not list every commit. Use `git log` for the full history.
   shows each detector's latest under its name (or *Untested*). A retrain marks
   a verdict *out of date*; it stays. Opening Find again on a tested collection,
   with the detector and its ranking unchanged, resumes the test from the kept
-  picks (back in the Review tab's piles), and **Forget it and test afresh**
-  deals new ones instead. New route `POST /api/line-test/forget`.
+  picks (back in the Review tab's piles). New route `POST /api/line-test/forget`
+  resets a kept verdict, for the screenshot harness.
 
 - **Find opens on a Test autopilot** (issue #4524). The Find view's left panel
   now carries two tabs, the Train view's Autopilot / Manual split applied to

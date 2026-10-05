@@ -805,12 +805,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.lineTest.start();
   }
 
-  /** Forget the test the detector kept for this collection (#4526) and deal a fresh one. */
-  onTestAfresh(): void {
-    if (this.sortState.sortBusy) return;
-    this.lineTest.testAfresh();
-  }
-
   /**
    * The verdict's reason to exist: put the detector on the AutoRun list, so
    * every dataset it runs over ships its matches unchecked at this balance,

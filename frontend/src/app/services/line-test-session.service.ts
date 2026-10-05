@@ -160,11 +160,6 @@ export class LineTestSessionService {
     this.send(this.api.cancel(), 'Could not stop the test.');
   }
 
-  /** Forget the test the detector keeps for this dataset (#4526) and deal a fresh one over the same line. */
-  testAfresh(): void {
-    this.send(this.api.forget(), 'Could not forget the kept test.', () => this.start());
-  }
-
   private inFlight = 0;
 
   private send(

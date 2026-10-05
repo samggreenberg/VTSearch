@@ -109,8 +109,6 @@ export class LineTestResultComponent {
   readonly addCorrections = output<void>();
   /** Test the line as it stands now (after it moved). */
   readonly testAgain = output<void>();
-  /** Forget the test the detector keeps for this collection and deal a fresh one (#4526). */
-  readonly testAfresh = output<void>();
 
   readonly phase = computed<LineTestPhase>(() => (this.scoring() ? 'score' : lineTestPhase(this.response())));
   readonly test = computed(() => this.response()?.test ?? null);

@@ -19,7 +19,7 @@ lifecycle for the active detector's Find session:
 * ``POST /api/line-test/cancel`` abandons a running test (the votes cast stay
   session votes);
 * ``POST /api/line-test/forget`` forgets the verdict the detector keeps for
-  this dataset (#4526), so the next start tests afresh;
+  this dataset (#4526): a reset for the screenshot harness, not a user action;
 * ``GET /api/line-test`` reports the running test, or the last finished one.
 
 Unlike the spot check (``vtsearch/routes/precision_check.py``) a test never
@@ -298,10 +298,16 @@ def cancel_line_test():
 def forget_line_test():
     """Forget the verdict the detector keeps for this dataset (#4526), so the next start deals a fresh test.
 
-    A finished test in memory goes with it, since it is the one that was kept
-    or the one a start would resume; its picks stay session votes, as a
-    cancelled test's do.  A running test is left as it is.  200 whether or
-    not a verdict was kept; 500 only when the detector file cannot be rewritten.
+    A reset, not a user action: the app never calls it.  A user has no need
+    to, because a retrain already marks the verdict stale, a changed ranking
+    already deals a fresh test (whose verdict replaces the kept one at Done),
+    and on an unchanged ranking a second test of the same budget measures
+    nothing the first did not.  The screenshot harness calls it between shots,
+    so a shot that reaches Done does not leave the next one resuming on the
+    same pair.  A finished test in memory goes with it; its picks stay session
+    votes, as a cancelled test's do.  A running test is left as it is.  200
+    whether or not a verdict was kept; 500 only when the detector file cannot
+    be rewritten.
     """
     from vtscore.detectors.line_verdicts import forget_verdict  # noqa: PLC0415
     from vtscore.detectors.store import DetectorWriteError  # noqa: PLC0415

@@ -185,10 +185,6 @@ describe('LineTestResultComponent (#4524)', () => {
     el = await show(wireLineTest(wireDone({ kept_at: keptAt })));
     expect(el.querySelector('.kept-note')!.textContent).toContain('Kept from your test of 2026-10-05');
     expect(el.querySelector('.kept-note')!.textContent).toContain('its 45 picks still hold');
-    const afresh: number[] = [];
-    fixture.componentInstance.testAfresh.subscribe(() => afresh.push(1));
-    (el.querySelector('.kept-note button') as HTMLButtonElement).click();
-    expect(afresh.length).toBe(1);
   });
 
   it('says there is nothing to test', async () => {

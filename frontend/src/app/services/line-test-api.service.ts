@@ -7,7 +7,6 @@ import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { LineTestResponse } from '../generated/api-client/models/line-test-response';
 import type { PrecisionCheckVote } from '../generated/api-client/models/precision-check-vote';
 import { cancelLineTest } from '../generated/api-client/fn/line-test/cancel-line-test';
-import { forgetLineTest } from '../generated/api-client/fn/line-test/forget-line-test';
 import { getLineTest } from '../generated/api-client/fn/line-test/get-line-test';
 import { startLineTest } from '../generated/api-client/fn/line-test/start-line-test';
 import { unvoteLineTest } from '../generated/api-client/fn/line-test/unvote-line-test';
@@ -48,10 +47,5 @@ export class LineTestApiService {
   /** Drop a running test; its votes stay session votes. A finished test is kept. */
   cancel(): Observable<LineTestResponse> {
     return cancelLineTest(this.http, this.config.rootUrl).pipe(map((r) => r.body));
-  }
-
-  /** Forget the verdict the detector keeps for this dataset (#4526), and a finished test with it: the next start tests afresh. */
-  forget(): Observable<LineTestResponse> {
-    return forgetLineTest(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 }
