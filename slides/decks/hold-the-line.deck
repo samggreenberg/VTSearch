@@ -107,6 +107,9 @@ slides:
   # idea, drawn on a pool thinned to 5% positive by the owner's call; the
   # natural-pool result is in the notes and the study's REPORT.md.
   progression
+  # How the app does on that bench today: the State of the App review, each
+  # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
+  sota-photos
 
   # 6 — Regions
   outline-hold-the-line +at6
@@ -149,6 +152,9 @@ slides:
   logo-votes
   logo-line
   logo-balance
+  # And how it does: the document review's two panels, one run of the app per
+  # radio (`make-sota-figs.py`, from the committed per-step CSVs).
+  sota-documents
 
   # 8 — Step by Step: the tool as a how-to (#4202). Section 1 shows the same
   # session as an argument; this shows it as instructions, every click marked
