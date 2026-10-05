@@ -3715,6 +3715,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             color=INK,
         )
         _acq_cell(ax, zx0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+        # Backed in white: it sits inside the zoom wedge, whose edge would
+        # otherwise run through the words.
         ax.text(
             zx0 + (pick_index + 0.5) * cell_w,
             zoom_top + LABEL_GAP,
@@ -3723,6 +3725,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             va="bottom",
             fontsize=15,
             color=INK,
+            bbox={"boxstyle": "square,pad=0.1", "facecolor": "white", "edgecolor": "none"},
+            zorder=3,
         )
 
     # ── stage 4: the vote goes back to D₀, and the loop closes ───────────────

@@ -538,16 +538,18 @@ section .pageno {
 section.lead .pageno,
 section.statement .pageno { display: none; }
 
-/* A results slide's date, opposite the page number and set like it. The deck
-   ages unevenly: a mechanism slide holds for months, while a chart of measured
-   numbers is true of the app on the day it ran. So a slide that charts an
-   experiment says, on its face, when the experiment ran — the room can see
+/* A results slide's date, in the top-right corner, set like the page number.
+   The deck ages unevenly: a mechanism slide holds for months, while a chart of
+   measured numbers is true of the app on the day it ran. So a slide that charts
+   an experiment says, on its face, when the experiment ran — the room can see
    how fresh a number is, and the presenter can see which charts are due a
-   re-run. See *A results slide carries its date* in STYLE.md. */
+   re-run. Top right because it is the one corner every chart leaves empty: the
+   bottom-left one holds an axis label on some of them. See *A results slide
+   carries its date* in STYLE.md. */
 section .asof {
   position: absolute;
-  left: 70px;
-  bottom: 26px;
+  right: 70px;
+  top: 30px;
   font-size: 20px;
   color: var(--ink-soft);
 }

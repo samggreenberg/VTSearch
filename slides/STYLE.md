@@ -504,8 +504,10 @@ So a slide that charts an experiment says when it ran, on its face:
 <div class="asof">Measured 2026-10-04</div>
 ```
 
-The theme sets it bottom left, opposite the page number and in the same type,
-because it is the same kind of thing: an address, not an argument. Use the
+The theme sets it in the top-right corner, in the page number's type, because
+it is the same kind of thing (an address, not an argument) and because that is
+the corner every chart leaves empty: the bottom-left one holds an axis label on
+some of them. Use the
 date in the report's directory name, and give both dates when the chart joins
 runs from two days (`Measured 2026-10-03 and 10-04`). Re-running the
 experiment means changing the date along with the figure and the notes.
