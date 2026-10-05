@@ -92,6 +92,9 @@ NEUTRAL_FILL = "#e8ebef"  # a wash *behind* other ink: a band, a shaded interval
 #: absence of hatching says "classes unknown", and neither is a claim that
 #: wants colour.
 UNLABELED_FILL = "#dae0e8"
+#: The zoom wedge on Second Cut: lighter than an unlabeled cell, so the strip it
+#: opens into still reads as the thing being looked at.
+ZOOM_WEDGE_FILL = "#eef1f5"
 BLUE = "#0b5fa5"  # production / the shipped thing
 RED = "#b91c1c"  # the Bad component / cross-calibration
 GREEN = "#0d8a5f"  # the Good component
@@ -2629,7 +2632,7 @@ INCL_POPULATION = XQUANT_POPULATIONS[0]
 KNOB_FLOW_STAGES = 4
 WALK_FLOW_STAGES = 6
 TILT_FLOW_STAGES = 6
-ACQ_FLOW_STAGES = 5
+ACQ_FLOW_STAGES = 4
 
 #: The gauge row's geometry: three bars across the panel's width.
 INCL_GAUGE_GAP = 0.8
@@ -3619,7 +3622,10 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     def row_name(x: float, y: float, text: str, size: float = 15.0) -> None:
         ax.text(x - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
 
-    # ── stage 1: where the calibration talk left off ──────────────────────────
+    # ── stage 1: where the calibration talk left off, and job one ─────────────
+    # The cut read as a decision boundary arrives with the drawing rather than a
+    # page after it: on its own page the bracket was the only change, and the
+    # room read the two pages as one (#4517).
     ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
     _data_block(ax, block_x0, block_y0, block_w, block_h)
     train_x = block_x0 + block_w + OBJECT_GAP
@@ -3638,43 +3644,49 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     _quantile_gauge(ax, x0, gauge_y0, w, ACQ_GAUGE_H, q_report, "")
     row_name(x0, gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
 
-    # ── stage 2: job one — the cut read as a decision boundary ───────────────
-    if stage >= 2:
-        brace_x0, brace_x1 = x0 + q_report * w, x0 + w
-        brace_y = gauge_top + GAUGE_STUB + OBJECT_GAP
-        ax.plot(
-            [brace_x0, brace_x0, brace_x1, brace_x1],
-            [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12],
-            color=INK,
-            linewidth=1.6,
-            zorder=5,
-        )
-        ax.text(
-            (brace_x0 + brace_x1) / 2,
-            brace_y + LABEL_GAP,
-            "what you keep",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-        )
+    brace_x0, brace_x1 = x0 + q_report * w, x0 + w
+    brace_y = gauge_top + GAUGE_STUB + OBJECT_GAP
+    ax.plot(
+        [brace_x0, brace_x0, brace_x1, brace_x1],
+        [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12],
+        color=INK,
+        linewidth=1.6,
+        zorder=5,
+    )
+    ax.text(
+        (brace_x0 + brace_x1) / 2,
+        brace_y + LABEL_GAP,
+        "what you keep",
+        ha="center",
+        va="bottom",
+        fontsize=15,
+        color=INK,
+    )
 
-    # ── stage 3: job two reads the same number as a rank, so zoom in ─────────
-    if stage >= 3:
+    # ── stage 2: job two reads the same number as a rank, so zoom in ─────────
+    if stage >= 2:
         for i in range(zoom_cells):
             kind = "unlabeled"
             for idx, good in ACQ_ZOOM_VOTES:
                 if idx == i:
                     kind = "good" if good else "bad"
             _acq_cell(ax, zx0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
-        for target in (zx0, zx0 + zw):
-            ax.plot(
-                [x0 + q_report * w, target],
-                [gauge_y0, zoom_top],
-                color=RULE,
-                linewidth=1.4,
+        # The enlargement, drawn as a wedge from the one point on the ranking to
+        # the whole width of the zoom: shaded, with soft edges, so the thin cut
+        # visibly opens into the wide strip. Two hairlines in `RULE` used to say
+        # this, and at slide size they were invisible (#4517).
+        apex = (x0 + q_report * w, gauge_y0)
+        ax.add_patch(
+            Polygon(
+                [apex, (zx0, zoom_top), (zx0 + zw, zoom_top)],
+                closed=True,
+                facecolor=ZOOM_WEDGE_FILL,
+                edgecolor="none",
                 zorder=0,
             )
+        )
+        for target in (zx0, zx0 + zw):
+            ax.plot([apex[0], target], [apex[1], zoom_top], color=SOFT, linewidth=1.4, zorder=1)
         row_name(zx0, zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
         # The two cuts' names sit *between* them, each against its own tick: the
         # gap is wide enough to hold both, and a name hung outside the window
@@ -3690,8 +3702,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 4: the second cut, a few steps of the knob further up the ranking
-    if stage >= 4:
+    # ── stage 3: the second cut, a few steps of the knob further up the ranking
+    if stage >= 3:
         ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
         ax.text(
             zoom_acq_x - LABEL_GAP,
@@ -3713,12 +3725,12 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 5: the vote goes back to D₀, and the loop closes ───────────────
+    # ── stage 4: the vote goes back to D₀, and the loop closes ───────────────
     # Routed down the left margin, as the loop schematic routes its own return:
     # a straight diagonal would cross both rows of evidence, and what the last
     # step has to say is that the threshold chooses what gets voted on, which a
     # clean rectangular return says more plainly than a shortcut.
-    if stage >= 5:
+    if stage >= 4:
         pick_cx = zx0 + (pick_index + 0.5) * cell_w
         ax.plot(
             [pick_cx, pick_cx, rail_x, rail_x],
