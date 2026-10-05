@@ -1420,8 +1420,8 @@ def _pvalues_stage(stage: int) -> plt.Figure:
 
     ax.set_xlim(0, 0.36)
     ax.set_ylim(-0.012, 0.36)
-    ax.set_xlabel("share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
-    ax.set_ylabel("distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
+    ax.set_xlabel("Share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
+    ax.set_ylabel("Distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
     ax.tick_params(labelsize=NOTE_PT, colors=SOFT, length=4)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)

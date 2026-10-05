@@ -3811,7 +3811,7 @@ def blend_schedule_fig() -> None:
     ax.set_xlim(0, 122)
     ax.set_ylim(-0.03, 1.12)
     ax.set_yticks([0, 0.5, 1.0], ["GMM", "half", "x-cal"])
-    ax.set_xlabel("votes", labelpad=2)
+    ax.set_xlabel("Votes", labelpad=2)
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
     fig.text(
@@ -3944,7 +3944,7 @@ def split_fraction_fig() -> None:
     """
     import csv
 
-    report = _REPO_ROOT / "docs" / "experiments" / "calibration-fraction-3287"
+    report = _REPO_ROOT / "docs" / "experiments" / "2026-08-27-calibration-fraction-3287"
     series: dict[tuple[str, float], dict[int, tuple[float, float]]] = {}
     for run in ("figures", "siglip2l/figures", "clip/figures", "clip_l/figures"):
         with (report / run / "cost_vs_clicks.csv").open() as fh:
@@ -4275,7 +4275,7 @@ def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
     ax.text(
         FBETA_AXIS_LABEL_X,
         rank_y + FBETA_AXIS_LABEL_LIFT,
-        "“bookness”, low to high",
+        "“Bookness”, low to high",
         ha="center",
         va="bottom",
         fontsize=FBETA_AXIS_LABEL_PT,
@@ -5382,7 +5382,7 @@ def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
             color=GREEN if good else RED,
             fontweight="bold",
         )
-    _ll_row_name(ax, LL_VOTES_Y + 0.15, "the votes")
+    _ll_row_name(ax, LL_VOTES_Y + 0.15, "The votes")
     if stage < 2:
         return
     # Drawn at one height: the class model says what a match and a near-miss
@@ -5409,7 +5409,7 @@ def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: 
         if top > LL_CORPUS_Y:
             ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_CORPUS_Y, z=5)
-    _ll_row_name(ax, LL_CORPUS_Y + 0.9, "the corpus")
+    _ll_row_name(ax, LL_CORPUS_Y + 0.9, "The corpus")
     # The 2-part fit: the labels' Good normal, its shape held, and a normal
     # for everything else, each scaled to the count the fit gives it.
     grid = np.linspace(lo, hi, 700)
@@ -5441,7 +5441,7 @@ def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) 
     """Stages 4-5: expected F-beta down the ranking, the line at the picked radio's peak, then the other two."""
     lo, hi = LL_LOGIT
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
-    _ll_row_name(ax, LL_F_Y + 0.75, "expected " + _sub(r"F_\beta"))
+    _ll_row_name(ax, LL_F_Y + 0.75, "Expected " + _sub(r"F_\beta"))
     for (beta, _name), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True):
         picked = beta == LL_PICKED
         if stage < (4 if picked else 5):
@@ -5607,7 +5607,7 @@ def _tx_stage(stage: int) -> plt.Figure:
     sy = (TX_CORPUS_H - 0.9) / float(peak)
 
     # ── stage 1: Train, as What to Expect left it ─────────────────────────────
-    for name, y in (("the votes", TX_VOTES_Y + 0.15), ("the corpus", TX_CORPUS_Y + 1.6)):
+    for name, y in (("The votes", TX_VOTES_Y + 0.15), ("The corpus", TX_CORPUS_Y + 1.6)):
         ax.text(TX_TRAIN[0] - 0.35, y, name, ha="right", va="center", fontsize=16, color=INK)
     ax.text(
         sum(TX_TRAIN) - TX_TRAIN[1] / 2,
@@ -6102,7 +6102,7 @@ def _cp_stage(stage: int) -> plt.Figure:
     ax.text(
         _cp_x(0.5),
         CP_AXIS_Y - 0.3,
-        "how much of the whole set is right",
+        "How much of the whole set is right",
         ha="center",
         va="top",
         fontsize=16,
@@ -6179,7 +6179,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict
     # Under the strip's left end, which nothing else uses; above it is where
     # the two figures draw their votes.
     ax.text(
-        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
+        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "Ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
     )
     # The kept set: a bracket under the top 32, named once.
     brace_y = strip_y0 - 0.42

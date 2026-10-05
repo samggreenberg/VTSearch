@@ -160,8 +160,8 @@ def _figure(curves: dict[str, tuple[np.ndarray, np.ndarray]], layout: dict, k: i
     t_max = layout["t_max"]
     ax.set_xlim(0, t_max)
     ax.set_ylim(*layout["ylim"])
-    ax.set_xlabel("votes")
-    ax.set_ylabel("cost = FPR + FNR")
+    ax.set_xlabel("Votes")
+    ax.set_ylabel("Cost = FPR + FNR")
 
     # The notch every curve leaves from: the typed query, before any vote.
     t0 = layout["t0"]
