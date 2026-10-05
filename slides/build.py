@@ -24,7 +24,8 @@ notes-page style: each speaker page shows a miniature of the real rendered
 slide beside the notes for it. Notes are the HTML comments that are not Marp
 directives — the same comments Marp exports as PPTX/HTML presenter notes, so
 they are authored once. The speaker build references per-slide PNGs of the
-audience deck under _build/imgs/, which render.sh produces first; run
+audience deck's unnumbered cut under _build/imgs/, which render.sh produces
+first, and prints each slide's number large in the page's corner instead; run
 `./render.sh <deck> pdf --speaker` rather than calling this mode directly.
 The audience build is untouched.
 """
@@ -540,14 +541,35 @@ def showing_notes(text: str, pages: list[int], group: list[int]) -> list[str]:
     return notes_for_showing(notes, letters, first=pages[0] == group[0])
 
 
-def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> str:
+def speaker_label(number: int | None, pages: list[int], group: list[int]) -> str:
+    """The slide's address as the speaker page prints it, large, bottom right.
+
+    The miniatures are rendered from the *unnumbered* cut of the deck: a 20px
+    number shrunk to a 40% thumbnail is too small to read, and it repeats on
+    every frame of the contact sheet. So the page prints the number once, at a
+    size a presenter can find at a glance, and it is the same number the room
+    sees. A fragment shown more than once adds this showing's letters (the
+    outline before section 3 is `1d`), because its speaker pages are otherwise
+    the same picture; a build's page covers every letter, which the contact
+    sheet already labels, so it prints the number alone.
+    """
+    if number is None:
+        return ""
+    if pages == group:
+        return str(number)
+    return f"{number}{''.join(stage_letter(group.index(page)) for page in pages)}"
+
+
+def speaker_page(deck: str, pages: list[int], group: list[int], text: str, number: int | None = None) -> str:
     """One showing of a fragment as one speaker page: pictures beside notes.
 
     The miniature is the per-slide PNG of the audience deck (rendered by
-    render.sh into _build/imgs/ before this runs), so the speaker sees exactly
-    what the audience sees, pixel for pixel — page number included. When the
-    fragment renders as more than one page, `frame_overview` draws the rest of
-    the group with it, in whichever of the two shapes the fragment declares.
+    render.sh into _build/imgs/ before this runs), so the speaker sees what the
+    audience sees, pixel for pixel, except the page number: the images are the
+    unnumbered cut, and the page prints the number itself, large, in its
+    bottom-right corner (`speaker_label`). When the fragment renders as more
+    than one page, `frame_overview` draws the rest of the group with it, in
+    whichever of the two shapes the fragment declares.
 
     *pages* is this showing's audience pages; *group* is every page the
     fragment renders as across the deck. They differ only for a fragment shown
@@ -561,11 +583,13 @@ def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> st
     style = fragment_frame_style(text)
     visual = frame_overview(deck, pages, group, style)
     notes = showing_notes(text, pages, group) or ["*(no presenter notes on this slide)*"]
+    label = speaker_label(number, pages, group)
+    folio = f'\n\n<div class="speaker-pageno">{label}</div>' if label else ""
     return (
         "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
         f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{style}">\n'
         f"{visual}"
-        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>"
+        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>" + folio
     )
 
 
@@ -761,28 +785,36 @@ def lay_out(
     return showings, texts, group
 
 
+def slide_numbers(showings: list[Showing], texts: dict[str, str]) -> dict[str, int]:
+    """Each numbered fragment's slide number, in order of first showing.
+
+    A slide's number is claimed by its fragment's first showing and reused by
+    the rest; a fragment marked `_paginate: false` — the title slide — takes no
+    number and does not consume one, so the first real slide is 1 rather than 2.
+    """
+    numbers: dict[str, int] = {}
+    for name, _extras, _stages, _pages in showings:
+        if name not in numbers and not UNPAGINATED_RE.search(texts[name]):
+            numbers[name] = len(numbers) + 1
+    return numbers
+
+
 def audience_bodies(
     showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]], pageno: bool = True
 ) -> list[str]:
     """The audience deck's slides, each carrying its page number and letter.
 
-    A slide's number is claimed by its fragment's first showing and reused by
-    the rest; a fragment marked `_paginate: false` — the title slide — takes no
-    number and does not consume one, so the first real slide is 1 rather than 2.
-
-    `pageno=False` draws neither, for a deck being handed over rather than
+    The numbers are `slide_numbers`'. `pageno=False` draws neither, for a deck being handed over rather than
     presented. The numbers are earned — they are how a question from the room
     names a slide, and how this repo's own review comments do — so this is an
     export option and not a style choice: nothing else about the deck changes,
     and the numbering is still computed, so a page's *address* is the same
     whether or not it is printed on it.
     """
-    numbers: dict[str, int] = {}
+    numbers = slide_numbers(showings, texts)
     bodies: list[str] = []
     for name, _extras, stages, pages in showings:
-        numbered = not UNPAGINATED_RE.search(texts[name])
-        if numbered and name not in numbers:
-            numbers[name] = len(numbers) + 1
+        numbered = name in numbers
         for offset, stage in enumerate(stages):
             marks = ""
             if numbered and pageno:
@@ -809,6 +841,7 @@ def speaker_bodies(
     a deck error (`check_speaker_fit`), so this never emits two pages for one
     slide.
     """
+    numbers = slide_numbers(showings, texts)
     bodies: list[str] = []
     for name, _extras, _stages, pages in showings:
         for number in pages if write else []:
@@ -818,7 +851,7 @@ def speaker_bodies(
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.append(speaker_page(deck, pages, group[name], texts[name]))
+        bodies.append(speaker_page(deck, pages, group[name], texts[name], numbers.get(name)))
     return bodies
 
 

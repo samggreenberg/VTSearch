@@ -499,6 +499,21 @@ section.speaker .speaker-notes {
   color: var(--ink);
 }
 section.speaker .speaker-notes p { margin: 0 0 0.4em; }
+/* The slide's number, printed once and large. The miniatures are rendered from
+   the deck's unnumbered cut, because the audience deck's 20px folio comes out
+   about 8px in a thumbnail and repeats on every frame of the contact sheet;
+   this is the same number the room sees, at a size a presenter finds at a
+   glance. It sits in the page's bottom padding, so it never takes a line from
+   the notes build.py budgets for. */
+section.speaker .speaker-pageno {
+  position: absolute;
+  right: 42px;
+  bottom: 3px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
 
 /* --- Pagination ------------------------------------------------------ */
 
