@@ -87,6 +87,8 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
+    WEAK_CHECK_COOLDOWN,
+    WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
     LineRanking,
     SpotCheck,
@@ -98,6 +100,7 @@ from vtscore.training.thresholds import (
     floor_line,
     floor_state,
     mixture_count,
+    weak_check_due,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -404,6 +407,12 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
         # set the line keeps, which ``floor_count`` reports.
         "check_audited": getattr(state, "audited", None) if rng is not None else -1,
     }
+
+
+#: Autopilot's opening (#4496): the phases on the text or example sort, where the
+#: app trains no detector, so a weak-separation check under ``weak_phase="learned"``
+#: waits for the flow to leave them.
+_OPENING_PHASES = frozenset({"good", "bad", "more"})
 
 
 def _preference_line_for_step(
@@ -2101,10 +2110,11 @@ def simulate_voting_iterations(  # noqa: C901
     walk_fine: bool = False,
     walk_guard: Optional[float] = None,
     walk_shape: Optional[str] = None,
-    spot_check: str = "end",
+    spot_check: str = "weak",
     weak_separation: float = WEAK_SEPARATION_D,
-    weak_min_t: int = 10,
-    weak_repeat: int = 0,
+    weak_min_t: int = WEAK_CHECK_MIN_VOTES,
+    weak_repeat: int = WEAK_CHECK_COOLDOWN,
+    weak_phase: str = "any",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2497,9 +2507,12 @@ def simulate_voting_iterations(  # noqa: C901
             where the retrain moved it.  Until then every row reports the
             ``unchecked`` starting candidate, which is exactly what a headless
             run exports.  ``"off"`` never checks: the whole run is the
-            unchecked line.  ``"weak"`` (#4496) is ``"end"`` plus a check the
-            app prompts: at the first ordinary step from *weak_min_t* votes
-            on whose labels line separates weakly
+            unchecked line.  ``"weak"`` (#4496, the default since the owner's
+            ruling of 2026-10-05: the app's Autopilot checks where
+            :func:`~vtscore.training.thresholds.weak_check_due` says) is
+            ``"end"`` plus the check the app runs mid-session: at the first
+            ordinary step from *weak_min_t* votes on whose labels line
+            separates weakly
             (:attr:`~vtscore.training.thresholds.LabelsLine.separation` below
             *weak_separation*), the user checks then and there.  Its picks are
             clicks: they count in ``t`` and the voting budget, and their rows
@@ -2508,9 +2521,16 @@ def simulate_voting_iterations(  # noqa: C901
             been cast since the last prompted check ended, while the labels
             still separate weakly; 0 prompts once.  Ignored on the Inclusion
             arm, and when nothing is left unvoted to check.
-        weak_separation: The d' below which ``spot_check="weak"`` prompts.
-        weak_min_t: The fewest votes before ``spot_check="weak"`` prompts.
-        weak_repeat: Votes after a prompted check before it may prompt again; 0 never.
+        weak_separation: The d' below which ``spot_check="weak"`` prompts (the app's ``WEAK_SEPARATION_D``).
+        weak_min_t: The fewest votes before ``spot_check="weak"`` prompts (``WEAK_CHECK_MIN_VOTES``).
+        weak_repeat: Votes after a prompted check before it may prompt again
+            (``WEAK_CHECK_COOLDOWN``); 0 prompts once, the priced alternative.
+        weak_phase: Where in Autopilot's flow ``spot_check="weak"`` may prompt.
+            ``"any"`` (the arm #4496 priced) or ``"learned"``: only once the
+            flow has left its opening (``good``/``bad``/``more``, on the text or
+            example sort), where the app trains no detector and so has neither
+            a separation to read nor a ranking to check.  Without a flow
+            (a non-Autopilot strategy) both prompt anywhere.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2943,6 +2963,8 @@ def simulate_voting_iterations(  # noqa: C901
 
     if spot_check not in ("end", "off", "weak"):
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
+    if weak_phase not in ("any", "learned"):
+        raise ValueError(f"weak_phase must be 'any' or 'learned', got {weak_phase!r}")
     # The floor's spot check (#4272), run once the voting steps are spent: the
     # simulated user checks the line as the app's check step does, its picks
     # answered from ground truth and cast as votes.  ``line_ranking`` is the
@@ -3166,13 +3188,20 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             )
             line_ranking = details.get("line_ranking")
-            if spot_check == "weak" and picks is None:
+            if (
+                spot_check == "weak"
+                and picks is None
+                and (weak_phase == "any" or flow is None or flow.phase not in _OPENING_PHASES)
+            ):
                 weak_line = details.get("find_line")
-                if (
-                    weak_line is not None
-                    and t >= weak_min_t
-                    and weak_line.separation < weak_separation
-                    and (last_weak_check is None or (weak_repeat > 0 and t - last_weak_check >= weak_repeat))
+                # The app's rule (#4496): Autopilot checks where this says.
+                if weak_line is not None and weak_check_due(
+                    weak_line.separation,
+                    t,
+                    last_weak_check,
+                    threshold=weak_separation,
+                    min_votes=weak_min_t,
+                    cooldown=weak_repeat if weak_repeat > 0 else None,
                 ):
                     weak_due = True
             if live_threshold is not None:
