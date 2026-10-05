@@ -4,6 +4,8 @@
 
 ## Photo<br>Finish
 
+<div class="asof">Measured 2026-10-04</div>
+
 <!-- build: figs/sota-photos.build1.png -->
 
 <!-- How the app does today on photos: the State of the App review of

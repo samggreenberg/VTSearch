@@ -538,6 +538,20 @@ section .pageno {
 section.lead .pageno,
 section.statement .pageno { display: none; }
 
+/* A results slide's date, opposite the page number and set like it. The deck
+   ages unevenly: a mechanism slide holds for months, while a chart of measured
+   numbers is true of the app on the day it ran. So a slide that charts an
+   experiment says, on its face, when the experiment ran — the room can see
+   how fresh a number is, and the presenter can see which charts are due a
+   re-run. See *A results slide carries its date* in STYLE.md. */
+section .asof {
+  position: absolute;
+  left: 70px;
+  bottom: 26px;
+  font-size: 20px;
+  color: var(--ink-soft);
+}
+
 /* A split-background slide is not the full slide. Marpit renders its text into
    a `foreignObject` the width of the text column, so nothing inside the section
    can reach the slide's right edge — a number set 70px in from it lands in the

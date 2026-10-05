@@ -4,6 +4,8 @@
 
 ## Raise<br>the Bar
 
+<div class="asof">Measured 2026-10-01 and 10-02</div>
+
 <!-- build: figs/logo-line.build1.png -->
 
 <!-- build: figs/logo-line.build2.png -->

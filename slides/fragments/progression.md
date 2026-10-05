@@ -4,6 +4,8 @@
 
 ## The Ladder,<br>One in Twenty
 
+<div class="asof">Measured 2026-09-25</div>
+
 <!-- build: figs/progression.build1.png -->
 
 <!-- build: figs/progression.build2.png -->

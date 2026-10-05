@@ -4,6 +4,8 @@
 
 ## A Likely Story
 
+<div class="asof">Measured 2026-08-30</div>
+
 <!-- build: figs/atlas-pvalues.build1.png -->
 
 <!-- The atlas has a second job, and this is the slide where it loses. Having

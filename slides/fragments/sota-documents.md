@@ -4,6 +4,8 @@
 
 ## Looks Good<br>on Paper
 
+<div class="asof">Measured 2026-10-03 and 10-04</div>
+
 <!-- build: figs/sota-documents.build1.png -->
 
 <!-- The photo results' two panels, for documents. FullMarks v5.0, about
