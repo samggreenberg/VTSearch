@@ -85,14 +85,15 @@ slides:
   # threshold does not do".
   #
   # The order is the argument, not the code: the blind spot the atlas exists
-  # for, the structure, the second job that structure also does, and how badly
-  # it does it. That last one stays last whatever happens to the rest — it is
+  # for, the structure, the second job that structure also does, the atlas
+  # doing it on that very room (#4517), and how badly it does it. That last one stays last whatever happens to the rest — it is
   # the only slide here that reports a loss, and a loss read before the
   # mechanism is just a reason not to listen.
   outline-hold-the-line +at4
   atlas-blindspot
   atlas-cells
   atlas-depth
+  atlas-far
   atlas-pvalues
 
   # 5 — Experiments: the photographs the experiments run on. Every dataset

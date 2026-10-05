@@ -8,11 +8,10 @@
 
 <!-- build: figs/atlas-pvalues.build1.png -->
 
-<!-- The atlas has a second job, and this is the slide where it loses. Having
-     built a model of what a collection looks like, you can ask a new item how
-     typical it is — which is how a detector trained on one dataset gets checked
-     against another before anybody trusts its scores there. It answers with a
-     p-value: the share of the training data that looks stranger than this. -->
+<!-- Far Out was the easy case: a whole collection a long way off. This is
+     the slide where the atlas loses. Its answer is a p-value, the share of the
+     training data that looks stranger than this, and a p-value owes something
+     on data from the *same* place too. -->
 
 <!-- **a** — So test it on data the atlas has never seen but which came from the
      same place, where the answer is known: a p-value should be below 5% about

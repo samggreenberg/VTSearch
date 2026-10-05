@@ -774,7 +774,9 @@ def _submerged_outline(pad: float = 0.0) -> np.ndarray:
     return np.vstack([waterline, silhouette])
 
 
-def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None) -> np.ndarray | None:
+def _item(
+    ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None, fill: str = "white"
+) -> np.ndarray | None:
     """One item: a sphere, half of it under *plane*.
 
     With no plane it is a plain circle — the first page's items lie on a plane
@@ -792,8 +794,11 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | N
     outlined in black where it stands clear and in grey where it is seen
     through the plane, *including* the rim of one hanging over the plane's edge,
     which is clear of the plane and so stays black.
+
+    *fill* is the sphere's face: white, or `FLAGGED` on Far Out for an item the
+    atlas calls atypical.
     """
-    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="white", edgecolor="none", zorder=zorder))
+    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor=fill, edgecolor="none", zorder=zorder))
     if plane is None:
         ax.add_patch(
             plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 0.3)
@@ -1295,6 +1300,78 @@ def depth_fig() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 3b. Far Out — the atlas finding the room's second collection (#4517)
+# ──────────────────────────────────────────────────────────────────────────────
+
+FAR_STAGES = 4
+#: How many floor points the atlas is built on. Denser than the drawing's
+#: `N_ITEMS`, because the shipped atlas splits only nodes of twenty and more
+#: and calibrates only those: built on the drawn seventy-six it would have a
+#: handful of calibrated nodes and say little. The drawn floor items are then
+#: *held out* — the atlas never saw them — which is the honest test.
+FAR_BUILD = 2000
+FAR_SEED = 23
+#: The threshold an item is flagged at: the domain-shift report's own alpha.
+FAR_ALPHA = 0.05
+#: The face of a flagged item: ink, the colour nothing else in the room is.
+FLAGGED = INK
+
+
+@functools.lru_cache(maxsize=1)
+def _far_pvalues() -> tuple[np.ndarray, np.ndarray]:
+    """The shipped atlas, built on the floor, scoring the drawn floor items and the ceiling.
+
+    Real code on drawing coordinates: `CoverageAtlas` and its
+    `typicality_pvalues`, the same pair the domain-shift route calls. Each item
+    is its room position `(u, v, h)` as a three-number vector.
+    """
+    from vtscore.coverage.atlas import CoverageAtlas  # noqa: PLC0415
+
+    rng = np.random.default_rng(FAR_SEED)
+    (u0, u1), (v0, v1) = ITEM_LIMITS
+    build = np.column_stack([rng.uniform(u0, u1, FAR_BUILD), rng.uniform(v0, v1, FAR_BUILD), np.zeros(FAR_BUILD)])
+    atlas = CoverageAtlas({i: row for i, row in enumerate(build.astype(np.float32))})
+    floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
+
+    def scored(points: np.ndarray, h: float) -> np.ndarray:
+        return atlas.typicality_pvalues(np.column_stack([points, np.full(len(points), h)]).astype(np.float32))
+
+    return scored(floor, 0.0), scored(ceiling, NEW_H)
+
+
+def far_fig() -> None:
+    """The atlas finding Out of Its Depth's second collection, drawn in the same room (#4517).
+
+    Four pages: the floor, as the atlas was built on it; the floor scored, the
+    few items the atlas calls atypical filled in; the second collection on the
+    ceiling, as Out of Its Depth showed it; and the ceiling scored, nearly every
+    item filled. No chart: the drift is which spheres go dark.
+    """
+    for stage in range(1, FAR_STAGES):
+        save(_far_stage(stage), OUT, f"atlas-far.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+    save(_far_stage(FAR_STAGES), OUT, "atlas-far.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+
+
+def _far_stage(stage: int) -> plt.Figure:
+    fig, ax = _canvas()
+    planes = _wireframe(ax)
+    floor_p, ceiling_p = _far_pvalues()
+    floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
+    for index, depth_z in _painted_back_to_front(floor, 0.0):
+        flagged = stage >= 2 and floor_p[index] < FAR_ALPHA
+        _item(ax, proj(*floor[index], 0.0), Z_IN_FRONT + depth_z, planes[0], fill=FLAGGED if flagged else "white")
+    if stage >= 3:
+        ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
+        for index, depth_z in _painted_back_to_front(ceiling, 0.0):
+            flagged = stage >= 4 and ceiling_p[index] < FAR_ALPHA
+            _item(
+                ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1], fill=FLAGGED if flagged else "white"
+            )
+    return fig
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 4. The p-values — the second job, and what is wrong with it
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -1411,5 +1488,6 @@ if __name__ == "__main__":
     blindspot_fig()
     cells_fig()
     depth_fig()
+    far_fig()
     pvalues_fig()
     print("wrote figures to", OUT)
