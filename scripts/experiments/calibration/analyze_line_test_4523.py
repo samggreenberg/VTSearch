@@ -423,7 +423,8 @@ def main(argv: list[str] | None = None) -> int:
         linetests = {p.name.split("__")[0]: p for p in side_frame_files(cells, "__linetest")}
         if args.limit:
             npzs = npzs[: args.limit]
-        prov["inputs"][label] = {"dir": str(cells), "snapshots": len(npzs), "sha": sha_dir(npzs)}
+        # One label may span several results dirs (one per beta): the rows carry the beta.
+        prov["inputs"].setdefault(label, []).append({"dir": str(cells), "snapshots": len(npzs), "sha": sha_dir(npzs)})
         for p in npzs:
             jobs.append(
                 (
@@ -446,7 +447,9 @@ def main(argv: list[str] | None = None) -> int:
         frames = sorted(Path(d).glob("*__v*.npz"))
         if args.limit:
             frames = frames[: args.limit]
-        prov["inputs"][label] = {"dir": str(d), "frames": len(frames), "sha": sha_dir(frames), "betas": betas}
+        prov["inputs"].setdefault(label, []).append(
+            {"dir": str(d), "frames": len(frames), "sha": sha_dir(frames), "betas": betas}
+        )
         for p in frames:
             jobs.append(
                 (
