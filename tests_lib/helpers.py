@@ -266,31 +266,6 @@ def current_loading_progress() -> dict:
     return {"status": "idle", "message": "", "current": 0, "total": 0, "error": None}
 
 
-def planted_fold_anchored_cut(n_pos_per_fold: int):
-    """A fitted fold-anchored cut whose folds hold *n_pos_per_fold* Good votes each.
-
-    Two folds over a sigmoid-scale pool, with held-out votes that separate
-    cleanly (Goods high, Bads low), so the estimate has contrast to fit.
-    """
-    import numpy as np  # noqa: PLC0415
-
-    from vtscore.training.thresholds import fit_fold_anchored_cut  # noqa: PLC0415
-
-    rng = np.random.default_rng(7)
-    pool = np.clip(rng.beta(1.0, 4.0, 400), 0.0, 1.0)
-    orderings, haystacks = [], []
-    for _fold in range(2):
-        goods = rng.uniform(0.7, 0.99, n_pos_per_fold)
-        bads = rng.uniform(0.0, 0.4, 20)
-        orderings.append(
-            (np.concatenate([goods, bads]).tolist(), [1.0] * n_pos_per_fold + [0.0] * 20),
-        )
-        haystacks.append(np.clip(pool + rng.normal(0.0, 0.02, pool.size), 0.0, 1.0))
-    cut = fit_fold_anchored_cut(haystacks, orderings, pool)
-    assert cut is not None and len(cut.fold_orderings) == 2
-    return cut
-
-
 def planted_spot_check(ctx, min_precision: float, *, right: bool = True, seed: int = 1):
     """A finished spot check of *ctx*'s floor at *min_precision*, its votes cast on *ctx* (#4272, #4388).
 
