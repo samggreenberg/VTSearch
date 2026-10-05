@@ -4527,7 +4527,7 @@ PATCH_DIM = 768
 #: The photograph: Extreme Measures' first one, the doll holding a book, as a
 #: single COCO val2017 frame fetched by URL rather than out of the 1 GB corpus
 #: archive, because this figure needs nothing else from it.
-PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0]`, defined further down
+PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0][0]`, defined further down
 PATCH_PHOTO_URL = f"http://images.cocodataset.org/val2017/{PATCH_PHOTO_ID:012d}.jpg"
 #: The book's box in the square crop, as grid cells (first row, first col, last
 #: row, last col), read off the photograph; and the one patch on it the figure
@@ -4713,25 +4713,34 @@ def _patch_stage(stage: int) -> plt.Figure:
     return fig
 
 
-#: The region grid the max figure opens on: rows, columns, and which cell wins.
-REGION_GRID = (3, 4)
+#: The region grid the max figure opens on: rows and columns. Finer than the
+#: 3 x 4 it was, and over a closer crop, so it reads as the same kind of grid
+#: as Patch Work's 14 x 14 rather than as a different idea (#4533). Over the
+#: whole frame it would be about 6 x 8: still coarser than DINOv3's, on purpose,
+#: because every cell carries its score.
+REGION_GRID = (4, 5)
 
 #: The score range the maxima panel is drawn over. Cropped to the sample rather
 #: than run 0-1: the whole claim of the stage is a *shape* — that a maximum
 #: leans right — and a distribution drawn across four times its own width is a
 #: spike with no shape at all.
-REGION_RANGE = (0.33, 0.82)
+REGION_RANGE = (0.36, 0.82)
 REGION_BINS = 42
 
-#: The two photographs the max figure opens on, by COCO val2017 id: one
+#: The two photographs the max figure opens on, by COCO val2017 id, each with
+#: the 5:4 window of it the figure shows, in the frame's own pixels: one
 #: holding a book (a doll's "Goody Two Shoes"), and one holding none — a dog on
-#: a couch, with cushions for a detector to be tempted by.
-REGION_PHOTOS = (167159, 347930)
+#: a couch, with cushions for a detector to be tempted by. Each window is
+#: about two thirds of its frame's width, around the book and the dog.
+REGION_PHOTOS = (
+    (167159, (21, 119, 341, 375)),
+    (347930, (83, 90, 493, 418)),
+)
 
 
 @functools.cache
-def _region_photo(image_id: int) -> tuple:
-    """`(4:3 image, [book boxes in its pixels])` for one COCO val2017 frame."""
+def _region_photo(image_id: int, window: tuple[int, int, int, int]) -> tuple:
+    """`(the window of one COCO val2017 frame, [book boxes in its pixels])`."""
     import json
 
     from PIL import Image
@@ -4743,11 +4752,9 @@ def _region_photo(image_id: int) -> tuple:
     meta = next(i for i in coco["images"] if i["id"] == image_id)
     book = next(c["id"] for c in coco["categories"] if c["name"] == "book")
     image = Image.open(coco_fixture.IMAGES / meta["file_name"]).convert("RGB")
-    width, height = image.size
-    side = int(round(height * 4 / 3)) if width / height > 4 / 3 else width
-    tall = height if width / height > 4 / 3 else int(round(width * 3 / 4))
-    dx, dy = (width - side) // 2, (height - tall) // 2
-    image = image.crop((dx, dy, dx + side, dy + tall))
+    dx, dy, x1, y1 = window
+    assert (x1 - dx) * REGION_GRID[0] == (y1 - dy) * REGION_GRID[1], f"{image_id}: the window is not 5:4"
+    image = image.crop(window)
     boxes = [
         (x - dx, y - dy, w, h)
         for a in coco["annotations"]
@@ -4757,16 +4764,18 @@ def _region_photo(image_id: int) -> tuple:
     return image, boxes
 
 
-def _region_scores(image_id: int, seed: int) -> np.ndarray:
+def _region_scores(image_id: int, window: tuple[int, int, int, int], seed: int) -> np.ndarray:
     """Illustrative per-region scores: a little of everything, and a lot of book.
 
     Each region scores a noisy baseline — every region of every photograph
     resembles *something* — plus a share proportional to how much of it the
     photograph's COCO book box covers. So the book's own regions win when there
     is a book, and when there is none the grid still has a spread, and a top.
-    Seeded, so the slide is the same every time it is drawn.
+    Seeded, so the slide is the same every time it is drawn. The book's share
+    is sized so a cell the book fills scores high without saturating, so the
+    winning cell is one cell and not a tie.
     """
-    image, boxes = _region_photo(image_id)
+    image, boxes = _region_photo(image_id, window)
     rows, cols = REGION_GRID
     width, height = image.size
     rng = np.random.default_rng(seed)
@@ -4779,7 +4788,7 @@ def _region_scores(image_id: int, seed: int) -> np.ndarray:
                 max(0.0, min(x1, bx + bw) - max(x0, bx)) * max(0.0, min(y1, by + bh) - max(y0, by))
                 for bx, by, bw, bh in boxes
             ) / ((x1 - x0) * (y1 - y0))
-            scores[r, c] += 0.8 * cover
+            scores[r, c] += 0.5 * cover
     return np.round(np.clip(scores, 0.0, 0.95), 2)
 
 
@@ -4815,6 +4824,18 @@ def _gumbel_fit(sample: np.ndarray) -> tuple[float, float]:
     return float(sample.mean()) - 0.5772156649 * scale, scale
 
 
+#: The region figure's layout, in `TEACH_CANVAS` units: each photograph's
+#: width and height (5:4, so a cell is square), the gap between the two, and
+#: where the first starts — right of the title notch, and centred with its
+#: partner over the histogram below.
+REGION_PHOTO_W, REGION_PHOTO_H, REGION_PHOTO_GAP, REGION_PHOTO_X0 = 5.0, 4.0, 1.6, 6.7
+#: The cell scores' type: as large as a two-decimal score can be and still
+#: clear its neighbour in a one-unit cell.
+REGION_SCORE_PT = 13
+#: The histogram panel: left edge, floor, and height.
+REGION_PANEL_X0, REGION_PANEL_Y0, REGION_PANEL_H = 5.9, 1.55, 3.3
+
+
 def _region_max_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the region-max figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
@@ -4824,12 +4845,14 @@ def _region_max_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     rows, cols = REGION_GRID
-    photo_w, photo_h = 4.6, 3.45
+    photo_w, photo_h = REGION_PHOTO_W, REGION_PHOTO_H
     photo_top = TEACH_CANVAS[1] - 0.5
-    for slot, (image_id, seed) in enumerate(zip(REGION_PHOTOS, (3, 7), strict=True)):
-        image, _ = _region_photo(image_id)
-        scores = _region_scores(image_id, seed)
-        px0 = 6.2 + slot * (photo_w + 2.2)
+    # Seeds picked so each photo has one clear winner: on the book's own cell,
+    # and on the dog photo's cushions.
+    for slot, ((image_id, window), seed) in enumerate(zip(REGION_PHOTOS, (11, 8), strict=True)):
+        image, _ = _region_photo(image_id, window)
+        scores = _region_scores(image_id, window, seed)
+        px0 = REGION_PHOTO_X0 + slot * (photo_w + REGION_PHOTO_GAP)
         py0 = photo_top - photo_h
         ax.imshow(image, extent=(px0, px0 + photo_w, py0, photo_top), zorder=1, aspect="auto")
         best = np.unravel_index(int(np.argmax(scores)), scores.shape)
@@ -4859,12 +4882,12 @@ def _region_max_stage(stage: int) -> plt.Figure:
                     f"{scores[r, c]:.2f}",
                     ha="center",
                     va="center",
-                    fontsize=15,
+                    fontsize=REGION_SCORE_PT,
                     color=INK,
                     fontweight="bold" if won else "normal",
                     zorder=4,
                     bbox={
-                        "boxstyle": "round,pad=0.15",
+                        "boxstyle": "round,pad=0.12",
                         "facecolor": "white",
                         "alpha": 0.85 if won else 0.7,
                         "edgecolor": "none",
@@ -4883,14 +4906,20 @@ def _region_max_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 3: every item is a maximum, so the corpus is a pile of maxima ───
-    panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
-    panel_h = 3.75
-    y_base = 1.5
+    panel_x0, panel_w = REGION_PANEL_X0, TEACH_CANVAS[0] - REGION_PANEL_X0 - 0.7
+    panel_h, y_base = REGION_PANEL_H, REGION_PANEL_Y0
+    lo, hi = REGION_RANGE
     sample = _maxima()
+    density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
+    xs = np.linspace(lo, hi, 500)
+    normal = gaussian(xs, float(sample.mean()), float(sample.var()))
+    loc, scale = _gumbel_fit(sample)
+    z = (xs - loc) / scale
+    gumbel = np.exp(-(z + np.exp(-z))) / scale
+    # One vertical scale for the bars and both fits, set by whichever reaches
+    # highest, so a fitted curve never rises through the caption over the panel.
+    sy = panel_h / max(float(density.max()), float(normal.max()), float(gumbel.max()))
     if stage >= 3:
-        lo, hi = REGION_RANGE
-        density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
-        sy = panel_h / float(density.max())
         bars = _staircase(panel_x0, y_base, panel_w / (hi - lo), sy, (edges - lo), density, 0, len(density) - 1)
         bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
         ax.add_patch(bars)
@@ -4904,20 +4933,32 @@ def _region_max_stage(stage: int) -> plt.Figure:
             fontsize=16,
             color=INK,
         )
+        # The axes, named and no more (#4533): the slide is about the shape,
+        # so neither carries ticks.
+        ax.text(
+            panel_x0 + panel_w / 2,
+            y_base - RANGE_FOOT - LABEL_GAP,
+            "Similarity",
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=SOFT,
+        )
+        ax.text(
+            panel_x0 - 2 * LABEL_GAP,
+            y_base + panel_h / 2,
+            "#",
+            ha="right",
+            va="center",
+            fontsize=16,
+            color=SOFT,
+        )
 
     # ── stage 4: the two tail families, fitted to the same maxima ─────────────
     if stage >= REGION_MAX_STAGES:
-        lo, hi = REGION_RANGE
-        density, _edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
-        sy = panel_h / float(density.max())
-        xs = np.linspace(lo, hi, 500)
-        normal = gaussian(xs, float(sample.mean()), float(sample.var()))
-        loc, scale = _gumbel_fit(sample)
-        z = (xs - loc) / scale
-        gumbel = np.exp(-(z + np.exp(-z))) / scale
         for curve, colour, dash, name in (
-            (normal, SOFT, (0, (5, 3)), "a Gaussian, fitted"),
-            (gumbel, BLUE, (0, ()), "a Gumbel, fitted"),
+            (normal, SOFT, (0, (5, 3)), "Fitted Gaussian"),
+            (gumbel, BLUE, (0, ()), "Fitted Gumbel"),
         ):
             ax.plot(
                 panel_x0 + (xs - lo) / (hi - lo) * panel_w,
@@ -4936,15 +4977,6 @@ def _region_max_stage(stage: int) -> plt.Figure:
                 fontsize=15,
                 color=colour,
             )
-        ax.text(
-            panel_x0 + panel_w,
-            y_base - 0.32 - LABEL_GAP,
-            "a maximum is not a mean: it leans right, and the tail is where the cut goes",
-            ha="right",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
     return fig
 
 
