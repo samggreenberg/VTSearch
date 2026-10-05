@@ -5250,6 +5250,181 @@ def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float,
     )
 
 
+# ── what travels from Train to Find (#4517) ──────────────────────────────────
+
+#: How many build stages the transfer figure reveals in: Train as What to
+#: Expect left it; the labels, carried across; the corpus Find is pointed at;
+#: the line the same labels draw there.
+TX_STAGES = 4
+#: The two columns, each a copy of What to Expect's votes and corpus rows on
+#: its own copy of the score axis: (left edge, width). The gap between them is
+#: what the one arrow crosses.
+TX_TRAIN = (4.0, 6.3)
+TX_FIND = (12.8, 6.3)
+#: Rows, in canvas units: the column names, the votes, the corpus.
+TX_HEAD_Y = 10.35
+TX_VOTES_Y = 8.6
+TX_CORPUS_Y, TX_CORPUS_H = 1.2, 4.6
+#: The corpus Find is pointed at, in `LL_CORPUS`'s form: half again as many
+#: items and a third the share of matches, so the line has to land somewhere
+#: else and keep a different count, from the same votes.
+TX_FIND_CORPUS = (3000, 0.04, (1.1, 0.65), (-1.0, 0.9), 7)
+TX_BINS = 30
+
+
+@functools.lru_cache(maxsize=None)
+def _tx_find() -> tuple[np.ndarray, "LabelsLine"]:
+    """The Find corpus and the line `fit_labels_line` draws on it from What to Expect's votes."""
+    n, share, (pos_mu, pos_sd), (neg_mu, neg_sd), seed = TX_FIND_CORPUS
+    rng = np.random.default_rng(seed)
+    n_pos = int(round(n * share))
+    corpus = np.concatenate([rng.normal(pos_mu, pos_sd, n_pos), rng.normal(neg_mu, neg_sd, n - n_pos)])
+    votes = _ll_sigmoid(np.array(LL_GOODS + LL_BADS))
+    labels = [1.0] * len(LL_GOODS) + [0.0] * len(LL_BADS)
+    line = fit_labels_line([(votes, labels)], _ll_sigmoid(corpus))
+    assert line is not None
+    return corpus, line
+
+
+def transfer_fig() -> None:
+    """What the line has to work with once it leaves Train (#4517).
+
+    Find runs on a corpus nobody voted on. The model's scores there are new,
+    the Train corpus and its line stay behind, and the one thing carried
+    across is the labels. What to Expect's own votes and `fit_labels_line`,
+    run on a second corpus: the same labels draw a different line there, and
+    keep a different count, because the corpus is half the input.
+    """
+    final = _tx_stage(TX_STAGES)
+    box = tight_box(final)
+    for stage in range(1, TX_STAGES):
+        save(_tx_stage(stage), OUT, f"calib-transfer.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-transfer.png", column=FULL_BLEED, box=box)
+
+
+def _tx_at(column: tuple[float, float], logit: float | np.ndarray) -> np.ndarray:
+    lo, hi = LL_LOGIT
+    x0, w = column
+    return x0 + (np.asarray(logit, dtype=float) - lo) / (hi - lo) * w
+
+
+def _tx_votes(ax: plt.Axes, column: tuple[float, float]) -> None:
+    """The votes on half What to Expect's width: Goods in one row, Bads in the row under it.
+
+    At half the width the eleven glyphs no longer fit one row without touching,
+    and two rows are also the clearer picture: which kind a vote is reads off
+    its row, not only off its colour.
+    """
+    x0, w = column
+    _range_line(ax, x0, x0 + w, TX_VOTES_Y, z=3)
+    for row, (scores, glyph, color) in enumerate(((LL_GOODS, "✓", GREEN), (LL_BADS, "✗", RED))):
+        for x in scores:
+            ax.text(
+                float(_tx_at(column, x)),
+                TX_VOTES_Y - 0.12 - row * TX_VOTE_ROW,
+                glyph,
+                ha="center",
+                va="top",
+                fontsize=18,
+                color=color,
+                fontweight="bold",
+            )
+
+
+#: The step from the Goods' row to the Bads' row, in canvas units.
+TX_VOTE_ROW = 0.62
+
+
+def _tx_corpus(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, sy: float) -> None:
+    x0, w = column
+    lo, hi = LL_LOGIT
+    counts, edges = np.histogram(corpus, bins=TX_BINS, range=LL_LOGIT)
+    u_edges = (edges - lo) / (hi - lo)
+    bars = _staircase(x0, TX_CORPUS_Y, w, sy, u_edges, counts.astype(float), 0, len(counts) - 1)
+    bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    ax.add_patch(bars)
+    for i in range(1, len(counts)):
+        top = TX_CORPUS_Y + float(min(counts[i - 1], counts[i])) * sy
+        if top > TX_CORPUS_Y:
+            ax.plot([x0 + u_edges[i] * w] * 2, [TX_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    _range_line(ax, x0, x0 + w, TX_CORPUS_Y, z=5)
+
+
+def _tx_line(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, line: "LabelsLine") -> None:
+    """The line at the middle radio, blue, through the corpus, and what it keeps."""
+    x0, w = column
+    cut = float(_ll_logit(line.threshold(LL_PICKED)))
+    cut_x = float(_tx_at(column, cut))
+    top = TX_CORPUS_Y + TX_CORPUS_H + 0.2
+    ax.plot([cut_x] * 2, [TX_CORPUS_Y, top], color=BLUE, linewidth=2.6, zorder=5)
+    kept = int(np.sum(corpus >= cut))
+    bracket_y = TX_CORPUS_Y + TX_CORPUS_H - 0.3
+    right = x0 + w
+    ax.plot([cut_x + 0.08, right], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=5)
+    ax.plot([right] * 2, [bracket_y - 0.14, bracket_y], color=INK, linewidth=1.6, zorder=5)
+    # Starting just right of the line rather than centred on the bracket: on
+    # a corpus with few matches the line sits near the right end, and a centred
+    # label would straddle it.
+    ax.text(cut_x + 0.2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="left", va="bottom", fontsize=16, color=INK)
+
+
+def _tx_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the transfer figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    train, train_line = _ll_data()
+    find, find_line = _tx_find()
+    # One count scale for both histograms, so the bigger corpus looks bigger.
+    peak = max(np.histogram(c, bins=TX_BINS, range=LL_LOGIT)[0].max() for c in (train, find))
+    sy = (TX_CORPUS_H - 0.9) / float(peak)
+
+    # ── stage 1: Train, as What to Expect left it ─────────────────────────────
+    for name, y in (("the votes", TX_VOTES_Y + 0.15), ("the corpus", TX_CORPUS_Y + 1.6)):
+        ax.text(TX_TRAIN[0] - 0.35, y, name, ha="right", va="center", fontsize=16, color=INK)
+    ax.text(
+        sum(TX_TRAIN) - TX_TRAIN[1] / 2,
+        TX_HEAD_Y,
+        "Train",
+        ha="center",
+        va="center",
+        fontsize=20,
+        color=INK,
+        fontweight="bold",
+    )
+    _tx_votes(ax, TX_TRAIN)
+    _tx_corpus(ax, TX_TRAIN, train, sy)
+    _tx_line(ax, TX_TRAIN, train, train_line)
+
+    # ── stage 2: what crosses — the labels, and nothing else ──────────────────
+    if stage >= 2:
+        gap_l, gap_r = sum(TX_TRAIN) + 0.15, TX_FIND[0] - 0.15
+        _labeled_arrow(ax, (gap_l, TX_VOTES_Y - 0.35), (gap_r, TX_VOTES_Y - 0.35), "labels")
+        ax.text(
+            sum(TX_FIND) - TX_FIND[1] / 2,
+            TX_HEAD_Y,
+            "Find",
+            ha="center",
+            va="center",
+            fontsize=20,
+            color=INK,
+            fontweight="bold",
+        )
+        _tx_votes(ax, TX_FIND)
+
+    # ── stage 3: the corpus Find is pointed at ────────────────────────────────
+    if stage >= 3:
+        _tx_corpus(ax, TX_FIND, find, sy)
+
+    # ── stage 4: the line the same labels draw there ──────────────────────────
+    if stage >= TX_STAGES:
+        _tx_line(ax, TX_FIND, find, find_line)
+    return fig
+
+
 # ── the document line at the three radios (#4367, #4458, #4479) ─────────────
 
 #: How many build stages the document-balance figure reveals in: the votes and
@@ -5850,6 +6025,7 @@ if __name__ == "__main__":
     fmetrics_fig()
     fbeta_fig()
     labels_line_fig()
+    transfer_fig()
     doc_balance_fig()
     region_max_fig()
     xcal_flow_fig()
