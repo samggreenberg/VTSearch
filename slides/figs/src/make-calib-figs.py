@@ -62,6 +62,13 @@ from vtscore.training.thresholds import (
     inclusion_cost_weights,
 )
 from vtscore.training.thresholds.labels_line import LabelsLine, corpus_sigma_floor, fit_labels_line
+from vtscore.training.structural_similarity import (
+    PRECISION_CEILING_MARGIN,
+    PRECISION_GOOD_FRACTION,
+    PRECISION_MIN_INLIERS,
+    RECALL_GOOD_FRACTION,
+    RECALL_MIN_INLIERS,
+)
 from vtscore.training.thresholds.spot_check import CHECK_ALPHA, fbeta_score, likely_range, range_tail
 
 OUT = Path(__file__).resolve().parent.parent
@@ -5300,6 +5307,171 @@ def _ll_stage(stage: int) -> plt.Figure:
     return fig
 
 
+# ── the document line at the three radios (#4367, #4458, #4479) ─────────────
+
+#: How many build stages the document-balance figure reveals in: the votes and
+#: the verified pages on one inlier axis; the middle radio's line (the Bad
+#: ceiling); the recall end's floor; the precision end's floor.
+DOC_STAGES = 4
+#: The canvas: `FBETA_CANVAS`, so the three slides about the balance draw at
+#: one scale and their type lands at one size.
+DOC_CANVAS = FBETA_CANVAS
+#: The inlier axis, as `(low, high)` counts.
+DOC_AXIS = (0.0, 84.0)
+#: One detector, some way into a session: each Good's leave-one-out fit (its
+#: best fit to the *other* Goods' templates) and each Bad's best fit to the
+#: templates. Schematic, chosen so the three radios' rules land in three
+#: different places: the Goods' median is 40, the Bad ceiling 21.
+DOC_GOODS = (25, 33, 40, 48, 62)
+DOC_BADS = (9, 15, 21)
+#: The shortlisted pages that verified at all, by inlier count: copies of the
+#: mark, then pages that are not it. Faint copies sit among the hard negatives
+#: low on the axis — the pages the two ends of the balance disagree about. No
+#: page sits within a count of any radio's cut, so no dot straddles one.
+DOC_MARK_PAGES = (11, 14, 18, 23, 28, 31, 35, 39, 44, 50, 57, 65, 74)
+DOC_OTHER_PAGES = (8, 12, 15, 17, 19, 24)
+#: Pages closer than this many counts stack, so no two dots overlap.
+DOC_STACK_GAP = 2.0
+#: Rows, in canvas units: the votes; the pages; one row per radio, top to bottom
+#: the precision end, the middle, the recall end — the order `calib-fbeta`
+#: stacks the same three balances in.
+DOC_VOTES_Y = 8.35
+DOC_PAGES_Y = 6.45
+DOC_RADIO_Y = (4.55, 3.0, 1.45)
+DOC_DOT_R = 0.15
+
+
+def _doc_lines() -> dict[float, tuple[int, str]]:
+    """Each radio's lowest inlier count kept, and the rule that sets it, from the shipped constants.
+
+    The rules are `structural_similarity`'s: the Bad ceiling at the middle
+    radio (#4367); at beta >= `RECALL_BETA` a floor that also keeps every page
+    with max(10, ceil(¼ x the Goods' median)) inliers (#4458); at beta <=
+    `PRECISION_BETA` a floor of max(16, ceil(½ x the median), the ceiling + 5)
+    that the middle radio's set must also clear (#4479).
+    """
+    median = float(np.median(DOC_GOODS))
+    ceiling = max(DOC_BADS)
+    middle = ceiling + 1
+    recall = max(RECALL_MIN_INLIERS, math.ceil(RECALL_GOOD_FRACTION * median))
+    precision = max(
+        PRECISION_MIN_INLIERS,
+        math.ceil(PRECISION_GOOD_FRACTION * median),
+        ceiling + PRECISION_CEILING_MARGIN + 1,
+    )
+    return {
+        0.25: (max(middle, precision), f"beat every Bad by {PRECISION_CEILING_MARGIN + 1}"),
+        1.0: (middle, "beat every Bad"),
+        4.0: (min(middle, recall), f"¼ × Goods' median, {RECALL_MIN_INLIERS} at least"),
+    }
+
+
+def doc_balance_fig() -> None:
+    """Where the document line goes at each of the three radios (#4458, #4479).
+
+    One inlier axis: the Goods' leave-one-out fits and the Bads' best fits
+    above it, the verified pages on it, and one row per radio under it with the
+    set that radio keeps. The middle radio keeps what beats every Bad; the
+    recall end adds the faint copies a floor under the Goods' own fits lets in;
+    the precision end keeps only what clears the ceiling by a margin.
+    """
+    final = _doc_stage(DOC_STAGES)
+    box = tight_box(final)
+    for stage in range(1, DOC_STAGES):
+        save(_doc_stage(stage), OUT, f"logo-balance.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
+
+
+def _doc_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the document-balance figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in DOC_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, DOC_CANVAS[0])
+    ax.set_ylim(0, DOC_CANVAS[1])
+    ax.set_axis_off()
+
+    lo, hi = DOC_AXIS
+    x0, w = 4.0, DOC_CANVAS[0] - 4.0 - 1.5
+
+    def at(count: float) -> float:
+        return x0 + (count - lo) / (hi - lo) * w
+
+    def row_name(y: float, text: str) -> None:
+        ax.text(x0 - 0.35, y, text, ha="right", va="center", fontsize=16, color=INK)
+
+    # ── stage 1: the votes, and the pages that verified ───────────────────────
+    _range_line(ax, x0, x0 + w, DOC_VOTES_Y, z=3)
+    for count, good in [(g, True) for g in DOC_GOODS] + [(b, False) for b in DOC_BADS]:
+        ax.text(
+            at(count),
+            DOC_VOTES_Y - 0.12,
+            "✓" if good else "✗",
+            ha="center",
+            va="top",
+            fontsize=20,
+            color=GREEN if good else RED,
+            fontweight="bold",
+        )
+    row_name(DOC_VOTES_Y - 0.2, "the votes")
+    ax.text(
+        x0 + w,
+        DOC_VOTES_Y + LABEL_GAP,
+        "inliers, few to many",
+        ha="right",
+        va="bottom",
+        fontsize=FBETA_AXIS_LABEL_PT,
+        color=SOFT,
+    )
+    _range_line(ax, x0, x0 + w, DOC_PAGES_Y, z=3)
+    # A dot plot: a page closer than `DOC_STACK_GAP` counts to one already on a
+    # level goes up a level, so the low end, where pages crowd, stays legible.
+    placed: list[tuple[float, int]] = []
+    for count, mark in sorted([(c, True) for c in DOC_MARK_PAGES] + [(c, False) for c in DOC_OTHER_PAGES]):
+        level = 0
+        while any(lvl == level and abs(count - c) < DOC_STACK_GAP for c, lvl in placed):
+            level += 1
+        placed.append((count, level))
+        ax.add_patch(
+            Circle(
+                (at(count), DOC_PAGES_Y + DOC_DOT_R + 0.08 + level * (2 * DOC_DOT_R + 0.06)),
+                DOC_DOT_R,
+                facecolor=GREEN if mark else RED,
+                edgecolor="none",
+                zorder=4,
+            )
+        )
+    row_name(DOC_PAGES_Y + 0.2, "the pages")
+
+    # ── stages 2-4: what each radio keeps ─────────────────────────────────────
+    lines = _doc_lines()
+    pages = [(c, True) for c in DOC_MARK_PAGES] + [(c, False) for c in DOC_OTHER_PAGES]
+    reveal = {1.0: 2, 4.0: 3, 0.25: 4}
+    for ((beta, name), weight), y in zip(zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True), DOC_RADIO_Y, strict=True):
+        if stage < reveal[beta]:
+            continue
+        first, rule = lines[beta]
+        # Half a count below the lowest page kept, so the cut sits between two
+        # integer counts rather than on one.
+        cut = at(first - 0.5)
+        ax.plot([cut, cut], [y, DOC_PAGES_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+        ax.plot([cut, x0 + w], [y, y], color=INK, linewidth=weight, solid_capstyle="butt", zorder=3)
+        ax.plot([cut] * 2, [y - 0.18, y + 0.18], color=INK, linewidth=2.4, zorder=3)
+        kept = [mark for count, mark in pages if count >= first]
+        wrong = sum(1 for mark in kept if not mark)
+        ax.text(
+            x0 + w,
+            y + LABEL_GAP,
+            f"{len(kept)} kept, {wrong} wrong",
+            ha="right",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        ax.text(cut + 0.15, y + LABEL_GAP, rule, ha="left", va="bottom", fontsize=15, color=INK)
+        row_name(y, f"β = {name}")
+    return fig
+
+
 # ── the balance's line and its spot check (#4244, #4413, #4444) ──────────────
 
 #: The two figures that close the Preference section share one drawing: the
@@ -5317,10 +5489,12 @@ def _ll_stage(stage: int) -> plt.Figure:
 #: strip, kept set, line — and differ only in how far below the strip they go.
 FLOOR_ASK_CANVAS_H = 6.35
 FLOOR_CHECK_CANVAS_H = 8.65
-#: How many items the strip shows, and how many of them the line keeps: the
-#: top 32 nobody has voted on, the balance's cap at the middle and right-hand
-#: radios (#4413). Sixty-four is the kept set plus the band the check's first
-#: deeper step audits, so that band is exactly the strip's left half (#4444).
+#: How many items the strip shows, and how many of them the line keeps. The
+#: count is wherever the labels' line falls on the corpus (#4452), so 32 is a
+#: choice of the drawing, not a cap: it is the set the check's walk starts on
+#: at the middle radio, which lets one strip show both. Sixty-four is the kept
+#: set plus the band the check's first deeper step audits, so that band is
+#: exactly the strip's left half (#4444).
 FLOOR_ITEMS = 64
 FLOOR_K = 32
 #: The strip's geometry. It starts at the left margin and spans the canvas:
@@ -5356,8 +5530,8 @@ FLOOR_MODEL_VOTES = (
     (63, True),
 )
 #: The balance the check is drawn at: the middle radio, every detector's
-#: default, where a check is advisory — it audits and reports, and the line
-#: keeps its count (#4427).
+#: default. A check is advisory at every radio since #4452: it audits and
+#: reports, and the line stays where the labels put it.
 FLOOR_BETA = 1.0
 #: The walk's count of the ranking's positives, which turns the picks' shares
 #: into recall: the mixture's, fixed when the check starts. Schematic, set so
@@ -5392,8 +5566,8 @@ def floor_ask_fig() -> None:
     """The line the balance keeps, and why the session's own votes cannot vouch for it.
 
     Three stages: what the Threshold control says before anyone checks — the
-    top 32 nobody has voted on are kept, unchecked (#4413) — with that kept set
-    and its line; the votes the session already holds, drawn where the model
+    top 32 nobody has voted on are kept, unchecked, where the labels' line fell
+    (#4413, #4452) — with that kept set and its line; the votes the session already holds, drawn where the model
     chose to look; and the conclusion — they say where the model looked, not
     how right the kept set is. The 83% is #4256's: an estimator calibrated on
     learned-sort evidence alone, with a consistent reference pool, broke that
@@ -5413,8 +5587,8 @@ def floor_check_fig() -> None:
     cut into bands, and picks drawn at random from each band the kept set
     holds; the user's votes on them; the walk's step one band deeper and its
     step one band shallower, both worse, so it ends on the kept set; and what
-    the control says once checked, with the line where it was — at the middle
-    radio a check informs the line and does not move it. The reading is the
+    the control says once checked, with the line where it was — at every
+    radio a check informs the line and does not move it (#4452). The reading is the
     app's own range over these votes (`_floor_check_reading`), so its numbers
     are the ones the control would show for them.
     """
@@ -5714,8 +5888,8 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
         )
         for row, words in enumerate(
             (
-                "At the middle and right-hand radios a check informs the line and does not move it;",
-                "at the left-hand one it may only trim the line, never deepen it.",
+                "At every radio a check informs the line and does not move it:",
+                "its picks are votes, and the line stays where the labels put it.",
             )
         ):
             ax.text(
@@ -5732,6 +5906,7 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
 if __name__ == "__main__":
     fbeta_fig()
     labels_line_fig()
+    doc_balance_fig()
     crossing_fig()
     region_max_fig()
     xcal_flow_fig()

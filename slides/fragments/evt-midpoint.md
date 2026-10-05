@@ -17,7 +17,7 @@
 <!-- **a** — The fit Calibration ended on: two components with the same
      spread, one Bad and one Good, and their two means. -->
 
-<!-- **b** — And the rule we ship: cut halfway between them. It has survived
+<!-- **b** — And the mixture's rule: cut halfway between them. It has survived
      every attempt to out-smart it, which is why it is worth asking what it
      assumes. -->
 
@@ -32,4 +32,6 @@
      the log-odds are linear in the score, so the answer is the midpoint plus a
      displacement set by the log of the prior ratio. It shipped at −0.0044 in
      cost with *both* error rates falling, and captured about sixty percent of
-     the headroom an oracle said this axis had. -->
+     the headroom an oracle said this axis had. The labels' line in section 3
+     carries the same term: it counts the corpus's matches, and that count is
+     the prior. -->

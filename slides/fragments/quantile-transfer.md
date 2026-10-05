@@ -10,8 +10,11 @@
 
 <!-- build: figs/calib-quantile-flow.build6.png -->
 
-<!-- This page is what ships today, end to end. The line to say as it comes up
-     is "cuts don't transfer; ranks do". -->
+<!-- Where section 2's line ended up, end to end. The line to say as it comes
+     up is "cuts don't transfer; ranks do". It is no longer the line the user
+     sees: that comes from the labels now (section 3). Every retrain still fits
+     this, to place Autopilot's next question (Second Cut), and falls back on
+     it when the votes cannot support the labels' model. -->
 
 <!-- **a** — Where it turns. M₀ scores the corpus too, and its distribution
      appears on the right — bare bars, nothing estimated. This is not a third
