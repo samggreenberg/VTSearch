@@ -248,6 +248,65 @@ class TestTheBalanceArm:
             self._run(beta=9.0)
 
 
+class TestTheWeakSeparationPrompt:
+    """#4496: ``spot_check="weak"`` - the app prompts a check when the labels separate weakly."""
+
+    def _run(self, n_per_cat: int = 20, max_steps: int = 15, **kwargs):
+        picks: list[dict] = []
+        rows = simulate_voting_iterations(
+            _separable(n_per_cat), "alpha", seed=0, max_steps=max_steps, calibrate_count=2, pick_sink=picks,
+            beta=1.0, **kwargs,
+        )  # fmt: skip
+        return rows, picks
+
+    @staticmethod
+    def _prompts(picks: list[dict]) -> list[list[int]]:
+        """The prompted checks, as runs of prompted picks in the log's order (a round's picks share one ``t``)."""
+        runs: list[list[int]] = []
+        previous = None
+        for p in picks:
+            if p["phase"] == "prompt":
+                if previous != "prompt":
+                    runs.append([])
+                runs[-1].append(p["t"])
+            previous = p["phase"]
+        return runs
+
+    def test_a_weak_session_checks_mid_run_and_the_picks_are_clicks(self):
+        rows, picks = self._run(n_per_cat=40, max_steps=25, spot_check="weak", weak_separation=math.inf, weak_min_t=6)
+        prompts = self._prompts(picks)
+        assert len(prompts) == 1, "prompted once"
+        assert prompts[0][0] > 6, "not before the first eligible click"
+        prompt_rows = [r for r in rows if r["phase"] == "prompt"]
+        assert prompt_rows and all(r["n_good"] + r["n_bad"] == r["t"] for r in prompt_rows)
+        # The prompted picks spend the voting budget: ordinary clicks resume after them and stop at the same count.
+        ordinary = [r for r in rows if r["phase"] not in ("check", "prompt")]
+        assert any(r["t"] > prompts[0][-1] for r in ordinary), "voting resumed"
+        assert max(r["t"] for r in ordinary) == 25
+        # And the end-of-run check still runs after them.
+        end = [r for r in rows if r["phase"] == "check"]
+        assert end and all(r["t"] > 25 for r in end)
+
+    def test_a_session_that_never_separates_weakly_is_the_shipped_run(self):
+        """No prompt draws nothing from the RNG: the run is byte-identical to ``spot_check="end"``."""
+        shipped, shipped_picks = self._run()
+        weak, weak_picks = self._run(spot_check="weak", weak_separation=-math.inf)
+        assert [p["picked_id"] for p in weak_picks] == [p["picked_id"] for p in shipped_picks]
+        assert [(r["t"], r["phase"], r["floor_count"]) for r in weak] == [
+            (r["t"], r["phase"], r["floor_count"]) for r in shipped
+        ]
+
+    def test_the_prompt_returns_after_its_cooldown_while_separation_stays_weak(self):
+        once, once_picks = self._run(n_per_cat=60, max_steps=45, spot_check="weak", weak_separation=math.inf)
+        again, again_picks = self._run(
+            n_per_cat=60, max_steps=45, spot_check="weak", weak_separation=math.inf, weak_repeat=5
+        )
+        assert len(self._prompts(once_picks)) == 1
+        prompts = self._prompts(again_picks)
+        assert len(prompts) >= 2, "the prompt came back"
+        assert all(b[0] - a[-1] >= 5 for a, b in zip(prompts, prompts[1:])), "after at least the cooldown"
+
+
 class TestThePAwareAcquisitionArm:
     """#4409: the acquisition cut at the depth where the session's mixture says the ranking stops being P right."""
 
