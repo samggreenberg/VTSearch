@@ -1,6 +1,6 @@
 # Precision floor ("MinPrecision"): replacing the Inclusion knob
 
-> **Superseded by [`fbeta-balance.md`](fbeta-balance.md)** (the owner's ruling
+> **Superseded by the balance in [`ML.md`](../ML.md#threshold-calibration)** (the owner's ruling
 > of 2026-10-01, #4413): the line's preference is a balance, F-beta's beta,
 > not a precision floor. The floor's machinery below (the band walk, the
 > vote-anchored mixture, the memoised `LineRanking`) carries over; the floor
