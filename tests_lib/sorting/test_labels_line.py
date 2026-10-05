@@ -23,7 +23,14 @@ from vtscore.training.thresholds import (
     fit_labels_line,
     labels_line_threshold,
 )
-from vtscore.training.thresholds.labels_line import MIN_LOGIT_SIGMA, WEAK_SEPARATION_D, _line_on
+from vtscore.training.thresholds.labels_line import (
+    MIN_LOGIT_SIGMA,
+    WEAK_CHECK_COOLDOWN,
+    WEAK_CHECK_MIN_VOTES,
+    WEAK_SEPARATION_D,
+    _line_on,
+    weak_check_due,
+)
 
 
 def _sig(x):
@@ -290,3 +297,24 @@ def test_a_line_built_by_hand_reads_separation_in_the_models_spread():
     assert LabelsLine(model, 0.01).separation == pytest.approx(3.0)
     assert LabelsLine(ClassScoreModel(0.2, 0.0, 0.0, 1, 1), 0.01).separation == float("inf")
     assert 1.0 < WEAK_SEPARATION_D < 3.0
+
+
+class TestWeakCheckDue:
+    """#4496: the rule the app's Autopilot and the harness's default arm both check by."""
+
+    def test_due_only_on_weak_separation_after_the_first_votes(self):
+        assert weak_check_due(1.0, WEAK_CHECK_MIN_VOTES, None)
+        assert not weak_check_due(1.0, WEAK_CHECK_MIN_VOTES - 1, None), "too few votes"
+        assert not weak_check_due(WEAK_SEPARATION_D, 40, None), "at the threshold is not weak"
+        assert not weak_check_due(None, 40, None), "no labels line yet"
+        assert not weak_check_due(float("nan"), 40, None)
+
+    def test_it_comes_back_a_cooldown_after_the_last_check_ended(self):
+        ended = 30
+        assert not weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN - 1, ended)
+        assert weak_check_due(1.0, ended + WEAK_CHECK_COOLDOWN, ended)
+        assert not weak_check_due(3.0, ended + 100, ended), "not while separation is strong"
+
+    def test_no_cooldown_makes_it_due_once(self):
+        assert weak_check_due(1.0, 20, None, cooldown=None)
+        assert not weak_check_due(1.0, 500, 20, cooldown=None)

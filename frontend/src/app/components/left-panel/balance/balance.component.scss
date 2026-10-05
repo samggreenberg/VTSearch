@@ -121,3 +121,11 @@
   font-size: var(--font-2xs);
   letter-spacing: normal;
 }
+
+// The call for a check when the labels separate weakly (#4496): one short line
+// under the state it explains, in the same small type.
+.balance-due {
+  margin: var(--space-2xs) 0 0;
+  font-size: var(--font-2xs);
+  color: var(--text-secondary);
+}

@@ -31,6 +31,9 @@ from vtscore.training.thresholds import (
     CHECK_ADVISORY,
     BALANCE_CHECKED,
     FLOOR_UNCHECKED,
+    WEAK_CHECK_COOLDOWN,
+    ClassScoreModel,
+    LabelsLine,
     LineRanking,
     SpotCheck,
     balance_count,
@@ -194,6 +197,41 @@ class TestTheLine:
         assert recut_detector_threshold(bare, 4, beta=1.0) is None
         with pytest.raises(ValueError, match="needs an inclusion"):
             recut_detector_threshold(bare)
+
+
+class TestTheWeakCheckPrompt:
+    """#4496: the balance payload says when the labels separate weakly enough that a check is due."""
+
+    @staticmethod
+    def _weak(ctx: DetectorContext, gap: float = 0.2) -> DetectorContext:
+        ctx.labels_line = LabelsLine(ClassScoreModel(gap, 0.0, 0.5, 8, 8), 0.01)  # d' = gap / 0.5
+        return ctx
+
+    def test_weak_labels_make_a_check_due(self):
+        state = detector_balance_state(self._weak(_ctx("det-weak")), 1.0)
+        assert state["separation"] == pytest.approx(0.4)
+        assert state["check_due"] is True
+
+    def test_strong_labels_or_no_labels_line_make_none_due(self):
+        assert detector_balance_state(self._weak(_ctx("det-strong"), gap=2.0), 1.0)["check_due"] is False
+        bare = detector_balance_state(_ctx("det-no-line"), 1.0)
+        assert bare["separation"] is None and bare["check_due"] is False
+
+    def test_never_due_in_find_or_while_a_check_runs(self):
+        find = self._weak(_ctx("det-weak-find"))
+        find.find_mode = True
+        assert detector_balance_state(find, 1.0)["check_due"] is False
+        running = self._weak(_ctx("det-weak-running"))
+        running.precision_check_run = SpotCheck.start(running.line_ranking.unvoted_ids(human_voted_ids(running)), 0.5)
+        assert detector_balance_state(running, 1.0)["check_due"] is False
+
+    def test_it_waits_a_cooldown_after_the_last_check_ended(self):
+        ctx = self._weak(_ctx("det-weak-cooldown"))
+        n = len(human_voted_ids(ctx))
+        ctx.check_ended_votes = n
+        assert detector_balance_state(ctx, 1.0)["check_due"] is False
+        ctx.check_ended_votes = n - WEAK_CHECK_COOLDOWN
+        assert detector_balance_state(ctx, 1.0)["check_due"] is True
 
 
 def test_the_planted_ranking_is_what_the_tests_assume():

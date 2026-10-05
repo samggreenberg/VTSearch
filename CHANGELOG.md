@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot checks the line when your labels still overlap** (issue #4496).
+  When the detector scores your Good and Bad answers close together (the
+  labels line's separation below 1.5, from 10 votes on), Autopilot opens the
+  spot check itself, once it has started learning, with a line saying why, and
+  asks again 25 votes after the last check if they still overlap. In Manual,
+  the **Check 5 picks** button turns primary with a note. Priced at equal
+  clicks, prompted sessions returned far fewer wrong images and found more
+  right ones (`docs/experiments/2026-10-05-weak-check-4496/REPORT.md`). The
+  balance payload carries `separation` and `check_due`.
+
 - **Document collections stop on a dry run** (issue #4488). On a collection
   of document pages (`sift_vlad_doc`), Autopilot runs four phases: after the
   initial goods and bads it offers the detector's own best matches, re-ranked
