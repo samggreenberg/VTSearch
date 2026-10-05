@@ -484,3 +484,34 @@ saying what a picture already says.
 **Notes are budgeted, not paginated.** A wordy slide is an edit, not a
 continuation: `build.py --check` fails notes that overflow their one speaker
 page (see *One slide, one speaker page* in [`README.md`](README.md)).
+
+<!-- item-sep -->
+
+## A results slide carries its date
+
+The deck does not age evenly. A slide about a mechanism (what the mixture is,
+how the line is drawn) stays true until the app changes, and that is rare. A
+chart of measured numbers from a run of the app's own path is true of the app
+**on the day it ran**, and the app moves every week. Leave that date in the
+presenter notes and the room cannot tell a fresh number from a stale one, and
+nor can the presenter, scanning the deck for charts that are due a re-run.
+
+So a slide that charts an experiment says when it ran, on its face:
+
+```markdown
+## Photo<br>Finish
+
+<div class="asof">Measured 2026-10-04</div>
+```
+
+The theme sets it in the top-right corner, in the page number's type, because
+it is the same kind of thing (an address, not an argument) and because that is
+the corner every chart leaves empty: the bottom-left one holds an axis label on
+some of them. Use the
+date in the report's directory name, and give both dates when the chart joins
+runs from two days (`Measured 2026-10-03 and 10-04`). Re-running the
+experiment means changing the date along with the figure and the notes.
+
+A schematic drawn to make a point, or one computed live from the shipped
+constants (`logo-balance`), carries no date: it changes when the code does,
+and the code has no date on it either.

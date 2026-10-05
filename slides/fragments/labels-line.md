@@ -43,9 +43,7 @@
 <!-- **e** — The other two radios, β = 1/4 and 4: the tighter cut and the
      looser one. A new radio re-cuts this, with no retrain. -->
 
-<!-- Why the labels: they are the only thing that travels. Export a labelset,
-     open a new corpus, even under another embedder, and Find re-fits the
-     corpus side there from the same votes. Train and Find draw the line one
-     way. The weak spot is a session's start, when the only Goods are the
-     easiest: #4492 tied the spreads' floor to the corpus's own, and weak
-     sessions can still over-return (#4466). -->
+<!-- Why only the labels and the corpus: they are all Find will have, which
+     is the next slide. The weak spot is a session's start, when the only
+     Goods are the easiest: #4492 tied the spreads' floor to the corpus's own,
+     and weak sessions can still over-return (#4466). -->

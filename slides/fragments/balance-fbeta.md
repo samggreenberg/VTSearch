@@ -12,15 +12,13 @@
 
 <!-- build: figs/calib-fbeta.build4.png -->
 
-<!-- **a** — The same ten items, same order, photographs taken away and only
-     the labels left. The axis label has not moved: still “bookness”. -->
+<!-- **a** — The same ranking, its cut taken off: F-ing Metrics scored one
+     cut, and the question now is which cut. -->
 
-<!-- **b** — The score the app keeps its line at: F-beta. Read it as counts.
-     *Kept* is how many come back, *hits* how many of those are books,
-     *matches* how many books there are. Spread out, the bottom is
-     (1 + β²)·hits + β²·misses + false alarms, so a miss weighs β² false
-     alarms. At β = 1 they weigh the same, and the peak is the middle cut,
-     Include five: one false alarm against one miss, F 0.80. -->
+<!-- **b** — The app keeps its line where F-beta peaks, so score every cut:
+     one row per β, the peak dotted up to the cut it picks. At β = 1 a miss
+     and a false alarm weigh the same, and the peak is the middle cut, Include
+     five: one false alarm against one miss, F 0.80. -->
 
 <!-- **c** — β = 1/4: a miss now weighs a sixteenth of a false alarm, and the
      peak moves to the tightest cut, Include two (0.92). Fewer items come back,

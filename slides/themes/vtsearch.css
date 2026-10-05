@@ -499,6 +499,21 @@ section.speaker .speaker-notes {
   color: var(--ink);
 }
 section.speaker .speaker-notes p { margin: 0 0 0.4em; }
+/* The slide's number, printed once and large. The miniatures are rendered from
+   the deck's unnumbered cut, because the audience deck's 20px folio comes out
+   about 8px in a thumbnail and repeats on every frame of the contact sheet;
+   this is the same number the room sees, at a size a presenter finds at a
+   glance. It sits in the page's bottom padding, so it never takes a line from
+   the notes build.py budgets for. */
+section.speaker .speaker-pageno {
+  position: absolute;
+  right: 42px;
+  bottom: 3px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
 
 /* --- Pagination ------------------------------------------------------ */
 
@@ -522,6 +537,22 @@ section .pageno {
 
 section.lead .pageno,
 section.statement .pageno { display: none; }
+
+/* A results slide's date, in the top-right corner, set like the page number.
+   The deck ages unevenly: a mechanism slide holds for months, while a chart of
+   measured numbers is true of the app on the day it ran. So a slide that charts
+   an experiment says, on its face, when the experiment ran — the room can see
+   how fresh a number is, and the presenter can see which charts are due a
+   re-run. Top right because it is the one corner every chart leaves empty: the
+   bottom-left one holds an axis label on some of them. See *A results slide
+   carries its date* in STYLE.md. */
+section .asof {
+  position: absolute;
+  right: 70px;
+  top: 30px;
+  font-size: 20px;
+  color: var(--ink-soft);
+}
 
 /* A split-background slide is not the full slide. Marpit renders its text into
    a `foreignObject` the width of the text column, so nothing inside the section

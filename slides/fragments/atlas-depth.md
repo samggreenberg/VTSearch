@@ -45,4 +45,4 @@
 <!-- So the fix cannot come from the detector, but from something that models
      where the data *was* — the atlas: it does not need to know the truth up
      there, only to say "this is nowhere near anything I was built on". That is
-     the typicality p-value, and the next slide is about how well it says it. -->
+     the typicality p-value, and the next slide shows it saying so. -->

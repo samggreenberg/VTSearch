@@ -131,9 +131,13 @@ if [[ -n $watch ]]; then
 fi
 
 if [[ -n $speaker ]]; then
+    # The miniatures come from the unnumbered cut: a page number shrunk into a
+    # thumbnail is too small to read, so the speaker page prints the number
+    # itself, large, in its own corner (build.py `speaker_label`).
+    ./build.py --no-pageno "$deck"
     mkdir -p _build/imgs
     rm -f "_build/imgs/$deck".*.png
-    run_marp "_build/$deck.md" --images png -o "_build/imgs/$deck.png" \
+    run_marp "_build/$deck.unnumbered.md" --images png -o "_build/imgs/$deck.png" \
         || { echo "ERROR: slide-image pass failed." >&2; exit 1; }
     ./build.py --speaker "$deck"
     out="_out/$deck.speaker.$fmt"

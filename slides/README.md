@@ -196,6 +196,13 @@ miniature of the real rendered slide (pixel-identical — it *is* a PNG of the
 audience deck, rendered in a first pass) with that slide's notes beside it.
 Same fragments, same manifest — the notes are authored once, as comments.
 
+The one difference is the page number. The miniatures come from the deck's
+unnumbered cut, because a 20px number shrunk into a thumbnail is too small to
+read and repeats on every frame of the contact sheet. The speaker page prints
+the slide's number once instead, large, in its own bottom-right corner — the
+same number the room sees, plus this showing's letters for a slide the deck
+shows more than once (the outline before section 3 reads `1d`).
+
 **Never put a bare `---` in a fragment**: Marp reads it as a slide break and
 would silently split one slide into two. `build.py` errors on it. Use `***`
 for a horizontal rule.

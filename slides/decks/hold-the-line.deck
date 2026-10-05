@@ -56,19 +56,25 @@ slides:
   quantile-transfer
   split-fraction
 
-  # 3 — Preference: why a line needs one, F-beta and the three-radio balance
-  # that sets its beta (#4413, #4448), the line the labels draw at its expected
-  # peak (#4452), what that line can and cannot claim before anyone checks,
-  # and what a check says about it without moving it (#4427, #4452). Present
+  # 3 — Preference: why a line needs one, what F₁ and F-beta are (#4517),
+  # F-beta's peak and the three-radio balance that sets its beta (#4413,
+  # #4448), the line the labels draw at its expected peak (#4452), and why
+  # the labels are what it is drawn from: they are all Find has (#4517). Then
+  # the question that line cannot answer before anyone checks (how many of
+  # what it keeps are right), Clopper–Pearson on its own, and what a check
+  # says about the line without moving it (#4427, #4452, #4517). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after The End.
   # Second Cut stays last: the acquisition cut is measured from wherever the
   # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
   inclusion-rank
+  fbeta-metrics
   balance-fbeta
   labels-line
+  transfer-student
   floor-ask
+  clopper-pearson
   floor-check
   inclusion-acq
 
@@ -79,14 +85,15 @@ slides:
   # threshold does not do".
   #
   # The order is the argument, not the code: the blind spot the atlas exists
-  # for, the structure, the second job that structure also does, and how badly
-  # it does it. That last one stays last whatever happens to the rest — it is
+  # for, the structure, the second job that structure also does, the atlas
+  # doing it on that very room (#4517), and how badly it does it. That last one stays last whatever happens to the rest — it is
   # the only slide here that reports a loss, and a loss read before the
   # mechanism is just a reason not to listen.
   outline-hold-the-line +at4
   atlas-blindspot
   atlas-cells
   atlas-depth
+  atlas-far
   atlas-pvalues
 
   # 5 — Experiments: the photographs the experiments run on. Every dataset
@@ -111,10 +118,11 @@ slides:
   # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
   sota-photos
 
-  # 6 — Regions
+  # 6 — Regions: the region vote in the app, what a patch is and the model
+  # that makes them (DINOv3, #4517), and the maximum a photo is then scored by.
   outline-hold-the-line +at6
   voting-modes
-  evt-midpoint
+  patches
   evt-gumbel
 
   # 7 — Logos. The logo slide opens it because it introduces the idea of logo
@@ -122,34 +130,36 @@ slides:
   # `book` slide's claim made a second time, in the one domain where a room
   # expects a concept to have a published spec sheet: eight results for one
   # query, arriving one at a time, and the presenter asks about each without
-  # answering. Then the same "Data, Set" card as section 5, for the document
-  # sources and FullMarks, built from the FullMarks datasheet.
+  # answering.
+  #
+  # Then how we find one, before the data built to test it (#4517): the
+  # shipped matcher on real Tobacco800 pages (`make-sift-figs.py`), with a
+  # FullMarks crest as the running example. The background comes first, in
+  # the order a page is checked: keypoints, then matching and RANSAC. Then the
+  # three things the documents changed: the keypoint budget, the shortlist and
+  # why a page vector cannot build one, and the votes. Tiles shipped after
+  # these slides were drawn (#4378, #4415): the notes say so, and the tiles
+  # figure still draws the old single-layer pick until #4455 pins the app's own.
   outline-hold-the-line +at7
   logo-grid
-  data-set-fullmarks-sources
-  data-fullmarks-problems
-  data-set-fullmarks
-  data-fullmarks-shape
-  # How we find one, on the pile just shown, with the FullMarks zoom's crest
-  # as the running example (`make-sift-figs.py`, the shipped matcher on real
-  # Tobacco800 pages). The background comes first, in the order a page is
-  # checked: keypoints, then matching and RANSAC. Then the three things the
-  # documents changed: the keypoint budget, the shortlist and why a page
-  # vector cannot build one, and the votes. Tiles shipped after these slides
-  # were drawn (#4378, #4415): the notes say so, and the tiles figure still
-  # draws the old single-layer pick until #4455 pins the app's own. Last,
-  # where the line goes on documents: Goods rank, Bads set the line (#4367),
-  # and tight fits hold it before the first Bad (#4440), charted from the
-  # three runs' committed CSVs (`make-logo-line-fig.py`). Then the same line
-  # at the other two radios: the recall end adds pages above a floor under the
-  # Goods' own fits (#4458), the precision end trims to pages that beat every
-  # Bad by a margin (#4479) — a schematic on the shipped constants.
   logo-keypoints
   logo-match
   logo-budget
   logo-stages
   logo-tiles
   logo-votes
+  # Then the same "Data, Set" card as section 5, for the document sources and
+  # FullMarks, built from the FullMarks datasheet.
+  data-set-fullmarks-sources
+  data-fullmarks-problems
+  data-set-fullmarks
+  data-fullmarks-shape
+  # Last, where the line goes on documents: Goods rank, Bads set the line
+  # (#4367), and tight fits hold it before the first Bad (#4440), charted from
+  # the three runs' committed CSVs (`make-logo-line-fig.py`). Then the same
+  # line at the other two radios: the recall end adds pages above a floor
+  # under the Goods' own fits (#4458), the precision end trims to pages that
+  # beat every Bad by a margin (#4479) — a schematic on the shipped constants.
   logo-line
   logo-balance
   # And how it does: the document review's two panels, one run of the app per

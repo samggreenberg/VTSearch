@@ -774,7 +774,9 @@ def _submerged_outline(pad: float = 0.0) -> np.ndarray:
     return np.vstack([waterline, silhouette])
 
 
-def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None) -> np.ndarray | None:
+def _item(
+    ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | None = None, fill: str = "white"
+) -> np.ndarray | None:
     """One item: a sphere, half of it under *plane*.
 
     With no plane it is a plain circle — the first page's items lie on a plane
@@ -792,8 +794,11 @@ def _item(ax: plt.Axes, point: np.ndarray, zorder: float, plane: plt.Polygon | N
     outlined in black where it stands clear and in grey where it is seen
     through the plane, *including* the rim of one hanging over the plane's edge,
     which is clear of the plane and so stays black.
+
+    *fill* is the sphere's face: white, or `FLAGGED` on Far Out for an item the
+    atlas calls atypical.
     """
-    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor="white", edgecolor="none", zorder=zorder))
+    ax.add_patch(plt.Circle(tuple(point), ITEM_R, facecolor=fill, edgecolor="none", zorder=zorder))
     if plane is None:
         ax.add_patch(
             plt.Circle(tuple(point), ITEM_R, facecolor="none", edgecolor=INK, linewidth=1.7, zorder=zorder + 0.3)
@@ -1030,40 +1035,62 @@ def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
     )
 
 
-def _occluded_by_dome(u: float, v: float) -> bool:
-    """Whether the dome stands between this floor item and the eye.
+def _occluded_by_dome(u: float, v: float, h: float = 0.0) -> bool:
+    """Whether the dome stands between this point (a floor item, or a rim of one) and the eye.
 
     Same walk as `_occluded_by_pillar`, against the half-ellipsoid instead of
     the cylinder — so an item inside the footprint is behind the near surface,
     an item just beyond it may be behind both, and one in front of it is behind
-    neither. No height window is needed: the dome closes, so leaving through the
-    top is leaving through the dome.
+    neither. The walk only climbs, so the one height check is that it leaves
+    the solid above the floor: a rim under the floor (the floor is glass too,
+    and a sphere's lower half shows through it) can cross the full ellipsoid's
+    mirrored lower half, which is not there.
     """
     toward = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
-    du, dv = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV
+    du, dv, dh = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV, h / DOME_H
     au, av, ah = toward[0] / CURVE_RU, toward[1] / CURVE_RV, toward[2] / DOME_H
     a = au * au + av * av + ah * ah
-    b = 2 * (du * au + dv * av)
-    disc = b * b - 4 * a * (du * du + dv * dv - 1.0)
-    return disc >= 0 and (-b + math.sqrt(disc)) / (2 * a) > 1e-9
+    b = 2 * (du * au + dv * av + dh * ah)
+    disc = b * b - 4 * a * (du * du + dv * dv + dh * dh - 1.0)
+    if disc < 0:
+        return False
+    leaves = (-b + math.sqrt(disc)) / (2 * a)
+    return leaves > max(1e-9, -h / toward[2])
+
+
+#: The directions round a sphere's page outline its rims are walked from, every
+#: 45°. The lower half counts too: it is under the floor, and the floor is
+#: glass, so that half shows through it and can stand behind a solid as well.
+RIM_ANGLES = tuple(range(0, 360, 45))
 
 
 def _partly_behind(occluded, u: float, v: float) -> bool:
     """Whether any of this floor item stands behind the solid, not just its centre.
 
-    `occluded` walks one ray, from the item's centre, and a sphere is wider than
-    a ray: one whose centre sits just outside the solid's silhouette can still
-    overhang its outline, and if it stands *behind* the solid that overhang is
-    behind the glass. Tested on the centre alone, those spheres were painted in
-    front and sat on top of the pillar's edge. So the walk is repeated from the
-    sphere's two rims either side on the page — a step along `u` is purely
-    sideways in this projection, and at the same depth — and any hit sends the
-    whole item under the glass, where only the part the pillar covers is tinted.
-    A sphere in *front* of the pillar is unaffected: no ray from it toward the
+    `occluded` walks one ray, from a point toward the eye, and a sphere is
+    wider than a ray: one whose centre sits just outside the solid's silhouette
+    can still overhang its outline, and if it stands *behind* the solid that
+    overhang is behind the glass. Tested on the centre alone, those spheres were
+    painted in front and sat on top of the solid's edge. So the walk is repeated
+    from points round the sphere's page outline (`RIM_ANGLES`), each at the
+    centre's depth: a step along `u` is purely sideways in this projection, and
+    a step in height is purely upward. Testing only the two side rims missed a
+    sphere whose lower edge overhung the dome's outline (#4517). Any hit sends the
+    whole item under the glass, where only the part the solid covers is tinted.
+    A sphere in *front* of the solid is unaffected: no ray from it toward the
     eye meets the solid, rim or centre.
     """
-    step = ITEM_R * 1.02 / (PROJ_SCALE * PROJ_U)
-    return any(occluded(u + du, v) for du in (0.0, -step, step))
+    if occluded(u, v, 0.0):
+        return True
+    radius = ITEM_R * 1.02
+    return any(
+        occluded(
+            u + radius * math.cos(math.radians(angle)) / (PROJ_SCALE * PROJ_U),
+            v,
+            radius * math.sin(math.radians(angle)) / PROJ_SCALE,
+        )
+        for angle in RIM_ANGLES
+    )
 
 
 def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int, float]]:
@@ -1202,9 +1229,7 @@ def _depth_stage(stage: int) -> plt.Figure:
     base = _footprint(angles, 0.0)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
     if stage == 4:
-        behind = {
-            i for i, (u, v) in enumerate(floor) if _partly_behind(lambda a, b: _occluded_by_pillar(a, b, 0.0), u, v)
-        }
+        behind = {i for i, (u, v) in enumerate(floor) if _partly_behind(_occluded_by_pillar, u, v)}
     elif stage == 5:
         behind = {i for i, (u, v) in enumerate(floor) if _partly_behind(_occluded_by_dome, u, v)}
     else:
@@ -1272,6 +1297,78 @@ def depth_fig() -> None:
     for stage in range(1, DEPTH_STAGES):
         save(_depth_stage(stage), OUT, f"atlas-depth.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
     save(_depth_stage(DEPTH_STAGES), OUT, "atlas-depth.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 3b. Far Out — the atlas finding the room's second collection (#4517)
+# ──────────────────────────────────────────────────────────────────────────────
+
+FAR_STAGES = 4
+#: How many floor points the atlas is built on. Denser than the drawing's
+#: `N_ITEMS`, because the shipped atlas splits only nodes of twenty and more
+#: and calibrates only those: built on the drawn seventy-six it would have a
+#: handful of calibrated nodes and say little. The drawn floor items are then
+#: *held out* — the atlas never saw them — which is the honest test.
+FAR_BUILD = 2000
+FAR_SEED = 23
+#: The threshold an item is flagged at: the domain-shift report's own alpha.
+FAR_ALPHA = 0.05
+#: The face of a flagged item: ink, the colour nothing else in the room is.
+FLAGGED = INK
+
+
+@functools.lru_cache(maxsize=1)
+def _far_pvalues() -> tuple[np.ndarray, np.ndarray]:
+    """The shipped atlas, built on the floor, scoring the drawn floor items and the ceiling.
+
+    Real code on drawing coordinates: `CoverageAtlas` and its
+    `typicality_pvalues`, the same pair the domain-shift route calls. Each item
+    is its room position `(u, v, h)` as a three-number vector.
+    """
+    from vtscore.coverage.atlas import CoverageAtlas  # noqa: PLC0415
+
+    rng = np.random.default_rng(FAR_SEED)
+    (u0, u1), (v0, v1) = ITEM_LIMITS
+    build = np.column_stack([rng.uniform(u0, u1, FAR_BUILD), rng.uniform(v0, v1, FAR_BUILD), np.zeros(FAR_BUILD)])
+    atlas = CoverageAtlas({i: row for i, row in enumerate(build.astype(np.float32))})
+    floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
+    ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
+
+    def scored(points: np.ndarray, h: float) -> np.ndarray:
+        return atlas.typicality_pvalues(np.column_stack([points, np.full(len(points), h)]).astype(np.float32))
+
+    return scored(floor, 0.0), scored(ceiling, NEW_H)
+
+
+def far_fig() -> None:
+    """The atlas finding Out of Its Depth's second collection, drawn in the same room (#4517).
+
+    Four pages: the floor, as the atlas was built on it; the floor scored, the
+    few items the atlas calls atypical filled in; the second collection on the
+    ceiling, as Out of Its Depth showed it; and the ceiling scored, nearly every
+    item filled. No chart: the drift is which spheres go dark.
+    """
+    for stage in range(1, FAR_STAGES):
+        save(_far_stage(stage), OUT, f"atlas-far.build{stage}.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+    save(_far_stage(FAR_STAGES), OUT, "atlas-far.png", column=FULL_BLEED, tight=False, notch=NOTCH)
+
+
+def _far_stage(stage: int) -> plt.Figure:
+    fig, ax = _canvas()
+    planes = _wireframe(ax)
+    floor_p, ceiling_p = _far_pvalues()
+    floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
+    for index, depth_z in _painted_back_to_front(floor, 0.0):
+        flagged = stage >= 2 and floor_p[index] < FAR_ALPHA
+        _item(ax, proj(*floor[index], 0.0), Z_IN_FRONT + depth_z, planes[0], fill=FLAGGED if flagged else "white")
+    if stage >= 3:
+        ceiling = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP, seed=NEW_SEED)
+        for index, depth_z in _painted_back_to_front(ceiling, 0.0):
+            flagged = stage >= 4 and ceiling_p[index] < FAR_ALPHA
+            _item(
+                ax, proj(*ceiling[index], NEW_H), Z_CEILING + depth_z, planes[1], fill=FLAGGED if flagged else "white"
+            )
+    return fig
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1391,5 +1488,6 @@ if __name__ == "__main__":
     blindspot_fig()
     cells_fig()
     depth_fig()
+    far_fig()
     pvalues_fig()
     print("wrote figures to", OUT)

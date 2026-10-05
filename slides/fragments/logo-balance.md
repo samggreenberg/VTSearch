@@ -15,11 +15,12 @@
      rules on it, so each end of the control gets its own rule, priced on
      FullMarks (#4458, #4479). -->
 
-<!-- **a** — One detector, mid-session, on one inlier axis. Above: each
-     Good's leave-one-out fit (its best fit to the other Goods' templates) and
-     each Bad's best fit. Below: the shortlisted pages that verified. Green are
-     copies of the mark, red are not, and the faint copies sit among the hard
-     negatives at the low end. That is the whole difficulty. -->
+<!-- **a** — One detector, mid-session, on one inlier axis, each kind on
+     its own row as on Cross Examination. The votes: each Good's leave-one-out
+     fit (its best fit to the other Goods' templates), then each Bad's best
+     fit. The shortlisted pages that verified: copies of the mark, then pages
+     that are not. The faint copies sit as low as the hard negatives. That is
+     the whole difficulty. -->
 
 <!-- **b** — The middle radio is Raise the Bar's line: a page must beat every
      Bad (#4367). One wrong page, and the faint copies under the top Bad are

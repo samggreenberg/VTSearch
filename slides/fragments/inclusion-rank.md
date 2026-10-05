@@ -26,5 +26,6 @@
      splits it down the middle: one mistake of each kind. Put the question to
      the room, then give them the honest answer: the ranking cannot choose,
      because all three are consistent with every label on screen. What chooses
-     is what the two mistakes are worth to the person who asked — and that is
-     the next slide, which prices them and gets a different cut each time. -->
+     is what the two mistakes are worth to the person who asked. Pricing them
+     takes a score, which is the next slide; the one after puts it to work and
+     gets a different cut for each price. -->

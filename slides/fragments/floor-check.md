@@ -12,9 +12,9 @@
 
 <!-- build: figs/calib-floor-check.build4.png -->
 
-<!-- **a** — Where Say It Out Loud left off: the same strip, the same kept
-     set, the same <span class="cut">line</span>, and the control still says
-     *unchecked*. Drawn at the middle radio, every detector's default. -->
+<!-- **a** — Back to Say It Out Loud's strip: the same kept set, the same
+     <span class="cut">line</span>, and the control still says *unchecked*.
+     Drawn at the middle radio, every detector's default. Now the picks. -->
 
 <!-- **b** — The check, offered in the Train view. The unvoted ranking is cut
      into bands from the top: the top 8, the next 8, then 16, 32, 64,
@@ -37,7 +37,7 @@
      started on. A rising walk goes on deeper and stops at its first fall.
      All twenty votes are ordinary votes, and they train the model. -->
 
-<!-- **e** — Checked. The ranges are each band's Clopper–Pearson interval,
+<!-- **e** — Checked. The ranges are Home on the Range's, one per band,
      each tail at 5% over the three bands, weighted by size: precision over
      the audited set, recall over the 35, said in words. And the line keeps
      its 32. At every radio a check informs the line and does not move it
