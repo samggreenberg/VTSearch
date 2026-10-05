@@ -5469,12 +5469,15 @@ DOC_MARK_PAGES = (11, 14, 18, 23, 28, 31, 35, 39, 44, 50, 57, 65, 74)
 DOC_OTHER_PAGES = (8, 12, 15, 17, 19, 24)
 #: Pages closer than this many counts stack, so no two dots overlap.
 DOC_STACK_GAP = 2.0
-#: Rows, in canvas units: the votes; the pages; one row per radio, top to bottom
-#: the precision end, the middle, the recall end — the order `calib-fbeta`
-#: stacks the same three balances in.
-DOC_VOTES_Y = 8.35
-DOC_PAGES_Y = 6.45
-DOC_RADIO_Y = (4.55, 3.0, 1.45)
+#: Rows, in canvas units: the Good votes and the Bad votes; the Good pages and
+#: the Bad pages; one row per radio, top to bottom the precision end, the
+#: middle, the recall end — the order `calib-fbeta` stacks the same three
+#: balances in. Votes and pages are each split into a Good row over a Bad row,
+#: the way Cross Examination splits D₀ (#4517): which kind a mark is reads off
+#: its row, and red against green is only a second way of saying it.
+DOC_VOTE_ROWS_Y = (7.95, 7.0)
+DOC_PAGE_ROWS_Y = (6.05, 5.1)
+DOC_RADIO_Y = (3.75, 2.5, 1.25)
 DOC_DOT_R = 0.15
 
 
@@ -5519,6 +5522,71 @@ def doc_balance_fig() -> None:
     save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
 
 
+def _doc_rows(ax: plt.Axes, x0: float, w: float, at) -> None:
+    """Stage 1 of the document-balance figure: the votes and the verified pages, Good over Bad.
+
+    *at* maps an inlier count to canvas x on the axis every row shares.
+    """
+
+    def row_kind(y: float, noun: str, good: bool) -> None:
+        ax.text(
+            x0 - 0.35,
+            y,
+            f"{'Good' if good else 'Bad'} {noun}",
+            ha="right",
+            va="center",
+            fontsize=16,
+            color=GREEN if good else RED,
+        )
+
+    for (counts, good), y in zip(((DOC_GOODS, True), (DOC_BADS, False)), DOC_VOTE_ROWS_Y, strict=True):
+        _range_line(ax, x0, x0 + w, y, z=3)
+        # Sitting on their row's line, as the pages sit on theirs: every mark
+        # is above the line it belongs to, so no row's marks hang between two.
+        for count in counts:
+            ax.text(
+                at(count),
+                y + 0.06,
+                "✓" if good else "✗",
+                ha="center",
+                va="bottom",
+                fontsize=20,
+                color=GREEN if good else RED,
+                fontweight="bold",
+            )
+        row_kind(y + 0.25, "votes", good)
+    ax.text(
+        x0 + w,
+        DOC_VOTE_ROWS_Y[0] + 0.6,
+        "inliers, few to many",
+        ha="right",
+        va="bottom",
+        fontsize=FBETA_AXIS_LABEL_PT,
+        color=SOFT,
+    )
+    # One dot per page on its own row's line. Pages closer than
+    # `DOC_STACK_GAP` counts would stack a level up, though with the rows split
+    # none of the drawing's pages are that close.
+    for (counts, good), y in zip(((DOC_MARK_PAGES, True), (DOC_OTHER_PAGES, False)), DOC_PAGE_ROWS_Y, strict=True):
+        _range_line(ax, x0, x0 + w, y, z=3)
+        placed: list[tuple[float, int]] = []
+        for count in sorted(counts):
+            level = 0
+            while any(lvl == level and abs(count - c) < DOC_STACK_GAP for c, lvl in placed):
+                level += 1
+            placed.append((count, level))
+            ax.add_patch(
+                Circle(
+                    (at(count), y + DOC_DOT_R + 0.08 + level * (2 * DOC_DOT_R + 0.06)),
+                    DOC_DOT_R,
+                    facecolor=GREEN if good else RED,
+                    edgecolor="none",
+                    zorder=4,
+                )
+            )
+        row_kind(y + 0.2, "pages", good)
+
+
 def _doc_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the document-balance figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in DOC_CANVAS))
@@ -5537,47 +5605,7 @@ def _doc_stage(stage: int) -> plt.Figure:
         ax.text(x0 - 0.35, y, text, ha="right", va="center", fontsize=16, color=INK)
 
     # ── stage 1: the votes, and the pages that verified ───────────────────────
-    _range_line(ax, x0, x0 + w, DOC_VOTES_Y, z=3)
-    for count, good in [(g, True) for g in DOC_GOODS] + [(b, False) for b in DOC_BADS]:
-        ax.text(
-            at(count),
-            DOC_VOTES_Y - 0.12,
-            "✓" if good else "✗",
-            ha="center",
-            va="top",
-            fontsize=20,
-            color=GREEN if good else RED,
-            fontweight="bold",
-        )
-    row_name(DOC_VOTES_Y - 0.2, "the votes")
-    ax.text(
-        x0 + w,
-        DOC_VOTES_Y + LABEL_GAP,
-        "inliers, few to many",
-        ha="right",
-        va="bottom",
-        fontsize=FBETA_AXIS_LABEL_PT,
-        color=SOFT,
-    )
-    _range_line(ax, x0, x0 + w, DOC_PAGES_Y, z=3)
-    # A dot plot: a page closer than `DOC_STACK_GAP` counts to one already on a
-    # level goes up a level, so the low end, where pages crowd, stays legible.
-    placed: list[tuple[float, int]] = []
-    for count, mark in sorted([(c, True) for c in DOC_MARK_PAGES] + [(c, False) for c in DOC_OTHER_PAGES]):
-        level = 0
-        while any(lvl == level and abs(count - c) < DOC_STACK_GAP for c, lvl in placed):
-            level += 1
-        placed.append((count, level))
-        ax.add_patch(
-            Circle(
-                (at(count), DOC_PAGES_Y + DOC_DOT_R + 0.08 + level * (2 * DOC_DOT_R + 0.06)),
-                DOC_DOT_R,
-                facecolor=GREEN if mark else RED,
-                edgecolor="none",
-                zorder=4,
-            )
-        )
-    row_name(DOC_PAGES_Y + 0.2, "the pages")
+    _doc_rows(ax, x0, w, at)
 
     # ── stages 2-4: what each radio keeps ─────────────────────────────────────
     lines = _doc_lines()
@@ -5590,7 +5618,7 @@ def _doc_stage(stage: int) -> plt.Figure:
         # Half a count below the lowest page kept, so the cut sits between two
         # integer counts rather than on one.
         cut = at(first - 0.5)
-        ax.plot([cut, cut], [y, DOC_PAGES_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+        ax.plot([cut, cut], [y, DOC_PAGE_ROWS_Y[0]], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
         ax.plot([cut, x0 + w], [y, y], color=INK, linewidth=weight, solid_capstyle="butt", zorder=3)
         ax.plot([cut] * 2, [y - 0.18, y + 0.18], color=INK, linewidth=2.4, zorder=3)
         kept = [mark for count, mark in pages if count >= first]
