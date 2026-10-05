@@ -114,7 +114,6 @@ slides:
   # 6 — Regions
   outline-hold-the-line +at6
   voting-modes
-  evt-midpoint
   evt-gumbel
 
   # 7 — Logos. The logo slide opens it because it introduces the idea of logo
@@ -122,34 +121,36 @@ slides:
   # `book` slide's claim made a second time, in the one domain where a room
   # expects a concept to have a published spec sheet: eight results for one
   # query, arriving one at a time, and the presenter asks about each without
-  # answering. Then the same "Data, Set" card as section 5, for the document
-  # sources and FullMarks, built from the FullMarks datasheet.
+  # answering.
+  #
+  # Then how we find one, before the data built to test it (#4517): the
+  # shipped matcher on real Tobacco800 pages (`make-sift-figs.py`), with a
+  # FullMarks crest as the running example. The background comes first, in
+  # the order a page is checked: keypoints, then matching and RANSAC. Then the
+  # three things the documents changed: the keypoint budget, the shortlist and
+  # why a page vector cannot build one, and the votes. Tiles shipped after
+  # these slides were drawn (#4378, #4415): the notes say so, and the tiles
+  # figure still draws the old single-layer pick until #4455 pins the app's own.
   outline-hold-the-line +at7
   logo-grid
-  data-set-fullmarks-sources
-  data-fullmarks-problems
-  data-set-fullmarks
-  data-fullmarks-shape
-  # How we find one, on the pile just shown, with the FullMarks zoom's crest
-  # as the running example (`make-sift-figs.py`, the shipped matcher on real
-  # Tobacco800 pages). The background comes first, in the order a page is
-  # checked: keypoints, then matching and RANSAC. Then the three things the
-  # documents changed: the keypoint budget, the shortlist and why a page
-  # vector cannot build one, and the votes. Tiles shipped after these slides
-  # were drawn (#4378, #4415): the notes say so, and the tiles figure still
-  # draws the old single-layer pick until #4455 pins the app's own. Last,
-  # where the line goes on documents: Goods rank, Bads set the line (#4367),
-  # and tight fits hold it before the first Bad (#4440), charted from the
-  # three runs' committed CSVs (`make-logo-line-fig.py`). Then the same line
-  # at the other two radios: the recall end adds pages above a floor under the
-  # Goods' own fits (#4458), the precision end trims to pages that beat every
-  # Bad by a margin (#4479) — a schematic on the shipped constants.
   logo-keypoints
   logo-match
   logo-budget
   logo-stages
   logo-tiles
   logo-votes
+  # Then the same "Data, Set" card as section 5, for the document sources and
+  # FullMarks, built from the FullMarks datasheet.
+  data-set-fullmarks-sources
+  data-fullmarks-problems
+  data-set-fullmarks
+  data-fullmarks-shape
+  # Last, where the line goes on documents: Goods rank, Bads set the line
+  # (#4367), and tight fits hold it before the first Bad (#4440), charted from
+  # the three runs' committed CSVs (`make-logo-line-fig.py`). Then the same
+  # line at the other two radios: the recall end adds pages above a floor
+  # under the Goods' own fits (#4458), the precision end trims to pages that
+  # beat every Bad by a margin (#4479) — a schematic on the shipped constants.
   logo-line
   logo-balance
   # And how it does: the document review's two panels, one run of the app per

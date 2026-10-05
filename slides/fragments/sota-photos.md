@@ -13,8 +13,9 @@
      withheld images Find would search. -->
 
 <!-- **a** — Left: each line is scored at its own β, so this is not a league
-     table between radios. After 150 clicks and the spot check: 0.62, 0.52 and
-     0.60. The check's 21 to 31 uniform picks add +0.034 to +0.037 at every
+     table between radios. The **✓** is not more clicks: it is the same
+     sessions after the spot check's uniform picks. After 150 clicks and the
+     spot check: 0.62, 0.52 and 0.60. The check's 21 to 31 uniform picks add +0.034 to +0.037 at every
      radio. Per pick, a band pick is worth several of Autopilot's. -->
 
 <!-- **b** — Right: the same three sets as precision against recall, and the

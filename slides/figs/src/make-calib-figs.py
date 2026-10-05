@@ -215,10 +215,6 @@ VOTE_PANEL_MARK_PT = 22
 VOTE_MARK_PX = 24.0
 VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 * VOTE_PANEL_MARK_PT / VOTE_MARK_PT + LABEL_GAP
 
-#: The same label under a baseline that carries *no* vote glyphs: the notch's
-#: own length plus a gap, and nothing else to clear.
-NOTCH_LABEL_DROP = 0.32 + LABEL_GAP
-
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
 #: and where that fold's cut goes. Quoted once and rescaled by `_line_marks`,
@@ -2188,10 +2184,7 @@ def _theta_notch(
     """The progression's one cut mark: a notch under the baseline, then a name.
 
     `drop` is how far under the baseline the *name* hangs, and it defaults to
-    clearing a panel's row of vote glyphs. A baseline with no glyphs under it
-    has nothing to clear, and paying `VOTE_LABEL_DROP` there drives the label
-    into whatever sits below — which is how the crossing figure's θ_mid ended
-    up inside the sentence beneath it. Those callers pass `NOTCH_LABEL_DROP`.
+    clearing a panel's row of vote glyphs.
     """
     ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
     dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
@@ -4091,11 +4084,6 @@ TEACH_CANVAS = (19.8, 11.0)
 #: control that names them.
 FBETA_STAGES = 5
 
-#: How many stages the Bayes-crossing figure reveals in: the fitted mixture;
-#: the midpoint of the means; the weighted densities and where they actually
-#: cross; the arithmetic that moves one to the other.
-CROSSING_STAGES = 4
-
 #: How many stages the region-maximum figure reveals in: two photographs cut
 #: into regions; each region's score and the max over them; the corpus of
 #: maxima; the two tail families fitted to it.
@@ -4407,149 +4395,6 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
         )
         if picked:
             ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
-
-
-#: The mixture the crossing figure argues over: (weight, mean, variance) for
-#: the Bad component and the Good one. The weights are the measured ones from
-#: the anchored slide — a fitted high-component weight far under a half is what
-#: makes the midpoint and the crossing different places, and a figure drawn at
-#: equal weights would show them on top of each other and prove nothing.
-CROSSING_LO = (0.91, 0.30, 0.0130)
-CROSSING_HI = (0.09, 0.70, 0.0130)
-
-#: How tall the small component is drawn relative to its own true height. The
-#: two weighted densities differ by a factor of ten, so the Good one drawn to
-#: scale is a smear along the baseline and the crossing it makes is invisible.
-#: The *shapes* are therefore drawn unweighted and the weights are carried by
-#: the second pair of curves, which is the whole distinction the slide makes.
-CROSSING_SHAPE_H = 0.86
-
-
-def crossing_fig() -> None:
-    """Why the midpoint of two means is not the cut, unless the two are equally likely.
-
-    The deck asserted this in one bullet and then reported that fixing it was
-    worth −0.0044. A room that has not seen *where* the two answers differ has
-    no way to judge either number (#3246).
-    """
-    final = _crossing_stage(CROSSING_STAGES)
-    box = tight_box(final)
-    for stage in range(1, CROSSING_STAGES):
-        save(_crossing_stage(stage), OUT, f"calib-crossing.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-crossing.png", column=FULL_BLEED, box=box)
-
-
-def _crossing_point() -> float:
-    """Where the two weighted components actually cross, in score units.
-
-    Closed form, because the two variances are equal: the log-odds are linear
-    in the score, so the crossing is the midpoint of the means displaced by the
-    prior's own log-ratio. That displacement is the slide.
-    """
-    (w_lo, mu_lo, var), (w_hi, mu_hi, _) = CROSSING_LO, CROSSING_HI
-    return 0.5 * (mu_lo + mu_hi) + var / (mu_hi - mu_lo) * float(np.log(w_lo / w_hi))
-
-
-def _crossing_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the crossing figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, TEACH_CANVAS[0])
-    ax.set_ylim(0, TEACH_CANVAS[1])
-    ax.set_axis_off()
-
-    (w_lo, mu_lo, var_lo), (w_hi, mu_hi, var_hi) = CROSSING_LO, CROSSING_HI
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
-    shape_base = TEACH_CANVAS[1] - 1.0 - 3.1
-    shape_h = 3.1
-    weighted_base = 2.35
-    weighted_h = 3.1
-    arithmetic_y = 0.55
-
-    xs = np.linspace(0.0, 1.0, 700)
-    lo, hi = gaussian(xs, mu_lo, var_lo), gaussian(xs, mu_hi, var_hi)
-    mid = 0.5 * (mu_lo + mu_hi)
-    crossing = _crossing_point()
-
-    # ── stage 1: the fit, as the mixture slide left it — two shapes and two means
-    peak = float(max(lo.max(), hi.max()))
-    for curve, colour, name, hatch in ((lo, RED, r"\mu_{lo}", "\\\\\\"), (hi, GREEN, r"\mu_{hi}", "//////")):
-        density_ys = shape_base + curve / peak * shape_h * CROSSING_SHAPE_H
-        ys = density_ys - HUMP_DROP
-        mu = mu_lo if colour == RED else mu_hi
-        keep = np.flatnonzero(density_ys > shape_base + TAIL_FLOOR)
-        ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=HUMP_LW, zorder=3)
-        pts = [(x0 + xs[keep[0]] * w, shape_base)]
-        pts += [(x0 + xx * w, yy) for xx, yy in zip(xs[keep], ys[keep])]
-        pts.append((x0 + xs[keep[-1]] * w, shape_base))
-        ax.add_patch(Polygon(pts, closed=True, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2))
-        top = shape_base + float(curve.max()) / peak * shape_h * CROSSING_SHAPE_H - HUMP_DROP
-        ax.plot([x0 + mu * w] * 2, [shape_base, top], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
-        ax.text(x0 + mu * w, shape_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=16, color=INK)
-    _range_line(ax, x0, x0 + w, shape_base, z=5)
-
-    # ── stage 2: the shipped rule — halfway between the means ─────────────────
-    if stage >= 2:
-        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"), drop=NOTCH_LABEL_DROP)
-
-    # ── stage 3: the same two components, priced by how likely each is ────────
-    if stage >= 3:
-        weighted = [(w_lo * lo, RED, "\\\\\\"), (w_hi * hi, GREEN, "//////")]
-        top = float(max(c.max() for c, _c, _h in weighted))
-        for curve, colour, hatch in weighted:
-            density_ys = weighted_base + curve / top * weighted_h
-            ys = density_ys - HUMP_DROP
-            keep = np.flatnonzero(density_ys > weighted_base + TAIL_FLOOR)
-            ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=HUMP_LW, zorder=3)
-            pts = [(x0 + xs[keep[0]] * w, weighted_base)]
-            pts += [(x0 + xx * w, yy) for xx, yy in zip(xs[keep], ys[keep])]
-            pts.append((x0 + xs[keep[-1]] * w, weighted_base))
-            ax.add_patch(
-                Polygon(pts, closed=True, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
-            )
-        _range_line(ax, x0, x0 + w, weighted_base, z=5)
-        ax.text(
-            x0,
-            weighted_base + weighted_h + LABEL_GAP,
-            _sub(r"\pi_{lo} = 0.91"),
-            ha="left",
-            va="bottom",
-            fontsize=16,
-            color=INK,
-        )
-        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"), drop=NOTCH_LABEL_DROP)
-        # The midpoint, carried down onto the weighted picture so the gap
-        # between the two answers is a gap the room can measure by eye rather
-        # than a claim about two numbers on two different rows.
-        ax.plot(
-            [x0 + mid * w] * 2,
-            [weighted_base, weighted_base + weighted_h * 0.62],
-            color=SOFT,
-            linewidth=2.0,
-            linestyle=(0, (4, 3)),
-            zorder=4,
-        )
-        ax.annotate(
-            "",
-            xy=(x0 + crossing * w, weighted_base + weighted_h * 0.5),
-            xytext=(x0 + mid * w, weighted_base + weighted_h * 0.5),
-            arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.8, "shrinkA": 0, "shrinkB": 0},
-        )
-
-    # ── stage 4: the arithmetic that moves one to the other ───────────────────
-    if stage >= CROSSING_STAGES:
-        ax.text(
-            x0 + w / 2,
-            arithmetic_y,
-            _sub(r"\theta^* = \theta_{mid} + \frac{\sigma^2}{\mu_{hi} - \mu_{lo}}\,")
-            + "ln "
-            + _sub(r"\frac{\pi_{lo}}{\pi_{hi}}"),
-            ha="center",
-            va="center",
-            fontsize=19,
-            color=INK,
-        )
-    return fig
 
 
 #: The region grid the max figure opens on: rows, columns, and which cell wins.
@@ -5913,7 +5758,6 @@ if __name__ == "__main__":
     fbeta_fig()
     labels_line_fig()
     doc_balance_fig()
-    crossing_fig()
     region_max_fig()
     xcal_flow_fig()
     gmm_flow_fig()

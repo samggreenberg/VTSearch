@@ -8,10 +8,10 @@
 
 <!-- build: figs/logo-line.build2.png -->
 
-<!-- The count ranks the pages. The app also has to say where its answer
-     stops: everything above a line is what it returns. Each curve is that
-     returned set, scored by F1 over FullMarks' 36 classes at 50,000 pages,
-     after every vote. -->
+<!-- Back to the matcher, on that pile. The count ranks the pages. The app
+     also has to say where its answer stops: everything above a line is what
+     it returns. Each curve is that returned set, scored by F1 over
+     FullMarks' 36 classes at 50,000 pages, after every vote. -->
 
 <!-- **a** — Dashed: the best any line could do on this ranking, 0.94 by 25
      votes. The ranking is right. The old line was the gate, 8 agreeing

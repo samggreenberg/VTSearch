@@ -18,7 +18,8 @@
 <!-- At 8,192 the crest gets 460, and 101 agree. Nothing else changed: same
      matcher, same page. -->
 
-<!-- On FullMarks (v3.1, the 5,000-page tier, every page checked) this is AP
+<!-- On FullMarks, the benchmark after these slides (v3.1, the 5,000-page
+     tier, every page checked), this is AP
      0.16 at 1,024 against 0.88 at 8,192. SigLIP scores 0.12 on the same
      pages. It ships as its own embedder, *SIFT/VLAD (document scans)*, so a
      dataset records that it chose it. -->
