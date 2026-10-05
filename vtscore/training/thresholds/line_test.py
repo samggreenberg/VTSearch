@@ -475,7 +475,7 @@ class LineTest:
             raise ValueError(f"beta must be in [{BETA_MIN}, {BETA_MAX}], got {beta!r}")
         post = None
         if posteriors is not None:
-            post = np.clip(np.asarray(posteriors, dtype=np.float64), 0.0, 1.0)
+            post = np.clip(np.nan_to_num(np.asarray(posteriors, dtype=np.float64), nan=0.0), 0.0, 1.0)
             if post.shape != (len(ids),):
                 raise ValueError("posteriors must align with the ranking")
         k = max(0, min(int(line_count), len(ids)))
