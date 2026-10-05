@@ -4508,6 +4508,207 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
             ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
 
 
+# ── patches, and the model that makes them (#4517) ───────────────────────────
+
+#: How many build stages the patch figure reveals in: one photograph; the grid
+#: DINOv3 cuts it into; the vectors it makes, one per patch and one for the
+#: whole image; a box vote, and the maximum a photo is scored by.
+PATCH_STAGES = 4
+#: DINOv3 ViT-B/16 sees a 224-pixel square as a 14 x 14 grid of 16-pixel
+#: patches and gives each a 768-number vector (`embedder_dinov3_patch`), plus
+#: one for the image as a whole; scoring max-pools over all of them
+#: (`vtscore.embedding.matrix.media_score_rows`).
+PATCH_GRID = 14
+PATCH_DIM = 768
+#: The photograph: Extreme Measures' first one, the doll holding a book, as a
+#: single COCO val2017 frame fetched by URL rather than out of the 1 GB corpus
+#: archive, because this figure needs nothing else from it.
+PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0]`, defined further down
+PATCH_PHOTO_URL = f"http://images.cocodataset.org/val2017/{PATCH_PHOTO_ID:012d}.jpg"
+#: The book's box in the square crop, as grid cells (first row, first col, last
+#: row, last col), read off the photograph; and the one patch on it the figure
+#: follows into the vector stack.
+PATCH_BOOK_CELLS = (7, 2, 13, 6)
+PATCH_FOLLOWED = (10, 4)
+#: Layout, in `TEACH_CANVAS` units: the photograph's square, the arrow, and
+#: the vector stack's left edge, row height and cells per row drawn.
+PATCH_PHOTO = (0.9, 1.1, 6.9)
+PATCH_STACK_X0, PATCH_ROW_H, PATCH_CELLS = 13.2, 0.42, 20
+
+
+@functools.cache
+def _patch_photo():
+    """The doll photograph, centre-cropped to the square the model sees."""
+    import io
+    import urllib.request
+
+    from PIL import Image
+
+    cache = Path(__file__).resolve().parents[3] / "data" / "coco-val2017" / "val2017" / f"{PATCH_PHOTO_ID:012d}.jpg"
+    if cache.exists():
+        image = Image.open(cache)
+    else:
+        with urllib.request.urlopen(PATCH_PHOTO_URL) as response:  # noqa: S310
+            image = Image.open(io.BytesIO(response.read()))
+    image = image.convert("RGB")
+    width, height = image.size
+    side = min(width, height)
+    dx, dy = (width - side) // 2, (height - side) // 2
+    return image.crop((dx, dy, dx + side, dy + side))
+
+
+def patch_fig() -> None:
+    """What a patch is, and DINOv3, before Extreme Measures takes a maximum over them (#4517).
+
+    Region voting runs on a model the deck had not introduced: DINOv3, which
+    describes every 16-pixel patch of an image rather than the image as one
+    thing. One photograph, the grid the model cuts it into, the vector stack it
+    hands back (one row per patch, one for the whole image), and the two things
+    region voting does with that stack: a box vote trains on the patches inside
+    the box, and a photo's score is the best of all its rows.
+    """
+    final = _patch_stage(PATCH_STAGES)
+    box = tight_box(final)
+    for stage in range(1, PATCH_STAGES):
+        save(_patch_stage(stage), OUT, f"calib-patches.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-patches.png", column=FULL_BLEED, box=box)
+
+
+def _patch_cell(row: int, col: int) -> tuple[float, float, float]:
+    """A grid cell's lower-left corner and side, in canvas units."""
+    x0, y0, side = PATCH_PHOTO
+    cell = side / PATCH_GRID
+    return x0 + col * cell, y0 + side - (row + 1) * cell, cell
+
+
+def _patch_stack(ax: plt.Axes, stage: int) -> None:
+    """The vectors DINOv3 hands back: one row for the whole image, then one per patch."""
+    followed = 1 + PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
+    rows = [("whole image", 0), ("patch 1", 1), ("patch 2", 2), ("patch 3", 3), ("⋮", None)]
+    rows += [(f"patch {followed}", followed), ("⋮", None), (f"patch {PATCH_GRID**2}", PATCH_GRID**2)]
+    rng = np.random.default_rng(11)
+    cell_w = (TEACH_CANVAS[0] - 0.7 - PATCH_STACK_X0) / PATCH_CELLS
+    top = PATCH_PHOTO[1] + PATCH_PHOTO[2] - 0.2
+    for k, (name, index) in enumerate(rows):
+        y = top - (k + 1) * PATCH_ROW_H * 1.45
+        ax.text(
+            PATCH_STACK_X0 - LABEL_GAP * 2, y + PATCH_ROW_H / 2, name, ha="right", va="center", fontsize=15, color=INK
+        )
+        if index is None:
+            continue
+        shades = 0.25 + 0.7 * rng.random(PATCH_CELLS)
+        for c, shade in enumerate(shades):
+            ax.add_patch(
+                Rectangle(
+                    (PATCH_STACK_X0 + c * cell_w, y),
+                    cell_w,
+                    PATCH_ROW_H,
+                    facecolor=str(round(float(shade), 3)),
+                    edgecolor="white",
+                    linewidth=0.6,
+                    zorder=3,
+                )
+            )
+        if index == followed:
+            ax.add_patch(
+                Rectangle(
+                    (PATCH_STACK_X0, y),
+                    PATCH_CELLS * cell_w,
+                    PATCH_ROW_H,
+                    facecolor="none",
+                    edgecolor=INK,
+                    linewidth=3.0,
+                    zorder=4,
+                )
+            )
+    ax.text(
+        PATCH_STACK_X0 + PATCH_CELLS * cell_w,
+        top + LABEL_GAP,
+        f"{PATCH_GRID**2 + 1} vectors, {PATCH_DIM} numbers each",
+        ha="right",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+    del stage
+
+
+def _patch_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the patch figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, TEACH_CANVAS[0])
+    ax.set_ylim(0, TEACH_CANVAS[1])
+    ax.set_axis_off()
+
+    # ── stage 1: one photograph ───────────────────────────────────────────────
+    x0, y0, side = PATCH_PHOTO
+    ax.imshow(_patch_photo(), extent=(x0, x0 + side, y0, y0 + side), zorder=1, aspect="auto")
+
+    # ── stage 2: the grid the model cuts it into ──────────────────────────────
+    if stage >= 2:
+        for k in range(1, PATCH_GRID):
+            t = k * side / PATCH_GRID
+            ax.plot([x0 + t] * 2, [y0, y0 + side], color="white", linewidth=0.9, alpha=0.85, zorder=2)
+            ax.plot([x0, x0 + side], [y0 + t] * 2, color="white", linewidth=0.9, alpha=0.85, zorder=2)
+        ax.text(
+            x0 + side / 2,
+            y0 - LABEL_GAP,
+            f"{PATCH_GRID} × {PATCH_GRID} = {PATCH_GRID**2} patches",
+            ha="center",
+            va="top",
+            fontsize=17,
+            color=INK,
+        )
+
+    # ── stage 3: what it makes of them — one vector per patch, one for all ────
+    if stage >= 3:
+        row, col = PATCH_FOLLOWED
+        px, py, cell = _patch_cell(row, col)
+        ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor="white", linewidth=4.5, zorder=5))
+        ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor=INK, linewidth=2.2, zorder=6))
+        mid = y0 + side / 2
+        _labeled_arrow(ax, (x0 + side + 0.35, mid), (x0 + side + 0.35 + arrow_len_for("DINOv3") + 0.4, mid), "DINOv3")
+        _patch_stack(ax, stage)
+
+    # ── stage 4: a box vote, and the maximum a photo is scored by ─────────────
+    if stage >= PATCH_STAGES:
+        r0, c0, r1, c1 = PATCH_BOOK_CELLS
+        bx, by, cell = _patch_cell(r1, c0)
+        ax.add_patch(
+            Rectangle(
+                (bx, by),
+                (c1 - c0 + 1) * cell,
+                (r1 - r0 + 1) * cell,
+                facecolor=(1, 1, 1, 0.18),
+                edgecolor=GREEN,
+                linewidth=3.2,
+                zorder=4,
+            )
+        )
+        ax.text(
+            bx + (c1 - c0 + 1) * cell + LABEL_GAP * 2,
+            by + (r1 - r0 + 1) * cell,
+            "a Good box",
+            ha="left",
+            va="top",
+            fontsize=16,
+            color=INK,
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
+            zorder=6,
+        )
+        ax.text(
+            PATCH_STACK_X0 + PATCH_CELLS * (TEACH_CANVAS[0] - 0.7 - PATCH_STACK_X0) / PATCH_CELLS,
+            y0,
+            "a photo scores the best of its rows",
+            ha="right",
+            va="bottom",
+            fontsize=17,
+            color=INK,
+        )
+    return fig
+
+
 #: The region grid the max figure opens on: rows, columns, and which cell wins.
 REGION_GRID = (3, 4)
 
@@ -6263,6 +6464,7 @@ if __name__ == "__main__":
     labels_line_fig()
     transfer_fig()
     doc_balance_fig()
+    patch_fig()
     region_max_fig()
     xcal_flow_fig()
     gmm_flow_fig()

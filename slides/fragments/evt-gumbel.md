@@ -10,8 +10,8 @@
 
 <!-- build: figs/calib-region-max.build3.png -->
 
-<!-- So the axis had something on it, and the next idea on it was the ambitious
-     one. -->
+<!-- Patch Work ended on a maximum. This is what that maximum does to the
+     distribution the line is drawn on, and the idea it suggested. -->
 
 <!-- **a** — Two photographs, each cut into a grid of regions. Let the room
      look first: left, a doll on a bed with a book under her arm; right, a dog
