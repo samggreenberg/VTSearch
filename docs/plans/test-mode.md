@@ -1,7 +1,8 @@
 # Test mode: Find becomes a decision, not a browse (#4520)
 
-**Status:** design, decided. The test sample (#4527) has shipped; nothing
-else here has. #4520 asks three
+**Status:** design, decided. The test sample (#4527) and the eval arm with
+its pricing study (#4523, `docs/experiments/2026-10-05-line-test-4523/`) have
+shipped; nothing else here has. #4520 asks three
 questions: how a "Test" would work, how the open Find interface becomes a
 constrained Test interface, and which metric and statistics it needs. This
 file is the answer; the owner settled its open decisions on 2026-10-05, and
@@ -252,7 +253,7 @@ Each is independently shippable. The test sample and the eval arm carry no visib
 
 <!-- item-sep -->
 
-- [ ] #4523 — Test mode: eval arm and the pricing study for the stop rule (Opus; `experiment`)
+- [x] #4523 — Test mode: eval arm and the pricing study for the stop rule (Opus; `experiment`)
 
 <!-- item-sep -->
 
