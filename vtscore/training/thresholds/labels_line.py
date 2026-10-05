@@ -44,7 +44,7 @@ pricing in ``docs/experiments`` measures what that costs on the objective.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
@@ -55,6 +55,17 @@ _CLIP = 1e-6
 #: separate perfectly give a near-zero pooled spread, and a normal that narrow
 #: would put the line at an arbitrary point of the empty gap.
 MIN_LOGIT_SIGMA = 0.25
+#: The spread floor once a corpus is known (#4492): this share of the corpus's own
+#: robust spread (1.4826 x the MAD of its logit scores), on the class model and on
+#: the corpus's negative bulk alike.  An absolute floor is not scale-free: an early
+#: head compresses every score (the withheld half's robust spread was ~0.09 at click
+#: 5 on COCO Better, ~0.18 by 150), and a bulk held 2.5x wider than the data covers
+#: the positives, so the corpus fit read none and the line kept one image for the
+#: first ~15 clicks.  :data:`MIN_LOGIT_SIGMA` stays where no corpus is known (the
+#: parametric fallback).
+RELATIVE_SIGMA_FLOOR = 0.5
+#: The smallest floor a corpus can set: a corpus of one score has no spread.
+_MIN_CORPUS_FLOOR = 1e-3
 #: How far past the class means, in spreads, the threshold search reaches.
 _SEARCH_SPREADS = 8.0
 #: Points on the threshold search's logit grid.
@@ -87,6 +98,14 @@ class ClassScoreModel:
     sigma: float
     n_pos: int
     n_neg: int
+    #: The pooled spread before any floor; ``None`` on a model built by hand, whose
+    #: *sigma* is then taken as given.  A corpus floors it afresh (:meth:`floored`).
+    sigma_raw: float | None = None
+
+    def floored(self, floor: float) -> "ClassScoreModel":
+        """This model with its spread held to *floor* (a corpus's own, #4492) rather than the absolute one."""
+        raw = self.sigma if self.sigma_raw is None else self.sigma_raw
+        return replace(self, sigma=max(raw, floor))
 
     def _norm_sf(self, z: np.ndarray) -> np.ndarray:
         from scipy.stats import norm  # noqa: PLC0415
@@ -114,6 +133,7 @@ class ClassScoreModel:
             "sigma": round(self.sigma, 6),
             "n_pos": self.n_pos,
             "n_neg": self.n_neg,
+            "sigma_raw": None if self.sigma_raw is None else round(self.sigma_raw, 6),
         }
 
 
@@ -150,8 +170,17 @@ def class_score_model(orderings: Sequence[tuple[Any, Any]] | None) -> ClassScore
         return None
     dof = max(1, xp.size + xn.size - 2)
     var = (float(((xp - mu_pos) ** 2).sum()) + float(((xn - mu_neg) ** 2).sum())) / dof
-    sigma = max(math.sqrt(var), MIN_LOGIT_SIGMA)
-    return ClassScoreModel(mu_pos, mu_neg, sigma, int(xp.size), int(xn.size))
+    raw = math.sqrt(var)
+    return ClassScoreModel(mu_pos, mu_neg, max(raw, MIN_LOGIT_SIGMA), int(xp.size), int(xn.size), raw)
+
+
+def corpus_sigma_floor(scores: Any) -> float:
+    """The spread floor a corpus sets (#4492): :data:`RELATIVE_SIGMA_FLOOR` x its robust spread on the logit scale."""
+    x = _logit(_finite_unit(scores))
+    if x.size == 0:
+        return MIN_LOGIT_SIGMA
+    robust = 1.4826 * float(np.median(np.abs(x - np.median(x))))
+    return max(RELATIVE_SIGMA_FLOOR * robust, _MIN_CORPUS_FLOOR)
 
 
 @dataclass(frozen=True)
@@ -234,6 +263,7 @@ def fit_corpus(
     *,
     iterations: int = 500,
     tol: float = 1e-9,
+    floor: float = MIN_LOGIT_SIGMA,
 ) -> tuple[float, CorpusNegatives]:
     """How many positives a corpus holds, and its negatives: ``(Good votes + EM positives, CorpusNegatives)``.
 
@@ -252,7 +282,7 @@ def fit_corpus(
     if x.size == 0:
         return float(n_good), CorpusNegatives(model.mu_neg, model.sigma)
     mu0 = float(np.median(x))
-    s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), MIN_LOGIT_SIGMA)
+    s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), floor)
     pi = 0.01
     r = np.zeros_like(x)
     for _ in range(iterations):
@@ -266,7 +296,7 @@ def fit_corpus(
         if sw <= 0:
             break
         new_mu0 = min(float((w * x).sum()) / sw, model.mu_pos)
-        new_s0 = max(math.sqrt(float((w * (x - new_mu0) ** 2).sum()) / sw), MIN_LOGIT_SIGMA)
+        new_s0 = max(math.sqrt(float((w * (x - new_mu0) ** 2).sum()) / sw), floor)
         done = abs(new_pi - pi) < tol and abs(new_mu0 - mu0) < 1e-7 and abs(new_s0 - s0) < 1e-7
         pi, mu0, s0 = new_pi, new_mu0, new_s0
         if done:
@@ -274,7 +304,9 @@ def fit_corpus(
     return float(n_good) + float(r.sum()), CorpusNegatives(mu0, s0)
 
 
-def corpus_posteriors(model: ClassScoreModel, unvoted_scores: Any, *, iterations: int = 300) -> np.ndarray:
+def corpus_posteriors(
+    model: ClassScoreModel, unvoted_scores: Any, *, iterations: int = 300, floor: float = MIN_LOGIT_SIGMA
+) -> np.ndarray:
     """Each unvoted item's chance of being a positive, under a 3-part fit of the corpus (#4452).
 
     The labels' Good component and the labels' Bad component keep their
@@ -291,7 +323,7 @@ def corpus_posteriors(model: ClassScoreModel, unvoted_scores: Any, *, iterations
     if x.size == 0:
         return np.zeros(0)
     mu0 = float(np.median(x))
-    s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), MIN_LOGIT_SIGMA)
+    s0 = max(1.4826 * float(np.median(np.abs(x - mu0))), floor)
     w1, wb = 0.01, 0.05
     r1 = np.zeros_like(x)
     for _ in range(iterations):
@@ -308,7 +340,7 @@ def corpus_posteriors(model: ClassScoreModel, unvoted_scores: Any, *, iterations
         s_r0 = float(r0.sum())
         if s_r0 > 1e-12:
             mu0 = min(float((r0 * x).sum()) / s_r0, model.mu_neg)
-            s0 = max(math.sqrt(max(float((r0 * (x - mu0) ** 2).sum()) / s_r0, 0.0)), MIN_LOGIT_SIGMA)
+            s0 = max(math.sqrt(max(float((r0 * (x - mu0) ** 2).sum()) / s_r0, 0.0)), floor)
         done = abs(nw1 - w1) < 1e-8 and abs(nwb - wb) < 1e-7
         w1, wb = nw1, nwb
         if done:
@@ -400,13 +432,17 @@ def _line_on(
     voted = dict(labels or {})
     unvoted = np.array([s for i, s, k in zip(id_list, a, keep) if k and int(i) not in voted], dtype=np.float64)
     n_good = sum(1 for i, k in zip(id_list, keep) if k and voted.get(int(i)) is True)
-    positives, negatives = fit_corpus(model, unvoted, n_good)
+    # The spread floor this corpus sets (#4492), on the class model and the bulk alike.
+    floor = corpus_sigma_floor(unvoted)
+    fitted = model.floored(floor)
+    positives, negatives = fit_corpus(fitted, unvoted, n_good, floor=floor)
     share = (positives - n_good) / unvoted.size if unvoted.size else 0.0
-    share = min(share, _BOUND_MARGIN * _counted_share_bound(model, unvoted))
+    share = min(share, _BOUND_MARGIN * _counted_share_bound(fitted, unvoted))
     positives = n_good + share * unvoted.size
     prevalence = min(max(positives / n_items, PREVALENCE_MIN), PREVALENCE_MAX)
     order = np.argsort(-unvoted, kind="stable")
-    post = corpus_posteriors(model, unvoted)
+    post = corpus_posteriors(fitted, unvoted, floor=floor)
+    # The labels' model is kept unfloored, so a Find on another corpus floors it afresh.
     return LabelsLine(model, prevalence, negatives, float(share), unvoted[order].copy(), post[order].copy())
 
 
@@ -484,6 +520,7 @@ def fit_labels_line(
 
 __all__ = [
     "MIN_LOGIT_SIGMA",
+    "RELATIVE_SIGMA_FLOOR",
     "PREVALENCE_MAX",
     "PREVALENCE_MIN",
     "ClassScoreModel",
@@ -494,6 +531,7 @@ __all__ = [
     "corpus_fit",
     "corpus_posteriors",
     "corpus_prevalence",
+    "corpus_sigma_floor",
     "estimate_positives",
     "fit_labels_line",
     "labels_line_threshold",
