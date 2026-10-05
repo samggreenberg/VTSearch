@@ -202,7 +202,8 @@ dataset and every ticked detector of one media type, runs the background
 AutoRun task per dataset (`vtsearch/autorun_detectors.py` already does this
 from the row menu, one dataset at a time) and opens the AutoRun Results
 dialog. It is a button, not a view; the issue's P.S. says so and nothing in
-the code wants more. The row menu's **Run AutoRun** stays.
+the code wants more. It can ship before the rename, labelled **AutoRun** while today's Find is still
+on the Dashboard, and the rename relabels it Find. The row menu's **Run AutoRun** stays.
 
 The *Scoring a dataset* and *Find* sections of the user guide become a
 *Testing a detector* section; the step-by-step's Step 4 becomes the test. The
@@ -258,7 +259,7 @@ That run picks the targets and budgets §2 proposes, and it is an
 
 ## Slices
 
-Each is independently shippable; the first two carry no visible change.
+Each is independently shippable. The test sample and the eval arm carry no visible change, and the AutoRun button needs nothing else here, so it can ship first.
 
 <!-- item-sep -->
 
@@ -274,7 +275,11 @@ Each is independently shippable; the first two carry no visible change.
 
 <!-- item-sep -->
 
-- [ ] #4525 — Test mode: rename Find to Test, and make Find a button that runs AutoRun on the selection (Sonnet)
+- [ ] #4529 — Dashboard: a big button that runs AutoRun on the selected datasets and detectors (Sonnet; depends on nothing here)
+
+<!-- item-sep -->
+
+- [ ] #4525 — Test mode: rename Find to Test, and relabel the AutoRun button Find (Sonnet)
 
 <!-- item-sep -->
 
