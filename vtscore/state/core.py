@@ -1101,6 +1101,10 @@ class DetectorContext:
         # ends.  Ids and labels only - never serialised.
         "precision_check",  # SpotCheck | None (finished)
         "precision_check_run",  # SpotCheck | None (running)
+        # How many votes the detector held when its last spot check ended,
+        # finished or cancelled: the weak-separation rule's cooldown counts
+        # from it (``weak_check_due``, #4496).  Goes with the check.
+        "check_ended_votes",  # int | None
         # The line the labels imply (``LabelsLine``, #4452): the class model
         # the last retrain's calibration folds fitted from the labels, and the
         # prevalence it estimated on the corpus scored last (a Find pass over a
@@ -1183,6 +1187,7 @@ class DetectorContext:
         self.line_ranking: Any = None  # LineRanking | None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
+        self.check_ended_votes: int | None = None
         self.labels_line: Any = None  # LabelsLine | None
 
 
@@ -1803,14 +1808,38 @@ def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any
 
     # Under the labelset's line (#4452) the count is what the threshold keeps
     # of the ranking scored last - possibly none - not the count rule's.
-    return balance_state(
+    voted = human_voted_ids(ctx)
+    state = balance_state(
         beta,
         ctx.precision_check,
         ctx.line_ranking,
-        human_voted_ids(ctx),
+        voted,
         proposal=detector_balance_proposal(ctx, beta) if ctx.labels_line is None else None,
         threshold=ctx.threshold if ctx.labels_line is not None else None,
     ).as_dict()
+    state.update(detector_check_prompt(ctx, len(voted)))
+    return state
+
+
+def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any]:
+    """Whether *ctx*'s labels separate weakly enough that a spot check is due (#4496).
+
+    ``separation`` is the labels line's d' (``None`` before a retrain has drawn
+    one, or when it is unbounded); ``check_due`` is :func:`weak_check_due` on
+    it, counted from the vote total when the last check ended.  Never due in
+    Find, which offers no check (#4317), nor while a check is running.
+    """
+    from vtscore.training.thresholds import weak_check_due  # noqa: PLC0415
+
+    sep = ctx.labels_line.separation if ctx.labels_line is not None else None
+    due = (
+        not ctx.find_mode
+        and ctx.precision_check_run is None
+        and ctx.line_ranking is not None
+        and weak_check_due(sep, n_votes, ctx.check_ended_votes)
+    )
+    shown = round(float(sep), 4) if sep is not None and math.isfinite(sep) else None
+    return {"separation": shown, "check_due": bool(due)}
 
 
 def detector_floor_state(ctx: "DetectorContext", min_precision: float | None) -> dict[str, Any] | None:

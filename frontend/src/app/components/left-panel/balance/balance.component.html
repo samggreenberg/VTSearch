@@ -42,7 +42,9 @@
       @if (checkText(); as label) {
         <button
           type="button"
-          class="btn btn--toolbar balance-check-btn"
+          class="btn balance-check-btn"
+          [class.btn--toolbar]="!due()"
+          [class.btn--primary]="due()"
           [disabled]="!checkable()"
           [title]="checkHint()"
           (click)="check.emit()"
@@ -51,5 +53,8 @@
         </button>
       }
     </p>
+    @if (dueNote(); as note) {
+      <p class="balance-due" role="status">{{ note }}</p>
+    }
   }
 </div>

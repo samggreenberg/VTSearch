@@ -10,6 +10,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Tiled Stage 1 orders on an exact score** (issue #4481). The page scorers return each
+  page's best (query, tile) pair (`PageMax`, `page_max_from_tiles`, `_gpu_page_max`,
+  `_cpu_page_max`), and `tiled_stage1` orders on that pair recomputed in float64
+  (`exact_page_scores`), then snapshot order. `_gpu_page_scores` is gone. With OpenBLAS
+  pinned, V100 and L40S nodes give the same Stage-1 and verified-head order in 24 of 24
+  diagnostic steps (12 of 24 before).
+
+- **A spot check is due when the labels separate weakly** (issue #4496).
+  `LabelsLine.separation` is the labels' d' in the spread the line was cut
+  with; `weak_check_due(separation, n_votes, votes_at_last_check)` is the rule
+  the app and the eval harness share (`WEAK_SEPARATION_D` 1.5,
+  `WEAK_CHECK_MIN_VOTES` 10, `WEAK_CHECK_COOLDOWN` 25).
+  `detector_balance_state` adds `separation` and `check_due`, counted from the
+  new `DetectorContext.check_ended_votes`. The harness's default arm is now
+  `spot_check="weak"` (`weak_phase="learned"`: only past Autopilot's
+  opening): a prompted check's picks are clicks inside the voting budget, and
+  frames record on them. Runs that never prompt are unchanged.
+
 - **The document stop** (issue #4488). `labeling_progress.dry_run_status`
   counts the standing non-Good votes cast since the last Good (green at
   `DRY_RUN_TARGET = 16`), and `document_labeling_status` is a tiled

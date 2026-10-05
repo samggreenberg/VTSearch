@@ -40,6 +40,8 @@ export function lineBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     schedule: SCHEDULE_DEFAULT,
     shape: shapeFor(beta),
     audited: checked ? count : null,
+    separation: null,
+    checkDue: false,
     ...overrides,
   };
 }
@@ -57,5 +59,7 @@ export function wireBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     schedule: b.schedule ?? SCHEDULE_DEFAULT,
     shape: b.shape,
     audited: b.audited,
+    separation: b.separation,
+    check_due: b.checkDue,
   };
 }

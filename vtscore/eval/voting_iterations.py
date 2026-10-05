@@ -87,17 +87,22 @@ from vtscore.eval.voting_columns import (
 )
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.thresholds import (
+    WEAK_CHECK_COOLDOWN,
+    WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
     LineRanking,
     SpotCheck,
     balance_line,
+    balance_schedule,
     balance_state,
+    check_schedule,
     check_shape,
     fbeta_count,
     fit_labels_line,
     floor_line,
     floor_state,
     mixture_count,
+    weak_check_due,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
@@ -404,6 +409,12 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
         # set the line keeps, which ``floor_count`` reports.
         "check_audited": getattr(state, "audited", None) if rng is not None else -1,
     }
+
+
+#: Autopilot's opening (#4496): the phases on the text or example sort, where the
+#: app trains no detector, so a weak-separation check under ``weak_phase="learned"``
+#: waits for the flow to leave them.
+_OPENING_PHASES = frozenset({"good", "bad", "more"})
 
 
 def _preference_line_for_step(
@@ -2101,10 +2112,11 @@ def simulate_voting_iterations(  # noqa: C901
     walk_fine: bool = False,
     walk_guard: Optional[float] = None,
     walk_shape: Optional[str] = None,
-    spot_check: str = "end",
+    spot_check: str = "weak",
     weak_separation: float = WEAK_SEPARATION_D,
-    weak_min_t: int = 10,
-    weak_repeat: int = 0,
+    weak_min_t: int = WEAK_CHECK_MIN_VOTES,
+    weak_repeat: int = WEAK_CHECK_COOLDOWN,
+    weak_phase: str = "learned",
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2497,20 +2509,35 @@ def simulate_voting_iterations(  # noqa: C901
             where the retrain moved it.  Until then every row reports the
             ``unchecked`` starting candidate, which is exactly what a headless
             run exports.  ``"off"`` never checks: the whole run is the
-            unchecked line.  ``"weak"`` (#4496) is ``"end"`` plus a check the
-            app prompts: at the first ordinary step from *weak_min_t* votes
-            on whose labels line separates weakly
+            unchecked line.  ``"weak"`` (#4496, the default since the owner's
+            ruling of 2026-10-05: the app's Autopilot checks where
+            :func:`~vtscore.training.thresholds.weak_check_due` says) is
+            ``"end"`` plus the check the app runs mid-session: at the first
+            ordinary step from *weak_min_t* votes on whose labels line
+            separates weakly
             (:attr:`~vtscore.training.thresholds.LabelsLine.separation` below
             *weak_separation*), the user checks then and there.  Its picks are
             clicks: they count in ``t`` and the voting budget, and their rows
-            carry ``phase == "prompt"``, so they read as ordinary clicks.  With
+            carry ``phase == "prompt"``, so they read as ordinary clicks (frames
+            record on them, at each requested click a round reaches).  It starts
+            only when its opening bands fit the voting budget left, and a deeper
+            band that would overrun the budget ends it there, as a user closing
+            the step does, so a run's clicks still end at *max_steps*.  With
             *weak_repeat* > 0 the prompt returns once that many votes have
             been cast since the last prompted check ended, while the labels
             still separate weakly; 0 prompts once.  Ignored on the Inclusion
             arm, and when nothing is left unvoted to check.
-        weak_separation: The d' below which ``spot_check="weak"`` prompts.
-        weak_min_t: The fewest votes before ``spot_check="weak"`` prompts.
-        weak_repeat: Votes after a prompted check before it may prompt again; 0 never.
+        weak_separation: The d' below which ``spot_check="weak"`` prompts (the app's ``WEAK_SEPARATION_D``).
+        weak_min_t: The fewest votes before ``spot_check="weak"`` prompts (``WEAK_CHECK_MIN_VOTES``).
+        weak_repeat: Votes after a prompted check before it may prompt again
+            (``WEAK_CHECK_COOLDOWN``); 0 prompts once, the priced alternative.
+        weak_phase: Where in Autopilot's flow ``spot_check="weak"`` may prompt.
+            ``"learned"`` (the default, the app's) or ``"any"`` (the arm #4496
+            priced first): ``"learned"`` prompts only once the flow has left
+            its opening (``good``/``bad``/``more``, on the text or
+            example sort), where the app trains no detector and so has neither
+            a separation to read nor a ranking to check.  Without a flow
+            (a non-Autopilot strategy) both prompt anywhere.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -2943,6 +2970,8 @@ def simulate_voting_iterations(  # noqa: C901
 
     if spot_check not in ("end", "off", "weak"):
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
+    if weak_phase not in ("any", "learned"):
+        raise ValueError(f"weak_phase must be 'any' or 'learned', got {weak_phase!r}")
     # The floor's spot check (#4272), run once the voting steps are spent: the
     # simulated user checks the line as the app's check step does, its picks
     # answered from ground truth and cast as votes.  ``line_ranking`` is the
@@ -3004,15 +3033,39 @@ def simulate_voting_iterations(  # noqa: C901
             )
         return SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
 
+    # The last finished check: what a prompted check the budget cut short leaves in place.
+    finished_check: SpotCheck | None = None
+
+    def _check_start_cost() -> int:
+        """The most a check's opening bands cost: what a prompted one needs left in the voting budget."""
+        if beta is not None:
+            schedule = balance_schedule(beta)
+        elif floor is not None:
+            schedule = check_schedule(floor)  # type: ignore[arg-type]
+        else:
+            return 0
+        return schedule.rounds * (walk_picks or schedule.picks)
+
     t = 0
     while True:
         picks: list[int] | None = None
+        # The vote count before this step's votes: a frame is due at every
+        # requested click this step reaches, which a check round can jump past.
+        t_before = t
         if check is not None and check.running:
-            picks = list(check.pending)
-        else:
-            if weak_due and t < n_steps and pool and line_ranking is not None:
+            if check_phase == "prompt" and t + len(check.pending) > n_steps:
+                # The budget is spent mid-check: the user stops there, as closing
+                # the step does, and the end-of-run check takes over (#4496).
+                check.cancel()
+                check = finished_check
+                last_weak_check = t
+            else:
+                picks = list(check.pending)
+        if picks is None and not (check is not None and check.running):
+            if weak_due and t + _check_start_cost() <= n_steps and pool and line_ranking is not None:
                 # The labels separate weakly (#4496): the user checks now, and
-                # the check's picks are clicks.
+                # the check's picks are clicks, so its opening bands must fit
+                # the budget left.
                 weak_due = False
                 last_weak_check = t
                 started = _start_check()
@@ -3049,6 +3102,7 @@ def simulate_voting_iterations(  # noqa: C901
             if check.finished and check_phase == "prompt":
                 last_weak_check = t
             if check.finished:
+                finished_check = check
                 # The set the line keeps from here on, as it stands with the
                 # check's own votes cast: what the retrains below are
                 # compared against for ``check_stale``.
@@ -3166,13 +3220,20 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             )
             line_ranking = details.get("line_ranking")
-            if spot_check == "weak" and picks is None:
+            if (
+                spot_check == "weak"
+                and picks is None
+                and (weak_phase == "any" or flow is None or flow.phase not in _OPENING_PHASES)
+            ):
                 weak_line = details.get("find_line")
-                if (
-                    weak_line is not None
-                    and t >= weak_min_t
-                    and weak_line.separation < weak_separation
-                    and (last_weak_check is None or (weak_repeat > 0 and t - last_weak_check >= weak_repeat))
+                # The app's rule (#4496): Autopilot checks where this says.
+                if weak_line is not None and weak_check_due(
+                    weak_line.separation,
+                    t,
+                    last_weak_check,
+                    threshold=weak_separation,
+                    min_votes=weak_min_t,
+                    cooldown=weak_repeat if weak_repeat > 0 else None,
                 ):
                     weak_due = True
             if live_threshold is not None:
@@ -3474,7 +3535,9 @@ def simulate_voting_iterations(  # noqa: C901
 
         if calibration is not None:
             metric_rows, base_scores, base_labels, base_ids = calibration
-            if rank_frame_sink is not None and picks is None:
+            # A prompted check's rounds are clicks (#4496); the end-of-run check's are not.
+            is_click = picks is None or check_phase == "prompt"
+            if rank_frame_sink is not None and is_click:
                 # Kept by reference and turned into the ``last`` frame after the
                 # loop: nothing here is mutated later, and the voted set is a
                 # snapshot, so it is this step's ranking whatever runs after it.
@@ -3497,9 +3560,14 @@ def simulate_voting_iterations(  # noqa: C901
                         else None
                     ),
                 }
-                if rank_frame_steps and t in rank_frame_steps:
+                if rank_frame_steps and any(t_before < s <= t for s in rank_frame_steps):
                     rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
-            if precision_frame_sink is not None and precision_frame_steps and t in precision_frame_steps:
+            if (
+                precision_frame_sink is not None
+                and precision_frame_steps
+                and is_click
+                and any(t_before < s <= t for s in precision_frame_steps)
+            ):
                 # The trainer builds its rows Goods first, then Bads, in vote order.
                 vote_order = list(good_votes) + list(bad_votes)
                 cal_votes = [

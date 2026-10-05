@@ -38,8 +38,7 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 
 ## Thresholds and calibration
 
-- [`fbeta-balance.md`](fbeta-balance.md) - the line's preference is a balance (F-beta's beta; #4413)
-- [`min-precision.md`](min-precision.md) - superseded by `fbeta-balance.md`; the floor stays one release behind `line_preference: "floor"`
+- [`min-precision.md`](min-precision.md) - superseded by the balance in `docs/ML.md`; the floor stays one release behind `line_preference: "floor"`
 - [`population-anchored-calibration.md`](population-anchored-calibration.md)
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
 - [`calibration-experiment.md`](calibration-experiment.md)

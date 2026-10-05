@@ -17,6 +17,9 @@
         </div>
       }
       @default {
+        @if (intro(); as why) {
+          <p class="check-intro" role="status">{{ why }}</p>
+        }
         @if (walkNote()) {
           <p class="check-walk" role="status">{{ walkNote() }}</p>
         }
