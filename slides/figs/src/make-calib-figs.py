@@ -61,7 +61,7 @@ from vtscore.training.thresholds import (
     gmm_cut_from_fit,
     inclusion_cost_weights,
 )
-from vtscore.training.thresholds.labels_line import LabelsLine, corpus_sigma_floor, fit_labels_line
+from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine, corpus_sigma_floor, fit_labels_line
 from vtscore.training.structural_similarity import (
     PRECISION_CEILING_MARGIN,
     PRECISION_GOOD_FRACTION,
@@ -5171,6 +5171,24 @@ def labels_line_fig() -> None:
     save(final, OUT, "calib-labels-line.png", column=FULL_BLEED, box=box)
 
 
+#: The rows' left edge and width: the same indent and right margin as
+#: `calib-fbeta`, for the same reasons — the rows' names take the left column,
+#: clear of the title notch above them, and the slide's page number takes the
+#: bottom-right corner.
+LL_X0 = 4.0
+LL_W = LL_CANVAS[0] - LL_X0 - 1.5
+
+
+def _ll_at(logit: float | np.ndarray) -> np.ndarray:
+    """Canvas x for a score in logit units, on the axis every row shares."""
+    lo, hi = LL_LOGIT
+    return LL_X0 + (np.asarray(logit, dtype=float) - lo) / (hi - lo) * LL_W
+
+
+def _ll_row_name(ax: plt.Axes, y: float, text: str) -> None:
+    ax.text(LL_X0 - 0.35, y, text, ha="right", va="center", fontsize=16, color=INK)
+
+
 def _ll_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the labels-line figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
@@ -5180,26 +5198,21 @@ def _ll_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     corpus, line = _ll_data()
-    lo, hi = LL_LOGIT
-    # The same indent and right margin as `calib-fbeta`, for the same reasons:
-    # the rows' names take the left column, clear of the title notch above
-    # them, and the slide's page number takes the bottom-right corner.
-    x0, w = 4.0, LL_CANVAS[0] - 4.0 - 1.5
-
-    def at(logit: float | np.ndarray) -> np.ndarray:
-        return x0 + (np.asarray(logit, dtype=float) - lo) / (hi - lo) * w
-
-    def row_name(y: float, text: str) -> None:
-        ax.text(x0 - 0.35, y, text, ha="right", va="center", fontsize=16, color=INK)
-
-    grid = np.linspace(lo, hi, 700)
     model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
+    _ll_votes_row(ax, model, stage)
+    if stage >= 3:
+        _ll_corpus_row(ax, corpus, line, model)
+    if stage >= 4:
+        _ll_f_row(ax, corpus, line, stage)
+    return fig
 
-    # ── stage 1: the votes, each scored by a model that never saw it ──────────
-    _range_line(ax, x0, x0 + w, LL_VOTES_Y, z=3)
+
+def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
+    """Stages 1-2: the votes, each scored by a model that never saw it; then two normals, one spread."""
+    _range_line(ax, LL_X0, LL_X0 + LL_W, LL_VOTES_Y, z=3)
     for x, good in [(g, True) for g in LL_GOODS] + [(b, False) for b in LL_BADS]:
         ax.text(
-            float(at(x)),
+            float(_ll_at(x)),
             LL_VOTES_Y - 0.12,
             "✓" if good else "✗",
             ha="center",
@@ -5208,103 +5221,96 @@ def _ll_stage(stage: int) -> plt.Figure:
             color=GREEN if good else RED,
             fontweight="bold",
         )
-    row_name(LL_VOTES_Y + 0.15, "the votes")
-
-    # ── stage 2: two normals, one spread ──────────────────────────────────────
+    _ll_row_name(ax, LL_VOTES_Y + 0.15, "the votes")
+    if stage < 2:
+        return
     # Drawn at one height: the class model says what a match and a near-miss
     # *score*, not how many of each there are. That is the corpus row's job.
-    if stage >= 2:
-        for mu, color in ((model.mu_neg, RED), (model.mu_pos, GREEN)):
-            curve = np.exp(-0.5 * ((grid - mu) / model.sigma) ** 2)
-            seen = curve > 0.012
-            ax.plot(at(grid[seen]), LL_VOTES_Y + curve[seen] * LL_MODEL_H, color=color, linewidth=HUMP_LW, zorder=4)
+    grid = np.linspace(*LL_LOGIT, 700)
+    for mu, color in ((model.mu_neg, RED), (model.mu_pos, GREEN)):
+        curve = np.exp(-0.5 * ((grid - mu) / model.sigma) ** 2)
+        seen = curve > 0.012
+        ax.plot(_ll_at(grid[seen]), LL_VOTES_Y + curve[seen] * LL_MODEL_H, color=color, linewidth=HUMP_LW, zorder=4)
 
-    # ── stage 3: the corpus, and how many matches it holds ────────────────────
-    if stage >= 3:
-        counts, edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
-        bin_w = (hi - lo) / LL_BINS
-        sy = LL_CORPUS_H / float(counts.max())
-        u_edges = (edges - lo) / (hi - lo)
-        bars = _staircase(x0, LL_CORPUS_Y, w, sy, u_edges, counts.astype(float), 0, len(counts) - 1)
-        bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
-        ax.add_patch(bars)
-        for i in range(1, len(counts)):
-            top = LL_CORPUS_Y + float(min(counts[i - 1], counts[i])) * sy
-            if top > LL_CORPUS_Y:
-                ax.plot([x0 + u_edges[i] * w] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
-        _range_line(ax, x0, x0 + w, LL_CORPUS_Y, z=5)
-        row_name(LL_CORPUS_Y + 0.9, "the corpus")
-        # The 2-part fit: the labels' Good normal, its shape held, and a normal
-        # for everything else, each scaled to the count the fit gives it.
-        n = corpus.size
-        matches = float(line.unvoted_share) * n
-        negs = line.negatives
-        for mu, sd, count, color in (
-            (negs.mu, negs.sigma, n - matches, SOFT),
-            (model.mu_pos, model.sigma, matches, GREEN),
-        ):
-            dens = count * bin_w * np.exp(-0.5 * ((grid - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
-            seen = dens * sy > TAIL_FLOOR
-            ax.plot(at(grid[seen]), LL_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=color, linewidth=HUMP_LW, zorder=4)
-        # Over the matches' hump, clear of the tallest bar under it, and
-        # starting at its peak so it stays right of the line and inside the
-        # canvas (a label past the edge widens the crop and rescales the slide).
-        under = edges[1:] > model.mu_pos - model.sigma
-        ax.text(
-            float(at(model.mu_pos)),
-            LL_CORPUS_Y + float(counts[under].max()) * sy + LABEL_GAP,
-            f"≈ {int(round(matches, -1)):,} matches",
-            ha="left",
-            va="bottom",
-            fontsize=16,
-            color=INK,
-        )
 
-    # ── stages 4-5: expected F-beta, and the line at its peak ─────────────────
-    if stage >= 4:
-        _range_line(ax, x0, x0 + w, LL_F_Y, z=3)
-        row_name(LL_F_Y + 0.75, "expected " + _sub(r"F_\beta"))
+def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: "ClassScoreModel") -> None:
+    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds."""
+    lo, hi = LL_LOGIT
+    counts, edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
+    bin_w = (hi - lo) / LL_BINS
+    sy = LL_CORPUS_H / float(counts.max())
+    u_edges = (edges - lo) / (hi - lo)
+    bars = _staircase(LL_X0, LL_CORPUS_Y, LL_W, sy, u_edges, counts.astype(float), 0, len(counts) - 1)
+    bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    ax.add_patch(bars)
+    for i in range(1, len(counts)):
+        top = LL_CORPUS_Y + float(min(counts[i - 1], counts[i])) * sy
+        if top > LL_CORPUS_Y:
+            ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    _range_line(ax, LL_X0, LL_X0 + LL_W, LL_CORPUS_Y, z=5)
+    _ll_row_name(ax, LL_CORPUS_Y + 0.9, "the corpus")
+    # The 2-part fit: the labels' Good normal, its shape held, and a normal
+    # for everything else, each scaled to the count the fit gives it.
+    grid = np.linspace(lo, hi, 700)
+    matches = float(line.unvoted_share) * corpus.size
+    negs = line.negatives
+    for mu, sd, count, color in (
+        (negs.mu, negs.sigma, corpus.size - matches, SOFT),
+        (model.mu_pos, model.sigma, matches, GREEN),
+    ):
+        dens = count * bin_w * np.exp(-0.5 * ((grid - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
+        seen = dens * sy > TAIL_FLOOR
+        ax.plot(_ll_at(grid[seen]), LL_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=color, linewidth=HUMP_LW, zorder=4)
+    # Over the matches' hump, clear of the tallest bar under it, and starting
+    # at its peak so it stays right of the line and inside the canvas (a label
+    # past the edge widens the crop and rescales the slide).
+    under = edges[1:] > model.mu_pos - model.sigma
+    ax.text(
+        float(_ll_at(model.mu_pos)),
+        LL_CORPUS_Y + float(counts[under].max()) * sy + LABEL_GAP,
+        f"≈ {int(round(matches, -1)):,} matches",
+        ha="left",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+
+
+def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) -> None:
+    """Stages 4-5: expected F-beta down the ranking, the line at the picked radio's peak, then the other two."""
+    lo, hi = LL_LOGIT
+    _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
+    _ll_row_name(ax, LL_F_Y + 0.75, "expected " + _sub(r"F_\beta"))
     for (beta, _name), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True):
         picked = beta == LL_PICKED
         if stage < (4 if picked else 5):
             continue
         xs, f = _ll_expected_f(line, beta)
         inside = (xs >= lo) & (xs <= hi)
-        ax.plot(at(xs[inside]), LL_F_Y + f[inside] * LL_F_H, color=INK, linewidth=weight, zorder=3)
-        cut = float(_ll_logit(line.threshold(beta)))
-        k = int(np.argmax(f))
-        dot_y = LL_F_Y + float(f[k]) * LL_F_H
-        ax.plot([float(at(cut))], [dot_y], marker="o", markersize=8, color=INK, zorder=6)
+        ax.plot(_ll_at(xs[inside]), LL_F_Y + f[inside] * LL_F_H, color=INK, linewidth=weight, zorder=3)
+        cut_x = float(_ll_at(float(_ll_logit(line.threshold(beta)))))
+        dot_y = LL_F_Y + float(f.max()) * LL_F_H
+        ax.plot([cut_x], [dot_y], marker="o", markersize=8, color=INK, zorder=6)
         if picked:
-            # The line: blue, the palette's "the shipped thing", from the peak
-            # that placed it up through the corpus it cuts.
-            top = LL_CORPUS_Y + LL_CORPUS_H + 0.15
-            ax.plot([float(at(cut))] * 2, [dot_y, top], color=BLUE, linewidth=2.6, zorder=5)
-            kept = int(np.sum(corpus >= cut))
-            bracket_y = LL_CORPUS_Y + LL_CORPUS_H - 0.35
-            ax.plot([float(at(cut)) + 0.08, x0 + w], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=5)
-            ax.plot([x0 + w] * 2, [bracket_y - 0.14, bracket_y], color=INK, linewidth=1.6, zorder=5)
-            ax.text(
-                (float(at(cut)) + x0 + w) / 2,
-                bracket_y + LABEL_GAP,
-                f"kept: {kept}",
-                ha="center",
-                va="bottom",
-                fontsize=16,
-                color=INK,
-            )
+            _ll_line(ax, corpus, line, cut_x, dot_y)
         else:
             # The radios not picked: their peaks, dropped to the corpus they
             # would cut, in black like the three cuts on `calib-fbeta`.
-            ax.plot(
-                [float(at(cut))] * 2,
-                [dot_y, LL_CORPUS_Y],
-                color=INK,
-                linewidth=1.4,
-                linestyle=(0, (2, 3)),
-                zorder=2,
-            )
-    return fig
+            ax.plot([cut_x] * 2, [dot_y, LL_CORPUS_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+
+
+def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float, dot_y: float) -> None:
+    """The line: blue, the palette's "the shipped thing", from the peak that placed it up through the corpus."""
+    top = LL_CORPUS_Y + LL_CORPUS_H + 0.15
+    ax.plot([cut_x] * 2, [dot_y, top], color=BLUE, linewidth=2.6, zorder=5)
+    kept = int(np.sum(corpus >= float(_ll_logit(line.threshold(LL_PICKED)))))
+    bracket_y = LL_CORPUS_Y + LL_CORPUS_H - 0.35
+    right = LL_X0 + LL_W
+    ax.plot([cut_x + 0.08, right], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=5)
+    ax.plot([right] * 2, [bracket_y - 0.14, bracket_y], color=INK, linewidth=1.6, zorder=5)
+    ax.text(
+        (cut_x + right) / 2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="center", va="bottom", fontsize=16, color=INK
+    )
 
 
 # ── the document line at the three radios (#4367, #4458, #4479) ─────────────
