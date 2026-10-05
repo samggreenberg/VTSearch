@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Document search without a GPU is ~9x faster per click at 50,000 pages** (issue #4514).
+  A vote on a document collection served from a CPU took about 2 minutes at 50,000 pages:
+  each click converted the whole tile matrix to float32. The conversion now happens once
+  when the collection's pages are first scored, so a Good takes ~14 s and a Bad ~3 s
+  (8 cores; ~10 s and 0.1 s at 5,000 pages). That first search is ~30 s slower at 50,000
+  pages, and the CPU server holds twice the tile matrix in memory. Rankings are unchanged.
+
 - **A document ranking no longer depends on the machine the server runs on** (issue #4481).
   The same detector used to order near-equal pages differently on the GRID's AMD and Intel
   nodes, because their math libraries rounded the page vectors differently. The server now

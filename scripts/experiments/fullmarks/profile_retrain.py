@@ -41,7 +41,7 @@ import embed_corpus  # noqa: E402
 import fullmarks_config as cfg  # noqa: E402
 import template_matrix as tm  # noqa: E402
 from app_replay_tiled import _extract  # noqa: E402
-from sota_documents import in_test_half, load_or_extract  # noqa: E402
+from sota_documents import _cached_tiles, in_test_half, load_or_extract  # noqa: E402
 
 PHASES = ("stage1", "ratio_test", "ransac")
 
@@ -98,6 +98,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     timers = Timers()
     timers.wrap(s1, "vote_queries", "stage1")
     timers.wrap(s1, "tiled_stage1", "stage1", sync=True)
+    # Stacking the tile matrix happens once per page set in the app (a dataset load), but once per
+    # class here, since each class has its own pool: timed apart so it is not read as per-click cost.
+    timers.wrap(s1, "_tile_matrix", "matrix")
     # structural_similarity imported these names from structural_stage1; time those bindings too.
     for name in ("vote_queries", "tiled_stage1"):
         if hasattr(ss, name):
@@ -110,11 +113,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pages = {p.page_id: p for p in embed_corpus.pages_for_tier(args.corpus, args.tier)}
     ids = sorted(pages)
     feats = load_or_extract(ids, {p: pages[p].path for p in ids}, args.feature_cache, args.tier, args.workers)
-    projection = load_tile_projection()
-    snap_all = {
-        p: {"embedder": "sift_vlad_doc", "local_features": feats[p], "tile_vectors": tile_vectors(feats[p], projection)}
-        for p in ids
-    }
+    import vtscore.media.structural_tiles as st  # noqa: PLC0415
+
+    tiles = _cached_tiles(ids, args.feature_cache, args.tier, st) if args.feature_cache else {}
+    if len(tiles) < len(ids):  # no cache covering the tier: tile here (slow at 50k pages)
+        projection = load_tile_projection()
+        tiles = {p: tile_vectors(feats[p], projection) for p in ids}
+    snap_all = {p: {"embedder": "sift_vlad_doc", "local_features": feats[p], "tile_vectors": tiles[p]} for p in ids}
     host = {"node": socket.gethostname()}
     try:
         import torch  # noqa: PLC0415
@@ -162,6 +167,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     "after": last or "start",
                     "goods": len(goods),
                     "total_s": round(total, 4),
+                    # The once-per-page-set matrix build, inside stage1; per_click_s leaves it out.
+                    "matrix_s": round(timers.acc.get("matrix", 0.0), 4),
+                    "per_click_s": round(total - timers.acc.get("matrix", 0.0), 4),
                     **{f"{p}_s": round(t, 4) for p, t in phases.items()},
                     "other_s": round(total - sum(phases.values()), 4),
                     # The ranking, scores and line, to show a speed change leaves the results alone.
@@ -194,9 +202,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         sel = [r for r in rows if r["after"] == after]
         if not sel:
             continue
-        cells = " | ".join(f"{k}: {np.median([r[f'{k}_s'] for r in sel]):.2f}" for k in ("total", *PHASES, "other"))
+        keys = ("total", "per_click", "matrix", *PHASES, "other")
+        cells = " | ".join(f"{k}: {np.median([r[f'{k}_s'] for r in sel]):.2f}" for k in keys)
         lines.append(f"after {after} ({len(sel)} steps), medians (s): {cells}")
-        lines.append(f"  total p90: {np.percentile([r['total_s'] for r in sel], 90):.2f} s")
+        lines.append(f"  per-click p90: {np.percentile([r['per_click_s'] for r in sel], 90):.2f} s")
     buf = io.StringIO()
     pstats.Stats(prof, stream=buf).sort_stats("cumulative").print_stats(30)
     (args.out / "profile_good_steps.txt").write_text(buf.getvalue(), encoding="utf-8")

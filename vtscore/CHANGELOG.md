@@ -10,6 +10,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The CPU Stage 1 keeps a float32 tile matrix** (issue #4514). `_float32_matrix` converts the
+  fp16 matrix once per page set (torch's vectorised conversion), `_cpu_page_max` multiplies it
+  directly, and `exact_page_scores` reads it when present. numpy's per-call conversion was 95%
+  of a CPU click at 50,000 pages. The copy doubles the matrix's memory, on the CPU path only.
+
 - **Tiled Stage 1 orders on an exact score** (issue #4481). The page scorers return each
   page's best (query, tile) pair (`PageMax`, `page_max_from_tiles`, `_gpu_page_max`,
   `_cpu_page_max`), and `tiled_stage1` orders on that pair recomputed in float64

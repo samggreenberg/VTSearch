@@ -143,6 +143,18 @@ class TestTiledStage1:
         ]
         np.testing.assert_allclose(exact, brute, rtol=0, atol=1e-12)
 
+    def test_the_cpu_path_converts_the_matrix_once_and_exactly(self, tiled):
+        # #4514: numpy's fp16 -> float32 conversion of the whole matrix on every call cost
+        # ~2 minutes a click at 50,000 pages. The copy is made once per page set.
+        snap = tiled(4)
+        _ids, matrix, _starts = s1._tile_matrix(snap)
+        f32 = s1._float32_matrix(matrix)
+        assert f32.dtype == np.float32
+        np.testing.assert_array_equal(f32, matrix.astype(np.float32))
+        assert s1._float32_matrix(matrix) is f32
+        s1._tile_matrix(tiled(3))  # a new page set drops it
+        assert not s1._CPU_CACHE
+
     def test_only_the_head_is_recomputed_and_it_stays_on_top(self, monkeypatch):
         # Recomputing every page cost ~0.2 s a call at 50,000 pages; past the shortlist the
         # float32 order is enough (#4481).
