@@ -51,6 +51,7 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`coverage-atlas.md`](coverage-atlas.md)
 - [`coco-better.md`](coco-better.md)
 - [`stopping-rules-in-eval.md`](stopping-rules-in-eval.md)
+- [`test-mode.md`](test-mode.md)
 
 ## Platform / CLI
 
