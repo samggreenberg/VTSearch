@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-patches.png)
 
-## Patch Work
+## DINO Might
 
 <!-- build: figs/calib-patches.build1.png -->
 
@@ -14,17 +14,20 @@
      rest of the talk, and the next slide takes a maximum over what it makes. -->
 
 <!-- **a** — One photograph: Extreme Measures' doll with a book under her
-     arm. -->
+     arm. DINOv3, a vision model from Meta, sends it into content space: the
+     same cube as Embed-time Stories, 768 dimensions with three drawn. SigLIP
+     sends a whole photo to one point in there. -->
 
-<!-- **b** — DINOv3, a vision model from Meta, does not look at the photo as
-     one thing. It cuts a 224-pixel square into a 14 by 14 grid of 16-pixel
-     patches: 196 of them. -->
+<!-- **b** — DINOv3 cuts it up first: a 224-pixel square becomes a 14 by 14
+     grid of 16-pixel patches, 196 of them. -->
 
-<!-- **c** — And it describes each patch on its own, in context: 768 numbers a
-     patch, plus one more vector for the whole image. SigLIP, which the talk
-     has used so far, makes only that last kind: one vector a photo, saying
-     what the photo is about. DINOv3's say what is where. -->
+<!-- **c** — And sends each patch to its own point, described in context.
+     SigLIP says what a photo is about; DINOv3 says what is where. (It makes
+     one more point for the whole image, which the drawing leaves out.) The
+     drawing's one claim is that patches of the same thing land together, so
+     the book's gather. Where they gather means nothing. -->
 
 <!-- **d** — What region voting does with them. A Good box trains on the
-     patches inside it, so the vote says *this part*. And a photo is scored by
-     its best row, the maximum over all 197. That maximum is the next slide. -->
+     patches inside it: mostly the book, plus the corners of quilt the box
+     catches. And a photo is scored by its best point, the maximum over all
+     197. That maximum is the next slide. -->

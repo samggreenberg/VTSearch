@@ -13,11 +13,13 @@ way it read the first:
   an F at 4 are different scores);
 * **right** — the same three returned sets as precision against recall, which
   is the trade the radio sets, drawn on one pair of axes so the three can be
-  compared. On documents, where the per-step CSVs carry both at every click,
-  each radio is a path through the session (#4517): a dot at each of
-  `DOC_PR_CLICKS`, joined in order, drawn at the radio's own line weight.
+  compared, square and on one scale (#4533). On documents, where the per-step
+  CSVs carry both at every click, each radio is a path through the session
+  (#4517): a circle at each of `DOC_PR_CLICKS` with the click count written in
+  it, joined in order, circle and path both in the radio's own weight (#4533).
   The photo slide gets the same paths once its review commits precision and
-  recall per click (#4519).
+  recall per click (#4519); until then each radio is one circle, after the
+  spot check, with the check's ✓ in it.
 
 The photo slide is the binary-photo review (SigLIP, binary votes, COCO Better,
 `docs/experiments/2026-10-04-state-of-the-app-binary-photo/`). Its per-run
@@ -86,9 +88,11 @@ DOC_RUNS: dict[float, tuple[Path, ...]] = {
 }
 #: Classes x replicates every document click must cover, and the clicks.
 DOC_ROWS, DOC_CLICKS = 72, 50
-#: The clicks the document slide's precision-recall paths put a dot at: the
-#: query crop alone, then through the session to its last click.
-DOC_PR_CLICKS = (0, 10, 25, 50)
+#: The clicks the document slide's precision-recall paths put a circle at: the
+#: query crop alone, then through the session to its last click. Not 25: every
+#: radio has stopped moving by then, so its circle would sit on the one at 50
+#: and cover its number (#4533).
+DOC_PR_CLICKS = (0, 10, 50)
 
 #: What the presenter notes quote, rounded as the notes say them.
 EXPECT = {
@@ -112,6 +116,9 @@ EXPECT = {
 plt.rcParams.update(
     {
         "font.family": ["DejaVu Sans"],
+        # F-beta's subscript is set as mathtext, in the figure's own face, as on
+        # F-ing Metrics (`make-calib-figs._sub`).
+        "mathtext.fontset": "dejavusans",
         "font.size": 17,
         "text.color": INK,
         "axes.edgecolor": SOFT,
@@ -239,45 +246,105 @@ def _spread(ys: list[float], gap: float) -> list[float]:
     return out.tolist()
 
 
-#: Both slides' panels, in figure fractions: the left starts below the title
-#: notch's foot and the right sits beside it, square-ish, so precision and
-#: recall share a scale.
-LEFT_AXES = (0.085, 0.14, 0.43, 0.58)
-RIGHT_AXES = (0.68, 0.14, 0.27, 0.58)
+#: The figure, in inches: the slide's own 16:9.
+FIG_SIZE = (12.8, 7.2)
+#: Both slides' panels, in figure fractions. The left starts below the title
+#: notch's foot; the right sits beside it at the same height and is square,
+#: because precision and recall run over the same span and a unit of one has to
+#: be as long as a unit of the other (#4533).
+PANEL_BOTTOM, PANEL_HEIGHT = 0.14, 0.58
+RIGHT_WIDTH = PANEL_HEIGHT * FIG_SIZE[1] / FIG_SIZE[0]
+RIGHT_AXES = (0.935 - RIGHT_WIDTH, PANEL_BOTTOM, RIGHT_WIDTH, PANEL_HEIGHT)
+LEFT_AXES = (0.085, PANEL_BOTTOM, 0.37, PANEL_HEIGHT)
 PR_LIM = (0.3, 1.0)
 
+#: A circle on the precision-recall panel, per radio: the edge is the radio's
+#: line weight from the left panel, and the type inside steps from light to
+#: dark with it, so a circle reads as the same radio as the line it sits on.
+CIRCLE_TEXT: dict[float, tuple[str, str]] = {
+    0.25: (SOFT, "normal"),
+    1.0: (INK, "normal"),
+    4.0: (INK, "bold"),
+}
+#: The circle's diameter in points: room for a two-digit count at the type
+#: floor, plus the heaviest radio's edge.
+CIRCLE_PT = 30
+CIRCLE_TEXT_PT = 15
+#: The precision-recall grid: a faint line every step, so a set near the
+#: top-right corner can still be read against something (#4533). Half a tick
+#: on the documents' half-unit span; a whole one on the photos' wider span,
+#: where half a tick would be fourteen lines a side.
+DOC_GRID_STEP, PHOTO_GRID_STEP = 0.05, 0.1
+GRID_COLOUR = "#e3e7ec"
 
-def _pr_panel(fig: Figure, sets: dict[float, dict], note: str) -> None:
-    """Precision against recall, one dot per radio, each labelled with how many it kept."""
+
+def _pr_axes(fig: Figure, lim: tuple[float, float], ticks: list[float], step: float) -> plt.Axes:
+    """The square precision-recall axes, gridded every *step* on both."""
     ax = fig.add_axes(RIGHT_AXES)
-    ax.set_xlim(*PR_LIM)
-    ax.set_ylim(*PR_LIM)
-    ticks = [0.4, 0.6, 0.8, 1.0]
+    ax.set_xlim(*lim)
+    ax.set_ylim(*lim)
     ax.set_xticks(ticks)
     ax.set_yticks(ticks)
-    ax.grid(True, color="#e3e7ec", lw=1.0)
+    lines = np.arange(lim[0], lim[1] + step / 2, step)
+    ax.set_xticks(lines, minor=True)
+    ax.set_yticks(lines, minor=True)
+    ax.tick_params(which="minor", length=0)
+    ax.grid(True, which="both", color=GRID_COLOUR, lw=1.0)
     ax.set_axisbelow(True)
-    ax.set_xlabel("recall")
-    ax.set_ylabel("precision")
+    ax.set_xlabel("Recall")
+    ax.set_ylabel("Precision")
+    return ax
+
+
+def _circle(ax: plt.Axes, x: float, y: float, beta: float, text: str) -> None:
+    """One returned set on the precision-recall panel: a circle with *text* in it, in *beta*'s weight."""
+    weight = next(w for b, _, w in RADIOS if b == beta)
+    colour, font = CIRCLE_TEXT[beta]
+    ax.plot(
+        [x],
+        [y],
+        ls="none",
+        marker="o",
+        markersize=CIRCLE_PT,
+        markerfacecolor="white",
+        markeredgecolor=INK,
+        markeredgewidth=weight,
+        zorder=5,
+        clip_on=False,
+    )
+    ax.text(
+        x, y, text, ha="center", va="center_baseline", fontsize=CIRCLE_TEXT_PT, color=colour, fontweight=font, zorder=6
+    )
+
+
+#: How far right of a circle's centre its radio's name starts, in points.
+CIRCLE_LABEL_PT = CIRCLE_PT / 2 + 6
+
+
+def _pr_panel(fig: Figure, sets: dict[float, dict]) -> None:
+    """Precision against recall, one circle per radio after the check, each labelled with how many it kept.
+
+    The circle carries the check's ✓, as the left panel's last tick does: it
+    is the set after the spot check, which is the one point per radio the
+    photo review commits (#4519 brings the rest of the path).
+    """
+    ax = _pr_axes(fig, PR_LIM, [0.4, 0.6, 0.8, 1.0], PHOTO_GRID_STEP)
     xs = [sets[b]["recall"] for b, _, _ in RADIOS]
     ax.plot(xs, [sets[b]["precision"] for b, _, _ in RADIOS], color=SOFT, lw=1.2, zorder=2)
     for beta, label, _w in RADIOS:
         s = sets[beta]
-        ax.plot([s["recall"]], [s["precision"]], marker="o", markersize=11, color=INK, zorder=4)
-        # Labelled on whichever side has room inside the panel: a dot in its
-        # left half would push a left-hand label across the precision axis.
-        right = s["recall"] < sum(PR_LIM) / 2 + 0.05
+        _circle(ax, s["recall"], s["precision"], beta, "✓")
         ax.annotate(
             f"{label} · {s['kept']} kept",
             (s["recall"], s["precision"]),
-            xytext=(12 if right else -12, 0),
+            xytext=(CIRCLE_LABEL_PT, 0),
             textcoords="offset points",
-            ha="left" if right else "right",
+            ha="left",
             va="center",
             fontsize=16,
             color=INK,
+            annotation_clip=False,
         )
-    ax.set_title(note, fontsize=16, color=SOFT, loc="left", pad=10)
 
 
 #: The paths' axes: zoomed to where the document sets live, the same span on
@@ -291,32 +358,30 @@ def _pr_paths_panel(fig: Figure, sets: dict[float, dict]) -> None:
     Each radio is drawn at the weight the left panel gives it, so a path and its
     F line are one object on two axes, and nothing joins the radios to one
     another: what the panel shows is how each one's set moves as votes arrive.
-    A dot marks each of `DOC_PR_CLICKS`, the panel's note says which, and each
+    Each of `DOC_PR_CLICKS` is a circle with its click count in it, so the
+    points say when they are without a note to decode them (#4533), and each
     path is labelled where it ends; how many each returns is in the notes, since
     a count beside every end would not fit the panel.
+
+    The middle and recall-end runs leave from one set, the query crop alone, so
+    that circle is drawn once, by the first radio to reach it.
     """
-    ax = fig.add_axes(RIGHT_AXES)
-    ax.set_xlim(*PR_PATH_LIM)
-    ax.set_ylim(*PR_PATH_LIM)
-    ticks = [0.6, 0.8, 1.0]
-    ax.set_xticks(ticks)
-    ax.set_yticks(ticks)
-    ax.grid(True, color="#e3e7ec", lw=1.0)
-    ax.set_axisbelow(True)
-    ax.set_xlabel("recall")
-    ax.set_ylabel("precision")
-    starts = set()
+    ax = _pr_axes(fig, PR_PATH_LIM, [0.5, 0.6, 0.7, 0.8, 0.9, 1.0], DOC_GRID_STEP)
+    drawn: set[tuple[float, float]] = set()
     for beta, label, weight in RADIOS:
         path = sets[beta]["path"]
         xs = [point["recall"] for point in path]
         ys = [point["precision"] for point in path]
-        ax.plot(xs, ys, color=INK, lw=weight * 0.7, solid_capstyle="round", solid_joinstyle="round", zorder=3)
-        ax.plot(xs[:-1], ys[:-1], ls="none", marker="o", markersize=6, color=INK, zorder=4)
-        ax.plot(xs[-1:], ys[-1:], ls="none", marker="o", markersize=11, color=INK, zorder=4)
+        ax.plot(xs, ys, color=INK, lw=weight, solid_capstyle="round", solid_joinstyle="round", zorder=3)
+        for click, x, y in zip(DOC_PR_CLICKS, xs, ys, strict=True):
+            if (round(x, 3), round(y, 3)) in drawn:
+                continue
+            drawn.add((round(x, 3), round(y, 3)))
+            _circle(ax, x, y, beta, str(click))
         ax.annotate(
             label,
             (xs[-1], ys[-1]),
-            xytext=(12, 0),
+            xytext=(CIRCLE_LABEL_PT, 0),
             textcoords="offset points",
             ha="left",
             va="center",
@@ -324,37 +389,25 @@ def _pr_paths_panel(fig: Figure, sets: dict[float, dict]) -> None:
             color=INK,
             annotation_clip=False,
         )
-        starts.add((round(xs[0], 3), round(ys[0], 3)))
-    # Where each path leaves from. The middle and recall-end runs leave from
-    # one dot, the query crop alone; the precision end's rule trims even that.
-    for x, y in sorted(starts):
-        left = x < sum(PR_PATH_LIM) / 2 + 0.25
-        ax.annotate(
-            "0 clicks",
-            (x, y),
-            xytext=(-10 if left else 10, -4),
-            textcoords="offset points",
-            ha="right" if left else "left",
-            va="top",
-            fontsize=16,
-            color=SOFT,
-            annotation_clip=False,
-        )
-    clicks = ", ".join(str(c) for c in DOC_PR_CLICKS)
-    ax.set_title(f"dots at {clicks} clicks", fontsize=16, color=SOFT, loc="left", pad=10)
 
 
-def _f_panel(fig: Figure, lines: dict[float, tuple[list, list]], xlim, xticks, xlabel: str, extra=None) -> plt.Axes:
-    """The returned set's F-beta over a session, one line per radio, labelled at its end."""
+def _f_panel(
+    fig: Figure, lines: dict[float, tuple[list, list]], xlim, xticks, xlabel: str, floor: float, extra=None
+) -> plt.Axes:
+    """The returned set's F-beta over a session, one line per radio, labelled at its end.
+
+    The axis starts at *floor*, the last 0.2 step under the lowest point the
+    slide draws, rather than at 0: the panel is read for its shape (#4533).
+    """
     ax = fig.add_axes(LEFT_AXES)
     ax.set_xlim(*xlim)
-    ax.set_ylim(0.2, 1.0)
+    ax.set_ylim(floor, 1.0)
     ax.set_xticks(xticks)
-    ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.yaxis.grid(True, color="#e3e7ec", lw=1.0)
+    ax.set_yticks(np.arange(floor, 1.0 + 1e-9, 0.2))
+    ax.yaxis.grid(True, color=GRID_COLOUR, lw=1.0)
     ax.set_axisbelow(True)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel("returned set, F at its own β")
+    ax.set_ylabel(r"$\mathregular{F_\beta}$ at that β")
     ends = {}
     for beta, label, weight in RADIOS:
         xs, ys = lines[beta]
@@ -380,13 +433,19 @@ def _f_panel(fig: Figure, lines: dict[float, tuple[list, list]], xlim, xticks, x
     return ax
 
 
+def _floor(lines: dict[float, tuple[list, list]]) -> float:
+    """The F panel's floor: the last 0.2 step at or under every point it draws."""
+    lowest = min(min(ys) for _xs, ys in lines.values())
+    return math.floor(round(lowest / 0.2, 6)) * 0.2
+
+
 #: Where the photo slide draws "after the check": past the last click, joined
 #: to it by a dotted step, because the check is not more clicks of the same kind.
 PHOTO_CHECK_X = 168
 
 
 def photo_figure(data: dict[float, dict], stage: int) -> Figure:
-    fig = plt.figure(figsize=(12.8, 7.2))
+    fig = plt.figure(figsize=FIG_SIZE)
     lines = {b: (data[b]["clicks"] + [PHOTO_CHECK_X], data[b]["f"] + [data[b]["after"]]) for b in data}
 
     def check_step(ax: plt.Axes, _ends: dict) -> None:
@@ -398,19 +457,20 @@ def photo_figure(data: dict[float, dict], stage: int) -> Figure:
         lines,
         (0, PHOTO_CHECK_X + 4),
         [25, 50, 100, 150, PHOTO_CHECK_X],
-        "clicks, then the spot check",
+        "Clicks, then the spot check",
+        _floor(lines),
         check_step,
     )
     ax.set_xticklabels(["25", "50", "100", "150", "✓"])
     if stage >= 2:
-        _pr_panel(fig, data, "after the check")
+        _pr_panel(fig, data)
     return fig
 
 
 def doc_figure(data: dict[float, dict], stage: int) -> Figure:
-    fig = plt.figure(figsize=(12.8, 7.2))
+    fig = plt.figure(figsize=FIG_SIZE)
     lines = {b: (data[b]["clicks"], data[b]["f"]) for b in data}
-    _f_panel(fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "clicks")
+    _f_panel(fig, lines, (0, DOC_CLICKS), [0, 10, 20, 30, 40, 50], "Clicks", _floor(lines))
     if stage >= 2:
         _pr_paths_panel(fig, data)
     return fig

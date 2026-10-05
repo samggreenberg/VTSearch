@@ -3811,7 +3811,7 @@ def blend_schedule_fig() -> None:
     ax.set_xlim(0, 122)
     ax.set_ylim(-0.03, 1.12)
     ax.set_yticks([0, 0.5, 1.0], ["GMM", "half", "x-cal"])
-    ax.set_xlabel("votes", labelpad=2)
+    ax.set_xlabel("Votes", labelpad=2)
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
     fig.text(
@@ -3944,7 +3944,7 @@ def split_fraction_fig() -> None:
     """
     import csv
 
-    report = _REPO_ROOT / "docs" / "experiments" / "calibration-fraction-3287"
+    report = _REPO_ROOT / "docs" / "experiments" / "2026-08-27-calibration-fraction-3287"
     series: dict[tuple[str, float], dict[int, tuple[float, float]]] = {}
     for run in ("figures", "siglip2l/figures", "clip/figures", "clip_l/figures"):
         with (report / run / "cost_vs_clicks.csv").open() as fh:
@@ -4275,7 +4275,7 @@ def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
     ax.text(
         FBETA_AXIS_LABEL_X,
         rank_y + FBETA_AXIS_LABEL_LIFT,
-        "“bookness”, low to high",
+        "“Bookness”, low to high",
         ha="center",
         va="bottom",
         fontsize=FBETA_AXIS_LABEL_PT,
@@ -4512,11 +4512,13 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
             ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
 
 
-# ── patches, and the model that makes them (#4517) ───────────────────────────
+# ── DINOv3, and the patches it makes (#4517, #4533) ─────────────────────────
 
-#: How many build stages the patch figure reveals in: one photograph; the grid
-#: DINOv3 cuts it into; the vectors it makes, one per patch and one for the
-#: whole image; a box vote, and the maximum a photo is scored by.
+#: How many build stages the patch figure reveals in: one photograph, and
+#: DINOv3, which sends what it is given into content space, as SigLIP does; the
+#: grid it cuts the photograph into; a point for every patch, where SigLIP
+#: would have made one for the photo; and a box vote, whose patches are what
+#: it trains on.
 PATCH_STAGES = 4
 #: DINOv3 ViT-B/16 sees a 224-pixel square as a 14 x 14 grid of 16-pixel
 #: patches and gives each a 768-number vector (`embedder_dinov3_patch`), plus
@@ -4527,17 +4529,41 @@ PATCH_DIM = 768
 #: The photograph: Extreme Measures' first one, the doll holding a book, as a
 #: single COCO val2017 frame fetched by URL rather than out of the 1 GB corpus
 #: archive, because this figure needs nothing else from it.
-PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0]`, defined further down
+PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0][0]`, defined further down
 PATCH_PHOTO_URL = f"http://images.cocodataset.org/val2017/{PATCH_PHOTO_ID:012d}.jpg"
 #: The book's box in the square crop, as grid cells (first row, first col, last
 #: row, last col), read off the photograph; and the one patch on it the figure
-#: follows into the vector stack.
+#: follows into content space.
 PATCH_BOOK_CELLS = (7, 2, 13, 6)
 PATCH_FOLLOWED = (10, 4)
-#: Layout, in `TEACH_CANVAS` units: the photograph's square, the arrow, and
-#: the vector stack's left edge, row height and cells per row drawn.
+#: Layout, in `TEACH_CANVAS` units: the photograph's square `(x0, y0, side)`,
+#: and content space's cube `(x0, y0, side, depth)`. The cube is
+#: Embed-time Stories' (`make-intro-figs.py`): the same wire, the same 45°
+#: depth at the same share of its side, the same hollow dots, so the room
+#: reads it as the space SigLIP's points went into (#4533).
 PATCH_PHOTO = (0.9, 1.1, 6.9)
-PATCH_STACK_X0, PATCH_ROW_H, PATCH_CELLS = 13.2, 0.42, 20
+PATCH_CUBE = (11.4, 0.85, 5.9, 1.53)
+#: The wire of the cube, and its dots' radius and how much the back of the
+#: cloud shrinks: `make-intro-figs`'s `WIRE` and `FLOW_DEPTH_SHRINK`, with the
+#: radius cut to suit 197 dots rather than 60.
+PATCH_WIRE = "#98a2b0"
+PATCH_DOT_R, PATCH_DOT_SHRINK = 0.1, 0.30
+#: How far in from the cube's faces the cloud stays.
+PATCH_CLOUD_PAD = 0.07
+#: The book's outline in the square crop's pixels: COCO's own segmentation of
+#: it (annotation on image 167159), shifted left by the crop's 62 pixels, and
+#: pinned here so the figure needs only the one photograph, not the corpus.
+PATCH_BOOK_OUTLINE = (
+    (105, 197), (90, 226), (68, 275), (48, 322), (79, 340), (119, 365),
+    (136, 365), (157, 318), (182, 260), (191, 228), (163, 218), (121, 199),
+)  # fmt: skip
+#: Where the book's patches gather in the cube, and how loosely: a patch that
+#: is mostly book moves to this neighbourhood, and every other patch is drawn
+#: at least `PATCH_BOOK_CLEAR` (in cube sides, on the page) from its centre,
+#: so the gathering reads as one.
+PATCH_BOOK_CENTRE = (0.72, 0.70, 0.3)
+PATCH_BOOK_SPREAD = 0.3
+PATCH_BOOK_CLEAR = 0.24
 
 
 @functools.cache
@@ -4561,15 +4587,115 @@ def _patch_photo():
     return image.crop((dx, dy, dx + side, dy + side))
 
 
-def patch_fig() -> None:
-    """What a patch is, and DINOv3, before Extreme Measures takes a maximum over them (#4517).
+@functools.cache
+def _patch_points() -> np.ndarray:
+    """Where each patch lands in the cube, in [0, 1]³, row-major from the top-left patch.
 
-    Region voting runs on a model the deck had not introduced: DINOv3, which
-    describes every 16-pixel patch of an image rather than the image as one
-    thing. One photograph, the grid the model cuts it into, the vector stack it
-    hands back (one row per patch, one for the whole image), and the two things
-    region voting does with that stack: a box vote trains on the patches inside
-    the box, and a photo's score is the best of all its rows.
+    A drawing, not DINOv3, and it says so in two steps. Every patch starts
+    where its own colour and texture put it: the mean and spread of its pixels,
+    reduced to three numbers by principal components and spread evenly across
+    the cube by rank, so the cloud fills the box without piling up at a face.
+    Then every patch that is mostly book (`PATCH_BOOK_OUTLINE`) moves to one
+    neighbourhood, keeping its place within it, because that is the one
+    property of DINOv3's space the slide leans on: patches of the same *thing*
+    land together, however differently they are lit. The cube is a lie of
+    scale either way (Embed-time Stories).
+    """
+    from PIL import Image, ImageDraw
+
+    photo = _patch_photo()
+    pixels = np.asarray(photo.resize((PATCH_GRID * 16,) * 2), dtype=float) / 255.0
+    cells = pixels.reshape(PATCH_GRID, 16, PATCH_GRID, 16, 3).transpose(0, 2, 1, 3, 4)
+    features = np.hstack([cells.mean(axis=(2, 3)), cells.std(axis=(2, 3))]).reshape(PATCH_GRID**2, -1)
+    features = (features - features.mean(axis=0)) / features.std(axis=0)
+    _u, _s, vt = np.linalg.svd(features, full_matrices=False)
+    coords = features @ vt[:3].T
+    spread = coords.argsort(axis=0).argsort(axis=0) / (PATCH_GRID**2 - 1)
+
+    mask = Image.new("L", photo.size, 0)
+    ImageDraw.Draw(mask).polygon(PATCH_BOOK_OUTLINE, fill=255)
+    book = np.asarray(mask.resize((PATCH_GRID, PATCH_GRID), Image.Resampling.BOX), dtype=float).ravel() / 255.0
+    centre = np.array(PATCH_BOOK_CENTRE)
+    gathered = centre + PATCH_BOOK_SPREAD * (spread - 0.5)
+    is_book = book >= 0.5
+    points = np.where(is_book[:, None], gathered, spread)
+    # Mostly not book: pushed out of the book's neighbourhood, so the room sees
+    # a gathering rather than a crowd. Measured where the dots land on the
+    # page, not in the cube: the figure is read in two dimensions, and a dot a
+    # unit behind the gathering still draws on top of it.
+    _x0, _y0, side, depth = PATCH_CUBE
+    lean = depth / side
+
+    def flat(p: np.ndarray) -> np.ndarray:
+        return np.array([p[0] + lean * p[2], p[1] + lean * p[2]])
+
+    # The push is r -> sqrt(r² + clear²) on every such dot, which keeps equal
+    # areas equal: the cloud stays as even as it was, with a hole cut in it,
+    # rather than piling the dots it moves into a ring round the hole.
+    for i in np.flatnonzero(~is_book):
+        offset = flat(points[i]) - flat(centre)
+        distance = float(np.linalg.norm(offset))
+        pushed = float(np.hypot(distance, PATCH_BOOK_CLEAR))
+        points[i, :2] += offset / max(distance, 1e-9) * (pushed - distance)
+    # Back into the cube by rescaling, not clipping: a clip stacks every dot
+    # the push carried past a face into a column along it.
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    return PATCH_CLOUD_PAD + (1 - 2 * PATCH_CLOUD_PAD) * (points - lo) / (hi - lo)
+
+
+def _cube_at(point: np.ndarray) -> tuple[float, float]:
+    """Where a point of the unit cube lands on the page: Embed-time Stories' axonometric."""
+    x0, y0, side, depth = PATCH_CUBE
+    return x0 + point[0] * side + point[2] * depth, y0 + point[1] * side + point[2] * depth
+
+
+def _content_cube(ax: plt.Axes) -> None:
+    """The wire-frame box content space is drawn as, its hidden edges behind the cloud.
+
+    `make-intro-figs._wire_cube`, at this figure's size: the three edges where
+    the hidden faces meet pass behind every dot, the other nine in front.
+    """
+    x0, y0, side, depth = PATCH_CUBE
+    front = [(x0, y0), (x0 + side, y0), (x0 + side, y0 + side), (x0, y0 + side)]
+    back = [(x + depth, y + depth) for x, y in front]
+    bl, br, tr, tl = range(4)
+    hidden = {(bl, br), (bl, tl)}
+    edges = []
+    for a, b in ((bl, br), (br, tr), (tr, tl), (tl, bl)):
+        edges.append((front[a], front[b], False))
+        edges.append((back[a], back[b], (a, b) in hidden))
+    for corner in range(4):
+        edges.append((front[corner], back[corner], corner == bl))
+    for (xa, ya), (xb, yb), behind in edges:
+        ax.plot(
+            [xa, xb],
+            [ya, yb],
+            color=PATCH_WIRE,
+            linewidth=1.4,
+            solid_capstyle="projecting",
+            zorder=2 if behind else 7.5,
+        )
+
+
+def _cube_dot(ax: plt.Axes, point: np.ndarray, fill: str = "white", edge: str = INK, scale: float = 1.0) -> None:
+    """One point in the cube: hollow unless *fill* says otherwise, smaller and further back with depth."""
+    x, y = _cube_at(point)
+    radius = scale * PATCH_DOT_R * (1.0 - PATCH_DOT_SHRINK * point[2])
+    ax.add_patch(Circle((x, y), radius, facecolor=fill, edgecolor=edge, linewidth=1.1, zorder=5 + 2 * (1 - point[2])))
+
+
+def patch_fig() -> None:
+    """DINOv3, and what a patch is, before Extreme Measures takes a maximum over them (#4517, #4533).
+
+    Region voting runs on a model the deck had not introduced: DINOv3. It is
+    introduced in the picture the deck already has for an embedding, the
+    content-space cube of Embed-time Stories, where SigLIP sent each
+    photograph to one point. DINOv3 cuts the photograph into a grid first and
+    sends each patch to its own point, which is the whole difference. (It
+    makes one more for the image as a whole, which the notes mention and the
+    figure leaves out.) Last, what region voting does with those points: a box
+    vote trains on the patches inside the box, and a photo is scored by its
+    best point.
     """
     final = _patch_stage(PATCH_STAGES)
     box = tight_box(final)
@@ -4585,58 +4711,6 @@ def _patch_cell(row: int, col: int) -> tuple[float, float, float]:
     return x0 + col * cell, y0 + side - (row + 1) * cell, cell
 
 
-def _patch_stack(ax: plt.Axes, stage: int) -> None:
-    """The vectors DINOv3 hands back: one row for the whole image, then one per patch."""
-    followed = 1 + PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
-    rows = [("whole image", 0), ("patch 1", 1), ("patch 2", 2), ("patch 3", 3), ("⋮", None)]
-    rows += [(f"patch {followed}", followed), ("⋮", None), (f"patch {PATCH_GRID**2}", PATCH_GRID**2)]
-    rng = np.random.default_rng(11)
-    cell_w = (TEACH_CANVAS[0] - 0.7 - PATCH_STACK_X0) / PATCH_CELLS
-    top = PATCH_PHOTO[1] + PATCH_PHOTO[2] - 0.2
-    for k, (name, index) in enumerate(rows):
-        y = top - (k + 1) * PATCH_ROW_H * 1.45
-        ax.text(
-            PATCH_STACK_X0 - LABEL_GAP * 2, y + PATCH_ROW_H / 2, name, ha="right", va="center", fontsize=15, color=INK
-        )
-        if index is None:
-            continue
-        shades = 0.25 + 0.7 * rng.random(PATCH_CELLS)
-        for c, shade in enumerate(shades):
-            ax.add_patch(
-                Rectangle(
-                    (PATCH_STACK_X0 + c * cell_w, y),
-                    cell_w,
-                    PATCH_ROW_H,
-                    facecolor=str(round(float(shade), 3)),
-                    edgecolor="white",
-                    linewidth=0.6,
-                    zorder=3,
-                )
-            )
-        if index == followed:
-            ax.add_patch(
-                Rectangle(
-                    (PATCH_STACK_X0, y),
-                    PATCH_CELLS * cell_w,
-                    PATCH_ROW_H,
-                    facecolor="none",
-                    edgecolor=INK,
-                    linewidth=3.0,
-                    zorder=4,
-                )
-            )
-    ax.text(
-        PATCH_STACK_X0 + PATCH_CELLS * cell_w,
-        top + LABEL_GAP,
-        f"{PATCH_GRID**2 + 1} vectors, {PATCH_DIM} numbers each",
-        ha="right",
-        va="bottom",
-        fontsize=16,
-        color=INK,
-    )
-    del stage
-
-
 def _patch_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the patch figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
@@ -4645,11 +4719,29 @@ def _patch_stage(stage: int) -> plt.Figure:
     ax.set_ylim(0, TEACH_CANVAS[1])
     ax.set_axis_off()
 
-    # ── stage 1: one photograph ───────────────────────────────────────────────
     x0, y0, side = PATCH_PHOTO
-    ax.imshow(_patch_photo(), extent=(x0, x0 + side, y0, y0 + side), zorder=1, aspect="auto")
+    cube_x0, cube_y0, cube_side, cube_depth = PATCH_CUBE
+    points = _patch_points()
+    r0, c0, r1, c1 = PATCH_BOOK_CELLS
+    boxed = {row * PATCH_GRID + col for row in range(r0, r1 + 1) for col in range(c0, c1 + 1)}
+    followed = PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
 
-    # ── stage 2: the grid the model cuts it into ──────────────────────────────
+    # ── stage 1: one photograph, and DINOv3, into content space ───────────────
+    ax.imshow(_patch_photo(), extent=(x0, x0 + side, y0, y0 + side), zorder=1, aspect="auto")
+    mid = y0 + side / 2
+    arrow_x0 = x0 + side + OBJECT_GAP
+    _labeled_arrow(ax, (arrow_x0, mid), (cube_x0 - OBJECT_GAP, mid), "DINOv3")
+    _content_cube(ax)
+    ax.text(
+        cube_x0 + (cube_side + cube_depth) / 2,
+        cube_y0 - LABEL_GAP,
+        f"{PATCH_DIM}-d",
+        ha="center",
+        va="top",
+        fontsize=17,
+        color=INK,
+    )
+    # ── stage 2: the grid DINOv3 cuts it into ─────────────────────────────────
     if stage >= 2:
         for k in range(1, PATCH_GRID):
             t = k * side / PATCH_GRID
@@ -4665,19 +4757,37 @@ def _patch_stage(stage: int) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 3: what it makes of them — one vector per patch, one for all ────
+    # ── stage 3: a point for every patch ──────────────────────────────────────
     if stage >= 3:
+        for index, point in enumerate(points):
+            voted = stage >= PATCH_STAGES and index in boxed
+            if index == followed:
+                continue
+            _cube_dot(ax, point, fill=GREEN if voted else "white", edge=GREEN if voted else INK)
+        # The one patch the figure follows: outlined on the photograph, and
+        # its point in the cube drawn the same way, ringed, so the eye can pair
+        # the two across the arrow.
         row, col = PATCH_FOLLOWED
         px, py, cell = _patch_cell(row, col)
         ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor="white", linewidth=4.5, zorder=5))
         ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor=INK, linewidth=2.2, zorder=6))
-        mid = y0 + side / 2
-        _labeled_arrow(ax, (x0 + side + 0.35, mid), (x0 + side + 0.35 + arrow_len_for("DINOv3") + 0.4, mid), "DINOv3")
-        _patch_stack(ax, stage)
+        point = points[followed]
+        _cube_dot(ax, point, fill=GREEN if stage >= PATCH_STAGES else "white", edge=INK, scale=1.6)
+        fx, fy = _cube_at(point)
+        ax.add_patch(
+            Rectangle(
+                (fx - 1.9 * PATCH_DOT_R, fy - 1.9 * PATCH_DOT_R),
+                3.8 * PATCH_DOT_R,
+                3.8 * PATCH_DOT_R,
+                facecolor="none",
+                edgecolor=INK,
+                linewidth=2.2,
+                zorder=8,
+            )
+        )
 
-    # ── stage 4: a box vote, and the maximum a photo is scored by ─────────────
+    # ── stage 4: a box vote, and the points it trains on ──────────────────────
     if stage >= PATCH_STAGES:
-        r0, c0, r1, c1 = PATCH_BOOK_CELLS
         bx, by, cell = _patch_cell(r1, c0)
         ax.add_patch(
             Rectangle(
@@ -4702,9 +4812,9 @@ def _patch_stage(stage: int) -> plt.Figure:
             zorder=6,
         )
         ax.text(
-            PATCH_STACK_X0 + PATCH_CELLS * (TEACH_CANVAS[0] - 0.7 - PATCH_STACK_X0) / PATCH_CELLS,
-            y0,
-            "a photo scores the best of its rows",
+            cube_x0 + cube_side + cube_depth,
+            cube_y0 + cube_side + cube_depth + LABEL_GAP,
+            "a photo scores its best point",
             ha="right",
             va="bottom",
             fontsize=17,
@@ -4713,25 +4823,34 @@ def _patch_stage(stage: int) -> plt.Figure:
     return fig
 
 
-#: The region grid the max figure opens on: rows, columns, and which cell wins.
-REGION_GRID = (3, 4)
+#: The region grid the max figure opens on: rows and columns. Finer than the
+#: 3 x 4 it was, and over a closer crop, so it reads as the same kind of grid
+#: as DINO Might's 14 x 14 rather than as a different idea (#4533). Over the
+#: whole frame it would be about 6 x 8: still coarser than DINOv3's, on purpose,
+#: because every cell carries its score.
+REGION_GRID = (4, 5)
 
 #: The score range the maxima panel is drawn over. Cropped to the sample rather
 #: than run 0-1: the whole claim of the stage is a *shape* — that a maximum
 #: leans right — and a distribution drawn across four times its own width is a
 #: spike with no shape at all.
-REGION_RANGE = (0.33, 0.82)
+REGION_RANGE = (0.36, 0.82)
 REGION_BINS = 42
 
-#: The two photographs the max figure opens on, by COCO val2017 id: one
+#: The two photographs the max figure opens on, by COCO val2017 id, each with
+#: the 5:4 window of it the figure shows, in the frame's own pixels: one
 #: holding a book (a doll's "Goody Two Shoes"), and one holding none — a dog on
-#: a couch, with cushions for a detector to be tempted by.
-REGION_PHOTOS = (167159, 347930)
+#: a couch, with cushions for a detector to be tempted by. Each window is
+#: about two thirds of its frame's width, around the book and the dog.
+REGION_PHOTOS = (
+    (167159, (21, 119, 341, 375)),
+    (347930, (83, 90, 493, 418)),
+)
 
 
 @functools.cache
-def _region_photo(image_id: int) -> tuple:
-    """`(4:3 image, [book boxes in its pixels])` for one COCO val2017 frame."""
+def _region_photo(image_id: int, window: tuple[int, int, int, int]) -> tuple:
+    """`(the window of one COCO val2017 frame, [book boxes in its pixels])`."""
     import json
 
     from PIL import Image
@@ -4743,11 +4862,9 @@ def _region_photo(image_id: int) -> tuple:
     meta = next(i for i in coco["images"] if i["id"] == image_id)
     book = next(c["id"] for c in coco["categories"] if c["name"] == "book")
     image = Image.open(coco_fixture.IMAGES / meta["file_name"]).convert("RGB")
-    width, height = image.size
-    side = int(round(height * 4 / 3)) if width / height > 4 / 3 else width
-    tall = height if width / height > 4 / 3 else int(round(width * 3 / 4))
-    dx, dy = (width - side) // 2, (height - tall) // 2
-    image = image.crop((dx, dy, dx + side, dy + tall))
+    dx, dy, x1, y1 = window
+    assert (x1 - dx) * REGION_GRID[0] == (y1 - dy) * REGION_GRID[1], f"{image_id}: the window is not 5:4"
+    image = image.crop(window)
     boxes = [
         (x - dx, y - dy, w, h)
         for a in coco["annotations"]
@@ -4757,16 +4874,18 @@ def _region_photo(image_id: int) -> tuple:
     return image, boxes
 
 
-def _region_scores(image_id: int, seed: int) -> np.ndarray:
+def _region_scores(image_id: int, window: tuple[int, int, int, int], seed: int) -> np.ndarray:
     """Illustrative per-region scores: a little of everything, and a lot of book.
 
     Each region scores a noisy baseline — every region of every photograph
     resembles *something* — plus a share proportional to how much of it the
     photograph's COCO book box covers. So the book's own regions win when there
     is a book, and when there is none the grid still has a spread, and a top.
-    Seeded, so the slide is the same every time it is drawn.
+    Seeded, so the slide is the same every time it is drawn. The book's share
+    is sized so a cell the book fills scores high without saturating, so the
+    winning cell is one cell and not a tie.
     """
-    image, boxes = _region_photo(image_id)
+    image, boxes = _region_photo(image_id, window)
     rows, cols = REGION_GRID
     width, height = image.size
     rng = np.random.default_rng(seed)
@@ -4779,7 +4898,7 @@ def _region_scores(image_id: int, seed: int) -> np.ndarray:
                 max(0.0, min(x1, bx + bw) - max(x0, bx)) * max(0.0, min(y1, by + bh) - max(y0, by))
                 for bx, by, bw, bh in boxes
             ) / ((x1 - x0) * (y1 - y0))
-            scores[r, c] += 0.8 * cover
+            scores[r, c] += 0.5 * cover
     return np.round(np.clip(scores, 0.0, 0.95), 2)
 
 
@@ -4815,6 +4934,18 @@ def _gumbel_fit(sample: np.ndarray) -> tuple[float, float]:
     return float(sample.mean()) - 0.5772156649 * scale, scale
 
 
+#: The region figure's layout, in `TEACH_CANVAS` units: each photograph's
+#: width and height (5:4, so a cell is square), the gap between the two, and
+#: where the first starts — right of the title notch, and centred with its
+#: partner over the histogram below.
+REGION_PHOTO_W, REGION_PHOTO_H, REGION_PHOTO_GAP, REGION_PHOTO_X0 = 5.0, 4.0, 1.6, 6.7
+#: The cell scores' type: as large as a two-decimal score can be and still
+#: clear its neighbour in a one-unit cell.
+REGION_SCORE_PT = 13
+#: The histogram panel: left edge, floor, and height.
+REGION_PANEL_X0, REGION_PANEL_Y0, REGION_PANEL_H = 5.9, 1.55, 3.3
+
+
 def _region_max_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the region-max figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
@@ -4824,12 +4955,14 @@ def _region_max_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     rows, cols = REGION_GRID
-    photo_w, photo_h = 4.6, 3.45
+    photo_w, photo_h = REGION_PHOTO_W, REGION_PHOTO_H
     photo_top = TEACH_CANVAS[1] - 0.5
-    for slot, (image_id, seed) in enumerate(zip(REGION_PHOTOS, (3, 7), strict=True)):
-        image, _ = _region_photo(image_id)
-        scores = _region_scores(image_id, seed)
-        px0 = 6.2 + slot * (photo_w + 2.2)
+    # Seeds picked so each photo has one clear winner: on the book's own cell,
+    # and on the dog photo's cushions.
+    for slot, ((image_id, window), seed) in enumerate(zip(REGION_PHOTOS, (11, 8), strict=True)):
+        image, _ = _region_photo(image_id, window)
+        scores = _region_scores(image_id, window, seed)
+        px0 = REGION_PHOTO_X0 + slot * (photo_w + REGION_PHOTO_GAP)
         py0 = photo_top - photo_h
         ax.imshow(image, extent=(px0, px0 + photo_w, py0, photo_top), zorder=1, aspect="auto")
         best = np.unravel_index(int(np.argmax(scores)), scores.shape)
@@ -4859,12 +4992,12 @@ def _region_max_stage(stage: int) -> plt.Figure:
                     f"{scores[r, c]:.2f}",
                     ha="center",
                     va="center",
-                    fontsize=15,
+                    fontsize=REGION_SCORE_PT,
                     color=INK,
                     fontweight="bold" if won else "normal",
                     zorder=4,
                     bbox={
-                        "boxstyle": "round,pad=0.15",
+                        "boxstyle": "round,pad=0.12",
                         "facecolor": "white",
                         "alpha": 0.85 if won else 0.7,
                         "edgecolor": "none",
@@ -4883,14 +5016,20 @@ def _region_max_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 3: every item is a maximum, so the corpus is a pile of maxima ───
-    panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
-    panel_h = 3.75
-    y_base = 1.5
+    panel_x0, panel_w = REGION_PANEL_X0, TEACH_CANVAS[0] - REGION_PANEL_X0 - 0.7
+    panel_h, y_base = REGION_PANEL_H, REGION_PANEL_Y0
+    lo, hi = REGION_RANGE
     sample = _maxima()
+    density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
+    xs = np.linspace(lo, hi, 500)
+    normal = gaussian(xs, float(sample.mean()), float(sample.var()))
+    loc, scale = _gumbel_fit(sample)
+    z = (xs - loc) / scale
+    gumbel = np.exp(-(z + np.exp(-z))) / scale
+    # One vertical scale for the bars and both fits, set by whichever reaches
+    # highest, so a fitted curve never rises through the caption over the panel.
+    sy = panel_h / max(float(density.max()), float(normal.max()), float(gumbel.max()))
     if stage >= 3:
-        lo, hi = REGION_RANGE
-        density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
-        sy = panel_h / float(density.max())
         bars = _staircase(panel_x0, y_base, panel_w / (hi - lo), sy, (edges - lo), density, 0, len(density) - 1)
         bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
         ax.add_patch(bars)
@@ -4904,20 +5043,32 @@ def _region_max_stage(stage: int) -> plt.Figure:
             fontsize=16,
             color=INK,
         )
+        # The axes, named and no more (#4533): the slide is about the shape,
+        # so neither carries ticks.
+        ax.text(
+            panel_x0 + panel_w / 2,
+            y_base - RANGE_FOOT - LABEL_GAP,
+            "Similarity",
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=SOFT,
+        )
+        ax.text(
+            panel_x0 - 2 * LABEL_GAP,
+            y_base + panel_h / 2,
+            "#",
+            ha="right",
+            va="center",
+            fontsize=16,
+            color=SOFT,
+        )
 
     # ── stage 4: the two tail families, fitted to the same maxima ─────────────
     if stage >= REGION_MAX_STAGES:
-        lo, hi = REGION_RANGE
-        density, _edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
-        sy = panel_h / float(density.max())
-        xs = np.linspace(lo, hi, 500)
-        normal = gaussian(xs, float(sample.mean()), float(sample.var()))
-        loc, scale = _gumbel_fit(sample)
-        z = (xs - loc) / scale
-        gumbel = np.exp(-(z + np.exp(-z))) / scale
         for curve, colour, dash, name in (
-            (normal, SOFT, (0, (5, 3)), "a Gaussian, fitted"),
-            (gumbel, BLUE, (0, ()), "a Gumbel, fitted"),
+            (normal, SOFT, (0, (5, 3)), "Fitted Gaussian"),
+            (gumbel, BLUE, (0, ()), "Fitted Gumbel"),
         ):
             ax.plot(
                 panel_x0 + (xs - lo) / (hi - lo) * panel_w,
@@ -4936,15 +5087,6 @@ def _region_max_stage(stage: int) -> plt.Figure:
                 fontsize=15,
                 color=colour,
             )
-        ax.text(
-            panel_x0 + panel_w,
-            y_base - 0.32 - LABEL_GAP,
-            "a maximum is not a mean: it leans right, and the tail is where the cut goes",
-            ha="right",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
     return fig
 
 
@@ -5382,7 +5524,7 @@ def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
             color=GREEN if good else RED,
             fontweight="bold",
         )
-    _ll_row_name(ax, LL_VOTES_Y + 0.15, "the votes")
+    _ll_row_name(ax, LL_VOTES_Y + 0.15, "The votes")
     if stage < 2:
         return
     # Drawn at one height: the class model says what a match and a near-miss
@@ -5409,7 +5551,7 @@ def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: 
         if top > LL_CORPUS_Y:
             ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_CORPUS_Y, z=5)
-    _ll_row_name(ax, LL_CORPUS_Y + 0.9, "the corpus")
+    _ll_row_name(ax, LL_CORPUS_Y + 0.9, "The corpus")
     # The 2-part fit: the labels' Good normal, its shape held, and a normal
     # for everything else, each scaled to the count the fit gives it.
     grid = np.linspace(lo, hi, 700)
@@ -5441,7 +5583,7 @@ def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) 
     """Stages 4-5: expected F-beta down the ranking, the line at the picked radio's peak, then the other two."""
     lo, hi = LL_LOGIT
     _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
-    _ll_row_name(ax, LL_F_Y + 0.75, "expected " + _sub(r"F_\beta"))
+    _ll_row_name(ax, LL_F_Y + 0.75, "Expected " + _sub(r"F_\beta"))
     for (beta, _name), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True):
         picked = beta == LL_PICKED
         if stage < (4 if picked else 5):
@@ -5607,7 +5749,7 @@ def _tx_stage(stage: int) -> plt.Figure:
     sy = (TX_CORPUS_H - 0.9) / float(peak)
 
     # ── stage 1: Train, as What to Expect left it ─────────────────────────────
-    for name, y in (("the votes", TX_VOTES_Y + 0.15), ("the corpus", TX_CORPUS_Y + 1.6)):
+    for name, y in (("The votes", TX_VOTES_Y + 0.15), ("The corpus", TX_CORPUS_Y + 1.6)):
         ax.text(TX_TRAIN[0] - 0.35, y, name, ha="right", va="center", fontsize=16, color=INK)
     ax.text(
         sum(TX_TRAIN) - TX_TRAIN[1] / 2,
@@ -5674,16 +5816,18 @@ DOC_MARK_PAGES = (11, 14, 18, 23, 28, 31, 35, 39, 44, 50, 57, 65, 74)
 DOC_OTHER_PAGES = (8, 12, 15, 17, 19, 24)
 #: Pages closer than this many counts stack, so no two dots overlap.
 DOC_STACK_GAP = 2.0
-#: Rows, in canvas units: the Good votes and the Bad votes; the Good pages and
-#: the Bad pages; one row per radio, top to bottom the precision end, the
-#: middle, the recall end — the order `calib-fbeta` stacks the same three
-#: balances in. Votes and pages are each split into a Good row over a Bad row,
-#: the way Cross Examination splits D₀ (#4517): which kind a mark is reads off
-#: its row, and red against green is only a second way of saying it.
-DOC_VOTE_ROWS_Y = (7.95, 7.0)
-DOC_PAGE_ROWS_Y = (6.05, 5.1)
+#: Rows, in canvas units: the votes; the pages; one row per radio, top to
+#: bottom the precision end, the middle, the recall end — the order
+#: `calib-fbeta` stacks the same three balances in. Votes and pages each get
+#: one line, Good above it and Bad below (#4533), so which kind a mark is reads
+#: off its side of the line as well as its colour, and which of the two rows it
+#: is reads off its shape: a vote is a ✓ or a ✗, a page is a hatched dot.
+DOC_VOTE_ROW_Y = 7.55
+DOC_PAGE_ROW_Y = 5.6
 DOC_RADIO_Y = (3.75, 2.5, 1.25)
 DOC_DOT_R = 0.15
+#: How far a mark sits off its row's line, above or below.
+DOC_MARK_GAP = 0.06
 
 
 def _doc_lines() -> dict[float, tuple[int, str]]:
@@ -5727,69 +5871,68 @@ def doc_balance_fig() -> None:
     save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
 
 
+def _hatched_dot(ax: plt.Axes, xy: tuple[float, float], r: float, good: bool, z: float = 4) -> None:
+    """A Good or Bad item as a hollow dot, hatched the way `_data_block` hatches its halves.
+
+    A solid green or red dot reads as a vote (#4533); the hatch says what kind
+    an item is without saying that anybody voted on it. The Bad hatch is drawn
+    at the Good one's density rather than `_data_block`'s sparser one: a dot
+    is small enough that half as many lines leaves a single stroke across it,
+    which reads as a "no entry" sign rather than as a fill.
+    """
+    colour, hatch = (GREEN, "//////") if good else (RED, "\\\\\\\\\\\\")
+    ax.add_patch(Circle(xy, r, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=1.3, zorder=z))
+
+
 def _doc_rows(ax: plt.Axes, x0: float, w: float, at) -> None:
-    """Stage 1 of the document-balance figure: the votes and the verified pages, Good over Bad.
+    """Stage 1 of the document-balance figure: the votes and the verified pages, each Good over Bad.
 
     *at* maps an inlier count to canvas x on the axis every row shares.
     """
 
-    def row_kind(y: float, noun: str, good: bool) -> None:
-        ax.text(
-            x0 - 0.35,
-            y,
-            f"{'Good' if good else 'Bad'} {noun}",
-            ha="right",
-            va="center",
-            fontsize=16,
-            color=GREEN if good else RED,
-        )
+    def row_name(y: float, noun: str) -> None:
+        ax.text(x0 - 0.35, y, noun, ha="right", va="center", fontsize=16, color=INK)
 
-    for (counts, good), y in zip(((DOC_GOODS, True), (DOC_BADS, False)), DOC_VOTE_ROWS_Y, strict=True):
-        _range_line(ax, x0, x0 + w, y, z=3)
-        # Sitting on their row's line, as the pages sit on theirs: every mark
-        # is above the line it belongs to, so no row's marks hang between two.
+    y = DOC_VOTE_ROW_Y
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for counts, good in ((DOC_GOODS, True), (DOC_BADS, False)):
         for count in counts:
             ax.text(
                 at(count),
-                y + 0.06,
+                y + DOC_MARK_GAP if good else y - DOC_MARK_GAP,
                 "✓" if good else "✗",
                 ha="center",
-                va="bottom",
+                va="bottom" if good else "top",
                 fontsize=20,
                 color=GREEN if good else RED,
                 fontweight="bold",
             )
-        row_kind(y + 0.25, "votes", good)
+    row_name(y, "Votes")
     ax.text(
         x0 + w,
-        DOC_VOTE_ROWS_Y[0] + 0.6,
-        "inliers, few to many",
+        DOC_VOTE_ROW_Y + 0.6,
+        "Inliers, few to many",
         ha="right",
         va="bottom",
         fontsize=FBETA_AXIS_LABEL_PT,
         color=SOFT,
     )
-    # One dot per page on its own row's line. Pages closer than
-    # `DOC_STACK_GAP` counts would stack a level up, though with the rows split
-    # none of the drawing's pages are that close.
-    for (counts, good), y in zip(((DOC_MARK_PAGES, True), (DOC_OTHER_PAGES, False)), DOC_PAGE_ROWS_Y, strict=True):
-        _range_line(ax, x0, x0 + w, y, z=3)
+    # One dot per page, Good above the line and Bad below. Pages closer than
+    # `DOC_STACK_GAP` counts on one side would stack a level further out,
+    # though none of the drawing's pages are that close.
+    y = DOC_PAGE_ROW_Y
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for counts, good in ((DOC_MARK_PAGES, True), (DOC_OTHER_PAGES, False)):
+        side = 1 if good else -1
         placed: list[tuple[float, int]] = []
         for count in sorted(counts):
             level = 0
             while any(lvl == level and abs(count - c) < DOC_STACK_GAP for c, lvl in placed):
                 level += 1
             placed.append((count, level))
-            ax.add_patch(
-                Circle(
-                    (at(count), y + DOC_DOT_R + 0.08 + level * (2 * DOC_DOT_R + 0.06)),
-                    DOC_DOT_R,
-                    facecolor=GREEN if good else RED,
-                    edgecolor="none",
-                    zorder=4,
-                )
-            )
-        row_kind(y + 0.2, "pages", good)
+            offset = DOC_DOT_R + DOC_MARK_GAP + 0.04 + level * (2 * DOC_DOT_R + 0.06)
+            _hatched_dot(ax, (at(count), y + side * offset), DOC_DOT_R, good)
+    row_name(y, "Pages")
 
 
 def _doc_stage(stage: int) -> plt.Figure:
@@ -5823,7 +5966,7 @@ def _doc_stage(stage: int) -> plt.Figure:
         # Half a count below the lowest page kept, so the cut sits between two
         # integer counts rather than on one.
         cut = at(first - 0.5)
-        ax.plot([cut, cut], [y, DOC_PAGE_ROWS_Y[0]], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+        ax.plot([cut, cut], [y, DOC_PAGE_ROW_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
         ax.plot([cut, x0 + w], [y, y], color=INK, linewidth=weight, solid_capstyle="butt", zorder=3)
         ax.plot([cut] * 2, [y - 0.18, y + 0.18], color=INK, linewidth=2.4, zorder=3)
         kept = [mark for count, mark in pages if count >= first]
@@ -6101,7 +6244,7 @@ def _cp_stage(stage: int) -> plt.Figure:
     ax.text(
         _cp_x(0.5),
         CP_AXIS_Y - 0.3,
-        "how much of the whole set is right",
+        "How much of the whole set is right",
         ha="center",
         va="top",
         fontsize=16,
@@ -6178,7 +6321,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict
     # Under the strip's left end, which nothing else uses; above it is where
     # the two figures draw their votes.
     ax.text(
-        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
+        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "Ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
     )
     # The kept set: a bracket under the top 32, named once.
     brace_y = strip_y0 - 0.42

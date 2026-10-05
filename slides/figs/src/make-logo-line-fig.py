@@ -91,6 +91,9 @@ CLASSES, MAX_VOTES = 36, 50
 plt.rcParams.update(
     {
         "font.family": ["DejaVu Sans"],
+        # F₁'s subscript is set as mathtext, in the figure's own face, as on
+        # F-ing Metrics (`make-calib-figs._sub`).
+        "mathtext.fontset": "dejavusans",
         "font.size": 17,
         "text.color": INK,
         "axes.edgecolor": SOFT,
@@ -178,8 +181,10 @@ def _figure(lines: dict[str, tuple[np.ndarray, np.ndarray]], label_y: dict[str, 
     ax.set_yticks([0.4, 0.6, 0.8, 1.0])
     ax.yaxis.grid(True, color="#e3e7ec", lw=1.0)
     ax.set_axisbelow(True)
-    ax.set_xlabel("votes")
-    ax.set_ylabel("returned pages, F1")
+    ax.set_xlabel("Votes")
+    # Two characters read upright; turned on its side, F₁ is a thing to tilt
+    # your head at.
+    ax.set_ylabel(r"$\mathregular{F_1}$", rotation=0, ha="right", va="center", labelpad=12)
 
     shown = [("oracle", ORACLE_LABEL)] + [(key, label) for key, label, _ in RULES[:k]]
     for key, label in shown:
