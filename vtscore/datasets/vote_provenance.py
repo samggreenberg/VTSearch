@@ -86,6 +86,12 @@ SCHEMA_VERSION = 1
 #:                       drawn uniformly from the top of the ranking, never by
 #:                       a model.  Ordinary training labels, tagged so the
 #:                       check's own votes can be told from the rest.
+#: ``test``            - a pick of Test mode's test sample (#4527,
+#:                       :mod:`vtscore.training.thresholds.line_test`): drawn
+#:                       uniformly from a rank band on a corpus the detector
+#:                       never trained on.  Never a training label - the point
+#:                       of a test set is that the detector has not seen it -
+#:                       so a later merge must tell it from a ``check`` vote.
 #: ``unknown``         - unattributed; the default for legacy votes.
 FLOWS = frozenset(
     {
@@ -98,6 +104,7 @@ FLOWS = frozenset(
         "bulk",
         "undo",
         "check",
+        "test",
         "unknown",
     }
 )

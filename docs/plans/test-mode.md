@@ -1,6 +1,7 @@
 # Test mode: Find becomes a decision, not a browse (#4520)
 
-**Status:** design, decided. Nothing here has shipped. #4520 asks three
+**Status:** design, decided. The test sample (#4527) has shipped; nothing
+else here has. #4520 asks three
 questions: how a "Test" would work, how the open Find interface becomes a
 constrained Test interface, and which metric and statistics it needs. This
 file is the answer; the owner settled its open decisions on 2026-10-05, and
@@ -208,24 +209,12 @@ screenshots move with it (queued under `docs/reshoot-queue/`, not reshot).
 
 ## 5. What has to be written
 
-Library tier, `vtscore`, Flask-clean:
-
-- **A test sample.** A class over a frozen ranking and a line: band edges on
-  both sides of the line (the spot check's `band_edges` from the top for the
-  matches, the same doubling from the line downward for the misses), per-band
-  picks and labels, and the estimators: per-band Beta posteriors, the
-  band-weighted precision of any top-*b* union, the model-assisted count of
-  positives below the line, recall and F-beta, all as joint Monte Carlo
-  ranges. The spot check's `LineRanking`, `band_edges`, `likely_range` and
-  Clopper-Pearson bounds are reused; its `SpotCheck` is not extended, because
-  its walk answers a different question (where the peak is) and its votes
-  train.
-- **The allocation rule.** Which band the next round goes to, as a pure
-  function of the sample, so the harness and the app cannot disagree.
-- **The phase machine and stop rule**, as a pure function of the sample and
-  the budgets, ported to `vtscore/eval/autopilot_flow.py`'s neighbour and
-  pinned in `scripts/check-eval-app-sync.py` the way Autopilot's phases are.
-- **A `test` vote flow** in `vtscore/datasets/vote_provenance.py`.
+Library tier, `vtscore`, Flask-clean: shipped as
+`vtscore/training/thresholds/line_test.py` (#4527) - the test sample, its
+estimators, the allocation rule, the phase machine and stop rule, and the
+`test` vote flow. Its targets and budgets (`LineBudgets`) are the §2
+proposals until #4523 prices them; its pin in `scripts/check-eval-app-sync.py`
+is that slice's.
 
 App tier:
 
@@ -259,7 +248,7 @@ Each is independently shippable. The test sample and the eval arm carry no visib
 
 <!-- item-sep -->
 
-- [ ] #4527 — Test mode: the test sample and its estimators in vtscore (Opus)
+- [x] #4527 — Test mode: the test sample and its estimators in vtscore (Opus)
 
 <!-- item-sep -->
 

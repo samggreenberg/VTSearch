@@ -6841,6 +6841,7 @@
               "labelset_review",
               "list_review",
               "seed_example",
+              "test",
               "undo",
               "unknown",
               null
