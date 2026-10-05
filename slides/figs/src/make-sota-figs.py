@@ -312,7 +312,9 @@ def _circle(ax: plt.Axes, x: float, y: float, beta: float, text: str) -> None:
         zorder=5,
         clip_on=False,
     )
-    ax.text(x, y, text, ha="center", va="center_baseline", fontsize=CIRCLE_TEXT_PT, color=colour, fontweight=font, zorder=6)
+    ax.text(
+        x, y, text, ha="center", va="center_baseline", fontsize=CIRCLE_TEXT_PT, color=colour, fontweight=font, zorder=6
+    )
 
 
 #: How far right of a circle's centre its radio's name starts, in points.
