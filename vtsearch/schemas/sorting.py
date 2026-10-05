@@ -154,6 +154,12 @@ class BalanceStateSchema(Schema):
     # The set the last check audited (the walk's end); under ``advisory`` not the
     # set the line keeps.  ``null`` while unchecked.
     audited = fields.Integer(required=True, allow_none=True)
+    # Whether a spot check can start on this line (#4489): ``false`` with no
+    # ranking to walk - a structural detector, whose line is the verification
+    # gate's boundary, or one not yet trained on this dataset - or nothing in it
+    # unvoted.  ``POST /api/precision-check/start`` refuses those with a 409, so
+    # a client offers no check where this is ``false``.
+    checkable = fields.Boolean(required=True)
 
 
 # ---------------------------------------------------------------------------

@@ -401,3 +401,12 @@ class TestTheLineAndTheState:
         stale = balance_state(1.0, check, ranking, also_voted={1})
         assert stale.stale is True and stale.as_dict()["precision"]["stale"] is True
         assert balance_state(2.0, check, ranking).status == FLOOR_UNCHECKED, "a result belongs to its balance"
+
+    def test_the_state_says_whether_a_check_can_start(self):
+        """#4489: a check walks the unvoted ranking, so a line with none - a structural detector's - offers none."""
+        ranking, _ = _planted(52)
+        assert balance_state(1.0, None, ranking).as_dict()["checkable"] is True
+        assert balance_state(1.0, None, None).as_dict()["checkable"] is False, "no ranking: the structural line"
+        every = set(ranking.unvoted_ids().tolist())
+        assert balance_state(1.0, None, ranking, also_voted=every).checkable is False, "nothing left unvoted"
+        assert balance_state(1.0, None, ranking, also_voted=iter(sorted(every)[1:])).checkable is True

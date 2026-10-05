@@ -17,6 +17,7 @@ import pytest
 from vtscore.media.structural import SIFT_DESCRIPTOR_DIM, MatchStats, StructuralFeatures
 from vtscore.media.structural_tiles import fit_projection, raw_tiles, tile_vectors
 from vtscore.training import structural_stage1 as s1
+from vtscore.training.thresholds import LineRanking, balance_state
 from vtscore.training.structural_similarity import (
     VerificationScorer,
     maybe_structural_rerank,
@@ -223,6 +224,25 @@ class TestChokepoint:
         results = [{"id": mid, "score": 1.0} for mid in range(60)]
         maybe_structural_rerank(results, 0.3, snap, {0: None}, {})
         assert matcher.calls == 50  # DEFAULT_RERANK_TOP_K, one template
+
+    def test_a_structural_line_leaves_a_spot_check_nothing_to_walk(self, monkeypatch):
+        """#4489: the line is the gate's boundary, not a cut on a ranking, so the balance offers no check."""
+        snap = {mid: {"embedder": "sift_vlad", "local_features": _features(mid, 30)} for mid in range(10)}
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity._resolve_matcher", lambda _snap: _CountingMatcher({})
+        )
+        results = [{"id": mid, "score": 1.0 - mid / 10} for mid in range(10)]
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = None
+            line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], {0})
+
+        ctx = Ctx()
+        assert balance_state(1.0, None, ctx.line_ranking).checkable
+        maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, ctx)
+        assert ctx.line_ranking is None
+        assert not balance_state(1.0, None, ctx.line_ranking).checkable
 
     def test_example_sort_on_a_tiled_dataset_ranks_by_the_crops_tiles(self, tiled, monkeypatch):
         snap = tiled(6)

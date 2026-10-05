@@ -246,6 +246,12 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(checkBtn()).toBeNull();
       expect(stateText()).not.toBeNull();
     });
+
+    it.each(BALANCE_STATES)('is absent on a line a check cannot walk, a structural detector\'s (%s, #4489)', async (status) => {
+      await show(1, lineBalance(status, { checkable: false }), 32);
+      expect(checkBtn()).toBeNull();
+      expect(stateText()).not.toBeNull();
+    });
   });
 
   describe('the "what does this mean" hint', () => {
