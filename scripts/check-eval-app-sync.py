@@ -122,7 +122,10 @@ MIRRORS: list[Mirror] = [
             "add, remove or reorder a phase, or change what gates one, port the same change. "
             "The 'more' walk (#4282) keeps history the counts cannot: its run of misses, read "
             "off which vote count rose. The app keeps it in checkPhaseTransition; the harness "
-            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done."
+            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done. A document "
+            "dataset (stop_rule 'dry_run', #4488) takes its own branch after the opening - the "
+            "walk with no Good target, its dry run as done - ported as next_phase(dry_run_stop=, "
+            "ran_dry=) and AutopilotFlow(dry_run_stop=)."
         ),
     ),
     Mirror(
@@ -156,7 +159,11 @@ MIRRORS: list[Mirror] = [
             "onAutopilotStop applies the mapping when the user stops Autopilot; the live "
             "mapping is the phase subscription in the same component, which additionally "
             "kicks off the sort request. This anchor is the one place the whole table is "
-            "written out in one block, so it is what the digest watches."
+            "written out in one block, so it is what the digest watches. On a document dataset "
+            "(stop_rule 'dry_run', #4488) 'more' and 'done' draw off learned+top; the harness "
+            "does not model that row, because vtscore.eval simulates photo datasets. Documents are "
+            "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
+            "the retrained structural ranking at every step."
         ),
     ),
     Mirror(

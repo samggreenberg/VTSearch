@@ -640,6 +640,56 @@ describe('AutopilotPanelComponent', () => {
     });
   });
 
+  describe('on a document dataset (#4488)', () => {
+    const off = { status: 'off' };
+    const DOCUMENT = {
+      good_count: 0,
+      bad_count: 0,
+      total_count: 0,
+      smart: off,
+      stable: off,
+      span: off,
+      stop_rule: 'dry_run',
+      dry_run: { status: 'red', run: 0, target: 16 },
+    };
+
+    async function enterWalk(): Promise<void> {
+      fixture.componentRef.setInput('votesLoaded', true);
+      fixture.componentRef.setInput('labelingStatus', DOCUMENT);
+      fixture.componentRef.setInput('goodVotes', goods(3));
+      fixture.componentRef.setInput('badVotes', bads(4));
+      await settleZoneless(fixture);
+      expect(component.state.phase).toBe('more');
+    }
+
+    it('has no Boundary or Diversity step', async () => {
+      await enterWalk();
+      expect(component.steps.map((st) => st.phase)).toEqual(['good', 'bad', 'more', 'done']);
+    });
+
+    it('lights the walk by its run of misses', async () => {
+      await enterWalk();
+      for (let n = 5; n <= 12; n++) {
+        fixture.componentRef.setInput('badVotes', bads(n));
+        await settleZoneless(fixture);
+      }
+      const more = component.steps.find((st) => st.phase === 'more');
+      expect(more?.detail).toBe('8/16 in a row not good');
+      expect(more?.light?.color).toBe('yellow');
+    });
+
+    it('announces Detector Trained when the walk runs dry', async () => {
+      await enterWalk();
+      for (let n = 5; n <= 20; n++) {
+        fixture.componentRef.setInput('badVotes', bads(n));
+        await settleZoneless(fixture);
+      }
+      expect(component.state.phase).toBe('done');
+      expect(component.completionPrompt()?.heading).toBe('Detector Trained');
+      expect(component.completionPrompt()?.detail).toContain('16 of the detector\'s best matches in a row were not good');
+    });
+  });
+
   it('does not exhaust while the dataset size is unknown (datasetSize 0)', async () => {
     fixture.componentRef.setInput('datasetSize', 0);
     fixture.componentRef.setInput('goodVotes', new Set([1]));

@@ -10,6 +10,14 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **The document stop** (issue #4488). `labeling_progress.dry_run_status`
+  counts the standing non-Good votes cast since the last Good (green at
+  `DRY_RUN_TARGET = 16`), and `document_labeling_status` is a tiled
+  dataset's labeling status: `stop_rule: "dry_run"`, the readout, and Smart /
+  Stable / Span `off`. The Autopilot port follows the app:
+  `next_phase(dry_run_stop=, ran_dry=)` and `AutopilotFlow(dry_run_stop=)` walk
+  with no Good target, in retrain mode too, and running dry is `done`.
+
 - **The labels line's spread floor follows the corpus** (issue #4492).
   `class_score_model` keeps the raw pooled spread (`ClassScoreModel.sigma_raw`,
   `floored()`); once a corpus is known, the class model and the corpus's

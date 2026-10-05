@@ -515,13 +515,21 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
         // fired: the same vote load usually moves the phase as well, and that
         // branch below sorts on its own.
         if (!prev.retrainMode && curr.retrainMode) this.scheduleSeedRanking('retrain');
+        // A document dataset's stop rule arrives with its first labeling status,
+        // which can land after the walk began on the seed sort (#4488).
+        if (!prev.dryRunStop && curr.dryRunStop && prev.phase === 'more' && curr.phase === 'more') {
+          this.sortState.setSortMode('learned');
+          this.sortRunner.onLearnedSort(false);
+        }
         if (prev.phase === curr.phase) return;
         this.autopilotExhausted.set(curr.phase === 'exhausted');
         // 'more' (#4282) resumes the Good phase's draw: the top of the seed sort
-        // the Bad phase left on screen.
+        // the Bad phase left on screen. On a document dataset it walks the
+        // detector's own ranking instead, which is where its dry run was measured
+        // as the stop (#4488).
         if (curr.phase === 'good' || curr.phase === 'more') {
           this.sortState.setSelectMode('top');
-          if (curr.retrainMode) {
+          if (curr.retrainMode || (curr.phase === 'more' && curr.dryRunStop)) {
             this.sortState.setSortMode('learned');
             this.sortRunner.onLearnedSort(false);
           }
@@ -1275,7 +1283,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // Retrain mode: the subscription already set sortMode='learned' and
     // kicked off learned sort for whatever phase we're in.  Nothing more to do.
-    if (state.retrainMode) {
+    // Nor for a document dataset's walk, which draws off the learned sort too
+    // (#4488).
+    if (state.retrainMode || (phase === 'more' && state.dryRunStop)) {
       return;
     }
 
@@ -1320,8 +1330,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * replace the learned ranking (#4318).
    */
   private get autopilotSeedWanted(): boolean {
-    const { phase, retrainMode } = this.autopilotStateService.state;
-    return !retrainMode && (phase === 'good' || phase === 'bad' || phase === 'more');
+    const { phase, retrainMode, dryRunStop } = this.autopilotStateService.state;
+    return !retrainMode && (phase === 'good' || phase === 'bad' || (phase === 'more' && !dryRunStop));
   }
 
   private triggerAutopilotTextSort(autoSelect = true): void {
@@ -1456,7 +1466,12 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       : (isMediaBased ? 'load' : 'text');
 
     // Map autopilot phase to the same Sort + Select that autopilot was using.
-    if (phase === 'good' || phase === 'more') {
+    // A document dataset's walk and its Done draw off the learned sort's top
+    // (#4488).
+    if (state.dryRunStop && (phase === 'more' || phase === 'done')) {
+      this.sortState.setSortMode('learned');
+      this.sortState.setSelectMode('top');
+    } else if (phase === 'good' || phase === 'more') {
       this.sortState.setSortMode(earlySortMode);
       this.sortState.setSelectMode('top');
     } else if (phase === 'bad') {

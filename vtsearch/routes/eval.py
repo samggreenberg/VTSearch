@@ -17,6 +17,7 @@ from vtscore.detectors.labeling_progress import (
     calculate_error_cost_over_time,
     calculate_prediction_stability_over_time,
     compute_labeling_status,
+    document_labeling_status,
     is_status_cache_fresh,
     stale_labeling_status,
 )
@@ -94,6 +95,32 @@ def labeling_progress():
         abort(500, message="Labeling progress computation failed")
 
 
+#: ``dataset_id -> (media count, tiled?)`` for :func:`_dataset_is_tiled`.
+_TILED_MEMO: dict[str, tuple[int, bool]] = {}
+
+
+def _dataset_is_tiled() -> bool:
+    """Whether the active dataset is a document (tiled structural) one, as the re-rank gates it.
+
+    The answer is :func:`~vtscore.training.structural_stage1.snapshot_has_tiles`,
+    the gate that hands a dataset's ranking to tiled Stage 1.  Scanning a large
+    photo dataset for it takes ~10 ms, so it is kept per dataset and media count
+    instead of re-read on every 2 s poll; the count catches a dataset still loading.
+    """
+    from vtscore.state.core import _state_lock, get_active_context
+    from vtscore.training.structural_stage1 import snapshot_has_tiles
+
+    ds_ctx = get_active_context()
+    with _state_lock:
+        count = len(ds_ctx.medias)
+    memo = _TILED_MEMO.get(ds_ctx.dataset_id)
+    if memo is not None and memo[0] == count:
+        return memo[1]
+    tiled = snapshot_has_tiles(snapshot_medias())
+    _TILED_MEMO[ds_ctx.dataset_id] = (count, tiled)
+    return tiled
+
+
 def _schedule_status_refresh(span_info) -> None:
     """Kick (or coalesce into) a single background labeling-status cache build.
 
@@ -150,14 +177,24 @@ def labeling_status_indicator():
     retrain one-or-more MLPs and score every unlabeled media, so we return the
     last-computed snapshot immediately with ``stale = true`` and defer the
     advancement to a background worker (issue #2397).
+
+    ``stop_rule`` names what ends labeling.  ``"lights"`` is Smart, Stable and
+    Span.  A document (tiled structural) dataset answers ``"dry_run"`` instead,
+    with the ``dry_run`` readout and the three lights ``off`` (#4488).
     """
     try:
+        if _dataset_is_tiled():
+            status = document_labeling_status(label_history, good_votes, bad_votes)
+            status["stale"] = False
+            return status
+
         tree = get_coverage_atlas()
         span = tree.span_info() if tree is not None else None
 
         if is_status_cache_fresh(label_history):
             status = compute_labeling_status(snapshot_medias(), label_history, good_votes, bad_votes, span_info=span)
             status["stale"] = False
+            status["stop_rule"] = "lights"
             return status
 
         # Cache is behind: serve the last snapshot now, advance the cache in
@@ -172,6 +209,7 @@ def labeling_status_indicator():
         # the in-flight recompute instead of the previous snapshot.
         status = stale_labeling_status(good_votes, bad_votes, span)
         status["stale"] = True
+        status["stop_rule"] = "lights"
         _schedule_status_refresh(span)
         return status
     except _CONTEXT_ERRORS:

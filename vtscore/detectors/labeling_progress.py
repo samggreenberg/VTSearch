@@ -1393,6 +1393,78 @@ def stale_labeling_status(
     return status
 
 
+#: The document stop (#4488): this many votes in a row without a Good.  It is
+#: Autopilot's walk dry run (``moreDryRun``, #4282), measured as the stop for
+#: document detectors on FullMarks across size (5k-200k pages) and prevalence.
+DRY_RUN_TARGET = 16
+
+#: What a document detector's response says in place of Smart / Stable / Span.
+#: On a tiled dataset those lights would score the page-VLAD head against the
+#: structural line, a model and a scale the user's ranking does not use.
+_LIGHT_OFF = {"status": "off", "reason": "Document detectors stop on the dry run, not this indicator."}
+
+
+def dry_run_status(
+    label_history: list[tuple[int, str, float]],
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+    target: int = DRY_RUN_TARGET,
+) -> dict[str, Any]:
+    """The document stop's readout: standing non-Good votes cast since the last Good.
+
+    Walks *label_history* in vote order and counts only votes that still stand:
+    each media's last entry, and only while it matches the media's current vote,
+    so a vote later flipped or removed neither extends nor breaks the run.
+    Green at *target* once the labelset holds a Good, yellow from halfway.
+    ``run`` is the count; ``target`` the green bar.
+    """
+    last = {media_id: i for i, (media_id, _label, _t) in enumerate(label_history)}
+    run = 0
+    goods = 0
+    for i, (media_id, label, _t) in enumerate(label_history):
+        if last[media_id] != i:
+            continue
+        if label == "good" and media_id in current_good_votes:
+            run = 0
+            goods += 1
+        elif label == "bad" and media_id in current_bad_votes:
+            run += 1
+    if goods == 0:
+        status, reason = "red", "No Good yet."
+    elif run >= target:
+        status, reason = "green", f"{run} votes in a row without a Good: the top of the ranking has run dry."
+    elif 2 * run >= target:
+        status, reason = "yellow", f"{run} of {target} votes in a row without a Good."
+    else:
+        status, reason = "red", f"{run} of {target} votes in a row without a Good."
+    return {"status": status, "reason": reason, "run": run, "target": target}
+
+
+def document_labeling_status(
+    label_history: list[tuple[int, str, float]],
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+) -> dict[str, Any]:
+    """The labeling status of a document (tiled structural) detector (#4488).
+
+    Its stop is the dry run (:func:`dry_run_status`), computed from the vote
+    order alone, so nothing here trains or scores a model and the response is
+    never stale.  Smart, Stable and Span are reported ``off``.
+    """
+    good = len(current_good_votes)
+    bad = len(current_bad_votes)
+    return {
+        "good_count": good,
+        "bad_count": bad,
+        "total_count": good + bad,
+        "stop_rule": "dry_run",
+        "dry_run": dry_run_status(label_history, current_good_votes, current_bad_votes),
+        "smart": dict(_LIGHT_OFF),
+        "stable": dict(_LIGHT_OFF),
+        "span": dict(_LIGHT_OFF),
+    }
+
+
 def calculate_diversity_level_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
