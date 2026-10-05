@@ -65,7 +65,8 @@ slides:
   # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
   inclusion-rank
-  inclusion-cost
+  balance-fbeta
+  labels-line
   floor-ask
   floor-check
   inclusion-acq
