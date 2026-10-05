@@ -208,6 +208,7 @@ These are read by the installer, not the running app.
 | `TRANSFORMERS_NO_ADVISORY_WARNINGS` | `1` (set by app) | Suppresses advisory warnings from `transformers` |
 | `OMP_NUM_THREADS` | set by app | OpenMP thread count; overwritten at startup with the resolved `VTSEARCH_TORCH_THREADS` — set that instead |
 | `MKL_NUM_THREADS` | set by app | Intel MKL thread count; same as above |
+| `OPENBLAS_CORETYPE` | `Haswell` on x86-64 (set by app unless already set) | One set of OpenBLAS kernels on every node, so a document ranking does not depend on the CPU the server runs on (#4481): AVX-512 and AVX2 kernels round float32 differently, which moved the VLAD and tile vectors. |
 
 ### Docker / GPU
 
