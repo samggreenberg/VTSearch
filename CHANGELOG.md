@@ -17,6 +17,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A document ranking no longer depends on the machine the server runs on** (issue #4481).
+  The same detector used to order near-equal pages differently on the GRID's AMD and Intel
+  nodes, because their math libraries rounded the page vectors differently. The server now
+  uses one set of OpenBLAS kernels on every x86 machine (`OPENBLAS_CORETYPE`, see
+  DEPLOYMENT.md), and orders Stage 1 on an exactly recomputed score. Which pages are returned
+  did not change; only the order among near-ties did.
+
 - **Autopilot checks the line when your labels still overlap** (issue #4496).
   When the detector scores your Good and Bad answers close together (the
   labels line's separation below 1.5, from 10 votes on), Autopilot opens the

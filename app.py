@@ -1,4 +1,5 @@
 import os
+import platform
 import warnings
 
 # Native math libraries read these env vars during *their* import, which happens
@@ -23,6 +24,16 @@ os.environ["MKL_NUM_THREADS"] = _torch_threads
 # therefore ``torch.set_num_threads`` -- agrees with the OMP/MKL vars above.
 # Without this the two disagree and torch silently wins with 1.
 os.environ[_THREADS_ENV] = _torch_threads
+
+# One set of OpenBLAS kernels on every x86 node (#4481). OpenBLAS picks kernels by
+# CPU: AVX-512 ("SkylakeX") on the GRID's AMD EPYC nodes, AVX2 ("Haswell") on its
+# Xeons. Their float32 rounding differs in the last bits, which moved the VLAD
+# and tile vectors a document ranking is built from, so the same detector ranked
+# documents differently depending on the node the app landed on. Haswell kernels
+# run on both, and were no slower for tiling on the EPYC nodes. Set before numpy
+# loads OpenBLAS; an explicit value wins.
+if platform.machine() in ("x86_64", "AMD64"):
+    os.environ.setdefault("OPENBLAS_CORETYPE", "Haswell")
 
 # Configure structured logging: JSON lines by default with per-record
 # request_id / dataset_id / detector_id / user fields. Override via:

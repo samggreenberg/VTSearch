@@ -811,7 +811,7 @@ class TestGPUMemoryCleanup:
 
 
 class TestTiledStage1GPU:
-    def test_gpu_page_scores_equal_the_cpu_path(self, monkeypatch):
+    def test_gpu_page_max_equals_the_cpu_path(self, monkeypatch):
         from vtscore.training import structural_stage1 as s1
 
         rng = np.random.default_rng(0)
@@ -823,8 +823,13 @@ class TestTiledStage1GPU:
         queries /= np.linalg.norm(queries, axis=1, keepdims=True)
 
         s1._GPU_CACHE.clear()
-        on_gpu = s1._gpu_page_scores(tiles, starts, queries)
+        on_gpu = s1._gpu_page_max(tiles, starts, queries)
         assert on_gpu is not None and s1._GPU_CACHE  # the device copy is kept
+        on_cpu = s1._cpu_page_max(tiles, starts, queries)
+        np.testing.assert_allclose(on_gpu.score, on_cpu.score, atol=1e-5)
+        # #4481: the same best pairs, so the exact scores, and the order, are bit-identical.
+        np.testing.assert_array_equal(on_gpu.tile, on_cpu.tile)
+        np.testing.assert_array_equal(on_gpu.query, on_cpu.query)
+        exact_gpu = s1.exact_page_scores(tiles, queries, on_gpu)
         monkeypatch.setattr(s1, "_cuda", lambda: False)
-        on_cpu = s1._page_scores(tiles, starts, queries)
-        np.testing.assert_allclose(on_gpu, on_cpu, atol=1e-5)
+        np.testing.assert_array_equal(exact_gpu, s1._page_scores(tiles, starts, queries))

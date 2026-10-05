@@ -10,6 +10,13 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Tiled Stage 1 orders on an exact score** (issue #4481). The page scorers return each
+  page's best (query, tile) pair (`PageMax`, `page_max_from_tiles`, `_gpu_page_max`,
+  `_cpu_page_max`), and `tiled_stage1` orders on that pair recomputed in float64
+  (`exact_page_scores`), then snapshot order. `_gpu_page_scores` is gone. With OpenBLAS
+  pinned, V100 and L40S nodes give the same Stage-1 and verified-head order in 24 of 24
+  diagnostic steps (12 of 24 before).
+
 - **A spot check is due when the labels separate weakly** (issue #4496).
   `LabelsLine.separation` is the labels' d' in the spread the line was cut
   with; `weak_check_due(separation, n_votes, votes_at_last_check)` is the rule

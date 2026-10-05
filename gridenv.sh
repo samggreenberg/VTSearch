@@ -37,3 +37,7 @@ export PYTHONPATH="${_VTS_WT}/.shadow:${_VTS_WT}:${PYTHONPATH:-}"
 # otherwise; `preflight.sh` checks the value.
 export VTS_REPO="${VTS_REPO:-$_VTS_WT}"
 export TOKENIZERS_PARALLELISM=false
+# One set of OpenBLAS kernels on every node (#4481): the AMD EPYC nodes otherwise get
+# AVX-512 kernels and the Xeons AVX2, whose float32 rounding differs enough to move
+# document VLAD/tile vectors, and with them closed-loop sessions, between node types.
+export OPENBLAS_CORETYPE="${OPENBLAS_CORETYPE:-Haswell}"
