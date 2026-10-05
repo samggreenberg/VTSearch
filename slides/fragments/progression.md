@@ -33,8 +33,10 @@
      the fix: the mixture still gives its "Good" component about three times
      too much weight. This is open, #4201. **f** — 70/30: −0.004. -->
 
-<!-- **g** — The second cut, today's app: −0.023. It passes the raw average
-     at vote 89 and ends lowest, 0.18. If asked why one in twenty: COCO
-     Better's own pools are 0.44% positive, and there every midpoint cut
-     over-flags about 60 to 1 and the raw average wins by 0.083. The report is
+<!-- **g** — The second cut, the app as of late September: −0.023. It passes
+     the raw average at vote 89 and ends lowest, 0.18. The ladder stops there:
+     the line has since moved to the labels (section 3), and the next slide is
+     how that app does. If asked why one in twenty: COCO Better's own pools are
+     0.44% positive, and there every midpoint cut over-flags about 60 to 1 and
+     the raw average wins by 0.083. The report is
      docs/experiments/2026-09-25-progression-4184. -->

@@ -22,25 +22,27 @@
      one line through a ranking, doing two jobs. -->
 
 <!-- **c** — Section 2 puts the line where the *data* says. Four ideas in
-     order, each one repairing what the last one starved on. -->
+     order, each one repairing what the last one starved on. It ends on the
+     estimator the app still fits to choose its next question. -->
 
-<!-- **d** — Section 3 puts it where the *user* says instead: what the two
-     mistakes cost, the three radios that choose between them, what the line
-     can and cannot claim before anyone checks — and the second job the same
-     fit does. -->
+<!-- **d** — Section 3 is the line the app draws today: F-beta, the three
+     radios that set its β, the line the labels put at its peak, what that
+     line can and cannot claim before anyone checks — and the second job the
+     same fit does. -->
 
 <!-- **e** — Section 4 is the half of asking the threshold does not do: the
      places no vote has been, and the atlas that knows where they are. -->
 
 <!-- **f** — Section 5 is the data the experiments run on: COCO, what it
-     does not give you, and the bench we built out of it. -->
+     does not give you, the bench we built out of it, and how the app does on
+     that bench today. -->
 
 <!-- **g** — Section 6 introduces region voting, then asks whether there is a
      smarter cut rule than the midpoint. -->
 
 <!-- **h** — Section 7 is logos: where a concept ends when the room expects a
-     spec sheet, the document set we built to find them in, and how we find
-     them. -->
+     spec sheet, the document set we built to find them in, how we find them,
+     where the line goes on a page, and how well it all does. -->
 
 <!-- **i** — Section 8 is the tool again, as a how-to: five slides, every
      click numbered, from an empty app to a detector finding books in photos

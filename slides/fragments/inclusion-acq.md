@@ -16,9 +16,9 @@
      threshold decides twice. Everything since has been the first job; this is
      the second. -->
 
-<!-- **a** — The fitted estimator, cutting where the line sits: at the foot
-     of the kept set. **b** — Job one, drawn as a bracket over what comes
-     back. -->
+<!-- **a** — Section 2's fused mixture, which every retrain still fits for
+     this job, cut where the labels put the line: at the foot of the kept set.
+     **b** — Job one, drawn as a bracket over what comes back. -->
 
 <!-- **c** — The turn, and the mechanism is not what people guess. Autopilot's
      hard pick ranks the corpus descending, finds the first position at or below
@@ -28,10 +28,10 @@
      items either side of the cut. -->
 
 <!-- **d** — The second cut: the same fit, re-priced. Read the line back as
-     a price — the Sunk Cost slide's ratio — and price a false alarm sixteen
-     times dearer than that. Say it slowly — dearer false alarms raise the
-     cut, which moves it up the ranking, which returns more positives to vote
-     on. -->
+     a price, the cost of a false alarm against a miss that would cut the
+     mixture there, and price a false alarm sixteen times dearer than that.
+     Say it slowly — dearer false alarms raise the cut, which moves it up the
+     ranking, which returns more positives to vote on. -->
 
 <!-- **e** — And the loop closes: that vote goes back into the labelled set, the
      model retrains, and the threshold that chose the question is re-derived

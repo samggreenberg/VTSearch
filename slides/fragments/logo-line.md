@@ -34,5 +34,6 @@
      line. At ten votes 0.56 becomes 0.79, for 0.01 of ranking AP, which is
      gone by 25. Once a Bad arrives, the ceiling takes over. This ships. -->
 
-<!-- Each curve is the app's own run with that rule in it. Photos keep the
-     plain gate: both rules were measured on documents. -->
+<!-- Each curve is the app's own run with that rule in it, scored at the
+     middle radio; the next slide is the other two. Photos keep the plain gate:
+     both rules were measured on documents. -->

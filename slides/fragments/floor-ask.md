@@ -11,9 +11,9 @@
 <!-- **a** — What the control says, word for word, before anyone checks.
      Under it, the corpus as before, best on the right, and what comes back:
      the **kept** set, the items nobody has voted on above the <span
-     class="cut">line</span>. How many is the vote-anchored mixture's estimate
-     of where F-beta peaks, capped at the top 32 — 128 at the left-hand radio,
-     which wants more back. And the control says so: *unchecked*. -->
+     class="cut">line</span>. How many is wherever the last slide's peak fell
+     on this corpus, 32 here. No cap set that number; the labels did. And the
+     control says so: *unchecked*. -->
 
 <!-- **b** — The obvious move is to read the promise off the votes the session
      already holds. Here they are, at the scores they landed on: a cluster at
@@ -22,7 +22,8 @@
      the model — which makes them a biased sample of its own scores.
      Measured: an estimator that promises a precision from those votes alone
      breaks **83%** of its 50% promises once its reference pool is built
-     consistently. -->
+     consistently. The line is drawn from these votes too, and it is a best
+     guess. A promise is a different claim. -->
 
 <!-- **c** — So *unchecked* means it: how right the kept set is has to be
      measured another way. The app's way is a spot check — a few items drawn

@@ -47,10 +47,10 @@
 
 <!-- **f** — Twenty-nine questions in — twenty-one Good, eight Bad, a few
      minutes, the whole budget this task was ever going to get. Note what it
-     asks *now*: not a shelf and not a stack, but a dog with a chew toy. The
-     easy books are answered, and what is left near the line is the frames
-     the model still cannot place — exactly the line the rest of the talk is
-     about. -->
+     asks *now*: not a shelf and not a stack, but a man in a dinosaur-print
+     suit stepping off a cable car. The easy books are answered, and what is
+     left near the line is the frames the model still cannot place — exactly
+     the line the rest of the talk is about. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
      with the whole pile in a grid, sort controls and a threshold control — a

@@ -37,5 +37,5 @@
      not a screen with them stacked in a panel down one side of it. -->
 
 <!-- The next slide goes back into the tool, once, for the one thing this view
-     cannot show: the top **32** came back and the rest did not. Nobody asked for
-     that split and nothing in the votes specified it. -->
+     cannot show: the top of the ranking came back and the rest did not. Nobody
+     asked for that split, and no vote said where it goes. -->
