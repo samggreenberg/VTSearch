@@ -10,7 +10,7 @@
 
 <!-- build: figs/calib-region-max.build3.png -->
 
-<!-- Patch Work ended on a maximum. This is what that maximum does to the
+<!-- DINO Might ended on a maximum. This is what that maximum does to the
      distribution the line is drawn on, and the idea it suggested. -->
 
 <!-- **a** — Two photographs, closer in, each cut into a grid of regions:

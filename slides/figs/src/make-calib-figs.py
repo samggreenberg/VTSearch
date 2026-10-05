@@ -4512,11 +4512,13 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
             ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
 
 
-# ── patches, and the model that makes them (#4517) ───────────────────────────
+# ── DINOv3, and the patches it makes (#4517, #4533) ─────────────────────────
 
-#: How many build stages the patch figure reveals in: one photograph; the grid
-#: DINOv3 cuts it into; the vectors it makes, one per patch and one for the
-#: whole image; a box vote, and the maximum a photo is scored by.
+#: How many build stages the patch figure reveals in: one photograph, and
+#: DINOv3, which sends what it is given into content space, as SigLIP does; the
+#: grid it cuts the photograph into; a point for every patch, where SigLIP
+#: would have made one for the photo; and a box vote, whose patches are what
+#: it trains on.
 PATCH_STAGES = 4
 #: DINOv3 ViT-B/16 sees a 224-pixel square as a 14 x 14 grid of 16-pixel
 #: patches and gives each a 768-number vector (`embedder_dinov3_patch`), plus
@@ -4531,13 +4533,37 @@ PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0][0]`, defined further down
 PATCH_PHOTO_URL = f"http://images.cocodataset.org/val2017/{PATCH_PHOTO_ID:012d}.jpg"
 #: The book's box in the square crop, as grid cells (first row, first col, last
 #: row, last col), read off the photograph; and the one patch on it the figure
-#: follows into the vector stack.
+#: follows into content space.
 PATCH_BOOK_CELLS = (7, 2, 13, 6)
 PATCH_FOLLOWED = (10, 4)
-#: Layout, in `TEACH_CANVAS` units: the photograph's square, the arrow, and
-#: the vector stack's left edge, row height and cells per row drawn.
+#: Layout, in `TEACH_CANVAS` units: the photograph's square `(x0, y0, side)`,
+#: and content space's cube `(x0, y0, side, depth)`. The cube is
+#: Embed-time Stories' (`make-intro-figs.py`): the same wire, the same 45°
+#: depth at the same share of its side, the same hollow dots, so the room
+#: reads it as the space SigLIP's points went into (#4533).
 PATCH_PHOTO = (0.9, 1.1, 6.9)
-PATCH_STACK_X0, PATCH_ROW_H, PATCH_CELLS = 13.2, 0.42, 20
+PATCH_CUBE = (11.4, 0.85, 5.9, 1.53)
+#: The wire of the cube, and its dots' radius and how much the back of the
+#: cloud shrinks: `make-intro-figs`'s `WIRE` and `FLOW_DEPTH_SHRINK`, with the
+#: radius cut to suit 197 dots rather than 60.
+PATCH_WIRE = "#98a2b0"
+PATCH_DOT_R, PATCH_DOT_SHRINK = 0.1, 0.30
+#: How far in from the cube's faces the cloud stays.
+PATCH_CLOUD_PAD = 0.07
+#: The book's outline in the square crop's pixels: COCO's own segmentation of
+#: it (annotation on image 167159), shifted left by the crop's 62 pixels, and
+#: pinned here so the figure needs only the one photograph, not the corpus.
+PATCH_BOOK_OUTLINE = (
+    (105, 197), (90, 226), (68, 275), (48, 322), (79, 340), (119, 365),
+    (136, 365), (157, 318), (182, 260), (191, 228), (163, 218), (121, 199),
+)  # fmt: skip
+#: Where the book's patches gather in the cube, and how loosely: a patch that
+#: is mostly book moves to this neighbourhood, and every other patch is drawn
+#: at least `PATCH_BOOK_CLEAR` (in cube sides, on the page) from its centre,
+#: so the gathering reads as one.
+PATCH_BOOK_CENTRE = (0.72, 0.70, 0.3)
+PATCH_BOOK_SPREAD = 0.3
+PATCH_BOOK_CLEAR = 0.24
 
 
 @functools.cache
@@ -4561,15 +4587,115 @@ def _patch_photo():
     return image.crop((dx, dy, dx + side, dy + side))
 
 
-def patch_fig() -> None:
-    """What a patch is, and DINOv3, before Extreme Measures takes a maximum over them (#4517).
+@functools.cache
+def _patch_points() -> np.ndarray:
+    """Where each patch lands in the cube, in [0, 1]³, row-major from the top-left patch.
 
-    Region voting runs on a model the deck had not introduced: DINOv3, which
-    describes every 16-pixel patch of an image rather than the image as one
-    thing. One photograph, the grid the model cuts it into, the vector stack it
-    hands back (one row per patch, one for the whole image), and the two things
-    region voting does with that stack: a box vote trains on the patches inside
-    the box, and a photo's score is the best of all its rows.
+    A drawing, not DINOv3, and it says so in two steps. Every patch starts
+    where its own colour and texture put it: the mean and spread of its pixels,
+    reduced to three numbers by principal components and spread evenly across
+    the cube by rank, so the cloud fills the box without piling up at a face.
+    Then every patch that is mostly book (`PATCH_BOOK_OUTLINE`) moves to one
+    neighbourhood, keeping its place within it, because that is the one
+    property of DINOv3's space the slide leans on: patches of the same *thing*
+    land together, however differently they are lit. The cube is a lie of
+    scale either way (Embed-time Stories).
+    """
+    from PIL import Image, ImageDraw
+
+    photo = _patch_photo()
+    pixels = np.asarray(photo.resize((PATCH_GRID * 16,) * 2), dtype=float) / 255.0
+    cells = pixels.reshape(PATCH_GRID, 16, PATCH_GRID, 16, 3).transpose(0, 2, 1, 3, 4)
+    features = np.hstack([cells.mean(axis=(2, 3)), cells.std(axis=(2, 3))]).reshape(PATCH_GRID**2, -1)
+    features = (features - features.mean(axis=0)) / features.std(axis=0)
+    _u, _s, vt = np.linalg.svd(features, full_matrices=False)
+    coords = features @ vt[:3].T
+    spread = coords.argsort(axis=0).argsort(axis=0) / (PATCH_GRID**2 - 1)
+
+    mask = Image.new("L", photo.size, 0)
+    ImageDraw.Draw(mask).polygon(PATCH_BOOK_OUTLINE, fill=255)
+    book = np.asarray(mask.resize((PATCH_GRID, PATCH_GRID), Image.Resampling.BOX), dtype=float).ravel() / 255.0
+    centre = np.array(PATCH_BOOK_CENTRE)
+    gathered = centre + PATCH_BOOK_SPREAD * (spread - 0.5)
+    is_book = book >= 0.5
+    points = np.where(is_book[:, None], gathered, spread)
+    # Mostly not book: pushed out of the book's neighbourhood, so the room sees
+    # a gathering rather than a crowd. Measured where the dots land on the
+    # page, not in the cube: the figure is read in two dimensions, and a dot a
+    # unit behind the gathering still draws on top of it.
+    _x0, _y0, side, depth = PATCH_CUBE
+    lean = depth / side
+
+    def flat(p: np.ndarray) -> np.ndarray:
+        return np.array([p[0] + lean * p[2], p[1] + lean * p[2]])
+
+    # The push is r -> sqrt(r² + clear²) on every such dot, which keeps equal
+    # areas equal: the cloud stays as even as it was, with a hole cut in it,
+    # rather than piling the dots it moves into a ring round the hole.
+    for i in np.flatnonzero(~is_book):
+        offset = flat(points[i]) - flat(centre)
+        distance = float(np.linalg.norm(offset))
+        pushed = float(np.hypot(distance, PATCH_BOOK_CLEAR))
+        points[i, :2] += offset / max(distance, 1e-9) * (pushed - distance)
+    # Back into the cube by rescaling, not clipping: a clip stacks every dot
+    # the push carried past a face into a column along it.
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    return PATCH_CLOUD_PAD + (1 - 2 * PATCH_CLOUD_PAD) * (points - lo) / (hi - lo)
+
+
+def _cube_at(point: np.ndarray) -> tuple[float, float]:
+    """Where a point of the unit cube lands on the page: Embed-time Stories' axonometric."""
+    x0, y0, side, depth = PATCH_CUBE
+    return x0 + point[0] * side + point[2] * depth, y0 + point[1] * side + point[2] * depth
+
+
+def _content_cube(ax: plt.Axes) -> None:
+    """The wire-frame box content space is drawn as, its hidden edges behind the cloud.
+
+    `make-intro-figs._wire_cube`, at this figure's size: the three edges where
+    the hidden faces meet pass behind every dot, the other nine in front.
+    """
+    x0, y0, side, depth = PATCH_CUBE
+    front = [(x0, y0), (x0 + side, y0), (x0 + side, y0 + side), (x0, y0 + side)]
+    back = [(x + depth, y + depth) for x, y in front]
+    bl, br, tr, tl = range(4)
+    hidden = {(bl, br), (bl, tl)}
+    edges = []
+    for a, b in ((bl, br), (br, tr), (tr, tl), (tl, bl)):
+        edges.append((front[a], front[b], False))
+        edges.append((back[a], back[b], (a, b) in hidden))
+    for corner in range(4):
+        edges.append((front[corner], back[corner], corner == bl))
+    for (xa, ya), (xb, yb), behind in edges:
+        ax.plot(
+            [xa, xb],
+            [ya, yb],
+            color=PATCH_WIRE,
+            linewidth=1.4,
+            solid_capstyle="projecting",
+            zorder=2 if behind else 7.5,
+        )
+
+
+def _cube_dot(ax: plt.Axes, point: np.ndarray, fill: str = "white", edge: str = INK, scale: float = 1.0) -> None:
+    """One point in the cube: hollow unless *fill* says otherwise, smaller and further back with depth."""
+    x, y = _cube_at(point)
+    radius = scale * PATCH_DOT_R * (1.0 - PATCH_DOT_SHRINK * point[2])
+    ax.add_patch(Circle((x, y), radius, facecolor=fill, edgecolor=edge, linewidth=1.1, zorder=5 + 2 * (1 - point[2])))
+
+
+def patch_fig() -> None:
+    """DINOv3, and what a patch is, before Extreme Measures takes a maximum over them (#4517, #4533).
+
+    Region voting runs on a model the deck had not introduced: DINOv3. It is
+    introduced in the picture the deck already has for an embedding, the
+    content-space cube of Embed-time Stories, where SigLIP sent each
+    photograph to one point. DINOv3 cuts the photograph into a grid first and
+    sends each patch to its own point, which is the whole difference. (It
+    makes one more for the image as a whole, which the notes mention and the
+    figure leaves out.) Last, what region voting does with those points: a box
+    vote trains on the patches inside the box, and a photo is scored by its
+    best point.
     """
     final = _patch_stage(PATCH_STAGES)
     box = tight_box(final)
@@ -4585,58 +4711,6 @@ def _patch_cell(row: int, col: int) -> tuple[float, float, float]:
     return x0 + col * cell, y0 + side - (row + 1) * cell, cell
 
 
-def _patch_stack(ax: plt.Axes, stage: int) -> None:
-    """The vectors DINOv3 hands back: one row for the whole image, then one per patch."""
-    followed = 1 + PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
-    rows = [("whole image", 0), ("patch 1", 1), ("patch 2", 2), ("patch 3", 3), ("⋮", None)]
-    rows += [(f"patch {followed}", followed), ("⋮", None), (f"patch {PATCH_GRID**2}", PATCH_GRID**2)]
-    rng = np.random.default_rng(11)
-    cell_w = (TEACH_CANVAS[0] - 0.7 - PATCH_STACK_X0) / PATCH_CELLS
-    top = PATCH_PHOTO[1] + PATCH_PHOTO[2] - 0.2
-    for k, (name, index) in enumerate(rows):
-        y = top - (k + 1) * PATCH_ROW_H * 1.45
-        ax.text(
-            PATCH_STACK_X0 - LABEL_GAP * 2, y + PATCH_ROW_H / 2, name, ha="right", va="center", fontsize=15, color=INK
-        )
-        if index is None:
-            continue
-        shades = 0.25 + 0.7 * rng.random(PATCH_CELLS)
-        for c, shade in enumerate(shades):
-            ax.add_patch(
-                Rectangle(
-                    (PATCH_STACK_X0 + c * cell_w, y),
-                    cell_w,
-                    PATCH_ROW_H,
-                    facecolor=str(round(float(shade), 3)),
-                    edgecolor="white",
-                    linewidth=0.6,
-                    zorder=3,
-                )
-            )
-        if index == followed:
-            ax.add_patch(
-                Rectangle(
-                    (PATCH_STACK_X0, y),
-                    PATCH_CELLS * cell_w,
-                    PATCH_ROW_H,
-                    facecolor="none",
-                    edgecolor=INK,
-                    linewidth=3.0,
-                    zorder=4,
-                )
-            )
-    ax.text(
-        PATCH_STACK_X0 + PATCH_CELLS * cell_w,
-        top + LABEL_GAP,
-        f"{PATCH_GRID**2 + 1} vectors, {PATCH_DIM} numbers each",
-        ha="right",
-        va="bottom",
-        fontsize=16,
-        color=INK,
-    )
-    del stage
-
-
 def _patch_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the patch figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
@@ -4645,11 +4719,29 @@ def _patch_stage(stage: int) -> plt.Figure:
     ax.set_ylim(0, TEACH_CANVAS[1])
     ax.set_axis_off()
 
-    # ── stage 1: one photograph ───────────────────────────────────────────────
     x0, y0, side = PATCH_PHOTO
-    ax.imshow(_patch_photo(), extent=(x0, x0 + side, y0, y0 + side), zorder=1, aspect="auto")
+    cube_x0, cube_y0, cube_side, cube_depth = PATCH_CUBE
+    points = _patch_points()
+    r0, c0, r1, c1 = PATCH_BOOK_CELLS
+    boxed = {row * PATCH_GRID + col for row in range(r0, r1 + 1) for col in range(c0, c1 + 1)}
+    followed = PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
 
-    # ── stage 2: the grid the model cuts it into ──────────────────────────────
+    # ── stage 1: one photograph, and DINOv3, into content space ───────────────
+    ax.imshow(_patch_photo(), extent=(x0, x0 + side, y0, y0 + side), zorder=1, aspect="auto")
+    mid = y0 + side / 2
+    arrow_x0 = x0 + side + OBJECT_GAP
+    _labeled_arrow(ax, (arrow_x0, mid), (cube_x0 - OBJECT_GAP, mid), "DINOv3")
+    _content_cube(ax)
+    ax.text(
+        cube_x0 + (cube_side + cube_depth) / 2,
+        cube_y0 - LABEL_GAP,
+        f"{PATCH_DIM}-d",
+        ha="center",
+        va="top",
+        fontsize=17,
+        color=INK,
+    )
+    # ── stage 2: the grid DINOv3 cuts it into ─────────────────────────────────
     if stage >= 2:
         for k in range(1, PATCH_GRID):
             t = k * side / PATCH_GRID
@@ -4665,19 +4757,37 @@ def _patch_stage(stage: int) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 3: what it makes of them — one vector per patch, one for all ────
+    # ── stage 3: a point for every patch ──────────────────────────────────────
     if stage >= 3:
+        for index, point in enumerate(points):
+            voted = stage >= PATCH_STAGES and index in boxed
+            if index == followed:
+                continue
+            _cube_dot(ax, point, fill=GREEN if voted else "white", edge=GREEN if voted else INK)
+        # The one patch the figure follows: outlined on the photograph, and
+        # its point in the cube drawn the same way, ringed, so the eye can pair
+        # the two across the arrow.
         row, col = PATCH_FOLLOWED
         px, py, cell = _patch_cell(row, col)
         ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor="white", linewidth=4.5, zorder=5))
         ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor=INK, linewidth=2.2, zorder=6))
-        mid = y0 + side / 2
-        _labeled_arrow(ax, (x0 + side + 0.35, mid), (x0 + side + 0.35 + arrow_len_for("DINOv3") + 0.4, mid), "DINOv3")
-        _patch_stack(ax, stage)
+        point = points[followed]
+        _cube_dot(ax, point, fill=GREEN if stage >= PATCH_STAGES else "white", edge=INK, scale=1.6)
+        fx, fy = _cube_at(point)
+        ax.add_patch(
+            Rectangle(
+                (fx - 1.9 * PATCH_DOT_R, fy - 1.9 * PATCH_DOT_R),
+                3.8 * PATCH_DOT_R,
+                3.8 * PATCH_DOT_R,
+                facecolor="none",
+                edgecolor=INK,
+                linewidth=2.2,
+                zorder=8,
+            )
+        )
 
-    # ── stage 4: a box vote, and the maximum a photo is scored by ─────────────
+    # ── stage 4: a box vote, and the points it trains on ──────────────────────
     if stage >= PATCH_STAGES:
-        r0, c0, r1, c1 = PATCH_BOOK_CELLS
         bx, by, cell = _patch_cell(r1, c0)
         ax.add_patch(
             Rectangle(
@@ -4702,9 +4812,9 @@ def _patch_stage(stage: int) -> plt.Figure:
             zorder=6,
         )
         ax.text(
-            PATCH_STACK_X0 + PATCH_CELLS * (TEACH_CANVAS[0] - 0.7 - PATCH_STACK_X0) / PATCH_CELLS,
-            y0,
-            "a photo scores the best of its rows",
+            cube_x0 + cube_side + cube_depth,
+            cube_y0 + cube_side + cube_depth + LABEL_GAP,
+            "a photo scores its best point",
             ha="right",
             va="bottom",
             fontsize=17,
@@ -4715,7 +4825,7 @@ def _patch_stage(stage: int) -> plt.Figure:
 
 #: The region grid the max figure opens on: rows and columns. Finer than the
 #: 3 x 4 it was, and over a closer crop, so it reads as the same kind of grid
-#: as Patch Work's 14 x 14 rather than as a different idea (#4533). Over the
+#: as DINO Might's 14 x 14 rather than as a different idea (#4533). Over the
 #: whole frame it would be about 6 x 8: still coarser than DINOv3's, on purpose,
 #: because every cell carries its score.
 REGION_GRID = (4, 5)
