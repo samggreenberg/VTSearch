@@ -20,8 +20,8 @@
      spot check: 0.62, 0.52 and 0.60. The check's 21 to 31 uniform picks add +0.034 to +0.037 at every
      radio. Per pick, a band pick is worth several of Autopilot's. -->
 
-<!-- **b** — Right: the same three sets as precision against recall, and the
-     radios do what they say. 26 kept at precision 0.70 and recall 0.40; 47 at
+<!-- **b** — Right: the same three sets as precision against recall, after
+     the check (the ✓ in each circle), and the radios do what they say. 26 kept at precision 0.70 and recall 0.40; 47 at
      0.57 and 0.54; 80 at 0.42 and 0.68. -->
 
 <!-- Where it does well, at β 1: large objects 0.77, medium 0.48, small 0.28.

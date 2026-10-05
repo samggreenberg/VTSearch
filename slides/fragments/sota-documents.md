@@ -19,9 +19,9 @@
      AP 0.79 from the crop alone, 0.92 at 25 clicks, 0.94 at 50. -->
 
 <!-- **b** — Right: each radio's set as precision against recall, followed
-     through the session, a dot at 0, 10, 25 and 50 clicks. The middle and
-     recall end leave one dot, the crop alone; the precision end's rule trims
-     even that. Each climbs most by 10 and then drifts. At 50: 13 pages at
+     through the session; each circle holds its click count, 0, 10 and 50.
+     The middle and recall end leave one circle, the crop alone; the
+     precision end's rule trims even that. Each climbs most by 10 and then drifts. At 50: 13 pages at
      precision 0.98 and recall 0.79; 14 at 0.93 and 0.87; 25 at 0.72 and
      0.95. The same trade as on photos, higher up. The β 1/4 run is in sample,
      its rule refit on these classes; its cross-validated gain is on the last
