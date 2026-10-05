@@ -77,16 +77,47 @@ def _hash(*parts: object) -> int:
     return int.from_bytes(h[:4], "little")
 
 
-def grid(widths: tuple[float, ...], budgets: tuple[int, ...]) -> list[LineBudgets]:
-    return [LineBudgets(matches_width=w, matches_picks=b, misses_picks=b) for w in widths for b in budgets]
+def walk_tag(b: LineBudgets) -> str:
+    """The walk below the line a grid point ran: its dry-run share, the model's weight, the recall width target."""
+    return f"d{b.dry_run_share:g}/w{b.model_weight:g}/mw{b.misses_width:g}"
 
 
-def _default_point(b: LineBudgets) -> bool:
-    return (
-        b.matches_width == DEFAULT_BUDGETS.matches_width
-        and b.matches_picks == DEFAULT_BUDGETS.matches_picks
-        and b.misses_picks == DEFAULT_BUDGETS.misses_picks
-    )
+DEFAULT_WALK = walk_tag(DEFAULT_BUDGETS)
+
+#: Variants of the walk below the line, priced at the default width and budget
+#: (``dry_run_share:model_weight:misses_width``): the plan's walk; no dry-run
+#: stop; no dry-run stop and no width stop (the walk runs to its budget); the
+#: model's prior at one pick's weight; and both relaxations with that weight.
+MISSES_VARIANTS = "0.05:5:0.25,0:5:0.25,0:5:0.001,0.05:1:0.25,0:1:0.001"
+
+
+def parse_variants(spec: str) -> list[tuple[float, float, float]]:
+    out = []
+    for item in spec.split(","):
+        if not item.strip():
+            continue
+        d, w, mw = item.split(":")
+        out.append((float(d), float(w), float(mw)))
+    return out
+
+
+def grid(
+    widths: tuple[float, ...], budgets: tuple[int, ...], variants: list[tuple[float, float, float]] | None = None
+) -> list[LineBudgets]:
+    """The width x budget grid at the plan's walk, plus each other walk variant at the plan's width and budget."""
+    points = [LineBudgets(matches_width=w, matches_picks=b, misses_picks=b) for w in widths for b in budgets]
+    for d, w, mw in variants or []:
+        b = LineBudgets(
+            matches_width=DEFAULT_BUDGETS.matches_width,
+            matches_picks=DEFAULT_BUDGETS.matches_picks,
+            misses_picks=DEFAULT_BUDGETS.misses_picks,
+            dry_run_share=d,
+            model_weight=w,
+            misses_width=mw,
+        )
+        if walk_tag(b) != DEFAULT_WALK:
+            points.append(b)
+    return points
 
 
 def thin_mask(labels: np.ndarray, prevalence: float, rng: np.random.Generator) -> np.ndarray:
@@ -140,7 +171,7 @@ def _same(a, b) -> bool:
 
 def cell_rows(job: tuple) -> tuple[list[dict], dict]:
     """One cell's replay: its grid rows, and the harness check (the in-run row against the replay)."""
-    world, npz_path, linetest_path, widths, budgets, test_seeds, thin = job
+    world, npz_path, linetest_path, widths, budgets, test_seeds, thin, variants = job
     harness = _harness_row(linetest_path)
     z = np.load(npz_path)
     snap = _snapshot(z)
@@ -177,16 +208,25 @@ def cell_rows(job: tuple) -> tuple[list[dict], dict]:
         "thinned_to": float("nan") if thin is None else thin,
     }
     rows: list[dict] = []
-    for b in grid(widths, budgets):
+    for b in grid(widths, budgets, variants):
         for s in range(test_seeds):
             row = row_from_snapshot(snap, budgets=b, seed=_hash(SEED_BASE, seed, cat, s), keep=keep)
-            rows.append({**ident, "test_seed_index": s, "width": b.matches_width, "budget": b.matches_picks, **row})
+            rows.append(
+                {
+                    **ident,
+                    "test_seed_index": s,
+                    "width": b.matches_width,
+                    "budget": b.matches_picks,
+                    "walk": walk_tag(b),
+                    **row,
+                }
+            )
     return rows, check
 
 
 def doc_rows(job: tuple) -> list[dict]:
     """One document frame's replay at each beta: the structural ranking of the test half, no model."""
-    world, frame_path, betas, widths, budgets, test_seeds = job
+    world, frame_path, betas, widths, budgets, test_seeds, variants = job
     z = np.load(frame_path)
     if "order" not in z.files or "line" not in z.files:
         return []
@@ -204,7 +244,7 @@ def doc_rows(job: tuple) -> list[dict]:
     cid, v = name.rsplit("__v", 1)
     rows: list[dict] = []
     for beta in betas:
-        for b in grid(widths, budgets):
+        for b in grid(widths, budgets, variants):
             for s in range(test_seeds):
                 out = simulate_line_test(
                     truth, line_count, beta, posteriors=None, budgets=b, seed=_hash(SEED_BASE, cid, beta, s)
@@ -219,6 +259,7 @@ def doc_rows(job: tuple) -> list[dict]:
                         "test_seed_index": s,
                         "width": b.matches_width,
                         "budget": b.matches_picks,
+                        "walk": walk_tag(b),
                         "t": int(v),
                         "beta": float(beta),
                         "line_source": "structural",
@@ -244,8 +285,8 @@ def cluster_se(x: pd.Series, cells: pd.Series) -> float:
 
 
 def summarise(rows: pd.DataFrame) -> pd.DataFrame:
-    """Per world x beta x width x budget (x click for documents): cost, stops, coverage, widths, errors, verdicts."""
-    keys = ["world", "beta", "width", "budget"]
+    """Per world x beta x width x budget x walk: cost, stops, coverage, widths, errors, verdicts."""
+    keys = ["world", "beta", "width", "budget", "walk"]
     out: list[dict] = []
     for key, g in rows.groupby(keys, sort=True):
         done = g[g["phase"] == PHASE_DONE]
@@ -308,7 +349,8 @@ def pick(summary: pd.DataFrame, bar: float = COVERAGE_BAR) -> pd.DataFrame:
     for the user).  A world where no point is eligible names the best coverage.
     """
     out: list[dict] = []
-    for (world, beta), g in summary.groupby(["world", "beta"], sort=True):
+    plan = summary[summary["walk"] == DEFAULT_WALK]
+    for (world, beta), g in plan.groupby(["world", "beta"], sort=True):
         default = g[(g["width"] == DEFAULT_BUDGETS.matches_width) & (g["budget"] == DEFAULT_BUDGETS.matches_picks)]
         ok = g[g["precision_cov"] >= bar].sort_values(["picks_mean", "width"], ascending=[True, False])
         chosen = ok.iloc[0] if len(ok) else g.sort_values("precision_cov", ascending=False).iloc[0]
@@ -351,16 +393,29 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--widths", default=",".join(str(w) for w in WIDTHS))
     ap.add_argument("--budgets", default=",".join(str(b) for b in BUDGETS))
     ap.add_argument("--test-seeds", type=int, default=4, help="Test seeds per session and grid point")
+    ap.add_argument(
+        "--misses-variants",
+        default=MISSES_VARIANTS,
+        help="walk variants below the line at the plan's width and budget: dry_run_share:model_weight:misses_width,...",
+    )
     ap.add_argument("--limit", type=int, default=0, help="cells per world (0 = all); for a smoke run")
     args = ap.parse_args(argv)
     widths = tuple(float(w) for w in args.widths.split(","))
     budgets = tuple(int(b) for b in args.budgets.split(","))
+    variants = parse_variants(args.misses_variants)
     thin = {kv.split("=", 1)[0]: float(kv.split("=", 1)[1]) for kv in args.thin}
     args.out.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
     jobs: list[tuple] = []
-    prov: dict = {"inputs": {}, "widths": widths, "budgets": budgets, "test_seeds": args.test_seeds, "thin": thin}
+    prov: dict = {
+        "inputs": {},
+        "widths": widths,
+        "budgets": budgets,
+        "walk_variants": variants,
+        "test_seeds": args.test_seeds,
+        "thin": thin,
+    }
     for spec in args.world:
         label, d = spec.split("=", 1)
         cells = Path(d) / "cells"
@@ -381,6 +436,7 @@ def main(argv: list[str] | None = None) -> int:
                         budgets,
                         args.test_seeds,
                         thin.get(label),
+                        variants,
                     ),
                 )
             )
@@ -393,7 +449,18 @@ def main(argv: list[str] | None = None) -> int:
         prov["inputs"][label] = {"dir": str(d), "frames": len(frames), "sha": sha_dir(frames), "betas": betas}
         for p in frames:
             jobs.append(
-                ("doc", (label, str(p), tuple(float(b) for b in betas.split(",")), widths, budgets, args.test_seeds))
+                (
+                    "doc",
+                    (
+                        label,
+                        str(p),
+                        tuple(float(b) for b in betas.split(",")),
+                        widths,
+                        budgets,
+                        args.test_seeds,
+                        variants,
+                    ),
+                )
             )
 
     rows: list[dict] = []

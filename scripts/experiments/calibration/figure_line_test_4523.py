@@ -229,6 +229,12 @@ def main(argv: list[str] | None = None) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     summary = pd.read_csv(args.analysis / "summary.csv")
     rows = pd.read_csv(args.analysis / "rows.csv.gz")
+    # The width x budget grid at the plan's walk below the line; the walk variants are the report's table.
+    if "walk" in summary.columns:
+        default_walk = summary.loc[summary["width"].eq(DEFAULT_WIDTH) & summary["budget"].eq(DEFAULT_BUDGET), "walk"]
+        plan = sorted(default_walk.unique(), key=lambda w: (not str(w).startswith("d0.05/w5/"), str(w)))[0]
+        summary = summary[summary["walk"] == plan]
+        rows = rows[rows["walk"] == plan]
     coverage_vs_picks(summary, args.out)
     picks_by_world(rows, args.out)
     recall_estimate(rows, args.out)

@@ -41,6 +41,7 @@ def _rows(world: str, beta: float, width: float, budget: int, held: list[int], p
                 "beta": beta,
                 "width": width,
                 "budget": budget,
+                "walk": a.DEFAULT_WALK,
                 "category": f"c{i}",
                 "seed": 0,
                 "phase": "done",
@@ -148,16 +149,31 @@ def main() -> int:
                 (20, 40),
                 2,
                 None,
+                a.parse_variants("0.05:5:0.25,0:5:0.001"),
             )
         )
-        check(len(rows) == 2 * 2 * 2, "cell_rows: one row per grid point x Test seed")
+        check(len(rows) == (2 * 2 + 1) * 2, "cell_rows: one row per grid point (plus each other walk) x Test seed")
+        check(
+            sum(1 for r in rows if r["walk"] != a.DEFAULT_WALK) == 2
+            and all(r["width"] == 0.2 and r["budget"] == 40 for r in rows if r["walk"] != a.DEFAULT_WALK),
+            "cell_rows: a walk variant runs at the plan's width and budget",
+        )
         check(chk["replayed"] and chk["same"], f"cell_rows: the harness row replays identically ({chk['diff']})")
         check(
             all(r["category"] == "cat@small" and r["seed"] == 3 and r["band"] == "small" for r in rows),
             "cell_rows: identity from the harness row",
         )
         thinned, _ = a.cell_rows(
-            ("w", str(cells / "task_0000__testscores.npz"), cells / "task_0000__linetest.csv", (0.2,), (40,), 1, 0.2)
+            (
+                "w",
+                str(cells / "task_0000__testscores.npz"),
+                cells / "task_0000__linetest.csv",
+                (0.2,),
+                (40,),
+                1,
+                0.2,
+                [],
+            )
         )
         check(
             thinned[0]["n_test"] == 150 and thinned[0]["n_test_pos"] == 30,
