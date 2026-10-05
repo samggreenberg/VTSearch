@@ -1030,40 +1030,62 @@ def _occluded_by_pillar(u: float, v: float, h: float) -> bool:
     )
 
 
-def _occluded_by_dome(u: float, v: float) -> bool:
-    """Whether the dome stands between this floor item and the eye.
+def _occluded_by_dome(u: float, v: float, h: float = 0.0) -> bool:
+    """Whether the dome stands between this point (a floor item, or a rim of one) and the eye.
 
     Same walk as `_occluded_by_pillar`, against the half-ellipsoid instead of
     the cylinder — so an item inside the footprint is behind the near surface,
     an item just beyond it may be behind both, and one in front of it is behind
-    neither. No height window is needed: the dome closes, so leaving through the
-    top is leaving through the dome.
+    neither. The walk only climbs, so the one height check is that it leaves
+    the solid above the floor: a rim under the floor (the floor is glass too,
+    and a sphere's lower half shows through it) can cross the full ellipsoid's
+    mirrored lower half, which is not there.
     """
     toward = np.array([PROJ_V / PROJ_U, -1.0, PROJ_VY])
-    du, dv = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV
+    du, dv, dh = (u - CURVE_U) / CURVE_RU, (v - CURVE_V) / CURVE_RV, h / DOME_H
     au, av, ah = toward[0] / CURVE_RU, toward[1] / CURVE_RV, toward[2] / DOME_H
     a = au * au + av * av + ah * ah
-    b = 2 * (du * au + dv * av)
-    disc = b * b - 4 * a * (du * du + dv * dv - 1.0)
-    return disc >= 0 and (-b + math.sqrt(disc)) / (2 * a) > 1e-9
+    b = 2 * (du * au + dv * av + dh * ah)
+    disc = b * b - 4 * a * (du * du + dv * dv + dh * dh - 1.0)
+    if disc < 0:
+        return False
+    leaves = (-b + math.sqrt(disc)) / (2 * a)
+    return leaves > max(1e-9, -h / toward[2])
+
+
+#: The directions round a sphere's page outline its rims are walked from, every
+#: 45°. The lower half counts too: it is under the floor, and the floor is
+#: glass, so that half shows through it and can stand behind a solid as well.
+RIM_ANGLES = tuple(range(0, 360, 45))
 
 
 def _partly_behind(occluded, u: float, v: float) -> bool:
     """Whether any of this floor item stands behind the solid, not just its centre.
 
-    `occluded` walks one ray, from the item's centre, and a sphere is wider than
-    a ray: one whose centre sits just outside the solid's silhouette can still
-    overhang its outline, and if it stands *behind* the solid that overhang is
-    behind the glass. Tested on the centre alone, those spheres were painted in
-    front and sat on top of the pillar's edge. So the walk is repeated from the
-    sphere's two rims either side on the page — a step along `u` is purely
-    sideways in this projection, and at the same depth — and any hit sends the
-    whole item under the glass, where only the part the pillar covers is tinted.
-    A sphere in *front* of the pillar is unaffected: no ray from it toward the
+    `occluded` walks one ray, from a point toward the eye, and a sphere is
+    wider than a ray: one whose centre sits just outside the solid's silhouette
+    can still overhang its outline, and if it stands *behind* the solid that
+    overhang is behind the glass. Tested on the centre alone, those spheres were
+    painted in front and sat on top of the solid's edge. So the walk is repeated
+    from points round the sphere's page outline (`RIM_ANGLES`), each at the
+    centre's depth: a step along `u` is purely sideways in this projection, and
+    a step in height is purely upward. Testing only the two side rims missed a
+    sphere whose lower edge overhung the dome's outline (#4517). Any hit sends the
+    whole item under the glass, where only the part the solid covers is tinted.
+    A sphere in *front* of the solid is unaffected: no ray from it toward the
     eye meets the solid, rim or centre.
     """
-    step = ITEM_R * 1.02 / (PROJ_SCALE * PROJ_U)
-    return any(occluded(u + du, v) for du in (0.0, -step, step))
+    if occluded(u, v, 0.0):
+        return True
+    radius = ITEM_R * 1.02
+    return any(
+        occluded(
+            u + radius * math.cos(math.radians(angle)) / (PROJ_SCALE * PROJ_U),
+            v,
+            radius * math.sin(math.radians(angle)) / PROJ_SCALE,
+        )
+        for angle in RIM_ANGLES
+    )
 
 
 def _painted_back_to_front(points: np.ndarray, base_z: float) -> list[tuple[int, float]]:
@@ -1202,9 +1224,7 @@ def _depth_stage(stage: int) -> plt.Figure:
     base = _footprint(angles, 0.0)
     floor = _spaced(N_ITEMS, *ITEM_LIMITS, ITEM_GAP)
     if stage == 4:
-        behind = {
-            i for i, (u, v) in enumerate(floor) if _partly_behind(lambda a, b: _occluded_by_pillar(a, b, 0.0), u, v)
-        }
+        behind = {i for i, (u, v) in enumerate(floor) if _partly_behind(_occluded_by_pillar, u, v)}
     elif stage == 5:
         behind = {i for i, (u, v) in enumerate(floor) if _partly_behind(_occluded_by_dome, u, v)}
     else:
