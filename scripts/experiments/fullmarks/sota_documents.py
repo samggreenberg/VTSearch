@@ -516,8 +516,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="#4488: write stop_log.jsonl - per click the line and the unlabelled pages above it",
     )
+    ap.add_argument("--top-k", type=int, default=0, help="#4493: the shortlist Stage 2 verifies (TILED_TOP_K)")
+    ap.add_argument(
+        "--k-policy",
+        default="",
+        choices=["", "fixed", "adaptive", "cap"],
+        help="#4493 / #4391: how the shortlist is sized (structural_stage1.K_POLICY)",
+    )
+    ap.add_argument("--k-cap", type=int, default=0, help="#4493: the most pages 'adaptive' / 'cap' verify")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args(argv)
+    if args.top_k:
+        s1.TILED_TOP_K = args.top_k
+    if args.k_policy:
+        s1.K_POLICY = args.k_policy
+    if args.k_cap:
+        s1.TILED_K_CAP = args.k_cap
     if args.shard_stage1:
         import vtscore.training.structural_stage1 as s1_mod  # noqa: PLC0415
 
@@ -569,6 +583,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "corpus_version": cfg.CORPUS_VERSION,
                 "max_v": args.max_v,
                 "tiled_top_k": s1.TILED_TOP_K,
+                "k_policy": s1.K_POLICY,
+                "k_cap": s1.TILED_K_CAP,
                 "tile_layers": [list(layer) for layer in st.TILE_LAYERS],
                 "projection": st.PROJECTION_NAME,
                 "stoplist": args.stoplist or "off",
