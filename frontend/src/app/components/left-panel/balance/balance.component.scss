@@ -104,6 +104,11 @@
   &[data-status="yellow"] .indicator-dot {
     background: var(--status-yellow-dot);
   }
+
+  // No dot where no check applies: a structural detector's gate line (#4505).
+  &[data-status="none"] .indicator-dot {
+    display: none;
+  }
 }
 
 .balance-state-text {

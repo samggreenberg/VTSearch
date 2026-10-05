@@ -384,6 +384,9 @@ def _fused_threshold(
     if det_ctx is not None:
         det_ctx.anchored_cut_cache = cut
         det_ctx.line_ranking = ranking
+        # A new line is drawn on this ranking; a structural re-rank that
+        # follows sets the gate's passed set afresh (#4505).
+        det_ctx.gate_passed = None
 
     if cut is not None and cut.n_unconverged:
         # Not a fallback and not an error - the threshold is still this fit's -
@@ -787,6 +790,7 @@ def train_and_threshold(
         # and no ranking for a floor to keep a set of.
         det_ctx.anchored_cut_cache = None
         det_ctx.line_ranking = None
+        det_ctx.gate_passed = None
 
     return model, threshold
 

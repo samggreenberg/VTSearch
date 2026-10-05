@@ -18,7 +18,9 @@ import pytest
 from tests_lib.sorting.test_mixture_count import _two_populations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
+    BALANCE_GATE,
     BALANCE_PRESETS,
+    BALANCE_STATES,
     BETA_MAX,
     BETA_MIN,
     CHECK_ADVISORY,
@@ -42,6 +44,7 @@ from vtscore.training.thresholds import (
     fbeta_score,
     floor_count,
     floor_state,
+    gate_balance_state,
     mixture_count,
     mixture_positives,
     walk_positives,
@@ -410,3 +413,14 @@ class TestTheLineAndTheState:
         every = set(ranking.unvoted_ids().tolist())
         assert balance_state(1.0, None, ranking, also_voted=every).checkable is False, "nothing left unvoted"
         assert balance_state(1.0, None, ranking, also_voted=iter(sorted(every)[1:])).checkable is True
+
+    def test_a_gate_line_counts_what_the_gate_passes_unvoted(self):
+        """#4505: a structural line is the verification gate's, so its count is the gate's, not the cap's 32."""
+        state = gate_balance_state(1.0, frozenset(range(100)), also_voted=iter([3, 7, 500]))
+        assert BALANCE_GATE in BALANCE_STATES and state.status == BALANCE_GATE
+        assert state.count == 98, "the two voted items that passed drop out; a voted item that did not changes nothing"
+        d = state.as_dict()
+        assert d["checkable"] is False and d["audited"] is None
+        assert d["precision"] is None and d["recall"] is None and d["fbeta"] is None
+        assert d["shape"] == check_shape(1.0) and d["schedule"] == balance_schedule(1.0).as_dict()
+        assert gate_balance_state(4.0, ()).count == 0, "nothing passes: the gate keeps nothing, not the cap's 128"

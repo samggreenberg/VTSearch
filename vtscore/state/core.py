@@ -1093,6 +1093,12 @@ class DetectorContext:
         # a re-cut (``recut_detector_threshold``) and the spot check's
         # candidate both read it.  Ids and scores only - never serialised.
         "line_ranking",  # LineRanking | None
+        # The items the structural verification gate passed on the last
+        # re-rank (#4505): a structural detector's line is the gate's boundary,
+        # so ``line_ranking`` is dropped and this is what the balance counts.
+        # An unordered set, never a ranking a check could walk; cleared
+        # wherever ``line_ranking`` is written or dropped.  Ids only.
+        "gate_passed",  # frozenset[int] | None
         # The spot check (``SpotCheck``, #4272) that last finished on this
         # detector - its fixed candidate, labels, verdict and the fingerprint
         # of the set it left the line on - and the one running now, if any.
@@ -1185,6 +1191,7 @@ class DetectorContext:
         self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
         self.precision_floor_cache: Any = None  # retired (#4362): always None
         self.line_ranking: Any = None  # LineRanking | None
+        self.gate_passed: frozenset[Any] | None = None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
         self.check_ended_votes: int | None = None
@@ -1802,21 +1809,27 @@ def detector_balance_state(ctx: "DetectorContext", beta: float) -> dict[str, Any
     ``status`` is ``unchecked`` (the line is the mixture's F-beta argmax under
     the cap) or ``checked`` (the last balance walk's peak); ``count`` the set's
     size; ``precision`` and ``recall`` the walk's likely ranges and ``fbeta``
-    its estimate, with ``stale`` once the ranking under them moved.
+    its estimate, with ``stale`` once the ranking under them moved.  On a
+    structural detector's line ``status`` is ``gate`` and ``count`` is what
+    the verification gate passes, unvoted (#4505).
     """
-    from vtscore.training.thresholds import balance_state
+    from vtscore.training.thresholds import balance_state, gate_balance_state
 
-    # Under the labelset's line (#4452) the count is what the threshold keeps
-    # of the ranking scored last - possibly none - not the count rule's.
     voted = human_voted_ids(ctx)
-    state = balance_state(
-        beta,
-        ctx.precision_check,
-        ctx.line_ranking,
-        voted,
-        proposal=detector_balance_proposal(ctx, beta) if ctx.labels_line is None else None,
-        threshold=ctx.threshold if ctx.labels_line is not None else None,
-    ).as_dict()
+    if ctx.line_ranking is None and ctx.gate_passed is not None:
+        # The line is the verification gate's boundary: no ranking, no check.
+        state = gate_balance_state(beta, ctx.gate_passed, voted).as_dict()
+    else:
+        # Under the labelset's line (#4452) the count is what the threshold keeps
+        # of the ranking scored last - possibly none - not the count rule's.
+        state = balance_state(
+            beta,
+            ctx.precision_check,
+            ctx.line_ranking,
+            voted,
+            proposal=detector_balance_proposal(ctx, beta) if ctx.labels_line is None else None,
+            threshold=ctx.threshold if ctx.labels_line is not None else None,
+        ).as_dict()
     state.update(detector_check_prompt(ctx, len(voted)))
     return state
 

@@ -340,6 +340,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A structural detector's Threshold line says how many pass its gate**
+  (issue #4505). On a `sift_vlad` / `sift_vlad_doc` collection the line is
+  the verification gate's boundary, but the state under the Threshold control
+  read "Top 32 kept, unchecked" with a yellow dot however many items the gate
+  kept. It now reads "N pass the verification gate", with no dot, since no
+  spot check applies there; Find's stats chart says the same. The balance
+  state every response carries reports `status: "gate"` with that count.
 - **A structural detector no longer offers a spot check it cannot run**
   (issue #4489). On a `sift_vlad` / `sift_vlad_doc` collection the line is
   the verification gate's boundary, not a cut on a ranking, so there is

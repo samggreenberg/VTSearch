@@ -57,15 +57,12 @@ class OkResponseSchema(Schema):
 
 from vtscore.training.thresholds.spot_check import (
     BALANCE_CHECKED,
+    BALANCE_STATES,
     CHECK_CANCELLED,
     CHECK_RUNNING,
     CHECK_SHAPES,
     FLOOR_STATES,
 )
-
-#: The states a balance can report (#4413); mirrors
-#: :data:`vtscore.training.thresholds.BALANCE_STATES`.
-BALANCE_STATES = (FLOOR_STATES[0], BALANCE_CHECKED)
 
 #: The states a precision floor can report (#4272); mirrors
 #: :data:`vtscore.training.thresholds.FLOOR_STATES`.
@@ -134,7 +131,9 @@ class BalanceStateSchema(Schema):
     F-beta argmax under the balance's cap; ``checked``: a walk has, and under
     the ``trim`` shape (beta above 1) the line keeps its end, under ``advisory``
     (beta 1 and below) the walk's ranges inform the line and the count stays
-    the unchecked rule's (#4427).
+    the unchecked rule's (#4427); ``gate``: a structural detector's line, the
+    verification gate's boundary, which no check applies to - ``count`` is the
+    unvoted items the gate passes (#4505).
     """
 
     # The detector's balance: F-beta's beta.

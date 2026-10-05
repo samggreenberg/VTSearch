@@ -224,6 +224,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **The balance's `gate` state** (issue #4505), additive: `BALANCE_GATE`
+  (`"gate"`) joins `BALANCE_STATES`, and `gate_balance_state(beta, passed,
+  also_voted=())` builds it - a structural detector's line, the verification
+  gate's boundary, whose `count` is the *passed* items not in *also_voted*,
+  with no ranges and `checkable` `False`. `maybe_structural_rerank` records
+  the passed set on the detector context (`DetectorContext.gate_passed`,
+  ids only, cleared wherever `line_ranking` is written or dropped), and
+  `vtscore.state.core.detector_balance_state` reports `gate` when the
+  context has that set and no ranking. A consumer that switches on a
+  balance's `status` should expect the third value.
 - **`BalanceState.checkable`** (issue #4489), additive (default `True`):
   whether a spot check has anything to walk, an unvoted item in the ranking.
   `balance_state` sets it `False` with no ranking (a structural detector,

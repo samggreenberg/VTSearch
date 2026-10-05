@@ -328,6 +328,15 @@ describe('FindStatsModalComponent', () => {
       expect(el.textContent).not.toContain('Checked:');
     });
 
+    it('says a structural line is the verification gate\'s, with how many pass it (#4505)', async () => {
+      const el = await load({ balance: wireBalance('gate', { count: 9 }) });
+      expect(legend(el)).toContain('Line: 9 pass the verification gate');
+      expect(legend(el)).not.toContain('unchecked');
+      const notes = Array.from(el.querySelectorAll('.chart-note')).map((n) => n.textContent!.replace(/\s+/g, ' '));
+      expect(notes.some((n) => n.includes('The verification gate draws the line: 9 pass it.'))).toBe(true);
+      expect(el.querySelector('.likely-range')).toBeNull();
+    });
+
     it('says an unchecked line keeps its starting candidate, with no range', async () => {
       const el = await load({
         balance: wireBalance('unchecked', { beta: 2, count: 128, schedule: { candidate: 128, rounds: 3, picks: 5 } }),

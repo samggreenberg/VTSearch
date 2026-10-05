@@ -192,6 +192,10 @@
           <p class="chart-note" role="note">
             The line keeps the top {{ balance.count | number }}, unchecked: no check has measured how much of it is right.
           </p>
+        } @else if (balance.status === 'gate') {
+          <p class="chart-note" role="note">
+            The verification gate draws the line: {{ balance.count | number }} pass it. A spot check needs a ranked list, so none applies.
+          </p>
         } @else if (checkedNote; as note) {
           <p class="chart-note" role="note" [title]="rangeTooltip">{{ note }}</p>
         }

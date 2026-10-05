@@ -175,6 +175,15 @@ describe('BalanceComponent (#4413, #4317)', () => {
       expect(stateText()!.textContent).not.toMatch(/likely|%\s*right/);
     });
 
+    it('says how many pass the verification gate on a structural line, with no dot and no check (#4505)', async () => {
+      await show(1, lineBalance('gate', { count: 12 }), 40);
+      expect(state()!.getAttribute('data-status')).toBe('none');
+      expect(stateText()!.textContent).toContain('12 pass the verification gate');
+      expect(stateText()!.textContent).not.toMatch(/unchecked|Top \d/);
+      expect(stateText()!.getAttribute('title')).toContain('The verification gate draws this line');
+      expect(root().querySelector('.balance-check-btn')).toBeNull();
+    });
+
     it('never shows red: nothing falls short of a balance', async () => {
       for (const status of BALANCE_STATES) {
         await show(1, lineBalance(status), 300);

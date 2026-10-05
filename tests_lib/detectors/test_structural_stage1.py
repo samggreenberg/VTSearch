@@ -17,7 +17,7 @@ import pytest
 from vtscore.media.structural import SIFT_DESCRIPTOR_DIM, MatchStats, StructuralFeatures
 from vtscore.media.structural_tiles import fit_projection, raw_tiles, tile_vectors
 from vtscore.training import structural_stage1 as s1
-from vtscore.training.thresholds import LineRanking, balance_state
+from vtscore.training.thresholds import LineRanking, balance_state, gate_balance_state
 from vtscore.training.structural_similarity import (
     VerificationScorer,
     maybe_structural_rerank,
@@ -282,6 +282,27 @@ class TestChokepoint:
         maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, ctx)
         assert ctx.line_ranking is None
         assert not balance_state(1.0, None, ctx.line_ranking).checkable
+
+    def test_a_structural_line_records_what_the_gate_passes(self, monkeypatch):
+        """#4505: the balance counts the gate's set, so the rerank leaves it on the context."""
+        snap = {mid: {"embedder": "sift_vlad", "local_features": _features(mid, 30)} for mid in range(10)}
+        # Pages 0-4 fit the template with 20 inliers (past the 8-inlier gate); 5-9 do not fit.
+        matcher = _CountingMatcher({id(snap[mid]["local_features"]): 20 for mid in range(5)})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+        results = [{"id": mid, "score": 1.0 - mid / 10} for mid in range(10)]
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = None
+            line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], {0})
+            gate_passed = None
+
+        ctx = Ctx()
+        out, threshold = maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, ctx)
+        passed = ctx.gate_passed
+        assert passed is not None
+        assert passed == frozenset(range(5)) == {e["id"] for e in out if e["score"] >= threshold}
+        assert gate_balance_state(1.0, passed, {0}).count == 4, "the voted template is not counted"
 
     def test_example_sort_on_a_tiled_dataset_ranks_by_the_crops_tiles(self, tiled, monkeypatch):
         snap = tiled(6)

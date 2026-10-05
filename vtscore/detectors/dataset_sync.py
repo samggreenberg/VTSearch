@@ -366,8 +366,9 @@ def _repoint_labelset_cache(det_ctx, path) -> None:
 
 
 def _drop_line_ranking(det_ctx) -> None:
-    """Forget the ranking the line kept and any spot check over it: media ids are per dataset (#4272)."""
+    """Forget the line's ranking or gate set, and any spot check over it: media ids are per dataset (#4272, #4505)."""
     det_ctx.line_ranking = None
+    det_ctx.gate_passed = None
     det_ctx.precision_check = None
     det_ctx.precision_check_run = None
     det_ctx.check_ended_votes = None
@@ -429,9 +430,10 @@ def invalidate_detector_model_on_embedder_mismatch(det_ctx, new_embedder: str) -
         # a re-cut (a floor change, the acquisition cut) must not read them.
         det_ctx.calibration_cache = None
         det_ctx.anchored_cut_cache = None
-        # The ranking the line kept, and any check over its ids, went with
-        # the old space's scores.
+        # The ranking the line kept (or the gate's passed set), and any check
+        # over its ids, went with the old space's scores.
         det_ctx.line_ranking = None
+        det_ctx.gate_passed = None
         det_ctx.precision_check = None
         det_ctx.precision_check_run = None
         det_ctx.check_ended_votes = None
