@@ -67,7 +67,9 @@ or only the ones most likely right (toward False Negatives), which moves its
 line between match and not a match without changing the order of the list.
 The note under it says whether the line can keep that promise yet, and
 **Check 5 picks** beside it measures that with a spot check (see
-[How close the line got](../USER_GUIDE.md#how-close-the-line-got)).
+[How close the line got](../USER_GUIDE.md#how-close-the-line-got)). When the
+button is highlighted and a note says your labels still overlap, check now:
+those picks are the answers the detector most needs.
 
 ## Step 4: Hand back to Autopilot
 
