@@ -18,6 +18,25 @@ td {
   gap: var(--space-sm);
 }
 
+// The AutoRun tab's verdict line under the name (#4526): small and muted, cut
+// with an ellipsis like the cell itself, the whole verdict in its title.
+.verdict-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.verdict-line--untested {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.verdict-line--stale {
+  color: var(--text-warning);
+}
+
 // Pencil/trash icon animations are scoped to their marker classes; the button
 // chrome comes from `.card-icon-btn`.
 .edit-btn {

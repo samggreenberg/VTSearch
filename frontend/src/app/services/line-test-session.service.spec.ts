@@ -94,6 +94,24 @@ describe('LineTestSessionService (#4524)', () => {
     httpMock.expectNone('/api/line-test/unvote');
   });
 
+  it('a start that resumed from kept picks re-reads the votes; a fresh one does not (#4526)', () => {
+    const loadVotes = TestBed.inject(VoteStateService).loadVotes;
+    start();
+    expect(loadVotes).not.toHaveBeenCalled();
+    service.start();
+    httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireDone({ kept_at: 1790000000 })));
+    expect(service.phase()).toBe('done');
+    expect(loadVotes).toHaveBeenCalledTimes(1);
+  });
+
+  it('testing afresh forgets the kept test, then deals a fresh one (#4526)', () => {
+    service.testAfresh();
+    httpMock.expectOne('/api/line-test/forget').flush(wireLineTest(null));
+    httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest()));
+    expect(service.phase()).toBe('matches');
+    expect(service.roundPicks()).toEqual([51, 36, 41, 44, 48]);
+  });
+
   it('done clears the table and frees the balance', () => {
     start([1]);
     service.vote('good');

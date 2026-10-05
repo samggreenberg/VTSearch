@@ -14,6 +14,8 @@ import { ContextMenuComponent, ContextMenuItem } from '../../context-menu/contex
 import { IconComponent } from '../../icon/icon.component';
 import { buildDetectorCardMenuItems, CARD_MENU_MIN_WIDTH, overflowMenuItems } from '../card-context-menu-items';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
+import type { LineTestVerdict } from '../../../generated/api-client/models/line-test-verdict';
+import { verdictLine, verdictTitle } from '../../../utils/line-test';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -99,6 +101,27 @@ export class DetectorCardComponent {
    *  menu omits the editing verbs — Move to Drafts first to edit. */
   get frozen(): boolean {
     return !!this.detector()?.autofind;
+  }
+
+  /** The newest test verdict an AutoRun detector keeps (#4526), which its row
+   *  shows under the name; null for one never tested (and for a draft, whose
+   *  listing leaves it out). */
+  get verdict(): LineTestVerdict | null {
+    return this.detector()?.test_verdict ?? null;
+  }
+
+  get verdictText(): string {
+    const verdict = this.verdict;
+    if (!verdict) return 'Untested';
+    return `${verdict.stale ? '⚠ Out of date · ' : ''}Tested on ${verdictLine(verdict)}`;
+  }
+
+  get verdictHint(): string {
+    const verdict = this.verdict;
+    if (!verdict) {
+      return 'No test has measured what this detector ships. Score a dataset it never trained on in Find, and the Autopilot tab tests it.';
+    }
+    return verdictTitle(verdict);
   }
 
   /** True for a just-created detector that has never been trained (no labels

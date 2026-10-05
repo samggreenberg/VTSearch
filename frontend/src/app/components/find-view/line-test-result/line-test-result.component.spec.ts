@@ -175,6 +175,22 @@ describe('LineTestResultComponent (#4524)', () => {
     expect(again.length).toBe(1);
   });
 
+  it('says when a test resumed from the picks the detector keeps (#4526)', async () => {
+    let el = await show(wireLineTest(wireDone()));
+    flushChecks();
+    await settleZoneless(fixture);
+    expect(el.querySelector('.kept-note')).toBeNull();
+
+    const keptAt = new Date(2026, 9, 5, 12, 0).getTime() / 1000;
+    el = await show(wireLineTest(wireDone({ kept_at: keptAt })));
+    expect(el.querySelector('.kept-note')!.textContent).toContain('Kept from your test of 2026-10-05');
+    expect(el.querySelector('.kept-note')!.textContent).toContain('its 45 picks still hold');
+    const afresh: number[] = [];
+    fixture.componentInstance.testAfresh.subscribe(() => afresh.push(1));
+    (el.querySelector('.kept-note button') as HTMLButtonElement).click();
+    expect(afresh.length).toBe(1);
+  });
+
   it('says there is nothing to test', async () => {
     const el = await show(wireLineTest(wireTest({ phase: 'nothing', picks: [] })));
     expect(el.querySelector('.section-title')!.textContent).toContain('Nothing to test');

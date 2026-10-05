@@ -274,3 +274,202 @@ class TestNothingToTest:
         assert test["phase"] == PHASE_NOTHING and test["picks"] == [] and test["estimates"] is None
         assert data["presets"] == []
         assert client.post("/api/line-test/votes", json=_votes([1], True)).status_code == 409
+
+
+def _detector_file() -> tuple:
+    """The active detector's JSON path and its parsed content."""
+    from vtscore.detectors.registry import get_detector  # noqa: PLC0415
+    from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
+
+    entry = get_detector(get_active_detector_context().detector_id)
+    assert entry is not None
+    path = _detector_path(entry["name"])
+    return path, _read_detector(path) or {}
+
+
+def _kept():
+    from vtscore.detectors.line_verdicts import read_verdicts  # noqa: PLC0415
+
+    return read_verdicts(_detector_file()[1])
+
+
+def _retrain_on_disk() -> None:
+    """Change the detector file's labels, as a retrain does: one more label."""
+    from vtscore.datasets.labelset import LabeledElement, LabelSet  # noqa: PLC0415
+    from vtscore.detectors.store import _write_detector  # noqa: PLC0415
+
+    path, data = _detector_file()
+    labelset = LabelSet.from_dict(data["labelset"])
+    data["labelset"] = LabelSet([*labelset.elements, LabeledElement(md5="later", label="good")]).to_dict()
+    _write_detector(path, data)
+
+
+def _new_session() -> None:
+    """Another day on the same ranking: no test in memory, no session votes."""
+    ctx = get_active_detector_context()
+    ctx.line_test = None
+    ctx.good_votes.clear()
+    ctx.bad_votes.clear()
+    ctx.verified_ids.clear()
+    ctx.vote_provenance.clear()
+
+
+def _clean_line(cid: int) -> bool:
+    return cid <= 64
+
+
+class TestTheVerdictIsKept:
+    """#4526: the vote that finishes a test keeps its verdict on the detector, and the readers and a later test read it."""
+
+    def test_the_vote_that_finishes_a_test_keeps_its_verdict(self, client):
+        detector_id = _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        picks = _start(client)["test"]["picks"]
+        data = client.post("/api/line-test/votes", json=_votes(picks, True)).get_json()
+        assert _kept() == [], "nothing is kept before Done"
+
+        data = _vote_until_done(client, data, _clean_line)
+        test = data["test"]
+        assert test["phase"] == PHASE_DONE and test["kept_at"] is None
+        (verdict,) = _kept()
+        assert verdict.dataset_id and verdict.dataset_id == ctx.votes_dataset_id
+        assert (verdict.line_count, verdict.size, verdict.labelled) == (64, 200, test["labelled"])
+        assert verdict.precision.as_dict() == test["estimates"]["precision"]
+        assert verdict.fbeta.as_dict() == test["estimates"]["fbeta"]
+        assert verdict.labels_digest is not None
+        # The rest of the file is as it was, and the Find session survived the write.
+        assert _detector_file()[1]["labelset"]["labels"]
+        assert ctx.find_mode and ctx.line_test is not None
+
+        stats = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()
+        (row,) = stats["test_verdicts"]
+        assert row["dataset_id"] == verdict.dataset_id and row["stale"] is False
+        assert row["labelled"] == test["labelled"] and row["found"] == test["estimates"]["found"]
+        assert row["precision"] == test["estimates"]["precision"]
+
+    def test_a_newer_test_of_the_same_dataset_replaces_the_older(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        _vote_until_done(client, _start(client), _clean_line)
+        ctx.threshold = 1.0 - 100 / 201
+        _vote_until_done(client, _start(client), lambda cid: cid <= 100)
+        (verdict,) = _kept()
+        assert verdict.line_count == 100
+
+    def test_the_autorun_tab_reads_the_latest_verdict_of_an_autorun_detector(self, client):
+        detector_id = _run_find(client)
+        _plant_big_corpus()
+
+        def entry() -> dict:
+            rows = client.get("/api/detectors/registry").get_json()["detectors"]
+            return next(d for d in rows if d["id"] == detector_id)
+
+        resp = client.put(f"/api/detectors/registry/{detector_id}/autofind", json={"autofind": True})
+        assert resp.status_code == 200, resp.get_json()
+        assert entry()["test_verdict"] is None, "an AutoRun detector never tested"
+        _vote_until_done(client, _start(client), _clean_line)
+        row = entry()["test_verdict"]
+        assert row["dataset_id"] == _kept()[0].dataset_id and row["stale"] is False
+        client.put(f"/api/detectors/registry/{detector_id}/autofind", json={"autofind": False})
+        assert "test_verdict" not in entry(), "a draft reads no detector file for it"
+
+    def test_a_retrain_marks_the_verdict_stale_and_it_stays(self, client):
+        detector_id = _run_find(client)
+        _plant_big_corpus()
+        _vote_until_done(client, _start(client), _clean_line)
+        _retrain_on_disk()
+        (row,) = client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()["test_verdicts"]
+        assert row["stale"] is True
+        assert len(_kept()) == 1
+
+    def test_corrections_before_done_leave_the_verdict_stale_from_the_start(self, client):
+        detector_id = _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        data = _start(client)
+        ctx.find_eval_stale = True
+        _vote_until_done(client, data, _clean_line)
+        (verdict,) = _kept()
+        assert verdict.labels_digest is None
+        assert client.get(f"/api/detectors/registry/{detector_id}/stats").get_json()["test_verdicts"][0]["stale"]
+
+
+class TestResumingFromTheKeptPicks:
+    def test_a_later_test_of_the_same_ranking_resumes_from_the_kept_picks(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        done = _vote_until_done(client, _start(client), _clean_line)["test"]
+        (verdict,) = _kept()
+
+        _new_session()
+        data = _start(client)
+        test = data["test"]
+        assert test["phase"] == PHASE_DONE and test["picks"] == []
+        assert test["kept_at"] == pytest.approx(verdict.tested_at)
+        assert test["labelled"] == done["labelled"]
+        assert test["estimates"]["precision"] == done["estimates"]["precision"]
+        # The kept picks are session votes again, in the Review tab's piles.
+        for cid, right, _ in verdict.picks:
+            assert cid in ctx.verified_ids and (cid in ctx.good_votes) == right
+            assert ctx.vote_provenance[cid]["flow"] == "test"
+        # Nothing new to keep: the verdict on disk is the one it resumed from.
+        assert [v.to_dict() for v in _kept()] == [verdict.to_dict()]
+
+    def test_a_pick_already_verified_this_session_keeps_the_session_vote(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        _vote_until_done(client, _start(client), _clean_line)
+        cid, right, _ = _kept()[0].picks[0]
+
+        _new_session()
+        ctx.verified_ids[cid] = None
+        (ctx.bad_votes if right else ctx.good_votes)[cid] = None
+        _start(client)
+        assert (cid in ctx.good_votes) != right
+
+    def test_another_line_starts_afresh(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        _vote_until_done(client, _start(client), _clean_line)
+        _new_session()
+        ctx.threshold = 1.0 - 100 / 201
+        test = _start(client)["test"]
+        assert test["labelled"] == 0 and test["kept_at"] is None and test["phase"] == PHASE_MATCHES
+
+    def test_a_stale_verdict_is_not_resumed(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        _vote_until_done(client, _start(client), _clean_line)
+        _retrain_on_disk()
+        _new_session()
+        test = _start(client)["test"]
+        assert test["labelled"] == 0 and test["kept_at"] is None
+
+    def test_forget_drops_the_kept_verdict_so_the_next_start_tests_afresh(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        _vote_until_done(client, _start(client), _clean_line)
+        _new_session()
+        assert _start(client)["test"]["kept_at"] is not None
+        resumed = dict(ctx.good_votes)
+
+        data = client.post("/api/line-test/forget", json={}).get_json()
+        assert data["test"] is None and ctx.line_test is None and _kept() == []
+        # The resumed picks stay session votes, as a cancelled test's do.
+        assert dict(ctx.good_votes) == resumed
+        test = _start(client)["test"]
+        assert test["labelled"] == 0 and test["kept_at"] is None and test["phase"] == PHASE_MATCHES
+
+    def test_forget_leaves_a_running_test_and_is_fine_with_nothing_kept(self, client):
+        _run_find(client)
+        _plant_big_corpus()
+        ctx = get_active_detector_context()
+        picks = _start(client)["test"]["picks"]
+        data = client.post("/api/line-test/forget", json={}).get_json()
+        assert data["test"]["picks"] == picks and ctx.line_test is not None

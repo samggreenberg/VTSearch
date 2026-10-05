@@ -39,6 +39,7 @@ Every module in the package, grouped by what it is for.
 | `vtscore/detectors/cost_trend.py`            | The Smart indicator's arithmetic (shared with the eval harness)     |
 | `vtscore/detectors/stability.py`             | The Stable indicator's arithmetic (shared with the eval harness)    |
 | `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
+| `vtscore/detectors/line_verdicts.py`         | A finished Test mode verdict, kept on the detector JSON             |
 
 **Labels: resolving, syncing, restoring**
 
@@ -189,6 +190,45 @@ a content hash appended so long names can't collide) and appends `.json`.
 `_write_detector(path, data)` writes atomically via a per-writer tempfile +
 `os.fsync` + `os.replace`. Despite the leading underscores these are the
 path-level API the rest of the package (and `vtscore.cli`) calls.
+
+### Kept test verdicts
+
+`vtscore/detectors/line_verdicts.py` (#4526) keeps a finished Test mode
+verdict ([`LineTest`](training.md#the-test-sample-linetest-linebudgets-line_phase-found_words))
+in the detector JSON under `TEST_VERDICTS_KEY` (`"test_verdicts"`), a list
+newest first, one entry per tested dataset:
+
+```python
+from vtscore.detectors.line_verdicts import LineTestVerdict, labels_digest, put_verdict, read_verdicts
+
+verdict = LineTestVerdict.from_test(test, dataset_id=ds_id, dataset_name="drawings-new",
+                                    labels_digest=labels_digest(labelset))
+put_verdict(data, verdict)              # replaces any earlier verdict for ds_id
+read_verdicts(data)                     # newest first; malformed entries skipped
+```
+
+An entry holds the dataset's id and name, `tested_at`, the balance, the line's
+count and the corpus's size, each pick as `{"id", "label", "band"}`, and the
+precision, recall and F-beta ranges: ids, labels and numbers, never a score or
+a weight. Two digests make it checkable without either:
+
+- `labels_digest(labelset)` digests `labelset_signature`, the identity
+  `cached_head_is_current` reuses a head by. `verdict.stale(current)` is true
+  once the detector's labels no longer match, which is what any retrain is; a
+  verdict whose `labels_digest` is `None` (finished after the test set was
+  folded in) is stale from the start. Staleness is derived on read, so no
+  writer of the labelset has to remember to mark it.
+- `ranking_digest(ids, line_count)` frames the ranking the picks came from;
+  `verdict.kept_labels(ids, line_count)` returns the picks only on that
+  ranking and line, for `LineTest.start(labels=...)` to resume from.
+
+`keep_verdict(det_ctx, test, dataset_id=, dataset_name=)`,
+`kept_verdict(det_ctx, dataset_id)` and `forget_verdict(det_ctx, dataset_id)`
+read and write the active detector's file under `label_sync_write_lock` and
+re-point its cached labelset afterwards, so the write does not rehydrate a live
+Find session. `verdict_summaries(data, latest_only=False)` is what a reader
+shows: the ranges, the *found* words and the stale mark against the labelset
+in the same file, the picks left on disk.
 
 ---
 
@@ -696,7 +736,9 @@ training clipper without reading the detector JSON.
 
 - **Labelset is the only persisted form.** Detector JSON files store
   `LabeledElement` lists; never weights, never embeddings, never
-  scores. Every load re-derives the head from origins.
+  scores. Every load re-derives the head from origins. A kept test
+  verdict sits beside the labelset as ids, labels and range numbers, and
+  is checked against the labels by digest, not by any stored vector.
 - **Origins are stable across datasets.** `stable_element_id` is
   computed from origin / md5 fields, so the same training label
   identifies the same source file no matter which dataset is loaded.

@@ -1,5 +1,5 @@
-import { estimate, wireDone, wireLineTest, wireTest } from '../testing/line-test';
-import { estimatePercent, fbetaHeadline, lineTestPhase, testLineState, widthLight } from './line-test';
+import { estimate, wireDone, wireLineTest, wireTest, wireVerdict } from '../testing/line-test';
+import { estimatePercent, fbetaHeadline, lineTestPhase, testLineState, verdictLine, verdictTitle, widthLight } from './line-test';
 
 describe('line-test helpers (#4524)', () => {
   describe('widthLight', () => {
@@ -75,6 +75,23 @@ describe('line-test helpers (#4524)', () => {
     it('reads untested when there is nothing to test', () => {
       const st = testLineState(wireLineTest(wireTest({ phase: 'nothing', picks: [] })), 3)!;
       expect(st.text).toBe('Untested · top 3 kept');
+    });
+  });
+
+  describe('a kept verdict (#4526)', () => {
+    it('reads in one line: the dataset, the share right, the share found, the picks and the date', () => {
+      expect(verdictLine(wireVerdict())).toBe('drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+      expect(verdictLine(wireVerdict({ labelled: 1, dataset_name: '' }))).toBe(
+        'a dataset: likely 70–85% right, about half of them found (1 pick, 2026-10-05)',
+      );
+    });
+
+    it('says in its title what was measured, and why a stale one no longer describes the detector', () => {
+      const fresh = verdictTitle(wireVerdict());
+      expect(fresh).toContain('34 random picks found the top 64 of 200 likely 70–85% right');
+      expect(fresh).toContain('F-beta at its balance, 0.60 (0.50–0.70).');
+      expect(fresh).not.toContain('Out of date');
+      expect(verdictTitle(wireVerdict({ stale: true }))).toContain('Out of date: the detector has been retrained since');
     });
   });
 });

@@ -27,6 +27,7 @@ import { DatasetsRegistryApiService } from '../../../services/datasets-registry-
 import { DetectorsFindApiService } from '../../../services/detectors-find-api.service';
 import { PairScopeService } from '../../../services/pair-scope.service';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { formatTimestamp } from '../../../utils/format-date';
 import { BALANCE_PRESETS } from '../../../utils/line-balance';
 import {
   estimatePercent,
@@ -108,6 +109,8 @@ export class LineTestResultComponent {
   readonly addCorrections = output<void>();
   /** Test the line as it stands now (after it moved). */
   readonly testAgain = output<void>();
+  /** Forget the test the detector keeps for this collection and deal a fresh one (#4526). */
+  readonly testAfresh = output<void>();
 
   readonly phase = computed<LineTestPhase>(() => (this.scoring() ? 'score' : lineTestPhase(this.response())));
   readonly test = computed(() => this.response()?.test ?? null);
@@ -116,6 +119,16 @@ export class LineTestResultComponent {
   readonly nothing = computed(() => this.phase() === 'nothing');
   readonly moved = computed(() => this.response()?.moved ?? false);
   readonly stale = computed(() => this.response()?.stale ?? false);
+  /** A test resumed from the verdict the detector keeps (#4526) says so: the user never voted these picks today. */
+  readonly keptNote = computed(() => {
+    const t = this.test();
+    if (!t?.kept_at) return '';
+    const date = formatTimestamp(t.kept_at, { withTime: false });
+    return (
+      `Kept from your test of ${date}: the detector and its ranking of this collection are unchanged since, ` +
+      `so its ${t.labelled} picks still hold and are in the Review tab's piles.`
+    );
+  });
 
   readonly precisionText = computed(() => {
     const e = this.estimates();

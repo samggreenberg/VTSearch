@@ -18,6 +18,8 @@ lifecycle for the active detector's Find session:
   ↓ key);
 * ``POST /api/line-test/cancel`` abandons a running test (the votes cast stay
   session votes);
+* ``POST /api/line-test/forget`` forgets the verdict the detector keeps for
+  this dataset (#4526), so the next start tests afresh;
 * ``GET /api/line-test`` reports the running test, or the last finished one.
 
 Unlike the spot check (``vtsearch/routes/precision_check.py``) a test never
@@ -26,7 +28,14 @@ which is what makes the band design valid.  The result goes ``stale`` once
 **Add Corrections** folds the session's votes into the detector (the detector
 has now seen the test set), and ``moved`` once the line no longer keeps the
 set the test measured.  A finished test stays on the context until the next
-Find pass, vote clear or dataset switch; persisting it is #4526.
+Find pass, vote clear or dataset switch.
+
+The verdict outlives the session (#4526): the vote that finishes a test keeps
+its verdict on the detector's JSON, one per tested dataset
+(:mod:`vtscore.detectors.line_verdicts`), where the detector's Stats and the
+Dashboard's AutoRun tab read it; and a test started over a ranking and line a
+kept verdict was drawn from resumes from its picks rather than dealing new
+ones.
 """
 
 from __future__ import annotations
@@ -69,6 +78,35 @@ def _preset_count(det_ctx, scores: list[float], beta: float) -> int | None:
         return None
     threshold = float(line.threshold(beta))
     return sum(1 for s in scores if s >= threshold)
+
+
+def _tested_dataset(det_ctx) -> tuple[str, str]:
+    """The id and name of the dataset the Find pass scored: the one a test's verdict is kept for.
+
+    The dataset the detector's votes are keyed in, which is the one the frozen
+    scores' ids belong to; the request's dataset when that is not stamped yet.
+    """
+    from vtscore.datasets.registry import get_dataset  # noqa: PLC0415
+    from vtscore.state.core import get_active_context, is_request_missing_dataset_context  # noqa: PLC0415
+
+    dataset_id = det_ctx.votes_dataset_id
+    if not dataset_id:
+        ds_ctx = get_active_context()
+        dataset_id = "" if is_request_missing_dataset_context(ds_ctx) else ds_ctx.dataset_id
+    entry = get_dataset(dataset_id) if dataset_id else None
+    return dataset_id, (entry or {}).get("name", "") or ""
+
+
+def _keep(det_ctx, test) -> None:
+    """Keep a finished test's verdict on the detector.  A failed write is logged: the vote that finished it stands."""
+    from vtscore.detectors.line_verdicts import keep_verdict  # noqa: PLC0415
+    from vtscore.detectors.store import DetectorWriteError  # noqa: PLC0415
+
+    dataset_id, dataset_name = _tested_dataset(det_ctx)
+    try:
+        keep_verdict(det_ctx, test, dataset_id=dataset_id, dataset_name=dataset_name)
+    except (OSError, DetectorWriteError):
+        log.warning("could not keep the test verdict of detector %s", det_ctx.detector_id, exc_info=True)
 
 
 def _payload() -> dict[str, Any]:
@@ -121,13 +159,18 @@ def start_line_test():
     whole test.  The labels line's chance per item is the auxiliary below the
     line, when the detector has one.  Deals the first round.  A test already
     running is replaced; a finished test of the same line is returned as it
-    is, since its picks already say what a new one would (resuming from
-    kept picks across sessions is #4526).
+    is, since its picks already say what a new one would.  So is a verdict
+    the detector keeps for this dataset (#4526), when it is not stale and its
+    picks were drawn from this very ranking and line: the test resumes from
+    them (``kept_at`` says when they were taken), and they are session votes
+    again, in the Review tab's piles, as they were when they were cast.
     """
     from vtscore.config import SPOT_CHECK_SEED  # noqa: PLC0415
+    from vtscore.detectors.line_verdicts import kept_verdict  # noqa: PLC0415
     from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
-    from vtscore.training.thresholds import LineTest  # noqa: PLC0415
-    from vtsearch.state import get_beta  # noqa: PLC0415
+    from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
+    from vtscore.training.thresholds import TEST_PROVENANCE, LineTest  # noqa: PLC0415
+    from vtsearch.state import get_beta, set_vote  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     if not det_ctx.find_mode or not det_ctx.find_scores:
@@ -148,9 +191,20 @@ def start_line_test():
     if det_ctx.labels_line is not None:
         line = det_ctx.labels_line
         posteriors = np.asarray(line.model.posterior(np.asarray(scores, dtype=np.float64), line.prevalence))
+    kept = kept_verdict(det_ctx, _tested_dataset(det_ctx)[0])
+    labels = kept[0].kept_labels(ids, line_count) if kept is not None and not kept[1] else None
     # Unseeded unless VTSEARCH_SPOT_CHECK_SEED is set, which only the
     # screenshot harness does, so a refresh frames the same picks.
-    test = LineTest.start(ids, line_count, beta, posteriors=posteriors, seed=SPOT_CHECK_SEED)
+    test = LineTest.start(ids, line_count, beta, posteriors=posteriors, seed=SPOT_CHECK_SEED, labels=labels)
+    if labels is not None and kept is not None:
+        test.kept_at = kept[0].tested_at
+        for cid, right in labels.items():
+            # A pick the user has already verified this session keeps the
+            # session's vote; the test keeps its own label either way.
+            if cid in det_ctx.verified_ids:
+                continue
+            set_vote(cid, "good" if right else "bad", provenance=dict(TEST_PROVENANCE))
+            record_vote_provenance(cid, dict(TEST_PROVENANCE))
     test.draw()
     det_ctx.line_test = test
     return _payload()
@@ -169,11 +223,12 @@ def vote_line_test(body: dict):
     Find mode, so it lands in the Review tab's piles, and kept out of the
     labelset like every Find vote.  The test records it against the pick's
     band and the ranges move.  A partial round waits for the rest; once the
-    round is whole the next round is dealt, or the test is done.
+    round is whole the next round is dealt, or the test is done.  The vote
+    that finishes it keeps its verdict on the detector (#4526).
     """
     from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
     from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
-    from vtscore.training.thresholds import TEST_PROVENANCE  # noqa: PLC0415
+    from vtscore.training.thresholds import PHASE_DONE, TEST_PROVENANCE  # noqa: PLC0415
     from vtsearch.state import set_vote  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
@@ -191,6 +246,10 @@ def vote_line_test(body: dict):
         record_vote_provenance(cid, dict(TEST_PROVENANCE))
     if test.record(votes):
         test.draw()
+    # The stop rule reads the ranges as they stand, so a test can finish part
+    # way through a round; either way this is the vote that finished it.
+    if test.phase().phase == PHASE_DONE:
+        _keep(det_ctx, test)
     return _payload()
 
 
@@ -228,5 +287,33 @@ def cancel_line_test():
     det_ctx = get_active_detector_context()
     test = det_ctx.line_test
     if test is not None and not test.phase().done:
+        det_ctx.line_test = None
+    return _payload()
+
+
+@line_test_bp.route("/api/line-test/forget", methods=["POST"])
+@require_detector_header
+@line_test_bp.response(200, LineTestResponseSchema)
+@line_test_bp.alt_response(500, description="The detector file could not be rewritten.")
+def forget_line_test():
+    """Forget the verdict the detector keeps for this dataset (#4526), so the next start deals a fresh test.
+
+    A finished test in memory goes with it, since it is the one that was kept
+    or the one a start would resume; its picks stay session votes, as a
+    cancelled test's do.  A running test is left as it is.  200 whether or
+    not a verdict was kept; 500 only when the detector file cannot be rewritten.
+    """
+    from vtscore.detectors.line_verdicts import forget_verdict  # noqa: PLC0415
+    from vtscore.detectors.store import DetectorWriteError  # noqa: PLC0415
+    from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
+
+    det_ctx = get_active_detector_context()
+    try:
+        forget_verdict(det_ctx, _tested_dataset(det_ctx)[0])
+    except (OSError, DetectorWriteError):
+        log.warning("could not forget the test verdict of detector %s", det_ctx.detector_id, exc_info=True)
+        abort(500, message="Could not forget the kept test.")
+    test = det_ctx.line_test
+    if test is not None and test.phase().done:
         det_ctx.line_test = None
     return _payload()

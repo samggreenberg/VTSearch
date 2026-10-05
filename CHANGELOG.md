@@ -17,6 +17,17 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **A finished test's verdict is kept on the detector** (issue #4526). Reaching
+  Done in Find's Test autopilot saves the verdict with the detector, one per
+  collection it was tested on: the share right and the share found as ranges,
+  the balance, the date and the picks, never a score. The detector's **Stats**
+  gain a *Tested on* section listing them, and the Dashboard's **AutoRun** tab
+  shows each detector's latest under its name (or *Untested*). A retrain marks
+  a verdict *out of date*; it stays. Opening Find again on a tested collection,
+  with the detector and its ranking unchanged, resumes the test from the kept
+  picks (back in the Review tab's piles), and **Forget it and test afresh**
+  deals new ones instead. New route `POST /api/line-test/forget`.
+
 - **Find opens on a Test autopilot** (issue #4524). The Find view's left panel
   now carries two tabs, the Train view's Autopilot / Manual split applied to
   testing. **Autopilot** measures the detector's line on the collection in

@@ -91,6 +91,12 @@ collection as a whole.
   ([Check and correct a detector's calls](check-and-correct.md)). That
   teaches it more than moving the Threshold would.
 
+Whichever you pick, the verdict stays with the detector: its **Stats** list it
+under *Tested on*, and the Dashboard's AutoRun tab shows the latest under its
+name, marked *out of date* once it is retrained. Test the same collection again
+later, with nothing retrained, and the test resumes from the picks you already
+took.
+
 There is no way to list just the flagged pictures: the figures are a count,
 not a selection. The pictures nearest the detector's line are the ones to
 check first.

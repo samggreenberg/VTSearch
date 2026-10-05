@@ -2,6 +2,7 @@ import type { LineTestEdge } from '../generated/api-client/models/line-test-edge
 import type { LineTestEstimate } from '../generated/api-client/models/line-test-estimate';
 import type { LineTestResponse } from '../generated/api-client/models/line-test-response';
 import type { LineTestState } from '../generated/api-client/models/line-test-state';
+import type { LineTestVerdict } from '../generated/api-client/models/line-test-verdict';
 import type { BalanceState } from '../generated/api-client/models/balance-state';
 import { wireBalance } from './line-balance';
 
@@ -80,6 +81,7 @@ export function wireTest(overrides: Partial<LineTestState> = {}): LineTestState 
       model_weight: 5,
       alpha: 0.05,
     },
+    kept_at: null,
     ...overrides,
   } as LineTestState;
 }
@@ -92,6 +94,25 @@ export function wireDone(overrides: Partial<LineTestState> = {}): LineTestState 
     band: null as unknown as LineTestState['band'],
     report: { ...base.report, phase: 'done', matches_stop: 'width', misses_stop: 'dry_run', matches_width: 0.18, misses_width: 0.22, picks_above: 25, picks_below: 20 },
     estimates: { ...base.estimates, labelled: 45 },
+  };
+}
+
+/** A verdict the detector keeps (#4526): drawings-new, 34 picks, likely 70–85% right. */
+export function wireVerdict(overrides: Partial<LineTestVerdict> = {}): LineTestVerdict {
+  return {
+    dataset_id: 'ds-new',
+    dataset_name: 'drawings-new',
+    tested_at: new Date(2026, 9, 5, 12, 0).getTime() / 1000,
+    beta: 1,
+    line_count: 64,
+    size: 200,
+    labelled: 34,
+    precision: estimate(0.78, 0.7, 0.85),
+    recall: estimate(0.5, 0.38, 0.62),
+    fbeta: estimate(0.6, 0.5, 0.7),
+    found: 'about half of them found',
+    stale: false,
+    ...overrides,
   };
 }
 

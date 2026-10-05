@@ -5,12 +5,14 @@ import { DetectorsRegistryApiService } from '../../../services/detectors-registr
 import type { DetectorRegistryStatsResponse } from '../../../generated/api-client/models/detector-registry-stats-response';
 import { formatTimestamp as formatTs } from '../../../utils/format-date';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { verdictLine, verdictTitle } from '../../../utils/line-test';
 
 /** Read-only stats for a registered detector. Mirrors the dataset stats
  *  modal: labelset composition (positives / negatives / total, plus how
- *  many positives currently resolve into the active dataset) and the
- *  detector's creation/provenance metadata. Counts only — no embeddings
- *  or MLP weights are read (see the "No Persisted Vectors" rule). */
+ *  many positives currently resolve into the active dataset), the test
+ *  verdicts the detector keeps (*Tested on*, #4526), and the detector's
+ *  creation/provenance metadata. Counts only — no embeddings or MLP
+ *  weights are read (see the "No Persisted Vectors" rule). */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-detector-stats-modal',
@@ -31,6 +33,9 @@ export class DetectorStatsModalComponent implements OnInit {
   readonly loading = signal(true);
   readonly error = signal('');
   readonly stats = signal<DetectorRegistryStatsResponse | null>(null);
+
+  protected readonly verdictLine = verdictLine;
+  protected readonly verdictTitle = verdictTitle;
 
   ngOnInit(): void {
     this.detectorsRegistryApi.getDetectorStats(this.detectorId()).subscribe({

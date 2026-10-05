@@ -86,9 +86,15 @@ export class LineTestSessionService {
     this.send(this.api.get(), 'Could not read the test.');
   }
 
-  /** Start a test over the Find pass's frozen scores. */
+  /**
+   * Start a test over the Find pass's frozen scores. One that resumed from the
+   * picks the detector keeps (#4526) made them session votes again, so the
+   * Review tab's piles are re-read.
+   */
   start(): void {
-    this.send(this.api.start(), 'Could not start the test.');
+    this.send(this.api.start(), 'Could not start the test.', () => {
+      if (this.test()?.kept_at) this.voteState.loadVotes();
+    });
   }
 
   /** Vote the pick on screen and move to the next unvoted one. */
@@ -152,6 +158,11 @@ export class LineTestSessionService {
   /** Drop a running test; its votes stay. A finished one is kept. */
   cancel(): void {
     this.send(this.api.cancel(), 'Could not stop the test.');
+  }
+
+  /** Forget the test the detector keeps for this dataset (#4526) and deal a fresh one over the same line. */
+  testAfresh(): void {
+    this.send(this.api.forget(), 'Could not forget the kept test.', () => this.start());
   }
 
   private inFlight = 0;

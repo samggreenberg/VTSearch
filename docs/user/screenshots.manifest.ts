@@ -241,11 +241,14 @@ async function trainPair(h: Helpers): Promise<{ dataset: string; detector: strin
  * balance back to the middle radio, so the next Find shot starts from a fresh scoring run
  * whatever an earlier recipe did. Find verifications live in server memory and
  * survive leaving Find, so without this one shot's checked pictures would show
- * up in the next.
+ * up in the next. A test an earlier shot finished is kept on the detector and
+ * would resume at Done, its picks back in the piles (#4526), so it is forgotten
+ * too.
  */
 async function resetFind(h: Helpers): Promise<void> {
   const pair = await findPair(h);
   await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
+  await h.app.api('/api/line-test/forget', { method: 'POST', ...pair });
   await h.app.api('/api/balance', { method: 'POST', body: { beta: 1 }, ...pair });
 }
 

@@ -250,6 +250,7 @@ POST /api/line-test/start
 POST /api/line-test/votes
 POST /api/line-test/unvote
 POST /api/line-test/cancel
+POST /api/line-test/forget
 ```
 
 **All but `GET` require** `X-Detector-Id`.
@@ -295,7 +296,8 @@ Every verb returns the same body:
       "at_edges": [{"count": 8, "side": "above", "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
     },
     "budgets": {"matches_width": 0.2, "misses_width": 0.25, "matches_picks": 40, "misses_picks": 40,
-                "picks_per_round": 5, "dry_run_share": 0.05, "model_weight": 5, "alpha": 0.05}
+                "picks_per_round": 5, "dry_run_share": 0.05, "model_weight": 5, "alpha": 0.05},
+    "kept_at": null
   },
   "stale": false, "moved": false,
   "presets": [{"beta": 0.25, "count": 31, "precision": {"...": "..."}, "recall": {"...": "..."}, "fbeta": {"...": "..."}, "found": "..."}, "..."]
@@ -307,19 +309,29 @@ Every verb returns the same body:
   it), takes the labels line's chance per item as the auxiliary below the line
   when the detector has a class model, and deals the first round. A test
   already running is replaced; a finished test of the same line is returned
-  as it is. **409** with no Find pass to test.
+  as it is. So is a [kept verdict](#the-kept-verdict) for this dataset that is
+  not stale and was drawn from this very ranking and line: the test resumes
+  from its picks (`test.kept_at` is when they were taken, `null` for a test
+  begun afresh), and they are session votes again. **409** with no Find pass
+  to test.
 - **`votes`** takes `{"votes": [{"id": 412, "label": "good"}, ...]}` on the
   round's `picks`. Each vote is a **session vote** with provenance `test`:
   verified in Find mode (it lands in the Review tab's piles) and kept out of
   the labelset like every Find vote, never a training label. The test records
   it against the pick's band and the ranges move; a partial round waits for
-  the rest, and a whole round deals the next. **400** for an id that is not
-  one of the round's picks; **409** with no test running.
+  the rest, and a whole round deals the next. The vote that finishes the test
+  keeps its verdict on the detector. **400** for an id that is not one of the
+  round's picks; **409** with no test running.
 - **`unvote`** takes `{"id": 412}` and takes one vote of the current round
   back (the ↓ key): the pick returns to `picks` and its session vote is
   lifted. **400** for a vote not of this round.
 - **`cancel`** drops a running test; its votes so far stay session votes. A
   finished test is left as it is. Always **200**.
+- **`forget`** drops the [kept verdict](#the-kept-verdict) for this dataset,
+  and a finished test in memory with it, so the next `start` deals a fresh
+  test even over a ranking a kept verdict was drawn from (the app's *Forget it
+  and test afresh*). A running test is left as it is, and the forgotten
+  test's picks stay session votes. **200** whether or not anything was kept.
 
 `test.phase` is derived from the sample on every read
 (`vtscore.training.thresholds.line_phase`): `matches` (precision, picks from
@@ -340,6 +352,26 @@ once corrections have been folded into the detector since the test (the
 detector has now seen the test set); `moved` once the line no longer keeps the
 set the test measured (the balance changed, or the ranking did). A fresh
 `/api/find-label` pass, a vote clear and a dataset switch all drop the test.
+
+#### The kept verdict
+
+A finished test outlives the session (#4526;
+`vtscore/detectors/line_verdicts.py`). The vote that brings a test to `done`
+writes its verdict into the detector's JSON beside the labelset, under
+`test_verdicts`, one per tested dataset (a newer test of the same dataset
+replaces the older): the dataset's id and name, when it finished, the balance
+and the line it ran at, the picks' ids and labels with the band each came
+from, and the precision, recall and F-beta ranges. Ids, labels and numbers
+only, never a score vector or a model. `nothing` leaves no verdict.
+
+A verdict is **stale** once the detector has been retrained: it records a
+digest of the training labels' signature, and any change to the labels (a
+Train vote, Add Corrections, an import) no longer matches it. A stale verdict
+stays, flagged. One finished after Add Corrections already folded the test set
+in is stale from the start. Two readers show it: the detector's
+[stats](detectors.md#detector-statistics) (`test_verdicts`, every verdict, newest first) and the
+[detector listing](detectors.md#list-registered-detectors), where an AutoRun detector
+carries `test_verdict`, its newest.
 
 ### Find stats (detector evaluation)
 
