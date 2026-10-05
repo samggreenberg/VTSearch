@@ -77,6 +77,7 @@ preference stores the beta and moves nothing.
 | `precision` | The check's **likely range** for how much of the kept set is right - `{"lo", "hi", "labelled", "right", "stale"}` - or `null` while unchecked. Each audited band's Clopper-Pearson interval from its picks, each tail at `alpha / bands` over the set's bands, weighted by band size; exact where the picks cover a band. `stale` is `true` once later votes moved the list under the result: the range describes the list as it was when checked. |
 | `recall` | The check's likely range for how much of the corpus's positives the kept set found: the bands' intervals times their sizes, over the mixture's count of positives in the unvoted ranking (fixed when the walk started). The same `labelled`, `right` and `stale`; `null` while unchecked. The rougher of the two ranges: the picks cannot measure its denominator. |
 | `fbeta` | The walk's F-beta estimate for the kept set - `(1 + beta²) · tp / (beta² · n_pos + count)`, `tp` the band-weighted positives among the picks, `n_pos` the mixture's - or `null` while unchecked. |
+| `checkable` | Whether a spot check can start on this line (#4489): `false` with no ranking to walk - a structural (`sift_vlad` / `sift_vlad_doc`) detector, whose line is the verification gate's boundary rather than a cut on a ranking, or a detector not yet trained on this dataset - or with nothing in it left unvoted. `POST /api/precision-check/start` refuses those with a **409**, so the app offers no check there. |
 | `separation` | The labels' d' (#4496): how many spreads apart the labels line's Good and Bad score components sit, the spread the line was cut with. `null` before a retrain has drawn the labels' line. |
 | `check_due` | `true` when the labels separate weakly enough that a spot check is due (#4496, `weak_check_due`): `separation` below 1.5, at least 10 votes, and 25 votes since the last check ended (finished or closed). Autopilot runs the check; the Train tab's Check button calls for one. Never `true` in Find or while a check runs. |
 | `schedule` | Where a walk starts and what it costs: `candidate` (32 at beta ≤ 1, 128 above: the bands a walk audits first; no longer a cap on the line), `rounds` (the bands it audits before its first verdict: 3 for 32, 5 for 128) and `picks` a band (5). |
@@ -147,7 +148,8 @@ few near-duplicate scores (#4419), `n_pos` is the balance's cap
 (`schedule.candidate`) lowered to the unvoted count - the bands a walk starts
 from - so the check still starts. The walk starts at the
 bands that hold `schedule.candidate` items. **409** when there is no ranking
-yet, nothing in it is unvoted, or the list is the one the last finished check
+(none yet, or a structural detector's, which never has one), nothing in it is
+unvoted - the two cases the balance's `checkable` reports - or the list is the one the last finished check
 already walked (there is no redraw on the same list: any vote, the check's
 own included, changes it). A check already running is replaced.
 

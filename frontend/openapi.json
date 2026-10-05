@@ -801,6 +801,9 @@
           "check_due": {
             "type": "boolean"
           },
+          "checkable": {
+            "type": "boolean"
+          },
           "count": {
             "type": "integer"
           },
@@ -852,6 +855,7 @@
         "required": [
           "audited",
           "beta",
+          "checkable",
           "count",
           "fbeta",
           "line_preference",
@@ -876,6 +880,9 @@
             "type": "number"
           },
           "check_due": {
+            "type": "boolean"
+          },
+          "checkable": {
             "type": "boolean"
           },
           "count": {
@@ -918,6 +925,7 @@
         "required": [
           "audited",
           "beta",
+          "checkable",
           "count",
           "fbeta",
           "precision",

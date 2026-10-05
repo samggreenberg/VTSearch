@@ -1827,15 +1827,20 @@ def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any
     ``separation`` is the labels line's d' (``None`` before a retrain has drawn
     one, or when it is unbounded); ``check_due`` is :func:`weak_check_due` on
     it, counted from the vote total when the last check ended.  Never due in
-    Find, which offers no check (#4317), nor while a check is running.
+    Find, which offers no check (#4317), nor while a check is running, nor on
+    a line a check cannot walk (#4489): no ranking - a structural detector's
+    line is the verification gate's boundary - or nothing in it unvoted, where
+    a check would be refused.
     """
     from vtscore.training.thresholds import weak_check_due  # noqa: PLC0415
 
     sep = ctx.labels_line.separation if ctx.labels_line is not None else None
+    ranking = ctx.line_ranking
     due = (
         not ctx.find_mode
         and ctx.precision_check_run is None
-        and ctx.line_ranking is not None
+        and ranking is not None
+        and ranking.unvoted_ids(human_voted_ids(ctx)).size > 0
         and weak_check_due(sep, n_votes, ctx.check_ended_votes)
     )
     shown = round(float(sep), 4) if sep is not None and math.isfinite(sep) else None

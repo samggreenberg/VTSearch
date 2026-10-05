@@ -71,6 +71,13 @@ export interface LineBalance {
   shape: BalanceShape;
   /** The set the last check audited (the walk's end), which the ranges describe; under `advisory` not the set kept. Null while unchecked. */
   audited: number | null;
+  /**
+   * Whether a spot check can start on this line (#4489). False when the
+   * detector has no ranking to walk - a structural detector, whose line is the
+   * verification gate's boundary rather than a cut on a ranking - or nothing in
+   * it is left unvoted. The server refuses a check there, so none is offered.
+   */
+  checkable: boolean;
   /** How far apart the labels' Good and Bad scores sit, in spreads (d'); null before a retrain has drawn the labels' line. */
   separation: number | null;
   /**
@@ -109,6 +116,8 @@ export function lineBalanceFrom(wire: BalanceState | null | undefined): LineBala
     schedule: schedule ? { candidate: schedule.candidate, rounds: schedule.rounds, picks: schedule.picks } : null,
     shape: wire.shape === 'advisory' ? 'advisory' : 'trim',
     audited: wire.audited ?? null,
+    // A server from before #4489 sends no flag, and offered a check everywhere.
+    checkable: wire.checkable !== false,
     separation: wire.separation ?? null,
     checkDue: wire.check_due ?? false,
   };
@@ -270,10 +279,12 @@ export function balanceExplanation(balance: LineBalance | null): string | null {
 /**
  * The balance control's check affordance (#4273): "Check 5 picks", with the
  * picks a band draws at this balance. It starts a check in every state; after
- * a finished one it runs a fresh check. Null with no line to check.
+ * a finished one it runs a fresh check. Null with no line to check, or a line
+ * a check cannot walk (#4489): a structural detector's, which is the
+ * verification gate's boundary and keeps no ranking.
  */
 export function checkLabel(balance: LineBalance | null): string | null {
-  if (!balance) return null;
+  if (!balance?.checkable) return null;
   return balance.schedule ? `Check ${balance.schedule.picks} picks` : 'Check the line';
 }
 

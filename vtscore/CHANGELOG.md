@@ -224,6 +224,11 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`BalanceState.checkable`** (issue #4489), additive (default `True`):
+  whether a spot check has anything to walk, an unvoted item in the ranking.
+  `balance_state` sets it `False` with no ranking (a structural detector,
+  whose line is the verification gate's boundary, or one not trained on the
+  corpus yet) or with every item voted, and `as_dict()` carries it.
 - **Per-media shipped timing defaults** (issue #4105), additive:
   `vtscore.timing.TaskSpec.media_default_terms` (a `{media_type: terms}`
   override of `default_terms`, default empty) and `TaskSpec.defaults_for(media_type)`,

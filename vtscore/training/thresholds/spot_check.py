@@ -1359,6 +1359,12 @@ class BalanceState:
     #: The set the last check audited (the walk's end), which under ``advisory``
     #: is not the set the line keeps; ``None`` while unchecked.
     audited: int | None = None
+    #: Whether a check has anything to walk (#4489): an unvoted item in the
+    #: ranking.  ``False`` with no ranking - a structural detector, whose line
+    #: is the verification gate's boundary rather than a cut on a ranking, or
+    #: one not trained on this corpus yet - or with every item in it voted.
+    #: A check cannot start on such a line, so a client offers none.
+    checkable: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1371,6 +1377,7 @@ class BalanceState:
             "schedule": self.schedule.as_dict(),
             "shape": self.shape,
             "audited": self.audited,
+            "checkable": self.checkable,
         }
 
 
@@ -1437,6 +1444,8 @@ def balance_state(
     shape = shape or check_shape(beta)
     applicable = applicable_balance(beta, result)
     count = balance_count(beta, result, proposal, shape)
+    also_voted = frozenset(int(v) for v in also_voted)
+    checkable = ranking is not None and ranking.unvoted_ids(also_voted).size > 0
     if threshold is not None and ranking is not None:
         excluded = ranking.voted.union(int(v) for v in also_voted)
         mask = np.fromiter((int(i) not in excluded for i in ranking.ids), dtype=bool, count=ranking.size)
@@ -1446,7 +1455,9 @@ def balance_state(
         # under ``trim`` is a band edge of the ranking it walked, kept as is.
         count = min(count, len(ranking.candidate(count, also_voted)))
     if applicable is None:
-        return BalanceState(float(beta), FLOOR_UNCHECKED, count, None, None, None, False, schedule, shape, None)
+        return BalanceState(
+            float(beta), FLOOR_UNCHECKED, count, None, None, None, False, schedule, shape, None, checkable
+        )
     stale = ranking is not None and applicable.is_stale(ranking, also_voted)
     return BalanceState(
         float(beta),
@@ -1459,6 +1470,7 @@ def balance_state(
         schedule,
         shape,
         applicable.k,
+        checkable,
     )
 
 

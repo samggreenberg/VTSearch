@@ -340,6 +340,13 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A structural detector no longer offers a spot check it cannot run**
+  (issue #4489). On a `sift_vlad` / `sift_vlad_doc` collection the line is
+  the verification gate's boundary, not a cut on a ranking, so there is
+  nothing for a check to walk: **Check 5 picks** used to show in Train and
+  fail every time ("No ranking to check"). The Threshold control now leaves
+  it out wherever a check cannot start, and the balance state every response
+  carries gains `checkable`.
 - **On a small dataset, a spot check under the precision/recall balance no
   longer keeps every unvoted item whatever your picks said** (issue #4424).
   When the unvoted items numbered no more than the check's starting count

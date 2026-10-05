@@ -225,6 +225,17 @@ class TestTheWeakCheckPrompt:
         running.precision_check_run = SpotCheck.start(running.line_ranking.unvoted_ids(human_voted_ids(running)), 0.5)
         assert detector_balance_state(running, 1.0)["check_due"] is False
 
+    def test_never_due_on_a_line_a_check_cannot_walk(self):
+        """#4489: no ranking (a structural detector's line) or nothing in it unvoted - a check would be refused."""
+        gone = self._weak(_ctx("det-weak-structural"))
+        gone.line_ranking = None
+        exhausted = self._weak(_ctx("det-weak-exhausted"))
+        r = exhausted.line_ranking
+        exhausted.line_ranking = LineRanking.from_scores(r.ids.tolist(), r.scores, r.ids.tolist())
+        for ctx in (gone, exhausted):
+            state = detector_balance_state(ctx, 1.0)
+            assert state["checkable"] is False and state["check_due"] is False
+
     def test_it_waits_a_cooldown_after_the_last_check_ended(self):
         ctx = self._weak(_ctx("det-weak-cooldown"))
         n = len(human_voted_ids(ctx))

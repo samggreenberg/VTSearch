@@ -31,6 +31,7 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 64, rounds: 2, picks: 5 },
         shape: 'advisory',
         audited: 128,
+        checkable: true,
       };
       expect(lineBalanceFrom(wire)).toEqual({
         beta: 0.5,
@@ -42,6 +43,7 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 64, rounds: 2, picks: 5 },
         shape: 'advisory',
         audited: 128,
+        checkable: true,
         separation: null,
         checkDue: false,
       });
@@ -59,9 +61,16 @@ describe('line-balance (#4413)', () => {
         schedule: { candidate: 128, rounds: 3, picks: 5 },
         shape: 'trim',
         audited: null,
+        checkable: true,
         separation: null,
         checkDue: false,
       });
+    });
+
+    it('reads a line a check cannot walk (#4489), and takes a server that sends no flag as offering one', () => {
+      const wire = { beta: 1, status: 'unchecked', count: 32, precision: null, recall: null, fbeta: null, schedule: { candidate: 32, rounds: 1, picks: 5 }, shape: 'advisory', audited: null };
+      expect(lineBalanceFrom({ ...wire, checkable: false } as unknown as BalanceState)!.checkable).toBe(false);
+      expect(lineBalanceFrom(wire as unknown as BalanceState)!.checkable).toBe(true);
     });
 
     it('reads the labels\' separation and whether a check is due (#4496)', () => {
@@ -277,6 +286,12 @@ describe('line-balance (#4413)', () => {
         expect(checkLabel(lineBalance(status))).toBe('Check 5 picks');
       }
       expect(checkLabel(lineBalance('unchecked', { schedule: null }))).toBe('Check the line');
+    });
+
+    it('is not offered on a line a check cannot walk: a structural detector\'s (#4489)', () => {
+      for (const status of ['unchecked', 'checked'] as const) {
+        expect(checkLabel(lineBalance(status, { checkable: false }))).toBeNull();
+      }
     });
 
     it('says what a check does at this balance (#4427), and that its votes are votes', () => {

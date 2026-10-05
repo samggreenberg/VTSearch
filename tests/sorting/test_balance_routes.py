@@ -147,6 +147,18 @@ class TestTheLineUnderTheBalance:
         assert start.status_code == 200, start.get_json()
         assert start.get_json()["check"]["status"] == "running" and start.get_json()["check"]["beta"] == 1.0
 
+    def test_a_line_with_no_ranking_offers_no_check_and_start_refuses_it(self, client):
+        """#4489: a structural detector's line is the verification gate's boundary, so its rerank drops the
+        ranking; the balance says a check cannot start there, as start's 409 does."""
+        detector_id = _load_detector(client)
+        client.post("/api/find-label", json={"detector_id": detector_id})
+        ctx = get_active_detector_context()
+        assert client.get("/api/balance").get_json()["checkable"] is True
+        ctx.line_ranking = None  # what ``maybe_structural_rerank`` leaves on a structural detector
+        assert client.get("/api/balance").get_json()["checkable"] is False
+        assert client.get("/api/precision-check").get_json()["balance"]["checkable"] is False
+        assert client.post("/api/precision-check/start", json={}).status_code == 409
+
     def test_under_the_floor_a_check_is_still_the_floors(self, client, floor_preference):
         detector_id = _load_detector(client)
         client.post("/api/find-label", json={"detector_id": detector_id})

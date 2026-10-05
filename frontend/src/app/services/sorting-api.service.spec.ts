@@ -76,7 +76,7 @@ describe('SortingApiService', () => {
     service.getBalance().subscribe(data => expect(data.beta).toBe(0.5));
     const req = httpMock.expectOne('/api/balance');
     expect(req.request.method).toBe('GET');
-    req.flush({ beta: 0.5, status: 'unchecked', count: 32, precision: null, recall: null, fbeta: null, schedule: { candidate: 32, rounds: 1, picks: 5 }, shape: 'advisory', audited: null, threshold: null, n_returned: null, line_preference: 'balance' });
+    req.flush({ beta: 0.5, status: 'unchecked', count: 32, precision: null, recall: null, fbeta: null, schedule: { candidate: 32, rounds: 1, picks: 5 }, shape: 'advisory', audited: null, checkable: true, threshold: null, n_returned: null, line_preference: 'balance' });
   });
 
   it('setBalance should POST the beta', () => {
