@@ -56,9 +56,9 @@ slides:
   quantile-transfer
   split-fraction
 
-  # 3 — Preference: why a line needs one, F-beta and the three-radio balance
-  # that sets its beta (#4413, #4448), the line the labels draw at its expected
-  # peak (#4452), what that line can and cannot claim before anyone checks,
+  # 3 — Preference: why a line needs one, what F₁ and F-beta are (#4517),
+  # F-beta's peak and the three-radio balance that sets its beta (#4413,
+  # #4448), the line the labels draw at its expected peak (#4452), what that line can and cannot claim before anyone checks,
   # and what a check says about it without moving it (#4427, #4452). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after The End.
@@ -66,6 +66,7 @@ slides:
   # line lands, so it has to follow the slide that says where that is.
   outline-hold-the-line +at3
   inclusion-rank
+  fbeta-metrics
   balance-fbeta
   labels-line
   floor-ask

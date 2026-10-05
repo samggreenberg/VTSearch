@@ -4219,42 +4219,20 @@ FBETA_ROW_GAP = 0.15
 FBETA_ROW_FILL = 0.9
 
 
-def _fbeta_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the F-beta figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, FBETA_CANVAS[0])
-    ax.set_ylim(0, FBETA_CANVAS[1])
-    ax.set_axis_off()
+def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
+    """The ten-item ranking both F-beta figures open on; returns ``(x0, w, rank_y)``.
 
-    bad, good = _ranked_votes()
+    One row of marks, under the line, in the order the Cutting Room's
+    photographs are in. Shared by F-ing Metrics and Beta Max so that, flicking
+    from one to the next, the ranking does not move.
 
-    # ── layout ────────────────────────────────────────────────────────────────
-    # The ranking sits at the top of the drawing and one row per balance under
-    # it, on the same x scale, so a peak in a row is directly under the cut it
-    # names. Indented from the left: the top row spans the drawing, which is the
-    # one shape the title notch cannot be panned out of (`slides/STYLE.md`).
-    #
-    # One row per balance, not three curves on one panel: the three F-betas
-    # are equal wherever precision equals recall, and on this ranking that is
-    # the whole Include-5 plateau, so overlaid they ran on top of one another
-    # for a fifth of the axis. Separate rows also give each peak its own zero.
-    # 1.5 of right margin stays: the slide draws its own page number in the
-    # bottom-right corner, and a label run out to the canvas edge lands on it.
+    Indented from the left: the top row spans the drawing, which is the one
+    shape the title notch cannot be panned out of (`slides/STYLE.md`). 1.5 of
+    right margin stays: the slide draws its own page number in the
+    bottom-right corner, and a label run out to the canvas edge lands on it.
+    """
     x0, w = 4.0, FBETA_CANVAS[0] - 4.0 - 1.5
     rank_y = FBETA_CANVAS[1] - FBETA_TOP_RESERVE - 0.97
-    rows_top = rank_y - 1.05
-    sy = FBETA_ROW_H * FBETA_ROW_FILL
-    row_base = [rows_top - (i + 1) * FBETA_ROW_H - i * FBETA_ROW_GAP for i in range(len(FBETA_ARMS))]
-    panel_base = row_base[-1]
-
-    # The cut's plateaus: a riser at every item, and one cut inside each step.
-    edges = np.array([0.0, *(_mark_score(i) for i in range(len(RANK_MARKS))), 1.0])
-    plateaus = (edges[:-1] + edges[1:]) / 2
-
-    # ── stage 1: one imperfect ranking ────────────────────────────────────────
-    # One row of marks, under the line, in the order the previous slide's
-    # photographs are in.
     _range_line(ax, x0, x0 + w, rank_y, z=3)
     for index, keep in enumerate(RANK_MARKS):
         ax.text(
@@ -4266,7 +4244,7 @@ def _fbeta_stage(stage: int) -> plt.Figure:
             fontsize=30,
             color=GREEN if keep else RED,
         )
-    # The previous slide's axis label, word for word, in the same place on the
+    # The Cutting Room's axis label, word for word, in the same place on the
     # slide and at the same rendered size: flicking between the two, the
     # photographs go and the label does not move. So it is centred on the
     # *slide* (`FBETA_AXIS_LABEL_X`), not on this line, which starts right of
@@ -4280,21 +4258,135 @@ def _fbeta_stage(stage: int) -> plt.Figure:
         fontsize=FBETA_AXIS_LABEL_PT,
         color=SOFT,
     )
+    return x0, w, rank_y
 
-    # ── stages 2-4: one score, three balances, three peaks ────────────────────
-    # The rule sits under the rows, as the panel's caption: above them, the
-    # dotted drops from each peak up to the cut it chooses would run through it.
-    if stage >= 2:
-        ax.text(
-            x0 + w,
-            panel_base - OBJECT_GAP - 0.1,
-            _sub(r"F_\beta") + " = (1 + β²) · hits  /  (β² · matches + kept)",
-            ha="right",
-            va="top",
-            fontsize=18,
-            color=INK,
-            zorder=6,
-        )
+
+#: How many stages F-ing Metrics reveals in: the cut and its three counts;
+#: precision and recall; F₁; F-beta.
+FMETRICS_STAGES = 4
+#: The cut F-ing Metrics reads, as items kept: the Cutting Room's middle one,
+#: one mistake of each kind, where every F-beta agrees (0.80).
+FMETRICS_KEPT = 5
+
+
+def fmetrics_fig() -> None:
+    """What F₁ is, and then what F-beta is, on the ten items the room just saw (#4517).
+
+    Beta Max used to print the F-beta formula under its rows and leave the room
+    to take it in while the rows were the point. This is the slide before it:
+    one cut through the same ranking, the three counts it has, the two rates
+    those make, F₁ as their harmonic mean, and F-beta as the same mean with
+    recall weighted β times. The count form on the last line is the one Beta
+    Max and What to Expect then evaluate.
+    """
+    final = _fmetrics_stage(FMETRICS_STAGES)
+    box = tight_box(final)
+    for stage in range(1, FMETRICS_STAGES):
+        save(_fmetrics_stage(stage), OUT, f"calib-fmetrics.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box)
+
+
+def _fmetrics_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of F-ing Metrics."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+
+    x0, w, rank_y = _fbeta_ranking(ax)
+    bad, good = _ranked_votes()
+    cut = _cut_score(FMETRICS_KEPT)
+    hits = int((good >= cut).sum())
+    kept = hits + int((bad >= cut).sum())
+    matches = int(good.size)
+    precision, recall = hits / kept, hits / matches
+    f1 = 2 * precision * recall / (precision + recall)
+
+    # ── stage 1: one cut, and the three counts it has ─────────────────────────
+    cut_x = x0 + cut * w
+    ax.plot([cut_x] * 2, [rank_y - 1.05, rank_y + 0.25], color=INK, linewidth=2.0, linestyle=(0, (4, 3)), zorder=4)
+    bracket_y = rank_y - 1.2
+    ax.plot([cut_x, x0 + w], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=4)
+    for x in (cut_x, x0 + w):
+        ax.plot([x] * 2, [bracket_y, bracket_y + 0.18], color=INK, linewidth=1.6, zorder=4)
+    centre = x0 + w / 2
+    counts_y = rank_y - 2.0
+    for dx, name, value, gloss in (
+        (-w / 3, "kept", kept, "came back"),
+        (0.0, "hits", hits, "came back and are books"),
+        (w / 3, "matches", matches, "books in all"),
+    ):
+        ax.text(centre + dx, counts_y, f"{name} = {value}", ha="center", va="center", fontsize=20, color=INK)
+        ax.text(centre + dx, counts_y - 0.55, gloss, ha="center", va="center", fontsize=16, color=SOFT)
+
+    # ── stages 2-4: the formulas, one per row ─────────────────────────────────
+    # Left-aligned on one edge so the eye runs down them as a derivation. What
+    # each one *says* is the presenter's to read out, so it is in the notes and
+    # not on the slide: set beside the formulas, the glosses crowded them.
+    rows = (
+        (2, f"precision  P = hits / kept = {precision:.2f}"),
+        (2, f"recall  R = hits / matches = {recall:.2f}"),
+        (3, _sub(r"F_1") + f" = 2PR / (P + R) = {f1:.2f}"),
+        (4, _sub(r"F_\beta") + " = (1 + β²) PR / (β²P + R)"),
+        (4, "= (1 + β²) · hits / (β² · matches + kept)"),
+    )
+    row_x = x0 + w * FMETRICS_INDENT
+    # The count form continues the line above it, so its "=" sits under that
+    # line's: measured, because the F_β in front of it is set in mathtext.
+    prefix = ax.text(row_x, 0, _sub(r"F_\beta") + " ", fontsize=20, alpha=0)
+    renderer = fig.canvas.get_renderer()
+    box = prefix.get_window_extent(renderer).transformed(ax.transData.inverted())
+    prefix.remove()
+    row_y = counts_y - 1.6
+    for index, (first, formula) in enumerate(rows):
+        if index and rows[index - 1][0] != first:
+            row_y -= 0.3
+        if stage >= first:
+            x = row_x + box.width if formula.startswith("=") else row_x
+            ax.text(x, row_y, formula, ha="left", va="baseline", fontsize=20, color=INK)
+        row_y -= 0.72
+    return fig
+
+
+#: Where the formulas' shared left edge sits, as a share of the ranking's width:
+#: in from the line's own start, so the block sits under the middle of the
+#: ranking rather than hanging off its left end.
+FMETRICS_INDENT = 0.16
+
+
+def _fbeta_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the F-beta figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+
+    bad, good = _ranked_votes()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # The ranking sits at the top of the drawing (`_fbeta_ranking`, stage 1)
+    # and one row per balance under it, on the same x scale, so a peak in a
+    # row is directly under the cut it names.
+    #
+    # One row per balance, not three curves on one panel: the three F-betas
+    # are equal wherever precision equals recall, and on this ranking that is
+    # the whole Include-5 plateau, so overlaid they ran on top of one another
+    # for a fifth of the axis. Separate rows also give each peak its own zero.
+    x0, w, rank_y = _fbeta_ranking(ax)
+    rows_top = rank_y - 1.05
+    sy = FBETA_ROW_H * FBETA_ROW_FILL
+    row_base = [rows_top - (i + 1) * FBETA_ROW_H - i * FBETA_ROW_GAP for i in range(len(FBETA_ARMS))]
+    panel_base = row_base[-1]
+
+    # The cut's plateaus: a riser at every item, and one cut inside each step.
+    edges = np.array([0.0, *(_mark_score(i) for i in range(len(RANK_MARKS))), 1.0])
+    plateaus = (edges[:-1] + edges[1:]) / 2
+
+    # ── stage 1 is the ranking, drawn above; stages 2-4: three balances ───────
+    # The score itself is the slide before's (F-ing Metrics), so it is not
+    # printed again here (#4517).
     for arm, ((beta, name), weight, base) in enumerate(zip(FBETA_ARMS, BALANCE_WEIGHTS, row_base, strict=True)):
         # Balanced first, then precise, then permissive: the middle arm is the
         # one the room already has in mind, and the other two are what the
@@ -5755,6 +5847,7 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
 
 
 if __name__ == "__main__":
+    fmetrics_fig()
     fbeta_fig()
     labels_line_fig()
     doc_balance_fig()
