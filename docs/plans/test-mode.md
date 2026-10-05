@@ -1,9 +1,10 @@
 # Test mode: Find becomes a decision, not a browse (#4520)
 
-**Status:** design. Nothing here has shipped. #4520 asks three questions: how
-a "Test" would work, how the open Find interface becomes a constrained Test
-interface, and which metric and statistics it needs. This file is the answer;
-the slices at the end are the work.
+**Status:** design, decided. Nothing here has shipped. #4520 asks three
+questions: how a "Test" would work, how the open Find interface becomes a
+constrained Test interface, and which metric and statistics it needs. This
+file is the answer; the owner settled its open decisions on 2026-10-05, and
+the work is filed as the issues at the end.
 
 **Background, what already exists.** Three pieces, which this design assembles
 rather than replaces:
@@ -34,7 +35,11 @@ rather than replaces:
   file is the product that calls it.
 
 Train's Autopilot is the model for the shape: a phase panel, one item at a
-time, a light per phase, and a **Done!** that says what it found.
+time, a light per phase, and a **Done!** that says what it found. The guided
+flow is called **Autopilot** in Test as in Train (the owner's choice): one
+word for "the guided flow" wherever it appears, with the phases differing by
+view, so the Autopilot / Review tab pair in Test mirrors Autopilot / Manual in
+Train.
 
 ## 1. The question Test answers, and the metric
 
@@ -138,6 +143,16 @@ coverage of the stop is priced in the eval, as every check so far was
 (#4267, #4383). The user clicks until Done, as the issue asks, and Done is
 where the ranges stop moving usefully, not where the corpus runs out.
 
+**The verdict persists** (the owner's choice). A finished test is kept on
+the detector, one entry per tested dataset: the picks' ids, labels and bands,
+the balance, the date, and the ranges and F-beta at Done; ids, labels and
+numbers only, never a vector. A retrain marks every entry stale, as the spot
+check's range goes stale, and the entry stays flagged. The detector's Stats
+and the Dashboard's AutoRun tab read it (*tested on drawings-new: likely
+70–85% right, about half found*), which is the reason to move a detector to
+AutoRun. A later Test on the same dataset resumes from the kept picks when
+the ranking is unchanged.
+
 **What a vote does.** It is recorded against the pick's band, refreshes the
 ranges on the right, and advances to the next pick. There is no retrain, no
 re-sort and no line move between votes: the ranking is frozen for the whole
@@ -174,8 +189,10 @@ A user who wants the old Find without a test clicks Review first.
 The Stats modal goes: its counts and the 2×2 table move to the right pane,
 its *Checked by you* curve is replaced by the band-resolution curve of §2's
 verdict, and its trust chips move to the verdict. The balance control's state
-line stops showing Train's check range here: that range measured the training
-corpus, and showing it in Test invites reading it as this corpus's.
+line does not show Train's check range here (the owner's choice): that range
+measured the training corpus, and showing it in Test invites reading it as
+this corpus's. In Test the line reads this corpus's result, or *untested*
+before Done.
 
 ## 4. What Find becomes
 
@@ -220,6 +237,7 @@ App tier:
   for the per-dataset AutoRun task.
 - The Test view and its phase panel, the right-pane result, the Review tab,
   the route rename, the Dashboard buttons, the hint text.
+- The persisted verdict on the detector, and its two readers.
 - Docs: the user guide and how-tos named in §4, and the eval doc's
   description of the new mirror.
 
@@ -238,48 +256,26 @@ Better at 0.1%, 0.44% and 5% and on a document class, at the three presets.
 That run picks the targets and budgets §2 proposes, and it is an
 `experiment`-labelled issue, so it is laptop work.
 
-## 7. Open decisions
-
-- **Does a test result persist?** Today nothing from a Find session outlives
-  it. A detector that has been tested could carry its verdicts (a few ids,
-  labels and numbers per tested dataset, no vectors), so the detector's Stats
-  and the AutoRun tab could read *tested on drawings-new: 70–85% right, about
-  half found*. It is the natural reason to move a detector to AutoRun, and it
-  is a persistence decision the owner has not made.
-- **The Train check in Test.** §3 proposes hiding it. The alternative is to
-  show both ranges labelled by corpus, which is more honest and more to read.
-- **The name.** "Autopilot" already means Train's phase machine, in the code
-  and the docs. Test's flow is a second one; whether the panel is called
-  Autopilot too, or just *the test*, is copy to settle before the screenshots
-  are queued.
-
 ## Slices
 
-Each slice is independently shippable; the first two carry no visible change.
+Each is independently shippable; the first two carry no visible change.
 
 <!-- item-sep -->
 
-- **The test sample and its estimators** in `vtscore`, with unit tests on
-  planted answers (a known precision and recall per band, and the ranges must
-  hold them), and the allocation rule. No app change.
+- [ ] #4527 — Test mode: the test sample and its estimators in vtscore (Opus)
 
 <!-- item-sep -->
 
-- **The eval arm and the pricing study** of §6, fixing the targets and
-  budgets. `experiment`.
+- [ ] #4523 — Test mode: eval arm and the pricing study for the stop rule (Opus; `experiment`)
 
 <!-- item-sep -->
 
-- **The Test autopilot inside today's Find view**: routes, phase machine,
-  phase panel and live result in the right pane, with the Review tab holding
-  the current Find. Find keeps its name in this slice.
+- [ ] #4524 — Test mode: the Test autopilot inside the Find view, with Find kept as a Review tab (Opus)
 
 <!-- item-sep -->
 
-- **The rename and the third button**: Find becomes Test on the Dashboard and
-  in the route and docs, the new Find button runs AutoRun on the selection, the
-  Stats modal is retired into the verdict, and the reshoot queue is filed.
+- [ ] #4525 — Test mode: rename Find to Test, and make Find a button that runs AutoRun on the selection (Sonnet)
 
 <!-- item-sep -->
 
-- **A persisted verdict**, if the owner decides §7's first question yes.
+- [ ] #4526 — Test mode: persist a finished test's verdict on the detector (Sonnet)
