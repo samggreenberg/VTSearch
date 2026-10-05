@@ -132,7 +132,7 @@
 }
 
 @if (showSpotCheck()) {
-  <vt-spot-check-modal (closed)="onSpotCheckClosed()" (voted)="onSpotCheckVoted($event)" />
+  <vt-spot-check-modal [intro]="spotCheckIntro()" (closed)="onSpotCheckClosed()" (voted)="onSpotCheckVoted($event)" />
 }
 
 @if (showResortPrompt()) {

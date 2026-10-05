@@ -142,6 +142,14 @@ describe('SpotCheckModalComponent (#4413, #4273)', () => {
       expect(component.currentId()).toBe(17);
     });
 
+    it('says why it opened when Autopilot ran it, and nothing when the user asked (#4496)', async () => {
+      await start([17, 4, 29, 8, 11]);
+      expect(el().querySelector('.check-intro')).toBeNull();
+      fixture.componentRef.setInput('intro', 'Your labels still overlap, so Autopilot is checking the line.');
+      await settleZoneless(fixture);
+      expect(el().querySelector('.check-intro')!.textContent).toContain('Autopilot is checking the line');
+    });
+
     it('presents them as a check, not the ranking: no rank numbers and no scores', async () => {
       await start([17, 4, 29, 8, 11]);
       const stage = el().querySelector('.spot-check')!;
