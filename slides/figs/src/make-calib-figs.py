@@ -69,7 +69,14 @@ from vtscore.training.structural_similarity import (
     RECALL_GOOD_FRACTION,
     RECALL_MIN_INLIERS,
 )
-from vtscore.training.thresholds.spot_check import CHECK_ALPHA, fbeta_score, likely_range, range_tail
+from vtscore.training.thresholds.spot_check import (  # noqa: E402
+    CHECK_ALPHA,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+    fbeta_score,
+    likely_range,
+    range_tail,
+)
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -5605,8 +5612,11 @@ def _doc_stage(stage: int) -> plt.Figure:
 #: a band of white under its last line (#3265). Every row is measured *down
 #: from the canvas top*, so the two share their top rows — statement, vote row,
 #: strip, kept set, line — and differ only in how far below the strip they go.
-FLOOR_ASK_CANVAS_H = 6.35
+FLOOR_ASK_CANVAS_H = 8.15
 FLOOR_CHECK_CANVAS_H = 8.65
+#: How far `calib-floor-ask` sets its shared rows below its own canvas top: the
+#: room it takes for the question above the control's sentence (#4517).
+FLOOR_ASK_HEADROOM = 0.75
 #: How many items the strip shows, and how many of them the line keeps. The
 #: count is wherever the labels' line falls on the corpus (#4452), so 32 is a
 #: choice of the drawing, not a cap: it is the set the check's walk starts on
@@ -5676,20 +5686,23 @@ FLOOR_BAND_PICKS = (
 FLOOR_BAND_LIFT = 0.70
 #: The walk row under the line: how far below the line's foot its arrows run.
 FLOOR_WALK_DROP = 0.55
-FLOOR_ASK_STAGES = 3
+FLOOR_ASK_STAGES = 4
 FLOOR_CHECK_STAGES = 5
 
 
 def floor_ask_fig() -> None:
-    """The line the balance keeps, and why the session's own votes cannot vouch for it.
+    """The problem the spot check solves, and why the session's own votes cannot solve it.
 
-    Three stages: what the Threshold control says before anyone checks — the
-    top 32 nobody has voted on are kept, unchecked, where the labels' line fell
-    (#4413, #4452) — with that kept set and its line; the votes the session already holds, drawn where the model
-    chose to look; and the conclusion — they say where the model looked, not
-    how right the kept set is. The 83% is #4256's: an estimator calibrated on
-    learned-sort evidence alone, with a consistent reference pool, broke that
-    share of its 50% promises.
+    Four stages (#4517: the problem first, then the excuse): the kept set, its
+    line, and the question — how many of it are right; what the Threshold
+    control can say about that before anyone checks — the top 32 nobody has
+    voted on are kept, unchecked, where the labels' line fell (#4413, #4452);
+    the votes the session already holds, drawn where the model chose to look;
+    and the conclusion — they say where the model looked, not how right the
+    kept set is, so the answer has to come from picks drawn at random. The 83%
+    in the notes is #4256's: an estimator calibrated on learned-sort evidence
+    alone, with a consistent reference pool, broke that share of its 50%
+    promises.
     """
     final = _floor_stage(FLOOR_ASK_STAGES, "ask")
     box = tight_box(final)
@@ -5718,6 +5731,157 @@ def floor_check_fig() -> None:
     save(final, OUT, "calib-floor-check.png", column=FULL_BLEED, box=box)
 
 
+# ── Clopper–Pearson, on its own (#4517) ──────────────────────────────────────
+
+#: How many build stages the Clopper–Pearson figure reveals in: five picks and
+#: what they say; the lowest share that could still give four right; the
+#: highest that could still give only four; the range between; and the same
+#: share from fifty picks.
+CP_STAGES = 5
+#: The picks the slide reads, as (right, drawn): the top band of Spot Check's
+#: first audit, four of five; and ten times as many at the same share.
+CP_SMALL = (4, 5)
+CP_LARGE = (40, 50)
+#: Each tail's share: a two-sided 95% range, the check's own alpha split in two.
+CP_TAIL = CHECK_ALPHA / 2
+#: The share axis: left edge, width and height, in `FBETA_CANVAS` units.
+CP_AXIS_X0, CP_AXIS_W, CP_AXIS_Y = 4.0, 15.1, 4.7
+#: The picks row, and the two lines of each end's flag, in canvas units.
+CP_PICKS_Y = 8.3
+CP_FLAG_Y = (6.55, 5.95)
+
+
+def clopper_fig() -> None:
+    """Clopper–Pearson in general, before Spot Check uses it (#4517).
+
+    A random sample's count, turned into a range on the share it was drawn
+    from: the lowest share that would still give a count this high at least
+    `CP_TAIL` of the time, and the highest that would still give one this low.
+    Each end carries a flag saying exactly that, in words and as "1 time in
+    40", because the tails themselves are too thin to draw: a bar of 2.5% is a
+    sliver at any size a slide can show. The bounds are the app's
+    (`clopper_pearson_lower` / `_upper`, the functions the spot check's ranges
+    are built from).
+    """
+    final = _cp_stage(CP_STAGES)
+    box = tight_box(final)
+    for stage in range(1, CP_STAGES):
+        save(_cp_stage(stage), OUT, f"calib-clopper.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-clopper.png", column=FULL_BLEED, box=box)
+
+
+def _cp_x(share: float) -> float:
+    return CP_AXIS_X0 + share * CP_AXIS_W
+
+
+def _cp_bounds(right: int, drawn: int) -> tuple[float, float]:
+    return clopper_pearson_lower(right, drawn, CP_TAIL), clopper_pearson_upper(right, drawn, CP_TAIL)
+
+
+def _cp_pct(share: float) -> str:
+    """A share as the slide says it: whole percent, or one decimal near the ends."""
+    value = share * 100
+    return f"{value:.1f}%" if value > 99 or value < 1 else f"{value:.0f}%"
+
+
+def _cp_flag(ax: plt.Axes, share: float, lines: tuple[str, str], ha: str) -> None:
+    """One end of the range: its tick on the axis, and what makes it the end.
+
+    The flag's own first line names the share, so the tick carries no number.
+    *ha* is the flag's alignment; a right-aligned flag ends at the axis's own
+    right end, so a flag near 100% stays inside the canvas.
+    """
+    x = _cp_x(share)
+    ax.plot([x] * 2, [CP_AXIS_Y - 0.18, CP_AXIS_Y + 0.18], color=INK, linewidth=2.2, zorder=4)
+    ax.plot(
+        [x] * 2,
+        [CP_AXIS_Y + 0.25, CP_FLAG_Y[1] - 0.35],
+        color=INK,
+        linewidth=1.4,
+        linestyle=(0, (2, 3)),
+        zorder=2,
+    )
+    anchor = {"right": CP_AXIS_X0 + CP_AXIS_W, "center": x}[ha]
+    for y, words in zip(CP_FLAG_Y, lines, strict=True):
+        ax.text(anchor, y, words, ha=ha, va="center", fontsize=17, color=INK)
+
+
+def _cp_range(ax: plt.Axes, y: float, lo: float, hi: float, words: str, ends: bool = False) -> None:
+    """A range under the axis, named on its left; *ends* prints its two shares under its ends."""
+    x0, x1 = _cp_x(lo), _cp_x(hi)
+    ax.plot([x0, x1], [y, y], color=INK, linewidth=5.0, solid_capstyle="butt", zorder=4)
+    for x in (x0, x1):
+        ax.plot([x, x], [y - 0.16, y + 0.16], color=INK, linewidth=2.2, zorder=4)
+    ax.text(x0 - 0.25, y, words, ha="right", va="center", fontsize=17, color=INK)
+    if ends:
+        for x, share in ((x0, lo), (x1, hi)):
+            ax.text(x, y - 0.3, _cp_pct(share), ha="center", va="top", fontsize=16, color=INK)
+
+
+def _cp_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the Clopper–Pearson figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+
+    right, drawn = CP_SMALL
+    lo, hi = _cp_bounds(right, drawn)
+    odds = f"1 time in {round(1 / CP_TAIL)}"
+
+    # ── stage 1: five picks at random, and the share they read ────────────────
+    for i in range(drawn):
+        ax.text(
+            6.8 + i * 0.85,
+            CP_PICKS_Y,
+            "✓" if i < right else "✗",
+            ha="center",
+            va="center",
+            fontsize=30,
+            color=GREEN if i < right else RED,
+        )
+    ax.text(
+        6.8 + drawn * 0.85,
+        CP_PICKS_Y,
+        f"{right} of {drawn} picks right, drawn at random",
+        ha="left",
+        va="center",
+        fontsize=20,
+        color=INK,
+    )
+    _range_line(ax, CP_AXIS_X0, CP_AXIS_X0 + CP_AXIS_W, CP_AXIS_Y, z=3)
+    for share, words in ((0.0, "0%"), (1.0, "100%")):
+        ax.text(_cp_x(share), CP_AXIS_Y - 0.3, words, ha="center", va="top", fontsize=15, color=SOFT)
+    ax.text(
+        _cp_x(0.5),
+        CP_AXIS_Y - 0.3,
+        "how much of the whole set is right",
+        ha="center",
+        va="top",
+        fontsize=16,
+        color=SOFT,
+    )
+    point = right / drawn
+    ax.plot([_cp_x(point)], [CP_AXIS_Y], marker="o", markersize=10, color=INK, zorder=5)
+    ax.text(_cp_x(point), CP_AXIS_Y + 0.25, _cp_pct(point), ha="center", va="bottom", fontsize=16, color=INK)
+
+    # ── stages 2-3: the share at each end that makes this count a fluke ───────
+    if stage >= 2:
+        _cp_flag(ax, lo, (f"If only {_cp_pct(lo)} were right,", f"{right} or more of {drawn}: {odds}"), "center")
+    if stage >= 3:
+        _cp_flag(ax, hi, (f"If {_cp_pct(hi)} were right,", f"{right} or fewer of {drawn}: {odds}"), "right")
+
+    # ── stage 4: everything between, the range ────────────────────────────────
+    if stage >= 4:
+        _cp_range(ax, CP_AXIS_Y - 1.35, lo, hi, f"{right} of {drawn}")
+    # ── stage 5: the same share from ten times the picks ──────────────────────
+    if stage >= CP_STAGES:
+        big_lo, big_hi = _cp_bounds(*CP_LARGE)
+        _cp_range(ax, CP_AXIS_Y - 2.1, big_lo, big_hi, f"{CP_LARGE[0]} of {CP_LARGE[1]}", ends=True)
+    return fig
+
+
 def _floor_cell_x(index: int) -> float:
     """The left edge of the `index`-th strip cell, worst first."""
     return FLOOR_STRIP_X0 + index * FLOOR_STRIP_W / FLOOR_ITEMS
@@ -5727,18 +5891,21 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of one of the pair."""
     top = FLOOR_ASK_CANVAS_H if variant == "ask" else FLOOR_CHECK_CANVAS_H
     fig, ax = _incl_figure(top)
-    rows = _floor_first_stage(ax, top)
     if variant == "ask":
-        _floor_ask_stages(ax, stage, rows)
+        rows = _floor_first_stage(ax, top - FLOOR_ASK_HEADROOM, statement=False)
+        _floor_ask_stages(ax, stage, rows, top)
     else:
+        rows = _floor_first_stage(ax, top)
         _floor_check_stages(ax, stage, rows)
     return fig
 
 
-def _floor_first_stage(ax: plt.Axes, top: float) -> dict:
+def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict:
     """The sentence, the corpus, the kept set and the line: both figures' first page.
 
-    Returns the rows the later stages hang off.
+    `calib-floor-ask` passes ``statement=False`` and draws the control's
+    sentence a stage later, under the question it answers. Returns the rows the
+    later stages hang off.
     """
     cell_w = FLOOR_STRIP_W / FLOOR_ITEMS
     strip_top = top - FLOOR_STRIP_DROP
@@ -5750,15 +5917,16 @@ def _floor_first_stage(ax: plt.Axes, top: float) -> dict:
     # checks, word for word, and it is the only ink above the strip on the
     # first page. It starts right of the title notch; the strip below runs from
     # the margin.
-    ax.text(
-        FLOOR_STATEMENT_X,
-        top - FLOOR_STATEMENT_DROP,
-        f"“Top {FLOOR_K} kept, unchecked”",
-        ha="left",
-        va="bottom",
-        fontsize=18,
-        color=INK,
-    )
+    if statement:
+        ax.text(
+            FLOOR_STATEMENT_X,
+            top - FLOOR_STATEMENT_DROP,
+            f"“Top {FLOOR_K} kept, unchecked”",
+            ha="left",
+            va="bottom",
+            fontsize=18,
+            color=INK,
+        )
     for index in range(FLOOR_ITEMS):
         _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled")
     # The axis, named the way every score axis in the deck is: best on the right.
@@ -5816,10 +5984,32 @@ def _floor_vote_marks(ax: plt.Axes, rows: dict, votes: tuple[tuple[int, bool], .
         )
 
 
-def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
-    """Stages 2–3 of `calib-floor-ask`: the session's votes, and what they can say."""
-    # ── stage 2: the votes the session already holds ─────────────────────────
+def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict, top: float) -> None:
+    """Stages of `calib-floor-ask`: the question, the control's answer, the votes, and what they can say."""
+    # ── stage 1: the problem, before anything is said about it ────────────────
+    ax.text(
+        FLOOR_STATEMENT_X,
+        top - FLOOR_STATEMENT_DROP,
+        f"How many of the kept {FLOOR_K} are right?",
+        ha="left",
+        va="bottom",
+        fontsize=18,
+        color=INK,
+        fontweight="bold",
+    )
+    # ── stage 2: what the Threshold control can say so far ────────────────────
     if stage >= 2:
+        ax.text(
+            FLOOR_STATEMENT_X,
+            top - FLOOR_STATEMENT_DROP - FLOOR_ASK_HEADROOM,
+            f"The Threshold control says: “Top {FLOOR_K} kept, unchecked”",
+            ha="left",
+            va="bottom",
+            fontsize=18,
+            color=INK,
+        )
+    # ── stage 3: the votes the session already holds ─────────────────────────
+    if stage >= 3:
         _floor_vote_marks(ax, rows, FLOOR_MODEL_VOTES)
         ax.text(
             INCL_CANVAS_W / 2 + 2.0,
@@ -5830,17 +6020,23 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
             fontsize=15,
             color=INK,
         )
-    # ── stage 3: what they can and cannot say ────────────────────────────────
-    if stage >= 3:
-        ax.text(
-            INCL_CANVAS_W / 2,
-            rows["brace_y"] - 1.75,
-            "They say where the model looked, not how right the kept set is.",
-            ha="center",
-            va="center",
-            fontsize=17,
-            color=INK,
-        )
+    # ── stage 4: what they can and cannot say, and so what to do instead ─────
+    if stage >= 4:
+        for row, words in enumerate(
+            (
+                "They say where the model looked, not how right the kept set is.",
+                "So pick from the kept set at random, and count.",
+            )
+        ):
+            ax.text(
+                INCL_CANVAS_W / 2,
+                rows["brace_y"] - 1.75 - row * 0.7,
+                words,
+                ha="center",
+                va="center",
+                fontsize=17,
+                color=INK,
+            )
 
 
 def _floor_band_cells(band: int) -> range:
@@ -6039,6 +6235,7 @@ if __name__ == "__main__":
     tilt_flow_fig()
     acq_flow_fig()
     floor_ask_fig()
+    clopper_fig()
     floor_check_fig()
     blend_schedule_fig()
     split_fraction_fig()

@@ -58,9 +58,11 @@ slides:
 
   # 3 — Preference: why a line needs one, what F₁ and F-beta are (#4517),
   # F-beta's peak and the three-radio balance that sets its beta (#4413,
-  # #4448), the line the labels draw at its expected peak (#4452), why the
-  # labels are what it is drawn from (they are all Find has, #4517), what that line can and cannot claim before anyone checks,
-  # and what a check says about it without moving it (#4427, #4452). Present
+  # #4448), the line the labels draw at its expected peak (#4452), and why
+  # the labels are what it is drawn from: they are all Find has (#4517). Then
+  # the question that line cannot answer before anyone checks (how many of
+  # what it keeps are right), Clopper–Pearson on its own, and what a check
+  # says about the line without moving it (#4427, #4452, #4517). Present
   # tense throughout: the deck says what the app does, and the slider that
   # came before the balance is in the appendix after The End.
   # Second Cut stays last: the acquisition cut is measured from wherever the
@@ -72,6 +74,7 @@ slides:
   labels-line
   transfer-student
   floor-ask
+  clopper-pearson
   floor-check
   inclusion-acq
 
