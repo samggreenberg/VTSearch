@@ -375,6 +375,14 @@ def pick(summary: pd.DataFrame, bar: float = COVERAGE_BAR) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+def _run_job(job: tuple) -> tuple[list[dict], dict | None]:
+    """One input's replay, for the process pool (a module-level function, so it pickles)."""
+    kind, payload = job
+    if kind == "cell":
+        return cell_rows(payload)
+    return doc_rows(payload), None
+
+
 def sha_dir(paths: list[Path]) -> str:
     h = hashlib.sha256()
     for p in sorted(paths):
@@ -468,22 +476,15 @@ def main(argv: list[str] | None = None) -> int:
 
     rows: list[dict] = []
     checks: list[dict] = []
-
-    def run(job):
-        kind, payload = job
-        if kind == "cell":
-            return cell_rows(payload)
-        return doc_rows(payload), None
-
     if args.jobs > 1:
         with ProcessPoolExecutor(args.jobs) as ex:
-            for r, c in ex.map(run, jobs, chunksize=4):
+            for r, c in ex.map(_run_job, jobs, chunksize=4):
                 rows.extend(r)
                 if c is not None:
                     checks.append(c)
     else:
         for job in jobs:
-            r, c = run(job)
+            r, c = _run_job(job)
             rows.extend(r)
             if c is not None:
                 checks.append(c)
