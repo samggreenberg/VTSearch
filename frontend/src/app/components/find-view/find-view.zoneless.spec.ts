@@ -15,6 +15,7 @@ import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { BALANCE_STATES, lineBalance, wireBalance } from '../../testing/line-balance';
+import { wireLineTest, wireTest } from '../../testing/line-test';
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -723,6 +724,8 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
   describe('the consumers of the cut', () => {
     beforeEach(async () => {
       await setUp(false);
+      // Today's Find lives on the Review tab (#4524): the work queue and the piles.
+      fixture.componentInstance.onFindTabChange('review');
       await flushInit(ranking.map(({ id }) => id));
       await settleZoneless(fixture);
     });
@@ -789,17 +792,42 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(view().unverifiedGoodIds()).toEqual([1, 2, 3]);
     });
 
-    it.each(BALANCE_STATES)('show the Threshold and its state in the Find row, with no check, when %s', async (status) => {
+    it.each(BALANCE_STATES)('show the Threshold and this corpus\'s test state in the Find row, never Train\'s check, with no check button, when %s', async (status) => {
       sortState.setSortResults(ranking, 0.5, lineBalance(status));
       await settleZoneless(fixture);
       const row = (fixture.nativeElement as HTMLElement).querySelector('.find-balance-row')!;
       const text = row.querySelector('.balance-state')!.textContent!;
-      expect(text).toContain(
-        status === 'unchecked' ? 'Top 32 kept, unchecked' : 'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept',
-      );
+      // The state line reads the test of this corpus, or untested (#4524): Train's
+      // check range measured the training corpus and would read as this one's.
+      expect(text).toContain('Untested · top 2 kept');
+      expect(text).not.toContain('Checked');
       // Find tests the balance Train set: it offers no spot check to set one (#4317).
       expect(row.querySelector('.balance-check-btn')).toBeNull();
       expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-modal')).toBeNull();
+    });
+
+    it('shows the phase panel, the stage and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      // Entering Autopilot with a line drawn and no test starts one.
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('vt-line-test-panel')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-stage')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-result')).not.toBeNull();
+      expect(el.querySelector('vt-media-list')).toBeNull();
+      expect(el.querySelector('vt-right-panel')).toBeNull();
+
+      (el.querySelector('.left-tab[title^="Review"]') as HTMLButtonElement).click();
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+      expect(el.querySelector('vt-media-list')).not.toBeNull();
+      expect(el.querySelector('vt-center-panel')).not.toBeNull();
+      expect(el.querySelector('vt-right-panel')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-stage')).toBeNull();
+      // The Stats modal is retired into the result pane (#4524).
+      expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
     });
   });
 });

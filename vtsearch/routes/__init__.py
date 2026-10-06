@@ -33,6 +33,7 @@ from vtsearch.routes.media import (
     medias_bp,
     seed_importers_bp,
 )
+from vtsearch.routes.line_test import line_test_bp
 from vtsearch.routes.precision_check import precision_check_bp
 from vtsearch.routes.processors import processors_crud_bp, processors_scoring_bp
 from vtsearch.routes.projection import projection_bp
@@ -66,6 +67,7 @@ __all__ = [
     "jobs_bp",
     "label_importers_bp",
     "labels_bp",
+    "line_test_bp",
     "main_bp",
     "media_server_bp",
     "medias_bp",

@@ -116,8 +116,9 @@ the set it would have kept.
 The fields mean what they do on `/api/balance` above, less `threshold`,
 `n_returned` and `line_preference`. The line keeps a set in both states:
 every match, count and action keeps working on it, and the app draws it the
-same in both, with the state and its ranges under the Threshold control and
-in the Find Stats chart's legend. It is never `null` for want of a check. A
+same in both, with the state and its ranges under the Threshold control in
+Train (in Find the control reads the [test of the line](find.md#test-the-line)
+instead). It is never `null` for want of a check. A
 headless run (AutoRun, the CLI) has nobody to vote, so it exports the
 `unchecked` line and records it as such. The `floor` object's shape is under
 [the floor state](#the-floor-state), below.

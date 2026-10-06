@@ -10,6 +10,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **A test's draws are read at any count** (issue #4524). `LineTest.estimate_at(count,
+  beta=None)` returns the `EdgeEstimate` the line would ship if it kept the top *count*,
+  from the same joint draws as `estimates()`: exact at a band edge, a band's positives
+  split in proportion inside one. The draws are cached until the next label. The app's
+  Test verdict reads it for the line each balance preset would draw.
+
 - **The CPU Stage 1 keeps a float32 tile matrix** (issue #4514). `_float32_matrix` converts the
   fp16 matrix once per page set (torch's vectorised conversion), `_cpu_page_max` multiplies it
   directly, and `exact_page_scores` reads it when present. numpy's per-call conversion was 95%
@@ -228,6 +234,25 @@ instead, since every commit on `dev` is effectively a new app release.)
     `_safe_threshold_for_step` takes `check=`.
 
 ### Added
+
+- **A finished test's verdict is kept on the detector** (issue #4526).
+  `vtscore.detectors.line_verdicts`: `LineTestVerdict.from_test` is what a
+  finished `LineTest` leaves (the dataset's id and name, the date, the balance,
+  the line's count and the corpus's size, each pick's id, label and band, and
+  the precision, recall and F-beta ranges; ids, labels and numbers only), kept
+  in the detector JSON under `TEST_VERDICTS_KEY` (`test_verdicts`), one per
+  tested dataset (`put_verdict`, `read_verdicts`, `verdict_for`,
+  `drop_verdict`). `labels_digest(labelset)` is a digest of
+  `labelset_signature`, and a verdict is `stale(current)` once the detector's
+  labels no longer match it; `ranking_digest(ids, line_count)` frames the
+  ranking its picks came from, and `kept_labels(ids, line_count)` gives them
+  back only on that ranking and line. `keep_verdict(det_ctx, test, ...)` /
+  `kept_verdict(det_ctx, dataset_id)` / `forget_verdict(det_ctx, dataset_id)`
+  read and write the active detector's file under `label_sync_write_lock`
+  (`forget_verdict` is a reset; nothing in the app's flow needs it);
+  `verdict_summaries(data)` is the readers' shape, with the stale mark.
+  `LineTest` gains `kept_at`, when a resumed test's picks were taken
+  (`None` for a fresh test), in `as_dict()` too.
 
 - **The test sample** (issue #4527; the first slice of Test mode,
   `docs/plans/test-mode.md`). `vtscore.training.thresholds.line_test`: `LineTest`

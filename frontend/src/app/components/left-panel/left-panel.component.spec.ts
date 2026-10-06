@@ -317,6 +317,8 @@ describe('LeftPanelComponent', () => {
 
     function show(panelMode: 'label' | 'find', balance: ReturnType<typeof lineBalance>): HTMLElement {
       fixture.componentRef.setInput('panelMode', panelMode);
+      // Today's Find lives on the Review tab (#4524); Autopilot shows no list.
+      fixture.componentRef.setInput('findTab', 'review');
       fixture.componentRef.setInput('medias', ranking.map(({ id }) => stub(id)));
       fixture.componentRef.setInput('sortOrder', ranking);
       fixture.componentRef.setInput('threshold', 0.5);
@@ -367,6 +369,7 @@ describe('LeftPanelComponent', () => {
 
     function find(sortOrder: { id: number; score: number }[] | null, threshold: number | null): HTMLElement {
       fixture.componentRef.setInput('panelMode', 'find');
+      fixture.componentRef.setInput('findTab', 'review');
       fixture.componentRef.setInput('medias', (sortOrder ?? []).map(({ id }) => stub(id)));
       fixture.componentRef.setInput('sortOrder', sortOrder);
       fixture.componentRef.setInput('threshold', threshold);

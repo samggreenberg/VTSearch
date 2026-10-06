@@ -26,9 +26,13 @@
       [textQuery]="sortState.textQuery"
       [datasetName]="pairScope.datasetName()"
       [panelMode]="'find'"
+      [findTab]="findTab()"
+      [balanceLocked]="lineTest.locked()"
+      [balanceLineState]="balanceLineState()"
       [disabled]="waiting"
       [autopilotCollapsed]="false"
       [autopilotEnabled]="false"
+      (findTabChange)="onFindTabChange($event)"
       (mediaSelect)="onMediaSelect($event)"
       (mediaVote)="onHoverVote($event)"
       (betaChange)="onBetaChange($event)"
@@ -36,7 +40,16 @@
       (toDataset)="onToDatasetUnverified()"
       (unverifiedExport)="onExportRequest('unverified_good')"
       (sortCancel)="onSortCancel()"
-    />
+    >
+      <!-- The Test autopilot's phase panel (#4524), under the Threshold on the
+           Autopilot tab. The ranked list is not shown while a test runs. -->
+      <vt-line-test-panel
+        findAutopilot
+        [response]="lineTest.response()"
+        [scoring]="sortState.sortBusy"
+        [scoreProgress]="sortState.sortOverall"
+      />
+    </vt-left-panel>
   </div>
   <div
     class="pane-divider"
@@ -96,35 +109,54 @@
         </div>
       </div>
     }
-    <vt-center-panel
-      [media]="mediaState.selectedMedia"
-      [disabled]="waiting"
-      [exhausted]="centreExhausted()"
-      exhaustedHeading="All items reviewed"
-      exhaustedDetail="Every item on both sides of the cutoff has been verified. Check Stats or export your results."
-      placeholderHint="Pick one from the work queue on the left, or score the dataset to build one."
-      (mediaVoted)="onMediaVoted($event)"
-      (navigateRequested)="onNavigate($event)"
-    />
+    @if (findTab() === 'autopilot') {
+      <!-- The current pick with Good and Bad, the round's dots and the phase's
+           prompt: the spot check's round as the view rather than a modal. -->
+      <vt-line-test-stage />
+    } @else {
+      <vt-center-panel
+        [media]="mediaState.selectedMedia"
+        [disabled]="waiting"
+        [exhausted]="centreExhausted()"
+        exhaustedHeading="All items reviewed"
+        exhaustedDetail="Every item on both sides of the cutoff has been verified. Read the test result on the Autopilot tab, or export your results."
+        placeholderHint="Pick one from the work queue on the left, or score the dataset to build one."
+        (mediaVoted)="onMediaVoted($event)"
+        (navigateRequested)="onNavigate($event)"
+      />
+    }
   </div>
   <div
     class="pane-divider"
     (mousedown)="onRightDividerMouseDown($event)"
   ></div>
   <div class="panel-right">
-    <vt-right-panel
-      [medias]="mediaState.mediasSignal()"
-      [focusMode]="focusModeRight()"
-      [disabled]="waiting"
-      mode="find"
-      (mediaSelected)="onMediaSelect($event)"
-      (mediaVoted)="onHoverVote($event)"
-      (browse)="onBrowse()"
-      (toDataset)="onToDataset()"
-      (exportLabels)="onExportRequest($event)"
-      (stats)="onStats()"
-      (addCorrections)="onAddCorrections()"
-    />
+    @if (findTab() === 'autopilot') {
+      <!-- The result as it forms, in place of the two piles: the Stats modal's
+           content, live, and the verdict with its exits. -->
+      <vt-line-test-result
+        [response]="lineTest.response()"
+        [scoring]="sortState.sortBusy"
+        [refresh]="resultRefresh()"
+        (moveToAutoRun)="onMoveToAutoRun()"
+        (lean)="onLean($event)"
+        (addCorrections)="onAddCorrections()"
+        (testAgain)="onTestAgain()"
+      />
+    } @else {
+      <vt-right-panel
+        [medias]="mediaState.mediasSignal()"
+        [focusMode]="focusModeRight()"
+        [disabled]="waiting"
+        mode="find"
+        (mediaSelected)="onMediaSelect($event)"
+        (mediaVoted)="onHoverVote($event)"
+        (browse)="onBrowse()"
+        (toDataset)="onToDataset()"
+        (exportLabels)="onExportRequest($event)"
+        (addCorrections)="onAddCorrections()"
+      />
+    }
   </div>
 </div>
 
@@ -135,8 +167,4 @@
     (closed)="showExport = false"
     (exported)="showExport = false"
   />
-}
-
-@if (showStats) {
-  <vt-find-stats-modal (closed)="showStats = false" />
 }

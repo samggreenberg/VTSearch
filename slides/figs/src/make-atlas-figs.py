@@ -307,9 +307,12 @@ def _blindspot_stage(stage: int) -> plt.Figure:
             INTRO._cross(ax, p)
         elif stage >= 4 and i in inside:
             # A match nobody has voted on and the detector rejects: the same
-            # hollow circle as its neighbours, filled in the colour the deck
-            # reserves for the Good side. Not a check — nobody has said so.
-            ax.add_patch(plt.Circle(tuple(p), R, facecolor=GREEN, edgecolor=GREEN, linewidth=1.7, zorder=4))
+            # circle as its neighbours, hatched the way the deck hatches the
+            # Good side of a block of media (#4533). Not a check, since nobody
+            # has said so, and not a solid dot either, which reads as a vote.
+            ax.add_patch(
+                plt.Circle(tuple(p), R, facecolor="white", edgecolor=GREEN, hatch="//////", linewidth=1.7, zorder=4)
+            )
         else:
             INTRO._circle(ax, p)
 
@@ -1417,8 +1420,8 @@ def _pvalues_stage(stage: int) -> plt.Figure:
 
     ax.set_xlim(0, 0.36)
     ax.set_ylim(-0.012, 0.36)
-    ax.set_xlabel("share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
-    ax.set_ylabel("distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
+    ax.set_xlabel("Share of its own held-out data called atypical", fontsize=LABEL_PT, color=INK, labelpad=9)
+    ax.set_ylabel("Distance from a calibrated p-value", fontsize=LABEL_PT, color=INK, labelpad=9)
     ax.tick_params(labelsize=NOTE_PT, colors=SOFT, length=4)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)

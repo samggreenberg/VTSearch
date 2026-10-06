@@ -22,6 +22,7 @@ import {
   nearestBalancePreset,
   type LineBalance,
 } from '../../../utils/line-balance';
+import type { TestLineState } from '../../../utils/line-test';
 
 /** The dot colour for each state, in `.labeling-indicator[data-status]` terms. */
 type Dot = 'green' | 'yellow' | 'none';
@@ -66,6 +67,13 @@ type Dot = 'green' | 'yellow' | 'none';
  * the verification gate's boundary rather than a cut on a ranking. A range that later votes have left
  * stale reads exactly as before; only its tooltip says so.
  *
+ * In Test (the Find view since #4524) the host supplies the state line
+ * (`lineState`): this corpus's test result, or *untested*, never Train's
+ * check range, which measured the training corpus and would read as this
+ * one's. While a test phase runs the host sets `locked`: the balance is live
+ * between phases and frozen within one, because moving it would move the
+ * line and the bands under the picks.
+ *
  * Content marked `balanceActions` is projected onto the Threshold heading's
  * line, so a host can seat controls there (Find's work-queue actions).
  */
@@ -92,6 +100,10 @@ export class BalanceComponent {
   readonly checkable = input(true);
   /** False where the host offers no spot check at all: Find (#4317). */
   readonly offerCheck = input(true);
+  /** The radios are frozen: a test phase is running over the line they would move (#4524). */
+  readonly locked = input(false);
+  /** The host's own state line, in place of the check's (Test: this corpus's result, or untested). */
+  readonly lineState = input<TestLineState | null>(null);
 
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();
@@ -113,8 +125,10 @@ export class BalanceComponent {
   /** The radio the balance shows: a balance off the list shows as the preset it will snap to. */
   readonly selected = computed(() => nearestBalancePreset(this.value()).value);
 
-  readonly summary = computed(() => balanceSummary(this.balance()));
-  readonly explanation = computed(() => balanceExplanation(this.balance()));
+  readonly summary = computed(() => this.lineState()?.text ?? balanceSummary(this.balance()));
+  readonly explanation = computed(() => this.lineState()?.title ?? balanceExplanation(this.balance()));
+  /** Why the radios are frozen, on each one, while `locked`. */
+  readonly lockedHint = 'The Threshold is frozen while a test phase runs: moving it would move the line under the picks.';
   readonly checkText = computed(() => (this.offerCheck() ? checkLabel(this.balance()) : null));
   readonly checkHint = computed(() => checkTitle(this.balance()));
   /** A check is due (#4496): the button calls for it, and a note says why. Never where no check is offered. */
@@ -122,6 +136,8 @@ export class BalanceComponent {
   readonly dueNote = computed(() => (this.due() ? checkDueNote(this.balance()) : null));
 
   readonly dot = computed<Dot>(() => {
+    const own = this.lineState();
+    if (own) return own.dot;
     switch (this.balance()?.status) {
       case 'checked':
         return 'green';
@@ -161,6 +177,10 @@ export class BalanceComponent {
   onPick(event: Event, value: number): void {
     (event.target as HTMLElement).blur();
     const shown = this.selected();
+    if (this.locked()) {
+      for (const radio of this.radios()) radio.nativeElement.checked = Number(radio.nativeElement.value) === shown;
+      return;
+    }
     for (const radio of this.radios()) radio.nativeElement.checked = Number(radio.nativeElement.value) === shown;
     if (value === shown) return;
     this.valueChange.emit(value);

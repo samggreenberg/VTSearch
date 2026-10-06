@@ -1,8 +1,9 @@
 # Test mode: Find becomes a decision, not a browse (#4520)
 
-**Status:** design, decided. The test sample (#4527) and the eval arm with
-its pricing study (#4523, `docs/experiments/2026-10-05-line-test-4523/`) have
-shipped; nothing else here has. #4520 asks three
+**Status:** design, decided. The test sample (#4527), the eval arm with its
+pricing study (#4523, `docs/experiments/2026-10-05-line-test-4523/`), the
+Test autopilot inside the Find view (#4524) and the kept verdict (#4526) have
+shipped; the rest has not. #4520 asks three
 questions: how a "Test" would work, how the open Find interface becomes a
 constrained Test interface, and which metric and statistics it needs. This
 file is the answer; the owner settled its open decisions on 2026-10-05, and
@@ -15,12 +16,13 @@ rather than replaces:
   `vtsearch/routes/detectors/scoring.py`) scores a dataset, draws the balance's
   line on that corpus, flood-fills every item with the detector's call, and
   opens a three-pane view whose work queue walks the line alternately above and
-  below it. Votes there are session-only (`find_mode` keeps them out of the
-  labelset), reach the detector only through **Add Corrections**, and feed a
-  Stats modal (`frontend/src/app/components/modals/find-stats-modal/`) whose
-  *Kept rate* and *Checked by you* curve count only what the walk happened to
-  serve. The walk is biased toward the line by design, so neither number
-  estimates anything about the set as a whole, and the modal says so.
+  below it (the **Review** tab since #4524, beside the Test autopilot's). Votes
+  there are session-only (`find_mode` keeps them out of the labelset) and reach
+  the detector only through **Add Corrections**. They used to feed a Stats
+  modal whose *Kept rate* and *Checked by you* curve counted only what the walk
+  happened to serve; the walk is biased toward the line by design, so neither
+  number estimated anything about the set as a whole. #4524 retired the modal
+  into the Test autopilot's result pane.
 - **The spot check** (`vtscore/training/thresholds/spot_check.py`,
   `vtsearch/routes/precision_check.py`,
   `frontend/src/app/components/modals/spot-check-modal/`) is the only measured
@@ -145,16 +147,6 @@ coverage of the stop is priced in the eval, as every check so far was
 (#4267, #4383). The user clicks until Done, as the issue asks, and Done is
 where the ranges stop moving usefully, not where the corpus runs out.
 
-**The verdict persists** (the owner's choice). A finished test is kept on
-the detector, one entry per tested dataset: the picks' ids, labels and bands,
-the balance, the date, and the ranges and F-beta at Done; ids, labels and
-numbers only, never a vector. A retrain marks every entry stale, as the spot
-check's range goes stale, and the entry stays flagged. The detector's Stats
-and the Dashboard's AutoRun tab read it (*tested on drawings-new: likely
-70–85% right, about half found*), which is the reason to move a detector to
-AutoRun. A later Test on the same dataset resumes from the kept picks when
-the ranking is unchanged.
-
 **What a vote does.** It is recorded against the pick's band, refreshes the
 ranges on the right, and advances to the next pick. There is no retrain, no
 re-sort and no line move between votes: the ranking is frozen for the whole
@@ -224,7 +216,6 @@ App tier:
   and the training write.
 - The Test view and its phase panel, the right-pane result, the Review tab,
   the route rename, the Dashboard buttons, the hint text.
-- The persisted verdict on the detector, and its two readers.
 - Docs: the user guide and how-tos named in §4, and the eval doc's
   description of the new mirror.
 
@@ -257,7 +248,7 @@ Each is independently shippable. The test sample and the eval arm carry no visib
 
 <!-- item-sep -->
 
-- [ ] #4524 — Test mode: the Test autopilot inside the Find view, with Find kept as a Review tab (Opus)
+- [x] #4524 — Test mode: the Test autopilot inside the Find view, with Find kept as a Review tab (Opus)
 
 <!-- item-sep -->
 
@@ -269,4 +260,4 @@ Each is independently shippable. The test sample and the eval arm carry no visib
 
 <!-- item-sep -->
 
-- [ ] #4526 — Test mode: persist a finished test's verdict on the detector (Sonnet)
+- [x] #4526 — Test mode: persist a finished test's verdict on the detector (Sonnet)

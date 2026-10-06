@@ -32,6 +32,11 @@
       </button>
       }
     </span>
+    <!-- An AutoRun detector ships unchecked, so the row says what a test
+         measured it to ship: the newest verdict it keeps (#4526). -->
+    @if (frozen) {
+      <span class="verdict-line" [class.verdict-line--stale]="verdict?.stale" [class.verdict-line--untested]="!verdict" [title]="verdictHint">{{ verdictText }}</span>
+    }
   }
 </td>
 @if (loadingTask() && !loadingTask()!.error) {

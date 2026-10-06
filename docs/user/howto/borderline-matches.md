@@ -29,19 +29,23 @@ balance peaks sooner. So moving toward False Positives moves the line down by
 a band of borderline pictures, and everything the line kept before it still
 keeps.
 
-The note under the spectrum says what the line keeps, and what a check found
-on it:
+The note under the spectrum says what the line keeps, and what the test on
+the **Autopilot** tab found on it:
 
-- **Top 32 kept, unchecked** - the Threshold's starting set. Nothing has
-  measured it yet. A Threshold that keeps a different count moves the line
+- **Untested · top 32 kept** - nothing has measured the line on this
+  collection yet. A Threshold that keeps a different count moves the line
   straight away.
-- **Checked · likely 55–80% right, about half of them found (checked 15) ·
-  48 kept** - a spot check in Train has measured it: it walked the list and
-  ended on the set where the balance peaked, and the note says how much of
-  that set is likely right and how much of what the list holds it likely
-  found; see
-  [How close the line got](../USER_GUIDE.md#how-close-the-line-got). Find
-  offers no check of its own; it is where you test the Threshold.
+- **Tested · likely 55–80% right, about half of them found (checked 32) ·
+  48 kept** - the Test autopilot has measured it with random picks from
+  either side of the line, and the note says how much of what it keeps is
+  likely right and how much of what the collection holds it likely found;
+  see [Find: testing and reviewing](../USER_GUIDE.md#find-testing-and-reviewing).
+  Moving the Threshold after a test reads *tested at another line* until you
+  test again. The check Train ran measured the training collection, so it is
+  not shown here.
+
+The Threshold is frozen while a test phase runs: moving the line would move
+the picks' bands under them. Finish the round, or wait for **Done!**.
 
 Moving the Threshold never re-scores anything and never changes the order of
 the pictures. Only the line moves. The user guide explains the line itself in
@@ -49,7 +53,7 @@ the pictures. Only the line moves. The user guide explains the line itself in
 
 ## Step 1: Check the pictures either side of the line
 
-Check the pictures near the line first, as in
+On the **Review** tab, check the pictures near the line first, as in
 [Check and correct a detector's calls](check-and-correct.md). Find serves
 them from both sides, alternating above and below the line, so the real
 matches just under it come up wherever the Threshold sits. Every one you mark
@@ -68,9 +72,9 @@ At the top of the left-hand panel:
 3. Find the line in the list: the pictures just above it are the ones the
    move let in.
 
-Checking the pictures in the band, as Step 3 does, is how you learn how much
-of that longer list is right here. Find has no spot check: that is for
-setting the Threshold in Train, before you test it.
+Checking the pictures in the band, as Step 3 does, is one way to learn how
+much of that longer list is right here; testing the new line on the
+**Autopilot** tab is the other, and the one that gives a range.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-floor.dark.webp" />
@@ -92,31 +96,32 @@ most it can.
 
 ## Step 4: See the trade-off
 
-1. Click **Stats** <picture><source media="(prefers-color-scheme: dark)" srcset="../assets/icon-stats.dark.webp" /><img src="../assets/icon-stats.light.webp" alt="The Stats button in the Find view" height="24" /></picture>, the pie-chart button at the top of the **Verified Good** pile.
-2. Scroll to **Precision by Number Returned**. It reads down the ranked list:
-   for the top N pictures, how many of them are real matches. Returning more
-   (to the right) catches more matches, but the share that are right falls.
-   The upright line is where your **Line** is now, and the legend under the
-   chart says whether it was checked (**Line: checked (48 kept)**, or
-   **Line: the top 32, unchecked**). Moving the Threshold toward False
-   Positives moves the Line to the right. Once a spot check has run in Train,
-   a bar stands on the Line: the check's likely range for how much of the
-   list is right.
+1. Click **Autopilot** at the top of the left-hand panel. If the line was
+   tested before you moved the Threshold, the result reads *tested at another
+   line*: click **Test this line** and answer the picks to **Done!**.
+2. Read **Precision by Number Returned** in the result pane. It reads down
+   the ranked list: for the top N pictures, how many of them are likely real
+   matches, at every band edge, from the picks alone. Returning more (to the
+   right) catches more matches, but the share that are right falls. The
+   upright line is where your **Line** is now, and the legend under the chart
+   says what it keeps (**Line: the top 48**). Moving the Threshold toward
+   False Positives moves the Line to the right.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
-  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with the Threshold drawn across it, the line marked, and the line under the chart reading it there" width="720" />
+  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with a likely range at every band edge, the line marked, and the line under the chart reading it there" width="720" />
 </picture>
 
-The chart's curve, **Checked by you**, counts only the pictures you have
-checked. You check the ones near the line, where the detector is least sure,
-so it can read lower than the matches as a whole. The chart makes no guess
-about the pictures nobody checked: the bar on the Line is the only measure of
-those, and only a spot check draws it.
+Each band edge carries a bar: the likely range for how much of the list up to
+there is right. The chart makes no guess from the pictures the detector chose
+to show you; the random picks are its only source, which is why it reads the
+same whether you checked near the line or not.
 
-Point at the chart to read the curve at any count; with the pointer off it,
-the line under the chart reads it at the Line. The chart is drawn when the Stats
-window opens, so close it and open it again after you move the Threshold.
+Point at the chart to read the curve at any band edge; with the pointer off
+it, the line under the chart reads it at the Line. **Lean the Threshold**,
+under the verdict, puts the same reading in a table: what each balance would
+keep, the share right and the share found, and a click on one moves the
+Threshold there.
 
 ## Where the setting goes
 
@@ -134,7 +139,7 @@ along with the ones you checked by hand.
 ## Where next
 
 - [Decide how far to trust a detector](trust-a-detector.md): the rest of the
-  **Stats** window.
+  result pane.
 - [Manual mode](../USER_GUIDE.md#3-threshold), in the user guide,
   describes the same Threshold while you train, and the spot check that
   measures it.

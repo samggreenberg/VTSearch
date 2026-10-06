@@ -1107,6 +1107,14 @@ class DetectorContext:
         # ends.  Ids and labels only - never serialised.
         "precision_check",  # SpotCheck | None (finished)
         "precision_check_run",  # SpotCheck | None (running)
+        # Test mode's test of the line (``LineTest``, #4524): the one running
+        # on this detector's Find session, or the last finished one, over the
+        # frozen Find scores.  Picks, labels and band counts only - never
+        # serialised itself: a finished test's verdict is kept on the
+        # detector's JSON instead (``vtscore.detectors.line_verdicts``,
+        # #4526).  Goes wherever the spot check goes: a vote clear, a dataset
+        # switch, a fresh Find pass.
+        "line_test",  # LineTest | None
         # How many votes the detector held when its last spot check ended,
         # finished or cancelled: the weak-separation rule's cooldown counts
         # from it (``weak_check_due``, #4496).  Goes with the check.
@@ -1194,6 +1202,7 @@ class DetectorContext:
         self.gate_passed: frozenset[Any] | None = None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
+        self.line_test: Any = None  # LineTest | None
         self.check_ended_votes: int | None = None
         self.labels_line: Any = None  # LabelsLine | None
 

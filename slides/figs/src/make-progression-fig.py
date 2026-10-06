@@ -1,12 +1,12 @@
 #!/usr/bin/env python
-"""The calibration ladder on COCO Better: one cost curve per rung (#4184).
+"""The calibration ladder on COCO Better, in F1: one curve per rung (#4184, redrawn for #4519).
 
 Run from the repo root, once the study's curve CSV is committed:
 
     python slides/figs/src/make-progression-fig.py
 
-Reads the 5%-prevalence arm's `progression_curve.csv` from the study directory
-(`docs/experiments/2026-09-25-progression-4184/h0.05/`, written by
+Reads `progression_curve.csv` from the 1% study
+(`docs/experiments/2026-10-05-ladder-fbeta-4519/`, written by
 `scripts/experiments/calibration/analyze_progression_4184.py`) and writes
 `figs/progression.png` plus one build stage per earlier rung, so the room
 watches the curves arrive in the order the deck argued for them.
@@ -17,17 +17,22 @@ draws the same figure from synthetic curves into DIR, for checking the layout
 before the run exists. It never writes into `figs/`: a slide made of invented
 numbers must not be one `git add` away from the deck.
 
+**The score is the returned set's F1** on the withheld half Find would search,
+the deck's own metric since Beta Max; the ladder used to be drawn in cost
+(FPR + FNR, #4184). Each rung is the app as the deck drew it at that point,
+re-run on today's harness with the user's pool thinned to 1% positive, and the
+last rung is today's app: the labels line (#4452), drawn in the deck's blue.
+
 **Every curve is drawn in its final style from the page it appears on.**
 `slides/STYLE.md`'s build rule is that a reveal adds ink and restyles nothing,
-so a rung cannot be black on its own page and grey on the next. The styling
-does the work a restyle would have done: the rungs darken as they climb, and
-the last one - the app as it ships - is the deck's blue, the colour that
-means "the threshold, and the shipped decision it makes".
+so a rung cannot be black on its own page and grey on the next. The rungs
+darken as they climb, and the last one - the app as it ships - is the deck's
+blue, the colour that means "the threshold, and the shipped decision it makes".
 
 **Each curve starts at the same notch.** Click 0 is the typed query's own
-ranking, and every click before the app shows a detector reads as that same
-ranking (the analyzer's *filled* mean), so all seven share their left end and
-differ only in how fast and how far they fall.
+returned set (the text sort's blind cut), and every click before the app shows
+a detector reads as that same set (the analyzer's *filled* mean), so all eight
+share their left end and differ only in how fast and how far they rise.
 """
 
 from __future__ import annotations
@@ -44,17 +49,18 @@ from matplotlib.figure import Figure  # noqa: E402
 import numpy as np  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, INK, SOFT, save  # noqa: E402
+from slide_figure import FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
 
 SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
 REPO = SRC.parents[2]
-STUDY = REPO / "docs" / "experiments" / "2026-09-25-progression-4184"
-#: The **5%-prevalence** arm (#4201), by the owner's call on #4184: the natural
-#: pool (0.44% positive) is where every midpoint rule over-flags and the ladder
-#: does not descend; the slide draws the regime its ideas were built for, and its
-#: caption and notes say so.  The natural curves are in ``STUDY / "natural"``.
-CSV = STUDY / "h0.05" / "progression_curve.csv"
+STUDY = REPO / "docs" / "experiments" / "2026-10-05-ladder-fbeta-4519"
+#: The **1%-prevalence** arm, by the owner's call on #4519 (the 5% arm of #4184
+#: drew cost): the user's pool thinned to 1% positive, the withheld half Find
+#: searches left at COCO Better's own 0.44%.
+CSV = STUDY / "progression_curve.csv"
+#: The curve the slide draws: the returned set's F1, filled.
+METRIC = "f1_mean"
 
 #: The rungs in the deck's order, and the words each is labelled with at its
 #: right end - the slide's own name for the idea, not the harness's.
@@ -66,6 +72,7 @@ RUNGS: tuple[tuple[str, str], ...] = (
     ("r5_anchored", "fused, rank transfer"),
     ("r6_split70", "70/30 split"),
     ("r7_acq4", "second cut"),
+    ("r8_labels", "the labels line"),
 )
 
 #: The deck's `.cut` blue (`themes/vtsearch.css`, `make-calib-figs.py`).
@@ -93,13 +100,13 @@ plt.rcParams.update(
 
 
 def read_curves(path: Path) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """``rung -> (clicks, mean cost)`` from the analyzer's curve CSV."""
+    """``rung -> (clicks, mean F1)`` from the analyzer's curve CSV."""
     import csv  # noqa: PLC0415
 
     by: dict[str, list[tuple[int, float]]] = {}
     with path.open() as f:
         for row in csv.DictReader(f):
-            by.setdefault(row["rung"], []).append((int(row["t"]), float(row["mean"])))
+            by.setdefault(row["rung"], []).append((int(row["t"]), float(row[METRIC])))
     out = {}
     for rung, pts in by.items():
         pts.sort()
@@ -111,28 +118,15 @@ def read_curves(path: Path) -> dict[str, tuple[np.ndarray, np.ndarray]]:
 
 
 def demo_curves(horizon: int = 150) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """Plausible shapes only: a shared notch, a delay, a fall to a rung-dependent floor."""
+    """Plausible shapes only: a shared notch near the floor, a delay, a rise to a rung-dependent level."""
     t = np.arange(horizon + 1)
+    levels = {"r1_xcal": 0.42, "r4_rawmean": 0.12, "r8_labels": 0.5}
     out = {}
     for i, (rung, _label) in enumerate(RUNGS):
-        floor = 0.42 - 0.035 * i
-        speed = 18.0 - 1.4 * i
-        fall = 1.0 - np.exp(-np.clip(t - 4, 0, None) / speed)
-        out[rung] = (t, 0.72 - (0.72 - floor) * fall)
+        top = levels.get(rung, 0.04 + 0.006 * i)
+        rise = 1.0 - np.exp(-np.clip(t - 4, 0, None) / (14.0 + i))
+        out[rung] = (t, 0.02 + (top - 0.02) * rise)
     return out
-
-
-def _spread(ys: list[float], gap: float) -> list[float]:
-    """Nudge label heights apart by at least *gap*, keeping their order."""
-    order = np.argsort(ys)
-    placed = np.array(ys, dtype=float)[order]
-    for i in range(1, len(placed)):
-        placed[i] = max(placed[i], placed[i - 1] + gap)
-    shift = (np.array(ys)[order].mean() - placed.mean()) if len(placed) else 0.0
-    placed += shift
-    out = np.empty_like(placed)
-    out[order] = placed
-    return out.tolist()
 
 
 def _layout(curves: dict[str, tuple[np.ndarray, np.ndarray]]) -> dict:
@@ -141,15 +135,19 @@ def _layout(curves: dict[str, tuple[np.ndarray, np.ndarray]]) -> dict:
     n = len(RUNGS)
     greys = [plt.cm.Greys(0.35 + 0.5 * i / max(n - 2, 1)) for i in range(n - 1)]
     all_y = np.concatenate([curves[r][1] for r, _ in RUNGS])
-    lo, hi = float(np.nanmin(all_y)), float(np.nanmax(all_y))
+    lo, hi = 0.0, float(np.nanmax(all_y))
     pad = 0.06 * (hi - lo)
     finals = [float(curves[r][1][-1]) for r, _ in RUNGS]
+    gap = 0.075 * (hi - lo + 2 * pad)
+    # Each name level with its curve's end where there is room; a crowd of ends
+    # fans out around its own centre, and nothing sits below the axis.
+    label_y = spread_labels(finals, gap=gap, floor=lo + gap / 2)
     return {
         "styles": [*({"color": g, "lw": 2.4} for g in greys), {"color": SHIPPED, "lw": 3.6}],
         "t_max": max(int(curves[r][0].max()) for r, _ in RUNGS),
-        "ylim": (lo - pad, hi + pad),
+        "ylim": (lo, hi + pad),
         "t0": float(np.mean([curves[r][1][0] for r, _ in RUNGS])),
-        "label_y": _spread(finals, gap=0.075 * (hi - lo + 2 * pad)),
+        "label_y": label_y,
     }
 
 
@@ -160,49 +158,34 @@ def _figure(curves: dict[str, tuple[np.ndarray, np.ndarray]], layout: dict, k: i
     t_max = layout["t_max"]
     ax.set_xlim(0, t_max)
     ax.set_ylim(*layout["ylim"])
-    ax.set_xlabel("votes")
-    ax.set_ylabel("cost = FPR + FNR")
+    ax.set_xlabel("Votes")
+    ax.set_ylabel("F1 of the returned set")
 
-    # The notch every curve leaves from: the typed query, before any vote.
+    # The notch every curve leaves from: the typed query, before any vote. It is
+    # named on the axis, under click 0, rather than on a leader: a leader reads
+    # as one more line (owner, 2026-10-05; STYLE.md).
     t0 = layout["t0"]
     ax.plot([0], [t0], marker="o", color=INK, markersize=9, zorder=5, clip_on=False)
-    # In the empty corner below the notch, on a leader: the curves climb out of
-    # the notch and fall back across the space either side of it.
-    lo, hi = layout["ylim"]
-    ax.annotate(
-        "typed query",
-        (0, t0),
-        xytext=(t_max * 0.02, lo + 0.12 * (hi - lo)),
-        textcoords="data",
-        color=INK,
-        va="center",
-        arrowprops={"arrowstyle": "-", "color": INK, "lw": 1.0, "shrinkA": 2, "shrinkB": 6, "relpos": (0.0, 0.5)},
-    )
+    ticks = [int(v) for v in ax.get_xticks() if 0 <= v <= t_max]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(["typed\nquery" if v == 0 else str(v) for v in ticks])
 
     last = RUNGS[-1][0]
+    # Each name sits just past its curve's end, in the ends' own order, nudged
+    # apart only as far as the type needs - never on a leader. Every build stage
+    # adds a curve and its name together, so the room meets each pair at once.
     for (rung, name), style, y_lab in list(zip(RUNGS, layout["styles"], layout["label_y"], strict=True))[:k]:
         t, y = curves[rung]
         ax.plot(t, y, color=style["color"], lw=style["lw"], solid_capstyle="round")
-        ax.annotate(
+        ax.text(
+            t_max * 1.015,
+            y_lab,
             name,
-            (t[-1], y[-1]),
-            xytext=(t_max * 1.02, y_lab),
-            textcoords="data",
             color=SHIPPED if rung == last else INK,
             fontweight="bold" if rung == last else "normal",
             ha="left",
             va="center",
-            annotation_clip=False,
-            # The leader leaves the label's left edge, so it never crosses a
-            # neighbouring label on its way down to a converged end.
-            arrowprops={
-                "arrowstyle": "-",
-                "color": style["color"],
-                "lw": 1.0,
-                "shrinkA": 2,
-                "shrinkB": 4,
-                "relpos": (0.0, 0.5),
-            },
+            clip_on=False,
         )
     return fig
 
@@ -234,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         draw(demo_curves(), out)
         return 0
     if not CSV.exists():
-        raise SystemExit(f"{CSV.relative_to(REPO)} does not exist yet: run the #4184 study and commit its curve CSV")
+        raise SystemExit(f"{CSV.relative_to(REPO)} does not exist yet: run the #4519 study and commit its curve CSV")
     draw(read_curves(CSV), OUT)
     return 0
 

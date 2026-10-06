@@ -372,6 +372,21 @@ fudged:
 
 <!-- item-sep -->
 
+## A line is labelled at its end, never on a leader
+
+On a chart of lines, a thin line from a label to the curve it names reads as one
+more curve (owner, 2026-10-05, #4519): a leader is the one mark the room cannot
+tell from data. So a line's label sits level with the line's end, just past it,
+and position alone binds them. `slide_figure.spread_labels` keeps every label on
+its own end where there is room, and fans a crowd of ends out around the crowd's
+own centre, in their order, so no label wanders further from its line than the
+type needs. A build stage that adds a line adds its label with it, so the room
+meets each pair together. A point that is not a line's end, such as a notch or a
+start, is named on the axis (a tick label) or beside the point, never on a
+leader.
+
+<!-- item-sep -->
+
 ## Every deck opens with an outline, and comes back to it
 
 After the title slide, before the first argument: one slide naming the sections

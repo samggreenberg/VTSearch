@@ -436,7 +436,7 @@ def fig_fullmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     ax.set_ylim(top=max(pages) * 40)
     ax.set_xticks(range(len(names)))
     ax.set_xticklabels(names, fontsize=FLOOR_PT + 1, color=INK)
-    ax.set_ylabel("pages (log)", fontsize=FLOOR_PT, color=SOFT)
+    ax.set_ylabel("Pages (log)", fontsize=FLOOR_PT, color=SOFT)
     ax.tick_params(axis="y", labelsize=FLOOR_PT, colors=SOFT)
     ax.tick_params(axis="x", length=0)
     for spine in ("top", "right"):
@@ -460,8 +460,8 @@ def fig_fullmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     ax = fig.add_axes([bar_x, 0.175, 0.975 - bar_x, 0.20])
     ax.bar(range(len(facts["class_instances"])), facts["class_instances"], color=CUT, width=0.82)
     ax.axhline(median, color=NEG, lw=1.5, ls="--")
-    ax.set_xlabel("one bar per mark, most copies first", fontsize=FLOOR_PT, color=SOFT)
-    ax.set_ylabel("copies", fontsize=FLOOR_PT, color=SOFT)
+    ax.set_xlabel("One bar per mark, most copies first", fontsize=FLOOR_PT, color=SOFT)
+    ax.set_ylabel("Copies", fontsize=FLOOR_PT, color=SOFT)
     # No x ticks: the bars are marks, and their position in a sorted order
     # is not a quantity anybody should read off an axis.
     ax.set_xticks([])
