@@ -10,5 +10,3 @@
 - `autorun-tab` — a ticked AutoRun detector greys Train with *Frozen: move to Drafts to retrain*
 - `combine-datasets-tick` — with two datasets ticked, Test is now greyed out with *Select exactly 1 dataset*
 - `import-progress` — the Dashboard under an import's progress row
-- `slides:make-detector` — the empty app's Dashboard shows the reworded reasons
-- `slides:steps` — the Step-By-Step Dashboard frames

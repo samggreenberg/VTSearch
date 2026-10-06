@@ -10,11 +10,13 @@
      above. The ranking gets the widest column and the biggest thumbnails,
      because it is what this screen is for. -->
 
-<!-- Look at what is on either side. Not books and not-books — a party
-     with a bookcase behind the game controllers, a man on a bicycle, a
-     living room lined with shelves, and a sandwich sitting right at the line
-     *above* it; another sandwich, a sitting room and a cat at a laptop just
-     below. Out at the ends of the ranking the
+<!-- Look at what is on either side. Not books and not-books — a dog on a
+     cluttered desk, a vase of tulips, a wrapped sandwich, a black cat beside a
+     laptop, and right at the line *above* it a hand holding a bun, filed under
+     book for the one half-hidden beneath it; a pizza, a plate of chicken and
+     a pan of stir-fry just below. This line came down a long way — 98 kept, in
+     a pile with about forty books in it — so what sits on it is dinner rather
+     than shelves. Out at the ends of the ranking the
      detector is right and it is boring; here it is neither, and this is the
      only part of the list a person's opinion could still change. -->
 

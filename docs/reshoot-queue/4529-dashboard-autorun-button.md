@@ -8,6 +8,3 @@
 - `autorun-tab` — the Dashboard on the AutoRun tab
 - `combine-datasets-tick` — the Dashboard with two datasets ticked
 - `import-progress` — the Dashboard under an import's progress row
-- `slides:make-detector` — the empty app's Dashboard shows the action bar
-- `slides:steps` — the Step-By-Step Dashboard frames
-- `slides:find` — the Dashboard frame before Find
