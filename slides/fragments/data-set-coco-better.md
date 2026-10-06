@@ -1,5 +1,6 @@
 <!-- _class: full -->
 <!-- frames: equal -->
+<!-- bookmark: Data, Set: COCO Better -->
 
 ![bg fit](figs/data-set-coco-better-zoom.webp)
 

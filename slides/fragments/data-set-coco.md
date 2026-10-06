@@ -1,5 +1,6 @@
 <!-- _class: full -->
 <!-- frames: equal -->
+<!-- bookmark: Data, Set: Caltech-101 and COCO -->
 
 ![bg fit](figs/data-set-coco-zoom.webp)
 
