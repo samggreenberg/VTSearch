@@ -1,0 +1,63 @@
+# Give the newest State of the App report of each kind a stable URL on GitHub
+# Pages, whenever a release to main changes one:
+#
+#   https://samggreenberg.github.io/VTSearch/sota/                          every kind
+#   https://samggreenberg.github.io/VTSearch/sota/binary-photo/             -> the newest REPORT.md
+#   https://samggreenberg.github.io/VTSearch/sota/binary-photo/viewer.html  its interactive viewer
+#
+# Like publish-slides.yml this tests nothing: `./run-tests.sh` is still the
+# whole gate. It follows main, not dev, on purpose (owner, 2026-10-06): the
+# links only need to move at a release. That also keeps setup to one click,
+# because the github-pages environment deploys only from the default branch
+# unless told otherwise.
+#
+# One-time setup: Settings > Pages > Build and deployment > Source: GitHub
+# Actions. Until then the deploy step fails with "Ensure GitHub Pages has been
+# enabled".
+#
+# A Pages deploy replaces the whole site, so anything else that ever wants to
+# live there has to be built by this same job, not a second workflow. The site
+# itself is built by scripts/publish-sota-site.py, which runs from a laptop too.
+name: Publish State of the App links
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/experiments/*state-of-the-app*/**'
+      - 'scripts/publish-sota-site.py'
+      - '.github/workflows/publish-sota.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# GitHub's guidance for Pages: let a running deploy finish rather than cancel it
+# halfway, and queue the next one behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}sota/
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pure stdlib, so the runner's own python3 is enough.
+      - name: Build the site
+        run: >-
+          python3 scripts/publish-sota-site.py --out _site
+          --repo "${{ github.repository }}" --ref "${{ github.ref_name }}" --sha "${{ github.sha }}"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v5
