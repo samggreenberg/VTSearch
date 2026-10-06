@@ -83,8 +83,8 @@ export CALIB_CELLS_GZIP="${CALIB_CELLS_GZIP:-1}"
 
 # --- ops -----------------------------------------------------------------------
 # A 1% cell took 4-9 min and < 1 GB on #4548's r8 arms (887706), so a bundle of
-# 10 is ~45-90 min.  K=4 fits twice the folds; the time limit leaves room for it.
-BUNDLE="${BUNDLE:-10}"
+# 8 is ~35-70 min; K=4 fits twice the folds, and 8 x 18 min still fits the limit.
+BUNDLE="${BUNDLE:-8}"
 MEM="${CALIB_MEM:-3G}"
 TIME="${CALIB_TIME:-4:00:00}"
 # 12 arms x %6 = 72 tasks, 144 charged CPUs of the 240 cap: room for a peer study.
