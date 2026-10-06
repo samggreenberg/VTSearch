@@ -28,11 +28,13 @@ drawn once per state and shared by every number (:meth:`LineTest.estimates`):
 * Each band's share right has a Beta posterior, and the band's unlabelled
   items are drawn binomially at that share, so a censused band is exact and
   a band with no picks is as uncertain as its prior says.  Above the line a
-  band's prior is the *pooled* share of every pick above the line (Jeffreys
-  on the pool) at :data:`POOLED_WEIGHT` picks' worth, drawn once per column
-  and shared by every band (#4539): independent Jeffreys priors read each
-  empty band of a big sparse line as about 8% right, and summed over a
-  thousand items that put the range above the truth every time (#4523).
+  band's prior is the *pooled* share of the picks in its neighbouring bands
+  (:data:`POOL_RADIUS`, Jeffreys on the pool) at :data:`POOLED_WEIGHT`
+  picks' worth (#4539, #4560): independent Jeffreys priors read each empty
+  band of a big sparse line as about 8% right, which put the range above the
+  truth every time (#4523), and one pool over every band above the line
+  mixed a rich top with a sparse tail, so that auditing the top lifted the
+  tail and leaving it unaudited sank the top.
 * **Above the line** the draws give the band-weighted precision of any
   top-*b* union, so the same draws re-estimate the line at every band edge
   (:attr:`LineEstimates.at_edges`), which the verdict's *Lean the Threshold*
@@ -78,7 +80,8 @@ of the sample and its budgets (:class:`LineBudgets`), so the app's view and
 the harness derive the phase from state on every poll rather than
 accumulating it.  The phases are the matches (precision), the misses
 (recall) and ``done``.  The matches phase ends when its range is narrower
-than its target, at its pick budget, or when its bands are exhausted; the
+than its target or at its pick budget, either only once every band above
+the line has had a round (#4539, #4560), or when its bands are exhausted; the
 misses phase at its pick budget or when its bands are exhausted, and,
 without a class model, on its width target or a dry run.  A line that keeps
 fewer items than one round is ``nothing``: nothing to test.  The targets and
@@ -134,13 +137,15 @@ POOLED_WEIGHT = float(CHECK_MIN_PICKS)
 #: of the band being drawn (itself excluded), falling back to the whole side
 #: when none of them has a pick.  One rate pooled across bands from 80% right
 #: at the top to 1% near a sparse line lifts the deep bands once the top ones
-#: are audited, and drags the top ones down when they are not.
-POOL_RADIUS: int | None = None
+#: are audited, and drags the top ones down when they are not.  1, with
+#: :data:`FIRST_PASS_BEFORE_BUDGET`, is what #4560 priced
+#: (``docs/experiments/2026-10-06-pooled-taper-4560/REPORT.md``).
+POOL_RADIUS: int | None = 1
 
 #: Whether the matches phase's budget waits until every band above the line
 #: has had a round (#4560).  Without it the top bands of a big line are often
 #: never audited, and a preset inside them reads at the pool's mean.
-FIRST_PASS_BEFORE_BUDGET: bool = False
+FIRST_PASS_BEFORE_BUDGET: bool = True
 
 
 def pooled_weight(depth: int, n_above: int) -> float:

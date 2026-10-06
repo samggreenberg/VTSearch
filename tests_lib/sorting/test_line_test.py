@@ -492,12 +492,23 @@ class TestThePhaseMachine:
 
     def test_the_matches_phase_ends_on_budget(self):
         ids, positives, post = _planted(above_rate=0.5)
-        budgets = LineBudgets(matches_width=0.01, matches_picks=15)
+        budgets = LineBudgets(matches_width=0.01, matches_picks=25)
         test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets)
-        _run(test, positives, rounds=2)
+        _run(test, positives, rounds=4)
         assert test.phase().phase == PHASE_MATCHES
         _run(test, positives, rounds=1)
-        assert test.phase().matches_stop == STOP_BUDGET and test.phase().picks_above == 15
+        assert test.phase().matches_stop == STOP_BUDGET and test.phase().picks_above == 25
+
+    def test_the_budget_waits_until_every_band_above_the_line_has_a_round(self):
+        """#4560: a budget smaller than the first pass still sees every band once, then stops."""
+        ids, positives, post = _planted(above_rate=0.5)
+        budgets = LineBudgets(matches_width=0.01, matches_picks=10)
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets)
+        _run(test, positives, rounds=2)
+        assert test.phase().phase == PHASE_MATCHES, "two of four bands seen: the budget is spent but waits"
+        _run(test, positives, rounds=2)
+        assert all(test.audited(b.index) for b in test.above)
+        assert test.phase().matches_stop == STOP_BUDGET and test.phase().picks_above == 20
 
     def test_the_matches_phase_ends_on_exhaustion(self):
         ids, positives, post = _planted(n=100, line=8, above_rate=0.5)

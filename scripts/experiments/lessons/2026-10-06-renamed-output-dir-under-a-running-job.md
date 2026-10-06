@@ -1,4 +1,4 @@
-# Renaming an output directory under a running job loses the job (#4560)
+# 2026-10-06 — Renaming an output directory under a running job loses the job (#4560)
 
 **What happened.** Two replays (`price_pooled_taper_4560.py`) were launched
 with `--out analysis-4560-<taper>`, a directory an earlier replay of the same
