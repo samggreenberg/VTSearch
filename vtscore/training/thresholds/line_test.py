@@ -1053,16 +1053,15 @@ def line_phase(test: LineTest) -> PhaseReport:
     est = test.estimates()
     picks_above, picks_below = test.picks_on(ABOVE), test.picks_on(BELOW)
     matches_stop: str | None = None
+    # Every band above the line has had a round: before that, a band no pick
+    # has seen is read at the pool's mean, the line's average, and the
+    # presets Lean the Threshold offers inside it read low (#4539, #4560).
+    first_pass = all(test.audited(b.index) or test.exhausted(b.index) for b in test.above)
     if all(test.exhausted(b.index) for b in test.above):
         matches_stop = STOP_EXHAUSTED
-    elif (
-        # Every band audited first: the pooled prior (#4539) can narrow the
-        # range on two bands' picks, but a band no pick has seen is a guess.
-        all(test.audited(b.index) or test.exhausted(b.index) for b in test.above)
-        and est.precision.width <= budgets.matches_width + _EPS
-    ):
+    elif first_pass and est.precision.width <= budgets.matches_width + _EPS:
         matches_stop = STOP_WIDTH
-    elif picks_above >= budgets.matches_picks:
+    elif first_pass and picks_above >= budgets.matches_picks:
         matches_stop = STOP_BUDGET
     if matches_stop is None:
         return PhaseReport(PHASE_MATCHES, None, None, est.precision.width, est.recall.width, picks_above, picks_below)
