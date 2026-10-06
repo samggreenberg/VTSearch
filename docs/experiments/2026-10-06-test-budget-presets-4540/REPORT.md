@@ -27,7 +27,7 @@ presets hold **0.45–0.89**, and they miss one way:
 That is the under-read gain #4523's verdict study saw, located: the rule it
 priced was the harness's proposal, but the ranges it read are the ones the
 app shows. Splitting a band by the model's posteriors instead of by size
-(below) brings the presets one step away to 0.84–0.97.
+(below) brings the presets one step away to 0.80–0.96.
 
 Part of #4520; follows #4523, #4539, #4542. Data: #4523's 3,669 saved photo
 sessions replayed under dev at 8bb7cfde9 + this branch (the arm now records the
@@ -96,15 +96,15 @@ number in `summary.csv` is identical, since only the presets read
 
 | session → preset | 0.1% | 0.44% | 5% |
 |---|---|---|---|
-| 1 → 1/4 (shallower) | 0.71 → **0.92** | 0.84 → **0.91** | 0.80 → **0.92** |
-| 4 → 1 (shallower) | 0.79 → **0.86** | 0.75 → **0.85** | 0.57 → **0.84** |
-| 4 → 1/4 (much shallower) | 0.63 → 0.81 | 0.58 → 0.75 | 0.45 → 0.67 |
-| 1/4 → 1 (deeper) | 0.77 → 0.81 | 0.83 → 0.86 | 0.89 → **0.97** |
-| 1/4 → 4 (much deeper) | 0.79 → 0.82 | 0.86 → 0.86 | 0.89 → **0.97** |
+| 1 → 1/4 (shallower) | 0.71 → **0.91** | 0.84 → **0.90** | 0.80 → **0.89** |
+| 4 → 1 (shallower) | 0.79 → **0.85** | 0.75 → **0.84** | 0.57 → **0.80** |
+| 4 → 1/4 (much shallower) | 0.63 → 0.80 | 0.58 → 0.73 | 0.45 → 0.61 |
+| 1/4 → 1 (deeper) | 0.77 → 0.81 | 0.83 → 0.86 | 0.89 → **0.96** |
+| 1/4 → 4 (much deeper) | 0.79 → 0.82 | 0.86 → 0.86 | 0.89 → **0.96** |
 
-The presets one step from the session's balance now hold 0.84–0.97. The
+The presets one step from the session's balance now hold 0.80–0.96. The split is held to what each side of the count can hold (a model sure of a band's top could otherwise read a preset as more than 100% right, which the route test caught). The
 furthest-shallow preset (a beta-4 session's beta-1/4 option, about a quarter
-of the line) still under-reads its precision by 0.10–0.16: there the count
+of the line) still under-reads its precision by 0.11–0.17: there the count
 falls in the top bands, whose estimates the pooled prior (#4539) pulls toward
 the line's average. A pooled weight that falls with distance from the top is
 the lever for that; it is left for another round.
