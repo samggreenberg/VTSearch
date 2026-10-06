@@ -58,7 +58,7 @@ if [[ -n "${CALIB_HAYSTACK_PREVALENCE:-}" ]]; then
   BASE="${PROGRESSION_BASE:-/expscratch/$USER/progression-4184${TAG}}"
 fi
 
-ALL_RUNGS="r1_xcal r2_gmm r3_blend r4_rawmean r5_anchored r6_split70 r7_acq4"
+ALL_RUNGS="r1_xcal r2_gmm r3_blend r4_rawmean r5_anchored r6_split70 r7_acq4 r8_labels"
 
 # --- science knobs -------------------------------------------------------------
 # The fused path must be on: every retired rule replaces ITS cut and reads the
@@ -164,7 +164,8 @@ link_prepare() {
 # The rung table.  Sets the three rung knobs and names the divergences
 # preflight must see declared.  Anything not set here stays unset = production.
 rung_env() {
-  unset CALIB_LIVE_THRESHOLD CALIB_CALIBRATION_FRACTION CALIB_ACQ_INCLUSION_OFFSET
+  unset CALIB_LIVE_THRESHOLD CALIB_CALIBRATION_FRACTION CALIB_ACQ_INCLUSION_OFFSET CALIB_SPOT_CHECK
+  unset CALIB_MIN_PRECISION CALIB_BETA
   RUNG_DIVERGES=""
   case "$1" in
     r1_xcal) export CALIB_LIVE_THRESHOLD=xcal_mincost ;;
@@ -172,7 +173,21 @@ rung_env() {
     r3_blend) export CALIB_LIVE_THRESHOLD=blend ;;
     r4_rawmean) export CALIB_LIVE_THRESHOLD=anchored_rawmean ;;
     r5_anchored | r6_split70 | r7_acq4) ;;
+    # Today's app (#4519): the labels line (#4452) at the default balance, its
+    # spread floor (#4492) and Autopilot's weak-separation check (#4496) -
+    # production in every knob, so the ladder ends where the app is now.
+    r8_labels) ;;
     *) echo "unknown rung '$1'; expected one of: $ALL_RUNGS" >&2; exit 2 ;;
+  esac
+  # The deck's rungs predate every preference (#4245, #4413) and the spot check
+  # (#4272, #4496). Since #4452 an unset preference is the balance, whose line is
+  # the labels line - which would turn r5-r7 into today's app. So r1-r7 run the
+  # Inclusion arm, whose line is the fused cut at inclusion (what "shipped" meant
+  # on 2026-09-25; r1-r4's retired rules replace it), with no check, as they ran
+  # then. Today's app (r8) runs the default balance and checks as it ships.
+  case "$1" in
+    r8_labels) ;;
+    *) export CALIB_MIN_PRECISION=off CALIB_SPOT_CHECK=off ;;
   esac
   # 50/50 until "Train More, Check Less" moves it.  Unset from r6 on, which the
   # harness resolves to production's per-space split: 0.3 held out for SigLIP.
@@ -184,12 +199,14 @@ rung_env() {
   # drops the fit the offset would re-cut); pinning it there too keeps the
   # launcher honest about what every rung ran with.
   case "$1" in
-    r7_acq4) ;;
+    r7_acq4 | r8_labels) ;;
     *) export CALIB_ACQ_INCLUSION_OFFSET=0 ;;
   esac
   [[ -n "${CALIB_LIVE_THRESHOLD:-}" ]] && RUNG_DIVERGES="$RUNG_DIVERGES,live_threshold"
   [[ -n "${CALIB_CALIBRATION_FRACTION:-}" ]] && RUNG_DIVERGES="$RUNG_DIVERGES,calibration_fraction"
   [[ -n "${CALIB_ACQ_INCLUSION_OFFSET:-}" ]] && RUNG_DIVERGES="$RUNG_DIVERGES,acq_offset"
+  [[ -n "${CALIB_SPOT_CHECK:-}" ]] && RUNG_DIVERGES="$RUNG_DIVERGES,spot_check"
+  [[ -n "${CALIB_MIN_PRECISION:-}" ]] && RUNG_DIVERGES="$RUNG_DIVERGES,min_precision"
   RUNG_DIVERGES="${RUNG_DIVERGES#,}"
   return 0
 }

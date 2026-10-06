@@ -142,6 +142,43 @@ INK = "#14181f"
 SOFT = "#5b6472"
 
 
+def spread_labels(ys: list[float], gap: float, floor: float | None = None) -> list[float]:
+    """Heights for labels at the ends of lines ending at *ys*: each on its own end where it fits.
+
+    A label is never tied to its line by a leader, which reads as one more line
+    (owner, 2026-10-05; STYLE.md), so position is all that binds it: a label
+    whose end has room sits exactly level with it. Ends closer than *gap* form a
+    cluster whose labels fan out *gap* apart, centred on the cluster's own ends
+    and in their order; clusters that then collide merge and fan again. With a
+    *floor*, nothing sits below it - a cluster pushed up pushes the ones above.
+    """
+    order = sorted(range(len(ys)), key=lambda i: ys[i])
+    clusters = [[i] for i in order]
+
+    def place(cluster: list[int]) -> list[float]:
+        centre = sum(ys[i] for i in cluster) / len(cluster)
+        return [centre + (k - (len(cluster) - 1) / 2) * gap for k in range(len(cluster))]
+
+    merged = True
+    while merged:
+        merged = False
+        for a in range(len(clusters) - 1):
+            if place(clusters[a + 1])[0] - place(clusters[a])[-1] < gap - 1e-12:
+                clusters[a : a + 2] = [clusters[a] + clusters[a + 1]]
+                merged = True
+                break
+    out = [0.0] * len(ys)
+    lowest = floor
+    for cluster in clusters:
+        heights = place(cluster)
+        if lowest is not None and heights[0] < lowest:
+            heights = [h + (lowest - heights[0]) for h in heights]
+        for i, h in zip(cluster, heights, strict=True):
+            out[i] = h
+        lowest = heights[-1] + gap if lowest is not None else None
+    return out
+
+
 def rendered_px_per_pt(fig: plt.Figure, column: float) -> float:
     """Slide pixels per printed point, once `fig` is fitted into its slot."""
     box_width, box_height = SLIDE_PX * column, SLIDE_PX * 9 / 16

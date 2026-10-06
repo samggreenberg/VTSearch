@@ -4296,8 +4296,9 @@ def fmetrics_fig() -> None:
     """What F₁ is, and then what F-beta is, on the ten items the room just saw (#4517).
 
     Beta Max used to print the F-beta formula under its rows and leave the room
-    to take it in while the rows were the point. This is the slide before it:
-    one cut through the same ranking, the three counts it has, the two rates
+    to take it in while the rows were the point. This comes first, with Beta
+    Release (the same score as a map, at each beta) between the two: one cut
+    through the same ranking, the three counts it has, the two rates
     those make, F₁ as their harmonic mean, and F-beta as the same mean with
     recall weighted β times. The count form on the last line is the one Beta
     Max and What to Expect then evaluate.
@@ -4378,6 +4379,159 @@ def _fmetrics_stage(stage: int) -> plt.Figure:
 FMETRICS_INDENT = 0.16
 
 
+# ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────
+
+#: How many stages Beta Release reveals in: F₁'s map, the one F-ing Metrics
+#: just defined; then β = ¼'s; then β = 4's (`FBETA_REVEAL`'s order).
+FBETA_MAPS_STAGES = 3
+#: The three maps' squares, in canvas units: the side, the gap between maps,
+#: and the first map's left edge (room for the row's one "Precision"). A gap
+#: holds the next map's tick numbers clear of the numbers ending the curves to
+#: its left. The row is as wide as the slide allows, short of the page
+#: number's corner, and as high: its titles just under the title's notch, so
+#: the slack is a margin below the row as well as above it (owner, 2026-10-05).
+FBETA_MAP_SIDE = 5.4
+FBETA_MAP_GAP = 1.2
+FBETA_MAP_X = 1.3
+FBETA_MAP_Y = 2.0
+#: How far above its map a map's "β = ..." sits: well clear of the numbers
+#: that end β = 4's curves along its top, so it reads as the map's title and
+#: not as one more curve's label (owner, 2026-10-05). The slack above the
+#: maps, under the notch, pays for it.
+FBETA_MAP_TITLE_LIFT = 0.85
+#: F-beta's level curves on a map: one every 0.2.
+FBETA_LEVELS = (0.2, 0.4, 0.6, 0.8)
+#: The precision-recall grid: a line every 0.1 in `make-sota-figs`'s
+#: `GRID_COLOUR`, so the maps read like the charts that follow them.
+PR_GRID_STEP = 0.1
+PR_GRID_COLOUR = "#e3e7ec"
+#: The room a level's number takes at the map's edge, in the map's own units
+#: ``(across, up)``: a 16pt "0.8" on a `FBETA_MAP_SIDE` square and a little
+#: air. The curve stops there and its number fills the rest.
+FBETA_MAP_LABEL_ROOM = (0.16, 0.1)
+
+
+def fbeta_maps_fig() -> None:
+    """F-beta as a contour map over recall and precision, at each of the app's betas (#4519).
+
+    The owner, 2026-10-05: one slide with the level-curve map for each beta, so
+    the three are comparable, and the slide that names ¼, 1 and 4 as the betas
+    the talk uses from here on. A map's contours are where F-beta takes one
+    value: at β = 1 they bow symmetrically about the diagonal; at β = ¼ they lie
+    down, so precision sets the height; at β = 4 they stand up, so recall does.
+    Every map's contours cross the diagonal at the same values — where
+    precision equals recall, every F-beta is that number — which is the beat
+    Beta Max later lands on its Include-5 cut.
+    """
+    final = _fbeta_maps_stage(FBETA_MAPS_STAGES)
+    box = tight_box(final)
+    for stage in range(1, FBETA_MAPS_STAGES):
+        save(_fbeta_maps_stage(stage), OUT, f"calib-fbeta-maps.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fbeta-maps.png", column=FULL_BLEED, box=box)
+
+
+def _fbeta_maps_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Beta Release."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+    # In `FBETA_ARMS` order, left to right, so beta rises across the slide; the
+    # same three, top to bottom, are Beta Max's rows.
+    first = min(FBETA_REVEAL) - 1
+    for arm, ((beta, name), reveal) in enumerate(zip(FBETA_ARMS, FBETA_REVEAL, strict=True)):
+        if stage < reveal - first:
+            continue
+        x = FBETA_MAP_X + arm * (FBETA_MAP_SIDE + FBETA_MAP_GAP)
+        pr = fig.add_axes(_canvas_box((x, FBETA_MAP_Y, FBETA_MAP_SIDE)))
+        # Every map has its own numbers, and the row one "Precision", on the
+        # leftmost (owner, 2026-10-05): one axis, not the same label three
+        # times. β = 1's map, shown first and alone, goes without the word
+        # until β = ¼'s arrives beside it.
+        _pr_plane(pr, precision_label=arm == 0)
+        _fbeta_contours(pr, beta)
+        ax.text(
+            x + FBETA_MAP_SIDE / 2,
+            FBETA_MAP_Y + FBETA_MAP_SIDE + FBETA_MAP_TITLE_LIFT,
+            f"β = {name}",
+            ha="center",
+            va="bottom",
+            fontsize=22,
+            color=INK,
+        )
+    return fig
+
+
+def _canvas_box(box: tuple[float, float, float]) -> list[float]:
+    """A square ``(x, y, side)`` in canvas units, as figure fractions for ``add_axes``."""
+    x, y, side = box
+    return [x / FBETA_CANVAS[0], y / FBETA_CANVAS[1], side / FBETA_CANVAS[0], side / FBETA_CANVAS[1]]
+
+
+def _pr_plane(ax: plt.Axes, precision_label: bool = True) -> None:
+    """The square recall-by-precision plane, 0 to 1 on both, in the deck's axis style.
+
+    Gridded like the precision-recall charts later in the deck (Photo Finish
+    and the document slides, `make-sota-figs._pr_axes`): a faint line every
+    0.1, behind everything, in their colour.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_aspect("equal")
+    ax.set_xticks([0, 0.5, 1])
+    ax.set_yticks([0, 0.5, 1])
+    ax.set_xticklabels(["0", "0.5", "1"], fontsize=16, color=SOFT)
+    ax.set_yticklabels(["0", "0.5", "1"], fontsize=16, color=SOFT)
+    ax.set_xlabel("Recall", fontsize=18, color=INK)
+    if precision_label:
+        ax.set_ylabel("Precision", fontsize=18, color=INK)
+    lines = np.arange(0, 1 + PR_GRID_STEP / 2, PR_GRID_STEP)
+    ax.set_xticks(lines, minor=True)
+    ax.set_yticks(lines, minor=True)
+    ax.tick_params(which="minor", length=0)
+    ax.grid(True, which="both", color=PR_GRID_COLOUR, linewidth=1.0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(SOFT)
+    ax.tick_params(colors=SOFT)
+
+
+def _fbeta_contours(ax: plt.Axes, beta: float) -> None:
+    """F-beta's level curves over the plane, each numbered at its own end (never on a leader).
+
+    Drawn from the formula rather than traced by ``contour``: a curve has to
+    stop short of the edge to leave its number room, and ``clabel`` both
+    clipped the number at the edge and left a stub of curve beyond it.
+    """
+    b2 = beta * beta
+    room_x, room_y = FBETA_MAP_LABEL_ROOM
+    for c in FBETA_LEVELS:
+        # The level set F = c, as precision against recall and recall against
+        # precision, sampled along both so its steep arm is as smooth as its
+        # flat one; it enters the square at precision 1, recall c·b²/(1+b²-c).
+        rec_a = np.linspace(c * b2 / (1 + b2 - c), 1, 600)
+        prec_b = np.linspace(c / (1 + b2 - c * b2), 1, 600)
+        rec = np.concatenate([rec_a, c * b2 * prec_b / ((1 + b2) * prec_b - c)])
+        prec = np.concatenate([c * rec_a / ((1 + b2) * rec_a - c * b2), prec_b])
+        order = np.argsort(rec)
+        rec, prec = rec[order], prec[order]
+        # Its number is its end (`slides/STYLE.md`), on the edge where the four
+        # ends spread out: the right edge when the curves lie down or bow
+        # (β <= 1), the top when they stand up (β > 1). The other edge bunches
+        # them: β = 4's right ends are all under 0.2.
+        if beta <= 1:
+            keep = rec <= 1 - room_x
+            ax.plot(rec[keep], prec[keep], color=INK, linewidth=1.8, zorder=2)
+            ax.text(1, prec[keep][-1], f"{c:.1f}", ha="right", va="center", fontsize=16, color=INK, clip_on=False)
+        else:
+            keep = prec <= 1 - room_y
+            ax.plot(rec[keep], prec[keep], color=INK, linewidth=1.8, zorder=2)
+            ax.text(rec[keep][0], 1, f"{c:.1f}", ha="center", va="top", fontsize=16, color=INK, clip_on=False)
+
+
 def _fbeta_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the F-beta figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
@@ -4408,7 +4562,7 @@ def _fbeta_stage(stage: int) -> plt.Figure:
     plateaus = (edges[:-1] + edges[1:]) / 2
 
     # ── stage 1 is the ranking, drawn above; stages 2-4: three balances ───────
-    # The score itself is the slide before's (F-ing Metrics), so it is not
+    # The score itself is F-ing Metrics', two slides back, so it is not
     # printed again here (#4517).
     for arm, ((beta, name), weight, base) in enumerate(zip(FBETA_ARMS, BALANCE_WEIGHTS, row_base, strict=True)):
         # Balanced first, then precise, then permissive: the middle arm is the
@@ -6607,6 +6761,7 @@ def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
 
 if __name__ == "__main__":
     fmetrics_fig()
+    fbeta_maps_fig()
     fbeta_fig()
     labels_line_fig()
     transfer_fig()
