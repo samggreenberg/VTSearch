@@ -990,7 +990,7 @@ def _opt_float(name: str) -> float | None:
 #: is continuous in ``k``.  Parsing this as an int would silently refuse the
 #: half-step grid rather than fail, so it is a float.
 #: The balance arm (#4413): draw the line at F-beta's beta instead of the floor
-#: (``CALIB_BETA=1`` is the balanced preset; 0.5 and 2 the leaning ones).  Unset
+#: (``CALIB_BETA=1`` is the balanced preset; 0.25 and 4 the leaning ones, #4448).  Unset
 #: with CALIB_MIN_PRECISION unset is the app's default preference, the balance
 #: at beta 1 (#4413); CALIB_MIN_PRECISION=<P> is the floor arm.  A given beta
 #: makes CALIB_MIN_PRECISION unused.
@@ -1011,9 +1011,10 @@ ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 #: the depth where the session's mixture says the unvoted ranking stops being
 #: P right (1.0 = at the crossing; under a balance, the F-beta argmax).  A
 #: number requires ``CALIB_ACQ_INCLUSION_OFFSET=0`` and a preference.  Unset is
-#: the shipped cut - under a balance ``ACQUISITION_ARGMAX_FACTOR`` (0.5 since
-#: #4409's pricing), the line - 4 offset otherwise; ``off`` forces the offset
-#: under a balance (the pricing's control).
+#: the shipped cut - under a balance ``ACQUISITION_ARGMAX_FACTOR``, which has
+#: been ``None`` since the #4427 revert, so the line - 4 offset there as
+#: everywhere; ``off`` forces the offset under a balance whatever ships (the
+#: pricing's control).
 #: The balance walk's arms (#4427), all off = the app's walk: picks a band
 #: (``CALIB_WALK_PICKS``, the schedule's 5), the tolerance a deeper step may
 #: fall within and still be looked past (``CALIB_WALK_TOL``, 0) and whether
@@ -1023,8 +1024,8 @@ WALK_TOL = _opt_float("CALIB_WALK_TOL") or 0.0
 WALK_FINE = os.environ.get("CALIB_WALK_FINE", "").strip().lower() in ("1", "true", "yes")
 #: The precision guard (``CALIB_WALK_GUARD``: a deeper band whose audited share right is below it
 #: times the start set's ends the walk) and the check's shape (``CALIB_WALK_SHAPE``: unset is the app's,
-#: advisory at beta <= 1 and trim above since #4427's pricing; ``walk`` the full walk whose end moves the
-#: line, ``advisory`` or ``trim`` a forced shape).
+#: advisory at every preset since #4452 (#4427 had priced advisory at beta <= 1 and trim above for the
+#: count line); ``walk`` the full walk whose end moves the line, ``advisory`` or ``trim`` a forced shape).
 WALK_GUARD = _opt_float("CALIB_WALK_GUARD")
 WALK_SHAPE = os.environ.get("CALIB_WALK_SHAPE", "").strip().lower() or None
 #: When the simulated user checks (#4496): unset is the harness's default, the app's (``weak``: the end-of-run check

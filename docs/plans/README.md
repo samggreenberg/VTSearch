@@ -42,6 +42,7 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`population-anchored-calibration.md`](population-anchored-calibration.md)
 - [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
 - [`calibration-experiment.md`](calibration-experiment.md)
+- [`cost-to-fbeta.md`](cost-to-fbeta.md)
 - [`region-vs-binary-kappa-mechanism.md`](region-vs-binary-kappa-mechanism.md)
 
 ## Scoring and eval
