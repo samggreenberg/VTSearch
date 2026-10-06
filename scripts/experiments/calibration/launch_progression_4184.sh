@@ -177,7 +177,12 @@ rung_env() {
     # spread floor (#4492) and Autopilot's weak-separation check (#4496) -
     # production in every knob, so the ladder ends where the app is now.
     r8_labels) ;;
-    *) echo "unknown rung '$1'; expected one of: $ALL_RUNGS" >&2; exit 2 ;;
+    # Today's app at the other two presets (#4548): is the preference where the
+    # work since cross-calibration pays? Named on the command line only; the
+    # deck's eight (ALL_RUNGS) end on r8 at the default balance, beta 1.
+    r8_labels_b025) ;;
+    r8_labels_b4) ;;
+    *) echo "unknown rung '$1'; expected one of: $ALL_RUNGS r8_labels_b025 r8_labels_b4" >&2; exit 2 ;;
   esac
   # The deck's rungs predate every preference (#4245, #4413) and the spot check
   # (#4272, #4496). Since #4452 an unset preference is the balance, whose line is
@@ -187,6 +192,8 @@ rung_env() {
   # then. Today's app (r8) runs the default balance and checks as it ships.
   case "$1" in
     r8_labels) ;;
+    r8_labels_b025) export CALIB_BETA=0.25 ;;
+    r8_labels_b4) export CALIB_BETA=4 ;;
     *) export CALIB_MIN_PRECISION=off CALIB_SPOT_CHECK=off ;;
   esac
   # 50/50 until "Train More, Check Less" moves it.  Unset from r6 on, which the
@@ -199,7 +206,7 @@ rung_env() {
   # drops the fit the offset would re-cut); pinning it there too keeps the
   # launcher honest about what every rung ran with.
   case "$1" in
-    r7_acq4 | r8_labels) ;;
+    r7_acq4 | r8_labels*) ;;
     *) export CALIB_ACQ_INCLUSION_OFFSET=0 ;;
   esac
   [[ -n "${CALIB_LIVE_THRESHOLD:-}" ]] && RUNG_DIVERGES="$RUNG_DIVERGES,live_threshold"
