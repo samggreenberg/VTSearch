@@ -69,7 +69,14 @@ pip install --ignore-installed blinker -q
 # precede the main requirements pass (it's declared in pyproject.toml);
 # toponymy goes in --no-deps because its transformers<5 pin would downgrade
 # the app's transformers and is empirically unnecessary for our usage.
-SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select -q
+# Python 3.12 removed stdlib distutils, so there the shim makes setuptools'
+# build backend unimportable and setuptools' own vendored copy is the one
+# that builds it.
+if python -c 'import sys; sys.exit(0 if sys.version_info < (3, 12) else 1)'; then
+  SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select -q
+else
+  pip install apricot-select -q
+fi
 pip install --no-deps "toponymy==0.5.2" -q
 
 # Install all dependencies + editable install via pyproject.toml

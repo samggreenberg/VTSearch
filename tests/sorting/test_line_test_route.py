@@ -205,7 +205,7 @@ class TestToDone:
         _run_find(client)
         _plant_big_corpus()
         data = _vote_until_done(client, _start(client))
-        assert data["presets"] == []
+        assert data["presets"] == [] and data["test"]["class_model"] is False
 
     def test_a_class_model_gives_the_line_each_preset_would_ship(self, client):
         _run_find(client)
@@ -217,6 +217,7 @@ class TestToDone:
         ctx.labels_line = LabelsLine(ClassScoreModel(2.0, -2.0, 1.0, 10, 10), 0.3)
         data = _vote_until_done(client, _start(client), right=lambda cid: cid <= 64)
         presets = data["presets"]
+        assert data["test"]["class_model"] is True
         assert [p["beta"] for p in presets] == [0.25, 1.0, 4.0]
         # A balance toward false positives keeps more, and every reading is a range.
         assert presets[0]["count"] <= presets[1]["count"] <= presets[2]["count"]

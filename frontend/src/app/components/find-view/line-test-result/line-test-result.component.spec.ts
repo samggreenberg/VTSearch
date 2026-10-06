@@ -124,6 +124,25 @@ describe('LineTestResultComponent (#4524)', () => {
     expect(rows[0].textContent).toContain('36–98%');
   });
 
+  it('with no class model reads Found in words only and says it is unmeasured below the picks (#4542)', async () => {
+    const t = wireDone({ class_model: false });
+    t.bands[4] = { ...t.bands[4], labelled: 5, right: 0, range: { lo: 0, hi: 0.45, labelled: 5, right: 0 } };
+    t.estimates = { ...t.estimates!, tail_positives: 0 };
+    const el = await show(wireLineTest(t));
+    flushChecks();
+    await settleZoneless(fixture);
+
+    const found = el.querySelectorAll('.range-row')[1] as HTMLElement;
+    expect(found.querySelector('dd')!.textContent!.trim()).toBe('about half of them found');
+    expect(found.querySelector('dt')!.getAttribute('title')).toContain('no count of its own');
+    const notes = Array.from(el.querySelectorAll('.result-note')).map((n) => n.textContent!).join(' ');
+    expect(notes).toContain('no class model, so nothing estimates the matches below the top 72');
+    expect(notes).not.toContain("detector's own estimate");
+    const verdict = el.querySelector('.verdict')!.textContent!;
+    expect(verdict).toContain('with about half of them found. That is');
+    expect(verdict).not.toContain('of all the matches');
+  });
+
   it('at Done shows the verdict with its exits, reads the checks, and lets the Threshold lean on the presets', async () => {
     const presets = [
       { beta: 0.25, count: 31, precision: estimate(0.9, 0.75, 1), recall: estimate(0.3, 0.2, 0.4), fbeta: estimate(0.5, 0.4, 0.6), found: 'about a quarter of them found' },
@@ -184,7 +203,7 @@ describe('LineTestResultComponent (#4524)', () => {
     const keptAt = new Date(2026, 9, 5, 12, 0).getTime() / 1000;
     el = await show(wireLineTest(wireDone({ kept_at: keptAt })));
     expect(el.querySelector('.kept-note')!.textContent).toContain('Kept from your test of 2026-10-05');
-    expect(el.querySelector('.kept-note')!.textContent).toContain('its 45 picks still hold');
+    expect(el.querySelector('.kept-note')!.textContent).toContain('its 65 picks still hold');
   });
 
   it('says there is nothing to test', async () => {

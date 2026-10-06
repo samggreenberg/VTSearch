@@ -60,20 +60,26 @@ is largest); later rounds go to the band whose next round would shrink the
 F-beta range most in expectation - the greedy face of Neyman allocation
 (``docs/plans/coverage-atlas.md`` §6.3), computed on the draws by
 pre-posterior analysis over the round's possible outcomes.  Below the line
-the walk takes the first band under the line first, then goes deeper while
-the band it just audited turned up a match or holds a posterior mass that is
-not negligible against the matches found above the line; a band with no
-match in its picks and little mass is a dry run and ends the walk.
+the walk takes the first band under the line first, then one band deeper a
+round.  With a class model it walks to its pick budget: every band it
+reaches is the model's count corrected by picks, and a walk that stops
+early leaves the tail to the model alone, as a point, whose recall range
+held the truth in 13-38% of #4523's sessions against 75-94% for the walk to
+the budget.  Without one it stops at a dry run - a band with no match in
+its picks - since a deeper band would be read on the Jeffreys prior alone,
+and on bands of thousands that counts hundreds of phantom positives.
 
 **The phase machine and stop rule** (:func:`line_phase`) are a pure function
 of the sample and its budgets (:class:`LineBudgets`), so the app's view and
 the harness derive the phase from state on every poll rather than
 accumulating it.  The phases are the matches (precision), the misses
-(recall) and ``done``; a phase ends when its range is narrower than its
-target, at its pick budget, or when its bands are exhausted (and, below the
-line, on a dry run), and a line that keeps fewer items than one round is
-``nothing``: nothing to test.  The targets and budgets are parameters whose
-defaults are the plan's proposals; #4523 prices them.
+(recall) and ``done``.  The matches phase ends when its range is narrower
+than its target, at its pick budget, or when its bands are exhausted; the
+misses phase at its pick budget or when its bands are exhausted, and,
+without a class model, on its width target or a dry run.  A line that keeps
+fewer items than one round is ``nothing``: nothing to test.  The targets and
+budgets are parameters whose defaults are the values #4523 priced
+(``docs/experiments/2026-10-05-line-test-4523/REPORT.md``).
 
 Test votes never train the detector: they are recorded with
 :data:`TEST_PROVENANCE` so a later merge can tell them from a check's.
@@ -191,8 +197,19 @@ class LineBudgets:
     the positives estimated above the line, below which a band with no match
     in its picks ends the walk below the line, and *model_weight* is what the
     model's share of a band below the line is worth in picks before the
-    band's own picks correct it (one round).  The defaults are the plan's
-    proposals, to be priced by #4523, not values the eval has confirmed.
+    band's own picks correct it (one round).
+
+    *misses_width* and *dry_run_share* govern only a test with no class model
+    (:attr:`LineTest.posteriors` is ``None``: a structural or document
+    detector), whose walk stops at the first band with no match, every
+    band's mass being zero; with a class model the walk below the line runs
+    to *misses_picks*, because its recall range only holds once the walk
+    has corrected the model's tail band by band.  The defaults are the values
+    #4523 priced on 192,660 replayed Tests
+    (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``): 0.20 and 40
+    picks above the line, where the precision range held the truth in 92-96%
+    of sessions at beta <= 1; 40 picks below it, where walking to the budget
+    raised the recall range's from 13-38% to 75-94%.
     """
 
     matches_width: float = 0.20
@@ -431,8 +448,10 @@ class LineTest:
     beta: float
     budgets: LineBudgets = DEFAULT_BUDGETS
     #: Each item's chance of being a positive by the labels line, aligned with
-    #: :attr:`ranking_ids`; ``None`` when the line has no corpus fit, in which
-    #: case the unreached tail counts nothing and every dry band is a dry run.
+    #: :attr:`ranking_ids`; ``None`` when the line has no corpus fit (no class
+    #: model), in which case the unreached tail counts nothing and the walk
+    #: below the line stops at its first dry band, so recall is unmeasured
+    #: below the bands it reached.
     posteriors: np.ndarray | None = field(default=None, repr=False, compare=False)
     labels: dict[int, bool] = field(default_factory=dict)
     #: The band each labelled (or pending) pick was drawn from.
@@ -747,13 +766,15 @@ class LineTest:
     def misses_walk(self) -> tuple[int | None, str | None]:
         """Where the walk below the line stands: ``(next band to audit, why it ended)``; one of the two is ``None``.
 
-        The walk audits the first band under the line, then each next band
-        while the band it just audited turned up a match or holds a posterior
-        mass that is not negligible against the positives found above the
-        line (:attr:`LineBudgets.dry_run_share` of them).  A band with no
-        match in its picks and little mass is a dry run; past the last band
-        the walk is exhausted; with nothing below the line it is exhausted
-        before it starts.
+        The walk audits the first band under the line, then each next band.
+        With a class model it goes on until the phase's pick budget stops it
+        (:func:`line_phase`) or the bands run out (#4523).  Without one it
+        goes on only while the band it just audited turned up a match or
+        holds a posterior mass that is not negligible against the positives
+        found above the line (:attr:`LineBudgets.dry_run_share` of them); a
+        band with no match in its picks and little mass is a dry run.  Past
+        the last band the walk is exhausted; with nothing below the line it
+        is exhausted before it starts.
         """
         below = self.below
         if not below:
@@ -764,11 +785,12 @@ class LineTest:
                 last_audited = band
         if last_audited is None:
             return below[0].index, None
-        _, _, right = self.band_counts(last_audited.index)
-        found_above = max(self.estimates().positives_above.point, 1.0)
-        dry = right == 0 and self.band_mass(last_audited.index) < self.budgets.dry_run_share * found_above
-        if dry:
-            return None, STOP_DRY_RUN
+        if self.posteriors is None:
+            _, _, right = self.band_counts(last_audited.index)
+            found_above = max(self.estimates().positives_above.point, 1.0)
+            dry = right == 0 and self.band_mass(last_audited.index) < self.budgets.dry_run_share * found_above
+            if dry:
+                return None, STOP_DRY_RUN
         nxt = last_audited.index + 1
         if nxt >= len(self._bands):
             return None, STOP_EXHAUSTED
@@ -888,6 +910,7 @@ class LineTest:
             "estimates": None if self.nothing_to_test else self.estimates().as_dict(),
             "budgets": self.budgets.as_dict(),
             "kept_at": self.kept_at,
+            "class_model": self.posteriors is not None,
         }
 
 
@@ -902,13 +925,17 @@ def line_phase(test: LineTest) -> PhaseReport:
     the matches phase runs until every band above the line is exhausted, its
     precision range is at or under its target width after at least one round
     above the line, or its picks reach the matches budget; then the misses
-    phase, until the walk below the line ends (exhausted, or a dry run), its
-    recall range is under its target after at least one round below the
-    line, or its picks reach the misses budget; then ``done``.  Width is read
-    on the ranges as they stand, so a phase's verdict is a function of the
-    picks and never of the order they were taken in; when more than one
-    reason holds, the one named is the first in that order (a censused line
-    is ``exhausted``, not ``width``, though its range has no width at all).
+    phase, until the walk below the line ends (exhausted, or, with no class
+    model, a dry run), its recall range is under its target after at least
+    one round below the line (with no class model only), or its picks reach
+    the misses budget; then ``done``.  With a class model the recall range's
+    width never stops the walk: it is narrow from the start, because the
+    unreached tail is the model's point, and it holds only once the walk has
+    corrected that point band by band (#4523).  Width is read on the ranges
+    as they stand, so a phase's verdict is a function of the picks and never
+    of the order they were taken in; when more than one reason holds, the one
+    named is the first in that order (a censused line is ``exhausted``, not
+    ``width``, though its range has no width at all).
     """
     budgets = test.budgets
     if test.nothing_to_test:
@@ -928,7 +955,7 @@ def line_phase(test: LineTest) -> PhaseReport:
     _, walk_end = test.misses_walk()
     if walk_end is not None:
         misses_stop = walk_end
-    elif picks_below > 0 and est.recall.width <= budgets.misses_width + _EPS:
+    elif test.posteriors is None and picks_below > 0 and est.recall.width <= budgets.misses_width + _EPS:
         misses_stop = STOP_WIDTH
     elif picks_below >= budgets.misses_picks:
         misses_stop = STOP_BUDGET

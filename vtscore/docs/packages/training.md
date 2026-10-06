@@ -596,18 +596,28 @@ the app's routes and the eval harness both call.
   shrink the F-beta range most in expectation (`expected_shrink`, a
   pre-posterior over the round's outcomes on the same draws: the greedy face
   of Neyman allocation). Below the line, `misses_walk()`: the first band
-  under the line, then deeper while the band just audited turned up a match
-  or holds a posterior mass that is not negligible against the positives found
-  above (`budgets.dry_run_share` of them); a dry band with little mass is a
-  dry run that ends the walk.
+  under the line, then one band deeper a round. With a class model
+  (`posteriors` given) the walk runs to `budgets.misses_picks` or the
+  corpus's end: a walk that stops early leaves the tail to the model's
+  point, and #4523 found its recall range then held the truth in 13-38% of
+  sessions, against 75-94% walking to the budget. Without one it goes on only
+  while the band just audited turned up a match or holds a posterior mass
+  that is not negligible against the positives found above
+  (`budgets.dry_run_share` of them, and with no model every band's mass is
+  zero); a dry band is a dry run that ends the walk, since a deeper band
+  would be read on the Jeffreys prior alone. `as_dict()` says which with
+  `class_model`.
 - `line_phase(test)` / `test.phase()` derives the phase from state
   (`PhaseReport`): `nothing` when the line keeps fewer items than a round;
   `matches` until the precision range is at or under `budgets.matches_width`
   after a round, the bands above are exhausted, or `budgets.matches_picks` is
-  spent; `misses` until the recall range is under `budgets.misses_width`, the
-  walk ends (`exhausted` or `dry_run`), or `budgets.misses_picks` is spent;
-  then `done`. The stop reasons are `STOP_REASONS`, the phases `PHASES`.
-  `LineBudgets`' defaults are the plan's proposals; #4523 prices them.
+  spent; `misses` until the walk ends (`exhausted`, or `dry_run` with no
+  class model), the recall range is under `budgets.misses_width` (with no
+  class model only), or `budgets.misses_picks` is spent; then `done`. The
+  stop reasons are `STOP_REASONS`, the phases `PHASES`. `LineBudgets`'
+  defaults are the values #4523 priced
+  (`docs/experiments/2026-10-05-line-test-4523/REPORT.md`): a 0.20 precision
+  width and 40 picks a phase.
 - `TEST_PROVENANCE` is the provenance a test's vote is recorded with
   (`flow: test`); a test vote never trains the detector.
 - A finished test's verdict is kept on the detector by

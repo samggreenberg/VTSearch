@@ -131,6 +131,11 @@ class LineTestStateSchema(Schema):
     # When the test resumed from a verdict the detector keeps (#4526): the
     # epoch seconds its picks were taken at.  ``null`` for a test begun afresh.
     kept_at = fields.Float(required=True, allow_none=True)
+    # Whether the detector has a class model to count the matches below the
+    # bands the test reached (#4542).  Without one (a structural or document
+    # detector) the walk below the line stops at its first dry band and the
+    # recall below it is unmeasured: a client reads it in words only.
+    class_model = fields.Boolean(required=True)
 
 
 class LineTestPresetSchema(Schema):

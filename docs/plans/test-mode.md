@@ -106,16 +106,18 @@ the same flow.
    against its target: red while wider than twice it, yellow within twice,
    green at or under.
 3. **Check the misses.** Recall. Picks from the bands *below* the line, the
-   first band under it first, then deeper while a band is still turning up
-   matches or its posterior mass is not yet negligible against the matches
-   found above the line. Estimation is model-assisted (the item posteriors
-   from the labels line as the auxiliary, corrected band by band by the picks;
-   Horvitz-Thompson under the band design), because uniform sampling of a
-   10,000-item tail at 0.4% prevalence can bound nothing. The deep tail the
-   walk never reaches is taken from the model and said to be, as the *found*
-   phrase is today. This phase has a dry-run stop like the document stop of
-   #4488: a band with no match in its picks and little posterior mass ends
-   the walk. The light is the recall range's width.
+   first band under it first, then one band deeper a round. Estimation is
+   model-assisted (the item posteriors from the labels line as the
+   auxiliary, corrected band by band by the picks; Horvitz-Thompson under the
+   band design), because uniform sampling of a 10,000-item tail at 0.4%
+   prevalence can bound nothing. The deep tail the walk never reaches is
+   taken from the model and said to be, as the *found* phrase is today. With
+   a class model the walk runs to its pick budget, since a walk that stops
+   early rests on the model's tail as a point and #4523 found that range
+   rarely holds; without one (a structural or document detector) it has a
+   dry-run stop like the document stop of #4488, a band with no match in its
+   picks ends the walk, and recall below it is unmeasured and read in words
+   only (#4542). The light is the recall range's width.
 4. **Done!** The verdict, with three exits, mirroring the **Detector
    Trained** dialog:
    - **Move to AutoRun**, the reason the test exists. Available whatever the
@@ -205,9 +207,9 @@ screenshots move with it (queued under `docs/reshoot-queue/`, not reshot).
 Library tier, `vtscore`, Flask-clean: shipped as
 `vtscore/training/thresholds/line_test.py` (#4527) - the test sample, its
 estimators, the allocation rule, the phase machine and stop rule, and the
-`test` vote flow. Its targets and budgets (`LineBudgets`) are the §2
-proposals until #4523 prices them; its pin in `scripts/check-eval-app-sync.py`
-is that slice's.
+`test` vote flow. Its targets and budgets (`LineBudgets`) are the values
+#4523 priced (#4542); its pin in `scripts/check-eval-app-sync.py` is that
+slice's.
 
 App tier:
 
