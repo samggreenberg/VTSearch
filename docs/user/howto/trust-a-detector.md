@@ -39,7 +39,7 @@ With the verdict up, two checks below it say how far the result carries:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/trust-stats.dark.webp" />
-  <img src="../assets/trust-stats.light.webp" alt="Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it" width="720" />
+  <img src="../assets/trust-stats.light.webp" alt="Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it" width="400" />
 </picture>
 
 The two checks answer the same question from different ends:

@@ -22,12 +22,12 @@ accept missing - and the line is drawn where that balance is best. Toward
 False Negatives it returns only the pictures most likely to be matches, and
 misses more; toward False Positives it returns the most, with more wrong ones
 among them; the middle radio weighs the two mistakes equally. The line keeps
-the top of the ranking, among the pictures you haven't checked: up to the
-top 32 on the middle and False Negatives radios, and up to the top 128 on the
-False Positives radio, fewer when the detector's own estimate says the
-balance peaks sooner. So moving toward False Positives moves the line down by
-a band of borderline pictures, and everything the line kept before it still
-keeps.
+the top of the ranking, and how far down it reaches is no fixed count: it is
+worked out from your labels and from how common matches look in this
+collection. In the example the middle radio keeps the top 36 and the False
+Positives radio the top 65. So moving toward False Positives moves the line
+down by a band of borderline pictures, and everything the line kept before it
+still keeps.
 
 The note under the spectrum says what the line keeps, and what the test on
 the **Autopilot** tab found on it:
@@ -45,7 +45,9 @@ the **Autopilot** tab found on it:
   not shown here.
 
 The Threshold is frozen while a test phase runs: moving the line would move
-the picks' bands under them. Finish the round, or wait for **Done!**.
+the picks' bands under them. Test starts its test as soon as it has scored,
+so answer the picks until **Done!**, as the guide's first search does, and
+the Threshold is yours again.
 
 Moving the Threshold never re-scores anything and never changes the order of
 the pictures. Only the line moves. The user guide explains the line itself in
@@ -65,10 +67,11 @@ At the top of the left-hand panel:
 
 1. Click the radio under the **False Positives** end of the spectrum: from
    the middle radio, that is the one to its left.
-2. Read the note under it. **Top 128 kept, unchecked** means the line has
-   moved down to keep the top 128, so more pictures sit above it and the count
-   of **Unverified Good** on the right grows by the pictures it has just let
-   in.
+2. Read the note under it. It ends with how many the line keeps now (**65
+   kept** in the example): the line has moved down, so more pictures sit
+   above it and the count of **Unverified Good** on the right grows by the
+   pictures it has just let in. It begins *Tested at another line*: the
+   ranges it quotes are the test's, measured at the line as it was.
 3. Find the line in the list: the pictures just above it are the ones the
    move let in.
 
@@ -109,7 +112,7 @@ most it can.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/borderline-chart.dark.webp" />
-  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with a likely range at every band edge, the line marked, and the line under the chart reading it there" width="720" />
+  <img src="../assets/borderline-chart.light.webp" alt="The Precision by Number Returned chart for the top N pictures, with a likely range at every band edge, the line marked, and the line under the chart reading it there" width="400" />
 </picture>
 
 Each band edge carries a bar: the likely range for how much of the list up to
