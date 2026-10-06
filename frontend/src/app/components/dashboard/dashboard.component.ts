@@ -1312,53 +1312,63 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Why the selection cannot be scored, or `''` when it can: at least one
    *  dataset and one detector, one media type across every ticked row, and
-   *  every ticked detector trained. Test and Find share this rule; Test
-   *  scores the first ticked pair, Find runs AutoRun on every ticked dataset
-   *  with every ticked detector. */
-  private get scoreSelectionBlocker(): string {
+   *  every ticked detector trained. Test and Find share this rule, except that
+   *  Test (*onePair*) opens one view on one pair and so takes exactly one of
+   *  each, as Train does; Find runs AutoRun on every ticked dataset with every
+   *  ticked detector.
+   *
+   *  Each reason is shown under its button as well as in the tooltip, so it
+   *  must fit the fixed-width `.action-btn-group` (about 36 characters at the
+   *  hint's size) or it is cut off with an ellipsis. */
+  private scoreSelectionBlocker(onePair: boolean): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
     // "row above": selection means checking a table row — a dataset can be
     // loaded (named in the top bar) while its row is unchecked, so a bare
     // "select a dataset" reads as already satisfied.
-    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and detector above.';
-    if (nDatasets === 0) return 'Select a dataset in the table above.';
-    if (nModels === 0) return 'Select a detector in the table above.';
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and detector above';
+    if (nDatasets === 0) return 'Select a dataset in the table above';
+    if (nModels === 0) return 'Select a detector in the table above';
+    if (onePair && nDatasets > 1) return 'Select exactly 1 dataset';
+    if (onePair && nModels > 1) return 'Select exactly 1 detector';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
-    if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
+    if (this.hasUntrainedModel()) return 'Detector has no training labels';
     return '';
   }
 
   get findEnabled(): boolean {
-    return this.scoreSelectionBlocker === '';
+    return this.scoreSelectionBlocker(true) === '';
   }
 
   /** The Test button's hint (the view is `find` in code, as Train's is `label`). */
   get findHint(): string {
     return (
-      this.scoreSelectionBlocker ||
-      'Score the selected dataset with the selected detector, then test how well its line does there'
+      this.scoreSelectionBlocker(true) ||
+      "Open the Test view to score the selected dataset and test the selected detector's line on it"
     );
   }
 
-  /** The big Find button (#4529; labelled AutoRun until #4525): enabled on Test's rule. */
+  /** The big Find button (#4529; labelled AutoRun until #4525): enabled on
+   *  Test's rule, for any number of ticked rows. */
   get autorunEnabled(): boolean {
-    return this.scoreSelectionBlocker === '';
+    return this.scoreSelectionBlocker(false) === '';
   }
 
   get autorunHint(): string {
     return (
-      this.scoreSelectionBlocker ||
+      this.scoreSelectionBlocker(false) ||
       'Run every selected detector on every selected dataset, as AutoRun does, and show the results as each run finishes'
     );
   }
 
+  /** The Train button's hint; like {@link scoreSelectionBlocker}'s reasons,
+   *  a disabled one must fit under the button. */
   get labelHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0) return 'Select a dataset in the table above.';
+    if (nDatasets === 0) return 'Select a dataset in the table above';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
-    if (nModels === 0) return 'Create a new detector and start training';
+    if (nModels === 0) return 'Create a new detector, then train it on the selected dataset';
     if (nModels > 1) return 'Select exactly 1 detector';
     const model = this.resolvedSelectedModels[0];
     const dataset = this.resolvedSelectedDatasets[0];
@@ -1366,9 +1376,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return 'Media type mismatch';
     }
     if (model?.autofind) {
-      return 'AutoRun detectors are frozen — move to Drafts to retrain';
+      // AutoRun detectors are frozen against edits.
+      return 'Frozen: move to Drafts to retrain';
     }
-    return 'Open Train Mode with the selected dataset and detector';
+    return 'Open the Train view with the selected dataset and detector';
   }
 
   private storeSelectedModelTextQuery(): void {

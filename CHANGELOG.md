@@ -56,6 +56,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Test takes exactly one dataset and one detector** (the Dashboard's action bar).
+  With two datasets or two detectors ticked, Test used to stay enabled and quietly open on
+  the first ticked pair; it is now greyed out with *Select exactly 1 dataset* (or
+  *detector*), as Train is. Find still takes any number. The reasons shown under the
+  Train / Test / Find buttons were also reworded to fit under them: two had been cut off
+  with an ellipsis (*Detector has no training labels*, and Train's *Frozen: move to Drafts
+  to retrain* for an AutoRun detector), and the tooltips now name the Train and Test views.
+
 - **Testing a detector checks deeper below the line** (issue #4542). When the detector
   has a class model, the Test autopilot's *Check the misses* step now keeps drawing picks
   from deeper bands until it has spent its 40, instead of stopping at the first band that
