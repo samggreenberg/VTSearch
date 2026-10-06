@@ -64,6 +64,9 @@ RUNGS: dict[str, dict] = {
     "r7_acq4": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": True},
     # Today's app (#4519): the labels line at the default balance, everything production.
     "r8_labels": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": True},
+    # Today's app at the other presets (#4548), named on the command line only.
+    "r8_labels_b025": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": True},
+    "r8_labels_b4": {"live_threshold": "shipped", "calibration_fraction": 0.3, "acq": True},
 }
 
 #: The clicks the paired table reads.  150 is the grid's horizon.
