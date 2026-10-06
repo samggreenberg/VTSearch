@@ -37,7 +37,12 @@ indicator now score through the same
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
+
+if TYPE_CHECKING:
+    from numpy.typing import ArrayLike
 
 
 def inclusion_weights(inclusion: float) -> tuple[float, float]:
@@ -187,9 +192,7 @@ def fbeta_metrics(scores: np.ndarray, labels: np.ndarray, threshold: float, beta
     }
 
 
-def fbeta_from_rates(
-    precision: "np.ndarray | float", recall: "np.ndarray | float", beta: "np.ndarray | float"
-) -> np.ndarray:
+def fbeta_from_rates(precision: "ArrayLike", recall: "ArrayLike", beta: "ArrayLike") -> np.ndarray:
     """:func:`fbeta_metrics`' number read back off a frame's ``precision`` and ``recall``, elementwise.
 
     For frames written before the ``fbeta`` columns (#4584), so an analyzer

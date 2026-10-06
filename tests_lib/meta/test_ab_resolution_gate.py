@@ -448,8 +448,8 @@ def test_a_balance_era_ab_is_decided_on_the_objective_end_to_end(tmp_path, monke
     assert summary["verdict"]["force_on_for_all_users"] is True
     tbl = pd.read_csv(on / "agg" / "ab_window_by_arm.csv")
     assert {"fbeta", "cost"} <= set(tbl["metric"])
-    ramp = tbl[(tbl["scope"] == "app_visible") & (tbl["window"] == "ramp_6_20") & (tbl["metric"] == "fbeta")]
-    assert float(ramp["delta_on_minus_off"].iloc[0]) > 0.04
+    ramp = (tbl["scope"] == "app_visible") & (tbl["window"] == "ramp_6_20") & (tbl["metric"] == "fbeta")
+    assert float(tbl.loc[ramp, "delta_on_minus_off"].to_numpy(dtype=float)[0]) > 0.04
 
 
 def test_an_ab_across_balances_stops_before_it_writes(tmp_path, monkeypatch):
