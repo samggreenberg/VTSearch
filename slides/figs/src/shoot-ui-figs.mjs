@@ -28,9 +28,10 @@
  * a moment is also an intro frame, it is shot twice in a row — clean, then
  * numbered — so the two sections of the deck show one session, not two. Nothing is staged through the API that the slide claims was done by
  * hand: `train-loop` votes by clicking Good and Bad, and which button it
- * clicks is decided by the filename of whatever autopilot chose to serve — so
- * the piles that accumulate in the right-hand panel are a real session's, and
- * the ranking `find` then shows is a real trained head's.
+ * clicks is decided by the filename of whatever autopilot chose to serve — the
+ * picks of a spot check autopilot opens included — so the piles that
+ * accumulate in the right-hand panel are a real session's, and the ranking
+ * `find` then shows is a real trained head's.
  *
  * One output of the `find` group is not a screenshot at all.
  * `figs/ui-find-grid.webp` is a contact sheet of the top of that ranking with
@@ -169,6 +170,9 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // laptops on a contact sheet, and the honest fix is to answer more questions
 // rather than to photograph fewer of the results (#3779). Still inside the
 // twenty minutes the deck says the whole task is worth.
+//
+// A spot check's answers count towards all three (`answerSpotCheck`): they are
+// votes, and they land in the same piles.
 const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
 // The numbered markers on the Step-By-Step frames, scaled for the slot. The
@@ -589,9 +593,14 @@ async function shootMakeDetector(page) {
  * grow through the build are the piles a person would have produced, and the
  * one thing a staged screenshot cannot show — that the tool asks about items
  * it cannot call, and is sometimes told no — is visible in them.
+ *
+ * Null when Autopilot's spot check stood over the item and nothing was cast:
+ * the caller answers the check (`answerSpotCheck`) and asks again, about
+ * whatever is served once it closes.
  */
 async function voteServed(page) {
-  const viewer = page.locator('img.image-element').first();
+  // The centre's own viewer: the spot check draws its picks in another.
+  const viewer = page.locator(CENTRE_ITEM).first();
   // Read the served item only once the viewer has stopped changing. The button
   // is chosen from this alt, so a read taken mid-swap decides the vote from one
   // item and casts it on another — which is how a stack of paperbacks ended up
@@ -615,14 +624,30 @@ async function voteServed(page) {
   if (!served(before)) throw new Error(`the viewer never settled on a served item (alt ${before})`);
   const good = isBook(before);
   if ((await viewer.getAttribute('alt')) !== before) return voteServed(page);
-  await page.locator(good ? '.btn-good' : '.btn-bad').first().click();
-  // The vote retrains the head and re-sorts, and autopilot then serves a
-  // different item. Waiting on the served item *changing* waits for all of it;
-  // waiting on a fixed delay waits for whichever part happens to be slowest.
+  // The check opens when a retrain lands, which is at no moment this script
+  // chooses (#4556): it can be up already, or come up while the click waits.
+  // Either way its backdrop takes the click, so nothing is cast.
+  if (await spotCheckOpen(page)) return null;
+  const cast = await page
+    .locator(`vt-center-panel ${good ? '.btn-good' : '.btn-bad'}`)
+    .first()
+    .click()
+    .then(
+      () => true,
+      async (err) => {
+        if (await spotCheckOpen(page)) return false;
+        throw err;
+      }
+    );
+  if (!cast) return null;
+  // Autopilot serves the next item as soon as the vote lands, and retrains
+  // after it: the re-sort is scheduled, not awaited (`scheduleLearnedSort`).
+  // So the served item *changing* is the vote done, and the retrain — the
+  // thing that can open the spot check — is still to come.
   await page
     .waitForFunction(
-      (prev) => document.querySelector('img.image-element')?.alt !== prev,
-      before,
+      ({ sel, prev }) => document.querySelector(sel)?.alt !== prev,
+      { sel: CENTRE_ITEM, prev: before },
       { timeout: 120000 }
     )
     .catch(() => {});
@@ -658,6 +683,118 @@ async function assertVoted(filename, good) {
   }
 }
 
+/** The item in the Label view's centre, as against a spot-check pick. */
+const CENTRE_ITEM = 'vt-center-panel img.image-element';
+const SPOT_CHECK = 'vt-spot-check-modal';
+
+const spotCheckOpen = async (page) => (await page.locator(SPOT_CHECK).count()) > 0;
+
+/**
+ * Answer Autopilot's spot check, if it has one open, as truthfully as the loop
+ * votes; the answers, Good as true, in the order they were given.
+ *
+ * Autopilot runs the check itself when the labels separate weakly (#4496):
+ * from the tenth vote, once a retrain lands, which is a moment this script
+ * does not choose (#4556). Its picks are the loop's question asked in a dialog
+ * and its answers are ordinary votes, so it is answered the same way — by the
+ * pick's file name, one at a time, round after round until the walk ends —
+ * and its votes join the piles the last page shows. That is the session a
+ * user has. Cancelling would not be: the check stays due, and comes back.
+ *
+ * It is not photographed. The train-loop slide's subject is one question
+ * repeated, and a frame of the check would need a slide of its own saying why
+ * Autopilot asks, which the intro has no room to make.
+ *
+ * Unlike the centre, a pick cannot be swapped under the read: the check moves
+ * to another only when it is voted, so the name read is the pick the click
+ * answers.
+ */
+async function answerSpotCheck(page) {
+  const modal = page.locator(SPOT_CHECK);
+  if (!(await modal.count())) return [];
+  log('autopilot opened a spot check; answering it');
+  const pick = modal.locator('.pick-stage img.image-element');
+  const answers = [];
+  for (let guard = 0; guard < 400 && (await modal.count()); guard++) {
+    // A refused start or a lost round is not something to photograph around.
+    const error = modal.locator('.error-text');
+    if (await error.count()) throw new Error(`the spot check failed: ${(await error.first().textContent()).trim()}`);
+    if (await modal.locator('.check-result').count()) {
+      log(`spot check: ${(await modal.locator('.check-result-headline').textContent()).trim()}`);
+      await modal.getByRole('button', { name: 'Done', exact: true }).click();
+      break;
+    }
+    // Nothing to read while it draws a round; and a pick's file name, never
+    // the viewer's placeholder, as in `voteServed`.
+    const name = (await pick.count()) ? await pick.first().getAttribute('alt') : null;
+    if (!/^[^/\s]+\/[^/]+\.\w+$/.test(name || '')) {
+      await page.waitForTimeout(500);
+      continue;
+    }
+    const good = isBook(name);
+    await modal.locator(good ? '.btn-good' : '.btn-bad').click();
+    answers.push({ name, good });
+    // On to the next pick; or, on a round's last, the round goes to the server
+    // with the pick still on screen, and the next round or the result replaces it.
+    await page.waitForFunction(
+      ({ sel, prev }) => {
+        const m = document.querySelector(sel);
+        if (!m || m.querySelector('.check-result, .error-text')) return true;
+        return m.querySelector('.pick-stage img.image-element')?.alt !== prev;
+      },
+      { sel: SPOT_CHECK, prev: name },
+      { timeout: 120000 }
+    );
+  }
+  await modal.waitFor({ state: 'detached', timeout: 30000 });
+  for (const { name, good } of answers) await assertVoted(name, good);
+  return answers.map((a) => a.good);
+}
+
+/**
+ * Watch the page's learned sorts, so the train loop can wait for the last
+ * vote's retrain rather than for a delay.
+ *
+ * `settled()` resolves once none has been in flight for `SORT_QUIET_MS`: a
+ * retrain is a POST and then a poll of its job, and the quiet has to outlast
+ * the poll's slow interval (2s) or a gap between polls reads as settled. A
+ * sort a newer one supersedes is aborted, which ends its request too.
+ */
+const LEARNED_SORT = /^\/api\/learned-sort(\/result)?$/;
+const SORT_QUIET_MS = 3500;
+
+function watchLearnedSorts(page) {
+  const pending = new Set();
+  let last = Date.now();
+  const sort = (req) => LEARNED_SORT.test(new URL(req.url()).pathname);
+  const start = (req) => {
+    if (!sort(req)) return;
+    pending.add(req);
+    last = Date.now();
+  };
+  const end = (req) => {
+    if (!pending.delete(req)) return;
+    last = Date.now();
+  };
+  page.on('request', start);
+  page.on('requestfinished', end);
+  page.on('requestfailed', end);
+  return {
+    async settled(timeout = 300000) {
+      const deadline = Date.now() + timeout;
+      while (pending.size || Date.now() - last < SORT_QUIET_MS) {
+        if (Date.now() > deadline) throw new Error('the learned sort never settled');
+        await page.waitForTimeout(250);
+      }
+    },
+    stop() {
+      page.off('request', start);
+      page.off('requestfinished', end);
+      page.off('requestfailed', end);
+    },
+  };
+}
+
 /**
  * Step 3 — answer, and answer again.
  *
@@ -686,6 +823,7 @@ async function shootTrainLoop(page) {
   await page.waitForTimeout(400);
   await shootNumbered(page, 'ui-steps-train.build1', [step(1, dashButton('Train'))]);
 
+  const sorts = watchLearnedSorts(page);
   await enterLabelView(page, TRAIN_DATASET, BOOK_DETECTOR);
   await collapseIntoAutopilot(page);
   await page.waitForSelector('.btn-good', { timeout: 120000 });
@@ -696,12 +834,25 @@ async function shootTrainLoop(page) {
   ]);
 
   let cast = 0;
+  let checked = 0;
   const tally = { good: 0, bad: 0 };
+  const count = (good) => {
+    tally[good ? 'good' : 'bad']++;
+    cast++;
+  };
+  const answerCheck = async () => {
+    const answers = await answerSpotCheck(page);
+    answers.forEach(count);
+    checked += answers.length;
+  };
+  // One vote on the centre item, answering whatever spot check is in its way.
+  const answer = async () => {
+    let good;
+    while ((good = await voteServed(page)) === null) await answerCheck();
+    count(good);
+  };
   for (const stage of TRAIN_STAGES) {
-    while (cast < stage) {
-      tally[(await voteServed(page)) ? 'good' : 'bad']++;
-      cast++;
-    }
+    while (cast < stage) await answer();
     const page_no = TRAIN_STAGES.indexOf(stage) + 1;
     await shoot(page, `ui-train-loop.build${page_no}`);
   }
@@ -709,10 +860,17 @@ async function shootTrainLoop(page) {
     cast < TRAIN_FINAL.maxVotes
     && (tally.good < TRAIN_FINAL.good || tally.bad < TRAIN_FINAL.bad)
   ) {
-    tally[(await voteServed(page)) ? 'good' : 'bad']++;
-    cast++;
+    await answer();
   }
-  log(`train loop: ${cast} votes — ${tally.good} good / ${tally.bad} bad`);
+  // The last vote's retrain is still to land, and it can open the check: the
+  // last page is the session once it is still, not a frame before a dialog.
+  await sorts.settled();
+  while (await spotCheckOpen(page)) {
+    await answerCheck();
+    await sorts.settled();
+  }
+  sorts.stop();
+  log(`train loop: ${cast} votes (${checked} in spot checks) — ${tally.good} good / ${tally.bad} bad`);
   if (!tally.bad) throw new Error('no Bad votes: the detector has nothing to separate');
   await assertVoteColumns(page);
   await shoot(page, 'ui-train-loop');
