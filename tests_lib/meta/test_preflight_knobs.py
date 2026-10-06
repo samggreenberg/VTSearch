@@ -235,6 +235,10 @@ class TestPreflightWiring:
                 "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
                 "HOME": str(tmp_path),
                 "VTS_REPO": str(tmp_path / "repo"),
+                # The GRID's venv python is linked against a libpython it finds
+                # only through LD_LIBRARY_PATH; stripped of it, the stub probe
+                # never runs and the knob check reads as "could not compare".
+                "LD_LIBRARY_PATH": os.environ.get("LD_LIBRARY_PATH", ""),
             },
         )
         return proc.stdout + proc.stderr
