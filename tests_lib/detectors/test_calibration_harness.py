@@ -190,7 +190,9 @@ def test_every_calibration_row_carries_its_own_objective():
     for r in scored:
         assert np.isfinite(r["fbeta_b1"])
         if np.isfinite(r["beta"]):
-            assert r["fbeta"] == pytest.approx(float(fbeta_from_rates(r["precision"], r["recall"], r["beta"])), abs=2e-5)
+            assert r["fbeta"] == pytest.approx(
+                float(fbeta_from_rates(r["precision"], r["recall"], r["beta"])), abs=2e-5
+            )
         else:
             assert np.isnan(r["fbeta"])
 

@@ -275,3 +275,145 @@ def test_a_delta_past_its_floor_says_so(ab):
 
 def test_no_paired_cells_is_said_rather_than_raised(ab):
     assert "no paired cells" in ab.pooled_line(pd.DataFrame())
+
+
+# --- The decision metric is the objective on a balance run (#4584) ---------------
+
+
+def _frame(beta: float | None, n: int = 4) -> pd.DataFrame:
+    """Base rows of a run whose lines were drawn at *beta* (``None``: the Inclusion arm)."""
+    return pd.DataFrame(
+        {
+            "beta": [np.nan if beta is None else beta] * n,
+            "precision": [0.5] * n,
+            "recall": [0.4] * n,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("on", "off", "want"),
+    ((None, None, "cost"), (1.0, 1.0, "fbeta"), (0.25, 0.25, "fbeta")),
+    ids=("no-balance", "beta-1", "beta-quarter"),
+)
+def test_the_decision_metric_follows_the_runs_balance(ab, on, off, want):
+    metric, refusal = ab.decision_metric(_frame(on), _frame(off))
+    assert (metric, refusal) == (want, "")
+
+
+@pytest.mark.parametrize(
+    ("on", "off"),
+    ((_frame(1.0), _frame(0.25)), (_frame(1.0), _frame(None)), (pd.concat([_frame(1.0), _frame(4.0)]), _frame(1.0))),
+    ids=("different-betas", "beta-against-off", "two-betas-in-one-run"),
+)
+def test_a_pair_across_balances_is_refused(ab, on, off):
+    metric, refusal = ab.decision_metric(on, off)
+    assert metric == "" and "same single beta" in refusal
+
+
+def _verdict_table(metric: str, delta: float) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "scope": "app_visible",
+                "arm": "coco/siglip/max_patch",
+                "window": w,
+                "metric": metric,
+                "n_cells": 400,
+                "delta_on_minus_off": delta if w == "ramp_6_20" else 0.0,
+                "p_wilcoxon": 0.001 if w == "ramp_6_20" else 0.9,
+            }
+            for w in ("pure_gmm_2_5", "ramp_6_20", "post_ramp_21_plus", "all_steps")
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    ("metric", "delta", "ship"),
+    (("fbeta", +0.02, True), ("fbeta", -0.02, False), ("cost", -0.02, True), ("cost", +0.02, False)),
+)
+def test_the_verdict_reads_each_metric_in_its_own_direction(ab, metric, delta, ship):
+    """A higher objective is a win, a higher cost a loss: the same Δ ships one and not the other."""
+    v = ab.verdict(_verdict_table(metric, delta), "app_visible", metric)
+    assert v["metric"] == metric
+    assert v["force_on_for_all_users"] is ship
+    assert v["ramp_6_20"]["reading"].startswith("safe ON better" if ship else "safe ON worse")
+
+
+def test_the_win_rate_is_in_the_metrics_own_direction(ab):
+    sub = pd.DataFrame({"fbeta_on": [0.6, 0.6, 0.4], "fbeta_off": [0.5, 0.5, 0.5]})
+    sub["cost_on"], sub["cost_off"] = sub["fbeta_on"], sub["fbeta_off"]
+    assert ab._delta_row(sub, "fbeta")["win_rate_on"] == pytest.approx(2 / 3)
+    assert ab._delta_row(sub, "cost")["win_rate_on"] == pytest.approx(1 / 3)
+
+
+def test_the_headline_is_the_objective_when_the_table_carries_it(ab):
+    both = pd.concat([_pooled(0.004, 0.003).assign(metric="fbeta"), _pooled(-0.01, 0.002)])
+    assert ab.pooled_line(both).startswith("pooled Δfbeta (app_visible, all_steps): +0.0040")
+    assert ab.pooled_line(both, metric="cost").startswith("pooled Δcost (app_visible, all_steps): -0.0100")
+
+
+def _write_cells(root: Path, *, beta: float | None, gain: float, seed: int) -> Path:
+    """One run's ``cells/`` as a balance-era runner wrote them: rates and a beta, no ``fbeta`` column."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for cat in ("cat_a", "cat_b", "cat_c"):
+        for s in range(4):
+            for t in range(2, 31):
+                lift = gain if 6 <= t <= 20 else 0.0
+                rows.append(
+                    {
+                        "seed": s,
+                        "dataset": "coco_better",
+                        "embedder": "siglip",
+                        "style": "max_patch",
+                        "category": cat,
+                        "t": t,
+                        "n_good": t // 2,
+                        "n_bad": t - t // 2,
+                        "app_trained": 1,
+                        "pool_variant": "max",
+                        "gmm_variant": "",
+                        "beta": np.nan if beta is None else beta,
+                        "precision": 0.5 + lift + 0.002 * rng.standard_normal(),
+                        "recall": 0.4 + lift,
+                        "cost": 0.3 + 0.002 * rng.standard_normal(),
+                        "fnr": 0.6 - lift,
+                        "fpr": 0.02,
+                    }
+                )
+    cells = root / "cells"
+    cells.mkdir(parents=True)
+    pd.DataFrame(rows).to_csv(cells / "task_0000.csv", index=False)
+    return root
+
+
+def test_a_balance_era_ab_is_decided_on_the_objective_end_to_end(tmp_path, monkeypatch):
+    """Cells written before the columns: back-filled, paired, decided on F-beta, with cost kept beside it."""
+    import json  # noqa: PLC0415
+
+    ab = _with_stubs("_ab_gate_analyze_ab_e2e", _CALIB / "analyze_ab.py")
+    # One noise draw for both runs, so the planted gain inside the ramp is the only difference.
+    on = _write_cells(tmp_path / "on", beta=1.0, gain=0.05, seed=1)
+    off = _write_cells(tmp_path / "off", beta=1.0, gain=0.0, seed=1)
+    monkeypatch.setenv("CALIB_AB_ON", str(on))
+    monkeypatch.setenv("CALIB_AB_OFF", str(off))
+    monkeypatch.delenv("CALIB_AB_OUT", raising=False)
+    assert ab.main() == 0
+    summary = json.loads((on / "summary_ab.json").read_text())
+    assert summary["decision_metric"] == "fbeta" and summary["beta"] == 1.0
+    assert summary["pooled"].startswith("pooled Δfbeta")
+    assert summary["verdict"]["force_on_for_all_users"] is True
+    tbl = pd.read_csv(on / "agg" / "ab_window_by_arm.csv")
+    assert {"fbeta", "cost"} <= set(tbl["metric"])
+    ramp = tbl[(tbl["scope"] == "app_visible") & (tbl["window"] == "ramp_6_20") & (tbl["metric"] == "fbeta")]
+    assert float(ramp["delta_on_minus_off"].iloc[0]) > 0.04
+
+
+def test_an_ab_across_balances_stops_before_it_writes(tmp_path, monkeypatch):
+    ab = _with_stubs("_ab_gate_analyze_ab_mismatch", _CALIB / "analyze_ab.py")
+    monkeypatch.setenv("CALIB_AB_ON", str(_write_cells(tmp_path / "on", beta=1.0, gain=0.0, seed=1)))
+    monkeypatch.setenv("CALIB_AB_OFF", str(_write_cells(tmp_path / "off", beta=0.25, gain=0.0, seed=2)))
+    monkeypatch.delenv("CALIB_AB_OUT", raising=False)
+    assert ab.main() == 2
+    assert not (tmp_path / "on" / "summary_ab.json").exists()

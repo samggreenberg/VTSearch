@@ -31,6 +31,15 @@ Every Δ is written with its **resolvable δ at 2 SE** (``resolvable_delta_2se``
 zero.  #3825 read +0.0049 off 114 cells whose floor was ~0.0075, and #3840 made
 the floor a design rule (SE = σ/√n, σ ≈ 0.04), so a Δ is never printed without
 it (#4111).  ``preflight.sh --resolve-delta`` is the same rule before launch.
+
+**The decision metric is the objective when the runs carry a beta** (#4584):
+``fbeta``, F-beta of the withheld half above the threshold the app holds, at
+the run's own balance (:mod:`objective`).  The two runs must have drawn their
+lines at the same beta; a pair that did not is refused, since a Δ-objective
+across balances measures the balance, not the arm.  A run with no balance (the
+Inclusion arm, a Cost-era run) is decided on ``cost`` as before.  Either way
+``cost`` stays in the tables as a diagnostic, and a frame written before the
+``fbeta`` columns has them filled from its ``precision`` and ``recall``.
 """
 
 from __future__ import annotations
@@ -47,6 +56,7 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from _cells_io import describe_load  # noqa: E402
 from _cells_io import load_cells as _load_cells  # noqa: E402
+from objective import COST, OBJECTIVE, frame_betas, lower_is_better, primary_metric, with_objective  # noqa: E402
 
 #: Vote-count windows the comparison aggregates over.  Below 6 votes the blend
 #: is pure GMM (full authority), 6-20 is the ramp, above 20 it is pure
@@ -59,11 +69,24 @@ WINDOWS: dict[str, tuple[int, int]] = {
     "all_steps": (2, 10**6),
 }
 
-#: Metrics compared per window.  ``cost`` is the pre-registered decision metric;
-#: ``fnr``/``fpr`` say *how* a cost change was bought (a needle-finding tool
-#: cares about missed positives), and ``average_precision``/``auroc`` say
-#: whether the ranking itself moved — which only selection feedback can do.
-METRICS: tuple[str, ...] = ("cost", "fnr", "fpr", "regret", "average_precision", "auroc", "degenerate")
+#: Metrics compared per window.  The decision metric is the first of the
+#: objective and ``cost`` the runs carry a value for (:func:`decision_metric`);
+#: ``precision``/``recall`` and ``fnr``/``fpr`` say *how* a change was bought (a
+#: needle-finding tool cares about missed positives), and
+#: ``average_precision``/``auroc`` say whether the ranking itself moved — which
+#: only selection feedback can do.
+METRICS: tuple[str, ...] = (
+    OBJECTIVE,
+    COST,
+    "precision",
+    "recall",
+    "fnr",
+    "fpr",
+    "regret",
+    "average_precision",
+    "auroc",
+    "degenerate",
+)
 
 CELL_KEYS: tuple[str, ...] = ("arm", "category", "seed")
 
@@ -99,11 +122,36 @@ def load_base_rows(results_dir: Path, label: str) -> pd.DataFrame:
         df["gmm_variant"] = df["gmm_variant"].fillna("")
         df = df[df["gmm_variant"] == ""]
     df = df[df["pool_variant"] == "max"] if "pool_variant" in df.columns else df
+    df = with_objective(df)
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
     df["run"] = label
     common.log(f"{label}: {len(df)} base rows; {describe_load(prov)} ({results_dir})")
     return df
+
+
+def decision_metric(on: pd.DataFrame, off: pd.DataFrame) -> tuple[str, str]:
+    """``(metric, refusal)``: the metric the ship rule reads, or why the pair cannot be decided.
+
+    The objective when both runs drew their lines at one beta, the same one;
+    ``cost`` when neither drew a line at a balance.  Anything else is a
+    refusal: a run with two betas pairs cells across balances, and a run with
+    a beta against one without compares the objective with nothing.
+    """
+    b_on, b_off = frame_betas(on), frame_betas(off)
+    if not b_on and not b_off:
+        return COST, ""
+    if len(b_on) == 1 and b_on == b_off:
+        return primary_metric(on), ""
+    return "", (
+        f"the runs drew their lines at different balances (ON beta {b_on or 'off'}, OFF beta {b_off or 'off'}): "
+        "a paired Δ-objective needs both at the same single beta"
+    )
+
+
+def _improvement(delta: np.ndarray, metric: str) -> np.ndarray:
+    """*delta* (ON − OFF) signed so that positive means ON is better on *metric*."""
+    return -delta if lower_is_better(metric) else delta
 
 
 def _cell_means(df: pd.DataFrame, lo: int, hi: int) -> pd.DataFrame:
@@ -155,7 +203,8 @@ def _delta_row(sub: pd.DataFrame, m: str) -> dict:
         "delta_on_minus_off": float(np.nanmean(delta)),
         "se": se,
         "resolvable_delta_2se": floor,
-        "win_rate_on": float(np.mean(delta < 0)) if np.isfinite(delta).any() else float("nan"),
+        # The share of cells where ON is better, in *m*'s own direction.
+        "win_rate_on": float(np.mean(_improvement(delta, m) > 0)) if np.isfinite(delta).any() else float("nan"),
         "p_wilcoxon": p,
         "note": note,
     }
@@ -207,34 +256,41 @@ def paired_window_table(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> t
     return tbl, pooled_tbl
 
 
-def pooled_line(pooled: pd.DataFrame, scope: str = "app_visible", window: str = "all_steps") -> str:
-    """The headline Δcost with its floor, as one printable line (#4111).
+def pooled_line(
+    pooled: pd.DataFrame, scope: str = "app_visible", window: str = "all_steps", metric: str | None = None
+) -> str:
+    """The headline Δ of the decision metric with its floor, as one printable line (#4111).
 
     The pooled paired mean over every cell is what #3825 and #3839 quoted, and
     #3840 showed it can sit well inside its own noise.  So the line carries the
-    smallest Δ it can resolve, and says when the Δ is below it.
+    smallest Δ it can resolve, and says when the Δ is below it.  *metric*
+    defaults to the objective when the table carries it, else ``cost``
+    (#4584).
     """
+    if metric is None:
+        metric = OBJECTIVE if not pooled.empty and (pooled["metric"] == OBJECTIVE).any() else COST
     if pooled.empty:
-        return f"pooled Δcost ({scope}, {window}): no paired cells"
-    r = pooled[(pooled["scope"] == scope) & (pooled["window"] == window) & (pooled["metric"] == "cost")]
+        return f"pooled Δ{metric} ({scope}, {window}): no paired cells"
+    r = pooled[(pooled["scope"] == scope) & (pooled["window"] == window) & (pooled["metric"] == metric)]
     if r.empty:
-        return f"pooled Δcost ({scope}, {window}): no paired cells"
+        return f"pooled Δ{metric} ({scope}, {window}): no paired cells"
     row = r.iloc[0]
     d, se, floor, n = row["delta_on_minus_off"], row["se"], row["resolvable_delta_2se"], int(row["n_cells"])
     if not np.isfinite(floor):
-        return f"pooled Δcost ({scope}, {window}): {d:+.4f} over {n} cell(s); no SE below two cells"
+        return f"pooled Δ{metric} ({scope}, {window}): {d:+.4f} over {n} cell(s); no SE below two cells"
     reading = "resolved at 2 SE" if abs(d) >= floor else "inside its floor: not resolved"
     return (
-        f"pooled Δcost ({scope}, {window}): {d:+.4f} ± {se:.4f} over {n} cells; "
+        f"pooled Δ{metric} ({scope}, {window}): {d:+.4f} ± {se:.4f} over {n} cells; "
         f"resolvable δ at 2 SE {floor:.4f} ({reading})"
     )
 
 
 def curves(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
-    """Mean cost/FNR/FPR vs vote count for each run — the shape behind the windows."""
+    """Mean objective/cost/FNR/FPR vs vote count for each run — the shape behind the windows."""
     frames = []
     for df in (on, off):
-        metrics = [m for m in ("cost", "fnr", "fpr", "threshold", "degenerate", "app_trained") if m in df.columns]
+        cols = (OBJECTIVE, COST, "fnr", "fpr", "threshold", "degenerate", "app_trained")
+        metrics = [m for m in cols if m in df.columns]
         g = df.groupby(["arm", "run", "n_votes"], as_index=False)[metrics].mean()
         g["n_rows"] = df.groupby(["arm", "run", "n_votes"]).size().to_numpy()
         frames.append(g)
@@ -243,8 +299,8 @@ def curves(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     return out
 
 
-def make_figures(curve: pd.DataFrame, fig_dir: Path) -> list[str]:
-    """ON-vs-OFF curves per arm: the shape the window tables average over."""
+def make_figures(curve: pd.DataFrame, fig_dir: Path, metric: str = COST) -> list[str]:
+    """ON-vs-OFF curves per arm: the shape the window tables average over, decision metric first."""
     try:
         import matplotlib  # noqa: PLC0415
 
@@ -256,8 +312,10 @@ def make_figures(curve: pd.DataFrame, fig_dir: Path) -> list[str]:
 
     fig_dir.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
-    for metric, ylabel in (("cost", "inclusion-weighted cost"), ("fnr", "FNR"), ("degenerate", "degenerate rate")):
-        if metric not in curve.columns:
+    panels = [(OBJECTIVE, "F-beta at the run's balance (the objective)")] if metric == OBJECTIVE else []
+    panels += [(COST, "inclusion-weighted cost"), ("fnr", "FNR"), ("degenerate", "degenerate rate")]
+    for col, ylabel in panels:
+        if col not in curve.columns or curve[col].isna().all():
             continue
         arms = sorted(curve["arm"].unique())
         fig, axes = plt.subplots(1, len(arms), figsize=(6 * len(arms), 4), squeeze=False)
@@ -266,7 +324,7 @@ def make_figures(curve: pd.DataFrame, fig_dir: Path) -> list[str]:
             for run, style in (("safe_off", "--"), ("safe_on", "-")):
                 s = sub[sub["run"] == run].sort_values("n_votes")
                 if not s.empty:
-                    ax.plot(s["n_votes"], s[metric], style, label=run)
+                    ax.plot(s["n_votes"], s[col], style, label=run)
             ax.axvspan(6, 20, color="0.9", zorder=0)  # the ramp window
             ax.set_title(arm.split("/", 1)[-1], fontsize=9)
             ax.set_xlabel("votes (n_good + n_bad)")
@@ -274,41 +332,47 @@ def make_figures(curve: pd.DataFrame, fig_dir: Path) -> list[str]:
             ax.legend(fontsize=8)
         fig.suptitle(f"{ylabel} vs votes — safe thresholds ON vs OFF (shaded = blend ramp)", fontsize=10)
         fig.tight_layout()
-        path = fig_dir / f"ab_{metric}_vs_votes.png"
+        path = fig_dir / f"ab_{col}_vs_votes.png"
         fig.savefig(path, dpi=140)
         plt.close(fig)
         written.append(path.name)
     return written
 
 
-def verdict(tbl: pd.DataFrame, scope: str = "app_visible") -> dict:
+def verdict(tbl: pd.DataFrame, scope: str = "app_visible", metric: str = COST) -> dict:
     """The ship decision: force ``safe_thresholds`` on for every user, or not?
 
-    Read on the production region-vote arm (``max_patch``) and, by default, on
-    the steps a user would actually see a detector at (``app_visible``).
+    Read on *metric* (the objective on a balance run, #4584; ``cost`` without
+    one), on the production region-vote arm (``max_patch``) and, by default,
+    on the steps a user would actually see a detector at (``app_visible``).
     Forcing a default on for everyone needs the blend to *help* where it has
     authority (the two sub-20-vote windows) and to not *hurt* once it has none
     (post-ramp, where only selection feedback can carry a difference).
+    ``gain_on`` is the Δ signed so that positive means ON is better, whichever
+    way *metric* points.
     """
-    out: dict = {"scope": scope}
+    out: dict = {"scope": scope, "metric": metric}
     prod = tbl[(tbl["scope"] == scope) & ~tbl["arm"].str.contains("whole_image", na=False)]
     for wname in WINDOWS:
-        w = prod[(prod["window"] == wname) & (prod["metric"] == "cost")]
+        w = prod[(prod["window"] == wname) & (prod["metric"] == metric)]
         if w.empty:
             out[wname] = {"n_cells": 0, "reading": "no steps in this window at this scope"}
             continue
         d = float(w["delta_on_minus_off"].mean())
+        gain = float(_improvement(np.array(d), metric))
         p = float(w["p_wilcoxon"].mean())
         out[wname] = {
             "n_cells": int(w["n_cells"].max()),
-            "delta_cost_on_minus_off": d,
+            "delta_on_minus_off": d,
+            "gain_on": gain,
             "p": p,
-            "reading": ("safe ON better" if d < 0 else "safe ON worse") + (" (significant)" if p < 0.05 else " (n.s.)"),
+            "reading": ("safe ON better" if gain > 0 else "safe ON worse")
+            + (" (significant)" if p < 0.05 else " (n.s.)"),
         }
-    helps = [out.get(w, {}).get("delta_cost_on_minus_off", 0.0) for w in ("pure_gmm_2_5", "ramp_6_20")]
+    helps = [out.get(w, {}).get("gain_on", 0.0) for w in ("pure_gmm_2_5", "ramp_6_20")]
     late = out.get("post_ramp_21_plus", {})
-    harms_late = late.get("delta_cost_on_minus_off", 0.0) > 0 and late.get("p", 1.0) < 0.05
-    out["force_on_for_all_users"] = bool(all(d <= 0 for d in helps) and not harms_late)
+    harms_late = late.get("gain_on", 0.0) < 0 and late.get("p", 1.0) < 0.05
+    out["force_on_for_all_users"] = bool(all(g >= 0 for g in helps) and not harms_late)
     return out
 
 
@@ -327,12 +391,19 @@ def main() -> int:
         common.log("no cells to compare (one of the runs produced no rows)")
         return 1
 
+    metric, refusal = decision_metric(on, off)
+    if refusal:
+        common.log(f"ERROR: {refusal}")
+        return 2
+    betas = frame_betas(on)
+    decided_on = f"{metric} (F-beta at beta {betas[0]:g})" if metric == OBJECTIVE else metric
+
     agg_dir = out_dir / "agg"
     tbl, pooled = paired_window_table(on, off, agg_dir)
-    headline = pooled_line(pooled)
+    headline = pooled_line(pooled, metric=metric)
     curve = curves(on, off, agg_dir)
-    figures = make_figures(curve, out_dir / "figures")
-    verdicts = {scope: verdict(tbl, scope) for scope in SCOPES}
+    figures = make_figures(curve, out_dir / "figures", metric)
+    verdicts = {scope: verdict(tbl, scope, metric) for scope in SCOPES}
     v = verdicts["app_visible"]
 
     # Where the detector actually goes live: the app sorts by text/example
@@ -350,6 +421,8 @@ def main() -> int:
         "n_cells_on": int(on.groupby(list(CELL_KEYS)).ngroups),
         "n_cells_off": int(off.groupby(list(CELL_KEYS)).ngroups),
         "windows": {k: list(v_) for k, v_ in WINDOWS.items()},
+        "decision_metric": metric,
+        "beta": betas[0] if betas else None,
         "first_app_visible_vote_count": first_live,
         "pooled": headline,
         "verdict": v,
@@ -371,6 +444,13 @@ def main() -> int:
         "sorts by text/example cosine, so `scope=app_visible` is what users actually get and",
         "`scope=all_steps` is the purely numerical reading.",
         "",
+        f"Decided on **{decided_on}**"
+        + (
+            ", the objective at the runs' balance; `cost` stays below as a diagnostic (#4584)."
+            if metric == OBJECTIVE
+            else ": neither run drew its line at a balance."
+        ),
+        "",
         "## Pooled over every paired cell (Δ = ON − OFF)",
         "",
         f"**{headline}**",
@@ -380,7 +460,7 @@ def main() -> int:
         "",
         _md(pooled),
         "",
-        "## Per-window paired comparison (Δ = ON − OFF; negative = safe thresholds better)",
+        "## Per-window paired comparison (Δ = ON − OFF; `win_rate_on` is each metric's own direction)",
         "",
         _md(tbl),
         "",

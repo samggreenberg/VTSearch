@@ -187,7 +187,9 @@ def fbeta_metrics(scores: np.ndarray, labels: np.ndarray, threshold: float, beta
     }
 
 
-def fbeta_from_rates(precision: "np.ndarray | float", recall: "np.ndarray | float", beta: "np.ndarray | float") -> np.ndarray:
+def fbeta_from_rates(
+    precision: "np.ndarray | float", recall: "np.ndarray | float", beta: "np.ndarray | float"
+) -> np.ndarray:
     """:func:`fbeta_metrics`' number read back off a frame's ``precision`` and ``recall``, elementwise.
 
     For frames written before the ``fbeta`` columns (#4584), so an analyzer
