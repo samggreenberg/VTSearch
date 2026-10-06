@@ -318,6 +318,9 @@ def save_frame(
     bads: dict,
     boxes: dict,
     det_ctx: Any,
+    order: Optional[np.ndarray] = None,
+    score: Optional[np.ndarray] = None,
+    line: Optional[float] = None,
 ) -> None:
     """Everything an accept rule may read at click *v*, per pool page and per vote (#4367).
 
@@ -325,7 +328,9 @@ def save_frame(
     verified shortlist, and its best inliers over the current templates (from the app's
     own verification cache). Per Good: its leave-one-out inliers (its own template
     excluded) and leave-one-out Stage-1 score (its own query excluded). Per Bad: its best
-    inliers.
+    inliers.  With *order*, *score* and *line* (#4523), also the app's ranking as it stood:
+    pool indices best first, the score the app ranked each by, and the line it drew, so
+    a Test of the line on the withheld half can be replayed from the frame.
     """
     from vtscore.training import structural_stage1 as s1  # noqa: PLC0415
 
@@ -380,11 +385,15 @@ def save_frame(
     bad_inl = np.array([best(b) for b in bad_ids], dtype=np.float32)
     bad_geo = np.array([geometry(b) for b in bad_ids], dtype=np.float32).reshape(-1, 2)
     out.mkdir(parents=True, exist_ok=True)
+    ranking = {}
+    if order is not None and score is not None and line is not None:
+        ranking = {"order": np.asarray(order), "score": np.asarray(score, dtype=np.float32), "line": np.float64(line)}
     np.savez_compressed(
         out / f"{cid.replace('/', '__')}__v{v:03d}.npz",
         positive=positive,
         test=test,
         stage1=s1_all,
+        **ranking,
         shortlisted=shortlisted,
         inliers=inliers,
         ratio=geo[:, 0],
@@ -685,7 +694,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 clicks[-1]["credit"] = ap_now - prev_ap
             prev_ap = ap_now
             if v in frame_at and goods:
-                save_frame(args.out / "frames", cid, v, pool_ids, positive, test, snap, goods, bads, boxes, det_ctx)
+                save_frame(
+                    args.out / "frames",
+                    cid,
+                    v,
+                    pool_ids,
+                    positive,
+                    test,
+                    snap,
+                    goods,
+                    bads,
+                    boxes,
+                    det_ctx,
+                    order=order,
+                    score=score,
+                    line=line,
+                )
             elif v in frame_at and not seeded:
                 save_opening_frame(args.out / "frames", cid, pool_ids, positive, test, snap, crop, ranked)
             if v == args.max_v:

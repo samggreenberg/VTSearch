@@ -345,7 +345,7 @@ class TestTheWiderWorldKnobs:
         rows = _run_safe_uncached("max_patch", min_precision=None, test_score_sink=sink)
         assert rows and sink
         last = sink[-1]
-        assert last["scores"].dtype == np.float32 and last["scores"].shape == last["labels"].shape
+        assert last["scores"].dtype == np.float64 and last["scores"].shape == last["labels"].shape
         assert last["labels"].sum() > 0 and np.isfinite(last["train_threshold"])
         drawn = [s for s in sink if s["model"] is not None]
         assert drawn and {"mu_pos", "mu_neg", "sigma"} <= set(drawn[-1]["model"])

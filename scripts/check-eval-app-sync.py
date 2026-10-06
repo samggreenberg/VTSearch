@@ -674,6 +674,23 @@ MIRRORS: list[Mirror] = [
             "comparable is what keeps fallback_rate aggregates joinable across them."
         ),
     ),
+    Mirror(
+        id="line_test.budgets_default",
+        app="py:vtscore.training.thresholds.line_test.LineBudgets",
+        harness="vtscore/eval/line_test_arm.py::line_test_row,simulate_line_test",
+        kind="default",
+        note=(
+            "Test mode's targets and budgets (#4523, #4527): the Test arm runs the app's phase "
+            "machine (LineTest.draw / record / line_phase, delegated) at LineBudgets' defaults "
+            "when a run names none, so a changed default - the width a phase stops at, a pick "
+            "budget, the dry-run share, the model's weight - silently changes what the arm's "
+            "default rows measure. When LineBudgets moves, re-read the arm's inputs "
+            "(line_test_inputs: Find's labels line on the withheld half, the posteriors "
+            "aligned with the ranking) and the verdict rule (read_verdict: LEAN_GAIN, "
+            "RETRAIN_BAR), which the app does not implement yet (#4524 takes it from the "
+            "study) and the study's report prices."
+        ),
+    ),
 ]
 
 

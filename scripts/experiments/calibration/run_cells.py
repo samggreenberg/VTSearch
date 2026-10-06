@@ -327,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
         CUT_INCLUSION_COLUMNS,
         FIT_QUALITY_ROW_COLUMNS,
         INCLUSION_SWEEP_COLUMNS,
+        LINE_TEST_COLUMNS,
         PICK_COLUMNS,
         RANK_FRAME_COLUMNS,
     )
@@ -370,6 +371,7 @@ def main(argv: list[str] | None = None) -> int:
     all_picks: list[dict] = []
     all_pframes: list[dict] = []
     all_rankframes: list[dict] = []
+    all_linetests: list[dict] = []
     all_testscores: dict[str, dict] = {}
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
@@ -381,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
         pframes_local: list[dict] | None = [] if cfg.PFRAME_STEPS else None
         rankframes_local: list[dict] | None = [] if cfg.RANK_FRAME_STEPS else None
         testscores_local: list[dict] | None = [] if cfg.SAVE_TEST_SCORES else None
+        linetest_local: list[dict] | None = [] if cfg.LINE_TEST else None
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -450,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
             precision_frame_steps=cfg.PFRAME_STEPS or None,
             rank_frame_sink=rankframes_local,
             test_score_sink=testscores_local,
+            line_test_sink=linetest_local,
             sim_size=cfg.SIM_SIZE,
             rank_frame_steps=cfg.RANK_FRAME_STEPS or None,
             calibration_seed=cal_seed,
@@ -517,6 +521,9 @@ def main(argv: list[str] | None = None) -> int:
         all_pframes.extend({**f, "style": np.array(style or "")} for f in pframes_local or [])
         all_fitq.extend(fitq_local or [])
         all_rankframes.extend(rankframes_local or [])
+        for lt in linetest_local or []:
+            lt["embedder"] = emb
+        all_linetests.extend(linetest_local or [])
         if testscores_local:
             # The last ordinary step and the last row (after the check): what Train left and what Find applies.
             ordinary = [f for f in testscores_local if f["phase"] != "check"]
@@ -584,6 +591,11 @@ def main(argv: list[str] | None = None) -> int:
     rankframes_cols = [*RANK_FRAME_COLUMNS, "embedder"]
     rankframes_out = cell_file(outdir / f"task_{idx:04d}__rankframes.csv")
     pd.DataFrame(all_rankframes, columns=pd.Index(rankframes_cols)).to_csv(rankframes_out, index=False)
+    # The #4523 Test arm: one row per session.  Same unconditional-write rule:
+    # an empty file with the header says the arm was off, not that the cell failed.
+    linetest_cols = [*LINE_TEST_COLUMNS, "embedder"]
+    linetest_out = cell_file(outdir / f"task_{idx:04d}__linetest.csv")
+    pd.DataFrame(all_linetests, columns=pd.Index(linetest_cols)).to_csv(linetest_out, index=False)
     # The #4220 precision frames: arrays, not a table, so one npz per cell with
     # each frame's fields prefixed by its step (``t150/test_scores``).  Written
     # only when asked for - unlike the CSV side frames, an absent file here means
