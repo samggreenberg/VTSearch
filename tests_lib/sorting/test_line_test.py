@@ -409,14 +409,19 @@ class TestThePhaseMachine:
         assert seen == [PHASE_MATCHES, PHASE_MISSES, PHASE_DONE]
         assert test.phase().done and test.next_band() is None
 
-    def test_the_matches_phase_ends_on_width_after_at_least_one_round(self):
+    def test_the_matches_phase_ends_on_width_once_every_band_above_the_line_has_a_round(self):
+        """#4539: the pooled prior can meet a loose target on one band's picks; a band no pick has seen still waits."""
         ids, positives, post = _planted(above_rate=1.0)
         budgets = LineBudgets(matches_width=0.7)  # a target the prior alone does not meet, but one round does
         test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets)
         before = test.phase()
         assert before.phase == PHASE_MATCHES and before.matches_width is not None and before.matches_width > 0.7
         _run(test, positives, rounds=1)
+        early = test.phase()
+        assert early.phase == PHASE_MATCHES and early.matches_stop is None, "three bands above the line unseen"
+        _run(test, positives, rounds=len(test.above) - 1)
         report = test.phase()
+        assert all(test.audited(b.index) for b in test.above)
         assert report.matches_stop == STOP_WIDTH and report.phase == PHASE_MISSES
         assert report.matches_width is not None and report.matches_width <= 0.7
 
