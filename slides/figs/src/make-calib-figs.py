@@ -4393,6 +4393,11 @@ FBETA_MAP_SIDE = 5.4
 FBETA_MAP_GAP = 1.2
 FBETA_MAP_X = 1.3
 FBETA_MAP_Y = 1.55
+#: How far above its map a map's "β = ..." sits: well clear of the numbers
+#: that end β = 4's curves along its top, so it reads as the map's title and
+#: not as one more curve's label (owner, 2026-10-05). The slack above the
+#: maps, under the notch, pays for it.
+FBETA_MAP_TITLE_LIFT = 0.85
 #: F-beta's level curves on a map: one every 0.2.
 FBETA_LEVELS = (0.2, 0.4, 0.6, 0.8)
 #: The precision-recall grid: a line every 0.1 in `make-sota-figs`'s
@@ -4447,7 +4452,7 @@ def _fbeta_maps_stage(stage: int) -> plt.Figure:
         _fbeta_contours(pr, beta)
         ax.text(
             x + FBETA_MAP_SIDE / 2,
-            FBETA_MAP_Y + FBETA_MAP_SIDE + 0.3,
+            FBETA_MAP_Y + FBETA_MAP_SIDE + FBETA_MAP_TITLE_LIFT,
             f"β = {name}",
             ha="center",
             va="bottom",
