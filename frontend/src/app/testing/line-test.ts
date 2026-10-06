@@ -74,7 +74,7 @@ export function wireTest(overrides: Partial<LineTestState> = {}): LineTestState 
     budgets: {
       matches_width: 0.2,
       misses_width: 0.25,
-      matches_picks: 40,
+      matches_picks: 20,
       misses_picks: 40,
       picks_per_round: 5,
       dry_run_share: 0.05,

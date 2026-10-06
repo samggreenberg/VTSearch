@@ -573,6 +573,17 @@ LINE_TEST_COLUMNS: tuple[str, ...] = (
     "verdict",
     "oracle_verdict",
     "verdict_match",
+    #: What *Lean the Threshold* shows (#4540): per balance preset, its line
+    #: count on the withheld half and, at its own beta, the range's point, the
+    #: truth and whether the range held it.  -1 / NaN with no class model.
+    *(
+        f"preset_{tag}_{col}"
+        for tag in ("b025", "b1", "b4")
+        for col in (
+            "count",
+            *(f"{m}_{k}" for m in ("precision", "recall", "fbeta") for k in ("point", "true", "held")),
+        )
+    ),
 )
 
 

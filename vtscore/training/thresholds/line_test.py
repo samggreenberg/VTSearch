@@ -28,11 +28,13 @@ drawn once per state and shared by every number (:meth:`LineTest.estimates`):
 * Each band's share right has a Beta posterior, and the band's unlabelled
   items are drawn binomially at that share, so a censused band is exact and
   a band with no picks is as uncertain as its prior says.  Above the line a
-  band's prior is the *pooled* share of every pick above the line (Jeffreys
-  on the pool) at :data:`POOLED_WEIGHT` picks' worth, drawn once per column
-  and shared by every band (#4539): independent Jeffreys priors read each
-  empty band of a big sparse line as about 8% right, and summed over a
-  thousand items that put the range above the truth every time (#4523).
+  band's prior is the *pooled* share of the picks in its neighbouring bands
+  (:data:`POOL_RADIUS`, Jeffreys on the pool) at :data:`POOLED_WEIGHT`
+  picks' worth (#4539, #4560): independent Jeffreys priors read each empty
+  band of a big sparse line as about 8% right, which put the range above the
+  truth every time (#4523), and one pool over every band above the line
+  mixed a rich top with a sparse tail, so that auditing the top lifted the
+  tail and leaving it unaudited sank the top.
 * **Above the line** the draws give the band-weighted precision of any
   top-*b* union, so the same draws re-estimate the line at every band edge
   (:attr:`LineEstimates.at_edges`), which the verdict's *Lean the Threshold*
@@ -78,7 +80,8 @@ of the sample and its budgets (:class:`LineBudgets`), so the app's view and
 the harness derive the phase from state on every poll rather than
 accumulating it.  The phases are the matches (precision), the misses
 (recall) and ``done``.  The matches phase ends when its range is narrower
-than its target, at its pick budget, or when its bands are exhausted; the
+than its target or at its pick budget, either only once every band above
+the line has had a round (#4539, #4560), or when its bands are exhausted; the
 misses phase at its pick budget or when its bands are exhausted, and,
 without a class model, on its width target or a dry run.  A line that keeps
 fewer items than one round is ``nothing``: nothing to test.  The targets and
@@ -127,6 +130,34 @@ JEFFREYS = 0.5
 #: each (the Jeffreys mean of 0 of 5) summed over a thousand items, which is how
 #: a sparse line's precision range came to sit above its truth (#4523).
 POOLED_WEIGHT = float(CHECK_MIN_PICKS)
+
+
+#: How far the pool above the line reaches, in bands (#4560): ``None`` pools
+#: every band above the line (#4539); ``r`` pools only the bands within *r*
+#: of the band being drawn (itself excluded), falling back to the whole side
+#: when none of them has a pick.  One rate pooled across bands from 80% right
+#: at the top to 1% near a sparse line lifts the deep bands once the top ones
+#: are audited, and drags the top ones down when they are not.  1, with
+#: :data:`FIRST_PASS_BEFORE_BUDGET`, is what #4560 priced
+#: (``docs/experiments/2026-10-06-pooled-taper-4560/REPORT.md``).
+POOL_RADIUS: int | None = 1
+
+#: Whether the matches phase's budget waits until every band above the line
+#: has had a round (#4560).  Without it the top bands of a big line are often
+#: never audited, and a preset inside them reads at the pool's mean.
+FIRST_PASS_BEFORE_BUDGET: bool = True
+
+
+def pooled_weight(depth: int, n_above: int) -> float:
+    """What the pooled share is worth, in picks, to the band *depth* bands up from the line (0 holds the line).
+
+    *n_above* is how many bands sit above the line.  The one place a band's
+    pull toward the pool is decided, so a study can price another taper by
+    replacing it (#4560).
+    """
+    del depth, n_above
+    return POOLED_WEIGHT
+
 
 #: The floor under the model's prior on a band below the line, in pseudo-picks
 #: either way: enough that a band the model counts empty stays correctable by
@@ -218,15 +249,18 @@ class LineBudgets:
     to *misses_picks*, because its recall range only holds once the walk
     has corrected the model's tail band by band.  The defaults are the values
     #4523 priced on 192,660 replayed Tests
-    (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``): 0.20 and 40
-    picks above the line, where the precision range held the truth in 92-96%
-    of sessions at beta <= 1; 40 picks below it, where walking to the budget
-    raised the recall range's coverage from 13-38% to 75-94%.
+    (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``) and #4540
+    re-priced with the pooled prior and the deeper walk
+    (``docs/experiments/2026-10-06-test-budget-presets-4540/REPORT.md``): a
+    width of 0.20 and 20 picks above the line, where the precision range holds
+    the truth in 94-99% of sessions, as well as at 40 picks or better, for up
+    to 13 fewer picks at beta 4; 40 picks below it, where walking to the
+    budget raised the recall range's coverage from 13-38% to 81-98%.
     """
 
     matches_width: float = 0.20
     misses_width: float = 0.25
-    matches_picks: int = 40
+    matches_picks: int = 20
     misses_picks: int = 40
     picks_per_round: int = CHECK_MIN_PICKS
     dry_run_share: float = 0.05
@@ -613,10 +647,22 @@ class LineTest:
         self._cache.clear()
         self._counts.clear()
 
-    def _pooled_counts(self, extra: dict[int, tuple[int, int]] | None = None) -> tuple[int, int]:
-        """``(picks, right)`` over every band above the line, *extra*'s hypothetical picks included."""
+    def _pooled_counts(
+        self, extra: dict[int, tuple[int, int]] | None = None, near: int | None = None
+    ) -> tuple[int, int]:
+        """``(picks, right)`` over the bands above the line that pool for band *near*, *extra*'s picks included.
+
+        Every band above the line when *near* is ``None`` or :data:`POOL_RADIUS`
+        is; else the bands within the radius of *near*, *near* itself
+        excluded, or every band when none of those has a pick.
+        """
+        pool = list(self.above)
+        if near is not None and POOL_RADIUS is not None:
+            local = [b for b in pool if b.index != near and abs(b.index - near) <= POOL_RADIUS]
+            if self._pick_total(local, extra) > 0:
+                pool = local
         labelled = right = 0
-        for band in self.above:
+        for band in pool:
             _, n_lab, n_right = self.band_counts(band.index)
             if extra and band.index in extra:
                 n_lab += extra[band.index][0]
@@ -625,11 +671,25 @@ class LineTest:
             right += n_right
         return labelled, right
 
+    def _pick_total(self, bands: Sequence[Band], extra: dict[int, tuple[int, int]] | None) -> int:
+        return sum(
+            self.band_counts(b.index)[1] + (extra[b.index][0] if extra and b.index in extra else 0) for b in bands
+        )
+
+    def _pooled_weight(self, b: int) -> float:
+        """Band *b*'s pull toward the pool (:func:`pooled_weight`), counted in bands up from the line."""
+        above = self.above
+        return pooled_weight(len(above) - 1 - b, len(above))
+
     def _pooled_share(
-        self, rng: np.random.Generator, n: int, extra: dict[int, tuple[int, int]] | None = None
+        self,
+        rng: np.random.Generator,
+        n: int,
+        extra: dict[int, tuple[int, int]] | None = None,
+        near: int | None = None,
     ) -> np.ndarray:
-        """*n* draws of the pooled share right above the line: Jeffreys' prior on every pick above it."""
-        labelled, right = self._pooled_counts(extra)
+        """*n* draws of the pooled share right above the line: Jeffreys' prior on the pool's picks."""
+        labelled, right = self._pooled_counts(extra, near)
         return rng.beta(JEFFREYS + right, JEFFREYS + (labelled - right), size=n)
 
     def _band_draws(
@@ -663,8 +723,9 @@ class LineTest:
         c: float | np.ndarray
         if band.side == ABOVE:
             if pooled is None:
-                pooled = self._pooled_share(rng, n, None if extra is None else {b: extra})
-            a, c = MODEL_FLOOR + POOLED_WEIGHT * pooled, MODEL_FLOOR + POOLED_WEIGHT * (1.0 - pooled)
+                pooled = self._pooled_share(rng, n, None if extra is None else {b: extra}, near=b)
+            w = self._pooled_weight(b)
+            a, c = MODEL_FLOOR + w * pooled, MODEL_FLOOR + w * (1.0 - pooled)
         elif self.posteriors is not None:
             mean = self.band_mass(b) / size
             weight = self.budgets.model_weight
@@ -679,7 +740,9 @@ class LineTest:
     ) -> np.ndarray:
         """A ``(bands, n)`` matrix of per-band positive counts; unreached bands below the line are the model's point."""
         out = np.zeros((len(self._bands), n))
-        pooled = self._pooled_share(rng, n, extra)
+        # One pooled draw shared by every band keeps the draws joint; a local
+        # pool (POOL_RADIUS) is drawn per band instead.
+        pooled = self._pooled_share(rng, n, extra) if POOL_RADIUS is None else None
         for band in self._bands:
             if band.side == BELOW and not self.audited(band.index) and not (extra and band.index in extra):
                 out[band.index] = self.band_mass(band.index)
@@ -769,10 +832,13 @@ class LineTest:
         """What the line would ship if it kept the top *count*, from the same draws (the verdict's **Lean the Threshold**).
 
         Exact at a band edge, where it is :attr:`LineEstimates.at_edges`'
-        entry; inside a band the band's positives are split in proportion to
-        how much of it the top *count* takes, which is the band resolution the
-        picks have.  *beta* defaults to the test's.  A count past the corpus
-        keeps all of it.
+        entry.  Inside a band the band's labelled picks count where their
+        ranks fall, and its unlabelled positives are split by the class
+        model's posterior mass on either side of *count* (#4540): a band's
+        top is richer than its bottom, and splitting it by size read a
+        shallower preset's precision as much as 0.19 low.  With no model, or
+        a band the model counts empty, the split is by size.  *beta*
+        defaults to the test's.  A count past the corpus keeps all of it.
         """
         beta = self.beta if beta is None else float(beta)
         k = max(0, min(int(count), self.size))
@@ -784,13 +850,45 @@ class LineTest:
             if band.hi <= k:
                 running = running + counts[band.index]
             elif band.lo < k:
-                running = running + counts[band.index] * ((k - band.lo) / band.size)
+                running = running + self._partial_band(band, k, counts[band.index])
         kf = float(k)
         p = running / kf if kf > 0 else np.zeros(n)
         r = np.where(total > 0, running / np.maximum(total, _EPS), 0.0)
         fb = (1.0 + beta * beta) * running / np.maximum(beta * beta * total + kf, _EPS)
         side = ABOVE if k <= self.line_count else BELOW
         return EdgeEstimate(k, side, _estimate(p, alpha), _estimate(r, alpha), _estimate(fb, alpha))
+
+    def _partial_band(self, band: Band, k: int, band_counts: np.ndarray) -> np.ndarray:
+        """The draws of band *band*'s positives that rank above *k*: its picks there, plus its share of the rest.
+
+        *band_counts* are the band's drawn positives (its right picks plus its
+        unlabelled items at a drawn share).  The right picks ranked above *k*
+        count as themselves; the unlabelled positives are split by the
+        model's posterior mass on the unlabelled items above *k*, or by their
+        number with no model or no mass, and held to what each side can hold:
+        no more above *k* than it has unlabelled items, no fewer than the
+        rest of the band below *k* cannot take.
+        """
+        right_above = right_all = 0
+        for cid, ok in self.labels.items():
+            if self.pick_band.get(cid) != band.index or not ok:
+                continue
+            right_all += 1
+            if self._rank[cid] < k:
+                right_above += 1
+        unlabelled = band_counts - right_all
+        ranks = np.arange(band.lo, band.hi)
+        free = np.array([self.ranking_ids[r] not in self.labels for r in ranks])
+        upper = free & (ranks < k)
+        weights = self.posteriors[band.lo : band.hi] if self.posteriors is not None else None
+        if weights is not None and float(weights[free].sum()) > _EPS:
+            share = float(weights[upper].sum()) / float(weights[free].sum())
+        else:
+            n_free = int(free.sum())
+            share = int(upper.sum()) / n_free if n_free else 0.0
+        n_upper, n_lower = int(upper.sum()), int(free.sum()) - int(upper.sum())
+        above = np.clip(unlabelled * share, np.maximum(unlabelled - n_lower, 0.0), np.minimum(unlabelled, n_upper))
+        return right_above + above
 
     def _expected_shrink(self, b: int, base: np.ndarray) -> float:
         size, labelled, right = self.band_counts(b)
@@ -799,11 +897,12 @@ class LineTest:
             return 0.0
         n, alpha, beta = self.budgets.draws, self.budgets.alpha, self.beta
         current = self._summarise(base, beta, alpha)[2].width
-        # The round's predictive under the band's prior: the pooled share's mean at POOLED_WEIGHT (#4539).
-        pooled_lab, pooled_right = self._pooled_counts()
+        # The round's predictive under the band's prior: the pooled share's mean at the band's weight (#4539).
+        pooled_lab, pooled_right = self._pooled_counts(near=b)
         p_mean = (pooled_right + JEFFREYS) / (pooled_lab + 2.0 * JEFFREYS)
-        a = right + MODEL_FLOOR + POOLED_WEIGHT * p_mean
-        bb = labelled - right + MODEL_FLOOR + POOLED_WEIGHT * (1.0 - p_mean)
+        w = self._pooled_weight(b)
+        a = right + MODEL_FLOOR + w * p_mean
+        bb = labelled - right + MODEL_FLOOR + w * (1.0 - p_mean)
         expected = 0.0
         for r in range(m + 1):
             weight = math.comb(m, r) * _beta_fn(a + r, bb + m - r) / _beta_fn(a, bb)
@@ -996,16 +1095,16 @@ def line_phase(test: LineTest) -> PhaseReport:
     est = test.estimates()
     picks_above, picks_below = test.picks_on(ABOVE), test.picks_on(BELOW)
     matches_stop: str | None = None
+    # Every band above the line has had a round: before that, a band no pick
+    # has seen is read at the pool's mean, the line's average, and the
+    # presets Lean the Threshold offers inside it read low (#4539, #4560).
+    first_pass = all(test.audited(b.index) or test.exhausted(b.index) for b in test.above)
+    budget_open = first_pass or not FIRST_PASS_BEFORE_BUDGET
     if all(test.exhausted(b.index) for b in test.above):
         matches_stop = STOP_EXHAUSTED
-    elif (
-        # Every band audited first: the pooled prior (#4539) can narrow the
-        # range on two bands' picks, but a band no pick has seen is a guess.
-        all(test.audited(b.index) or test.exhausted(b.index) for b in test.above)
-        and est.precision.width <= budgets.matches_width + _EPS
-    ):
+    elif first_pass and est.precision.width <= budgets.matches_width + _EPS:
         matches_stop = STOP_WIDTH
-    elif picks_above >= budgets.matches_picks:
+    elif budget_open and picks_above >= budgets.matches_picks:
         matches_stop = STOP_BUDGET
     if matches_stop is None:
         return PhaseReport(PHASE_MATCHES, None, None, est.precision.width, est.recall.width, picks_above, picks_below)
