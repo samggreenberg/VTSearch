@@ -395,7 +395,6 @@ def main(argv: list[str] | None = None) -> int:
             calibrate_count=cfg.CALIBRATE_COUNT,
             calibration_fraction=cfg.CALIBRATION_FRACTION,
             exclusion_min_remainder=cfg.EXCLUSION_MIN_REMAINDER,
-            min_precision=cfg.MIN_PRECISION,
             beta=cfg.BETA,
             live_cut_rule=cfg.LIVE_CUT_RULE,
             live_threshold=cfg.LIVE_THRESHOLD,

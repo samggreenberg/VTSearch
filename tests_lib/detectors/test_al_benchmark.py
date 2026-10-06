@@ -154,10 +154,10 @@ class TestRunAlBenchmark:
         assert summary.empty
 
 
-class TestInclusionUnderAFloor:
+class TestInclusionUnderABalance:
     """``--inclusion`` moves the line only on the Inclusion arm (#4361)."""
 
-    def test_run_refuses_a_nonzero_inclusion_under_the_default_floor(self):
+    def test_run_refuses_a_nonzero_inclusion_under_the_default_balance(self):
         clips = synthetic_source(n_per_cat=6, dim=8, seed=0)
         with pytest.raises(ValueError, match="Inclusion arm"):
             run_al_benchmark(clips, strategies=["autopilot"], seeds=[0], inclusion=3)
@@ -169,23 +169,23 @@ class TestInclusionUnderAFloor:
             strategies=["autopilot"],
             seeds=[0],
             inclusion=3,
-            min_precision="off",
+            beta="off",
             calibrate_count=1,
             max_steps=6,
             atlas_min_node_size=3,
         )
         assert not df.empty
-        assert bool(df["min_precision"].isna().all())
+        assert bool(df["beta"].isna().all())
 
-    def test_cli_refuses_inclusion_without_min_precision_off(self, capsys):
+    def test_cli_refuses_inclusion_without_beta_off(self, capsys):
         with pytest.raises(SystemExit) as exc:
             main(["--inclusion", "3"])
         assert exc.value.code == 2
-        assert "--min-precision off" in capsys.readouterr().err
+        assert "--beta off" in capsys.readouterr().err
 
-    @pytest.mark.parametrize("bad", ["0", "1.5", "loose"])
-    def test_cli_rejects_a_floor_out_of_range(self, bad, capsys):
+    @pytest.mark.parametrize("bad", ["0", "4.5", "loose"])
+    def test_cli_rejects_a_beta_out_of_range(self, bad, capsys):
         with pytest.raises(SystemExit) as exc:
-            main(["--min-precision", bad])
+            main(["--beta", bad])
         assert exc.value.code == 2
-        assert "--min-precision" in capsys.readouterr().err
+        assert "--beta" in capsys.readouterr().err

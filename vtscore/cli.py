@@ -239,9 +239,9 @@ def _load_and_train_detectors(
     whichever it is handed (issue #3647).  ``None`` keeps the loaded medias as
     the haystack, for callers with no scoring pass to agree with.
 
-    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float, "floor": dict, "balance": dict, ...}}``
-    map; ``floor`` is what the precision floor says about ``threshold``
-    (:func:`_record_line_states`).  Raises :class:`ValueError` if a detector cannot be trained - for example
+    Returns a ``{name: {"mlp": nn.Sequential, "threshold": float, "balance": dict, ...}}``
+    map; ``balance`` is what the balance says about ``threshold``
+    (:func:`_record_line_state`).  Raises :class:`ValueError` if a detector cannot be trained - for example
     when none of its labels' origin files are resolvable from the CLI
     environment.
     """
@@ -362,13 +362,12 @@ def _load_and_train_detectors(
         # type, and the labelset good/bad tallies.
         from vtscore.detectors.embedder_type import detector_embedder_type_from_data  # noqa: PLC0415
 
-        # The floor's and the balance's state on that threshold - unchecked,
-        # headless (#4272, #4413); they ride into every result the detector produces.
-        floor, balance = _record_line_states(det_name, det_ctx)
+        # The balance's state on that threshold - unchecked, headless (#4272,
+        # #4413); it rides into every result the detector produces.
+        balance = _record_line_state(det_name, det_ctx)
         out[det_name] = {
             "mlp": det_ctx.model,
             "threshold": det_ctx.threshold,
-            "floor": floor,
             "balance": balance,
             "embedder": det_ctx.embedder or "",
             "media_type": det_media_type or media_type,
@@ -383,38 +382,35 @@ def _load_and_train_detectors(
     return out
 
 
-def _record_line_states(det_name: str, det_ctx: Any) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """What the floor and the balance say about *det_name*'s trained cut: unchecked, because nobody can vote.
+def _record_line_state(det_name: str, det_ctx: Any) -> dict[str, Any] | None:
+    """What the balance says about *det_name*'s trained cut: unchecked, because nobody can vote.
 
-    Read at the preference the training read (:func:`vtscore.state.line_knobs`):
-    both states ride with the cut, and the one the ``line_preference`` setting
-    names drew the line (#4413).  A headless run cannot spot-check its line
-    (#4272), so it exports the preference's unchecked set - the schedule's
-    starting candidate or the mixture's count, whichever is smaller (#4389) -
-    and the ``detector_unchecked`` event is the run's record that the set it
-    exports was never checked.
+    Read at the balance the training read (:func:`vtscore.state.line_knobs`,
+    #4413).  A headless run cannot spot-check its line (#4272), so it exports
+    the balance's unchecked set - the cap or the mixture's F-beta argmax,
+    whichever is smaller (#4389) - and the ``detector_unchecked`` event is
+    the run's record that the set it exports was never checked.  ``None``
+    with no balance (a library caller's ``CoreConfig(beta=None)``): the line is
+    the Inclusion 0 cut, and there is no set to report.
     """
-    from vtscore.state import get_beta, get_line_preference, get_min_precision  # noqa: PLC0415
-    from vtscore.state.core import detector_balance_state, detector_floor_state  # noqa: PLC0415
-    from vtscore.training.thresholds import FLOOR_UNCHECKED, aim_words  # noqa: PLC0415
+    from vtscore.state import get_beta  # noqa: PLC0415
+    from vtscore.state.core import detector_balance_state  # noqa: PLC0415
+    from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
 
-    floor = detector_floor_state(det_ctx, get_min_precision())
     balance = detector_balance_state(det_ctx, get_beta())
-    drawn = balance if get_line_preference() == "balance" else floor
-    if drawn is not None and drawn["status"] == FLOOR_UNCHECKED:
+    if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         cli_progress.emit(
             "detector_unchecked",
             text=(
-                f"Detector '{det_name}' exports its top {drawn['count']} unchecked ({aim_words(drawn)}); "
+                f"Detector '{det_name}' exports its top {balance['count']} unchecked ({aim_words(balance)}); "
                 "nobody is here to check it."
             ),
             detector=det_name,
-            min_precision=drawn.get("min_precision"),
-            beta=drawn.get("beta"),
-            status=drawn["status"],
-            count=drawn["count"],
+            beta=balance["beta"],
+            status=balance["status"],
+            count=balance["count"],
         )
-    return floor, balance
+    return balance
 
 
 def _score_medias_with_detectors(
@@ -606,7 +602,6 @@ def _score_direct_all(
         out[det_name] = {
             "detector_name": det_name,
             "threshold": round(threshold, 4),
-            "floor": info.get("floor"),
             "balance": info.get("balance"),
             "total_hits": len(positive_hits),
             "hits": positive_hits,
@@ -671,7 +666,6 @@ def _score_one_detector(
     return {
         "detector_name": det_name,
         "threshold": round(threshold, 4),
-        "floor": info.get("floor"),
         "balance": info.get("balance"),
         "total_hits": len(positive_hits),
         "hits": positive_hits,
@@ -1594,7 +1588,6 @@ def _run_streaming_pipeline(
             {
                 "detector_name": name,
                 "threshold": round(info["threshold"], 4),
-                "floor": info.get("floor"),
                 "balance": info.get("balance"),
             }
             for name, info in detector_mlps.items()

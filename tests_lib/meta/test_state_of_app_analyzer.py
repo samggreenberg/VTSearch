@@ -1,17 +1,18 @@
-"""The State of the App analyzer under the precision floor (#4357).
+"""The State of the App analyzer over the balance's sessions (#4357, #4413).
 
-Since #4272 the default arm's line is the floor's set and every run ends on a
-spot check whose rows sit past ``max_steps``.  What is pinned here is the part
-a re-run cannot show by looking at it:
+The default arm's line is the balance's set and every run ends on a spot
+check whose rows sit past ``max_steps``.  What is pinned here is the part a
+re-run cannot show by looking at it:
 
 * **No FPR + FNR** reaches the analyzer's tables (owner, 2026-09-30).
 * **F1 is the returned set's** (owner, 2026-09-30: "Using the returned-set
-  threshold, show F1 over time, too"): the F1 of the top *K* the floor keeps,
+  threshold, show F1 over time, too"): the F1 of the top *K* the line keeps,
   read off the rank frames, at every recorded click as well as the checkpoints.
 * **Precision and recall at P** (owner, 2026-10-01, #4408): the returned set
-  at each floor, scored against the floor it aimed for, at every recorded
-  click; each run records the floor its sessions aimed at, and ``perp.py``
-  reads each P off its own run.
+  at each P, scored against that P, at every recorded click; a floor-era run
+  records the floor its sessions aimed at, and ``perp.py`` reads each P off
+  its own run.
+* **The returned set at each balance** (#4413): F-beta over the best cut.
 * **The check is not a click:** "final" is the last ordinary step, and no check
   pick is credited to an image.
 * **The line is read off the rank frames** by one definition
@@ -20,7 +21,7 @@ a re-run cannot show by looking at it:
   its line at click 0 only, never a neighbour's value.
 
 The cells are written by the real harness on synthetic clusters, so they carry
-the floor-era shape (check rows, check picks, rank frames) without the GRID.
+a session's shape (check rows, check picks, rank frames) without the GRID.
 
 Meta-group: the subject is repo tooling under ``scripts/experiments/``.
 """
@@ -162,7 +163,6 @@ def _write_cells(exp: Path) -> None:
             seed=0,
             dataset_name="coco_better",
             max_steps=MAX_STEPS,
-            min_precision=0.5,  # the floor arm: the per-P machinery's fixture (#4408); the balance is the default
             style="whole_image",
             safe_thresholds=True,
             emit_calibration_metrics=True,
@@ -322,7 +322,7 @@ def test_precision_and_recall_at_each_p_are_the_returned_sets_at_every_recorded_
                     assert got[m] == pytest.approx(want[m])
                     assert c.loc[int(f["t"]), f"{m}_{tag}"] == pytest.approx(want[m]), (cat, x, m)
     assert "## The returned set at each P: precision against P, recall against the oracle" in run["summary"]
-    assert "These sessions aimed at P = 50%" in run["summary"]
+    assert "These sessions aimed at no floor (a balance, since #4413)" in run["summary"]
 
 
 def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> None:
@@ -389,8 +389,9 @@ def test_fbeta_share_is_the_returned_sets_at_every_recorded_click(run, rm) -> No
             )
             assert final["fbeta"].iloc[0] == pytest.approx(want["fbeta"])
     assert "## The returned set at each balance: F-beta over the best cut" in run["summary"]
-    assert "These sessions aimed at a floor, not a balance" in run["summary"]
-    assert run["cells"]["session_beta"].isna().all(), "a floor run records no session beta"
+    assert "These sessions aimed at beta = 1" in run["summary"]
+    trained = run["cells"][~run["cells"]["never_trained"].astype(bool)]
+    assert not trained.empty and (trained["session_beta"] == 1.0).all(), "the default arm's balance"
 
 
 def test_each_rule_thresholds_both_sorts_the_same_way() -> None:
@@ -484,7 +485,7 @@ def test_positives_in_hand_are_the_goods_plus_the_kept_sets_on_the_users_own_cor
         main = _main_frame(run["exp"], idx)
         picks = pd.read_csv(run["exp"] / "results" / "cells" / f"task_{idx:04d}__picks.csv")
         clicks = picks[picks["phase"].astype(str) != "check"] if "phase" in picks else picks
-        own_beta = 1.0  # a floor run: the pool-side set is scored as F1
+        own_beta = 1.0  # the default arm's balance: the pool-side set is scored as F1
         for f in frames.query("kind == 'step'").to_dict("records"):
             t = int(f["t"])
             got = steps[(steps["category"] == cat) & (steps["t"] == t)].iloc[0]
@@ -523,6 +524,11 @@ def test_the_balance_metric_peaks_at_the_balance_by_construction(rm) -> None:
     assert rm.balance_metrics(ranks, 2000, n_pos, 0.5, None)["k"] == 32
 
 
+def test_a_balance_run_records_no_session_floor(run) -> None:
+    """``session_floor`` reads a floor-era run's ``min_precision`` column; the harness writes none since #4421."""
+    assert run["cells"]["session_floor"].isna().all()
+
+
 def test_a_line_that_keeps_nothing_is_read_as_empty_not_as_the_cap(rm) -> None:
     """#4471: the labels line (#4452) can keep nothing; a recorded 0 is an empty set, -1 or no column is unrecorded."""
     ranks = np.array([0, 2, 3, 7, 30])
@@ -543,12 +549,6 @@ def test_the_review_reads_the_apps_presets(rm) -> None:
 
     assert tuple(rm.BETAS) == BALANCE_PRESETS
     assert [rm.beta_tag(b) for b in rm.BETAS] == ["b025", "b1", "b4"]
-
-
-def test_each_run_records_the_floor_its_sessions_aimed_at(run) -> None:
-    """``session_floor`` is the run's CALIB_MIN_PRECISION: pinned to 0.5 here (the default arm is the balance, #4413)."""
-    trained = run["cells"][~run["cells"]["never_trained"].astype(bool)]
-    assert not trained.empty and (trained["session_floor"] == 0.5).all()
 
 
 def test_perp_reads_each_p_off_its_own_run(run, tmp_path) -> None:
@@ -665,7 +665,7 @@ def test_an_advisory_check_is_scored_on_the_set_it_audited() -> None:
 def test_the_check_is_reported_against_its_own_truth(run, rm) -> None:
     for idx, cat in enumerate(CATS):
         row = run["cells"].loc[cat]
-        assert row["check_status"] in ("confirmed", "short")
+        assert row["check_status"] == "checked"
         last = _frames(run["exp"], idx).query("kind == 'last'").iloc[0]
         k = min(int(row["check_k"]), int(last["n_pool"]))
         truth = np.count_nonzero(rm.parse_ranks(last["pool_pos_ranks"]) < k) / k

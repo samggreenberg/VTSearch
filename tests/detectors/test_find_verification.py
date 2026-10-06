@@ -4,7 +4,7 @@ Covers:
 - mark-verified on find-mode votes (and un-verify on un-vote)
 - the ``verified`` array on ``GET /api/votes``
 - ``label_filter=unverified`` / ``verified`` export partitioning
-- ``GET /api/find/stats`` (2x2 confusion, the floor's verdict, precision curve)
+- ``GET /api/find/stats`` (2x2 confusion, the balance's state, precision curve)
 - verified votes surviving a re-score (issue #2928)
 - a live Find session surviving a detector-file write (issue #2786)
 """
@@ -161,15 +161,15 @@ class TestRethresholdUnverified:
         # No re-split: the initial 0.5 assignment stands.
         assert 2 in good_votes
 
-    def test_floor_post_returns_threshold(self, client):
-        resp = client.post("/api/min-precision", json={"min_precision": 0.5})
+    def test_balance_post_returns_threshold(self, client):
+        resp = client.post("/api/balance", json={"beta": 0.5})
         assert resp.status_code == 200
         assert "threshold" in resp.get_json()
 
 
 class TestFindStats:
     """``GET /api/find/stats`` over the ADOPTED label set (all items, with
-    unverified flood-filled), the floor's verdict on the line (#4246), and the
+    unverified flood-filled), the balance's state on the line (#4246, #4413), and the
     precision curve against the number returned (#4242)."""
 
     def _setup(self):
@@ -217,18 +217,27 @@ class TestFindStats:
         assert data["verified_called_good"] == 2
         assert data["verified_precision"] == 0.5
 
-    def test_floor_rides_with_the_line(self, client):
-        """The chart marks the floor and says whether the line keeps it (#4246, #4272)."""
+    def test_balance_rides_with_the_line(self, client):
+        """The stats carry the balance the line was cut at and what its check found (#4246, #4272, #4413)."""
         self._setup()
-        client.post("/api/min-precision", json={"min_precision": 0.75})
+        client.post("/api/balance", json={"beta": 0.5})
         data = client.get("/api/find/stats").get_json()
-        assert data["floor"] == {
-            "min_precision": 0.75,
+        assert data["balance"] == {
+            "beta": 0.5,
             "status": "unchecked",
             "count": 32,
-            "range": None,
+            "precision": None,
+            "recall": None,
+            "fbeta": None,
             "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
+            "shape": "advisory",
+            "audited": None,
+            # No ranking behind this fixture's line, so nothing a check could walk (#4489, #4496).
+            "checkable": False,
+            "separation": None,
+            "check_due": False,
         }
+        assert "floor" not in data
         # The sweep went with the Inclusion stepper.
         assert "sweep" not in data
         assert "inclusion" not in data
@@ -444,7 +453,7 @@ class TestReScoreKeepsVerifiedVotes:
     bulk apply used to reassign *every* vote from the new threshold split while
     nothing cleared ``verified_ids``, so an item the human had ruled on came
     back carrying the machine's opposite label - excluded from the work queue,
-    counted in ``verified_count``, and pinned there by the floor's
+    counted in ``verified_count``, and pinned there by the line's
     re-threshold - i.e. the human's decision silently inverted while still
     presented as human-verified.
     """

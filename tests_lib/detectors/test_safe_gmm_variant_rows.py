@@ -62,8 +62,8 @@ def _run_safe_uncached(style, seed=0, max_steps=16, diag_sink=None, **kw):
         emit_calibration_metrics=True,
         cut_diag_sink=diag_sink,
         # The Inclusion arm: the production arm reproduces the estimator's cut
-        # at `inclusion`, which a floor's set would replace (#4272).
-        min_precision=kw.pop("min_precision", "off"),
+        # at `inclusion`, which a balance's set would replace (#4272).
+        beta=kw.pop("beta", "off"),
         **kw,
     )
 
@@ -328,7 +328,7 @@ class TestTheDefaultArmDrawsTheLabelsLine:
     """
 
     def test_base_rows_carry_both_prevalences_and_find_cuts_the_withheld_half(self):
-        rows = _run_safe_uncached("max_patch", min_precision=None)
+        rows = _run_safe_uncached("max_patch", beta=None)
         base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
         assert base, "no base rows"
         drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
@@ -342,7 +342,7 @@ class TestTheWiderWorldKnobs:
 
     def test_the_test_score_sink_carries_the_withheld_half_and_the_labels_model(self):
         sink: list = []
-        rows = _run_safe_uncached("max_patch", min_precision=None, test_score_sink=sink)
+        rows = _run_safe_uncached("max_patch", beta=None, test_score_sink=sink)
         assert rows and sink
         last = sink[-1]
         assert last["scores"].dtype == np.float64 and last["scores"].shape == last["labels"].shape
@@ -351,8 +351,8 @@ class TestTheWiderWorldKnobs:
         assert drawn and {"mu_pos", "mu_neg", "sigma"} <= set(drawn[-1]["model"])
 
     def test_a_smaller_train_pool_keeps_the_withheld_half_whole(self):
-        full = _run_safe_uncached("max_patch", min_precision=None, max_steps=6)
-        small = _run_safe_uncached("max_patch", min_precision=None, max_steps=6, sim_size=30)
+        full = _run_safe_uncached("max_patch", beta=None, max_steps=6)
+        small = _run_safe_uncached("max_patch", beta=None, max_steps=6, sim_size=30)
         assert {r["prevalence_arm"] for r in small} == {"sim_30"}
         base = lambda rows: [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]  # noqa: E731
         assert base(full)[0]["n_test_pos"] == base(small)[0]["n_test_pos"], "the Find side is untouched"

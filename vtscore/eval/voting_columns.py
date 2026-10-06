@@ -200,21 +200,18 @@ IDENT_COLUMNS: tuple[str, ...] = (
     #: them a sign error in the acquisition cut is invisible.
     "acq_pool_percentile",
     "report_pool_percentile",
-    # --- The precision floor (#4245, #4272).
-    #: The floor the reporting line was drawn at; NaN on the Inclusion arm
-    #: (``min_precision="off"``), where ``threshold`` is the knob's cut.
-    "min_precision",
-    #: The balance arm's beta (#4413); NaN on a floor arm.  The floor columns
-    #: below then read the balance's state (its precision range as the range).
+    # --- The balance's line (#4272, #4413).  The ``floor_*`` names predate the
+    # balance (the precision floor it replaced); they report the balance's line.
+    #: The balance the reporting line was drawn at; NaN on the Inclusion arm
+    #: (``beta="off"``), where ``threshold`` is the knob's cut.
     "beta",
-    #: The floor's state this step - ``unchecked`` (the line keeps the floor's
-    #: starting candidate), ``confirmed`` or ``short`` (the set the run's spot
-    #: check ended on) - and so what ``threshold`` is.  Empty where no floor
-    #: line was drawn.
+    #: The line's state this step - ``unchecked`` (the mixture's F-beta argmax
+    #: under the cap) or ``checked`` (after the run's spot check) - and so what
+    #: ``threshold`` is.  Empty where no balance line was drawn.
     "floor_status",
-    #: How many unvoted items the line keeps: 128 / 64 / 32 at 10% / 25% / 50%
-    #: and above until a check ends, then the check's set.  -1 with no floor
-    #: line.
+    #: How many unvoted items the line keeps: at most 32 at beta <= 1 and 128
+    #: above until a check ends, then what the check's shape makes of the
+    #: walk's end.  -1 with no balance line.
     "floor_count",
     #: The check's likely range for the kept set's precision (Clopper-Pearson,
     #: each tail at alpha / rounds; exact for a census), and the labels behind
@@ -405,8 +402,8 @@ PICK_COLUMNS: tuple[str, ...] = (
 #: Column order for the **rank frame** (issue #4357): where the positives sit in
 #: a ranking, emitted only when the caller passes a ``rank_frame_sink``.
 #:
-#: A precision floor's line keeps a *set* - the top *K* of a ranking (#4272) -
-#: so how good the line is at any floor, and how good the best cut on the same
+#: A balance's line keeps a *set* - the top *K* of a ranking (#4272) -
+#: so how good the line is at any balance, and how good the best cut on the same
 #: ranking could have been, is a function of the positives' ranks and nothing
 #: else.  That is a few dozen integers a frame, where the #4220 precision frame
 #: carries every score; it is cheap enough to record on every cell of a review.
@@ -439,33 +436,24 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     "n_pool_pos",
     "pool_pos_ranks",
     #: How many items the shipped unchecked line keeps on the test half at each
-    #: floor in :data:`RANK_FRAME_FLOORS` (#4389: the smaller of the schedule's
-    #: count and the vote-anchored mixture's, on a corpus that also holds the
-    #: session's votes, as a cold Find draws it).  -1 where no session drew a
-    #: line: a skyline, or no pool ranking.
-    "test_line_k_p10",
-    "test_line_k_p50",
-    "test_line_k_p90",
-    #: The same for the balance's line at each preset beta in
-    #: :data:`RANK_FRAME_BETAS` (#4471).  Under the app's labels line (#4452)
-    #: what it keeps on the test half, its corpus side fitted there as Find
-    #: fits it - the count at the run's own beta is the headline's returned
-    #: set - or, with no class model that step, what the retrain's fallback
-    #: cut keeps; 0 when the line keeps nothing.  Under a forced check shape
-    #: (``walk_shape``) the count line's: the mixture's F-beta argmax under the
-    #: cap on the test half plus the session's votes (#4413).  The full-label
-    #: skyline records Find's labels line from its own labels (#4486).  -1
-    #: with no line.  Runs before #4471 recorded the count line at 0.5 / 1 / 2.
+    #: preset beta in :data:`RANK_FRAME_BETAS` (#4389, #4413, #4471).  Under the
+    #: app's labels line (#4452) what it keeps on the test half, its corpus side
+    #: fitted there as Find fits it - the count at the run's own beta is the
+    #: headline's returned set - or, with no class model that step, what the
+    #: retrain's fallback cut keeps; 0 when the line keeps nothing.  Under a
+    #: forced check shape (``walk_shape``) the count line's: the mixture's F-beta
+    #: argmax under the cap on the test half plus the session's votes (#4413).
+    #: The full-label skyline records Find's labels line from its own labels
+    #: (#4486).  -1 with no line: no session drew one, or no pool ranking.  Runs
+    #: before #4471 recorded the count line at 0.5 / 1 / 2.
     "test_line_k_b025",
     "test_line_k_b1",
     "test_line_k_b4",
 )
 
-#: The floors the rank frame records the shipped line's count at (the presets).
-RANK_FRAME_FLOORS: tuple[float, ...] = (0.1, 0.5, 0.9)
-#: The balances it records the balance line's count at: the app's presets,
-#: ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a test pins
-#: the two together, so the analysis follows the app).
+#: The balances the rank frame records the shipped line's count at: the app's
+#: presets, ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a
+#: test pins the two together, so the analysis follows the app).
 RANK_FRAME_BETAS: tuple[float, ...] = (0.25, 1.0, 4.0)
 
 

@@ -83,8 +83,8 @@ def _run_uncached(
         emit_calibration_metrics=True,
         fold_count_variants=fold_counts,
         # The Inclusion arm: the shipped threshold the arms reproduce is the
-        # estimator's cut at `inclusion`, which a floor's set would replace (#4272).
-        min_precision="off",
+        # estimator's cut at `inclusion`, which a balance's set would replace (#4272).
+        beta="off",
     )
 
 

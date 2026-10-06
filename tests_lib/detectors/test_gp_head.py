@@ -511,8 +511,8 @@ class TestGPFoldAnchored:
             safe_thresholds=True,
             standalone_cut="anchored",
             emit_calibration_metrics=True,
-            # The Inclusion arm: under a floor the line is the floor's set, whatever estimator ran (#4272).
-            min_precision="off",
+            # The Inclusion arm: under a balance the line is the balance's set, whatever estimator ran (#4272).
+            beta="off",
         )
         assert rows and all(np.isfinite(r["cost"]) for r in rows)
         provenance = [str(r["threshold_provenance"]) for r in rows]

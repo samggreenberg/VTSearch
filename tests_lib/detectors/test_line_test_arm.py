@@ -41,7 +41,7 @@ from vtscore.eval.voting_columns import LINE_TEST_COLUMNS
 from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
     DEFAULT_BUDGETS,
-    DEFAULT_MIN_PRECISION,
+    NO_BALANCE,
     PHASE_DONE,
     PHASE_NOTHING,
     STOP_REASONS,
@@ -334,9 +334,9 @@ class TestTheHarnessArm:
         assert row["dataset"] == rows[0]["dataset"] and row["category"] == "alpha" and row["seed"] == 0
         assert row["t"] == max(r["t"] for r in rows if r["phase"] != "check")
 
-    def test_no_row_under_the_floor_arm(self):
-        """The Test is the balance line's: a floor draws no F-beta line to test."""
-        _rows, sink, _ = self._run(min_precision=DEFAULT_MIN_PRECISION)
+    def test_no_row_on_the_inclusion_arm(self):
+        """The Test is the balance line's: the Inclusion arm draws no F-beta line to test."""
+        _rows, sink, _ = self._run(beta=NO_BALANCE)
         assert sink == []
 
     def test_the_arm_does_not_touch_the_trajectory(self):

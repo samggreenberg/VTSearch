@@ -42,39 +42,53 @@ class TestSettingsModule:
         settings_mod.set_volume(-3.0)
         assert settings_mod.get_volume() == 0.0
 
-    def test_get_set_min_precision(self, isolated_settings):
-        settings_mod.set_min_precision(0.75)
-        assert settings_mod.get_min_precision() == 0.75
+    def test_get_set_beta(self, isolated_settings):
+        settings_mod.set_beta(2.0)
+        assert settings_mod.get_beta() == 2.0
 
         # Persisted to disk
         raw = json.loads(isolated_settings.read_text())
-        assert raw["min_precision"] == 0.75
+        assert raw["beta"] == 2.0
 
-    def test_min_precision_clamped(self):
-        settings_mod.set_min_precision(5.0)
-        assert settings_mod.get_min_precision() == 1.0
+    def test_beta_clamped(self):
+        settings_mod.set_beta(9.0)
+        assert settings_mod.get_beta() == 4.0
 
-        settings_mod.set_min_precision(0.0)
-        assert settings_mod.get_min_precision() == 0.01
+        settings_mod.set_beta(0.0)
+        assert settings_mod.get_beta() == 0.25
 
-    def test_min_precision_default(self):
-        from vtscore.config import DEFAULT_MIN_PRECISION
+    def test_beta_default(self):
+        from vtscore.config import DEFAULT_BETA
 
-        assert settings_mod.get_min_precision() == DEFAULT_MIN_PRECISION
+        assert settings_mod.get_beta() == DEFAULT_BETA
 
-    def test_min_precision_refuses_null(self):
-        """Every detector has a floor (#4269): there is no "no floor" to store."""
+    def test_beta_refuses_null(self):
+        """Every detector has a balance (#4413): there is no "no balance" to store."""
         with pytest.raises(ValueError):
-            settings_mod.set_min_precision(None)  # type: ignore[arg-type]
+            settings_mod.set_beta(None)  # type: ignore[arg-type]
 
-    def test_a_stored_null_floor_reads_as_the_default(self, isolated_settings):
-        """A ``null`` left by the pre-#4269 "no floor" reads as the default floor."""
-        from vtscore.config import DEFAULT_MIN_PRECISION
+    def test_a_stored_null_balance_reads_as_the_default(self, isolated_settings):
+        from vtscore.config import DEFAULT_BETA
 
-        isolated_settings.write_text(json.dumps({"min_precision": None}))
+        isolated_settings.write_text(json.dumps({"beta": None}))
 
-        assert settings_mod.get_min_precision() == DEFAULT_MIN_PRECISION
-        assert settings_mod.get_all()["min_precision"] == DEFAULT_MIN_PRECISION
+        assert settings_mod.get_beta() == DEFAULT_BETA
+        assert settings_mod.get_all()["beta"] == DEFAULT_BETA
+
+    def test_the_precision_floor_is_no_longer_a_setting(self):
+        """The floor is retired (#4421): no accessor reads or writes it, or the switch that chose it."""
+        for key in ("min_precision", "line_preference"):
+            assert not hasattr(settings_mod, f"get_{key}")
+            assert not hasattr(settings_mod, f"set_{key}")
+
+    def test_a_settings_file_from_the_floor_era_still_loads(self, isolated_settings):
+        """A stale ``min_precision`` / ``line_preference`` left in a settings file breaks nothing."""
+        from vtscore.config import DEFAULT_BETA
+
+        isolated_settings.write_text(json.dumps({"min_precision": 0.75, "line_preference": "floor", "volume": 0.5}))
+
+        assert settings_mod.get_volume() == pytest.approx(0.5)
+        assert settings_mod.get_beta() == DEFAULT_BETA
 
     def test_inclusion_is_no_longer_a_setting(self):
         """Inclusion is retired as a user preference (#4269): no accessor reads or writes it."""

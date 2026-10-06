@@ -144,14 +144,14 @@ describe('PairScopeService', () => {
 
   it('seedBeta pushes the per-detector balance into SortStateService', () => {
     service.seedBeta();
-    httpMock.expectOne('/api/balance').flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.3, n_returned: 12, line_preference: 'balance' });
+    httpMock.expectOne('/api/balance').flush({ ...wireBalance('checked', { beta: 0.5 }), threshold: 0.3, n_returned: 12 });
     expect(sortState.beta).toBe(0.5);
   });
 
   it('seedBeta seeds only the beta; the state of the line arrives with the line', () => {
     sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5, lineBalance('checked'));
     service.seedBeta();
-    httpMock.expectOne('/api/balance').flush({ ...wireBalance('unchecked'), threshold: 0.3, n_returned: 1, line_preference: 'balance' });
+    httpMock.expectOne('/api/balance').flush({ ...wireBalance('unchecked'), threshold: 0.3, n_returned: 1 });
     expect(sortState.balance?.status).toBe('checked');
     expect(sortState.threshold).toBe(0.5);
   });

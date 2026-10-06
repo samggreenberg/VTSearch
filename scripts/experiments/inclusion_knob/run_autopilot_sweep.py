@@ -7,7 +7,7 @@ concluded study made (Autopilot vs. exchangeable random voting) is recorded in
 [`SELECTION-BIAS.md`](../../../docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md);
 what this script is *for* now is measuring that budget under the **shipped**
 detector.  (The plan that owed those measurements was retired when a precision
-floor replaced the miss budget, #4223; see ``docs/plans/min-precision.md``.)
+floor replaced the miss budget, #4223.)
 
 **This is a driver, not a simulation.**  Every vote, fit, calibration and cut is
 :func:`vtscore.eval.voting_iterations.simulate_voting_iterations`'s; this file

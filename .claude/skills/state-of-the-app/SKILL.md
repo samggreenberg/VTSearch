@@ -66,23 +66,15 @@ same edit.
   Sessions run at `SOTA_BETA=0.25|1|4` (the eval's `CALIB_BETA` arm): this is
   the standing recipe. The analyzer's betas follow the app's presets
   (`_rank_metrics.BETAS` is the harness's `RANK_FRAME_BETAS`, which a test
-  pins to `BALANCE_PRESETS`, #4471). The harness's default arm (neither `SOTA_BETA` nor
-  `SOTA_FLOOR`) is the app's default, the balance at beta 1, since #4413's
-  step 6 switched `line_preference` to the balance. The per-floor sessions
-  below are the **floor-era control** (#4408): run them to compare against
-  the floor era, not as the review.
-- **The floor-era control: one set of sessions per precision floor P, the
-  returned set scored at its own P (owner, 2026-10-01 02:20, #4408).** "The quality of our
-  RETURNS matters more than the quality of our RANK." F1 cannot see P (the 50%
-  and 90% lines keep nearly the same set and got the same F1), so the headline
-  is, per P over clicks, the set the app returns **when it aims for P**: its
-  **precision against P** (below P breaks the promise; far above it leaves
-  recall behind) and its **recall against the oracle's recall at P** (the most
-  any cut of the same ranking returns at or above P). Sessions at P = 10%, 50%
-  and 90% (`SOTA_FLOOR`), each analyzed on its own, then `perp.py` reads each P
-  off its own run. AP stays as the ranking's measure; F1 is secondary. The
-  2026-10-01 review read 10% and 90% off P = 50% sessions; that is exact only
-  while a session ignores P.
+  pins to `BALANCE_PRESETS`, #4471). The harness's default arm (no
+  `SOTA_BETA`) is the app's default, the balance at beta 1. "The quality of
+  our RETURNS matters more than the quality of our RANK" (owner, 2026-10-01
+  02:20, #4408): AP stays as the ranking's measure.
+- **The floor-era control is history (#4408, #4421).** It ran one set of
+  sessions per precision floor P (`SOTA_FLOOR`, P = 10 / 50 / 90%) and scored
+  each returned set at its own P. `SOTA_FLOOR` went with the floor (#4421) and
+  the launcher now refuses it, so the control cannot be re-run; `perp.py`
+  (its default `--kind floor`) still reads the floor-era runs already on disk.
 - **A review runs Binary Photo only by default (owner, 2026-09-26).** Region
   Photo is so slow (~5 h a seed) that it runs only when the owner asks for it
   explicitly: "We'll do that explicitly at some point when we need it." Never
@@ -138,7 +130,7 @@ same edit.
     frames, never the harness rows' `f1`. It sits next to the best F1 any cut
     of the same ranking reaches (`f1_over_clicks.png`, `line_steps.csv`).
   - **The line on a fresh corpus** (the test half, which is what Find and a
-    headless run return), at each floor the app offers (10 / 50 / 90%): the
+    headless run return), at each floor the app offered until #4421 (10 / 50 / 90%): the
     precision of the kept set (the top K, the floor's unchecked candidate);
     the shortfall, max(0, P − precision); the share of sessions meeting P;
     recall next to the oracle's recall at precision ≥ P (the best cut of the
@@ -232,8 +224,6 @@ bash launch.sh status
 SOTA_PATH=binary srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # per path -> analysis-binary/
 # per beta (#4413, the standing recipe; presets #4448): SOTA_BETA=0.25|1|4 on prepare / redo / analyze -> <date>-b025/-b1/-b4
 python perp.py --kind balance --run 0.25=<b025>/analysis-binary --run 1=<b1>/analysis-binary --run 4=<b4>/analysis-binary --out <dir>   # each beta off its own run: the objective first, the returned set, the early dip, the check (#4474)
-# per floor (#4408, the floor-era control): SOTA_FLOOR=0.1|0.5|0.9 on prepare / redo / analyze -> <date>-p10/-p50/-p90, then
-python perp.py --run 0.1=<p10>/analysis-binary --run 0.5=<p50>/analysis-binary --run 0.9=<p90>/analysis-binary --out <dir>
 SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> analysis-region/
 ```
 
@@ -272,9 +262,9 @@ SOTA_PATH=region srun -p cpu --mem=48G -c 4 -t 4:00:00 bash analyze.sh   # -> an
   preset, its corpus side fitted on the test half as Find fits it; at the
   sessions' own beta it is the objective's returned set exactly. It can be 0,
   which the analyzer reads as an empty set (F-beta 0), not as a missing
-  count. `test_line_k_p10/p50/p90` is the floor's: the smaller of the
-  schedule's count and the vote-anchored mixture's, #4389.
-  `_rank_metrics.frame_k` / `frame_beta_k` read them. A run from before
+  count. A floor-era run also carries `test_line_k_p10/p50/p90`, the floor's
+  count (#4389), which #4421 stopped recording.
+  `_rank_metrics.frame_beta_k` / `frame_k` read them. A run from before
   c5f55732c has no such column, and one from before #4471 recorded the
   retired count line at 0.5 / 1 / 2; the analyzer then reads the balance's
   cap, which is not the app's line any more: **re-run it, don't re-analyze
@@ -316,8 +306,8 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
    (#4413): per beta at the app's presets (1/4 / 1 / 4, #4448) over clicks, the returned set's F-beta as
    a share of the best F-beta any cut of the same ranking reaches
    (`returned_at_beta.png`, the "returned set at each balance" table), with
-   its precision and recall beside it, text → 25 → 50 → final → ceiling. The
-   floor-era control (#4408), when it was run: precision against P and recall
+   its precision and recall beside it, text → 25 → 50 → final → ceiling. A
+   report from before #4421 also carried the floor-era control (#4408): precision against P and recall
    against the oracle's recall at P (`perp.py`: `returned_at_own_p.png`,
    `perp_summary.md`; per run, `returned_at_p.png`), with the share of
    sessions meeting P. The returned set's **path through the session** (#4519): per preset,
@@ -330,8 +320,8 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
    the balance.
 2. **The spot check:** where the F-beta walk ends (the kept set's F-beta
    against the best cut's), its precision and recall ranges, and how often
-   the precision range held the truth; under the floor-era control, how often
-   it confirms.
+   the precision range held the truth (a floor-era report also said how often
+   it confirmed).
 3. **Where the app does well and where it does poorly,** by class and by band,
    on final AP and on the final line at 50%. Name the classes, with numbers.
 4. **Headroom:** the ceiling's AP minus the final AP. This is what better

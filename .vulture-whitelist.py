@@ -256,7 +256,6 @@ degenerate_gmm  # noqa: F821 - forces the GMM to degenerate
 restore_resolvers  # noqa: F821 - re-binds the resolver globals via monkeypatch so teardown restores them
 clean_paths  # noqa: F821 - saves/restores sys.path and sys.meta_path around setup_env
 restore_stdlib  # noqa: F821 - re-installs the stdlib packages_distributions via monkeypatch for the test
-floor_preference  # noqa: F821 - selects the deprecated precision floor via the settings route
 schedule_only  # noqa: F821 - sets the mixture's proposal aside so the unchecked line follows the schedule
 
 # ---------------------------------------------------------------------------

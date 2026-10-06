@@ -51,7 +51,7 @@ class TestSmartCut:
         assert asked == [SMART_INCLUSION]
 
     def test_a_line_no_inclusion_drew_is_always_re_cut(self):
-        """A promised precision floor draws its own line (#4245): Smart re-cuts at its inclusion."""
+        """A balance draws its own line, a set rather than an inclusion (#4413): Smart re-cuts at its inclusion."""
         asked: list[float] = []
 
         def recut(k: float) -> float:
@@ -166,8 +166,8 @@ def test_harness_window_is_priced_and_cut_like_the_app(monkeypatch):
             "category": category,
         }
 
-    # The Inclusion arm: a set floor (the default arm's, #4245) would draw the line instead.
-    vi.simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, calibrate_count=1, min_precision="off")
+    # The Inclusion arm: a set balance (the default arm's, #4413) would draw the line instead.
+    vi.simulate_voting_iterations(medias, "alpha", seed=42, inclusion=3, calibrate_count=1, beta="off")
 
     assert windows
     assert len(windows) == len(cuts)

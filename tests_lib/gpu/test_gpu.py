@@ -416,7 +416,7 @@ class TestTrainAndScoreGPU:
         finally:
             config.TRAIN_EPOCHS = saved
 
-    def test_with_a_precision_floor(self):
+    def test_with_a_balance(self):
         import vtscore.config as config
 
         saved = config.TRAIN_EPOCHS
@@ -426,7 +426,7 @@ class TestTrainAndScoreGPU:
 
             clips_dict = _make_clips_dict(20, dim=64)
             good, bad = _make_votes([1, 2, 3], [18, 19, 20])
-            results, threshold, _model = train_and_score(clips_dict, good, bad, min_precision=0.75)
+            results, threshold, _model = train_and_score(clips_dict, good, bad, beta=2.0)
             assert len(results) == 20
             assert isinstance(threshold, float)
         finally:

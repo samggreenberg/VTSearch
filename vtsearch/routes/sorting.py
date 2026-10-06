@@ -4,9 +4,8 @@ Migrated to ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
-``examples`` / ``min_precision``; a ``null`` or non-numeric ``min_precision``)
-surface as 422 with the
-standard ``errors`` envelope. Handler-level rejects (empty / whitespace
+``examples`` / ``beta``; a ``null`` or non-numeric ``beta``) surface as 422
+with the standard ``errors`` envelope. Handler-level rejects (empty / whitespace
 ``text``, no votes, no medias, bad files in the multipart routes, etc.)
 keep their HTTP codes (400 / 404 / 500) with the standard ``message``
 envelope. The two multipart routes (``/api/example-sort``,
@@ -39,8 +38,6 @@ from vtsearch.schemas.sorting import (
     LearnedSortResultQuerySchema,
     BalanceRequestSchema,
     BalanceResponseSchema,
-    MinPrecisionRequestSchema,
-    MinPrecisionResponseSchema,
     OkResponseSchema,
     SortPageQuerySchema,
     SortPageResponseSchema,
@@ -68,14 +65,11 @@ from vtsearch.state import (
     get_coverage_atlas,
     get_learned_scores,
     get_beta,
-    get_line_preference,
-    get_min_precision,
     line_knobs,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
     set_beta,
-    set_min_precision,
     snapshot_medias,
     vote_region_boxes,
 )
@@ -84,7 +78,7 @@ from vtscore.concurrency.progress import sort_progress, update_sort_progress
 sorting_bp = Blueprint(
     "sorting",
     __name__,
-    description="Text / example / learned sort, votes, precision floor, safe-thresholds, coverage atlas.",
+    description="Text / example / learned sort, votes, balance, safe-thresholds, coverage atlas.",
 )
 
 # Text-sort proceeds in three phases: load the embedding model, embed the text
@@ -304,7 +298,6 @@ def _learned_sort_done_payload(job) -> dict:
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
         "acq_threshold": result.get("acq_threshold"),
-        "floor": result.get("floor"),
         "balance": result.get("balance"),
         "sort_token": result.get("sort_token"),
         "total": result.get("total"),
@@ -339,7 +332,7 @@ def learned_sort(body: dict):
     :func:`learned_sort_result` until ``status == "done"``.
 
     A small signature cache short-circuits the no-op case: when the votes,
-    detector, floor and thresholding settings are unchanged from the
+    detector, balance and thresholding settings are unchanged from the
     most recent successful run, the previous result is returned directly.
 
     Tests can pass ``{"wait": true}`` in the body to block until the job
@@ -354,7 +347,6 @@ def learned_sort(body: dict):
     from vtscore.state.core import (
         detector_acquisition_threshold,
         detector_balance_state,
-        detector_floor_state,
         detector_line_inclusion,
         get_active_context,
         get_active_detector_context,
@@ -379,8 +371,7 @@ def learned_sort(body: dict):
 
     _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
-    knobs = line_knobs()  # which preference draws the line (#4413)
-    min_precision_value, beta_value = knobs["min_precision"], knobs["beta"]
+    beta_value = line_knobs()["beta"]  # the balance the line is drawn at (#4413)
     calibrate_count_value = get_calibrate_count()
     calibration_fraction_value = get_calibration_fraction()
     region_boxes_snapshot = dict(vote_region_boxes)
@@ -395,7 +386,6 @@ def learned_sort(body: dict):
         region_boxes_snapshot=region_boxes_snapshot,
         calibrate_count_value=calibrate_count_value,
         calibration_fraction_value=calibration_fraction_value,
-        min_precision_value=min_precision_value,
         beta_value=beta_value,
     )
 
@@ -423,22 +413,19 @@ def learned_sort(body: dict):
             region_boxes_snapshot=region_boxes_snapshot,
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
-            min_precision_value=min_precision_value,
             beta_value=beta_value,
         )
         # The acquisition cut is read *inside* the job's dataset/detector
         # context, after training parked the fitted estimator on ``det_ctx`` -
         # this is the only sort with a detector behind it, so the only one that
         # carries one.  It sits four inclusion steps stricter than the line:
-        # under a promised floor no inclusion drew that line, so none is passed
-        # and it is derived from the line itself (#4245).
-        line_incl = detector_line_inclusion(det_ctx, min_precision_value, beta_value)
+        # under a balance no inclusion drew that line, so none is passed and it
+        # is derived from the line itself (#4245).
+        line_incl = detector_line_inclusion(det_ctx, beta_value)
         acq = detector_acquisition_threshold(det_ctx, line_incl, beta=beta_value)
-        # What the floor and the balance say about the line ride with it
-        # (#4247, #4413); the preference that drew it is the one the knobs name.
-        floor = detector_floor_state(det_ctx, min_precision_value)
-        balance = detector_balance_state(det_ctx, get_beta() if beta_value is None else beta_value)
-        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), floor=floor, balance=balance)
+        # What the balance says about the line rides with it (#4247, #4413).
+        balance = detector_balance_state(det_ctx, beta_value)
+        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4), balance=balance)
 
     job = learned_sort_jobs.start(
         signature,
@@ -585,56 +572,6 @@ def add_textsort_suggestion_route(body: dict):
     return {"ok": True}
 
 
-@sorting_bp.route("/api/min-precision", methods=["GET"])
-@sorting_bp.doc(deprecated=True)
-@sorting_bp.response(200, MinPrecisionResponseSchema)
-def get_min_precision_route():
-    """Deprecated (#4413): get the active detector's precision floor, its state (unchecked / confirmed / short), and the line it draws.
-
-    The floor draws the line only under ``line_preference: "floor"`` (``PUT
-    /api/settings``); the balance (``/api/balance``) is the preference since
-    #4413.  Kept for one release.
-    """
-    return _min_precision_payload()
-
-
-@sorting_bp.route("/api/min-precision", methods=["POST"])
-@sorting_bp.doc(deprecated=True)
-@sorting_bp.arguments(MinPrecisionRequestSchema)
-@sorting_bp.response(200, MinPrecisionResponseSchema)
-def set_min_precision_route(body: dict):
-    """Deprecated (#4413): set the precision floor, a fraction clamped to ``[0.01, 1]``.
-
-    The floor is the preference only under ``line_preference: "floor"``
-    (``PUT /api/settings``); ``/api/balance`` is the control since #4413, and
-    this route goes next release.  Under the floor it is a pure cutoff knob:
-    the active detector's line moves to the set the new floor keeps (no
-    retrain) and, in Find mode, the unverified items re-split over the frozen
-    scores.  The new line comes back in the same round trip, with the floor's
-    state: ``unchecked`` until a spot check runs at this floor
-    (``/api/precision-check``), then ``confirmed`` or ``short`` with the
-    check's likely range.  Under the balance the value is stored and draws
-    nothing.  Every detector has a floor, so ``null`` is refused.
-    """
-    # The clamp is not spelled out here: ``settings.validate_min_precision`` is
-    # generated from the bound declared once on ``UserSettings.min_precision``,
-    # so this endpoint and ``PUT /api/settings`` cannot disagree about the
-    # range (issue #3416).  The schema admits any number (``fields.Raw`` plus a
-    # numeric check), so the value is coerced to a float first.
-    #
-    # This note stays a comment rather than joining the docstring above:
-    # flask-smorest publishes the docstring as the endpoint's OpenAPI
-    # ``description``, and internal wiring is not part of the contract.
-    from vtsearch import settings  # noqa: PLC0415
-
-    try:
-        value = settings.validate_min_precision(float(body["min_precision"]))
-    except (TypeError, ValueError) as exc:
-        abort(400, message=str(exc))
-    set_min_precision(value)
-    return _min_precision_payload()
-
-
 @sorting_bp.route("/api/balance", methods=["GET"])
 @sorting_bp.response(200, BalanceResponseSchema)
 def get_balance_route():
@@ -648,15 +585,25 @@ def get_balance_route():
 def set_balance_route(body: dict):
     """Set the balance, F-beta's beta, clamped to ``[0.25, 4]`` (#4413).
 
-    A pure cutoff knob: under the balance preference the active detector's
-    line moves to the set the new beta keeps (no retrain) and, in Find mode,
-    the unverified items re-split; under the floor preference the value is
-    stored and draws nothing until the preference is switched.
+    A pure cutoff knob: the active detector's line moves to the set the new
+    beta keeps (no retrain) and, in Find mode, the unverified items re-split
+    over the frozen scores.  The new line comes back in the same round trip,
+    with the balance's state: ``unchecked`` until a spot check runs at this
+    beta (``/api/precision-check``), then ``checked`` with the check's likely
+    ranges.
     """
+    # The clamp is not spelled out here: ``settings.validate_beta`` is
+    # generated from the bound declared once on ``UserSettings.beta``, so this
+    # endpoint and ``PUT /api/settings`` cannot disagree about the range
+    # (issue #3416).
+    #
+    # This note stays a comment rather than joining the docstring above:
+    # flask-smorest publishes the docstring as the endpoint's OpenAPI
+    # ``description``, and internal wiring is not part of the contract.
     from vtsearch import settings  # noqa: PLC0415
 
     try:
-        value = settings.validate_beta(float(body["beta"]))
+        value = settings.validate_beta(body["beta"])
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
     set_beta(value)
@@ -669,20 +616,8 @@ def _balance_payload() -> dict:
 
     det_ctx = get_active_detector_context()
     threshold = _active_detector_threshold()
-    state = detector_balance_state(det_ctx, get_beta())
-    ranking = None if det_ctx is _empty_detector_context else det_ctx.line_ranking
-    n_returned = ranking.above(threshold) if ranking is not None and threshold is not None else None
-    return {**state, "threshold": threshold, "n_returned": n_returned, "line_preference": get_line_preference()}
-
-
-def _min_precision_payload() -> dict:
-    """The ``/api/min-precision`` response for the active detector."""
-    from vtscore.state.core import _empty_detector_context, detector_floor_state, get_active_detector_context
-
-    det_ctx = get_active_detector_context()
-    threshold = _active_detector_threshold()
-    # The app always sets a floor, so the state is never ``None`` here.
-    state = detector_floor_state(det_ctx, get_min_precision()) or {}
+    # The app always sets a balance, so the state is never ``None`` here.
+    state = detector_balance_state(det_ctx, get_beta()) or {}
     ranking = None if det_ctx is _empty_detector_context else det_ctx.line_ranking
     n_returned = ranking.above(threshold) if ranking is not None and threshold is not None else None
     return {**state, "threshold": threshold, "n_returned": n_returned}

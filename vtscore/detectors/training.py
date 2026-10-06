@@ -179,28 +179,6 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
     return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
 
 
-def _preference_line(
-    ranking: Any, det_ctx: Any, min_precision: float | None, beta: float | None, labels: "Mapping[int, bool] | None"
-) -> float | None:
-    """The line the user's preference draws over *ranking*, or ``None`` when neither preference is set.
-
-    Under a balance (#4413) the set the finished F-beta walk ended on, else
-    the mixture's F-beta argmax under the balance's cap; under a floor
-    (#4272, #4389) the set the finished walk ended on, else the smaller of the
-    schedule's count and the mixture's P crossing.  *labels* anchor the
-    mixture: the same votes the fold-anchored cut anchors on.  The fit is
-    memoised on the ranking, so the re-cut and the state read it back.
-    """
-    from vtscore.training.thresholds import balance_line, fbeta_count, floor_line, mixture_count  # noqa: PLC0415
-
-    check = det_ctx.precision_check if det_ctx is not None else None
-    if beta is not None:
-        return balance_line(ranking, beta, check, proposal=fbeta_count(ranking, beta, labels or {}))
-    if min_precision is not None:
-        return floor_line(ranking, min_precision, check, proposal=mixture_count(ranking, min_precision, labels or {}))
-    return None
-
-
 def _labels_line(
     folds: Any,
     final_scores: list[float],
@@ -242,7 +220,6 @@ def _fused_threshold(
     det_ctx: Any = None,
     final_ids: list[int] | None = None,
     voted_ids: "set[int] | None" = None,
-    min_precision: float | None = None,
     labels: "Mapping[int, bool] | None" = None,
     beta: float | None = None,
 ) -> float:
@@ -303,20 +280,21 @@ def _fused_threshold(
     pure-GMM branch fed it.
 
     When *det_ctx* is given, the fitted estimator is parked on
-    ``det_ctx.anchored_cut_cache`` so a floor change can re-cut it without
+    ``det_ctx.anchored_cut_cache`` so a balance change can re-cut it without
     refitting or re-scoring anything (see
     :func:`vtscore.state.core.recompute_detector_thresholds`).
 
-    **The line is drawn at an operating point.**  Under a precision floor
-    *min_precision* (the app's case, #4245) **the line keeps a set** (#4272):
-    the top *count* unvoted items of the haystack this final model scored,
-    where *count* is the set the detector's last spot check ended on, or the
-    floor's unchecked starting candidate before any check
-    (:func:`~vtscore.training.thresholds.floor_line`, the rule the re-cut and
-    the eval harness's default arm share).  The ranking is parked on
-    ``det_ctx.line_ranking`` so a floor change re-cuts, and a spot check draws
-    its candidate, without a retrain.  With no floor (#4269, a library
-    caller's choice) the line is the fold-anchored cut at Inclusion 0 through
+    **The line is drawn at an operating point.**  Under a balance *beta*
+    (the app's case, #4413) the line is the labels' line (#4452,
+    :func:`_labels_line`): the class model the calibration folds' held-out
+    votes imply, cut where the expected F-beta peaks at the prevalence it
+    estimates on the haystack this final model scored, parked on
+    ``det_ctx.labels_line`` so a balance change re-cuts it without a retrain.
+    The ranking of that haystack, voted items marked, is parked on
+    ``det_ctx.line_ranking``: the balance's state counts what the line keeps
+    there (#4272), and a spot check draws its bands from it.  With no class
+    model (too few votes, one class) or no balance (#4269, a library caller's
+    choice) the line is the fold-anchored cut at Inclusion 0 through
     :func:`~vtscore.training.thresholds.reporting_line`, and with no fitted cut
     at all the schedule blend answers as it always has.
 
@@ -400,16 +378,11 @@ def _fused_threshold(
             ",".join(str(i) for i in cut.fold_iterations),
         )
 
-    # Fitted on every retrain, so a later switch to the balance re-cuts it
-    # without a retrain; drawn only under the balance.
+    # Fitted on every retrain, so a later change of balance re-cuts it without
+    # a retrain (``recut_detector_threshold``); drawn only when a balance is set.
     labels_kept = _labels_line(folds, final_scores, final_ids, labels, beta if beta is not None else 1.0, det_ctx)
-    if beta is not None:
-        if labels_kept is not None:
-            return labels_kept
-    else:
-        kept = _preference_line(ranking, det_ctx, min_precision, beta, labels)
-        if kept is not None:
-            return kept
+    if beta is not None and labels_kept is not None:
+        return labels_kept
     line = reporting_line(cut, None, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=None)
     if line.threshold is not None:
         return line.threshold
@@ -569,13 +542,11 @@ def train_and_threshold(
        Without a *snap* there is no haystack to fuse and the cross-calibration
        cut ships alone.
 
-    The precision floor is read from ``get_min_precision()``, which resolves to
-    the *active detector context's* floor (seeded from the user's settings the
-    first time it's read for a detector).  Both Train and Find therefore cut at
-    the same per-detector floor within a session.  Under a floor the line
-    keeps the set the floor keeps - the top *count* unvoted items of the
-    haystack (#4272); with no floor it is the Inclusion 0 cut (see
-    :func:`_fused_threshold`).
+    The balance is read from ``line_knobs()``, which resolves to the *active
+    detector context's* beta (seeded from the user's settings the first time
+    it's read for a detector).  Both Train and Find therefore cut at the same
+    per-detector balance within a session.  The line is the labels' line at
+    that balance (#4413, #4452; see :func:`_fused_threshold`).
 
     Args:
         X_list: Embedding vectors (list of numpy arrays).
@@ -654,7 +625,6 @@ def train_and_threshold(
     from vtscore.state import (
         get_calibrate_count,
         get_calibration_fraction,
-        get_min_precision,  # noqa: F401
         line_knobs,
     )
     from vtscore.training import (
@@ -688,7 +658,7 @@ def train_and_threshold(
     hidden_dim = LINEAR_SVM_HEAD
 
     knobs = line_knobs()  # which preference draws the line (#4413)
-    min_precision, beta = knobs["min_precision"], knobs["beta"]
+    beta = knobs["beta"]
     # The user's persisted split wins; unset resolves to the per-space
     # production default for this detector's embedder (issue #3287).
     calibration_fraction = resolve_calibration_fraction(get_calibration_fraction(), embedder_name)
@@ -702,7 +672,7 @@ def train_and_threshold(
     if det_ctx is not None:
         # Cache the K folds on the context so a re-cut can re-derive the cutoff
         # without a no-op (the find-label / detector-load paths land here;
-        # without the cache a floor change can't move the line).
+        # without the cache a balance change can't move the line).
         folds = calibration_folds_cached(
             X_list,
             y_list,
@@ -781,13 +751,12 @@ def train_and_threshold(
             det_ctx=det_ctx,
             final_ids=all_ids,
             voted_ids=voted_ids,
-            min_precision=min_precision,
             labels=labels,
             beta=beta,
         )
     elif det_ctx is not None:
         # Safe thresholds off: no population estimator to re-cut on a slide,
-        # and no ranking for a floor to keep a set of.
+        # and no ranking for a balance to keep a set of.
         det_ctx.anchored_cut_cache = None
         det_ctx.line_ranking = None
         det_ctx.gate_passed = None
@@ -1329,7 +1298,6 @@ def _train_and_score_xy(
     score_rows: dict | None = None,
     voted_ids: "set[int] | None" = None,
     rows: ScoringRows | None = None,
-    min_precision: float | None = None,
     labels: "Mapping[int, bool] | None" = None,
     beta: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
@@ -1368,7 +1336,7 @@ def _train_and_score_xy(
     (its cache is keyed to the *active* dataset context).  Without it each
     detector would restack the corpus.
 
-    *min_precision* is the operating point's floor (``None``: the line is the
+    *beta* is the operating point's balance (``None``: the line is the
     Inclusion 0 cut); see :func:`_fused_threshold`.
     """
     import torch  # noqa: PLC0415
@@ -1467,7 +1435,6 @@ def _train_and_score_xy(
         det_ctx=det_ctx,
         final_ids=all_ids,
         voted_ids=voted_ids,
-        min_precision=min_precision,
         labels=labels,
         beta=beta,
     )
@@ -1487,7 +1454,6 @@ def train_and_score(
     calibration_fraction: float | None = None,
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
     det_ctx: Any = None,
-    min_precision: float | None = None,
     beta: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on voted media embeddings and score every media.
@@ -1505,7 +1471,7 @@ def train_and_score(
         inclusion_value: Deprecated (#4269): Inclusion is no longer a user
             preference.  Leave it unset; ``0`` is accepted with a
             ``DeprecationWarning`` and any other value raises ``ValueError``.
-            Set *min_precision* to choose where the line goes.
+            Set *beta* to choose where the line goes.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for calibration
@@ -1521,12 +1487,10 @@ def train_and_score(
             full-image vector when the media lacks a patch grid (legacy
             datasets, single-vector embedders) or the box is missing.
         det_ctx: The detector context to cache the calibration folds and the
-            fitted estimators on.  Its ``vote_provenance`` also decides which
-            votes may calibrate a precision floor; without a context every vote
-            may.
-        min_precision: The precision floor to cut at, in ``(0, 1]``, or
-            ``None`` (the default) for no floor: the Inclusion 0 cut.  Under a
-            floor the line keeps the set the floor keeps (#4272; see
+            fitted estimators on.
+        beta: The balance to cut at, F-beta's beta in ``[0.25, 4]``, or
+            ``None`` (the default) for no balance: the Inclusion 0 cut.  Under
+            a balance the line keeps the set the balance keeps (#4413; see
             :func:`_fused_threshold`).
 
     Returns:
@@ -1557,7 +1521,6 @@ def train_and_score(
         groups=groups,
         score_rows=score_rows,
         voted_ids=set(good_votes) | set(bad_votes),
-        min_precision=min_precision,
         labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
         beta=beta,
     )

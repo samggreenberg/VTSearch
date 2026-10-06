@@ -241,37 +241,22 @@ def probe(C: Any) -> list[str]:
     if C.OPENING_DIVERSITY is not None:
         rows.append(("opening_diversity", C.OPENING_DIVERSITY, "<unset> = the app's opening, no diversity pass"))
 
-    # The preference the line is drawn at (#4245, #4413).  Neither set is the app's
-    # default; a beta leaves the floor unused (`resolve_line_knobs`), so a floor
-    # beside a beta is reported, not flagged.
-    def preference(line):
-        floor, beta = line
-        if beta is not None:
-            return "the balance at beta %g" % beta
-        return "the floor at %g" % floor if floor is not None else "the Inclusion arm"
+    # The balance the line is drawn at (#4413).  Unset is the app's default;
+    # the precision floor went in #4421 (experiment_config refuses its knob).
+    def preference(beta):
+        return "the balance at beta %g" % beta if beta is not None else "the Inclusion arm"
 
-    shipped_line = T.resolve_line_knobs(None, None)
-    shipped_pref = "<unset> = the app's default preference, %s" % preference(shipped_line)
-    run_line = shipped_line
+    shipped_beta = T.resolve_line_knobs(None)
+    shipped_pref = "<unset> = the app's default preference, %s" % preference(shipped_beta)
+    run_beta = shipped_beta
     if C.BETA is not None:
         try:
-            run_line = T.resolve_line_knobs(None, C.BETA)
+            run_beta = T.resolve_line_knobs(C.BETA)
         except ValueError as exc:
             refuse("beta", "CALIB_BETA", exc)
         else:
-            if run_line != shipped_line:
+            if run_beta != shipped_beta:
                 rows.append(("beta", env("CALIB_BETA") or str(C.BETA), shipped_pref))
-        if C.MIN_PRECISION is not None:
-            skipped.append("min_precision (CALIB_BETA is set, and a beta leaves the floor unused)")
-    elif C.MIN_PRECISION is not None:
-        try:
-            run_line = T.resolve_line_knobs(C.MIN_PRECISION, None)
-        except ValueError as exc:
-            refuse("min_precision", "CALIB_MIN_PRECISION", exc)
-        else:
-            if run_line != shipped_line:
-                rows.append(("min_precision", env("CALIB_MIN_PRECISION") or str(C.MIN_PRECISION), shipped_pref))
-    run_beta = run_line[1]
 
     # The check's shape (#4427): the app's is `check_shape` at the run's own beta,
     # so a study sweeping beta is not also made to declare a shape it left alone.

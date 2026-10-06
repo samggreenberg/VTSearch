@@ -60,12 +60,14 @@ and cut at any inclusion; :class:`PrecisionFloorEstimate` holds one detector's
 inputs and fits the curve the first time a floor is asked for.
 
 **The app no longer builds this estimate.**  It stopped drawing a detector's
-line in #4272: under a floor the line keeps a set that a spot check measures
-(:func:`~vtscore.training.thresholds.floor_line`).  The Find Stats curve, its
-last reader, went in #4360, and a retrain stopped building and parking it in
-#4362.  The estimator stays as public library API, which the calibration
-studies under ``scripts/experiments/calibration/`` still call.  With no floor,
-or no ranking to keep a set of, the line is the Inclusion 0 cut through
+line in #4272, when the precision floor's line became a set a spot check
+measures; the floor itself gave way to the F-beta balance in #4413, whose line
+also keeps a set (:func:`~vtscore.training.thresholds.balance_line`).  The
+Find Stats curve, the estimate's last reader, went in #4360, and a retrain
+stopped building and parking it in #4362.  The estimator stays as public
+library API, which the calibration studies under
+``scripts/experiments/calibration/`` still call.  With no balance, or no
+ranking to keep a set of, the line is the Inclusion 0 cut through
 :func:`reporting_line`, shared by the app and the eval harness's default arm so
 the two cannot disagree about it.
 
@@ -162,37 +164,6 @@ class PrecisionFloorCut:
     n_returned: int
     estimated_precision: float | None
     calibration_positives: int
-
-
-#: How a caller whose ``None`` already means "the shipped default" spells *no
-#: floor* - the eval harness's arm knob, where ``None`` is the default arm.
-NO_PRECISION_FLOOR = "off"
-
-
-def resolve_min_precision(min_precision: float | str | None = None) -> float | None:
-    """The floor an eval arm cuts at: ``None`` is the app's default, ``"off"`` is no floor.
-
-    The three-state contract :func:`~vtscore.training.thresholds.resolve_exclusion_floor`
-    follows.  ``None`` - what the harness's default arm passes - resolves to
-    :data:`~vtscore.training.thresholds.DEFAULT_MIN_PRECISION`, the value an
-    unset user setting resolves to in the app, so the default arm cuts where a
-    live detector does.  :data:`NO_PRECISION_FLOOR` is the Inclusion-knob arm
-    (``min_precision=None`` in the app's own vocabulary), and a number pins a
-    floor, validated to ``(0, 1]``.
-    """
-    if min_precision is None:
-        from vtscore.config.runtime import DEFAULT_MIN_PRECISION  # noqa: PLC0415
-
-        return DEFAULT_MIN_PRECISION
-    if min_precision == NO_PRECISION_FLOOR:
-        return None
-    if isinstance(min_precision, str) or isinstance(min_precision, bool):
-        raise ValueError(
-            f"min_precision must be a number in (0, 1], None or {NO_PRECISION_FLOOR!r}; got {min_precision!r}"
-        )
-    floor = float(min_precision)
-    _check_floor(floor)
-    return floor
 
 
 def _check_floor(floor: float) -> None:
@@ -698,9 +669,9 @@ def reporting_line(
     (:func:`vtscore.detectors.training._fused_threshold`), its no-refit re-cut
     (:func:`vtscore.state.core.recut_detector_threshold`) and the eval
     harness's default arm, so the three cannot drift apart.  All three pass
-    ``min_precision=None`` since #4272: under a floor they draw the set the
-    floor keeps (:func:`~vtscore.training.thresholds.floor_line`), and come
-    here only when there is no ranking to keep a set of.  The two floor
+    ``min_precision=None``: under a balance they draw the set the balance
+    keeps (:func:`~vtscore.training.thresholds.balance_line`), and come here
+    only when there is no balance or no ranking to keep a set of.  The two floor
     branches below are the #4220 estimator's own line, kept as library API.
 
     * *min_precision* ``None``: no floor, and the line is

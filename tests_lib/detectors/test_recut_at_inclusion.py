@@ -64,9 +64,8 @@ class TestARecutReadsTheAnchoredEstimator:
         assert recut is not None and abs(recut - raw_xcal) > 1e-9
 
     def test_the_recut_at_inclusion_zero_is_the_trained_line(self):
-        """With no floor the trained line is the Inclusion 0 cut, so a re-cut there reproduces it."""
+        """With no balance the trained line is the Inclusion 0 cut, so a re-cut there reproduces it."""
         det_ctx, _results, threshold = _trained(7, range(500, 520), detector_id="det-recut-zero")
-        assert det_ctx.min_precision is None
         assert recut_detector_threshold(det_ctx, 0) == threshold
 
     def test_the_recut_is_monotone_and_moves_the_admitted_set(self):

@@ -369,8 +369,7 @@ not list every commit. Use `git log` for the full history.
   move a floored line. Clear the floor (`POST /api/min-precision` with `null`,
   or `min_precision: null` in `PUT /api/settings`) to get the stepper back. The
   on-screen control that replaces the stepper arrives in #4246. New endpoint:
-  `GET|POST /api/min-precision`; see
-  [the API reference](docs/api/labeling.md#get--set-the-precision-floor).
+  `GET|POST /api/min-precision` (removed with the floor, #4421).
 
 - **An unpromised line says so** (issue #4247). When a detector can't yet
   promise its precision floor - too little evidence, or no cut on the
@@ -383,8 +382,7 @@ not list every commit. Use `git log` for the full history.
   record that it was unpromised, in the log and as a `floor` entry beside
   each detector's `threshold`. Every response that carries a detector's
   line (the learned sort, `/api/find-label`, `/api/auto-detect`) now
-  carries that `floor` too; see
-  [the floor state](docs/api/labeling.md#the-floor-state).
+  carries that `floor` too (replaced by `balance`, #4413, #4421).
 
 - **Step-by-step how-to pages, readable in the Help panel.** Seventeen new
   pages under `docs/user/howto/` each walk through one task click by click,
@@ -421,6 +419,22 @@ not list every commit. Use `git log` for the full history.
   a missing detector still fails, now saying which flag would create it.
   Pipeline files take `import_labels.create: true` and
   `import_labels.media_type`.
+
+### Removed
+
+- **The precision floor** (issue #4421). The precision/recall balance
+  (#4413) is the only preference the line is drawn at, so the floor it
+  replaced goes now rather than a release later. Removed: the `min_precision`
+  and `line_preference` settings (a saved settings file that still holds them
+  loads as before and the keys are ignored), `GET|POST /api/min-precision`,
+  and the `floor` object every response that carries a detector's line sent
+  beside `balance` - the learned sort's result, `/api/find-label`,
+  `/api/find/stats`, the auto-detect, AutoRun and command-line results, and
+  every `/api/precision-check` verb. Those carry `balance` alone, and the spot
+  check runs only the balance's walk (its `check` object has no
+  `min_precision`, and its status is `running`, `checked` or `cancelled`).
+  `GET|POST /api/balance` no longer reports `line_preference`, and the
+  OpenAPI spec now types `POST /api/balance`'s `beta` as a number.
 
 ### Fixed
 

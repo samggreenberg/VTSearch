@@ -87,10 +87,9 @@ keyed by exporter name), `projection_n_neighbors` (`int`,
 `PROJECTION_MIN_DIST`), `signpost_captioner` (`dict[str, bool]`, `{}`),
 `signpost_vocab` (`dict[str, list[str]]`, `{}`), `hide_ingest_eta`
 (`bool`, `False` - when `True`, ingest progress bars publish no ETA; see
-[concurrency.md](concurrency.md#progresstracker)), and `min_precision`
-(`float | None`, `DEFAULT_MIN_PRECISION` - the user's precision floor, which
-seeds each detector's own; `None` is no floor, and the line is the Inclusion 0
-cut).
+[concurrency.md](concurrency.md#progresstracker)), and `beta` (`float`,
+`DEFAULT_BETA` = `1.0` - the user's balance, F-beta's beta, which seeds each
+detector's own; see [state.md](state.md#setting-persistence-hooks)).
 
 `inclusion` is **deprecated** (#4269): Inclusion is no longer a user
 preference, and nothing reads the field. It defaults to `None` ("not given");
@@ -204,7 +203,7 @@ when one is in scope). Tests rely on this: they override
 | `PROJECTION_DEFAULTS_BY_EMBEDDER` | dict | - | Per-embedder `(n_neighbors, min_dist)` overrides of the globals (e.g. `"siglip": (10, 0.05)`). |
 | `PROJECTION_COMPACT_DEFAULT` | `False` | - | Default for layout compaction.                                                                                |
 | `PROJECTION_SEED`        | `None`  | `VTSEARCH_PROJECTION_SEED`    | Seed for the browse projection's UMAP fit. Unset is an unseeded, parallel fit; an integer gives the same layout (and signposts) every time, fit single-threaded. |
-| `SPOT_CHECK_SEED`        | `None`  | `VTSEARCH_SPOT_CHECK_SEED`    | Seed the app's route passes to `SpotCheck.start` for the precision floor's spot check. Unset draws fresh picks every check; an integer deals the same picks from the same candidate every time. |
+| `SPOT_CHECK_SEED`        | `None`  | `VTSEARCH_SPOT_CHECK_SEED`    | Seed the app's route passes to `SpotCheck.start_balance` for the line's spot check. Unset draws fresh picks every check; an integer deals the same picks from the same candidate every time. |
 
 ### `allocated_cpus()` / `resolve_decode_workers()`
 
