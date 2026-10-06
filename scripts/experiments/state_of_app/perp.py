@@ -237,6 +237,8 @@ def _objective_rows(runs: dict[float, Path]) -> pd.DataFrame:
 
 #: The returned set's path through a session (#4519): these clicks, then after the end-of-run check.
 PATH_CLICKS = (25, 50, 100, 150)
+#: The path's first point: the text sort under its own blind GMM cut, before any vote.
+TYPED_QUERY = "typed query"
 
 
 def _path_rows(runs: dict[float, Path]) -> pd.DataFrame:
@@ -245,11 +247,16 @@ def _path_rows(runs: dict[float, Path]) -> pd.DataFrame:
 
     Means over the trained runs that had a line by that click; ``returned`` is the median size.  A run
     analyzed before #4519 has no per-click precision or recall, and its rows read NaN.
+
+    The path starts at the typed query (owner, 2026-10-06: Photo Finish's notch at click 0): the text sort
+    cut at its own blind GMM line, the set a user gets before voting, read off ``balances.csv`` (the
+    ``app line`` rule at the ``text`` point) over the same trained runs.
     """
     rows = []
     for beta, d in sorted(runs.items()):
         c = pd.read_csv(d / "cells.csv")
         c = c[~c["never_trained"].astype(bool)]
+        rows.append(_typed_query_row(d, beta))
         points = [(str(t), f"_{t}") for t in PATH_CLICKS] + [("after the check", "_final")]
         for point, suffix in points:
             col = lambda m, s=suffix: c.get(f"thr_{m}{s}", pd.Series(np.nan, index=c.index))  # noqa: E731
@@ -266,10 +273,30 @@ def _path_rows(runs: dict[float, Path]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _typed_query_row(d: Path, beta: float) -> dict:
+    """The typed query's own returned set at *beta*: the text sort under its blind GMM cut, trained runs."""
+    row = {"beta": f"{beta:g}", "point": TYPED_QUERY}
+    bal, _ = _by_rule(d, beta)
+    bal = bal[(bal["rule"] == "app line") & ~bal["never_trained"].astype(bool)]
+    if bal.empty:
+        return {**row, "precision": np.nan, "recall": np.nan, "fbeta": np.nan, "returned, median": np.nan, "runs": 0}
+    return {
+        **row,
+        "precision": bal["precision"].mean(),
+        "recall": bal["recall"].mean(),
+        "fbeta": bal["fbeta"].mean(),
+        "returned, median": bal["k"].median(),
+        "runs": len(bal),
+    }
+
+
 def figure_path(runs: dict[float, Path], out: Path) -> None:
     """``precision_recall_path.png`` (#4519): per beta, the returned set's (recall, precision) at each click of
     :data:`PATH_CLICKS`, joined in order, ending on the point after the check (✓)."""
+    # The typed query sits at precision ~0.01, recall ~0.9: off any useful scale, so the picture starts at
+    # the first click; the table and CSV carry it.
     rows = _path_rows(runs)
+    rows = rows[rows["point"] != TYPED_QUERY]
     fig, ax = plt.subplots(figsize=(5.6, 4.6), facecolor=SURFACE)
     for (beta, g), color in zip(rows.groupby("beta", sort=False), ("#2a6fdb", "#d9480f", "#2b8a3e", "#7048e8")):
         g = g.dropna(subset=["precision", "recall"])
@@ -354,8 +381,9 @@ def summary_balance(runs: dict[float, Path], out: Path) -> None:
         "",
         "## The returned set through the session",
         "",
-        "Per beta, the precision and recall of the same withheld set at 25, 50, 100 and 150 clicks and after "
-        "the check (#4519): the path a preset's returned set takes as the user clicks "
+        "Per beta, the precision and recall of the same withheld set from the typed query (the text sort at "
+        "its own blind GMM cut, before any vote), through 25, 50, 100 and 150 clicks, to after the check (#4519): "
+        "the path a preset's returned set takes as the user clicks "
         "(`precision_recall_path.png`, `precision_recall_path.csv`). Means over the trained runs with a line "
         "by that click; `returned` is the median size.",
         "",

@@ -17,7 +17,9 @@
      on the withheld images Find would search. -->
 
 <!-- **a** — Left: each line is scored at its own β, so again not a league
-     table between radios. After 150 clicks and the spot check: 0.74, 0.63
+     table between radios. They start at the same typed query as Photo
+     Finish's (the region path opens on the same text sort): 0.01, 0.02 and
+     0.15. After 150 clicks and the spot check: 0.74, 0.63
      and 0.72, about 0.1 above Photo Finish's 0.64, 0.53 and 0.60 at every
      radio, and already 0.58, 0.50 and 0.62 at 25 clicks. The check's 21 to
      30 picks add about +0.04 here, about twice what they add on the
