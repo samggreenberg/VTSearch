@@ -635,9 +635,11 @@ question for the eval, priced by #4523
   `class_model`.
 - `line_phase(test)` / `test.phase()` derives the phase from state
   (`PhaseReport`): `nothing` when the line keeps fewer items than a round;
-  `matches` until the precision range is at or under `budgets.matches_width`
-  once every band above the line has had a round (#4539), the bands above are
-  exhausted, or `budgets.matches_picks` is spent; `misses` until the walk ends (`exhausted`, or `dry_run` with no
+  `matches` until, once every band above the line has had a round (#4539,
+  #4560), the precision range is at or under `budgets.matches_width` or
+  `budgets.matches_picks` is spent, or until the bands above are exhausted.
+  A band above the line takes its prior from the picks in its neighbouring
+  bands (`POOL_RADIUS`, #4560); `misses` until the walk ends (`exhausted`, or `dry_run` with no
   class model), the recall range is under `budgets.misses_width` (with no
   class model only), or `budgets.misses_picks` is spent; then `done`. The
   stop reasons are `STOP_REASONS`, the phases `PHASES`. `LineBudgets`'

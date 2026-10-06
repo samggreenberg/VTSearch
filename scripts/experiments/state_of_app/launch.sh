@@ -33,14 +33,18 @@ CALIB="$HERE/../calibration"
 if [[ -n "${SOTA_FLOOR:-}" && -n "${SOTA_BETA:-}" ]]; then
   echo "set SOTA_FLOOR or SOTA_BETA, not both: one preference draws the line" >&2; exit 2
 fi
+# Either one is a preference the review runs on purpose, so it is declared to
+# preflight check 12 (launch_bands.sh passes no --diverges of its own).
 if [[ -n "${SOTA_FLOOR:-}" ]]; then
   export CALIB_MIN_PRECISION="$SOTA_FLOOR"
+  export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}min_precision"
   _PTAG="-p$(python3 -c "import sys; print(round(float(sys.argv[1]) * 100))" "$SOTA_FLOOR")"
 fi
 # The balance (#4413): SOTA_BETA=0.25|1|4, the app's presets (#4448), runs every
 # session at that F-beta balance (-b025, -b1, -b4); the review's sessions run once per beta.
 if [[ -n "${SOTA_BETA:-}" ]]; then
   export CALIB_BETA="$SOTA_BETA"
+  export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}beta"
   _PTAG="-b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$SOTA_BETA")"
 fi
 export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)${_PTAG:-}}"

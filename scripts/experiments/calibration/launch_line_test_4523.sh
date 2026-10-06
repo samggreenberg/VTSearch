@@ -80,6 +80,9 @@ arm_env() {  # arm = <world>-<betatag>, e.g. natural-b1, p0.001-b025, h0.05-b4
     b4) export CALIB_BETA=4 ;;
     *) echo "unknown beta tag '$tag'" >&2; exit 2 ;;
   esac
+  # Beta 1 is the app's default balance; the presets either side of it are the
+  # axis this study sweeps, so preflight check 12 has to see them declared.
+  [[ "$tag" != "b1" ]] && DIVERGES="${DIVERGES:+$DIVERGES,}beta"
   export CALIB_EXP="$BASE/$1" CALIB_RESULTS="$BASE/$1/results" CALIB_JOB_NAME="lt4523-$1"
   mkdir -p "$CALIB_EXP/logs" "$CALIB_RESULTS/cells"
 }

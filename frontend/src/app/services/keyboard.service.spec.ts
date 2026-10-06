@@ -313,5 +313,37 @@ describe('KeyboardService', () => {
       press('ArrowRight');
       expect(actions.map((a) => a.direction)).toEqual(['good']);
     });
+
+    // #4555: the Test autopilot's stage holds a claim with no centre panel on
+    // screen to start the shortcuts, and its keys did nothing.
+    it('takes the keys with nothing else listening, and listens no longer than the claim', () => {
+      const actions: KeyboardAction[] = [];
+      service.action$.subscribe((a) => actions.push(a));
+      const { votes, release } = claim();
+      press('ArrowRight');
+      expect(votes).toEqual(['good']);
+      release();
+      press('ArrowRight');
+      expect(votes).toEqual(['good']);
+      expect(actions).toEqual([]);
+    });
+
+    it('keeps the keys when the centre panel beside it stops the shortcuts', () => {
+      service.start();
+      const { votes } = claim();
+      service.stop();
+      press('ArrowLeft');
+      expect(votes).toEqual(['bad']);
+    });
+
+    it('leaves the shortcuts on for the centre panel when a claim is released', () => {
+      const actions: KeyboardAction[] = [];
+      service.action$.subscribe((a) => actions.push(a));
+      const { release } = claim();
+      service.start();
+      release();
+      press('ArrowRight');
+      expect(actions.map((a) => a.direction)).toEqual(['good']);
+    });
   });
 });
