@@ -129,6 +129,20 @@ JEFFREYS = 0.5
 POOLED_WEIGHT = float(CHECK_MIN_PICKS)
 
 
+#: How far the pool above the line reaches, in bands (#4560): ``None`` pools
+#: every band above the line (#4539); ``r`` pools only the bands within *r*
+#: of the band being drawn (itself excluded), falling back to the whole side
+#: when none of them has a pick.  One rate pooled across bands from 80% right
+#: at the top to 1% near a sparse line lifts the deep bands once the top ones
+#: are audited, and drags the top ones down when they are not.
+POOL_RADIUS: int | None = None
+
+#: Whether the matches phase's budget waits until every band above the line
+#: has had a round (#4560).  Without it the top bands of a big line are often
+#: never audited, and a preset inside them reads at the pool's mean.
+FIRST_PASS_BEFORE_BUDGET: bool = False
+
+
 def pooled_weight(depth: int, n_above: int) -> float:
     """What the pooled share is worth, in picks, to the band *depth* bands up from the line (0 holds the line).
 
@@ -628,10 +642,22 @@ class LineTest:
         self._cache.clear()
         self._counts.clear()
 
-    def _pooled_counts(self, extra: dict[int, tuple[int, int]] | None = None) -> tuple[int, int]:
-        """``(picks, right)`` over every band above the line, *extra*'s hypothetical picks included."""
+    def _pooled_counts(
+        self, extra: dict[int, tuple[int, int]] | None = None, near: int | None = None
+    ) -> tuple[int, int]:
+        """``(picks, right)`` over the bands above the line that pool for band *near*, *extra*'s picks included.
+
+        Every band above the line when *near* is ``None`` or :data:`POOL_RADIUS`
+        is; else the bands within the radius of *near*, *near* itself
+        excluded, or every band when none of those has a pick.
+        """
+        pool = list(self.above)
+        if near is not None and POOL_RADIUS is not None:
+            local = [b for b in pool if b.index != near and abs(b.index - near) <= POOL_RADIUS]
+            if self._pick_total(local, extra) > 0:
+                pool = local
         labelled = right = 0
-        for band in self.above:
+        for band in pool:
             _, n_lab, n_right = self.band_counts(band.index)
             if extra and band.index in extra:
                 n_lab += extra[band.index][0]
@@ -640,16 +666,25 @@ class LineTest:
             right += n_right
         return labelled, right
 
+    def _pick_total(self, bands: Sequence[Band], extra: dict[int, tuple[int, int]] | None) -> int:
+        return sum(
+            self.band_counts(b.index)[1] + (extra[b.index][0] if extra and b.index in extra else 0) for b in bands
+        )
+
     def _pooled_weight(self, b: int) -> float:
         """Band *b*'s pull toward the pool (:func:`pooled_weight`), counted in bands up from the line."""
         above = self.above
         return pooled_weight(len(above) - 1 - b, len(above))
 
     def _pooled_share(
-        self, rng: np.random.Generator, n: int, extra: dict[int, tuple[int, int]] | None = None
+        self,
+        rng: np.random.Generator,
+        n: int,
+        extra: dict[int, tuple[int, int]] | None = None,
+        near: int | None = None,
     ) -> np.ndarray:
-        """*n* draws of the pooled share right above the line: Jeffreys' prior on every pick above it."""
-        labelled, right = self._pooled_counts(extra)
+        """*n* draws of the pooled share right above the line: Jeffreys' prior on the pool's picks."""
+        labelled, right = self._pooled_counts(extra, near)
         return rng.beta(JEFFREYS + right, JEFFREYS + (labelled - right), size=n)
 
     def _band_draws(
@@ -683,7 +718,7 @@ class LineTest:
         c: float | np.ndarray
         if band.side == ABOVE:
             if pooled is None:
-                pooled = self._pooled_share(rng, n, None if extra is None else {b: extra})
+                pooled = self._pooled_share(rng, n, None if extra is None else {b: extra}, near=b)
             w = self._pooled_weight(b)
             a, c = MODEL_FLOOR + w * pooled, MODEL_FLOOR + w * (1.0 - pooled)
         elif self.posteriors is not None:
@@ -700,7 +735,9 @@ class LineTest:
     ) -> np.ndarray:
         """A ``(bands, n)`` matrix of per-band positive counts; unreached bands below the line are the model's point."""
         out = np.zeros((len(self._bands), n))
-        pooled = self._pooled_share(rng, n, extra)
+        # One pooled draw shared by every band keeps the draws joint; a local
+        # pool (POOL_RADIUS) is drawn per band instead.
+        pooled = self._pooled_share(rng, n, extra) if POOL_RADIUS is None else None
         for band in self._bands:
             if band.side == BELOW and not self.audited(band.index) and not (extra and band.index in extra):
                 out[band.index] = self.band_mass(band.index)
@@ -856,7 +893,7 @@ class LineTest:
         n, alpha, beta = self.budgets.draws, self.budgets.alpha, self.beta
         current = self._summarise(base, beta, alpha)[2].width
         # The round's predictive under the band's prior: the pooled share's mean at the band's weight (#4539).
-        pooled_lab, pooled_right = self._pooled_counts()
+        pooled_lab, pooled_right = self._pooled_counts(near=b)
         p_mean = (pooled_right + JEFFREYS) / (pooled_lab + 2.0 * JEFFREYS)
         w = self._pooled_weight(b)
         a = right + MODEL_FLOOR + w * p_mean
@@ -1057,11 +1094,12 @@ def line_phase(test: LineTest) -> PhaseReport:
     # has seen is read at the pool's mean, the line's average, and the
     # presets Lean the Threshold offers inside it read low (#4539, #4560).
     first_pass = all(test.audited(b.index) or test.exhausted(b.index) for b in test.above)
+    budget_open = first_pass or not FIRST_PASS_BEFORE_BUDGET
     if all(test.exhausted(b.index) for b in test.above):
         matches_stop = STOP_EXHAUSTED
     elif first_pass and est.precision.width <= budgets.matches_width + _EPS:
         matches_stop = STOP_WIDTH
-    elif first_pass and picks_above >= budgets.matches_picks:
+    elif budget_open and picks_above >= budgets.matches_picks:
         matches_stop = STOP_BUDGET
     if matches_stop is None:
         return PhaseReport(PHASE_MATCHES, None, None, est.precision.width, est.recall.width, picks_above, picks_below)
