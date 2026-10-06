@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -3362,11 +3362,13 @@ def simulate_voting_iterations(  # noqa: C901
                     {
                         "t": int(t),
                         "phase": check_phase if picks is not None else (flow.phase if flow is not None else ""),
-                        "scores": np.asarray(calibration[1], dtype=np.float32),
+                        # Full precision (#4523): the Test arm replays this snapshot, and a
+                        # float32 score or a rounded model moves its line and its tail.
+                        "scores": np.asarray(calibration[1], dtype=np.float64),
                         "labels": np.asarray(calibration[2], dtype=np.int8),
                         "train_threshold": float(threshold),
                         "beta": float(details["beta"]) if details.get("beta") is not None else float("nan"),
-                        "model": None if find_line is None else find_line.model.as_dict(),
+                        "model": None if find_line is None else asdict(find_line.model),
                     }
                 )
         else:
