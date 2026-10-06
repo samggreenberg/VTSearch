@@ -65,11 +65,15 @@ fi
 pip install --ignore-installed blinker -q
 
 # VTSBrowse signpost naming deps (see docs/plans/vtsbrowse-toponymy.md):
-# apricot-select's legacy setup.py needs the stdlib-distutils shim and must
-# precede the main requirements pass (it's declared in pyproject.toml);
+# apricot-select ships a legacy setup.py sdist and must precede the main
+# requirements pass (it's declared in pyproject.toml). Do NOT wrap it in
+# SETUPTOOLS_USE_DISTUTILS=stdlib, as scripts/install.sh explains: setuptools
+# >= 74 refuses to import with that value set, and Python >= 3.12 has no
+# stdlib distutils, so the build dies with "BackendUnavailable: Cannot import
+# 'setuptools.build_meta'" (it did on the Python 3.13 container).
 # toponymy goes in --no-deps because its transformers<5 pin would downgrade
 # the app's transformers and is empirically unnecessary for our usage.
-SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select -q
+pip install apricot-select -q
 pip install --no-deps "toponymy==0.5.2" -q
 
 # Install all dependencies + editable install via pyproject.toml
