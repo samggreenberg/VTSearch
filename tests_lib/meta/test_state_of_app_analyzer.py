@@ -611,11 +611,20 @@ def test_the_returned_sets_path_is_read_at_each_click_and_after_the_check(run, t
         check=True, capture_output=True, text=True,
     )  # fmt: skip
     path = pd.read_csv(out / "precision_recall_path.csv")
-    assert path["point"].astype(str).tolist() == ["25", "50", "100", "150", "after the check"]
+    assert path["point"].astype(str).tolist() == ["typed query", "25", "50", "100", "150", "after the check"]
     trained = cells[~cells["never_trained"].astype(bool)]
     end = path[path["point"] == "after the check"].iloc[0]
     assert end["precision"] == pytest.approx(trained["thr_precision_final"].mean())
     assert end["recall"] == pytest.approx(trained["thr_recall_final"].mean())
+    # The path starts at the typed query: the text sort under its own blind GMM cut (the app-line rule at the
+    # text point), over the same trained runs (owner, 2026-10-06: Photo Finish's notch at click 0).
+    bal = pd.read_csv(a / "balances.csv", dtype={"point": str})
+    text = bal[(bal["point"] == "text") & (bal["beta"].round(4) == 1.0) & ~bal["never_trained"].astype(bool)]
+    if "rule" in text:
+        text = text[text["rule"] == "app line"]
+    start = path[path["point"] == "typed query"].iloc[0]
+    assert start["fbeta"] == pytest.approx(text["fbeta"].mean())
+    assert start["precision"] == pytest.approx(text["precision"].mean())
 
 
 def test_final_is_the_last_ordinary_step_not_the_check(run) -> None:

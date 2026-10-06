@@ -12,20 +12,23 @@ F-beta at the sessions' own beta of the withheld images above the app's threshol
 
 ## The returned set through the session
 
-Per beta, the precision and recall of the same withheld set at 25, 50, 100 and 150 clicks and after the check (#4519): the path a preset's returned set takes as the user clicks (`precision_recall_path.png`, `precision_recall_path.csv`). Means over the trained runs with a line by that click; `returned` is the median size.
+Per beta, the precision and recall of the same withheld set from the typed query (the text sort at its own blind GMM cut, before any vote), through 25, 50, 100 and 150 clicks, to after the check (#4519): the path a preset's returned set takes as the user clicks (`precision_recall_path.png`, `precision_recall_path.csv`). Means over the trained runs with a line by that click; `returned` is the median size.
 
 | beta | point | precision | recall | fbeta | returned, median | runs |
 |---|---|---|---|---|---|---|
+| 0.25 | typed query | 0.011 | 0.922 | 0.011 | 4519.003 | 1403 |
 | 0.25 | 25 | 0.522 | 0.385 | 0.431 | 30.999 | 1256 |
 | 0.25 | 50 | 0.586 | 0.424 | 0.509 | 33.0 | 1327 |
 | 0.25 | 100 | 0.688 | 0.39 | 0.594 | 25.999 | 1356 |
 | 0.25 | 150 | 0.688 | 0.408 | 0.612 | 26.997 | 1403 |
 | 0.25 | after the check | 0.731 | 0.383 | 0.636 | 21.005 | 1403 |
+| 1 | typed query | 0.011 | 0.922 | 0.021 | 4519.003 | 1403 |
 | 1 | 25 | 0.406 | 0.51 | 0.335 | 53.5 | 1256 |
 | 1 | 50 | 0.496 | 0.554 | 0.418 | 45.999 | 1327 |
 | 1 | 100 | 0.582 | 0.527 | 0.486 | 41.998 | 1356 |
 | 1 | 150 | 0.565 | 0.536 | 0.504 | 44.004 | 1403 |
 | 1 | after the check | 0.597 | 0.523 | 0.526 | 43.995 | 1403 |
+| 4 | typed query | 0.011 | 0.922 | 0.152 | 4519.003 | 1403 |
 | 4 | 25 | 0.266 | 0.634 | 0.42 | 129.499 | 1256 |
 | 4 | 50 | 0.372 | 0.677 | 0.477 | 76.999 | 1327 |
 | 4 | 100 | 0.436 | 0.668 | 0.55 | 65.995 | 1356 |

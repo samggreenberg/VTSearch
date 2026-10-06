@@ -69,6 +69,11 @@ PHOTO_CLICKS = (25, 50, 100, 150)
 #: 0.04 of the set after the check on every radio, closer than a circle is wide, so
 #: they are dots on the path: a circle there would cover the check's ✓ (#4533's rule).
 PHOTO_CIRCLED = ("25", "50", "✓")
+#: The path's first point in `precision_recall_path.csv` (`perp.py`'s ``TYPED_QUERY``): the text sort under
+#: its own blind GMM cut, before any vote. The F panel starts every radio there, at click 0 (owner,
+#: 2026-10-06: "a text-sort (and GMM-thresh) notch at the far left for 0"); the precision-recall panel
+#: leaves it out, at precision ~0.01 and recall ~0.9, far off its scale.
+TYPED_QUERY = "typed query"
 #: The Region Photo review (#4534): the same harness and the same table, on the
 #: region path (DINOv3 patches, `max_patch`, opened on SigLIP's text sort).
 REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
@@ -127,6 +132,11 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
+    ("photos", 0.25, "text"): 0.01,
+    ("photos", 1.0, "text"): 0.02,
+    ("photos", 4.0, "text"): 0.15,
+    ("regions", 0.25, "text"): 0.01,
+    ("regions", 4.0, "text"): 0.15,
     ("regions", 0.25, "after"): 0.74,
     ("regions", 1.0, "after"): 0.63,
     ("regions", 4.0, "after"): 0.72,
@@ -191,7 +201,7 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
         for row in csv.DictReader(f):
             by.setdefault(float(row["beta"]), {})[row["point"]] = row
     points = [str(c) for c in PHOTO_CLICKS] + ["after the check"]
-    if set(by) != {0.25, 1.0, 4.0} or any(set(points) - set(by[b]) for b in by):
+    if set(by) != {0.25, 1.0, 4.0} or any(set(points + [TYPED_QUERY]) - set(by[b]) for b in by):
         raise SystemExit(f"make-sota-figs: {source} does not carry every radio at every point")
     out = {}
     for beta, rows in by.items():
@@ -205,6 +215,8 @@ def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
             for p in points
         ]
         out[beta] = {
+            # The typed query at click 0: the text sort under its own blind GMM cut (owner, 2026-10-06).
+            "text": float(rows[TYPED_QUERY]["fbeta"]),
             "clicks": list(PHOTO_CLICKS),
             "f": [float(rows[str(c)]["fbeta"]) for c in PHOTO_CLICKS],
             "after": float(rows["after the check"]["fbeta"]),
@@ -460,22 +472,27 @@ def photo_figure(
 ) -> Figure:
     """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
     fig = plt.figure(figsize=FIG_SIZE)
-    lines = {b: (data[b]["clicks"] + [PHOTO_CHECK_X], data[b]["f"] + [data[b]["after"]]) for b in data}
+    lines = {
+        b: ([0] + data[b]["clicks"] + [PHOTO_CHECK_X], [data[b]["text"]] + data[b]["f"] + [data[b]["after"]])
+        for b in data
+    }
 
-    def check_step(ax: plt.Axes, _ends: dict) -> None:
+    def ends_and_notch(ax: plt.Axes, _ends: dict) -> None:
         for beta, _label, _w in RADIOS:
             ax.plot([PHOTO_CHECK_X], [data[beta]["after"]], marker="o", markersize=8, color=INK, zorder=4)
+            # The notch: where every session starts, the typed query's own set.
+            ax.plot([0], [data[beta]["text"]], marker="o", markersize=8, color=INK, zorder=4, clip_on=False)
 
     ax = _f_panel(
         fig,
         lines,
         (0, PHOTO_CHECK_X + 4),
-        [25, 50, 100, 150, PHOTO_CHECK_X],
+        [0, 25, 50, 100, 150, PHOTO_CHECK_X],
         "Clicks, then the spot check",
         _floor(lines),
-        check_step,
+        ends_and_notch,
     )
-    ax.set_xticklabels(["25", "50", "100", "150", "✓"])
+    ax.set_xticklabels(["typed\nquery", "25", "50", "100", "150", "✓"])
     if stage >= 2:
         ticks = [t for t in (0.2, 0.4, 0.6, 0.8, 1.0) if pr_lim[0] - 1e-9 <= t <= pr_lim[1] + 1e-9]
         _pr_paths_panel(fig, data, pr_lim, ticks, PHOTO_GRID_STEP, circled)
