@@ -6,7 +6,9 @@ This is the procedure the **Dev2Main** Routine follows to promote `dev` to `main
 > **`main`**, not `dev`, and this runbook merges it. This is the one sanctioned
 > exception to CLAUDE.md's "never open or merge a PR into `main`" rule — it
 > applies solely to the release PR opened in step 5 and merged in step 8, and
-> only when running this runbook.
+> only when running this runbook. The Dev2Main Routine's prompt predates step 8
+> and names only the opening. That prompt says to follow this runbook, and
+> this runbook sanctions the merge too (owner, 2026-10-06).
 
 Work through the steps in order.
 
