@@ -14,7 +14,7 @@ import type { RecentSession } from '../generated/api-client/models/recent-sessio
  * Backed by ``/api/sessions/recent`` (per-user, persisted). The burger
  * menu subscribes to ``sessions$`` to render its "Recent sessions"
  * submenu; the active-context route guard calls ``bump()`` whenever
- * the user enters ``/label/:ds/:det`` or ``/find/:ds/:det``.
+ * the user enters ``/label/:ds/:det`` or ``/test/:ds/:det``.
  *
  * Bump failures are swallowed; the "recent" surface is a convenience,
  * not a correctness signal, so a transient backend error shouldn't

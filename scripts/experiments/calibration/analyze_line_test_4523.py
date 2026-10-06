@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Price Test mode's stop rule: the Test arm replayed over targets and budgets (#4523).
 
-Test mode (``docs/plans/test-mode.md`` §2) stops each phase when its range is
+Test mode (``vtscore/docs/packages/training.md``, *The test sample*) stops each phase when its range is
 narrower than a target, at a pick budget, or when its bands run out.  The
 plan's values (a precision width of 0.20, 40 picks a phase) are proposals;
 this prices them.  Every number here is a function of ``(the withheld half's

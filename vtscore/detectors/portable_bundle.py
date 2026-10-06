@@ -147,13 +147,13 @@ def _split_linear_weights(
 def embedding_dim_from_weights(weights: dict[str, list]) -> int:
     """Return the input embedding dimensionality of a serialized detector head.
 
-    Reads the first ``Linear`` layer's weight, whose second axis is the input
-    dimensionality for both the MLP (``[hidden, input_dim]``) and the linear
-    head (``[1, input_dim]``), so it is agnostic to the head's layer count.
+    Reads the first ``Linear`` layer's weight, whose last (second) axis is the
+    input dimensionality for both the MLP (``[hidden, input_dim]``) and the
+    linear head (``[1, input_dim]``), so it is agnostic to the head's layer count.
     """
     import numpy as np  # noqa: PLC0415
 
-    return int(np.asarray(weights["0.weight"], dtype=np.float32).shape[1])
+    return int(np.asarray(weights["0.weight"], dtype=np.float32).shape[-1])
 
 
 def mlp_weights_to_onnx(weights: dict[str, list]) -> bytes:
@@ -174,7 +174,7 @@ def mlp_weights_to_onnx(weights: dict[str, list]) -> bytes:
         # Linear head: sigmoid(Gemm(x, W, b)).
         w = np.asarray(weights["0.weight"], dtype=np.float32)
         b = np.asarray(weights["0.bias"], dtype=np.float32)
-        input_dim = int(w.shape[1])
+        input_dim = int(w.shape[-1])
         initializers = [
             numpy_helper.from_array(w, "output.weight"),
             numpy_helper.from_array(b, "output.bias"),

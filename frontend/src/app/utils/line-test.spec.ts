@@ -51,9 +51,9 @@ describe('line-test helpers (#4524)', () => {
 
     it('reads the result once done, green, with the share right as a number and the found share in words', () => {
       const st = testLineState(wireLineTest(wireDone()), 64)!;
-      expect(st.text).toBe('Tested · likely 55–95% right, about half of them found (checked 45) · 64 kept');
+      expect(st.text).toBe('Tested · likely 55–95% right, about half of them found (checked 65) · 64 kept');
       expect(st.dot).toBe('green');
-      expect(st.title).toContain('45 random picks from both sides of the line');
+      expect(st.title).toContain('65 random picks from both sides of the line');
       expect(st.title).toContain('30–70% of all the matches');
     });
 

@@ -56,6 +56,27 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Testing a detector checks deeper below the line** (issue #4542). When the detector
+  has a class model, the Test autopilot's *Check the misses* step now keeps drawing picks
+  from deeper bands until it has spent its 40, instead of stopping at the first band that
+  turns up nothing: the share of all the matches found was usually overstated before, and
+  is now right three times in four or better, for about 30 more picks. A detector with no
+  class model (a structural or document one) still stops at the first empty band, and its
+  result now gives the share found in words only and says it is unmeasured below the
+  bands checked.
+
+- **Find is now Test, and the AutoRun button is now Find** (issue #4525, the
+  last slice of #4520). The Dashboard's big button that scores a dataset and
+  tests a detector's line on it reads **Test**, and its view lives at
+  `/test/<dataset>/<detector>`; an old `/find/...` link lands on the
+  Dashboard. The third big button, which runs every ticked detector on every
+  ticked dataset as AutoRun does, reads **Find**. Test carries a new flask
+  icon, and Find the magnifier Test used to carry. The keyboard help's *Train /
+  Find* tab is *Train / Test*, and the Browser's way back is **← Back to
+  Test**. In the user guide, *Find: testing and reviewing* is now *Testing a
+  detector*, and the step-by-step's Step 4 tests the detector. The API keeps
+  its names (`/api/find-label`, `find_mode`, the `find` SSE channel).
+
 - **Document search without a GPU is ~9x faster per click at 50,000 pages** (issue #4514).
   A vote on a document collection served from a CPU took about 2 minutes at 50,000 pages:
   each click converted the whole tile matrix to float32. The conversion now happens once

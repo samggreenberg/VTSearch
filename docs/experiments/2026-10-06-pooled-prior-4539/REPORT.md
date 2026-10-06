@@ -8,7 +8,7 @@ same picks (±2).** At 0.1% positives it goes from 0.89 / 0.86 / 0.75 (beta 1/4,
 beta 4 from **0% to 95%**. One cell stays under the #4523 bar of 0.93: COCO
 Better's default pool at beta 4, **0.92 ± 0.008** (was 0.86). The 5% world
 gives back 1–2 points (0.97 → 0.95 at beta 1, 0.96 → 0.94 at beta 4), still
-above the bar. Recall is untouched; this changes only the bands above the line.
+above the bar. Recall is untouched; this changes only the bands above the line. The replay ran the walk below the line as #4523 did; #4542, which landed on dev while this ran, changes that walk and not the precision range, so these numbers carry over.
 
 Part of #4520; follows #4523, whose saved snapshots this replays (no new
 training). Code: `vtscore/training/thresholds/line_test.py` (`POOLED_WEIGHT`,

@@ -54,7 +54,7 @@ ACHIEVEMENTS: list[dict[str, Any]] = [
     {
         "id": "find_media",
         "name": "Finders Keepers",
-        "description": "Media items scored by Find (GUI and CLI combined).",
+        "description": "Media items scored by Test, Find and AutoRun (GUI and CLI combined).",
         "icon": "search",
         "tiers": [2000, 20000, 200000, 2000000],
     },

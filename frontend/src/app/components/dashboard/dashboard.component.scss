@@ -12,7 +12,7 @@
   // Positioning context for the first-run `<vt-pointer-arrow>`s, which span
   // from a panel's message to a header button or down to the Train button.
   position: relative;
-  // Width of each Train / Find / AutoRun group. Shared with `.intro-hint`,
+  // Width of each Train / Test / Find group. Shared with `.intro-hint`,
   // which uses it to sit directly above the Train button.
   --action-btn-group-width: 220px;
 }

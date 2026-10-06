@@ -461,7 +461,7 @@ The dashboard's dataset/detector rows (`vt-dataset-card`, `vt-detector-card`) re
 
 ### 2.12 Pane divider
 
-`.pane-divider` is the draggable rule between resizable layout panes (Find, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
+`.pane-divider` is the draggable rule between resizable layout panes (Test, Label, and VTSBrowse views): an 8px hit target with a 4px visible line centered inside - the same wider-hit-zone pattern as `.col-resize-handle`, because the thin line alone is hard to grab. The line tracks `--border` at rest and switches to `--accent` on hover; the drag handlers add `.dragging` to keep the accent lit through the drag. Don't hand-roll a divider; use this and bind `.dragging`.
 
 ### 2.13 Motion and misc utilities
 
@@ -471,7 +471,7 @@ Global classes that any component can apply. All animations here are silenced by
 |-------|------------|
 | `.drawer-enter-left` / `.drawer-leave-left` / `.drawer-enter-right` / `.drawer-leave-right` | Slide-from-edge transitions for side panels, bound via Angular's `animate.enter` / `animate.leave`. |
 | `.swipe-left` / `.swipe-right` | The vote fling that throws the current media off-screen (bad / good). |
-| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Find/Train buttons, in-flight import/export submits). |
+| `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Train/Test buttons, in-flight import/export submits). |
 | `.waveform-mask` | Paints `--accent` through an audio waveform's alpha mask so thumbnails tint per theme. The `mask-image` URL is set per instance via a style binding. |
 | `.sr-only` | Visually hidden, screen-reader-visible text. |
 
@@ -632,12 +632,15 @@ CSS classes) are exempt - this rule is about *visible* strings only.
 |---------|----------------|-------------|
 | The trained ranker (the product's core object) | **detector** | model |
 | Making a detector by voting good/bad | **Train** (verb) / **Learned** (the sort mode) | — |
-| Running a detector across a dataset to score items | **Find** (the action) / **Auto-Find** (the automatic/CLI variant) | — |
+| Measuring a detector's line on a dataset it never trained on | **Test** (the Dashboard button and its view) | — |
+| Running detectors across datasets to collect their matches | **Find** (the Dashboard button) / **AutoRun** (the detector tab, and the runs it starts on every import and from the CLI) / **Auto-Find** (the settings tab for where those results go) | — |
 | The two vote piles | **Good** / **Bad** | positives/negatives (in general UI; the ML terms are fine inside a stats table) |
 
-`Train` and `Find` are the two flow verbs surfaced to users; keep them stable.
-Meaning-bearing distinctions are *not* drift and stay as-is: `Verified Good`
-vs. `Good` (a real Find-mode state), and `Positives`/`Negatives` inside the
+`Train`, `Test` and `Find` are the three flow verbs surfaced to users; keep
+them stable. The Test view's code is still named `find` (#4525), as the Train
+view's is `label`; that is an internal identifier and exempt. Meaning-bearing
+distinctions are *not* drift and stay as-is: `Verified Good` vs. `Good` (a
+real Test-view state), and `Positives`/`Negatives` inside the
 detector-stats table (standard ML terminology in that context).
 
 ---

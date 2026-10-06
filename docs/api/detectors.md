@@ -507,7 +507,7 @@ Counts and metadata only — never embeddings or model weights.
 detector's positive labels currently resolve into the loaded dataset (the
 set the dashboard's Browse button projects). `test_verdicts` is every test
 verdict the detector keeps, one per tested dataset, newest first: what a test
-in Find measured its line to ship there, as ranges, with `stale` once the
+measured its line to ship there, as ranges, with `stale` once the
 detector has been retrained since (see
 [the kept verdict](find.md#the-kept-verdict)). The Stats dialog's *Tested on*
 section reads it.

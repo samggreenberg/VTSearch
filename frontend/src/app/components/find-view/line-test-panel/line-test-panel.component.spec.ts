@@ -75,11 +75,23 @@ describe('LineTestPanelComponent (#4524)', () => {
     expect(active(el).querySelector('.ap-step-detail')!.textContent).toContain('about half of them found');
   });
 
+  it('says how Check the misses ends: at its budget with a class model, at a dry band without one (#4542)', async () => {
+    const t = wireTest({ phase: 'misses' });
+    t.report = { ...t.report, phase: 'misses', matches_stop: 'width', misses_width: 0.2, picks_below: 5 };
+    let el = await show(wireLineTest(t));
+    let title = active(el).querySelector('.ap-check')!.getAttribute('title')!;
+    expect(title).toContain('ends at 40 picks, or once every band below the line is checked, however narrow the range');
+    expect(title).not.toContain('turns up nothing');
+    el = await show(wireLineTest({ ...t, class_model: false }));
+    title = active(el).querySelector('.ap-check')!.getAttribute('title')!;
+    expect(title).toContain('when the step ends. It also ends at 40 picks, or when a band below the line turns up nothing.');
+  });
+
   it('Done is green with the picks behind it', async () => {
     const el = await show(wireLineTest(wireDone()));
     expect(active(el).dataset['phase']).toBe('done');
     expect(active(el).querySelector('.ap-check')).not.toBeNull();
-    expect(active(el).querySelector('.ap-step-detail')!.textContent).toContain('45 picks');
+    expect(active(el).querySelector('.ap-step-detail')!.textContent).toContain('65 picks');
     expect(steps(el).filter((s) => s.classList.contains('done')).length).toBe(3);
   });
 
