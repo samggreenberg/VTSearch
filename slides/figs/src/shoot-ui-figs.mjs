@@ -22,7 +22,7 @@
  * `find` runs. Nothing is staged through the API that a slide shows being done
  * by hand.
  *
- * The `steps` group is the Step-By-Step section's figures: the moments of the
+ * The `steps` group is the Instruction section's figures: the moments of the
  * session a user has to click through, photographed a second time with red
  * numbered markers on the controls (`scripts/screenshots/callouts.mjs`). Where
  * a moment is also an intro frame, it is shot twice in a row — clean, then
@@ -175,7 +175,7 @@ const TRAIN_STAGES = [0, 1, 2, 3, 4];
 // votes, and they land in the same piles.
 const TRAIN_FINAL = { good: 12, bad: 8, maxVotes: 32 };
 
-// The numbered markers on the Step-By-Step frames, scaled for the slot. The
+// The numbered markers on the Instruction frames, scaled for the slot. The
 // app is drawn at about 0.74x on the slide (870 of 1180 CSS px), and the
 // numbers are text the room has to read, so they answer to the 20px type
 // floor (`slides/STYLE.md`): the drawer's 23px digit at 1.3x lands at 22px.
@@ -292,7 +292,7 @@ function compose(png, name) {
 /**
  * Shoot the page as it stands with *callouts* drawn over it, then take them off.
  *
- * The Step-By-Step frames are the session's own moments with numbers on them,
+ * The Instruction frames are the session's own moments with numbers on them,
  * so the caller shoots the clean frame (if the intro wants one) and this one
  * back to back, without the page changing in between.
  */
@@ -425,7 +425,7 @@ async function selectOnly(page, tag, name) {
 /**
  * Fail the run unless the row called *name* is already ticked.
  *
- * The Step-By-Step slides tell the user there is nothing to tick: a dataset or
+ * The Instruction slides tell the user there is nothing to tick: a dataset or
  * detector that has just been added is selected on its own (the dashboard's
  * `reconcileSelection`), so Train and Find are one click (#4443). The harness
  * still drives selection itself (`selectOnly`) so a rerun cannot shoot the
@@ -438,7 +438,7 @@ async function assertTicked(page, tag, name) {
   });
   const state = await row.first().locator('.select-checkbox').first().getAttribute('aria-checked');
   if (state !== 'true') {
-    throw new Error(`${name} was not selected on its own; the Step-By-Step slides say it is (#4443)`);
+    throw new Error(`${name} was not selected on its own; the Instruction slides say it is (#4443)`);
   }
 }
 
@@ -537,7 +537,7 @@ async function shootImport(page, name, figure, clean = null) {
  * and "Book detector" is the dialog's own suggestion for it. Typing a name of
  * the harness's choosing would put a step on the slide that nobody has to do.
  *
- * The second and last of them are shot again, numbered, for the Step-By-Step
+ * The second and last of them are shot again, numbered, for the Instruction
  * slide: the **+**, then the phrase and Create — no number on the name, which
  * is filled in for the user.
  */
@@ -804,7 +804,7 @@ function watchLearnedSorts(page) {
  * for the reason `collapseIntoAutopilot` gives — what is left is the item and
  * the two buttons.
  *
- * The Step-By-Step slide gets two numbered pages out of it: the dashboard with
+ * The Instruction slide gets two numbered pages out of it: the dashboard with
  * Train waiting — the pile and the detector are already ticked, because each
  * was selected the moment it was added, so the only number is on Train
  * (#4443) — and the first question with Good and Bad marked.
@@ -957,7 +957,7 @@ async function shootFind(page) {
   await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   await page.waitForTimeout(3000);
 
-  // The Step-By-Step slide's last page: the results a user lands on, best
+  // The Instruction slide's last page: the results a user lands on, best
   // first, and the button that sends them somewhere.
   await shootNumbered(page, 'ui-steps-find', [
     step(4, '.panel-left', 'corner'),

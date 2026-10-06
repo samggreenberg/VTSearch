@@ -164,8 +164,13 @@ MODEL_W, MODEL_H = 0.85, 0.62
 #: The outlined block arrows: shaft width, then the head's width and length.
 ARROW_W, ARROW_HEAD_W, ARROW_HEAD_L = 0.5, 0.66, 0.32
 
-#: Type size of the word written along a block arrow.
+#: Type size of the word written along a block arrow, and its cap height in
+#: drawing units, measured off the glyph as `arrow_len_for` measures widths.
 ARROW_LABEL_PT = 15.0
+ARROW_CAP = (
+    TextPath((0, 0), "H", size=ARROW_LABEL_PT, prop=FontProperties(family="DejaVu Sans")).get_extents().height
+    / FLOW_UNIT_PT
+)
 
 
 @functools.lru_cache(maxsize=None)
@@ -413,6 +418,12 @@ def _labeled_arrow(
     shaft is the part with room in it) reads as a label shoved towards the
     tail, because the eye counts the head as space like everything else
     (issue #3217). Every arrow here is drawn long enough for that to fit.
+
+    Width-wise, the centre is the centre of the *capitals*: the baseline sits
+    half a cap height below the arrow's axis. matplotlib's `va="center"`
+    centres the line box instead, which reserves room for descenders whether
+    the word has any or not, so "DINOv3" rode visibly high in its shaft
+    (#4563).
     """
     (x0, y0), (x1, y1) = xy_from, xy_to
     dx, dy = x1 - x0, y1 - y0
@@ -442,14 +453,17 @@ def _labeled_arrow(
     angle = float(np.degrees(np.arctan2(dy, dx)))
     if angle < -90 or angle > 90:  # keep the label reading left-to-right
         angle += 180
+    # The text's own "up", turned with it, and half a cap height along it.
+    up = np.array([-np.sin(np.radians(angle)), np.cos(np.radians(angle))])
+    baseline = np.array([x0 + dx * 0.5, y0 + dy * 0.5]) - up * ARROW_CAP / 2
     ax.text(
-        x0 + dx * 0.5,
-        y0 + dy * 0.5,
+        *baseline,
         label,
         rotation=angle,
+        rotation_mode="anchor",
         ha="center",
-        va="center",
-        fontsize=15,
+        va="baseline",
+        fontsize=ARROW_LABEL_PT,
         color=INK,
         zorder=z + 0.05,
     )
@@ -4670,10 +4684,11 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
 
 #: How many build stages the patch figure reveals in: one photograph, and
 #: DINOv3, which sends what it is given into content space, as SigLIP does; the
-#: grid it cuts the photograph into; a point for every patch, where SigLIP
-#: would have made one for the photo; and a box vote, whose patches are what
-#: it trains on.
-PATCH_STAGES = 4
+#: grid it cuts the photograph into; and a point for every patch, where SigLIP
+#: would have made one for the photo. It used to go on to a Good box and the
+#: points it trains on, which was a step ahead of the slide: there is no target
+#: yet while the embedder is being introduced (#4563).
+PATCH_STAGES = 3
 #: DINOv3 ViT-B/16 sees a 224-pixel square as a 14 x 14 grid of 16-pixel
 #: patches and gives each a 768-number vector (`embedder_dinov3_patch`), plus
 #: one for the image as a whole; scoring max-pools over all of them
@@ -4685,11 +4700,14 @@ PATCH_DIM = 768
 #: archive, because this figure needs nothing else from it.
 PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0][0]`, defined further down
 PATCH_PHOTO_URL = f"http://images.cocodataset.org/val2017/{PATCH_PHOTO_ID:012d}.jpg"
-#: The book's box in the square crop, as grid cells (first row, first col, last
-#: row, last col), read off the photograph; and the one patch on it the figure
-#: follows into content space.
-PATCH_BOOK_CELLS = (7, 2, 13, 6)
+#: The one patch on the book the figure follows into content space, as a grid
+#: cell (row, col), read off the photograph. It is drawn the way the deck draws
+#: the positive side — green, and hatched like the Good pile — on the
+#: photograph and in the cube alike, so the eye pairs the two across the arrow.
 PATCH_FOLLOWED = (10, 4)
+PATCH_FOLLOWED_HATCH = "//////"
+#: The followed point's radius, in ordinary dots'.
+PATCH_FOLLOWED_SCALE = 2.6
 #: Layout, in `TEACH_CANVAS` units: the photograph's square `(x0, y0, side)`,
 #: and content space's cube `(x0, y0, side, depth)`. The cube is
 #: Embed-time Stories' (`make-intro-figs.py`): the same wire, the same 45°
@@ -4831,11 +4849,28 @@ def _content_cube(ax: plt.Axes) -> None:
         )
 
 
-def _cube_dot(ax: plt.Axes, point: np.ndarray, fill: str = "white", edge: str = INK, scale: float = 1.0) -> None:
-    """One point in the cube: hollow unless *fill* says otherwise, smaller and further back with depth."""
+def _cube_dot(
+    ax: plt.Axes,
+    point: np.ndarray,
+    edge: str = INK,
+    hatch: str | None = None,
+    scale: float = 1.0,
+    zorder: float | None = None,
+) -> None:
+    """One point in the cube: hollow, smaller and further back with depth; *hatch* fills it in *edge*'s colour."""
     x, y = _cube_at(point)
     radius = scale * PATCH_DOT_R * (1.0 - PATCH_DOT_SHRINK * point[2])
-    ax.add_patch(Circle((x, y), radius, facecolor=fill, edgecolor=edge, linewidth=1.1, zorder=5 + 2 * (1 - point[2])))
+    ax.add_patch(
+        Circle(
+            (x, y),
+            radius,
+            facecolor="white",
+            edgecolor=edge,
+            hatch=hatch,
+            linewidth=1.1,
+            zorder=5 + 2 * (1 - point[2]) if zorder is None else zorder,
+        )
+    )
 
 
 def patch_fig() -> None:
@@ -4847,9 +4882,8 @@ def patch_fig() -> None:
     photograph to one point. DINOv3 cuts the photograph into a grid first and
     sends each patch to its own point, which is the whole difference. (It
     makes one more for the image as a whole, which the notes mention and the
-    figure leaves out.) Last, what region voting does with those points: a box
-    vote trains on the patches inside the box, and a photo is scored by its
-    best point.
+    figure leaves out.) What region voting does with those points is the next
+    slide's, not this one's (#4563).
     """
     final = _patch_stage(PATCH_STAGES)
     box = tight_box(final)
@@ -4876,8 +4910,6 @@ def _patch_stage(stage: int) -> plt.Figure:
     x0, y0, side = PATCH_PHOTO
     cube_x0, cube_y0, cube_side, cube_depth = PATCH_CUBE
     points = _patch_points()
-    r0, c0, r1, c1 = PATCH_BOOK_CELLS
-    boxed = {row * PATCH_GRID + col for row in range(r0, r1 + 1) for col in range(c0, c1 + 1)}
     followed = PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
 
     # ── stage 1: one photograph, and DINOv3, into content space ───────────────
@@ -4914,65 +4946,31 @@ def _patch_stage(stage: int) -> plt.Figure:
     # ── stage 3: a point for every patch ──────────────────────────────────────
     if stage >= 3:
         for index, point in enumerate(points):
-            voted = stage >= PATCH_STAGES and index in boxed
-            if index == followed:
-                continue
-            _cube_dot(ax, point, fill=GREEN if voted else "white", edge=GREEN if voted else INK)
-        # The one patch the figure follows: outlined on the photograph, and
-        # its point in the cube drawn the same way, ringed, so the eye can pair
-        # the two across the arrow.
+            if index != followed:
+                _cube_dot(ax, point)
+        # The one patch the figure follows: outlined on the photograph, and its
+        # point in the cube drawn green and hatched, ringed the same way, so the
+        # eye can pair the two across the arrow.
         row, col = PATCH_FOLLOWED
         px, py, cell = _patch_cell(row, col)
         ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor="white", linewidth=4.5, zorder=5))
-        ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor=INK, linewidth=2.2, zorder=6))
+        ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor=GREEN, linewidth=2.2, zorder=6))
+        # Large enough for its hatching to read as hatching rather than as a
+        # tint, and on top of the neighbours it lands among.
         point = points[followed]
-        _cube_dot(ax, point, fill=GREEN if stage >= PATCH_STAGES else "white", edge=INK, scale=1.6)
+        _cube_dot(ax, point, edge=GREEN, hatch=PATCH_FOLLOWED_HATCH, scale=PATCH_FOLLOWED_SCALE, zorder=7.8)
         fx, fy = _cube_at(point)
+        ring = (PATCH_FOLLOWED_SCALE + 0.9) * PATCH_DOT_R
         ax.add_patch(
             Rectangle(
-                (fx - 1.9 * PATCH_DOT_R, fy - 1.9 * PATCH_DOT_R),
-                3.8 * PATCH_DOT_R,
-                3.8 * PATCH_DOT_R,
+                (fx - ring, fy - ring),
+                2 * ring,
+                2 * ring,
                 facecolor="none",
-                edgecolor=INK,
+                edgecolor=GREEN,
                 linewidth=2.2,
                 zorder=8,
             )
-        )
-
-    # ── stage 4: a box vote, and the points it trains on ──────────────────────
-    if stage >= PATCH_STAGES:
-        bx, by, cell = _patch_cell(r1, c0)
-        ax.add_patch(
-            Rectangle(
-                (bx, by),
-                (c1 - c0 + 1) * cell,
-                (r1 - r0 + 1) * cell,
-                facecolor=(1, 1, 1, 0.18),
-                edgecolor=GREEN,
-                linewidth=3.2,
-                zorder=4,
-            )
-        )
-        ax.text(
-            bx + (c1 - c0 + 1) * cell + LABEL_GAP * 2,
-            by + (r1 - r0 + 1) * cell,
-            "a Good box",
-            ha="left",
-            va="top",
-            fontsize=16,
-            color=INK,
-            bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
-            zorder=6,
-        )
-        ax.text(
-            cube_x0 + cube_side + cube_depth,
-            cube_y0 + cube_side + cube_depth + LABEL_GAP,
-            "a photo scores its best point",
-            ha="right",
-            va="bottom",
-            fontsize=17,
-            color=INK,
         )
     return fig
 
@@ -6141,7 +6139,7 @@ def _doc_stage(stage: int) -> plt.Figure:
 
 # ── the balance's line and its spot check (#4244, #4413, #4444) ──────────────
 
-#: The two figures that close the Preference section share one drawing: the
+#: The two figures that close the Inclination section share one drawing: the
 #: corpus ranked as a strip of items, the set the line keeps bracketed at its
 #: top, and the line at that set's foot. `calib-floor-ask` says what the
 #: Threshold control says before anyone checks, and shows why the session's

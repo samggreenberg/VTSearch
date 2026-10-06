@@ -400,6 +400,12 @@ have to study is a line that has stopped being an outline. Make each name match
 the section it points at closely enough that the audience can place a slide
 without being told.
 
+**The theme numbers the sections in Roman numerals** — I, II, III — whatever
+the markdown list says. The pages are numbered in Arabic, so a section is a
+different kind of address from a slide, and "section III" can never be heard
+as "slide 3". The PDF's bookmarks follow suit (`III. Inclination`, then
+`18. The Cutting Room` for a slide in it).
+
 **Then show it again before every section**, with that section's line marked.
 Use the same fragment, and let the manifest do the marking:
 
@@ -414,8 +420,8 @@ is anchored in the argument, and a topic change gets an unmistakable signal to
 wake up for.
 
 **The opening list is unmarked, and the marked first section follows it.** The
-room reads `1 … 8` all one weight — every section still ahead of them — and
-only then does section 1 go bold and the rest go quiet. Those two pages are not
+room reads `I … VIII` all one weight — every section still ahead of them — and
+only then does section I go bold and the rest go quiet. Those two pages are not
 a stutter: the first is the shape of the talk and the second is the entry into
 it, and running them together (opening straight on `+at1`) means the whole list
 is never once shown as a list. So a deck's outline appears *N* + 2 times for
@@ -427,10 +433,10 @@ see *Numbering* in [`README.md`](README.md). The room is being shown the same
 thing again with a different line marked, and the deck should say so rather than
 spending ten numbers on it.
 
-**The outline's last showing is the last slide, and it says `The End`.** A deck
+**The outline's last showing is the last slide, and it says `Conclusion`.** A deck
 does not need a separate "Questions" page: the room is already looking at the
 list of everything it just heard, with a final line marked, which is a better
-thing to take questions against than the word *Questions*. But `The End` is not
+thing to take questions against than the word *Questions*. But `Conclusion` is not
 a section anybody is walked through, so it is not on the list the room sees on
 the way: write it as the fragment's last line wrapped in
 `<span class="closing">`, and the theme hides it on every showing but the one

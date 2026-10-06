@@ -307,6 +307,10 @@ CIRCLE_TEXT_PT = 15
 #: where half a tick would be fourteen lines a side.
 DOC_GRID_STEP, PHOTO_GRID_STEP = 0.05, 0.1
 GRID_COLOUR = "#e3e7ec"
+#: The precision-recall panel's grid is darker than the F panel's (#4563): it
+#: is the thing a set's position is read against, and at the F panel's shade it
+#: vanished on a projector. Still lighter than the axes, so it stays behind.
+PR_GRID_COLOUR, PR_GRID_LW = "#bcc4ce", 1.3
 
 
 def _pr_axes(fig: Figure, lim: tuple[float, float], ticks: list[float], step: float) -> plt.Axes:
@@ -322,7 +326,7 @@ def _pr_axes(fig: Figure, lim: tuple[float, float], ticks: list[float], step: fl
     ax.set_xticks(lines, minor=True)
     ax.set_yticks(lines, minor=True)
     ax.tick_params(which="minor", length=0)
-    ax.grid(True, which="both", color=GRID_COLOUR, lw=1.0)
+    ax.grid(True, which="both", color=PR_GRID_COLOUR, lw=PR_GRID_LW)
     ax.set_axisbelow(True)
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precision")

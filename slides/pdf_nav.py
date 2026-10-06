@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write a rendered deck's bookmarks and page labels into its PDF.
+"""Write a rendered deck's bookmarks, page labels and click-to-advance links into its PDF.
 
     ./pdf_nav.py _out/hold-the-line.pdf _build/hold-the-line.nav.json
     ./pdf_nav.py _out/hold-the-line.speaker.pdf _build/hold-the-line.speaker.nav.json \\
@@ -13,7 +13,10 @@ in each) and **page labels** (so the viewer's page box reads `17c`, the
 address printed on the slide, not `95`). `build.py` works both out from the
 manifest, since they are facts about fragments that no rendered page carries,
 and leaves them in `_build/<deck>[...].nav.json` for this script to write in.
-It also sets the PDF to open with the bookmarks showing.
+It also sets the PDF to open with the bookmarks showing, and makes the middle
+of every audience page but the outline's a link to the next page, so a viewer
+with no slideshow mode is one anyway: click the slide, get the next
+(`link_advance`).
 
 The speaker deck needs one thing more. Its outline is a *picture* — a PNG of
 the audience slide beside the notes — so the links the audience deck gets for
@@ -111,6 +114,36 @@ def link_miniatures(doc: pymupdf.Document, probe: pymupdf.Document, pages: list[
     return written
 
 
+#: The click-to-advance area: the page inset this fraction of its own size from
+#: every edge, so 80% by 80% of it — the middle majority, where a hand reaches
+#: for "next" — and clear of the page number in the bottom-right corner, which
+#: is a link of its own (back to the outline that opened the section).
+ADVANCE_INSET = 0.10
+
+
+def link_advance(doc: pymupdf.Document, pages: list[int]) -> int:
+    """Make the middle of each of *pages* (1-based) a link to the page after it.
+
+    Refuses a page that already carries a link inside that area: the two would
+    overlap, and which one a click lands on is up to the viewer. No slide does
+    today — the outline, whose lines are links, is left out by build.py — so a
+    slide that grows a link of its own fails here rather than half-working.
+    """
+    for number in pages:
+        page = doc[number - 1]
+        bounds = page.rect
+        dx, dy = bounds.width * ADVANCE_INSET, bounds.height * ADVANCE_INSET
+        area = pymupdf.Rect(bounds.x0 + dx, bounds.y0 + dy, bounds.x1 - dx, bounds.y1 - dy)
+        clash = [link for link in page.get_links() if link["from"].intersects(area)]
+        if clash:
+            raise SystemExit(
+                f"pdf_nav.py: page {number} has a link of its own inside its click-to-advance area "
+                f"({clash[0]['from']}); move it out, or leave the page out of build.py's `advance_pages`"
+            )
+        page.insert_link({"kind": pymupdf.LINK_GOTO, "from": area, "page": number, "to": pymupdf.Point(0, 0)})
+    return len(pages)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("pdf", type=Path, help="the rendered deck, rewritten in place")
@@ -134,6 +167,7 @@ def main() -> int:
     # Preview honour it; Chrome's viewer ignores it, harmlessly.
     doc.set_pagemode("UseOutlines")
     doc.set_page_labels(page_labels(nav["labels"]))
+    advances = link_advance(doc, nav.get("advance", []))
     links = 0
     if nav.get("probe"):
         if args.probe is None:
@@ -153,6 +187,7 @@ def main() -> int:
         tmp.replace(args.pdf)
     sections = sum(1 for level, _title, _page in nav["toc"] if level == 1)
     extra = f", {links} outline links on the miniatures" if links else ""
+    extra += f", {advances} click-to-advance pages" if advances else ""
     print(f"navigation: {len(nav['toc'])} bookmarks ({sections} top-level), {len(nav['labels'])} page labels{extra}")
     return 0
 

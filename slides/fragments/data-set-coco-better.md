@@ -17,8 +17,8 @@
      region: the class's largest instance, the box the simulated user drags.
      The label under it is its cell. -->
 
-<!-- **b** — The zoom, larger than the grid had room for. The dog@medium
-     frame again. Blue: COCO Better's classes in this picture, one region each.
+<!-- **b** — The zoom, larger than the grid had room for. The Dog@Medium
+     frame again, grown out of its corner cell. Blue: COCO Better's classes in this picture, one region each.
      Grey: classes checked absent — a longer list now there is room for it. The teddy
      bear has no box at all — it is not a COCO Better class. -->
 

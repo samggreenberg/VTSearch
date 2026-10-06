@@ -5,6 +5,8 @@
 
 ## Picture<br>(im)Perfect
 
+<!-- build: figs/coco-problems-blank.webp -->
+
 <!-- build: figs/coco-problems-merge.webp -->
 
 <!-- build: figs/coco-problems-cuts.webp -->
@@ -14,24 +16,27 @@
 <!-- COCO answers every class on every image. Four things it still does not
      hand you, one per click. -->
 
-<!-- **a** — The same object under two names. A pickup is a `car` in one
+<!-- **a** — The four, none of them lit yet. There are problems; here is
+     how many, before the first of them. -->
+
+<!-- **b** — The same object under two names. A pickup is a `car` in one
      photo and a `truck` in the next; a beer glass is a `cup` or a
      `wine glass`; flowers in a glass are a `vase` or a `potted plant`.
      Region voting drags a box, so what matters is the box: 6–11% of these
      classes' boxes carry the other name. Where the line does not hold, the
      two become one class. -->
 
-<!-- **b** — Back to books. We want many datasets out of one set of
+<!-- **c** — Back to books. We want many datasets out of one set of
      pictures: books common or rare, small or large. So a dataset has to be a rule over the images,
      not a hand-picked list — then any of these is a filter, not a rebuild. -->
 
-<!-- **c** — A size band needs one size per image, and a desk holds many
+<!-- **d** — A size band needs one size per image, and a desk holds many
      books. Boxing all of them measures the desk. The one a user would drag
      is the most obvious one, the largest — so that is the size. -->
 
-<!-- **d** — Two photographs, and in each the largest `book` box COCO drew,
+<!-- **e** — Two photographs, and in each the largest `book` box COCO drew,
      so the one that sets the size. Both are *large* by area. Left, that is
-     right: one book, held up to the camera. Right, it is the whole bottom
+     right: one book, its cover filling the photograph. Right, it is the whole bottom
      shelf of a bookcase under one box — large, and no book in it is. A second
      annotation of the same images, LVIS, boxes one object at a time, and a
      box round a pile is not admitted as a positive. (Fruit gets the same

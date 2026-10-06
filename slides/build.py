@@ -878,8 +878,11 @@ def slide_numbers(showings: list[Showing], texts: dict[str, str]) -> dict[str, i
 # - Bookmarks: the sections, and the slides in each (`bookmarks`).
 # - Page labels: the viewer's page box reads `5c`, the address printed on the
 #   page, rather than the page's position in the file (`audience_labels`).
+# - Click to advance: the middle of every page but the outline's is a link to
+#   the next page, so a viewer with no slideshow mode is one anyway
+#   (`advance_pages`).
 #
-# Chromium writes neither of the last two, so `assemble` puts them in
+# Chromium writes none of the last three, so `assemble` puts them in
 # `_build/<deck>[...].nav.json` beside the markdown and pdf_nav.py writes them
 # into the rendered PDF. They are worked out here because they are facts about
 # fragments and showings, which nothing downstream of this script can see.
@@ -995,27 +998,62 @@ def link_outline(text: str, targets: dict[int, int], href: str) -> str:
     return "".join(piece if piece.startswith("<!--") else "\n".join(map(link, piece.split("\n"))) for piece in pieces)
 
 
+#: The outline numbers its sections in Roman numerals (`upper-roman` in the
+#: theme), so the deck's pages, all Arabic, are never mistaken for sections.
+ROMAN = ((10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
+
+
+def roman(number: int) -> str:
+    """*number* as the outline's list prints it: `4` -> `IV`. Enough for any outline (under 40 lines)."""
+    out = ""
+    for value, numeral in ROMAN:
+        count, number = divmod(number, value)
+        out += numeral * count
+    return out
+
+
 def bookmarks(showings: list[Showing], texts: dict[str, str], firsts: list[int]) -> list[list[int | str]]:
     """The PDF's bookmarks, in the shape PyMuPDF's `set_toc` takes: `[level, title, page]`.
 
     A showing that marks an outline line opens a section, titled by that line
-    as the slide numbers it, and every slide after it sits one level under it
-    until the next; a slide before the first section — the title, the opening
-    outline — is top-level. One entry per showing, never per page: a build's
-    reveals are one slide, and its entry lands on the first of them.
+    as the slide numbers it — `III. Inclination`, in the Roman numerals the
+    theme prints sections in — and every slide after it sits one level under
+    it until the next; a slide before the first section — the title, the
+    opening outline — is top-level. A slide's entry leads with its page number
+    the same way, `18. The Cutting Room`, so the sidebar names a slide by the
+    address the room and the presenter use for it; the title slide has none.
+    One entry per showing, never per page: a build's reveals are one slide,
+    and its entry lands on the first of them.
     """
+    numbers = slide_numbers(showings, texts)
     toc: list[list[int | str]] = []
     nested = False
     for (name, extras, _stages, _pages), page in zip(showings, firsts):
         items = outline_items(texts[name])
         item = marked_item(extras, items)
         if item is None:
-            toc.append([2 if nested else 1, bookmark_title(name, texts[name]), page])
+            title = bookmark_title(name, texts[name])
+            number = numbers.get(name)
+            toc.append([2 if nested else 1, f"{number}. {title}" if number else title, page])
             continue
-        line = plain_text(items[item])
-        toc.append([1, line if CLOSING_RE.search(items[item]) else f"{item + 1}. {line}", page])
+        toc.append([1, f"{roman(item + 1)}. {plain_text(items[item])}", page])
         nested = True
     return toc
+
+
+def advance_pages(showings: list[Showing], texts: dict[str, str]) -> list[int]:
+    """The audience pages whose middle is a link to the next page (#4563).
+
+    Every page but the outline's, and but the last, which has nowhere to go.
+    It is what makes a PDF viewer with no slideshow mode into one: click the
+    slide, get the next. The outline is left out because its lines are links
+    already, each to its own section, and an area over them would shadow them.
+    The rectangle itself is pdf_nav.py's (`ADVANCE_INSET`), since it is a fact
+    about the page's size rather than about fragments.
+    """
+    pages = [page for name, _extras, _stages, pages in showings if not outline_items(texts[name]) for page in pages]
+    last = sum(len(pages) for *_, pages in showings)
+    return [page for page in pages if page != last]
 
 
 def page_address(number: int | None, page: int, group: list[int]) -> tuple[str, str]:
@@ -1214,7 +1252,12 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
         firsts = [pages[0] for *_, pages in showings]
         labels = audience_labels(showings, texts, group)
         probe, probe_pages = [], []
-    nav = {"toc": bookmarks(showings, texts, firsts), "labels": labels, "probe": probe_pages}
+    nav = {
+        "toc": bookmarks(showings, texts, firsts),
+        "labels": labels,
+        "probe": probe_pages,
+        "advance": [] if speaker else advance_pages(showings, texts),
+    }
 
     if problems or not write:
         return problems

@@ -114,7 +114,7 @@ def frame_caltech() -> Any:
         fig,
         "Caltech-101",
         [(dc.nice(images), "images"), (f"{len(categories)}", "categories, one per image"), ("0", "boxes")],
-        "data.caltech.edu/records/mzrjq-6wc02",
+        "https://data.caltech.edu/records/mzrjq-6wc02",
     )
     tiles = [dc.Tile(dc.fit_tile(Image.open(p))[0], caption=CALTECH_NAMES[c]) for c, p in picks]
     dc.grid(fig, tiles, cols=4, rows=3)
@@ -133,8 +133,10 @@ COCO_IMAGES = 123_287
 COCO_OBJECTS = 886_284  # boxes, crowd regions excluded
 
 #: Six val2017 frames for the 3x2 grid: rooms, streets and tables with several
-#: classes each. `COCO_ZOOM` is one of them, the one the next frame blows up.
-COCO_GRID = (139, 67616, 96001, 139099, 350148, 246968)
+#: classes each. `COCO_ZOOM` is one of them, the one the next frame blows up,
+#: and it is the first: the zoom draws from the grid's top-left corner, so the
+#: picture grows out of its own cell rather than jumping from another (#4563).
+COCO_GRID = (96001, 139, 67616, 139099, 350148, 246968)
 #: The zoom: a museum case holding Mary Poppins' umbrella, beside an open book
 #: and a bowl — three classes, every box plainly what it says it is (the desk
 #: this replaced had a card reader boxed as a `remote`, #4176) — and, just as
@@ -214,10 +216,10 @@ def _coco_left(fig: Any) -> None:
         "COCO 2017",
         [
             (dc.nice(COCO_IMAGES), "images"),
-            (f"{len(coco['categories'])}", "classes, every one checked on every image"),
-            (dc.nice(COCO_OBJECTS), "objects, each boxed"),
+            (f"{len(coco['categories'])}", "classes, complete"),
+            (dc.nice(COCO_OBJECTS), "objects boxed"),
         ],
-        "cocodataset.org",
+        "https://cocodataset.org",
     )
 
 
@@ -272,11 +274,13 @@ COCO_MERGE_PAIRS = (
 COCO_SHELF = 309938
 #: Two val2017 `book` boxes, each the largest non-crowd `book` box in its frame
 #: and so the one that sets the frame's size, and both in the **large** band:
-#: one round a single book held up to the camera, and one COCO drew round the
-#: whole bottom shelf of a bookcase — a row of small books, large only by area.
-#: `(image id, annotation id)`; the band is checked against `pile_config` when
-#: the frame is drawn, so a band change that moves either fails here.
-COCO_PILE_ONE = (551439, 1140019)
+#: one round a single book, its cover filling the photograph, and one COCO drew
+#: round the whole bottom shelf of a bookcase — a row of small books, large
+#: only by area. `(image id, annotation id)`; the band is checked against
+#: `pile_config` when the frame is drawn, so a band change that moves either
+#: fails here. The single book is a book cover rather than a person holding
+#: one up, which the frame had until #4563: pick from frames with no person in.
+COCO_PILE_ONE = (251140, 1137426)
 COCO_PILE_ROW = (183049, 1150908)
 
 
@@ -285,7 +289,8 @@ COCO_PILE_ROW = (183049, 1150908)
 PROBLEMS_MEDIA_X0 = 0.345
 
 
-def _problems_column(fig: Any, active: int, items: tuple[str, ...]) -> None:
+def _problems_column(fig: Any, active: int | None, items: tuple[str, ...]) -> None:
+    """The four problems down the left, the one being drawn at full weight; None lights none."""
     y = dc.LEFT_TOP - 0.01
     for i, item in enumerate(items):
         lit = i == active
@@ -362,6 +367,18 @@ def _crop_to(ann_id: int, aspect: float, pad: float = 0.06) -> Any:
     left = min(max(0.0, x + w / 2 - cw / 2), frame.width - cw)
     top = min(max(0.0, y + h / 2 - ch / 2), frame.height - ch)
     return frame.crop((int(left), int(top), int(left + cw), int(top + ch)))
+
+
+def frame_problem_blank() -> Any:
+    """The four problems listed and none of them lit, with nothing drawn yet (#4563).
+
+    The slide's first page: the room reads that there are four problems before
+    it is walked into the first, the way the outline is shown bare before
+    section I is marked on it.
+    """
+    fig = dc.blank()
+    _problems_column(fig, None, COCO_PROBLEMS)
+    return fig
 
 
 def frame_problem_merge() -> Any:
@@ -476,14 +493,17 @@ def frame_problem_largest() -> Any:
     y1 = max(b[1] + b[3] for b in cars)
     with Image.open(images / meta["file_name"]) as frame:
         image = frame.convert("RGB")
-    boxes = [(b, "white", 1.4) for b in cars if b is not largest] + [(largest, dc.CUT, 3.5)]
+    # The answer in green, against the red "all of them" it is chosen over: a
+    # red box is the wrong one throughout the deck, so its alternative is the
+    # positive side's colour, not the threshold's blue (#4563).
+    boxes = [(b, "white", 1.4) for b in cars if b is not largest] + [(largest, dc.POS, 3.5)]
     _picture(
         fig,
         [0.39, 0.13, 0.585, 0.80],
         image,
         boxes=boxes,
         dashed=[(x0, y0, x1 - x0, y1 - y0)],
-        labels=[(largest[0], largest[1] - 6, "largest", dc.CUT), (x0, y0 - 6, "all of them", dc.NEG)],
+        labels=[(largest[0], largest[1] - 6, "largest", dc.POS), (x0, y0 - 6, "all of them", dc.NEG)],
     )
     return fig
 
@@ -493,7 +513,7 @@ def frame_problem_pile() -> Any:
 
     Each box is the largest `book` box in its frame, so each is the one that
     sets that frame's size (the frame before), and both land in the **large**
-    band. On the left that is right — one book, held up to the camera. On the
+    band. On the left that is right — one book, its cover filling the frame. On the
     right it is a whole shelf of small books under one box: large by area, and
     no book in it is.
     """
@@ -503,7 +523,8 @@ def frame_problem_pile() -> Any:
     fig = dc.blank()
     _problems_column(fig, 3, COCO_PROBLEMS)
     shown = []
-    for (image_id, ann_id), colour, dashed in ((COCO_PILE_ONE, dc.CUT, False), (COCO_PILE_ROW, dc.NEG, True)):
+    # Green for the box that is right to call large, red for the one that is not.
+    for (image_id, ann_id), colour, dashed in ((COCO_PILE_ONE, dc.POS, False), (COCO_PILE_ROW, dc.NEG, True)):
         ann, meta = _ann(ann_id)
         if ann["image_id"] != image_id:
             raise SystemExit(f"coco pile: annotation {ann_id} is not on image {image_id}")
@@ -541,10 +562,11 @@ def frame_problem_pile() -> Any:
 #: one region the cell carries — the class's largest instance. The class and
 #: band are checked against `pile_config` when the frame is drawn, so a roster
 #: or band change that moves one of these fails here rather than mislabelling it.
+#: The zoom's frame is first, for the reason `COCO_GRID`'s is.
 COCO_BETTER_GRID = (
+    (404484, "dog", "medium"),
     (200839, "bus", "large"),
     (245513, "bird", "small"),
-    (404484, "dog", "medium"),
     (484760, "clock", "small"),
     (367680, "enclosed road vehicle", "medium"),
     (358923, "umbrella", "large"),
@@ -618,7 +640,7 @@ def _coco_better_left(fig: Any) -> None:
         [
             (dc.nice(COCO_IMAGES), "images, all of COCO 2017"),
             (f"{len(pc.SCALE_CLASSES)}", "classes"),
-            (f"{cells}", "cells: a class at a size"),
+            (f"{cells}", "(class, size)s"),
         ],
         None,
     )
@@ -632,7 +654,7 @@ def frame_coco_better_grid() -> Any:
         base, largest, fractions = _largest_by_class(image_id)
         if cls not in largest or _band(fractions[cls]) != band:
             raise SystemExit(f"COCO Better grid: image {image_id} is not a {cls}@{band} positive")
-        tiles.append(dc.Tile(base.image, [largest[cls]], caption=f"{dc.display_class(cls)}@{band}"))
+        tiles.append(dc.Tile(base.image, [largest[cls]], caption=f"{dc.display_class(cls)}@{band.capitalize()}"))
     dc.grid(fig, tiles, cols=3, rows=2)
     return fig
 
@@ -733,7 +755,7 @@ def frame_spods() -> Any:
             ("4", "masks a page: logo, stamp, signature, text"),
             ("0", "names for the marks"),
         ],
-        "facweb.iitkgp.ac.in/~jay/spods",
+        "https://facweb.iitkgp.ac.in/~jay/spods",
     )
     tiles = []
     for stem in SPODS_PAGES:
@@ -756,7 +778,7 @@ def frame_tobacco800() -> Any:
             ("412", "with a logo, boxed"),
             ("21", "logos seen more than once"),
         ],
-        "tc11.cvc.uab.es/datasets/Tobacco800_1",
+        "https://tc11.cvc.uab.es/datasets/Tobacco800_1",
     )
     tiles = []
     for stem in TOBACCO800_PAGES:
@@ -775,7 +797,7 @@ def frame_staver() -> Any:
         fig,
         "StaVer",
         [(dc.nice(counts["pages"]), "German invoices, rubber-stamped"), ("0", "names for the stamps")],
-        "madm.dfki.de/downloads-ds-staver",
+        "https://madm.dfki.de/downloads-ds-staver",
     )
     tiles = []
     for stem in STAVER_PAGES:
@@ -794,7 +816,7 @@ def frame_ucsf() -> Any:
         "UCSF Industry Documents",
         # Measured live against the IDL Solr index (fullmarks/README.md).
         [(dc.nice(13_216_456), "short tobacco-industry documents"), ("0", "boxes")],
-        "industrydocuments.ucsf.edu",
+        "https://industrydocuments.ucsf.edu",
     )
     tiles = [_page_tile(dm.ucsf_page(doc_id), []) for doc_id in dm.UCSF_PAGES]
     dc.grid(fig, tiles, cols=4, rows=2, aspect=3 / 4)
@@ -1023,6 +1045,7 @@ FRAMES = {
     ],
     "fullmarks": [("data-set-fullmarks-grid", frame_fullmarks_grid), ("data-set-fullmarks-zoom", frame_fullmarks_zoom)],
     "coco-problems": [
+        ("coco-problems-blank", frame_problem_blank),
         ("coco-problems-merge", frame_problem_merge),
         ("coco-problems-cuts", frame_problem_cuts),
         ("coco-problems-largest", frame_problem_largest),

@@ -8,8 +8,6 @@
 
 <!-- build: figs/calib-patches.build2.png -->
 
-<!-- build: figs/calib-patches.build3.png -->
-
 <!-- What sits under a box. Region voting runs on a different model from the
      rest of the talk, and the next slide takes a maximum over what it makes. -->
 
@@ -25,9 +23,5 @@
      SigLIP says what a photo is about; DINOv3 says what is where. (It makes
      one more point for the whole image, which the drawing leaves out.) The
      drawing's one claim is that patches of the same thing land together, so
-     the book's gather. Where they gather means nothing. -->
-
-<!-- **d** — What region voting does with them. A Good box trains on the
-     patches inside it: mostly the book, plus the corners of quilt the box
-     catches. And a photo is scored by its best point, the maximum over all
-     197. That maximum is the next slide. -->
+     the book's gather. Where they gather means nothing. The green one is the
+     patch outlined on the book, followed across. -->
