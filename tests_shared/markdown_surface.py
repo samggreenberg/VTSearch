@@ -50,12 +50,16 @@ MARKDOWN_TEST_SURFACE: tuple[str, ...] = (
 # cannot silently fall behind), and requires every test that *references* a
 # registered module to sit in the surface above.
 #
-# The four scripts are stage-1 gates, which a markdown-only run keeps in full;
-# they are listed because their self-tests reach the docs through them.
+# Four of the scripts are stage-1 gates, which a markdown-only run keeps in
+# full; they are listed because their self-tests reach the docs through them.
+# publish-sota-site.py is not a gate: it reads every State of the App
+# REPORT.md's title to decide which report each stable link names, and its
+# test fails on a report whose title stopped parsing.
 DOC_READING_SOURCES: tuple[str, ...] = (
     "vtsearch/achievements_catalog.py",
     "scripts/check-calibration-index.py",
     "scripts/check-docs.py",
     "scripts/check-extension-docs.py",
+    "scripts/publish-sota-site.py",
     "scripts/screenshots/wiring-check.py",
 )

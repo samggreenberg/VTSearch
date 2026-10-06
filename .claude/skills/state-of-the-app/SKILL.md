@@ -92,6 +92,11 @@ same edit.
   report follows the same shape. Each goes in its own directory,
   `docs/experiments/<date>-state-of-the-app-<path>-<modality>/`, and is written
   when ITS runs finish; one path does not wait for the other.
+- **Stable links, refreshed at each release (owner, 2026-10-06):** the newest
+  report of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages
+  that move when a release reaches `main`, not on every merge to `dev`. A
+  report commits its viewer so the link has one. See
+  [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
 - **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
   run, ~10-15 min per seed for all 144 cells), so it takes **as many seeds as
   a night allows** (owner, 2026-09-24: per-image claims need repeat clicks, and
@@ -344,6 +349,37 @@ Each report goes in `docs/experiments/<date>-state-of-the-app-<path>-<modality>/
 
 Follow the standing report rules: two significant digits, a figure per claim,
 and literal examples. Every `#N` in a message to the owner is a link.
+
+## Where the owner reads it: the stable links
+
+The owner reads the newest review of each kind from a fixed URL rather than
+browsing to it (owner, 2026-10-06):
+
+```
+https://samggreenberg.github.io/VTSearch/sota/                          every kind, with earlier reports
+https://samggreenberg.github.io/VTSearch/sota/binary-photo/             -> the newest REPORT.md on GitHub
+https://samggreenberg.github.io/VTSearch/sota/binary-photo/viewer.html  its interactive viewer
+```
+
+and likewise `region-photo/` and `document-logo/`. `.github/workflows/publish-sota.yml`
+rebuilds them with `scripts/publish-sota-site.py` on each **release to `main`**
+that touches a report. They follow releases, not `dev`, by the owner's choice,
+so a report merged to `dev` reaches its link at the next Dev2Main. Three things
+keep a report on its link:
+
+- **The title.** `REPORT.md`'s first line is `# State of the App: <Kind> — <date>`.
+  The kind is what follows the colon, up to the first ` — `, `,` or ` (`; the
+  `<date>-` prefix of the directory name decides which report is newest. A
+  directory named `*-state-of-the-app-*` whose title names no kind fails
+  `tests_lib/meta/test_publish_sota_site.py` unless that test lists it as a
+  deliberate side-report (the per-floor control is the one today).
+- **The viewer.** Commit `viewer.html` beside `REPORT.md`. `analyze.sh` already
+  writes it to `analysis-<path>/viewer.html`; for the per-preset sessions take
+  the beta-1 run's, the app's default arm. Without one, the `viewer.html` link
+  serves a page saying the newest report has none (it never falls back to an
+  older report's viewer).
+- **A new kind** (a future modality) needs nothing here: its first report
+  creates `sota/<kind>/`.
 
 ## Changing this recipe
 
