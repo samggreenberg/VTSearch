@@ -125,6 +125,9 @@ slides:
   voting-modes
   patches
   evt-gumbel
+  # How the app does on the region path today: the State of the App review
+  # of 2026-10-06 (#4534), drawn with Photo Finish's two panels.
+  sota-regions
 
   # 7 — Logos. The logo slide opens it because it introduces the idea of logo
   # detection before the room is asked to find logos on documents. It is the

@@ -69,6 +69,14 @@ PHOTO_CLICKS = (25, 50, 100, 150)
 #: 0.04 of the set after the check on every radio, closer than a circle is wide, so
 #: they are dots on the path: a circle there would cover the check's ✓ (#4533's rule).
 PHOTO_CIRCLED = ("25", "50", "✓")
+#: The Region Photo review (#4534): the same harness and the same table, on the
+#: region path (DINOv3 patches, `max_patch`, opened on SigLIP's text sort).
+REGION_REPORT = EXPERIMENTS / "2026-10-06-state-of-the-app-region-photo"
+REGION_PATH = REGION_REPORT / "precision_recall_path.csv"
+#: The region review's precision-recall panel: its span, and which path points get a
+#: labelled circle (as `PHOTO_CIRCLED`, set from where its points fall).
+REGION_PR_LIM = (0.35, 0.85)
+REGION_CIRCLED = ("25", "50", "✓")
 
 #: The three radios, left panel's line weight and label, in the order
 #: `calib-fbeta` stacks them: the precision end, the middle, the recall end.
@@ -119,6 +127,14 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
+    ("regions", 0.25, "after"): 0.73,
+    ("regions", 1.0, "after"): 0.63,
+    ("regions", 4.0, "after"): 0.72,
+    ("regions", 0.25, "kept"): 31,
+    ("regions", 1.0, "kept"): 48,
+    ("regions", 4.0, "kept"): 95,
+    ("regions", 0.25, "precision"): 0.81,
+    ("regions", 4.0, "recall"): 0.83,
 }
 
 plt.rcParams.update(
@@ -163,19 +179,20 @@ def _table_rows(path: Path, first: str) -> list[list[str]]:
     return rows
 
 
-def photo_data() -> dict[float, dict]:
+def photo_data(source: Path = PHOTO_PATH) -> dict[float, dict]:
     """Per radio: F-beta at `PHOTO_CLICKS` and after the check, the set after the check, and the path.
 
-    All of it is the review's committed `precision_recall_path.csv` (#4519): means over
-    the trained runs with a line by that click, the returned size a median.
+    All of it is a review's committed `precision_recall_path.csv` (#4519): means over
+    the trained runs with a line by that click, the returned size a median. The
+    binary review's by default; the region review's (#4534) has the same shape.
     """
     by: dict[float, dict[str, dict[str, str]]] = {}
-    with PHOTO_PATH.open() as f:
+    with source.open() as f:
         for row in csv.DictReader(f):
             by.setdefault(float(row["beta"]), {})[row["point"]] = row
     points = [str(c) for c in PHOTO_CLICKS] + ["after the check"]
     if set(by) != {0.25, 1.0, 4.0} or any(set(points) - set(by[b]) for b in by):
-        raise SystemExit(f"make-sota-figs: {PHOTO_PATH} does not carry every radio at every point")
+        raise SystemExit(f"make-sota-figs: {source} does not carry every radio at every point")
     out = {}
     for beta, rows in by.items():
         path = [
@@ -238,10 +255,10 @@ def doc_data() -> dict[float, dict]:
     return out
 
 
-def _check(photos: dict, docs: dict) -> None:
+def _check(photos: dict, docs: dict, regions: dict) -> None:
     got = {}
     for (path, beta, key), want in EXPECT.items():
-        data = photos if path == "photos" else docs
+        data = {"photos": photos, "documents": docs, "regions": regions}[path]
         value = data[beta]["f"][DOC_CLICKS] if key == "f50" else data[beta][key]
         got[(path, beta, key)] = value if isinstance(want, int) else round(value, 2)
     wrong = {k: (got[k], EXPECT[k]) for k in EXPECT if got[k] != EXPECT[k]}
@@ -287,7 +304,9 @@ def _pr_axes(fig: Figure, lim: tuple[float, float], ticks: list[float], step: fl
     ax.set_ylim(*lim)
     ax.set_xticks(ticks)
     ax.set_yticks(ticks)
-    lines = np.arange(lim[0], lim[1] + step / 2, step)
+    # From the first multiple of the step inside the span, so a span that starts
+    # between steps (the region panel's 0.35) keeps its lines on the ticks.
+    lines = np.arange(math.ceil(lim[0] / step - 1e-9) * step, lim[1] + step / 2, step)
     ax.set_xticks(lines, minor=True)
     ax.set_yticks(lines, minor=True)
     ax.tick_params(which="minor", length=0)
@@ -433,7 +452,13 @@ def _floor(lines: dict[float, tuple[list, list]]) -> float:
 PHOTO_CHECK_X = 168
 
 
-def photo_figure(data: dict[float, dict], stage: int) -> Figure:
+def photo_figure(
+    data: dict[float, dict],
+    stage: int,
+    pr_lim: tuple[float, float] = PHOTO_PR_LIM,
+    circled: tuple[str, ...] = PHOTO_CIRCLED,
+) -> Figure:
+    """Photo Finish's two panels; Patch Notes (#4534) draws the region review with them."""
     fig = plt.figure(figsize=FIG_SIZE)
     lines = {b: (data[b]["clicks"] + [PHOTO_CHECK_X], data[b]["f"] + [data[b]["after"]]) for b in data}
 
@@ -452,7 +477,8 @@ def photo_figure(data: dict[float, dict], stage: int) -> Figure:
     )
     ax.set_xticklabels(["25", "50", "100", "150", "✓"])
     if stage >= 2:
-        _pr_paths_panel(fig, data, PHOTO_PR_LIM, [0.2, 0.4, 0.6, 0.8], PHOTO_GRID_STEP, PHOTO_CIRCLED)
+        ticks = [t for t in (0.2, 0.4, 0.6, 0.8, 1.0) if pr_lim[0] - 1e-9 <= t <= pr_lim[1] + 1e-9]
+        _pr_paths_panel(fig, data, pr_lim, ticks, PHOTO_GRID_STEP, circled)
     return fig
 
 
@@ -465,11 +491,18 @@ def doc_figure(data: dict[float, dict], stage: int) -> Figure:
     return fig
 
 
+def region_figure(data: dict[float, dict], stage: int) -> Figure:
+    return photo_figure(data, stage, REGION_PR_LIM, REGION_CIRCLED)
+
+
 def main() -> int:
-    photos, docs = photo_data(), doc_data()
-    _check(photos, docs)
-    for stem, build in (("sota-photos", photo_figure), ("sota-documents", doc_figure)):
-        data = photos if stem == "sota-photos" else docs
+    photos, docs, regions = photo_data(), doc_data(), photo_data(REGION_PATH)
+    _check(photos, docs, regions)
+    for stem, build, data in (
+        ("sota-photos", photo_figure, photos),
+        ("sota-documents", doc_figure, docs),
+        ("sota-regions", region_figure, regions),
+    ):
         # Saved at the canvas's declared bounds, so both stages frame the
         # panels identically and the top margin keeps the title notch empty.
         save(build(data, 2), OUT, f"{stem}.png", column=FULL_BLEED, tight=False)
