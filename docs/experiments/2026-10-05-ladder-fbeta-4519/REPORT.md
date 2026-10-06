@@ -49,8 +49,44 @@ typed query's own returned set (the text sort's blind cut), so every rung leaves
    - It stays above it from vote 77.
    - It ends 0.03 above it, at 0.51, and +0.45 over the second cut.
 
-The deck's slide is `slides/fragments/progression.md` (figure `slides/figs/src/make-progression-fig.py`, from
-`progression_curve.csv`).
+The deck no longer draws this ladder. The owner asked what slide 32 should show (a cumulative build-up of how
+much each addition helped), and the measurements in [The presets](#the-presets-4548) below answered it. The
+slide is now `slides/fragments/follow-suit.md` (figure `slides/figs/src/make-follow-suit-fig.py`, from
+`presets/progression_curve.csv`). The history chart that stood here is in git history (PR #4544).
+
+## The presets (#4548)
+
+**What the work since cross-calibration buys is a line that follows the user's preset.** Today's app also ran at
+beta 1/4 (`r8_labels_b025`) and beta 4 (`r8_labels_b4`), 720 runs each, same pool. Each preset is set against
+cross-calibration and scored at that preset's beta, paired by run (`presets/paired_at_own_beta.csv`):
+
+| preset | Δ at vote 30 | 50 | 100 | **150** | today better / worse by > 0.05, at 150 |
+|---|---|---|---|---|---|
+| beta 1/4 | +0.066 ± 0.007 | +0.063 ± 0.007 | +0.124 ± 0.006 | **+0.168 ± 0.006** | 74% / 2% |
+| beta 1 | 0.000 ± 0.004 | +0.001 ± 0.004 | +0.009 ± 0.003 | **+0.030 ± 0.003** | 30% / 9% |
+| beta 4 | +0.008 ± 0.004 | 0.000 ± 0.004 | -0.005 ± 0.003 | **+0.001 ± 0.003** | 19% / 17% |
+
+What the user gets at vote 150 (cross-calibration's line is the same set whatever the preference):
+
+| | precision | recall | returned, median | runs returning > 200 |
+|---|---:|---:|---:|---:|
+| cross-calibration | 0.45 | 0.70 | 73 | 30% |
+| today, beta 1/4 | 0.68 | 0.41 | 29 | 2.5% |
+| today, beta 1 | 0.54 | 0.57 | 49 | 12% |
+| today, beta 4 | 0.38 | 0.73 | 111 | 36% |
+
+**Reading:**
+- Cross-calibration's one line is long and recall-heavy. That already suits a beta 4 user, and today's app ties
+  it there.
+- The gain is large for the precision-minded user (+0.17, better in three sessions in four), small at the
+  balance (+0.03), and zero for the recall-minded.
+- Mean F1 at beta 1 hid it, because that is the preset closest to cross-calibration's one line.
+
+**How these were made:**
+- `presets/progression_curve.csv` and `presets/paired.csv` are `analyze_progression_4184.py` run on the four
+  rungs together.
+- The paired table at each preset's own beta was computed from the same cells, with a script kept beside the runs
+  (`/expscratch/sgreenberg/slide32-4548/presets.py`).
 
 ## Files
 

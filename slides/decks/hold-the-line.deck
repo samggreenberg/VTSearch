@@ -111,10 +111,10 @@ slides:
   data-coco-better-complement
   data-coco-problems
   data-set-coco-better
-  # The whole ladder on COCO Better (#4184): one cost curve per threshold
-  # idea, drawn on a pool thinned to 5% positive by the owner's call; the
-  # natural-pool result is in the notes and the study's REPORT.md.
-  progression
+  # What the work since the first rule bought (#4548): each preset off its own
+  # sessions against cross-calibration, scored at its own beta, on the pool
+  # thinned to 1% positive. The line follows the user.
+  follow-suit
   # How the app does on that bench today: the State of the App review, each
   # radio on its own sessions (`make-sota-figs.py`, from the report's tables).
   sota-photos

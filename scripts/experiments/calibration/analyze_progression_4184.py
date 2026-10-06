@@ -7,7 +7,7 @@ one ran the rung it claims to, and writes:
 * ``progression_curve.csv`` - per rung, per click: the mean cost over every
   cell, as a user would experience it (see *filled* below), with its SE and the
   share of cells that had a detector on screen.  **This is the slide's input**:
-  ``slides/figs/src/make-progression-fig.py`` reads a committed copy of it.
+  ``slides/figs/src/make-follow-suit-fig.py`` reads a committed copy of it (#4548).
 * ``paired.csv`` - each rung against the one before it, and against rung 1, at
   fixed clicks and over the whole trajectory: paired mean difference and SE.
 * ``REPORT_progression.md`` - the machine summary: what loaded, what was
