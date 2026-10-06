@@ -24,6 +24,9 @@ anything under ``vtscore`` is imported.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -102,3 +105,29 @@ def with_objective(df: pd.DataFrame) -> pd.DataFrame:
         beta = want[col]
         out[col] = fbeta_from_rates(p, r, row_beta if beta is None else beta)
     return out
+
+
+def _num(row: Mapping[str, Any], key: str) -> float:
+    try:
+        return float(row[key])
+    except (KeyError, ValueError, TypeError):
+        return float("nan")
+
+
+def row_objective(row: Mapping[str, Any]) -> float:
+    """The objective of one row read with :mod:`csv` (a dict of strings), for the stdlib analyzers.
+
+    Its ``fbeta`` where the runner wrote one, else the same number from its
+    ``precision``, ``recall`` and ``beta`` (:func:`with_objective`'s rule).
+    """
+    v = _num(row, OBJECTIVE)
+    if v == v:
+        return v
+    from vtscore.eval.calibration_metrics import fbeta_from_rates  # noqa: PLC0415
+
+    return float(fbeta_from_rates(_num(row, "precision"), _num(row, "recall"), _num(row, "beta")))
+
+
+def rows_carry_beta(rows: Iterable[Mapping[str, Any]]) -> bool:
+    """:func:`carries_beta` for rows read with :mod:`csv`."""
+    return any(np.isfinite(_num(r, "beta")) for r in rows)

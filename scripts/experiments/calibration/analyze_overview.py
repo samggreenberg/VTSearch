@@ -32,6 +32,13 @@ A cell that is expensive because `regret` is high has a ranking that already
 knows the answer and a cut rule that cannot find it. Those two want completely
 different fixes, and averaging cost alone cannot tell them apart.
 
+**The headline metric is the decision metric** (#4584): the objective, F-beta
+of the withheld half above the threshold the app holds at the run's own beta,
+on a run that drew its line at a balance; cost on one that did not (the
+Inclusion arm, a Cost-era run).  Higher is better for the objective, lower for
+cost, and every table below says which.  The "why" split stays on cost: it is
+an identity of cost, and the frame carries no oracle for the objective.
+
 Reported as distributions, not means: the tail is the product problem. A mode
 whose median run is fine and whose worst decile never leaves the floor is a mode
 that fails some users completely, and a mean hides exactly that.
@@ -57,6 +64,7 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
+import objective
 from _cells_paths import main_frame_files
 
 from study_paths import require_study_dir
@@ -64,6 +72,37 @@ from study_paths import require_study_dir
 STEPS = (20, 50, 150)
 DEEP = 150
 BANDS = ("small", "medium", "large")
+
+#: Where a run counts as "never got going", per decision metric: cost at or
+#: above 0.9 (FPR + FNR near a coin's), or the objective at or below 0.1 (it
+#: found next to nothing).  ``--floor`` overrides either.
+STUCK_FLOOR: dict[str, float] = {objective.COST: 0.9, objective.OBJECTIVE: 0.1}
+
+
+class Metric:
+    """The decision metric a run is read on: its value of a row, its direction, and its stuck test."""
+
+    def __init__(self, name: str, floor: float | None) -> None:
+        self.name = name
+        self.lower_is_better = name == objective.COST
+        self.floor = STUCK_FLOOR[name] if floor is None else floor
+
+    def of(self, r: dict) -> float:
+        return fnum(r, "cost") if self.name == objective.COST else objective.row_objective(r)
+
+    def stuck(self, x: float) -> bool:
+        return x >= self.floor if self.lower_is_better else x <= self.floor
+
+    def at_least_as_good(self, x: float, anchor: float) -> bool:
+        return x <= anchor if self.lower_is_better else x >= anchor
+
+    @property
+    def stuck_words(self) -> str:
+        return f"{self.name} {'>=' if self.lower_is_better else '<='} {self.floor}"
+
+    @property
+    def direction(self) -> str:
+        return "lower is better" if self.lower_is_better else "higher is better"
 
 
 def q(xs: list[float], p: float) -> float:
@@ -102,7 +141,7 @@ def fnum(r: dict, key: str) -> float:
         return float("nan")
 
 
-def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: int, floor: float) -> None:
+def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: int, metric: Metric) -> None:
     """What the clicking bought over typing the query and stopping.
 
     Click 0 is not a zero: it is the whole product's cheap path -- type a query,
@@ -113,12 +152,24 @@ def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: 
     being asked, so it is the one the analyzer must not leave to the figures.
 
     Reported per mode as a level, and per cell as a CROSSING: the median cell's
-    first click at which the mean cost is at or below its own text sort, plus
-    how many cells never get there. A level alone hides the cells that start
-    ahead and stay ahead.
+    first click at which the mean of the decision metric is at least as good as
+    its own text sort, plus how many cells never get there. A level alone hides
+    the cells that start ahead and stay ahead.  The objective's anchor is the
+    text sort's at the run's preset (``text_fbeta_b1`` at beta 1).
     """
     import csv as _csv
     from collections import defaultdict as _dd
+
+    if metric.name == objective.COST:
+        anchor_col = "text_cost"
+    else:
+        from vtscore.eval.voting_columns import beta_tag  # noqa: PLC0415
+
+        betas = sorted({fnum(r, "beta") for r in rows if fnum(r, "beta") == fnum(r, "beta")})
+        if len(betas) != 1:
+            print(f"\n(no zero-click anchor: the runs drew their lines at {len(betas)} balances, not one)")
+            return
+        anchor_col = f"text_fbeta_{beta_tag(betas[0])}"
 
     base: dict[tuple[str, str], list[float]] = _dd(list)
     try:
@@ -127,18 +178,18 @@ def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: 
                 if r.get("supports_text") not in (None, "", "1"):
                     continue
                 try:
-                    base[(r["embedder"], r["category"])].append(float(r["text_cost"]))
+                    base[(r["embedder"], r["category"])].append(float(r[anchor_col]))
                 except (KeyError, ValueError, TypeError):
                     continue
     except OSError:
         print(f"\n(no zero-click baseline at {path})")
         return
     if not base:
-        print(f"\n(zero-click baseline at {path} carried no usable rows)")
+        print(f"\n(zero-click baseline at {path} carried no usable `{anchor_col}` rows)")
         return
     anchor = {k: sum(v) / len(v) for k, v in base.items()}
 
-    # (mode, category, t) -> costs, so a crossing is read off the same mean the
+    # (mode, category, t) -> values, so a crossing is read off the same mean the
     # level is.
     by: dict[tuple[str, str, int], list[float]] = _dd(list)
     for r in rows:
@@ -146,12 +197,12 @@ def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: 
             t = int(r["t"])
         except (KeyError, ValueError, TypeError):
             continue
-        c = fnum(r, "cost")
+        c = metric.of(r)
         if c == c:
             by[(mode(r), r.get("category", ""), t)].append(c)
 
     print()
-    print("=== what the clicking bought over the free text sort ===")
+    print(f"=== what the clicking bought over the free text sort ({metric.name}, {metric.direction}) ===")
     print("Click 0 is the typed query alone, cut the same way and costing nothing.")
     print(f"{'mode':<{mw}}{'text sort':>10}{'@20':>8}{'@150':>8}{'crossing':>10}{'never':>8}")
     print("-" * (mw + 44))
@@ -173,7 +224,7 @@ def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: 
             hit = None
             for t in ts:
                 xs = by.get((m, c, t), [])
-                if xs and sum(xs) / len(xs) <= a:
+                if xs and metric.at_least_as_good(sum(xs) / len(xs), a):
                     hit = t
                     break
             if hit is None:
@@ -185,14 +236,25 @@ def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: 
         cross = f"{med:.0f}" if crossings else "-"
         print(f"{m:<{mw}}{anchor_lvl:>10.2f}{lvl(20):>8.2f}{lvl(150):>8.2f}{cross:>10}{never:>4}/{len(cats):<3}")
     print()
-    print("crossing = the median cell's first click whose mean cost is at or below its own")
-    print("text sort; 'never' counts cells that do not get there within the horizon.")
+    print(f"crossing = the median cell's first click whose mean {metric.name} is at least as good as")
+    print("its own text sort; 'never' counts cells that do not get there within the horizon.")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156-final")
-    ap.add_argument("--floor", type=float, default=0.9, help="cost at/above this counts as 'never got going'")
+    ap.add_argument(
+        "--metric",
+        choices=(objective.OBJECTIVE, objective.COST),
+        default=None,
+        help="decision metric (default: the objective, fbeta, when the runs carry a beta; else cost)",
+    )
+    ap.add_argument(
+        "--floor",
+        type=float,
+        default=None,
+        help="a run 'never got going' at cost >= this (default 0.9) or objective <= this (default 0.1)",
+    )
     ap.add_argument("--expect", type=int, default=0, help="expected cell count; 0 = infer from the grid")
     ap.add_argument("--min-seeds", type=int, default=10, help="per-cell rates need at least this many runs")
     ap.add_argument("--top", type=int, default=15, help="rows in the per-cell listings")
@@ -254,6 +316,9 @@ def main() -> int:
     if not rows:
         print("no rows; nothing to analyse")
         return 1
+    name = args.metric or (objective.OBJECTIVE if objective.rows_carry_beta(rows) else objective.COST)
+    metric = Metric(name, args.floor)
+    print(f"decision metric       {metric.name} ({metric.direction}); stuck at {metric.stuck_words}\n")
 
     # last row at or before each step, per run
     snap: dict[tuple, dict] = {}
@@ -271,36 +336,38 @@ def main() -> int:
 
     deep = {k: v for k, v in snap.items() if k[3] == DEEP}
 
-    print("=== what a run looks like: cost distribution (lower is better) ===")
+    print(f"=== what a run looks like: {metric.name} distribution ({metric.direction}) ===")
     hdr = f"{'mode':<{MW}}{'votes':>6}{'p10':>7}{'median':>8}{'p90':>7}{'worst':>7}{'n':>6}"
     print(hdr)
     print("-" * len(hdr))
     for m in modes:
         for s in STEPS:
-            xs = [fnum(v, "cost") for k, v in snap.items() if k[0] == m and k[3] == s]
+            xs = [metric.of(v) for k, v in snap.items() if k[0] == m and k[3] == s]
             xs = [x for x in xs if x == x]
+            worst = (max(xs) if metric.lower_is_better else min(xs)) if xs else float("nan")
             print(
                 f"{m:<{MW}}{s:>6}{f(q(xs, 0.1)):>7}{f(q(xs, 0.5)):>8}"
-                f"{f(q(xs, 0.9)):>7}{f(max(xs)) if xs else 'n/a':>7}{len(xs):>6}"
+                f"{f(q(xs, 0.9)):>7}{f(worst) if xs else 'n/a':>7}{len(xs):>6}"
             )
         print()
 
-    print(f"=== runs that never got going (cost >= {args.floor} at {DEEP} votes) ===")
+    print(f"=== runs that never got going ({metric.stuck_words} at {DEEP} votes) ===")
     hdr = f"{'mode':<{MW}}{'stuck':>7}{'of':>6}{'rate':>8}"
     print(hdr)
     print("-" * len(hdr))
     for m in modes:
-        xs = [fnum(v, "cost") for k, v in deep.items() if k[0] == m]
+        xs = [metric.of(v) for k, v in deep.items() if k[0] == m]
         xs = [x for x in xs if x == x]
-        stuck = [x for x in xs if x >= args.floor]
+        stuck = [x for x in xs if metric.stuck(x)]
         print(f"{m:<{MW}}{len(stuck):>7}{len(xs):>6}{f(len(stuck) / len(xs)) if xs else 'n/a':>8}")
 
     # --- the profile of a stuck run -----------------------------------------
     print()
-    print(f"=== what distinguishes a stuck run (>= {args.floor}) from a healthy one ===")
-    metrics = ("n_good", "n_bad", "average_precision", "auroc", "oracle_cost", "regret")
-    bad = [v for k, v in deep.items() if fnum(v, "cost") >= args.floor]
-    good = [v for k, v in deep.items() if fnum(v, "cost") < args.floor]
+    print(f"=== what distinguishes a stuck run ({metric.stuck_words}) from a healthy one ===")
+    metrics = ("n_good", "n_bad", "average_precision", "auroc", "cost", "oracle_cost", "regret")
+    scored_deep = [(v, metric.of(v)) for v in deep.values()]
+    bad = [v for v, x in scored_deep if x == x and metric.stuck(x)]
+    good = [v for v, x in scored_deep if x == x and not metric.stuck(x)]
     hdr = f"{'metric':<22}{'stuck':>14}{'healthy':>14}   n={len(bad)} vs {len(good)}"
     print(hdr)
     print("-" * len(hdr))
@@ -334,7 +401,7 @@ def main() -> int:
         print(f"{p:<12}{ph_bad.get(p, 0):>8}{ph_good.get(p, 0):>9}   {meaning.get(p, '')}")
 
     print()
-    print("=== why: is the ranking the limit, or the cut rule? ===")
+    print("=== why: is the ranking the limit, or the cut rule? (on cost, the diagnostic) ===")
     print("cost = oracle_cost (the ranking's own limit) + regret (what the cut gives away)")
     hdr = f"{'mode':<{MW}}{'cost':>13}{'oracle':>13}{'regret':>13}{'regret share':>14}"
     print(hdr)
@@ -362,6 +429,7 @@ def main() -> int:
     print()
     print("=== the same split, by target size ===")
     hdr = f"{'mode':<{MW}}{'band':<8}{'cost':>13}{'oracle':>13}{'regret':>13}{'stuck':>8}"
+    print(f"(stuck is the share at {metric.stuck_words}; the rest is the cost split)")
     print(hdr)
     print("-" * len(hdr))
     for m in modes:
@@ -370,7 +438,8 @@ def main() -> int:
             c = [x for x in (fnum(v, "cost") for v in sel) if x == x]
             o = [x for x in (fnum(v, "oracle_cost") for v in sel) if x == x]
             g = [x for x in (fnum(v, "regret") for v in sel) if x == x]
-            rate = (sum(1 for x in c if x >= args.floor) / len(c)) if c else float("nan")
+            vals = [x for x in (metric.of(v) for v in sel) if x == x]
+            rate = (sum(1 for x in vals if metric.stuck(x)) / len(vals)) if vals else float("nan")
             print(f"{m:<{MW}}{b:<8}{pm(c):>13}{pm(o):>13}{pm(g):>13}{f(rate):>8}")
         print()
 
@@ -381,11 +450,11 @@ def main() -> int:
     print(f"=== reliably hard, or unlucky? per-cell stuck rate at {DEEP} votes ===")
     per: dict[tuple[str, str], list[float]] = defaultdict(list)
     for k, v in deep.items():
-        x = fnum(v, "cost")
+        x = metric.of(v)
         if x == x:
             per[(k[1], k[0])].append(x)
     scored = [
-        (cat, m, sum(1 for x in xs if x >= args.floor) / len(xs), q(xs, 0.5), len(xs))
+        (cat, m, sum(1 for x in xs if metric.stuck(x)) / len(xs), q(xs, 0.5), len(xs))
         for (cat, m), xs in per.items()
         if len(xs) >= args.min_seeds
     ]
@@ -397,7 +466,7 @@ def main() -> int:
         print(f"{cat:<20}{m:<{MW}}rate {rate:>5.2f}  median {med:>5.2f}  n={n:<4} {bar}")
 
     if args.baseline:
-        click_zero_section(args.baseline, rows, mode, modes, MW, args.floor)
+        click_zero_section(args.baseline, rows, mode, modes, MW, metric)
 
     print()
     print("=== hard for everyone, or hard for one mode? ===")
@@ -405,13 +474,15 @@ def main() -> int:
     for (cat, m), xs in per.items():
         if len(xs) >= args.min_seeds:
             med_by[cat][m] = q(xs, 0.5)
-    universal = [c for c, d in med_by.items() if len(d) == len(modes) and min(d.values()) >= args.floor]
+    universal = [c for c, d in med_by.items() if len(d) == len(modes) and all(metric.stuck(x) for x in d.values())]
     mode_specific = [
         c
         for c, d in med_by.items()
-        if len(d) == len(modes) and max(d.values()) >= args.floor and min(d.values()) < args.floor
+        if len(d) == len(modes)
+        and any(metric.stuck(x) for x in d.values())
+        and not all(metric.stuck(x) for x in d.values())
     ]
-    print(f"median cost >= {args.floor} for EVERY mode (intrinsically hard): {len(universal)}")
+    print(f"median {metric.stuck_words} for EVERY mode (intrinsically hard): {len(universal)}")
     for c in sorted(universal)[: args.top]:
         print(f"   {c}   " + "  ".join(f"{m.split('/')[0]}={med_by[c][m]:.2f}" for m in modes))
     print(f"\nhard for some mode but not others (a mode choice would fix it): {len(mode_specific)}")

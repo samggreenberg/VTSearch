@@ -90,6 +90,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
+import objective
 import pandas as pd
 
 from vtscore.eval.autopilot_flow import (
@@ -108,9 +109,11 @@ from vtscore.eval.autopilot_flow import (
 #: rest.
 RUN_KEYS: tuple[str, ...] = ("arm", "dataset", "embedder", "category", "seed")
 
-#: Metrics carried through to the stopping point by default: the one the ship
-#: decision reads and the ranking metric that sits beside it in every report.
-DEFAULT_METRICS: tuple[str, ...] = ("cost", "average_precision")
+#: Metrics carried through to the stopping point by default: the two a ship
+#: decision reads - the objective on a balance run, cost without one (#4584;
+#: each is dropped where the frame cannot carry it) - and the ranking metric
+#: that sits beside them in every report.
+DEFAULT_METRICS: tuple[str, ...] = (objective.OBJECTIVE, objective.COST, "average_precision")
 
 #: The indicator columns a post-#3560 run emits.  Absent from every earlier
 #: frame, which is why every read of them is guarded.
@@ -221,7 +224,8 @@ def stopping_points(
     ``{metric}_at_stop`` / ``{metric}_final`` / ``{metric}_delta``
         The **stopping cost** (height at the stopping point), the number
         studies report today, and ``final - at_stop``.  For ``cost`` a positive
-        delta means the extra clicks made the detector *worse*.
+        delta means the extra clicks made the detector *worse*; for the
+        objective, ``fbeta``, a negative one does.
     ``n_good_at_stop`` / ``n_bad_at_stop``
         The labelset the user would have left with.
     ``blocked_smart`` / ``blocked_stable`` / ``blocked_span``
@@ -233,6 +237,12 @@ def stopping_points(
     if main.empty or "phase" not in main.columns or "t" not in main.columns or not kk:
         return pd.DataFrame()
 
+    if any(m.startswith(objective.OBJECTIVE) for m in metrics):
+        # A balance-era frame written before the objective's columns (#4584).
+        main = objective.with_objective(main)
+    if objective.OBJECTIVE in metrics and not objective.carries_beta(main):
+        # No balance drew the line: there is no objective to carry, only NaN.
+        metrics = [m for m in metrics if m != objective.OBJECTIVE]
     metrics = [m for m in metrics if m in main.columns]
     out: list[dict[str, Any]] = []
     for run_key, g in main.groupby(kk, dropna=False, sort=True):
@@ -402,16 +412,21 @@ def _fmt(v: Any, digits: int = 2) -> str:
     return f"{f:.{digits}f}"
 
 
-def stopping_table(summary: pd.DataFrame, *, metric: str = "cost") -> str:
+def stopping_table(summary: pd.DataFrame, *, metric: str | None = None) -> str:
     """The stopping block of a REPORT.md, as markdown.
 
     One row per group.  The columns are the issue's two questions — *where* the
     rules fired and *what it cost there* — plus the two qualifications without
     which neither number can be read: how many runs ever fired, and how much
-    the budget's extra clicks moved the metric afterwards.
+    the budget's extra clicks moved the metric afterwards.  *metric* defaults
+    to the objective where the runs carried one, else cost (#4584).
     """
     if summary.empty:
         return "_No stopping data: no run carried a `phase` column._"
+    if metric is None:
+        col = f"median_{objective.OBJECTIVE}_at_stop"
+        has_objective = col in summary.columns and bool(summary[col].notna().any())
+        metric = objective.OBJECTIVE if has_objective else objective.COST
     ident = [c for c in summary.columns if c in ("arm", "dataset", "embedder", "category")]
     head = [*ident, "runs", "fired", "stop click (KM)", "stop click (median of fired)"]
     head += [f"{metric} at stop", f"{metric} at budget", f"Δ{metric} (paired)", "clicks after stop"]

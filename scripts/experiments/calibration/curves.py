@@ -102,6 +102,7 @@ import common
 common.setup_env()
 
 import numpy as np  # noqa: E402
+import objective  # noqa: E402
 import pandas as pd  # noqa: E402
 
 #: Below this fraction of an arm's cells carrying a detector, the mean is drawn
@@ -141,7 +142,49 @@ BASELINE_COLUMNS: dict[str, tuple[str, ...]] = {
     "f1": ("text_f1",),
     "fpr": ("text_fpr",),
     "fnr": ("text_fnr",),
+    # The text sort's returned set at each preset balance (`text_baseline.py`);
+    # `fbeta` itself resolves to the run's own preset in `resolve_metric`.
+    "fbeta_b025": ("text_fbeta_b025",),
+    "fbeta_b1": ("text_fbeta_b1",),
+    "fbeta_b4": ("text_fbeta_b4",),
 }
+
+
+def resolve_metric(
+    main: pd.DataFrame, metric: str | None, lower_is_better: bool | None, baseline_col: str | None
+) -> tuple[pd.DataFrame, str, bool, str | None]:
+    """``(frame, metric, lower_is_better, baseline_col)`` with every default filled (#4584).
+
+    No *metric* is the decision metric (:func:`objective.primary_metric`): the
+    objective, ``fbeta``, on a frame that carries a beta, else ``cost``.  An
+    objective column the frame predates is filled from its rates; the direction
+    comes from the one table the viewer reads; and ``fbeta``'s zero-click anchor
+    is the text sort's at the frame's preset, where it has a single one.
+    """
+    if metric is None:
+        metric = objective.primary_metric(main)
+    if metric.startswith(objective.OBJECTIVE):
+        main = objective.with_objective(main)
+    if lower_is_better is None:
+        lower_is_better = objective.lower_is_better(metric)
+    if baseline_col is None and metric == objective.OBJECTIVE:
+        baseline_col = objective_anchor_column(main)
+    return main, metric, lower_is_better, baseline_col
+
+
+def objective_anchor_column(main: pd.DataFrame) -> str | None:
+    """The text baseline's column for ``fbeta``'s zero-click anchor: the text sort at the frame's preset.
+
+    ``None`` unless every balance row was drawn at one preset beta, since the
+    text sort was scored at the presets only (``text_fbeta_b025`` / ``_b1`` /
+    ``_b4``).
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
+
+    betas = objective.frame_betas(main)
+    if len(betas) == 1 and betas[0] in RANK_FRAME_BETAS:
+        return f"text_fbeta_{beta_tag(betas[0])}"
+    return None
 
 
 def _keys(df: pd.DataFrame, keys: Sequence[str] = KEYS) -> list[str]:
@@ -394,14 +437,14 @@ def mean_figure(  # noqa: C901
     outdir: Path,
     *,
     arms: Sequence[str],
-    metric: str = "cost",
+    metric: str | None = None,
     keys: Sequence[str] = KEYS,
     denominator: pd.DataFrame | None = None,
     baseline: pd.DataFrame | None = None,
     baseline_col: str | None = None,
     baseline_label: str = BASELINE_LABEL,
     stat: str = STAT,
-    lower_is_better: bool = True,
+    lower_is_better: bool | None = None,
     stops: pd.DataFrame | None = None,
     dpi: int = FIG_DPI,
 ) -> tuple[str | None, pd.DataFrame]:
@@ -425,6 +468,7 @@ def mean_figure(  # noqa: C901
     Returns ``(filename, curves)``; ``curves`` is the plotted numbers, long
     format, one row per ``(arm, dataset, t)``, and always carries ``coverage``.
     """
+    main, metric, lower_is_better, baseline_col = resolve_metric(main, metric, lower_is_better, baseline_col)
     import matplotlib
 
     matplotlib.use("Agg")
@@ -596,17 +640,18 @@ def per_run_figures(  # noqa: C901
     outdir: Path,
     *,
     arms: Sequence[str],
-    metric: str = "cost",
+    metric: str | None = None,
     keys: Sequence[str] = KEYS,
     denominator: pd.DataFrame | None = None,
     baseline: pd.DataFrame | None = None,
     baseline_col: str | None = None,
     prevalence: dict[tuple[str, str], float] | None = None,
     max_runs: int = 0,
-    lower_is_better: bool = True,
+    lower_is_better: bool | None = None,
     dpi: int = FIG_DPI,
 ) -> list[str]:
     """One file per dataset: a panel per arm holding **every** seed's own curve."""
+    main, metric, lower_is_better, baseline_col = resolve_metric(main, metric, lower_is_better, baseline_col)
     import matplotlib
 
     matplotlib.use("Agg")
@@ -729,7 +774,7 @@ def quality_vs_clicks(
     outdir: Path,
     *,
     arms: Sequence[str],
-    metric: str = "cost",
+    metric: str | None = None,
     keys: Sequence[str] = KEYS,
     denominator: pd.DataFrame | None = None,
     baseline: pd.DataFrame | None = None,
@@ -738,7 +783,7 @@ def quality_vs_clicks(
     prevalence: dict[tuple[str, str], float] | None = None,
     stat: str = STAT,
     max_runs: int = 0,
-    lower_is_better: bool = True,
+    lower_is_better: bool | None = None,
     stops: pd.DataFrame | None = None,
     dpi: int = FIG_DPI,
 ) -> list[str]:
@@ -746,10 +791,13 @@ def quality_vs_clicks(
 
     The one call an analyzer needs: pass the main metric frame tagged with
     ``arm``, the cell list as *denominator*, and the text-sort *baseline*.
+    Without a *metric* it draws the decision metric: the objective on a frame
+    that carries a beta, cost otherwise (:func:`resolve_metric`, #4584).
     Pass *stops* (from ``stopping.stopping_points``) to mark where the app's
     stopping rules fired on the averaged panel — the click past which every
     further click on the axis was one the app had already said was optional.
     """
+    main, metric, lower_is_better, baseline_col = resolve_metric(main, metric, lower_is_better, baseline_col)
     written: list[str] = []
     name, _curves = mean_figure(
         main,
@@ -860,7 +908,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--results", default=str(common.RESULTS), help="results root holding one dir per arm")
     ap.add_argument("--arms", required=True, help="comma-separated arm directories, in report order")
     ap.add_argument("--out", default=None, help="figure directory (default: <results>/../analysis/figures)")
-    ap.add_argument("--metric", default="cost", help="metric column to curve (default: cost)")
+    ap.add_argument(
+        "--metric",
+        default=None,
+        help="metric column to curve (default: the objective, fbeta, when the frame carries a beta; else cost)",
+    )
     ap.add_argument("--stat", default=STAT, choices=("mean", "median"))
     ap.add_argument("--max-runs", type=int, default=0, help="cap per-run lines per panel (0 = draw all)")
     ap.add_argument("--prevalence", default=None, help="prepare_info.json, to colour runs by category prevalence")
@@ -877,13 +929,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     prevalence = prevalence_from(args.prevalence) if args.prevalence else None
     baseline = text_sort_baseline(args.baseline) if args.baseline else None
-    lower_is_better = args.metric not in ("average_precision", "auroc")
+    frame, metric, lower_is_better, _ = resolve_metric(frame, args.metric, None, None)
 
     written = quality_vs_clicks(
         frame,
         outdir,
         arms=arms,
-        metric=args.metric,
+        metric=metric,
         prevalence=prevalence,
         baseline=baseline,
         stat=args.stat,
@@ -893,7 +945,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"wrote {len(written)} figure(s) to {outdir}:")
     for name in written:
         print(f"  {name}")
-    curve_csv = outdir / f"{args.metric}_vs_clicks.csv"
+    curve_csv = outdir / f"{metric}_vs_clicks.csv"
     if curve_csv.exists():
         x = crossover(pd.read_csv(curve_csv), stat=args.stat, lower_is_better=lower_is_better)
         if not x.empty:
