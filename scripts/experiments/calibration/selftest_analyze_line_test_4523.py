@@ -41,6 +41,7 @@ def _rows(world: str, beta: float, width: float, budget: int, held: list[int], p
                 "beta": beta,
                 "width": width,
                 "budget": budget,
+                "budget_below": budget,
                 "walk": a.DEFAULT_WALK,
                 "category": f"c{i}",
                 "seed": 0,
