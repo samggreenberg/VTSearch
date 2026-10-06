@@ -1,8 +1,9 @@
-"""The precision floor wired to a detector (#4245, #4272, #4362): operating point, re-cut, state.
+"""A detector's line wired up (#4245, #4272, #4362, #4413): the estimator's seams, the re-cut, a retrain.
 
-``test_precision_floor.py`` pins the #4220 estimator itself and
-``test_spot_check.py`` the spot check that draws the line since #4272.  This
-file pins what the wiring adds around them:
+``test_precision_floor.py`` pins the #4220 estimator itself,
+``test_spot_check.py`` and ``test_balance.py`` the spot check and the balance
+that draw the line, and ``test_balance_wiring.py`` the balance as a setting.
+This file pins what the wiring adds around them:
 
 * that the fold held-out rows map back to their training rows
   (``holdout_sink``), which the eval harness's precision frames read;
@@ -10,10 +11,9 @@ file pins what the wiring adds around them:
   same answer as a fresh ``precision_floor_cut``;
 * ``reporting_line``, the library's own account of the estimator's line, kept
   as public API off the app's path;
-* the detector-state seams: ``recut_detector_threshold`` keeping the set the
-  floor keeps, ``detector_floor_state``, per-detector seeding,
-  ``set_min_precision``, and a retrain parking the ranking (and, since #4362,
-  no estimate);
+* the detector-state seams the balance leaves to the inclusion: a re-cut at an
+  inclusion, the human votes, and a retrain parking the ranking and drawing
+  the balance's line (and, since #4362, no estimate);
 * the retired #4245 calibration filter and the estimate's parking: every
   public name survives, answers as documented, and warns.
 
@@ -26,7 +26,6 @@ The estimator reads ranks, so the squash changes no answer.
 
 from __future__ import annotations
 
-import math
 
 import numpy as np
 import pytest
@@ -34,25 +33,13 @@ import pytest
 from tests_lib.sorting.test_precision_floor import _session
 from vtscore.datasets.vote_provenance import calibrates_precision
 from vtscore.state.core import (
-    detector_line_labels,
-    detector_line_proposal,
     DetectorContext,
-    detector_floor_state,
-    detector_line_inclusion,
+    detector_balance_state,
     detector_precision_floor,
     human_voted_ids,
-    recompute_detector_thresholds,
     recut_detector_threshold,
-    register_detector_context,
-    set_thread_detector_context,
 )
 from vtscore.training.thresholds import (
-    BAND_BASE,
-    DEFAULT_MIN_PRECISION,
-    FLOOR_CONFIRMED,
-    FLOOR_SHORT,
-    FLOOR_UNCHECKED,
-    NO_PRECISION_FLOOR,
     PRECISION_FLOOR_FALLBACK_INCLUSION,
     LineRanking,
     PrecisionFloorEstimate,
@@ -64,15 +51,10 @@ from vtscore.training.thresholds import (
     fit_fold_anchored_cut,
     fit_precision_floor_curve,
     line_inclusion,
-    line_under,
-    mixture_count,
     precision_floor_cut,
     reporting_line,
-    resolve_min_precision,
+    walk_positives,
 )
-
-#: The floor draws the line here (#4413): these are the deprecated floor's own tests, and the balance is the default.
-pytestmark = pytest.mark.usefixtures("floor_preference")
 
 LEARNED_HARD: dict[str, object] = {"flow": "autopilot", "phase": "hard", "select_mode": "hard", "sort_kind": "learned"}
 
@@ -302,42 +284,13 @@ class TestWhichLineAnOperatingPointDraws:
         assert cut.threshold_at(origin) <= line.threshold
 
 
-class TestResolvingTheArmKnob:
-    def test_none_is_the_apps_default(self):
-        assert resolve_min_precision(None) == DEFAULT_MIN_PRECISION
-
-    def test_off_is_the_inclusion_arm(self):
-        assert resolve_min_precision(NO_PRECISION_FLOOR) is None
-
-    def test_a_number_pins_a_floor(self):
-        assert resolve_min_precision(0.75) == 0.75
-
-    @pytest.mark.parametrize("bad", [0.0, 1.5, "half", True])
-    def test_anything_else_is_refused(self, bad):
-        with pytest.raises(ValueError):
-            resolve_min_precision(bad)
-
-
 def _planted_ranking(n: int = 200, voted: set[int] | None = None) -> LineRanking:
     """A haystack of *n* items on a strict descending ladder, rank == id - 1."""
     return LineRanking.from_scores(list(range(1, n + 1)), np.linspace(0.99, 0.01, n), voted or set())
 
 
-def _finished_check(ranking: LineRanking, min_precision: float, *, right: bool = True) -> SpotCheck:
-    """A walk over *ranking*'s unvoted items at *min_precision*, every pick voted *right* (or every pick wrong).
-
-    Every pick right walks to the end of the ranking (the whole of it is
-    kept); every pick wrong ends short on the first band (#4388).
-    """
-    check = SpotCheck.start(tuple(int(i) for i in ranking.unvoted_ids()), min_precision, seed=1)
-    while check.running:
-        check.record({cid: right for cid in check.pending})
-    check.fingerprint = ranking.fingerprint(check.k, set(check.labels))
-    return check
-
-
 class TestTheDetectorsLine:
-    def _ctx(self, detector_id: str = "det-floor", n: int = 200) -> DetectorContext:
+    def _ctx(self, detector_id: str = "det-line", n: int = 200) -> DetectorContext:
         cut, _estimate = _fitted()
         ctx = DetectorContext(detector_id)
         ctx.anchored_cut_cache = cut
@@ -348,77 +301,6 @@ class TestTheDetectorsLine:
     def test_recut_at_an_inclusion_reads_the_anchored_cut(self):
         ctx = self._ctx()
         assert recut_detector_threshold(ctx, 4) == ctx.anchored_cut_cache.threshold_at(4)
-
-    def test_recut_at_a_floor_keeps_the_starting_candidate(self, schedule_only):
-        """Before any check the line sits at the last of the top K unvoted items (#4272)."""
-        ctx = self._ctx()
-        r = ctx.line_ranking
-        assert recut_detector_threshold(ctx, 4, min_precision=0.5) == r.threshold_for(32)
-        assert recut_detector_threshold(ctx, 4, min_precision=0.25) == r.threshold_for(64)
-        assert recut_detector_threshold(ctx, 4, min_precision=0.1) == r.threshold_for(128)
-        assert recut_detector_threshold(ctx, 4, min_precision=1.0) == r.threshold_for(32)
-
-    def test_recut_at_a_floor_reads_the_live_votes(self, schedule_only):
-        """The unvoted remainder is read at re-cut time, so the line follows the ranking at the same count."""
-        ctx = self._ctx()
-        ctx.good_votes.update({1: None, 2: None})
-        ctx.bad_votes[3] = None
-        assert recut_detector_threshold(ctx, min_precision=0.5) == ctx.line_ranking.threshold_for(32, {1, 2, 3})
-        assert recut_detector_threshold(ctx, min_precision=0.5) == line_under(ctx.line_ranking.score_of(35))
-
-    def test_recut_at_a_floor_keeps_the_smaller_of_the_schedule_and_the_mixture(self):
-        """Before any check the line keeps the smaller of the schedule's count and the mixture's (#4389).
-
-        A two-population ranking (``test_mixture_count``) with 20 unvoted
-        items the mixture puts at ~1: at 90% its count is about them, under
-        the schedule's 32, and the line follows it; at 10% it runs ~200 deep
-        into the low population, and the schedule's 128 caps it.  The human
-        vote dicts are the anchors the state a response carries reads.
-        """
-        from tests_lib.sorting.test_mixture_count import _two_populations
-
-        ctx = self._ctx()
-        r, labels = _two_populations(n_high=28)
-        ctx.line_ranking = r
-        ctx.good_votes.update({cid: None for cid, good in labels.items() if good})
-        ctx.bad_votes.update({cid: None for cid, good in labels.items() if not good})
-        assert detector_line_labels(ctx) == labels
-        proposal = detector_line_proposal(ctx, 0.9)
-        assert proposal == mixture_count(r, 0.9, labels, set(labels))
-        assert proposal is not None and 16 <= proposal < 32, proposal
-        assert recut_detector_threshold(ctx, min_precision=0.9) == r.threshold_for(proposal, human_voted_ids(ctx))
-        state = detector_floor_state(ctx, 0.9)
-        assert state is not None and state["status"] == FLOOR_UNCHECKED and state["count"] == proposal
-        assert state["schedule"]["candidate"] == 32, "the walk still starts at the schedule"
-        deep = detector_line_proposal(ctx, 0.1)
-        assert deep is not None and deep > 128, deep
-        assert recut_detector_threshold(ctx, min_precision=0.1) == r.threshold_for(128, set(labels))
-        capped = detector_floor_state(ctx, 0.1)
-        assert capped is not None and capped["count"] == 128
-
-    def test_recut_at_a_floor_keeps_the_set_a_finished_check_ended_on(self):
-        ctx = self._ctx()
-        ctx.precision_check = _finished_check(ctx.line_ranking, 0.25)
-        n = ctx.line_ranking.size
-        assert ctx.precision_check.status == FLOOR_CONFIRMED and ctx.precision_check.k == n
-        voted = set(ctx.precision_check.labels)
-        ctx.good_votes.update({cid: None for cid in voted})
-        assert recut_detector_threshold(ctx, min_precision=0.25) == ctx.line_ranking.threshold_for(n, voted)
-        # A different floor is unchecked: its own starting candidate.
-        assert recut_detector_threshold(ctx, min_precision=0.5) == ctx.line_ranking.threshold_for(32, voted)
-
-    def test_a_short_check_keeps_the_first_band(self):
-        ctx = self._ctx()
-        ctx.precision_check = _finished_check(ctx.line_ranking, 0.1, right=False)
-        assert ctx.precision_check.status == FLOOR_SHORT and ctx.precision_check.k == BAND_BASE
-        voted = set(ctx.precision_check.labels)
-        ctx.bad_votes.update({cid: None for cid in voted})
-        assert recut_detector_threshold(ctx, min_precision=0.1) == ctx.line_ranking.threshold_for(BAND_BASE, voted)
-
-    def test_with_no_ranking_a_floor_falls_through_to_the_inclusion_fallbacks(self):
-        ctx = self._ctx()
-        ctx.line_ranking = None
-        assert recut_detector_threshold(ctx, 4, min_precision=0.5) == ctx.anchored_cut_cache.threshold_at(4)
 
     def test_an_operating_point_needs_one_of_the_two(self):
         with pytest.raises(ValueError, match="operating point"):
@@ -436,12 +318,6 @@ class TestTheDetectorsLine:
         with pytest.deprecated_call():
             assert detector_precision_floor(planted, 0.5).status is PrecisionFloorStatus.INSUFFICIENT_EVIDENCE
 
-    def test_acquisition_origin_under_each_operating_point(self):
-        ctx = self._ctx()
-        assert detector_line_inclusion(ctx, None) == PRECISION_FLOOR_FALLBACK_INCLUSION
-        for floor in (0.1, 0.5, 1.0):
-            assert detector_line_inclusion(ctx, floor) is None, "a set, not an inclusion, drew the line"
-
     def test_the_human_votes_are_the_verified_ones_in_find_mode(self):
         ctx = self._ctx()
         ctx.good_votes.update({1: None, 2: None})
@@ -450,116 +326,6 @@ class TestTheDetectorsLine:
         ctx.find_mode = True
         ctx.verified_ids[2] = None
         assert human_voted_ids(ctx) == {2}, "every Find item carries a machine label; only the verified are votes"
-
-    def test_the_floor_state_a_response_carries_before_a_check(self, schedule_only):
-        """What rides beside ``threshold`` wherever the line leaves the process (#4247, #4272)."""
-        ctx = self._ctx()
-        state = detector_floor_state(ctx, 0.25)
-        assert state == {
-            "min_precision": 0.25,
-            "status": FLOOR_UNCHECKED,
-            "count": 64,
-            "range": None,
-            "schedule": {"candidate": 64, "rounds": 4, "picks": 5},
-        }
-        assert detector_floor_state(ctx, None) is None
-
-    def test_the_floor_state_after_a_check_carries_its_range_and_goes_stale(self):
-        ctx = self._ctx()
-        ctx.precision_check = _finished_check(ctx.line_ranking, 0.5)
-        ctx.good_votes.update({cid: None for cid in ctx.precision_check.labels})
-        state = detector_floor_state(ctx, 0.5)
-        assert state is not None
-        assert state["status"] == FLOOR_CONFIRMED and state["count"] == ctx.line_ranking.size
-        # Every pick right walks all six bands of the 200 (8, 8, 16, 32, 64, 72): 30 picks.
-        assert state["range"]["labelled"] == 30 and state["range"]["right"] == 30
-        # The walk decides on the picks' plain share, so the range's lower end can sit
-        # under the floor (each band's bound is at alpha / 6 here); the upper end is 1.
-        assert 0.3 <= state["range"]["lo"] < 0.5 and state["range"]["hi"] == 1.0 and state["range"]["stale"] is False
-        # A later vote inside the set moves the set under the result.
-        ctx.bad_votes[next(cid for cid in ctx.line_ranking.candidate(32, human_voted_ids(ctx)))] = None
-        later, other = detector_floor_state(ctx, 0.5), detector_floor_state(ctx, 0.1)
-        assert later is not None and other is not None
-        assert later["range"]["stale"] is True
-        assert other["status"] == FLOOR_UNCHECKED, "a result belongs to its floor"
-
-    def test_the_floor_state_without_a_ranking_is_unchecked_at_the_schedules_count(self):
-        bare = DetectorContext("det-bare-state")
-        assert detector_floor_state(bare, 0.5) == {
-            "min_precision": 0.5,
-            "status": FLOOR_UNCHECKED,
-            "count": 32,
-            "range": None,
-            "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
-        }
-
-    def test_each_detector_keeps_its_own_floor(self):
-        """The floor is per detector (#3416): a change moves only the detector that holds it and the unseeded."""
-        mine = self._ctx("det-own-floor")
-        mine.min_precision, mine.min_precision_seeded = None, True
-        mine.threshold = -999.0
-        register_detector_context(mine)
-        unseeded = self._ctx("det-unseeded-floor")
-        register_detector_context(unseeded)
-
-        recompute_detector_thresholds(0.5)
-
-        assert mine.threshold == mine.anchored_cut_cache.threshold_at(0), "no floor: the Inclusion 0 cut"
-        assert unseeded.threshold == unseeded.line_ranking.threshold_for(32)
-
-
-class TestTheSetting:
-    def test_a_detector_seeds_its_floor_from_the_user_setting(self):
-        from vtscore.state import get_min_precision
-
-        ctx = DetectorContext("det-seed")
-        set_thread_detector_context(ctx)
-        assert get_min_precision() == DEFAULT_MIN_PRECISION
-        assert ctx.min_precision_seeded and ctx.min_precision == DEFAULT_MIN_PRECISION
-
-    @pytest.mark.usefixtures("no_precision_floor")
-    def test_a_cleared_user_floor_seeds_none(self):
-        from vtscore.state import get_min_precision
-
-        set_thread_detector_context(DetectorContext("det-seed-none"))
-        assert get_min_precision() is None
-
-    def test_setting_it_persists_and_recuts_the_active_detector(self):
-        from vtscore.state import get_min_precision, register_setting_persister, set_min_precision
-
-        persisted: list = []
-        register_setting_persister("min_precision", persisted.append)
-        ctx = self._active_ctx()
-
-        set_min_precision(0.5)
-        assert persisted == [0.5] and get_min_precision() == 0.5
-        assert ctx.threshold == ctx.line_ranking.threshold_for(32)
-
-        set_min_precision(0.1)
-        assert ctx.threshold == ctx.line_ranking.threshold_for(128)
-
-        set_min_precision(None)
-        assert persisted == [0.5, 0.1, None] and get_min_precision() is None
-        assert ctx.threshold == ctx.anchored_cut_cache.threshold_at(PRECISION_FLOOR_FALLBACK_INCLUSION)
-
-    def test_a_floor_outside_the_unit_interval_is_refused(self):
-        from vtscore.state import set_min_precision
-
-        for bad in (0.0, -0.1, 1.01):
-            with pytest.raises(ValueError, match="floor"):
-                set_min_precision(bad)
-
-    def _active_ctx(self) -> DetectorContext:
-        ctx = TestTheDetectorsLine()._ctx("det-active-floor")
-        register_detector_context(ctx)
-        set_thread_detector_context(ctx)
-        return ctx
-
-
-def test_the_default_floor_is_the_one_the_owner_ruled():
-    """Half of what the cut returns should be right (owner, 2026-09-28)."""
-    assert DEFAULT_MIN_PRECISION == 0.5
-    assert not math.isnan(DEFAULT_MIN_PRECISION)
 
 
 class TestARetrain:
@@ -577,12 +343,13 @@ class TestARetrain:
             for cid in range(500, 530)
         }
 
-    def _train(self, **kwargs):
+    def _train(self, det_ctx_check: SpotCheck | None = None, **kwargs):
         from vtscore.detectors.training import train_and_score
 
         good = {cid: None for cid in range(500, 506)}
         bad = {cid: None for cid in range(506, 514)}
-        ctx = DetectorContext("det-retrain-floor", media_type="audio")
+        ctx = DetectorContext("det-retrain-line", media_type="audio")
+        ctx.precision_check = det_ctx_check
         ctx.vote_provenance = {cid: LEARNED_HARD for cid in [*good, *bad]}
         _results, threshold, model = train_and_score(self._clips(), good, bad, det_ctx=ctx, **kwargs)
         assert model is not None and ctx.anchored_cut_cache is not None
@@ -596,52 +363,41 @@ class TestARetrain:
         ctx, _t = self._train()
         assert ctx.precision_floor_cache is None
 
-    def test_a_retrain_parks_the_ranking_and_cuts_at_the_floors_starting_candidate(self, schedule_only):
-        """The line keeps the top K unvoted items of the haystack it scored (#4272), voted items marked."""
-        ctx, threshold = self._train(min_precision=0.5)
+    def test_a_retrain_parks_the_ranking_and_cuts_at_the_labels_line(self):
+        """The line is the labels' line (#4452); the ranking it is read against is parked, voted items marked (#4272)."""
+        ctx, threshold = self._train(beta=1.0)
         ranking = ctx.line_ranking
         assert ranking is not None and ranking.size == 30
         assert ranking.voted == frozenset(range(500, 514))
-        # 30 media, 14 voted: the 16 unvoted are the whole candidate at 50%.
-        assert ranking.candidate(32) == tuple(sorted(range(514, 530), key=ranking.score_of, reverse=True))
-        assert (
-            threshold == ranking.threshold_for(32) == line_under(min(ranking.score_of(cid) for cid in range(514, 530)))
-        )
+        assert ctx.labels_line is not None, "the fixture's votes separate, so the folds fit a class model"
+        assert threshold == pytest.approx(ctx.labels_line.threshold(1.0), abs=1e-12)
+        assert recut_detector_threshold(ctx, beta=1.0) == pytest.approx(threshold, abs=1e-12)
 
-    def test_a_retrain_anchors_the_mixture_on_its_votes_and_cuts_at_the_smaller_count(self):
-        """The unchecked line a retrain draws is the smaller of the schedule's 32 and the mixture's (#4389).
-
-        The mixture is anchored on the votes the retrain trained on, and
-        memoised on the ranking it parks, so the re-cut and the floor state
-        read the same count back without a refit.
-        """
-        ctx, threshold = self._train(min_precision=0.5)
+    def test_the_balances_state_counts_what_the_labels_line_keeps(self):
+        """No count is drawn on the ranking (#4452): the state reports how many unvoted items clear the line."""
+        ctx, threshold = self._train(beta=1.0)
+        ctx.threshold = threshold  # what the caller of a retrain stores, as the app does
         ranking = ctx.line_ranking
         assert ranking is not None
-        labels = {**dict.fromkeys(range(500, 506), True), **dict.fromkeys(range(506, 514), False)}
-        proposal = mixture_count(ranking, 0.5, labels)
-        assert proposal is not None and 1 <= proposal <= 16
-        assert threshold == ranking.threshold_for(min(32, proposal))
-        assert len(ranking.mixture) == 1 and ranking.mixture[0] is not None, "one fit, memoised on the ranking"
-        from vtscore.state.core import recut_detector_threshold as recut
+        unvoted = ranking.unvoted_ids(set())
+        kept = sum(1 for cid in unvoted if ranking.score_of(int(cid)) >= threshold)
+        assert detector_balance_state(ctx, 1.0)["count"] == kept
+        assert ranking.mixture == [], "the count line's mixture is never fitted under the labels' line"
 
-        fit = ranking.mixture[0]
-        assert recut(ctx, min_precision=0.5) == threshold
-        state = detector_floor_state(ctx, 0.5)
-        assert state is not None and state["count"] == min(32, proposal)
-        assert ranking.mixture == [fit], "the re-cut and the state read the retrain's fit"
-
-    def test_a_retrain_keeps_a_finished_checks_count(self, schedule_only):
-        ctx, _t = self._train(min_precision=0.5)
-        check = _finished_check(ctx.line_ranking, 0.5)
-        ctx.precision_check = check
-        ctx2, threshold = self._train(min_precision=0.5)
-        # A fresh context each call: plant the result on it and re-cut.
-        ctx2.precision_check = check
-        from vtscore.state.core import recut_detector_threshold as recut
-
-        assert recut(ctx2, min_precision=0.5) == ctx2.line_ranking.threshold_for(check.k)
-        assert threshold == ctx2.line_ranking.threshold_for(32)
+    def test_a_finished_walk_never_moves_the_labels_line(self):
+        """Every preset's check is advisory since #4452: a retrain after a walk still cuts at the labels' line."""
+        ctx, _t = self._train(beta=2.0)
+        ranking = ctx.line_ranking
+        assert ranking is not None
+        unvoted = tuple(int(i) for i in ranking.unvoted_ids())
+        check = SpotCheck.start_balance(unvoted, 2.0, walk_positives(ranking, 2.0, {}), seed=1)
+        while check.running:
+            check.record({cid: cid < 520 for cid in check.pending})
+        check.fingerprint = ranking.fingerprint(check.k, set(check.labels))
+        ctx2, threshold = self._train(beta=2.0, det_ctx_check=check)
+        assert ctx2.labels_line is not None
+        assert threshold == pytest.approx(ctx2.labels_line.threshold(2.0), abs=1e-12)
+        assert recut_detector_threshold(ctx2, beta=2.0) == pytest.approx(threshold, abs=1e-12)
 
 
 class TestTheRetiredTrainingFilter:

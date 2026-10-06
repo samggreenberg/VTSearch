@@ -136,7 +136,6 @@ def build_learned_sort_signature(
     region_boxes_snapshot,
     calibrate_count_value,
     calibration_fraction_value,
-    min_precision_value=None,
     inclusion_value=None,
     beta_value=None,
 ):
@@ -144,9 +143,9 @@ def build_learned_sort_signature(
 
     Two runs with equal signatures produce identical results, so the route's
     job manager can return the cached result instead of retraining.  The
-    precision floor and the count its line keeps are part of the key: the
-    threshold a run returns is the floor's line whenever one is set, and a
-    finished spot check moves that line without changing a vote (#4272).
+    balance and the count its line keeps are part of the key: the threshold a
+    run returns is the balance's line whenever one is set, and a finished
+    spot check can move that line without changing a vote (#4272, #4413).
     *inclusion_value* is deprecated (#4269):
     leave it unset; ``0`` is accepted with a ``DeprecationWarning`` and any
     other value raises ``ValueError``.
@@ -171,8 +170,6 @@ def build_learned_sort_signature(
         labels_sig,
         calibrate_count_value,
         calibration_fraction_value,
-        min_precision_value,
-        _floor_count_key(det_ctx, min_precision_value),
         beta_value,
         _balance_count_key(det_ctx, beta_value),
     )
@@ -187,15 +184,6 @@ def _balance_count_key(det_ctx, beta_value) -> int | None:
     return balance_count(beta_value, getattr(det_ctx, "precision_check", None))
 
 
-def _floor_count_key(det_ctx, min_precision_value) -> int | None:
-    """The count the floor's line keeps, so a check result re-keys the sort it moves."""
-    from vtscore.training.thresholds import floor_count
-
-    if min_precision_value is None:
-        return None
-    return floor_count(min_precision_value, getattr(det_ctx, "precision_check", None))
-
-
 def run_learned_sort(
     *,
     det_ctx,
@@ -208,7 +196,6 @@ def run_learned_sort(
     region_boxes_snapshot,
     calibrate_count_value,
     calibration_fraction_value,
-    min_precision_value=None,
     inclusion_value=None,
     beta_value=None,
 ):
@@ -220,8 +207,8 @@ def run_learned_sort(
     *labelset* is set, otherwise the raw-vote pipeline; injects the live model
     into the progress cache when it maps cleanly onto current-dataset votes;
     and stores the model + training set on *det_ctx*.  Returns
-    ``(results, threshold)``: the threshold is the line the precision floor
-    keeps when *min_precision_value* is set (#4272), else the Inclusion 0 cut.
+    ``(results, threshold)``: the threshold is the line the balance keeps
+    when *beta_value* is set (#4272, #4413), else the Inclusion 0 cut.
     *inclusion_value* is deprecated (#4269): leave it unset; ``0`` is accepted
     with a ``DeprecationWarning`` and any other value raises ``ValueError``.
     """
@@ -259,7 +246,6 @@ def run_learned_sort(
                 clips_dict=snap,
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
-                min_precision=min_precision_value,
                 beta=beta_value,
             )
         else:
@@ -271,7 +257,6 @@ def run_learned_sort(
                 calibration_fraction=calibration_fraction_value,
                 vote_region_boxes=region_boxes_snapshot,
                 det_ctx=det_ctx,
-                min_precision=min_precision_value,
                 beta=beta_value,
             )
 
@@ -287,10 +272,9 @@ def run_learned_sort(
             # Smart scores every model at its own Inclusion 0 cut, not at the
             # line it was served with (issue #4243).  The re-cut reads the
             # estimator this training run just parked on *det_ctx*.  The line
-            # was served at Inclusion 0 with no preference, and at no inclusion
-            # at all under a floor or a balance, where it keeps a set (#4272,
-            # #4413).
-            served_inclusion = detector_line_inclusion(det_ctx, min_precision_value, beta_value)
+            # was served at Inclusion 0 with no balance, and at no inclusion at
+            # all under one, where it keeps a set (#4272, #4413).
+            served_inclusion = detector_line_inclusion(det_ctx, beta_value)
             smart_threshold = smart_cut(threshold, served_inclusion, lambda k: recut_detector_threshold(det_ctx, k))
             inject_live_model(good, bad, model, threshold, smart_threshold=smart_threshold)
         clock.mark("inject_live_model")

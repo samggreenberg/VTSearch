@@ -2,7 +2,7 @@
 """Where should the precision floor's line go on a corpus of ANY size? (#4383)
 
 Since #4272 the line keeps a **fixed count**: the top 128 unvoted at P = 10%
-and the top 32 at 50% and above (``check_schedule``), whatever the corpus
+and the top 32 at 50% and above (``floor_schedule``), whatever the corpus
 holds. A Find set of 30 items is returned whole; a corpus of 30M gets 32. The
 owner asked for a line that estimates where *this* corpus crosses P. This
 prices candidate rules for it, offline, on the #4220 precision frames
@@ -148,10 +148,32 @@ def band_edges(n: int, base: int = BASE) -> np.ndarray:
     return np.unique(np.asarray(edges, dtype=np.int64))
 
 
-def kept_count(floor: float, n: int) -> int:
-    from vtscore.training.thresholds import check_schedule  # noqa: PLC0415
+def floor_schedule(floor: float):
+    """The precision floor's schedule (#4267): its starting candidate, the bands that hold it, the picks a band.
 
-    return int(min(check_schedule(floor).candidate, n))
+    ``32 * 2**max(0, floor(log2(0.5 / P)))`` - the top 128 at 10%, 64 at 25%,
+    32 at 50% and above - with each band censused at ``P >= 1``.  The library
+    carried it as ``check_schedule`` until the floor was removed (#4421); the
+    balance keeps its 50% and 10% counts as its caps (``balance_schedule``).
+    """
+    import math  # noqa: PLC0415
+
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        BAND_BASE,
+        CHECK_BASE_CANDIDATE,
+        CHECK_MIN_PICKS,
+        CheckSchedule,
+        rounds_for,
+    )
+
+    if not 0.0 < floor <= 1.0:
+        raise ValueError(f"precision floor must be in (0, 1], got {floor!r}")
+    candidate = CHECK_BASE_CANDIDATE * 2 ** max(0, math.floor(math.log2(0.5 / floor) + EPS))
+    return CheckSchedule(candidate, rounds_for(candidate), BAND_BASE if floor >= 1.0 - EPS else CHECK_MIN_PICKS)
+
+
+def kept_count(floor: float, n: int) -> int:
+    return int(min(floor_schedule(floor).candidate, n))
 
 
 def corpus_draw(test_s: np.ndarray, test_y: np.ndarray, size: str, thin_to: float | None, rng) -> tuple:
@@ -261,10 +283,8 @@ def rule_fixed(labels: np.ndarray, floor: float) -> tuple[int, int, float]:
 
 def rule_check(labels: np.ndarray, floor: float, rng) -> tuple[int, int, float]:
     """Today's spot check (#4272) on this corpus: uniform picks from the candidate, halving to 32."""
-    from vtscore.training.thresholds import check_schedule  # noqa: PLC0415
-
     n = len(labels)
-    sched = check_schedule(floor)
+    sched = floor_schedule(floor)
     k = min(sched.candidate, n)
     level = ALPHA / sched.rounds
     known: dict[int, int] = {}

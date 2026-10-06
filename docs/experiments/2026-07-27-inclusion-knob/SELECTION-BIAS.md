@@ -59,7 +59,7 @@ inclusions = 7,392 rows; run 2026-07-30.
 > then-shipped detector. The plan that owed a re-measurement under the current
 > one was retired when a precision floor replaced the miss budget (#4223); what
 > survives of it is in
-> [`docs/plans/min-precision.md`](../../plans/min-precision.md).
+> [`docs/plans/provenance-partitioned-calibration.md`](../../plans/provenance-partitioned-calibration.md).
 
 ## Method
 
@@ -190,4 +190,4 @@ policy get", not as a production estimate.
    not bias correction.
 
 The plan that tracked these follow-ups was retired by the #4223 ruling; what
-survives of it is in [`docs/plans/min-precision.md`](../../plans/min-precision.md).
+survives of it is in [`docs/plans/provenance-partitioned-calibration.md`](../../plans/provenance-partitioned-calibration.md).

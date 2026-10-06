@@ -31,8 +31,6 @@ from vtscore.config import (
     DATA_DIR,
     DEFAULT_CALIBRATE_COUNT,
     DEFAULT_BETA,
-    DEFAULT_LINE_PREFERENCE,
-    DEFAULT_MIN_PRECISION,
     PROJECTION_MIN_DIST,
     PROJECTION_N_NEIGHBORS,
 )
@@ -64,8 +62,6 @@ __all__ = [
 
 
 Theme = Literal["dark", "light", "highviz", "system"]
-#: Which preference draws the line (#4413): the precision floor or the F-beta balance.
-LinePreference = Literal["floor", "balance"]
 
 
 # Decorative-motion master switch. ``"show"`` forces animations on even when the
@@ -398,22 +394,11 @@ class UserSettings(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
-    # The precision floor (#4245): the fraction of what a detector's cut
-    # returns that should be right.  Each detector keeps its own, seeded from
-    # this value the first time it reads one.  Under it the line keeps a set:
-    # the floor's unchecked starting candidate, then whatever set a spot check
-    # ended on (#4272).  Every detector has a floor (#4269):
-    # ``None`` is not a value, so a ``null`` left in an older settings file
-    # fails validation and reads as the default.  Clamped to ``[0.01, 1]``: a
-    # floor of zero promises nothing and would read as a floor that is always
-    # met.  Deprecated (#4413): draws the line only under ``line_preference
-    # == "floor"``; kept one release, then removed with the floor.
-    min_precision: Annotated[float, _clamp(0.01, 1.0)] = DEFAULT_MIN_PRECISION
-    # The balance (#4413): F-beta's beta, clamped to ``[0.25, 4]`` (the presets
-    # are 1/4 precision-leaning, 1 balanced, 4 recall-leaning, #4448).  Draws the line
-    # when ``line_preference`` is ``"balance"``; the floor draws it otherwise.
+    # The balance (#4413): F-beta's beta, the preference every detector's line
+    # is drawn at.  Each detector keeps its own, seeded from this value the
+    # first time it reads one.  Clamped to ``[0.25, 4]`` (the presets are 1/4
+    # precision-leaning, 1 balanced, 4 recall-leaning, #4448).
     beta: Annotated[float, _clamp(0.25, 4.0)] = DEFAULT_BETA
-    line_preference: LinePreference = DEFAULT_LINE_PREFERENCE
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a
     # concrete theme to opt out and return to "system" to opt back in.

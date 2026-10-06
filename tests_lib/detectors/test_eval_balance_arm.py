@@ -1,13 +1,14 @@
-"""The eval harness's default arm draws the line a live detector draws (#4245, #4272).
+"""The eval harness's default arm draws the line a live detector draws (#4272, #4413).
 
-The app's reporting line under a precision floor keeps a set - the floor's
-unchecked starting candidate, or the set its spot check ended on - and the
-default user has a floor, so the harness's default arm has to do the same, or
-every study measures a detector nobody ships.  The rule itself is shared
-(``floor_line`` / ``floor_state`` / ``SpotCheck``); what these tests pin is the
-harness's side of the plumbing: that the run's spot check draws its candidate
-off the ranking, answers its picks from ground truth, casts them as votes and
-retrains on them, and that the arms the knob names behave as named.
+The app's reporting line under a balance keeps a set - the mixture's F-beta
+argmax under the balance's cap, or what the check's shape makes of the set
+its spot check ended on - and the default user has a balance, so the harness's
+default arm has to do the same, or every study measures a detector nobody
+ships.  The rule itself is shared (``balance_line`` / ``balance_state`` /
+``SpotCheck``); what these tests pin is the harness's side of the plumbing:
+that the run's spot check cuts its bands off the ranking, answers its picks
+from ground truth, casts them as votes and retrains on them, and that the arms
+the knob names behave as named.
 """
 
 from __future__ import annotations
@@ -22,18 +23,13 @@ from vtscore.eval.voting_iterations import simulate_voting_iterations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
     BALANCE_STATES,
-    BAND_BASE,
+    BALANCE_UNCHECKED,
     DEFAULT_BETA,
-    DEFAULT_MIN_PRECISION,
-    FLOOR_CONFIRMED,
-    FLOOR_SHORT,
-    FLOOR_STATES,
-    FLOOR_UNCHECKED,
-    NO_PRECISION_FLOOR,
+    NO_BALANCE,
     WEAK_CHECK_COOLDOWN,
     WEAK_CHECK_MIN_VOTES,
     WEAK_SEPARATION_D,
-    check_schedule,
+    balance_schedule,
 )
 
 
@@ -67,10 +63,9 @@ class TestTheRetiredProvenanceRecord:
 
 
 class TestTheArms:
-    """The floor arm (``min_precision`` pinned; deprecated with the floor, #4413), and what the default arm is."""
+    """The default arm (the app's balance) and the Inclusion arm."""
 
     def _run(self, **kwargs):
-        kwargs.setdefault("min_precision", DEFAULT_MIN_PRECISION)
         picks: list[dict] = []
         rows = simulate_voting_iterations(
             _separable(), "alpha", seed=0, max_steps=15, calibrate_count=2, pick_sink=picks, **kwargs
@@ -78,39 +73,35 @@ class TestTheArms:
         return rows, picks
 
     def test_the_default_arm_is_the_apps_balance(self):
-        """Neither knob pinned draws the line where the app does: the balance at DEFAULT_BETA (#4413)."""
-        rows, _picks = self._run(min_precision=None)
+        """No knob pinned draws the line where the app does: the balance at DEFAULT_BETA (#4413)."""
+        rows, _picks = self._run()
         assert rows
-        assert all(r["beta"] == DEFAULT_BETA and math.isnan(r["min_precision"]) for r in rows)
+        assert all(r["beta"] == DEFAULT_BETA and "min_precision" not in r for r in rows)
         assert {r["floor_status"] for r in rows} <= set(BALANCE_STATES)
 
-    def test_a_pinned_floor_is_the_floor_arm(self):
-        rows, _picks = self._run()
-        assert rows
-        assert all(r["min_precision"] == DEFAULT_MIN_PRECISION and math.isnan(r["beta"]) for r in rows)
-        assert {r["floor_status"] for r in rows} <= set(FLOOR_STATES)
+    def test_before_the_check_the_line_keeps_the_unchecked_cap(self, schedule_only):
+        """The count line before a check: the top K unvoted, K the balance's cap, capped by the corpus.
 
-    def test_before_the_check_the_line_keeps_the_unchecked_starting_candidate(self, schedule_only):
-        """What a headless run exports: the top K unvoted, K from the floor's schedule, capped by the corpus."""
-        rows, _picks = self._run()
+        Since #4452 the default arm draws the labels' line; the count line is the forced-shape arm's.
+        """
+        rows, _picks = self._run(walk_shape="advisory")
         steps = [r for r in rows if r["phase"] != "check"]
-        assert steps and all(r["floor_status"] == FLOOR_UNCHECKED for r in steps)
-        k = check_schedule(DEFAULT_MIN_PRECISION).candidate
+        assert steps and all(r["floor_status"] == BALANCE_UNCHECKED for r in steps)
+        k = balance_schedule(DEFAULT_BETA).candidate
         # `n_remainder` is the unvoted sim set after this step's vote: the candidate.
         assert all(r["floor_count"] == min(k, r["n_remainder"]) for r in steps)
         assert all(math.isnan(r["range_lo"]) and r["check_labelled"] == -1 and r["check_stale"] == -1 for r in steps)
 
     def test_before_the_check_the_mixture_can_only_lower_the_count(self):
-        """The app's unchecked line: the smaller of the schedule's count and the vote-anchored mixture's (#4389).
+        """The app's unchecked line: the smaller of the cap and the mixture's F-beta argmax (#4389, #4413).
 
-        The harness hands the votes so far to the same ``mixture_count`` the
-        app anchors on, so a headless study exports what AutoRun would.
+        The harness hands the votes so far to the same ``fbeta_count`` the app
+        anchored on before #4452; the count line is now the forced-shape arm's.
         """
-        rows, _picks = self._run()
+        rows, _picks = self._run(walk_shape="advisory")
         steps = [r for r in rows if r["phase"] != "check"]
-        k = check_schedule(DEFAULT_MIN_PRECISION).candidate
+        k = balance_schedule(DEFAULT_BETA).candidate
         assert steps and all(1 <= r["floor_count"] <= min(k, r["n_remainder"]) for r in steps)
-        assert any(r["floor_count"] < min(k, r["n_remainder"]) for r in steps), "the mixture lowered some line"
 
     def test_the_check_runs_once_the_steps_are_spent_and_its_votes_enter_training(self):
         rows, picks = self._run()
@@ -125,23 +116,18 @@ class TestTheArms:
         check_picks = [p for p in picks if p["phase"] == "check"]
         assert len(check_picks) == check_rows[-1]["t"] - 15
         assert all(p["t"] > 15 for p in check_picks)
-        # The last row carries the result: the set the check ended on, and its range.
+        # The last row carries the result: the set the walk audited, and its range.
         last = check_rows[-1]
-        assert last["floor_status"] in (FLOOR_CONFIRMED, FLOOR_SHORT)
+        assert last["floor_status"] == BALANCE_CHECKED
         assert 0.0 <= last["range_lo"] <= last["range_hi"] <= 1.0
         assert last["check_labelled"] >= 1 and 0 <= last["check_right"] <= last["check_labelled"]
         assert last["check_stale"] in (0, 1)
-        # The walk decides on the band-weighted share of its picks, not on the
-        # range's lower end (#4388): a confirmed set's range can straddle the
-        # floor, and a short one keeps the first band whatever its range says.
-        assert last["floor_count"] >= 1
-        if last["floor_status"] == FLOOR_SHORT:
-            assert last["floor_count"] <= BAND_BASE
+        assert last["check_audited"] >= 1
 
     def test_switching_the_check_off_leaves_the_run_unchecked(self):
         rows, picks = self._run(spot_check="off")
         assert all(r["phase"] != "check" for r in rows)
-        assert all(r["floor_status"] == FLOOR_UNCHECKED for r in rows)
+        assert all(r["floor_status"] == BALANCE_UNCHECKED for r in rows)
         assert all(p["phase"] != "check" for p in picks)
 
     def test_the_voting_steps_are_byte_identical_with_or_without_the_check(self):
@@ -158,22 +144,17 @@ class TestTheArms:
         with pytest.raises(ValueError, match="spot_check"):
             self._run(spot_check="sometimes")
 
-    def test_the_inclusion_arm_reports_no_floor_and_never_checks(self):
-        rows, _picks = self._run(min_precision=NO_PRECISION_FLOOR)
+    def test_the_inclusion_arm_reports_no_balance_and_never_checks(self):
+        rows, _picks = self._run(beta=NO_BALANCE)
         assert rows
-        assert all(math.isnan(r["min_precision"]) for r in rows)
+        assert all(math.isnan(r["beta"]) for r in rows)
         assert all(r["floor_status"] == "" and r["floor_count"] == -1 for r in rows)
         assert all(r["phase"] != "check" for r in rows)
 
-    def test_a_pinned_floor_is_recorded_and_sizes_the_candidate(self, schedule_only):
-        rows, _picks = self._run(min_precision=0.25)
-        assert rows and all(r["min_precision"] == 0.25 for r in rows)
-        steps = [r for r in rows if r["phase"] != "check"]
-        assert all(r["floor_count"] == min(64, r["n_remainder"]) for r in steps)
-
-    def test_a_malformed_floor_kills_the_cell_before_it_runs(self):
-        with pytest.raises(ValueError):
-            self._run(min_precision=1.5)
+    def test_the_precision_floors_arm_is_gone(self):
+        """#4421: the floor's knob went with the floor, loudly."""
+        with pytest.raises(TypeError, match="min_precision"):
+            self._run(min_precision=0.5)
 
 
 class TestTheBalanceArm:
@@ -220,11 +201,11 @@ class TestTheBalanceArm:
         assert check_rows[-1]["floor_count"] <= check_rows[0]["floor_count"], "it never deepened"
         assert check_rows[-1]["floor_count"] == check_rows[-1]["check_audited"], "and the line is its end"
 
-    def test_the_line_is_the_balances_and_the_floor_is_unused(self):
-        rows, _ = self._run(beta=1.0, min_precision=0.9)
+    def test_the_line_is_the_balances_under_its_cap(self):
+        rows, _ = self._run(beta=1.0)
         steps = [r for r in rows if r["phase"] not in ("check", "")]
-        assert steps and all(r["beta"] == 1.0 and math.isnan(r["min_precision"]) for r in steps)
-        assert all(r["floor_status"] == FLOOR_UNCHECKED for r in steps)
+        assert steps and all(r["beta"] == 1.0 for r in steps)
+        assert all(r["floor_status"] == BALANCE_UNCHECKED for r in steps)
         # No cap since #4452: the labels' line keeps what clears it, possibly none.
         assert all(0 <= r["floor_count"] <= r["n_remainder"] for r in steps)
 
@@ -359,28 +340,20 @@ class TestTheWeakSeparationPrompt:
         assert all(b[0] - a[-1] >= 5 for a, b in zip(prompts, prompts[1:])), "after at least the cooldown"
 
 
-class TestThePAwareAcquisitionArm:
-    """#4409: the acquisition cut at the depth where the session's mixture says the ranking stops being P right."""
+class TestTheBalanceAwareAcquisitionArm:
+    """#4409, #4413: the acquisition cut at a share of the depth of the mixture's F-beta argmax."""
 
-    def _run(self, min_precision, **kwargs):
+    def _run(self, beta, **kwargs):
         picks: list[dict] = []
         rows = simulate_voting_iterations(
             _separable(), "alpha", seed=0, max_steps=15, calibrate_count=2, pick_sink=picks,
-            min_precision=min_precision, spot_check="off", **kwargs,
+            beta=beta, spot_check="off", **kwargs,
         )  # fmt: skip
         return rows, picks
 
-    def test_a_higher_floor_samples_higher_up_the_ranking(self):
-        hi, _ = self._run(0.9, acq_inclusion_offset=0, acq_p_crossing=1.0)
-        lo, _ = self._run(0.1, acq_inclusion_offset=0, acq_p_crossing=1.0)
-        a_hi = [r["acq_threshold"] for r in hi if r["t"] >= 5]
-        a_lo = [r["acq_threshold"] for r in lo if r["t"] >= 5]
-        assert a_hi and len(a_hi) == len(a_lo)
-        assert sum(a_hi) / len(a_hi) > sum(a_lo) / len(a_lo), "90% samples above 10%"
-
     def test_it_is_a_live_arm_not_the_shipped_cut(self):
-        shipped, picks_shipped = self._run(0.5)
-        aware, picks_aware = self._run(0.5, acq_inclusion_offset=0, acq_p_crossing=0.5)
+        shipped, picks_shipped = self._run(1.0)
+        aware, picks_aware = self._run(1.0, acq_inclusion_offset=0, acq_p_crossing=0.5)
         # The cut differs; on a 40-item fixture the opening takes every pick, so
         # whether the picks follow is for the bench run to show.
         assert [r["acq_threshold"] for r in shipped] != [r["acq_threshold"] for r in aware]
@@ -396,11 +369,11 @@ class TestThePAwareAcquisitionArm:
     )
     def test_a_malformed_arm_dies_before_it_runs(self, kwargs, match):
         with pytest.raises(ValueError, match=match):
-            self._run(0.5, **kwargs)
+            self._run(1.0, **kwargs)
 
-    def test_it_needs_a_preference(self):
-        with pytest.raises(ValueError, match="needs a preference"):
-            self._run(NO_PRECISION_FLOOR, acq_inclusion_offset=0, acq_p_crossing=1.0)
+    def test_it_needs_a_balance(self):
+        with pytest.raises(ValueError, match="needs a balance"):
+            self._run(NO_BALANCE, acq_inclusion_offset=0, acq_p_crossing=1.0)
 
     def test_the_default_arm_under_a_balance_is_the_shipped_factor_and_off_is_the_offset_cut(self):
         """#4409 / #4427: a balance arm with no acq knob is the shipped cut, line - 4 again since the revert; a
@@ -411,18 +384,18 @@ class TestThePAwareAcquisitionArm:
         assert resolve_acquisition_factor(None, 1.0) is ACQUISITION_ARGMAX_FACTOR is None
         assert resolve_acquisition_factor(None, None) is None and resolve_acquisition_factor("off", 1.0) is None
         assert resolve_acquisition_factor(0.25, 2.0) == 0.25
-        shipped, _ = self._run(NO_PRECISION_FLOOR, beta=1.0)
-        offset, _ = self._run(NO_PRECISION_FLOOR, beta=1.0, acq_p_crossing="off")
+        shipped, _ = self._run(1.0)
+        offset, _ = self._run(1.0, acq_p_crossing="off")
         assert [r["acq_threshold"] for r in shipped] == [r["acq_threshold"] for r in offset]
-        argmax, _ = self._run(NO_PRECISION_FLOOR, beta=1.0, acq_inclusion_offset=0, acq_p_crossing=0.5)
+        argmax, _ = self._run(1.0, acq_inclusion_offset=0, acq_p_crossing=0.5)
         assert [r["acq_threshold"] for r in argmax] != [r["acq_threshold"] for r in offset]
         with pytest.raises(ValueError, match="must be > 0"):
-            self._run(NO_PRECISION_FLOOR, beta=1.0, acq_inclusion_offset=0, acq_p_crossing="x")
+            self._run(1.0, acq_inclusion_offset=0, acq_p_crossing="x")
 
     def test_under_a_balance_it_samples_at_the_f_beta_argmax(self):
         """#4413: a precision-leaning balance samples higher than a recall-leaning one."""
-        hi, _ = self._run(NO_PRECISION_FLOOR, beta=0.5, acq_inclusion_offset=0, acq_p_crossing=1.0)
-        lo, _ = self._run(NO_PRECISION_FLOOR, beta=2.0, acq_inclusion_offset=0, acq_p_crossing=1.0)
+        hi, _ = self._run(0.5, acq_inclusion_offset=0, acq_p_crossing=1.0)
+        lo, _ = self._run(2.0, acq_inclusion_offset=0, acq_p_crossing=1.0)
         a_hi = [r["acq_threshold"] for r in hi if r["t"] >= 5 and r["phase"] != "check"]
         a_lo = [r["acq_threshold"] for r in lo if r["t"] >= 5 and r["phase"] != "check"]
         assert a_hi and len(a_hi) == len(a_lo)

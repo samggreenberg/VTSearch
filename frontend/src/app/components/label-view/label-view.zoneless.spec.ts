@@ -737,7 +737,7 @@ describe('LabelViewComponent', () => {
 
     const req = httpMock.expectOne((r) => r.url === '/api/balance' && r.method === 'POST');
     expect(req.request.body).toEqual({ beta: 0.5 });
-    req.flush({ ...wireBalance('unchecked', { beta: 0.5 }), threshold: null, n_returned: null, line_preference: 'balance' });
+    req.flush({ ...wireBalance('unchecked', { beta: 0.5 }), threshold: null, n_returned: null });
   });
 
   /**
@@ -812,7 +812,7 @@ describe('LabelViewComponent', () => {
     // The finished check moved the line server-side; the view installs it.
     httpMock
       .expectOne((req) => req.url === '/api/balance' && req.method === 'GET')
-      .flush({ ...wireBalance('checked'), threshold: 0.3, n_returned: 2, line_preference: 'balance' });
+      .flush({ ...wireBalance('checked'), threshold: 0.3, n_returned: 2 });
     await settleResource();
     expect(sortState.threshold).toBe(0.3);
     expect(sortState.balance?.status).toBe('checked');

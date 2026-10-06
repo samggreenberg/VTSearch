@@ -191,7 +191,7 @@ class TestTrainerPluggableVoting:
         # The Inclusion arm: the cost at the model's own Inclusion 0 cut is the
         # trainer's measure.  The default arm's line is the balance's (#4413),
         # and on a 100-item pool the end-of-run walk keeps whatever is left.
-        rows = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=40, trainer="svm_rbf", min_precision="off")
+        rows = simulate_voting_iterations(clips, "cat0", seed=0, max_steps=40, trainer="svm_rbf", beta="off")
         assert rows
         # On well-separated data the SVM should reach a low cost by the end.
         assert rows[-1]["cost"] < 0.5
@@ -371,28 +371,6 @@ class TestRankFrames:
             order = np.argsort(-pf["test_scores"].astype(np.float64), kind="stable")
             expected = np.flatnonzero(pf["test_labels"][order] == 1).tolist()
             assert [int(r) for r in f["test_pos_ranks"].split()] == expected
-
-    def test_step_frames_record_the_shipped_lines_count_on_the_test_half(self):
-        """#4389: a cold Find over the test half plus the votes; the skyline drew no line."""
-        from vtscore.training.thresholds import LineRanking, floor_count, mixture_count
-
-        sink: list = []
-        pframes: list = []
-        self._run((10, 20), sink, pframes)
-        for f, pf in zip([f for f in sink if f["kind"] == "step"], pframes, strict=True):
-            test_s = pf["test_scores"].astype(np.float64)
-            vote_s = pf["vote_scores"].astype(np.float64)
-            n_test = len(test_s)
-            votes = list(range(n_test, n_test + len(vote_s)))
-            corpus = LineRanking.from_scores([*range(n_test), *votes], [*test_s, *vote_s], votes)
-            labels = {v: bool(lab >= 0.5) for v, lab in zip(votes, pf["vote_labels"], strict=True)}
-            for p in (0.1, 0.5, 0.9):
-                want = min(floor_count(p, None, mixture_count(corpus, p, labels)), n_test)
-                got = f[f"test_line_k_p{round(p * 100):d}"]
-                assert got == want, (f["t"], p)
-                assert 1 <= got <= min(floor_count(p, None), n_test), "the mixture only lowers the count"
-        sky = sink[-1]
-        assert [sky[f"test_line_k_p{q}"] for q in (10, 50, 90)] == [-1, -1, -1]
 
     def test_the_frames_read_the_apps_presets(self):
         """#4471: the betas a frame records are the app's presets, so a review reads what the radios offer."""

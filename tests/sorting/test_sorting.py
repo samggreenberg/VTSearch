@@ -512,10 +512,10 @@ class TestCalibrationCache:
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] != first_key
 
-    def test_floor_change_reuses_cached_orderings(self):
-        """The precision floor is a pure threshold knob: a retrain at another
-        floor must reuse the cached fold orderings (no fold refit) and only
-        re-run the cheap cut."""
+    def test_balance_change_reuses_cached_orderings(self):
+        """The balance is a pure threshold knob: a retrain at another balance
+        must reuse the cached fold orderings (no fold refit) and only re-run
+        the cheap cut."""
         from vtscore.detectors import training as detector_training
         from vtscore.training.thresholds import conformal
 
@@ -527,7 +527,7 @@ class TestCalibrationCache:
             good_votes,
             bad_votes,
             det_ctx=det_ctx,
-            min_precision=0.5,
+            beta=1.0,
         )
         assert det_ctx.calibration_cache is not None
         key_before = det_ctx.calibration_cache[0]
@@ -542,9 +542,9 @@ class TestCalibrationCache:
                 good_votes,
                 bad_votes,
                 det_ctx=det_ctx,
-                min_precision=0.9,
+                beta=2.0,
             )
-        # No fold refit, and the cache key is unchanged (the floor is not in it).
+        # No fold refit, and the cache key is unchanged (the balance is not in it).
         assert patched.call_count == 0
         assert det_ctx.calibration_cache is not None
         assert det_ctx.calibration_cache[0] == key_before
@@ -721,7 +721,7 @@ class TestLearnedSortAsync:
 
         A dataset switch drops ``line_ranking`` (media ids are per dataset), and
         coming back with the same votes used to hit the signature cache: the
-        response drew a line and a floor state while the detector held no
+        response drew a line and a balance state while the detector held no
         ranking, so Train's spot check refused with "No ranking to check".
         """
         from vtscore.concurrency.async_jobs import learned_sort_jobs

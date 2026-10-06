@@ -1186,6 +1186,49 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Removed
 
+- **The precision floor** (issue #4421). The balance (#4413) is the only
+  preference a detector's line is drawn at. None of these was in a release
+  (all arrived after 0.1.0), so they go without a deprecation window:
+  - `vtscore.state`: `get_min_precision`, `set_min_precision`,
+    `get_line_preference`, `set_line_preference`; `line_knobs()` returns
+    `{"beta": b}`, and `min_precision` / `line_preference` are no longer
+    `KNOWN_SETTING_KEYS` (registering a persister for either raises
+    `ValueError`). `CoreConfig.beta` may be `None` - no balance, the
+    Inclusion 0 cut - for a library caller, as `min_precision=None` was;
+    `get_beta()` returns `float | None` accordingly.
+  - `vtscore.state.core`: `detector_floor_state`, `detector_line_proposal`,
+    `user_min_precision` (`user_beta()` replaces it) and
+    `DetectorContext.min_precision`; `recut_detector_threshold`,
+    `recompute_detector_thresholds` and `detector_line_inclusion` take the
+    beta alone. `detector_balance_state(ctx, None)` is `None`.
+  - `vtscore.config`: `CoreConfig.min_precision`, `CoreConfig.line_preference`,
+    `DEFAULT_MIN_PRECISION`, `DEFAULT_LINE_PREFERENCE`, `LINE_PREFERENCES`.
+  - `vtscore.training.thresholds`: the floor walk (`SpotCheck.start`; a walk
+    starts with `start_balance`, and `SpotCheck.min_precision` and the
+    check's `min_precision` key are gone), `FLOOR_CONFIRMED`, `FLOOR_SHORT`,
+    `FLOOR_STATES`, `FLOOR_UNCHECKED` (`BALANCE_UNCHECKED`), `FloorState`,
+    `applicable_result`, `floor_count`, `floor_line`, `floor_state`,
+    `mixture_count`, `check_schedule`, `DEFAULT_MIN_PRECISION`,
+    `resolve_min_precision` and `NO_PRECISION_FLOOR`. The band schedule
+    survives as `balance_schedule(beta)`: the top 32 at beta <= 1, 128 above
+    (`CHECK_BASE_CANDIDATE`, the new `CHECK_RECALL_CANDIDATE`). The #4220
+    estimator (`precision_floor_cut`, `PrecisionFloorEstimate`,
+    `reporting_line`) stays.
+  - The trainers (`train_and_score`, `labelset_train_and_score`,
+    `run_learned_sort`, `build_learned_sort_signature`) lose their
+    `min_precision` keyword; pass `beta`. The CLI's results and the exporters'
+    results dicts carry `balance` and no `floor`, and the `detector_unchecked`
+    event no `min_precision`.
+  - The eval harness's floor arm: `simulate_voting_iterations` and the
+    `run_voting_iterations_eval*` wrappers lose `min_precision`.
+    `resolve_line_knobs(beta)` takes the beta alone - `None` the app's
+    default, `"off"` (`NO_BALANCE`) the Inclusion arm, a number the balance
+    arm - so the Inclusion arm is `beta="off"`, and a non-zero `inclusion`
+    needs it. `python -m vtscore.eval.al_benchmark --min-precision` is
+    `--beta`. The rows lose the `min_precision` column (the `floor_*`
+    columns keep their names and report the balance's line) and the rank
+    frame its `test_line_k_p10/p50/p90` columns.
+
 - **The global dataset-progress system: `dataset_progress`, `get_progress()`
   and `check_dataset_cancelled()`** (issue #3376). Dataset and import progress
   now lives entirely in the per-task `loading_tasks` registry, one

@@ -586,7 +586,7 @@ describe('SortRunnerService', () => {
       );
 
       runner.refreshLine();
-      httpMock.expectOne(balanceGet).flush({ ...wireBalance('checked'), threshold: 0.8, n_returned: 7, line_preference: 'balance' });
+      httpMock.expectOne(balanceGet).flush({ ...wireBalance('checked'), threshold: 0.8, n_returned: 7 });
       vi.advanceTimersByTime(1000);
 
       expect(sortState.threshold).toBe(0.8);
@@ -604,7 +604,7 @@ describe('SortRunnerService', () => {
       sortState.setSortMode('text');
       sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
       runner.refreshLine();
-      httpMock.expectOne(balanceGet).flush({ ...wireBalance('checked'), threshold: 0.8, n_returned: 1, line_preference: 'balance' });
+      httpMock.expectOne(balanceGet).flush({ ...wireBalance('checked'), threshold: 0.8, n_returned: 1 });
       expect(sortState.threshold).toBe(0.3);
       expect(sortState.balance).toBeNull();
     });
@@ -644,7 +644,7 @@ describe('SortRunnerService', () => {
       sortState.setSortResults([{ id: 5, score: 0.9 }], 0.3);
 
       runner.onBetaChange(2);
-      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.1, n_returned: 9, line_preference: 'balance' });
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.1, n_returned: 9 });
       vi.advanceTimersByTime(1000);
 
       httpMock.expectNone('/api/learned-sort');
@@ -659,7 +659,7 @@ describe('SortRunnerService', () => {
         learnedRanking('unchecked');
 
         runner.onBetaChange(0.5);
-        httpMock.expectOne(balancePost).flush({ ...wireBalance(status, { beta: 0.5 }), threshold: 0.5, n_returned: 1, line_preference: 'balance' });
+        httpMock.expectOne(balancePost).flush({ ...wireBalance(status, { beta: 0.5 }), threshold: 0.5, n_returned: 1 });
         vi.advanceTimersByTime(1000);
 
         // Both balances keep the top 32: the count decides the line, so it cannot move.
@@ -680,7 +680,7 @@ describe('SortRunnerService', () => {
       vi.advanceTimersByTime(1000);
       httpMock.expectNone('/api/learned-sort');
 
-      post.flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.15, n_returned: 2, line_preference: 'balance' });
+      post.flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.15, n_returned: 2 });
       vi.advanceTimersByTime(300);
       httpMock.expectOne('/api/learned-sort').flush({
         status: 'done',
@@ -710,7 +710,7 @@ describe('SortRunnerService', () => {
       learnedRanking('unchecked');
 
       runner.onBetaChange(2);
-      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.15, n_returned: 2, line_preference: 'balance' });
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2, count: 64 }), threshold: 0.15, n_returned: 2 });
       vi.advanceTimersByTime(300);
 
       httpMock.expectOne('/api/learned-sort');
@@ -726,7 +726,7 @@ describe('SortRunnerService', () => {
       expect(stale.cancelled).toBe(true);
       const fresh = httpMock.expectOne(balancePost);
       expect(fresh.request.body).toEqual({ beta: 2 });
-      fresh.flush({ ...wireBalance('unchecked', { beta: 2 }), threshold: 0.5, n_returned: 1, line_preference: 'balance' });
+      fresh.flush({ ...wireBalance('unchecked', { beta: 2 }), threshold: 0.5, n_returned: 1 });
       expect(sortState.balance?.beta).toBe(2);
     });
 
@@ -738,7 +738,7 @@ describe('SortRunnerService', () => {
       expect(sortState.balance?.beta).toBe(1);
 
       runner.onBetaChange(2);
-      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2 }), threshold: 0.5, n_returned: 1, line_preference: 'balance' });
+      httpMock.expectOne(balancePost).flush({ ...wireBalance('checked', { beta: 2 }), threshold: 0.5, n_returned: 1 });
       expect(sortState.balance?.status).toBe('checked');
     });
   });

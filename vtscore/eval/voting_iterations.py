@@ -95,20 +95,16 @@ from vtscore.training.thresholds import (
     balance_line,
     balance_schedule,
     balance_state,
-    check_schedule,
     check_shape,
     fbeta_count,
     fit_labels_line,
-    floor_line,
-    floor_state,
-    mixture_count,
     weak_check_due,
     ACQUISITION_INCLUSION_OFFSET,
     CALIBRATION_SPLIT_SEED,
     apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
-    NO_PRECISION_FLOOR,
+    NO_BALANCE,
     ACQUISITION_ARGMAX_FACTOR,
     CHECK_SHAPES,
     CHECK_TRIM,
@@ -296,10 +292,10 @@ def _no_recut(_inclusion: float) -> None:
     """The re-cut of a step with no fold-anchored fit: there is none to re-derive.
 
     Handed to :func:`~vtscore.detectors.cost_trend.smart_cut`, which then keeps
-    the step's reporting line: the floor's kept set, the schedule blend, a
+    the step's reporting line: the balance's kept set, the schedule blend, a
     retired rung's cut, or the conformal cut of an arm with safe thresholds off.
     Any line no inclusion drew asks, and on the default arm that is every line
-    the floor keeps (#4272).  Where the step's folds split but none yielded a
+    the balance keeps (#4272, #4413).  Where the step's folds split but none yielded a
     fold-anchored fit, the app's seam (``recut_detector_threshold``) would
     re-cut the fold orderings instead - a difference ``progress.smart_status``
     declares, which reaches the default arm only on such a step.
@@ -368,20 +364,20 @@ def _blend_xcal_input(threshold: float, details: dict[str, Any]) -> float:
     return NO_GOOD_THRESHOLD if details.get("fold_fallback") is not None else threshold
 
 
-def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, Any]:
-    """The precision-floor columns of a step's row: the floor, the set its line keeps, and the check's range.
+def _line_columns(details: dict[str, Any]) -> dict[str, Any]:
+    """The balance columns of a step's row: the beta, the set its line keeps, and the check's ranges.
 
-    The state is the app's own (:func:`~vtscore.training.thresholds.floor_state`,
-    #4272), built by :func:`_safe_threshold_for_step`.  ``floor_status`` is
-    empty and every count -1 / range NaN on a step with no floor line - the
-    Inclusion arm, safe thresholds off, or nothing scored yet.
+    The state is the app's own (:func:`~vtscore.training.thresholds.balance_state`,
+    #4413), built by :func:`_safe_threshold_for_step`.  ``floor_status`` is
+    empty and every count -1 / range NaN on a step with no balance line - the
+    Inclusion arm, safe thresholds off, or nothing scored yet.  (The
+    ``floor_*`` names predate the balance; they report the balance's state.)
     """
     nan = float("nan")
-    state = details.get("floor_state")
+    state = details.get("line_state")
     beta = details.get("beta")
-    if (floor is None and beta is None) or state is None:
+    if beta is None or state is None:
         return {
-            "min_precision": floor if floor is not None else nan,
             "beta": beta if beta is not None else nan,
             "floor_status": "",
             "floor_count": -1,
@@ -392,12 +388,10 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
             "check_stale": -1,
             "check_audited": -1,
         }
-    # A balance state (#4413) carries the kept set's precision range where a
-    # floor state carries ``range``; the columns read the same thing.
-    rng = getattr(state, "range", None) if beta is None else getattr(state, "precision", None)
+    # The kept set's precision range: what the range columns have always read.
+    rng = state.precision
     return {
-        "min_precision": floor if floor is not None else nan,
-        "beta": beta if beta is not None else nan,
+        "beta": beta,
         "floor_status": state.status,
         "floor_count": state.count,
         "range_lo": round6(rng.lo) if rng is not None else nan,
@@ -407,7 +401,7 @@ def _floor_columns(floor: float | None, details: dict[str, Any]) -> dict[str, An
         "check_stale": (1 if state.stale else 0) if rng is not None else -1,
         # The set the walk audited (#4427): under the advisory shape not the
         # set the line keeps, which ``floor_count`` reports.
-        "check_audited": getattr(state, "audited", None) if rng is not None else -1,
+        "check_audited": state.audited if rng is not None else -1,
     }
 
 
@@ -420,51 +414,47 @@ _OPENING_PHASES = frozenset({"good", "bad", "more"})
 def _preference_line_for_step(
     ranking: LineRanking,
     details: dict[str, Any],
-    min_precision: float | None,
     beta: float | None,
     check: "SpotCheck | None",
     labels: "Mapping[int, bool] | None",
     line_shape: "str | None" = None,
 ) -> tuple[float | None, str]:
-    """The line the arm's preference draws over the step's ranking, and its provenance; ``(None, "")`` with neither.
+    """The line the arm's balance draws over the step's ranking, and its provenance; ``(None, "")`` with none.
 
-    The app's own rule (``_preference_line`` in the trainer): under a balance
-    (#4413) the finished F-beta walk's set, else the mixture's F-beta argmax
-    under the balance's cap; under a floor (#4272, #4389) the finished
-    walk's set, else the smaller of the schedule's count and the mixture's P
-    crossing.  Leaves the state the row's floor columns read in
-    ``details["floor_state"]`` (and ``details["beta"]`` under a balance).
+    The app's own rule: the labels' line (#4452), the class model the step's
+    fold orderings imply cut at the prevalence it estimates on this ranking,
+    where the arm forces no check shape.  A forced shape (``walk_shape``)
+    keeps the count line the app drew before #4452 (#4413): the finished
+    F-beta walk's set where the shape lets it move the line, else the
+    mixture's F-beta argmax under the balance's cap.  Leaves the state the
+    row's line columns read in ``details["line_state"]`` and the beta in
+    ``details["beta"]``.
     """
-    if beta is not None and line_shape is None:
+    if beta is None:
+        return None, ""
+    details["beta"] = beta
+    if line_shape is None:
         # The app's line (#4452): the labels' class model (the step's fold
         # orderings) cut at the prevalence it estimates on this ranking - the
         # Train side.  ``details["find_line"]`` carries it to the test side,
         # which re-estimates the prevalence on the withheld half the way a
         # Find on a new corpus does.
-        details["beta"] = beta
         labels_line = fit_labels_line(
             details.get("fold_orderings") or None, ranking.scores, ranking.ids.tolist(), labels or {}
         )
         details["find_line"] = labels_line
         if labels_line is not None:
             kept = labels_line.threshold(beta)
-            details["floor_state"] = balance_state(beta, check, ranking, threshold=kept)
+            details["line_state"] = balance_state(beta, check, ranking, threshold=kept)
             details["train_prevalence"] = labels_line.prevalence
             return kept, "balance"
-        details["floor_state"] = balance_state(beta, check, ranking)
+        details["line_state"] = balance_state(beta, check, ranking)
         return None, ""
-    if beta is not None:
-        # A forced check shape (``walk_shape``): the count line the app drew
-        # before #4452, kept as a measurement arm.
-        proposal = fbeta_count(ranking, beta, labels or {})
-        details["floor_state"] = balance_state(beta, check, ranking, proposal=proposal, shape=line_shape)
-        details["beta"] = beta
-        return balance_line(ranking, beta, check, proposal=proposal, shape=line_shape), "balance"
-    if min_precision is not None:
-        proposal = mixture_count(ranking, min_precision, labels or {})
-        details["floor_state"] = floor_state(min_precision, check, ranking, proposal=proposal)
-        return floor_line(ranking, min_precision, check, proposal=proposal), "floor"
-    return None, ""
+    # A forced check shape (``walk_shape``): the count line the app drew
+    # before #4452, kept as a measurement arm.
+    proposal = fbeta_count(ranking, beta, labels or {})
+    details["line_state"] = balance_state(beta, check, ranking, proposal=proposal, shape=line_shape)
+    return balance_line(ranking, beta, check, proposal=proposal, shape=line_shape), "balance"
 
 
 def _safe_threshold_for_step(
@@ -482,7 +472,6 @@ def _safe_threshold_for_step(
     voted_ids: "set[int] | None" = None,
     exclusion_min_remainder: float | None = None,
     cut_rule: str | None = None,
-    min_precision: float | None = None,
     check: "SpotCheck | None" = None,
     labels: "Mapping[int, bool] | None" = None,
     beta: float | None = None,
@@ -542,16 +531,17 @@ def _safe_threshold_for_step(
     resolves to the app's :data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`
     inside this function, so the default arm is production by construction.
 
-    **The line is drawn where the app draws it.**  *min_precision* is the
-    resolved floor (``None`` for the Inclusion arm).  Under a floor the line
-    keeps a set (#4272): the top *count* unvoted items of the sim set this
+    **The line is drawn where the app draws it.**  *beta* is the resolved
+    balance (``None`` for the Inclusion arm).  Under a balance the line keeps
+    a set (#4272, #4413): the top *count* unvoted items of the sim set this
     final model scored, where *count* is the set *check* - the run's spot
-    check, finished or not - ended on, or the floor's unchecked starting
-    candidate; :func:`~vtscore.training.thresholds.floor_line` is the app's
-    own rule, called, not copied, and its ranking rides out in
-    ``details["line_ranking"]`` for the check to draw its candidate from, with
-    the floor's state in ``details["floor_state"]`` for the row.  With no
-    floor the line is the fold-anchored cut at *inclusion* through the shared
+    check - ended on where the check's shape lets it move the line, or else
+    the mixture's F-beta argmax under the balance's cap;
+    :func:`~vtscore.training.thresholds.balance_line` is the app's own rule,
+    called, not copied, and its ranking rides out in
+    ``details["line_ranking"]`` for the check to draw its bands from, with the
+    balance's state in ``details["line_state"]`` for the row.  With no
+    balance the line is the fold-anchored cut at *inclusion* through the shared
     :func:`~vtscore.training.thresholds.reporting_line`.  Either way the line
     rides out in ``details["reporting_line"]`` so the acquisition cut can take
     its origin from it.
@@ -659,7 +649,7 @@ def _safe_threshold_for_step(
     # ones marked, as ``_fused_threshold`` parks it on the detector context.
     ranking = LineRanking.from_scores(ids, all_scores, voted_ids or ())
     details["line_ranking"] = ranking
-    kept, provenance = _preference_line_for_step(ranking, details, min_precision, beta, check, labels, line_shape)
+    kept, provenance = _preference_line_for_step(ranking, details, beta, check, labels, line_shape)
     if kept is not None:
         # No inclusion drew this line: acquisition derives its origin from it.
         details["reporting_line"] = ReportingLine(kept, None, None)
@@ -967,20 +957,18 @@ def _precision_frame(
     return frame
 
 
-def _fresh_corpus_line(
-    test: "LineRanking", pool: "LineRanking", vote_labels: "dict[int, bool]"
-) -> dict[float | str, int]:
-    """What the shipped unchecked line keeps on the test half at each preset floor (#4389).
+def _fresh_corpus_line(test: "LineRanking", pool: "LineRanking", vote_labels: "dict[int, bool]") -> dict[float, int]:
+    """What the shipped unchecked line keeps on the test half at each preset balance (#4389, #4413).
 
     A cold Find over a corpus holding the session's votes: the test half plus
     the voted items at the final model's scores (read off *pool*, the
     session's ranking), the votes marked voted and anchoring the mixture, and
-    the line at :func:`~vtscore.training.thresholds.floor_count` with the
-    mixture's proposal - the smaller of the schedule's count and the
-    mixture's.  Capped at the test half's size.  Pure read.
+    the line at :func:`~vtscore.training.thresholds.balance_count` with the
+    mixture's F-beta argmax as its proposal - the smaller of the cap and the
+    argmax.  Capped at the test half's size.  Pure read.
     """
-    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, RANK_FRAME_FLOORS  # noqa: PLC0415
-    from vtscore.training.thresholds import balance_count, fbeta_count, floor_count  # noqa: PLC0415
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS  # noqa: PLC0415
+    from vtscore.training.thresholds import balance_count, fbeta_count  # noqa: PLC0415
 
     in_test = set(test.ids.tolist())
     keep, scores = [], []
@@ -994,15 +982,10 @@ def _fresh_corpus_line(
         keep.append(int(v))
     corpus = LineRanking.from_scores([*test.ids.tolist(), *keep], [*test.scores.tolist(), *scores], keep)
     labels = {v: bool(vote_labels[v]) for v in keep}
-    counts: dict[float | str, int] = {
-        p: int(min(floor_count(p, None, mixture_count(corpus, p, labels)), test.size)) for p in RANK_FRAME_FLOORS
-    }
-    for b in RANK_FRAME_BETAS:  # the balance's line (#4413), read off the same fit
-        counts[f"b{b:g}"] = int(min(balance_count(b, None, fbeta_count(corpus, b, labels)), test.size))
-    return counts
+    return {b: int(min(balance_count(b, None, fbeta_count(corpus, b, labels)), test.size)) for b in RANK_FRAME_BETAS}
 
 
-def _labels_line_counts(test_scores: Any, find_on_test: Any, fallback_threshold: float | None) -> dict[str, int]:
+def _labels_line_counts(test_scores: Any, find_on_test: Any, fallback_threshold: float | None) -> dict[float, int]:
     """What the app's labels line keeps on the test half at each preset beta (#4452, #4471).
 
     *find_on_test* is the labels line with its corpus side fitted on the test
@@ -1018,10 +1001,10 @@ def _labels_line_counts(test_scores: Any, find_on_test: Any, fallback_threshold:
     from vtscore.eval.voting_columns import RANK_FRAME_BETAS  # noqa: PLC0415
 
     s = np.asarray(test_scores, dtype=np.float64)
-    out: dict[str, int] = {}
+    out: dict[float, int] = {}
     for b in RANK_FRAME_BETAS:
         thr = float(find_on_test.threshold(b)) if find_on_test is not None else fallback_threshold
-        out[f"b{b:g}"] = int(np.count_nonzero(s >= thr)) if thr is not None and np.isfinite(thr) else -1
+        out[b] = int(np.count_nonzero(s >= thr)) if thr is not None and np.isfinite(thr) else -1
     return out
 
 
@@ -1042,10 +1025,10 @@ def _rank_frame(
 
     Both rankings are :class:`~vtscore.training.thresholds.LineRanking` orders
     (score descending, ties by id, unscorable media left out), so the test
-    half's top *K* is the set a floor's line keeps on a fresh corpus, and the
+    half's top *K* is the set a balance's line keeps on a fresh corpus, and the
     pool's top *K* unvoted is the candidate the spot check samples.  With the
     session's votes (*vote_labels*, ``True`` = Good) it also records how many
-    the shipped unchecked line keeps on the test half at each preset floor
+    the shipped unchecked line keeps on the test half at each preset balance
     (:func:`_fresh_corpus_line`, #4389); -1 without them.  At each preset
     beta it records the arm's balance line: under the app's labels line
     (*find_on_test* or *fallback_threshold*, #4452) what that line keeps
@@ -1056,7 +1039,7 @@ def _rank_frame(
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, RANK_FRAME_FLOORS, beta_tag  # noqa: PLC0415
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag  # noqa: PLC0415
 
     def _ranks(ids: Any, label_of: Any) -> tuple[int, int, str]:
         pos = np.flatnonzero(np.fromiter((label_of(int(i)) >= 0.5 for i in ids), dtype=bool, count=len(ids)))
@@ -1068,10 +1051,7 @@ def _rank_frame(
     n_pool, n_pool_pos, pool_ranks = -1, -1, ""
     if pool_ranking is not None and pool_labels is not None:
         n_pool, n_pool_pos, pool_ranks = _ranks(pool_ranking.unvoted_ids(voted), pool_labels.__getitem__)
-    line_k: dict[float | str, int] = {
-        **dict.fromkeys(RANK_FRAME_FLOORS, -1),
-        **{f"b{b:g}": -1 for b in RANK_FRAME_BETAS},
-    }
+    line_k: dict[float, int] = dict.fromkeys(RANK_FRAME_BETAS, -1)
     if pool_ranking is not None and vote_labels:
         line_k = _fresh_corpus_line(test, pool_ranking, vote_labels)
     if find_on_test is not None or fallback_threshold is not None:
@@ -1085,8 +1065,7 @@ def _rank_frame(
         "n_pool": n_pool,
         "n_pool_pos": n_pool_pos,
         "pool_pos_ranks": pool_ranks,
-        **{f"test_line_k_p{round(p * 100):d}": k for p, k in line_k.items() if not isinstance(p, str)},
-        **{f"test_line_k_{beta_tag(b)}": line_k[f"b{b:g}"] for b in RANK_FRAME_BETAS},
+        **{f"test_line_k_{beta_tag(b)}": line_k[b] for b in RANK_FRAME_BETAS},
     }
 
 
@@ -1864,8 +1843,8 @@ def resolve_acquisition_factor(acq_p_crossing: "float | str | None", beta: Optio
     The harness's counterpart of what :func:`vtscore.state.core.detector_acquisition_threshold`
     does with its *beta*: ``None`` is the app's default - under a balance the
     shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
-    (``None`` since the #4427 revert: the line - 4 offset), under the
-    deprecated floor or the Inclusion arm the offset (``acq_inclusion_offset``);
+    (``None`` since the #4427 revert: the line - 4 offset), on the Inclusion
+    arm the offset (``acq_inclusion_offset``);
     :data:`ACQ_P_CROSSING_OFF` forces the offset under a balance whatever the
     constant says; a number is the arm (#4409).
     """
@@ -2024,21 +2003,19 @@ def _resolve_production_defaults(
     return blend_schedule, calibration_fraction
 
 
-def _check_inclusion_arm(inclusion: float, floor: float | None, beta: float | None = None) -> None:
-    """Refuse a non-zero *inclusion* under a precision floor or a balance (#4361, #4413).
+def _check_inclusion_arm(inclusion: float, beta: float | None) -> None:
+    """Refuse a non-zero *inclusion* under a balance (#4361, #4413).
 
-    A set preference wins over the knob: the line is the set the floor or the
-    balance keeps, so *inclusion* would only re-weight the ``cost`` column and
-    never move the line - an arm that looks swept and measures one line.  Only
-    the Inclusion arm (``min_precision="off"``) draws its line at *inclusion*.
+    A set preference wins over the knob: the line is the set the balance
+    keeps, so *inclusion* would only re-weight the ``cost`` column and never
+    move the line - an arm that looks swept and measures one line.  Only the
+    Inclusion arm (``beta="off"``) draws its line at *inclusion*.
     """
-    if (floor is None and beta is None) or inclusion == 0:
+    if beta is None or inclusion == 0:
         return
-    under = f"a precision floor ({floor:g})" if floor is not None else f"a balance (beta {beta:g})"
     raise ValueError(
-        f"inclusion={inclusion!r} draws the line only on the Inclusion arm "
-        f"(min_precision={NO_PRECISION_FLOOR!r}); under {under} it would only "
-        f"re-weight cost. Pass min_precision={NO_PRECISION_FLOOR!r} to sweep it."
+        f"inclusion={inclusion!r} draws the line only on the Inclusion arm (beta={NO_BALANCE!r}); under a "
+        f"balance (beta {beta:g}) it would only re-weight cost. Pass beta={NO_BALANCE!r} to sweep it."
     )
 
 
@@ -2107,8 +2084,7 @@ def simulate_voting_iterations(  # noqa: C901
     test_bands: Optional[list[str] | str] = None,
     train_mix: "Optional[str | dict[str, float]]" = None,
     test_band_auroc: bool = False,
-    min_precision: "Optional[float | str]" = None,
-    beta: Optional[float] = None,
+    beta: "Optional[float | str]" = None,
     walk_picks: Optional[int] = None,
     walk_tol: float = 0.0,
     walk_fine: bool = False,
@@ -2127,9 +2103,9 @@ def simulate_voting_iterations(  # noqa: C901
         target_category: Category treated as the positive class.
         seed: Random seed for splitting and vote ordering.
         dataset_name: Label included in result rows.
-        inclusion: The Inclusion arm's line, in ``[-10, 10]``.  A set floor
-            wins over it, so a non-zero value needs ``min_precision="off"``
-            and is refused under a floor (#4361).
+        inclusion: The Inclusion arm's line, in ``[-10, 10]``.  A set balance
+            wins over it, so a non-zero value needs ``beta="off"`` and is
+            refused under a balance (#4361).
         trainer: Which **pipeline** runs at each step.  ``"app"``
             (:data:`APP_TRAINER`, the default) is VTSearch's own — the app's
             ``train_model`` fit plus production fold calibration — and *which
@@ -2319,22 +2295,18 @@ def simulate_voting_iterations(  # noqa: C901
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
             intent, one fewer indirection.  Requires
             ``acq_inclusion_offset=0``, since the two name the same cut.
-        acq_p_crossing: The **P-aware** acquisition cut (#4409): place it at
-            this multiple of the depth where the session's vote-anchored
-            mixture says the unvoted ranking stops being *P* right
-            (:func:`~vtscore.training.thresholds.mixture_count` on the step's
-            line ranking at the session's floor, with no schedule cap; under a
-            balance, the mixture's F-beta argmax, #4413), read as a rank:
-            ``1.0`` samples at the crossing, ``0.5`` halfway up to the top.  So
-            a 90% floor or a precision-leaning balance samples high, a 10% floor
-            or a recall-leaning one deep.  A number requires
-            ``acq_inclusion_offset=0`` and a preference.  ``None`` (the default)
-            is the app's rule: under a balance the shipped
-            :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
+        acq_p_crossing: The **balance-aware** acquisition cut (#4409, #4413):
+            place it at this multiple of the depth of the mixture's F-beta
+            argmax over the step's unvoted line ranking (no cap), read as a
+            rank: ``1.0`` samples at the argmax, ``0.5`` halfway up to the top.
+            So a precision-leaning balance samples high, a recall-leaning one
+            deep.  A number requires ``acq_inclusion_offset=0`` and a balance.
+            ``None`` (the default) is the app's rule: under a balance the
+            shipped :data:`~vtscore.training.thresholds.ACQUISITION_ARGMAX_FACTOR`
             (the ``acq_inclusion_offset`` cut is then the fallback for a step
-            with no mixture estimate), under a floor or the Inclusion arm the
-            offset cut; ``"off"`` forces the offset cut under a balance (the
-            pricing's control, ``docs/experiments/2026-10-01-acquisition-fbeta-4409``).
+            with no mixture estimate), on the Inclusion arm the offset cut;
+            ``"off"`` forces the offset cut under a balance (the pricing's
+            control, ``docs/experiments/2026-10-01-acquisition-fbeta-4409``).
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -2468,25 +2440,18 @@ def simulate_voting_iterations(  # noqa: C901
         test_band_auroc: Under ``test_bands``, also rank each band's cohort
             against the held-out negatives (``auroc_<band>``, #4160).  Off by
             default because it scores the negatives a second time each step.
-        min_precision: The precision floor the reporting line is drawn at
-            (#4245; deprecated with the floor, #4413), resolved with *beta*
-            by :func:`~vtscore.training.thresholds.resolve_line_knobs`.
-            A number pins the **floor arm**: the set the floor keeps (#4272)
-            - the top *count* unvoted items of the sim set, where *count* is
-            the floor's starting candidate until the run's spot check ends,
-            then the set the check ended on.  ``"off"`` is the **Inclusion
-            arm** - the line at *inclusion* - which is what every study before
-            #4245 measured; an arm that sweeps *inclusion* has to pass it,
-            because a set preference wins over the knob.  ``None`` (the
-            default) with *beta* ``None`` is the app's own default preference,
-            the balance at ``DEFAULT_BETA``.  No step builds the #4220
-            estimate: the app stopped building it in #4362.
-        beta: The **balance** arm (#4413): draw the line at F-beta's beta -
-            the mixture's F-beta argmax under the balance's cap, and the
-            end-of-run check is the F-beta walk.  A given beta makes the floor
-            unused.  ``None`` with *min_precision* ``None`` (the default) is
-            the app's default balance, so the default arm reports the line a
-            live detector draws.
+        beta: The balance the reporting line is drawn at (#4413), resolved by
+            :func:`~vtscore.training.thresholds.resolve_line_knobs`.  A number
+            pins the **balance arm**: the set the balance keeps - the top
+            *count* unvoted items of the sim set, the mixture's F-beta argmax
+            under the balance's cap until the run's spot check ends, then
+            what the check's shape makes of the walk's end.  ``"off"``
+            (:data:`~vtscore.training.thresholds.NO_BALANCE`) is the
+            **Inclusion arm** - the line at *inclusion* - which is what every
+            study before #4245 measured; an arm that sweeps *inclusion* has
+            to pass it, because a set preference wins over the knob.  ``None``
+            (the default) is the app's own default balance, ``DEFAULT_BETA``,
+            so the default arm reports the line a live detector draws.
         walk_picks: The balance walk's picks a band (#4427's arms; the
             schedule's 5 when ``None``), *walk_tol* its tolerance (a deeper
             step within it of the best is flat and the walk looks one band
@@ -2502,27 +2467,25 @@ def simulate_voting_iterations(  # noqa: C901
             walk whose end moves the line, what the app shipped before
             #4427's pricing; ``"advisory"`` and ``"trim"`` force a shape.
             All apply to the end-of-run balance walk only.
-        spot_check: When the simulated user runs the floor's **spot check**
-            (#4272, the band walk of #4388).  ``"end"``: once the
-            voting steps are spent - *max_steps* reached, or the pool exhausted
-            - the user checks the line the way the app's check step does: the
-            unvoted ranking is fixed off the current one and cut into bands
-            (the top 8, the next 8, 16, 32, ...), the walk starts at the bands
-            holding the floor's schedule (the top 32 at 50% and above, 128 at
-            10%), each band's picks are answered from ground truth **and cast
-            as votes** (provenance ``check``), the model retrains on them and
-            one row is emitted per band with ``phase == "check"`` and ``t``
-            still counting every vote cast, so the check's rows sit past
-            *max_steps*.  The walk goes one band deeper while the set's
-            band-weighted share of right answers meets the floor and one
-            shallower while it does not; the check ends ``confirmed`` on the
-            deepest set that met it or ``short`` on the first band, and the
-            last row's line keeps that set, its range flagged ``check_stale``
-            where the retrain moved it.  Until then every row reports the
-            ``unchecked`` starting candidate, which is exactly what a headless
-            run exports.  ``"off"`` never checks: the whole run is the
-            unchecked line.  ``"weak"`` (#4496, the default since the owner's
-            ruling of 2026-10-05: the app's Autopilot checks where
+        spot_check: When the simulated user runs the balance's **spot check**
+            (#4272, the band walk of #4388 with #4413's F-beta stop).
+            ``"end"``: once the voting steps are spent - *max_steps* reached,
+            or the pool exhausted - the user checks the line the way the app's
+            check step does: the unvoted ranking is fixed off the current one
+            and cut into bands (the top 8, the next 8, 16, 32, ...), the walk
+            starts at the bands holding the balance's cap (the top 32 at
+            beta <= 1, 128 above it), each band's picks are answered from
+            ground truth **and cast as votes** (provenance ``check``), the
+            model retrains on them and one row is emitted per band with
+            ``phase == "check"`` and ``t`` still counting every vote cast, so
+            the check's rows sit past *max_steps*.  The walk stops at the
+            F-beta peak, and the last row's line is what the check's shape
+            makes of it, its ranges flagged ``check_stale`` where the retrain
+            moved them.  Until then every row reports the ``unchecked`` line,
+            which is exactly what a headless run exports.  ``"off"`` never
+            checks: the whole run is the unchecked line.  ``"weak"`` (#4496,
+            the default since the owner's ruling of 2026-10-05: the app's
+            Autopilot checks where
             :func:`~vtscore.training.thresholds.weak_check_due` says) is
             ``"end"`` plus the check the app runs mid-session: at the first
             ordinary step from *weak_min_t* votes on whose labels line
@@ -2627,26 +2590,22 @@ def simulate_voting_iterations(  # noqa: C901
     # Normalised once, at the top: the retired ``"mlp"`` spelling never reaches
     # the dispatch, the guards, or the result rows (issue #3764).
     trainer = knobs.trainer
-    # The preference the reporting line is drawn at (#4245, #4413): neither
-    # pinned is the app's default (the balance at DEFAULT_BETA), so the default
-    # arm cuts where a live detector does; a floor pins the floor arm, ``"off"``
-    # the Inclusion arm, and a beta the balance arm whatever the floor says.
+    # The balance the reporting line is drawn at (#4413): unpinned is the app's
+    # default (DEFAULT_BETA), so the default arm cuts where a live detector
+    # does; ``"off"`` is the Inclusion arm and a number the balance arm.
     # Resolved - and so validated - before anything expensive runs.
-    floor, beta = resolve_line_knobs(min_precision, beta)
+    beta = resolve_line_knobs(beta)
     walk_shape_resolved = resolve_walk_shape(walk_shape, beta)
     # What the line reads a finished walk as: the app's shape when the arm names none; the full walk's end moves the line.
     line_shape = None if walk_shape is None else (CHECK_TRIM if walk_shape == WALK_SHAPE_FULL else walk_shape)
     # The arm draws the app's labels line (#4452): a balance with no forced check shape.
     labels_arm = beta is not None and line_shape is None
-    _check_inclusion_arm(inclusion, floor, beta)
+    _check_inclusion_arm(inclusion, beta)
     # The acquisition cut's rule (#4409): the shipped argmax factor under a
     # balance unless the arm says otherwise, the offset everywhere else.
     acq_factor = resolve_acquisition_factor(acq_p_crossing, beta)
-    if acq_factor is not None and floor is None and beta is None:
-        raise ValueError(
-            "acq_p_crossing needs a preference: it places the acquisition cut at the floor's crossing, or at the "
-            "balance's F-beta argmax (#4413)"
-        )
+    if acq_factor is not None and beta is None:
+        raise ValueError("acq_p_crossing needs a balance: it places the acquisition cut at its F-beta argmax (#4413)")
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -2984,11 +2943,11 @@ def simulate_voting_iterations(  # noqa: C901
         raise ValueError(f"spot_check must be 'end', 'off' or 'weak', got {spot_check!r}")
     if weak_phase not in ("any", "learned"):
         raise ValueError(f"weak_phase must be 'any' or 'learned', got {weak_phase!r}")
-    # The floor's spot check (#4272), run once the voting steps are spent: the
-    # simulated user checks the line as the app's check step does, its picks
-    # answered from ground truth and cast as votes.  ``line_ranking`` is the
-    # ranking the last step's line was drawn over, which the candidate is
-    # fixed off and a finished result is fingerprinted against.
+    # The balance's spot check (#4272, #4413), run once the voting steps are
+    # spent: the simulated user checks the line as the app's check step does,
+    # its picks answered from ground truth and cast as votes.  ``line_ranking``
+    # is the ranking the last step's line was drawn over, which the walk's
+    # bands are cut from and a finished result is fingerprinted against.
     check: SpotCheck | None = None
     line_ranking: LineRanking | None = None
     # The rank frame's identity, and the inputs of the last ordinary step's
@@ -3014,48 +2973,43 @@ def simulate_voting_iterations(  # noqa: C901
 
     def _start_check() -> "SpotCheck | None":
         """The app's check over the line's unvoted ranking; ``None`` with nothing unvoted in it."""
-        assert line_ranking is not None
+        assert line_ranking is not None and beta is not None
         # The whole unvoted ranking, in rank order: the walk's bands are cut
-        # from it (#4388), and it starts at the floor's schedule.
+        # from it (#4388), and it starts at the balance's cap.
         candidate = tuple(int(i) for i in line_ranking.unvoted_ids(set(good_votes) | set(bad_votes)))
         if not candidate:
             return None
-        # Seeded off the run's own RNG, after every trajectory draw, so a
-        # run without the check is byte-identical up to here.
-        if beta is not None:
-            # The balance walk (#4413): recall read against the mixture's
-            # count of the unvoted ranking's positives, or the balance's cap
-            # when the mixture has no estimate (#4419), as the app does.
-            n_pos = walk_positives(
-                line_ranking,
-                beta,
-                {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
-                set(good_votes) | set(bad_votes),
-            )
-            return SpotCheck.start_balance(
-                candidate,
-                beta,
-                n_pos,
-                seed=int(rng.randint(2**31 - 1)),
-                picks=walk_picks,
-                tol=walk_tol,
-                fine=walk_fine,
-                guard=walk_guard,
-                shallow_only=walk_shape_resolved == CHECK_TRIM,
-            )
-        return SpotCheck.start(candidate, floor, seed=int(rng.randint(2**31 - 1)))  # type: ignore[arg-type]
+        # Seeded off the run's own RNG, after every trajectory draw, so a run
+        # without the check is byte-identical up to here.  Recall is read
+        # against the mixture's count of the unvoted ranking's positives, or
+        # the balance's cap when the mixture has no estimate (#4419), as the
+        # app does.
+        n_pos = walk_positives(
+            line_ranking,
+            beta,
+            {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
+            set(good_votes) | set(bad_votes),
+        )
+        return SpotCheck.start_balance(
+            candidate,
+            beta,
+            n_pos,
+            seed=int(rng.randint(2**31 - 1)),
+            picks=walk_picks,
+            tol=walk_tol,
+            fine=walk_fine,
+            guard=walk_guard,
+            shallow_only=walk_shape_resolved == CHECK_TRIM,
+        )
 
     # The last finished check: what a prompted check the budget cut short leaves in place.
     finished_check: SpotCheck | None = None
 
     def _check_start_cost() -> int:
         """The most a check's opening bands cost: what a prompted one needs left in the voting budget."""
-        if beta is not None:
-            schedule = balance_schedule(beta)
-        elif floor is not None:
-            schedule = check_schedule(floor)  # type: ignore[arg-type]
-        else:
+        if beta is None:
             return 0
+        schedule = balance_schedule(beta)
         return schedule.rounds * (walk_picks or schedule.picks)
 
     t = 0
@@ -3087,7 +3041,7 @@ def simulate_voting_iterations(  # noqa: C901
             if picks is None and (t >= n_steps or not pool):
                 # The voting steps are spent.  Check the line once, if the run
                 # checks at all and there is a ranking with something unvoted in it.
-                if spot_check == "off" or end_checked or (floor is None and beta is None) or line_ranking is None:
+                if spot_check == "off" or end_checked or beta is None or line_ranking is None:
                     break
                 end_checked = True
                 started = _start_check()
@@ -3224,7 +3178,6 @@ def simulate_voting_iterations(  # noqa: C901
                     voted_ids=set(good_votes) | set(bad_votes),
                     exclusion_min_remainder=exclusion_min_remainder,
                     cut_rule=live_cut_rule,
-                    min_precision=floor,
                     check=check,
                     labels={**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)},
                     beta=beta,
@@ -3302,24 +3255,18 @@ def simulate_voting_iterations(  # noqa: C901
                 if np.isfinite(cand):
                     offset_cut = float(cand)
             if acq_factor is not None:
-                # #4409: sample at a share of the depth where the session's
-                # mixture says the unvoted ranking stops being P right (no
-                # schedule cap), read as a rank; under a balance the F-beta
-                # argmax through the library's acquisition_threshold, as the
-                # app (#4413), and the shipped rule.  The mixture is the one
-                # the line's proposal already fitted on this ranking (memoised
-                # on it), so this costs a posterior read.
+                # #4409: sample at a share of the depth of the mixture's F-beta
+                # argmax over the unvoted ranking (no cap), read as a rank,
+                # through the library's acquisition_threshold, as the app does
+                # (#4413).  The mixture is the one the line's proposal already
+                # fitted on this ranking (memoised on it), so this costs a
+                # posterior read.
                 ranking_now = details.get("line_ranking")
                 cand = None
-                if ranking_now is not None and (floor is not None or beta is not None):
+                if ranking_now is not None and beta is not None:
                     voted_now = set(good_votes) | set(bad_votes)
                     labels_now = {**dict.fromkeys(good_votes, True), **dict.fromkeys(bad_votes, False)}
-                    if beta is not None:
-                        cand = acquisition_threshold(ranking_now, beta, labels_now, voted_now, factor=acq_factor)
-                    else:
-                        k_cross = mixture_count(ranking_now, floor, labels_now, voted_now)  # type: ignore[arg-type]
-                        if k_cross is not None:
-                            cand = ranking_now.threshold_for(max(1, round(acq_factor * k_cross)), voted_now)
+                    cand = acquisition_threshold(ranking_now, beta, labels_now, voted_now, factor=acq_factor)
                 if cand is not None and np.isfinite(cand):
                     acq_threshold = float(cand)
                 elif offset_cut is not None:
@@ -3441,7 +3388,7 @@ def simulate_voting_iterations(  # noqa: C901
             # (issue #4243).  A step with no fitted cut to re-derive keeps its
             # reporting line, which is then inclusion-blind.
             # The line was served at the operating point's inclusion - none at
-            # all when a precision floor kept a set (#4272).
+            # all when a balance kept a set (#4272, #4413).
             _line = details.get("reporting_line")
             _served = _line.inclusion if _line is not None else inclusion
             recent_steps.append(
@@ -3524,7 +3471,7 @@ def simulate_voting_iterations(  # noqa: C901
             # the pair answers "how much did the sampling position move".
             "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
             "report_pool_percentile": _pool_percentile(pool_scores, threshold),
-            **_floor_columns(floor, details),
+            **_line_columns(details),
         }
         timing_cols = {
             # The fold count this step actually LIVED at.  Constant on every run
@@ -3856,8 +3803,8 @@ def simulate_voting_iterations(  # noqa: C901
             "acq_threshold": float("nan"),
             "acq_pool_percentile": float("nan"),
             "report_pool_percentile": float("nan"),
-            # The run's floor; a skyline belongs to no step, so none was cut on it.
-            **_floor_columns(floor, {}),
+            # No line state: a skyline belongs to no step, so no line was cut on it.
+            **_line_columns({}),
         }
         rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
@@ -3890,8 +3837,7 @@ def run_voting_iterations_eval(
     startup_schedule: Optional[str] = None,
     calibration_seed: Optional[int] = None,
     standalone_cut: str = "raw",
-    min_precision: "Optional[float | str]" = None,
-    beta: Optional[float] = None,
+    beta: "Optional[float | str]" = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -3905,10 +3851,10 @@ def run_voting_iterations_eval(
             categories.  If ``None`` or a dataset is missing from the dict,
             all unique categories in that dataset are used.
         inclusion: The Inclusion arm's line, in ``[-10, 10]``.  It draws the
-            line only on the Inclusion arm (``min_precision="off"``), and a
-            non-zero value under a floor is refused (#4361): a set floor wins,
-            so it would only re-weight ``cost``.  The app has no such setting
-            (#4269); 0 is the cut it draws with no floor.
+            line only on the Inclusion arm (``beta="off"``), and a non-zero
+            value under a balance is refused (#4361): a set balance wins, so it
+            would only re-weight ``cost``.  The app has no such setting
+            (#4269); 0 is the cut it draws with no balance.
         sim_fraction: Fraction of medias reserved for simulated voting.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -3971,7 +3917,7 @@ def run_voting_iterations_eval(
     import pandas as pd  # noqa: PLC0415
 
     # Refused here as well as per cell, so a misconfigured grid fails before its first cell runs.
-    _check_inclusion_arm(inclusion, *resolve_line_knobs(min_precision, beta))
+    _check_inclusion_arm(inclusion, resolve_line_knobs(beta))
     strategy_list = strategies if strategies is not None else ["autopilot"]
     trainer_list = trainers if trainers is not None else [APP_TRAINER]
     arm_list = prevalence_arms if prevalence_arms is not None else [None]
@@ -4020,7 +3966,6 @@ def run_voting_iterations_eval(
                                     startup_schedule=startup_schedule,
                                     calibration_seed=calibration_seed,
                                     standalone_cut=standalone_cut,
-                                    min_precision=min_precision,
                                     beta=beta,
                                 )
                                 all_rows.extend(rows)
@@ -4047,8 +3992,7 @@ def run_voting_iterations_eval_from_pickles(
     styles: Optional[list[Optional[str]]] = None,
     autopilot_fidelity: bool = True,
     startup_schedule: Optional[str] = None,
-    min_precision: "Optional[float | str]" = None,
-    beta: Optional[float] = None,
+    beta: "Optional[float | str]" = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -4057,7 +4001,7 @@ def run_voting_iterations_eval_from_pickles(
         seeds: List of random seeds.
         categories: Optional category filter (see :func:`run_voting_iterations_eval`).
         inclusion: The Inclusion arm's line, in ``[-10, 10]``; a non-zero value
-            needs ``min_precision="off"`` (see :func:`run_voting_iterations_eval`).
+            needs ``beta="off"`` (see :func:`run_voting_iterations_eval`).
         sim_fraction: Fraction of medias for simulation.
         safe_thresholds: The shipped fused threshold path; on by default,
             matching the app.  ``False`` is the no-fusion control arm.
@@ -4078,10 +4022,9 @@ def run_voting_iterations_eval_from_pickles(
         seed_scores: Optional text-sort rankings keyed
             ``{dataset: {category: {media_id: similarity}}}`` (see
             :func:`run_voting_iterations_eval`).
-        min_precision: The precision floor the line is drawn at (see
-            :func:`simulate_voting_iterations`); ``"off"`` for the Inclusion arm.
-        beta: The balance arm (#4413): draw the line at F-beta's beta; the floor is then unused.
-            ``None`` with *min_precision* ``None`` is the app's default balance.
+        beta: The balance the line is drawn at (see
+            :func:`simulate_voting_iterations`): ``None`` is the app's default
+            balance, ``"off"`` the Inclusion arm.
 
     Returns:
         A :class:`~pandas.DataFrame` identical to :func:`run_voting_iterations_eval`
@@ -4090,7 +4033,7 @@ def run_voting_iterations_eval_from_pickles(
     """
     from vtscore.datasets.loader import load_dataset_from_pickle
 
-    _check_inclusion_arm(inclusion, *resolve_line_knobs(min_precision, beta))
+    _check_inclusion_arm(inclusion, resolve_line_knobs(beta))
     dataset_clips: dict[str, dict[int, dict[str, Any]]] = {}
     for name, path in dataset_paths.items():
         medias: dict[int, dict[str, Any]] = {}
@@ -4116,6 +4059,5 @@ def run_voting_iterations_eval_from_pickles(
         styles=styles,
         autopilot_fidelity=autopilot_fidelity,
         startup_schedule=startup_schedule,
-        min_precision=min_precision,
         beta=beta,
     )

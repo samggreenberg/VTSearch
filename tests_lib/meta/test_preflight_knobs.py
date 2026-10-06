@@ -11,8 +11,8 @@ Pinned here, against the probe `scripts/experiments/calibration/preflight_knobs.
 
 * a clean environment MATCHES, and a pin equal to the shipped value passes;
 * every session knob diverges when set off the app's value;
-* a knob another knob makes inert is not flagged (a beta leaves the floor
-  unused; a shape needs a balance), so no study declares a fictional divergence;
+* a knob another knob makes inert is not flagged (a shape needs a balance),
+  so no study declares a fictional divergence;
 * a value the harness itself refuses is REFUSED, which no declaration excuses;
 * an unset knob whose harness default has gone stale is caught too.
 
@@ -89,12 +89,11 @@ def test_a_clean_environment_matches(check):
 
 # One off-production value per session knob, and the knob name a launcher
 # declares for it.  The names the launchers already used (`startup_schedule`,
-# `spot_check`, `min_precision`, `opening_diversity`) are kept exactly.
+# `spot_check`, `opening_diversity`) are kept exactly.
 _DIVERGENT = [
     ({"CALIB_STARTUP_SCHEDULE": "g3@top,b4@mid"}, "startup_schedule"),
     ({"CALIB_OPENING_DIVERSITY": "0.85/1"}, "opening_diversity"),
-    ({"CALIB_MIN_PRECISION": "off"}, "min_precision"),
-    ({"CALIB_MIN_PRECISION": "0.9"}, "min_precision"),
+    ({"CALIB_BETA": "off"}, "beta"),
     ({"CALIB_BETA": "4"}, "beta"),
     ({"CALIB_WALK_SHAPE": "walk"}, "walk_shape"),
     ({"CALIB_WALK_PICKS": "3"}, "walk_picks"),
@@ -136,7 +135,6 @@ def test_pins_at_the_shipped_values_pass(check):
         CALIB_WALK_PICKS="0",
         CALIB_WALK_TOL="0",
         CALIB_WALK_FINE="0",
-        CALIB_MIN_PRECISION="default",
     )
     assert "MATCHES" in out, out
 
@@ -149,14 +147,6 @@ def test_acq_p_crossing_off_is_the_app_while_the_shipped_factor_is_none(check):
     assert flagged == (T.ACQUISITION_ARGMAX_FACTOR is not None)
 
 
-def test_a_beta_leaves_the_floor_unused_and_says_so(check):
-    out = check(CALIB_BETA="4", CALIB_MIN_PRECISION="0.9")
-    diverges = _tagged(out, "DIVERGES")
-    assert "beta" in diverges
-    assert "min_precision" not in diverges
-    assert any(line.startswith("SKIPPED\tmin_precision") for line in out)
-
-
 def test_a_swept_beta_is_not_also_a_shape_or_acquisition_divergence(check):
     """The app's shape and acquisition factor are read at the run's OWN beta, not the default one."""
     diverges = _tagged(check(CALIB_BETA="4"), "DIVERGES")
@@ -165,8 +155,8 @@ def test_a_swept_beta_is_not_also_a_shape_or_acquisition_divergence(check):
 
 def test_a_shape_without_a_balance_is_inert(check):
     """The Inclusion arm has no walk; the harness resolves any shape to None there."""
-    diverges = _tagged(check(CALIB_MIN_PRECISION="off", CALIB_WALK_SHAPE="walk"), "DIVERGES")
-    assert set(diverges) == {"min_precision"}, diverges
+    diverges = _tagged(check(CALIB_BETA="off", CALIB_WALK_SHAPE="walk"), "DIVERGES")
+    assert set(diverges) == {"beta"}, diverges
 
 
 @pytest.mark.parametrize(
@@ -177,7 +167,6 @@ def test_a_shape_without_a_balance_is_inert(check):
         ({"CALIB_STARTUP_SCHEDULE": "g3@topp"}, "startup_schedule"),
         ({"CALIB_WALK_SHAPE": "wlak"}, "walk_shape"),
         ({"CALIB_BETA": "100"}, "beta"),
-        ({"CALIB_MIN_PRECISION": "1.5"}, "min_precision"),
     ],
 )
 def test_a_value_the_harness_refuses_is_refused(check, env, knob):

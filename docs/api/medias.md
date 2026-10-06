@@ -437,7 +437,7 @@ work to a background thread and returns immediately:
 
 Poll [`GET /api/learned-sort/result`](#learned-sort-result-poll) with that
 `job_id` until `status == "done"` to receive the results. A no-op call (votes,
-detector, balance (or floor), and threshold settings unchanged from the most recent
+detector, balance, and threshold settings unchanged from the most recent
 successful run) short-circuits and returns the cached `done` payload directly.
 
 Pass `{"wait": true}` in the body to block until the job finishes and receive
@@ -448,14 +448,11 @@ the result inline (used by tests; the frontend leaves it `false`):
 
 The `done` payload — whether returned inline (`wait=true`) or via the result
 poll — is that same windowed envelope: `results`, `threshold`,
-`acq_threshold`, `balance`, `floor`, `sort_token`, `total`,
-`above_threshold`, `has_more_below`. This is the only sort with a detector
-behind it, so the only one whose `acq_threshold`, `balance` and `floor` are
-non-`null`; `balance` and `floor` are the
+`acq_threshold`, `balance`, `sort_token`, `total`, `above_threshold`,
+`has_more_below`. This is the only sort with a detector behind it, so the only
+one whose `acq_threshold` and `balance` are non-`null`; `balance` is the
 [line state](labeling.md#the-line-state) of `threshold`: the set the line
-keeps, and what the spot check found on it (the balance draws the line by
-default; the `floor` object is the deprecated preference's reading, carried
-for one release).
+keeps, and what the spot check found on it.
 
 `threshold` is the **decision line**: the cutoff shown to the user, what
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`

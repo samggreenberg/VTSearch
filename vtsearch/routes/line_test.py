@@ -178,6 +178,8 @@ def start_line_test():
     ids, scores = _ranking(det_ctx)
     line_count = _line_count(det_ctx, scores)
     beta = get_beta()
+    if beta is None:  # a library caller's "no balance"; the app always sets one
+        abort(409, message="The detector has no balance to test the line at.")
     last = det_ctx.line_test
     if (
         last is not None

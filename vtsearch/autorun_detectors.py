@@ -286,7 +286,7 @@ def score_detector(
         )
         if mlp is None:
             return None
-        floor, balance = _line_states(name, trained[0] if trained else None)
+        balance = _line_state(name, trained[0] if trained else None)
 
         scores, _best_row = score_rows_with_model(mlp, rows)
 
@@ -306,9 +306,8 @@ def score_detector(
         return name, {
             "detector_name": name,
             "threshold": round(threshold, 4),
-            # The floor's and the balance's state on that cut: unchecked,
-            # headless (#4247, #4272, #4413).
-            "floor": floor,
+            # The balance's state on that cut: unchecked, headless (#4247,
+            # #4272, #4413).
             "balance": balance,
             "total_hits": len(positive_hits),
             "hits": positive_hits,
@@ -319,32 +318,31 @@ def score_detector(
         return None
 
 
-def _line_states(name: str, det_ctx: Any) -> tuple[dict | None, dict | None]:
-    """What the floor and the balance say about *name*'s cut in an AutoRun: unchecked, because nobody can vote.
+def _line_state(name: str, det_ctx: Any) -> dict | None:
+    """What the balance says about *name*'s cut in an AutoRun: unchecked, because nobody can vote.
 
-    Both ride with the cut (``floor`` and ``balance``); which of the two drew
-    the line is the ``line_preference`` setting (#4413), read on the thread
-    that trained it, like the floor and the beta.  A headless run cannot
-    spot-check its line (#4272), so the cut exported is the preference's
-    unchecked set, and the log line is the record that it was never checked.
+    Rides with the cut (``balance``), read at the beta of the thread that
+    trained it (#4413).  A headless run cannot spot-check its line (#4272), so
+    the cut exported is the balance's unchecked set, and the log line is the
+    record that it was never checked.  ``None`` for a detector with no trained
+    context to ask, or with no balance (a library caller's choice; the app
+    always sets one).
     """
-    from vtscore.state.core import detector_balance_state, detector_floor_state  # noqa: PLC0415
-    from vtscore.training.thresholds import FLOOR_UNCHECKED, aim_words  # noqa: PLC0415
-    from vtsearch.state import get_beta, get_line_preference, get_min_precision  # noqa: PLC0415
+    from vtscore.state.core import detector_balance_state  # noqa: PLC0415
+    from vtscore.training.thresholds import BALANCE_UNCHECKED, aim_words  # noqa: PLC0415
+    from vtsearch.state import get_beta  # noqa: PLC0415
 
     if det_ctx is None:
-        return None, None
-    floor = detector_floor_state(det_ctx, get_min_precision())
+        return None
     balance = detector_balance_state(det_ctx, get_beta())
-    drawn = balance if get_line_preference() == "balance" else floor
-    if drawn is not None and drawn["status"] == FLOOR_UNCHECKED:
+    if balance is not None and balance["status"] == BALANCE_UNCHECKED:
         logger.info(
             "Auto-detect: detector %s exports its top %d unchecked (%s); nobody is here to check it",
             name,
-            drawn["count"],
-            aim_words(drawn),
+            balance["count"],
+            aim_words(balance),
         )
-    return floor, balance
+    return balance
 
 
 def score_autorun(

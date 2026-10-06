@@ -212,20 +212,18 @@ The three panels are shared with the Test view:
 - **Right** — labels, labelsets, vote grid, and the detector context bar.
 
 **The Threshold** (`vt-balance`, the balance, in the Manual tab and Test's
-top row; #4413, replacing the precision floor of #4246) is the one knob on the
-detector's line. The balance is F-beta's beta: which way to lean between false
-positives and false negatives. The line is the set with the best estimated
-F-beta, and nothing is "met" or "short" any more: a spot check just says what
-it estimated. Two values back the control, and they travel separately:
+top row; #4413) is the one knob on the detector's line. The balance is
+F-beta's beta: which way to lean between false positives and false negatives.
+The line is the set with the best estimated F-beta, and a spot check just says
+what it estimated. Two values back the control, and they travel separately:
 `SortStateService.beta` is the balance the radios show, seeded per pair by
 `PairScopeService.seedBeta` (`GET /api/balance`); `balance` is the state of
 the line on screen (`utils/line-balance.ts`, `LineBalance`: `unchecked` or
 `checked`, the count kept, the check's two likely ranges and its F-beta
 estimate), and only ever arrives *with* that line (a sort, a Test pass, or the
-balance POST's own response). Every response that carries a line carries both
-`floor` (the old object, kept one release) and `balance`; the frontend reads
-only `balance`. Each view has one write path, both `switchMap`-ed and
-pair-scoped so a balance the user moved past can never land last. Test's
+balance POST's own response). Each view has one write path, both
+`switchMap`-ed and pair-scoped so a balance the user moved past can never land
+last. Test's
 (`betaRequests$`, debounced) installs the returned line straight over the
 frozen scores. Label's (in `SortRunnerService`) re-runs the learned sort, but
 only from the POST's response: the learned sort reads the balance server-side
@@ -234,13 +232,14 @@ balance. When the balance keeps the same count of items before and after, the
 line stays put and only its state is swapped: the count, not the state,
 decides where the line sits. The control is a False Positives - False
 Negatives spectrum with three radios under its thirds (`BALANCE_PRESETS` in
-`utils/line-balance.ts`: beta 2 toward false positives, 1 balanced, 0.5 toward
-false negatives), and never shows a balance as a word or a number: each
+`utils/line-balance.ts`: beta 4 toward false positives, 1 balanced, 1/4 toward
+false negatives; #4448), and never shows a balance as a word or a number: each
 radio's tooltip says where it sits (#4298, #4317). The radios show the host's
 balance, never the click: a pick puts the DOM back on `value()` before
 emitting, so a pick the host drops (Test, mid-pass) leaves them where they
 were. A stored balance off the list is shown on the nearest radio (nearest in
-log space, a tie to the higher beta) and snapped to it through the control's
+log space, a tie to the preset farther from 1, so the old 2 and 0.5 show as 4
+and 1/4) and snapped to it through the control's
 own `valueChange`, once `busy` (the host's `sortBusy`) is false, because Test
 drops a balance change while a pass is running. Under the spectrum the state
 line reads "Checked · likely 55–100% right, about half of them found (checked

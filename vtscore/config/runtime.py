@@ -134,27 +134,12 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # single fold yields only ~4 positive scores, i.e. ~4 usable cut positions;
 # a second fold doubles that for one extra fold fit.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
-# The precision floor a user who has set none gets (#4245): the line keeps the
-# floor's starting candidate (32 items at 50%) until a spot check measures how
-# much of it is right, then the set the check ended on (#4272).  The app
-# always sets a floor (#4269): a stored ``None`` reads as this default.  A
-# library caller's ``None`` is no floor, and the line is the Inclusion 0 cut.
-# Re-exported as
-# ``vtscore.training.thresholds.DEFAULT_MIN_PRECISION``; defined here so the
-# settings layer can read it without importing the training stack.
-DEFAULT_MIN_PRECISION = 0.5
-
 #: The balance the line is drawn at by default (#4413): F-beta's beta, 1 =
-#: precision and recall weighed equally.  The presets are 1/4 / 1 / 4 (#4448).  As with
-#: the floor, ``vtscore.training.thresholds.DEFAULT_BETA`` re-exports it.
+#: precision and recall weighed equally.  The presets are 1/4 / 1 / 4 (#4448).
+#: Defined here so the settings layer can read it without importing the
+#: training stack; ``vtscore.training.thresholds`` carries the same value as its
+#: own ``DEFAULT_BETA``.
 DEFAULT_BETA = 1.0
-
-#: Which preference draws the line (#4413): ``"balance"`` (F-beta, ``beta``,
-#: the default since the switch's last step) or ``"floor"`` (the precision
-#: floor, ``min_precision``; deprecated, kept one release for the API and the
-#: CLI, then removed).
-DEFAULT_LINE_PREFERENCE = "balance"
-LINE_PREFERENCES = ("floor", "balance")
 MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32
 MLP_DROPOUT = 0.5
@@ -220,8 +205,8 @@ _seed = os.environ.get("VTSEARCH_PROJECTION_SEED", "").strip()
 PROJECTION_SEED: int | None = int(_seed) if _seed else None
 del _seed
 
-# Seed for the precision floor's spot check (#4330): the generator its picks
-# are drawn from (``vtscore.training.thresholds.SpotCheck.start(seed=...)``).
+# Seed for the balance's spot check (#4330): the generator its picks are drawn
+# from (``vtscore.training.thresholds.SpotCheck.start_balance(seed=...)``).
 # Unset (``None``, the default) is the shipped behaviour: every check draws
 # fresh uniform picks, which is what makes its bound honest.  Set
 # ``VTSEARCH_SPOT_CHECK_SEED`` to an integer and a check over the same

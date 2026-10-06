@@ -11,7 +11,7 @@ curve is not drawn: it keeps its promise only through an in-sample offset in
 its reference pool, and against a consistent pool it breaks 83-91% of its
 X = 50% promises (#4221, #4256), so it cannot back the "at least" a chart
 would be read as (#4360).  The one range the chart shows is the spot check's,
-for the set the line keeps (the ``floor`` state).
+for the set the line keeps (the ``balance`` state).
 Pure read; nothing is cached or persisted.
 """
 

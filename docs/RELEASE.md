@@ -235,6 +235,4 @@ its issues as shipped. Merging here makes "closed" mean "on `main`".
    merge method. Leave the PR open, comment on it with the refusal verbatim, and
    lead the run's final message with it, since the release has not shipped.
 
-End the run by naming the merge commit on `main`. The push to `main` also
-republishes the State of the App links (`.github/workflows/publish-sota.yml`)
-when the release carried a report.
+End the run by naming the merge commit on `main`.

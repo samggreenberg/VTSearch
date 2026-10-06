@@ -1,11 +1,12 @@
-"""The precision floor's spot check (#4272): draw picks, take the votes, report the line's state.
+"""The balance's spot check (#4272, #4413): draw picks, take the votes, report the line's state.
 
-The floor *P* is a share of what the line returns that should be right.  A
-**spot check** measures it by walking the unvoted ranking in bands (#4388):
-the user votes on uniform random picks from each band (the top 8, the next 8,
-then 16, 32, ...), the walk goes deeper while the band-weighted share of right
-answers meets *P* and shallower while it does not, and the line keeps the
-deepest set that met it.  The rule lives in
+The balance is F-beta's *beta*, a weighing of precision against recall.  A
+**spot check** audits the line by walking the unvoted ranking in bands
+(#4388): the user votes on uniform random picks from each band (the top 8,
+the next 8, then 16, 32, ...), the walk goes deeper while the F-beta estimate
+rises and shallower while it does not, and the peak is the set it ends on.
+Whether that set moves the line follows the preset (``advisory`` at beta 1
+and below, ``trim`` above; #4427).  The rule lives in
 :mod:`vtscore.training.thresholds.spot_check`; this blueprint is its lifecycle
 for the active detector:
 
@@ -15,12 +16,12 @@ for the active detector:
   ordinary labels (provenance ``check``), so they train the model like any
   other vote, and either deals the next band or ends the check;
 * ``POST /api/precision-check/cancel`` abandons a running check, leaving the
-  floor's state as it was (the votes already cast stay votes);
+  balance's state as it was (the votes already cast stay votes);
 * ``GET /api/precision-check`` reports the running check, or the last finished
-  one, beside the floor's state.
+  one, beside the balance's state.
 
-A finished check is kept on the detector and its result decides where the line
-sits - the set the walk ended on - until a new check replaces it.  Later votes
+A finished check is kept on the detector and its result informs where the line
+sits until a new check replaces it.  Later votes
 retrain the model and the line follows the new ranking at the same count; the
 result's range then reports ``stale``.  Starting a new check needs a changed
 ranking: there is no redraw on the same list (any vote, the check's own
@@ -41,19 +42,18 @@ log = logging.getLogger(__name__)
 precision_check_bp = Blueprint(
     "precision_check",
     __name__,
-    description="The precision floor's spot check: draw picks, take the votes, report how close the line got.",
+    description="The balance's spot check: draw picks, take the votes, report how close the line got.",
 )
 
 
 def _payload() -> dict:
-    """The floor's state and the check (running, else the last finished one) for the active detector."""
-    from vtscore.state.core import detector_balance_state, detector_floor_state, get_active_detector_context  # noqa: PLC0415
-    from vtsearch.state import get_beta, get_min_precision  # noqa: PLC0415
+    """The balance's state and the check (running, else the last finished one) for the active detector."""
+    from vtscore.state.core import detector_balance_state, get_active_detector_context  # noqa: PLC0415
+    from vtsearch.state import get_beta  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     check = det_ctx.precision_check_run or det_ctx.precision_check
     return {
-        "floor": detector_floor_state(det_ctx, get_min_precision()),
         "balance": detector_balance_state(det_ctx, get_beta()),
         "check": check.as_dict() if check is not None else None,
     }
@@ -62,7 +62,7 @@ def _payload() -> dict:
 @precision_check_bp.route("/api/precision-check", methods=["GET"])
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
 def get_precision_check():
-    """The active detector's spot check (running, else the last finished) and the floor's state."""
+    """The active detector's spot check (running, else the last finished) and the balance's state."""
     return _payload()
 
 
@@ -73,11 +73,11 @@ def get_precision_check():
     409, description="No ranking to draw from, nothing unvoted in it, or the same list as the last check."
 )
 def start_precision_check():
-    """Start a spot check of the active detector's floor over its current ranking.
+    """Start a spot check of the active detector's line at its balance, over its current ranking.
 
     The walk is over the unvoted items of the ranking the detector last
     scored, in rank order, fixed for the whole check, and starts at the bands
-    that hold the floor's starting count (32 at 50% and above, 128 at 10%).
+    that hold the balance's cap (the top 32 at beta 1 and below, 128 above).
     Deals the first band's picks.  A check already running is replaced.  The
     last finished result stays in force until this check ends.
     """
@@ -90,26 +90,22 @@ def start_precision_check():
     ranking = det_ctx.line_ranking
     if ranking is None:
         abort(409, message="No ranking to check: run a learned sort or a Test pass first.")
-    knobs = line_knobs()
-    beta, floor = knobs["beta"], knobs["min_precision"]
-    if beta is None and floor is None:
-        abort(409, message="The detector has no precision floor to check.")
+    beta = line_knobs()["beta"]
+    if beta is None:
+        abort(409, message="The detector has no balance to check.")
     unvoted = tuple(int(i) for i in ranking.unvoted_ids(human_voted_ids(det_ctx)))
     if not unvoted:
         abort(409, message="Nothing is left unvoted to check.")
     last = det_ctx.precision_check
     if last is not None and last.ranking_ids == unvoted:
         abort(409, message="This list was already checked; vote on something first, or re-sort.")
-    # Unseeded unless VTSEARCH_SPOT_CHECK_SEED is set, which only the
-    # screenshot harness does, so a refresh frames the same picks (#4330).
-    if beta is not None:
-        # The balance walk (#4413): the same bands and picks, stopped at the
-        # F-beta peak, its recall read against the mixture's count of positives
-        # - or the balance's cap when the mixture has no estimate (#4419).
-        n_pos = detector_walk_positives(det_ctx, beta)
-        det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED)
-    else:
-        det_ctx.precision_check_run = SpotCheck.start(unvoted, floor, seed=SPOT_CHECK_SEED)  # type: ignore[arg-type]
+    # The walk stops at the F-beta peak, its recall read against the mixture's
+    # count of positives - or the balance's cap when the mixture has no
+    # estimate (#4419).  Unseeded unless VTSEARCH_SPOT_CHECK_SEED is set, which
+    # only the screenshot harness does, so a refresh frames the same picks
+    # (#4330).
+    n_pos = detector_walk_positives(det_ctx, beta)
+    det_ctx.precision_check_run = SpotCheck.start_balance(unvoted, beta, n_pos, seed=SPOT_CHECK_SEED)
     return _payload()
 
 
@@ -127,13 +123,13 @@ def vote_precision_check(body: dict):
     item.  Once every pick of the band is labelled the walk moves on: the next
     band the set under test still owes is dealt, or the set is decided and the
     walk goes deeper (a new band is dealt), shallower, or ends.  The response
-    carries the check's new state and the floor's, whose line moves to the set
-    a finished check ended on.
+    carries the check's new state and the balance's, whose line a finished
+    check re-draws (to the set it ended on under ``trim``).
     """
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
     from vtscore.state.votes import record_vote_provenance  # noqa: PLC0415
     from vtscore.training.thresholds import CHECK_PROVENANCE  # noqa: PLC0415
-    from vtsearch.state import get_min_precision, set_vote  # noqa: PLC0415
+    from vtsearch.state import set_vote  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     check = det_ctx.precision_check_run
@@ -161,7 +157,7 @@ def vote_precision_check(body: dict):
         det_ctx.precision_check_run = None
         # The weak-separation prompt's cooldown counts from here (#4496).
         det_ctx.check_ended_votes = len(human_voted_ids(det_ctx))
-        _move_line(det_ctx, get_min_precision())
+        _move_line(det_ctx)
     return _payload()
 
 
@@ -169,7 +165,7 @@ def vote_precision_check(body: dict):
 @require_detector_header
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
 def cancel_precision_check():
-    """Abandon the running check.  Its votes so far stay ordinary votes; the floor's state is as it was."""
+    """Abandon the running check.  Its votes so far stay ordinary votes; the balance's state is as it was."""
     from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
@@ -198,18 +194,14 @@ def _persist_votes() -> None:
         log.exception("precision check: labelset source scheduling failed")
 
 
-def _move_line(det_ctx, floor: float | None) -> None:
-    """Move the line to the set the finished check ended on, and in Find mode re-split the unverified items."""
+def _move_line(det_ctx) -> None:
+    """Re-draw the line now the check has finished, and in Find mode re-split the unverified items."""
     from vtscore.state.core import recut_detector_threshold  # noqa: PLC0415
     from vtscore.state.votes import rethreshold_unverified_find_items  # noqa: PLC0415
 
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
-    knobs = line_knobs()
-    if knobs["beta"] is not None:
-        threshold = recut_detector_threshold(det_ctx, beta=knobs["beta"])
-    else:
-        threshold = recut_detector_threshold(det_ctx, min_precision=floor)
+    threshold = recut_detector_threshold(det_ctx, beta=line_knobs()["beta"])
     if threshold is not None:
         det_ctx.threshold = threshold
         rethreshold_unverified_find_items()

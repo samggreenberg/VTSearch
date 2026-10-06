@@ -262,9 +262,10 @@ nested: everything included at `k` is still included at `k + 1`. That is
 what makes "cut off at Inclusion 1, verify up to Inclusion 4" well-defined.
 
 Inclusion is no longer a user preference (#4269): the app's control is the
-**precision floor** (#4224), where the user names the share of returns that
-should be right: the line keeps the top of the ranking and a spot check of
-random picks measures how much of it is right
+**balance** (#4413), F-beta's beta, where the user says which way to lean
+between precision and recall: the line keeps the top of the ranking where the
+estimated F-beta peaks, and a spot check of random picks measures how much of
+it is right and how much it found
 (`vtscore.training.thresholds.spot_check`, #4272). `k` stays underneath, as
 the unit Autopilot's acquisition offset and the Smart indicator's pricing are
 measured in. The entry points that used to take

@@ -278,7 +278,7 @@ class ResultsExporter(PluginBase):
                              "<detector_name>": {
                                "detector_name": "...",
                                "threshold": 0.5,
-                               "floor": {...},        # may be absent or None
+                               "balance": {...},      # may be absent or None
                                "total_hits": 15,      # positives only
                                "hits": [{...}, ...],
                                "negative_hits": [{...}, ...],
@@ -303,16 +303,16 @@ class ResultsExporter(PluginBase):
                      below-threshold items can read it.  ``missing_detectors``
                      is likewise informational.
 
-                     **``floor``** says whether ``threshold`` is a promise
-                     (:func:`vtscore.state.core.detector_floor_state`):
-                     ``{"min_precision", "status", "calibration_positives",
-                     "min_calibration_positives"}``.
-                     A ``status`` of ``"unreachable"`` or
-                     ``"insufficient_evidence"`` means the floor promised
-                     nothing and ``hits`` is the Inclusion 0 cut; ``None``
-                     means no floor is set.  Informational, like
-                     ``missing_detectors``: ``threshold`` stays the float the
-                     hits were cut at, whatever it says.
+                     **``balance``** says what the line at ``threshold``
+                     keeps (:func:`vtscore.state.core.detector_balance_state`):
+                     ``{"beta", "status", "count", "precision", "recall",
+                     "fbeta", "schedule", "shape", "audited"}``.  A headless
+                     run's ``status`` is ``"unchecked"``: nobody was there
+                     to spot-check the set, so ``count`` is the balance's
+                     unchecked line and the ranges are ``None``.
+                     Informational, like ``missing_detectors``:
+                     ``threshold`` stays the float the hits were cut at,
+                     whatever it says.
 
             field_values: Mapping of :attr:`PluginField.key` -> value supplied
                 by the user.
@@ -592,8 +592,8 @@ class ResultsExporter(PluginBase):
         Args:
             header: Metadata known before any hit streams, with keys
                 ``"media_type"`` (str), ``"detectors"`` (a list of
-                ``{"detector_name": str, "threshold": float, "floor": dict}``
-                dicts; ``floor`` as in :meth:`export_find_results`), and
+                ``{"detector_name": str, "threshold": float, "balance": dict}``
+                dicts; ``balance`` as in :meth:`export_find_results`), and
                 ``"keep_negatives"`` (bool — whether below-threshold hits are
                 included in *records*).
             records: Yields ``(detector_name, hit)`` tuples in chunk order

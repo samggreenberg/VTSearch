@@ -184,7 +184,7 @@ def reset_state():
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
     # behaviour, which wipes the module-level ``_core_config_builder``
     # installed at app startup.  Re-register defensively so any later test
-    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_min_precision()``)
+    # that calls ``CoreConfig.from_settings()`` (e.g. via ``get_beta()``)
     # still has a backing implementation.
     from vtsearch.shim import register_app_config_builder
 
@@ -428,29 +428,21 @@ def client():
 
 
 @pytest.fixture
-def floor_preference(client):
-    """The deprecated precision floor draws the line (#4413): for the floor's own tests, now that the balance is the default."""
-    resp = client.put("/api/settings", json={"line_preference": "floor"})
-    assert resp.status_code == 200, resp.get_json()
-
-
-@pytest.fixture
 def schedule_only(monkeypatch):
-    """The unchecked line at the schedule's count alone: the mixture's proposal (#4389) set aside.
+    """The unchecked line at the balance's cap alone: the mixture's proposal (#4389, #4413) set aside.
 
-    Before any check the line keeps the smaller of the schedule's count and
-    the vote-anchored mixture's; on a fixture corpus of a few dozen synthetic
-    items the mixture's count is whatever the fit says that day.  For tests
-    whose subject is the schedule, the walk or a carrier of the state, not
-    the mixture - that rule is pinned in
-    ``tests_lib/sorting/test_mixture_count.py``.  Both seams: the package
+    Before any check the line keeps the smaller of the cap and the mixture's
+    F-beta argmax; on a fixture corpus of a few dozen synthetic items the
+    argmax is whatever the fit says that day.  For tests whose subject is the
+    cap, the walk or a carrier of the state, not the mixture - that rule is
+    pinned in ``tests_lib/sorting/test_balance.py``.  Both seams: the package
     name the app's local imports read, and the harness's module binding.
     """
     import vtscore.eval.voting_iterations as harness
     import vtscore.training.thresholds as thresholds
 
-    monkeypatch.setattr(thresholds, "mixture_count", lambda *_a, **_k: None)
-    monkeypatch.setattr(harness, "mixture_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(thresholds, "fbeta_count", lambda *_a, **_k: None)
+    monkeypatch.setattr(harness, "fbeta_count", lambda *_a, **_k: None)
 
 
 def _wait_for_job(job_manager, *, timeout: float = 30.0) -> None:

@@ -161,31 +161,31 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         register_detector_context(ctx)
         return ctx
 
-    def test_set_min_precision_preserves_model_no_fold_cache(self):
-        """The floor is a pure cutoff knob: it does not drop the model.
+    def test_set_beta_preserves_model_no_fold_cache(self):
+        """The balance is a pure cutoff knob: it does not drop the model.
         Without cached fold orderings the threshold is left for the next
         training pass."""
-        from vtsearch.state import set_min_precision
+        from vtsearch.state import set_beta
 
         ctx = self._loaded_ctx()
         model_before = ctx.model
-        set_min_precision(0.75)
+        set_beta(2.0)
         assert ctx.model is model_before
         assert ctx.threshold == 0.73
 
-    def test_set_min_precision_rethresholds_from_fold_cache(self, floor_preference):
-        """With cached fold orderings and no estimator, a floor change re-derives
+    def test_set_beta_rethresholds_from_fold_cache(self):
+        """With cached fold orderings and no estimator, a balance change re-derives
         the threshold (cheap quantile rule over the cache) without touching the
-        model.  There is no ranking for the floor to keep a set of, so the line
+        model.  There is no ranking for the balance to keep a set of, so the line
         is the Inclusion 0 cut."""
-        from vtsearch.state import set_min_precision
+        from vtsearch.state import set_beta
         from vtscore.training.thresholds import CalibrationFolds, threshold_from_fold_orderings
 
         ctx = self._loaded_ctx()
         model_before = ctx.model
         orderings = [([0.9, 0.8, 0.2, 0.1], [1.0, 1.0, 0.0, 0.0])]
         ctx.calibration_cache = ("k", CalibrationFolds(orderings, None, []))
-        set_min_precision(0.75)
+        set_beta(2.0)
         assert ctx.model is model_before
         assert ctx.threshold == threshold_from_fold_orderings(orderings, 0)
         assert ctx.threshold != 0.73

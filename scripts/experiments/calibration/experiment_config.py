@@ -708,24 +708,13 @@ else:
         raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
 
 
-#: The precision floor the reporting line is drawn at (#4245).  Unset is the
-#: app's own default floor - a live detector's line - resolved by
-#: ``vtscore.training.thresholds.resolve_min_precision``; ``off`` is the
-#: Inclusion arm every study before #4245 ran, and the one an Inclusion sweep
-#: needs, because a set floor wins over the knob; a number pins a floor.
-_MIN_PRECISION_ENV = os.environ.get("CALIB_MIN_PRECISION", "").strip().lower()
-MIN_PRECISION: float | str | None
-if _MIN_PRECISION_ENV in ("", "default", "app"):
-    MIN_PRECISION = None
-elif _MIN_PRECISION_ENV == "off":
-    MIN_PRECISION = "off"
-else:
-    try:
-        MIN_PRECISION = float(_MIN_PRECISION_ENV)
-    except ValueError:
-        raise ValueError(
-            f"CALIB_MIN_PRECISION={_MIN_PRECISION_ENV!r} is not 'off', a floor in (0, 1], or unset (= the app's default)"
-        ) from None
+# The precision floor's arm went with the floor (#4421).  A stale export would
+# otherwise run the default balance while the operator thinks it ran a floor.
+if os.environ.get("CALIB_MIN_PRECISION", "").strip():
+    raise ValueError(
+        "CALIB_MIN_PRECISION was removed with the precision floor (#4421): set CALIB_BETA instead "
+        "(a beta, or 'off' for the Inclusion arm)"
+    )
 
 
 def exclusion_arm_name() -> str:
@@ -989,12 +978,25 @@ def _opt_float(name: str) -> float | None:
 #: that consumes it (the conformal quantiles, ``FoldAnchoredCut.threshold_at``)
 #: is continuous in ``k``.  Parsing this as an int would silently refuse the
 #: half-step grid rather than fail, so it is a float.
-#: The balance arm (#4413): draw the line at F-beta's beta instead of the floor
-#: (``CALIB_BETA=1`` is the balanced preset; 0.25 and 4 the leaning ones, #4448).  Unset
-#: with CALIB_MIN_PRECISION unset is the app's default preference, the balance
-#: at beta 1 (#4413); CALIB_MIN_PRECISION=<P> is the floor arm.  A given beta
-#: makes CALIB_MIN_PRECISION unused.
-BETA = _opt_float("CALIB_BETA")
+#: The balance the reporting line is drawn at (#4413), resolved by
+#: ``vtscore.training.thresholds.resolve_line_knobs``.  Unset is the app's own
+#: default balance - a live detector's line; a number pins the balance arm
+#: (``1`` is the balanced preset, 0.25 and 4 the leaning ones, #4448); ``off``
+#: is the Inclusion arm every study before #4245 ran, and the one an Inclusion
+#: sweep needs, because a set balance wins over the knob.
+_BETA_ENV = os.environ.get("CALIB_BETA", "").strip().lower()
+BETA: float | str | None
+if _BETA_ENV in ("", "default", "app"):
+    BETA = None
+elif _BETA_ENV == "off":
+    BETA = "off"
+else:
+    try:
+        BETA = float(_BETA_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_BETA={_BETA_ENV!r} is not 'off', a beta in [0.25, 4], or unset (= the app's default)"
+        ) from None
 
 ACQ_INCLUSION_OFFSET = _opt_float("CALIB_ACQ_INCLUSION_OFFSET")
 if ACQ_INCLUSION_OFFSET is None:

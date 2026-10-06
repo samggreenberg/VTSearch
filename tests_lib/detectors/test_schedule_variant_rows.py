@@ -97,8 +97,8 @@ def harness_rows():
         emit_calibration_metrics=True,
         schedule_variants=_VARIANTS,
         # The Inclusion arm: the shipped schedule reproduces the estimator's
-        # fallback steps, which a floor's set would replace (#4272).
-        min_precision="off",
+        # fallback steps, which a balance's set would replace (#4272).
+        beta="off",
     )
 
 
