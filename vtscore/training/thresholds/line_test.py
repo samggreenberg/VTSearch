@@ -128,6 +128,18 @@ JEFFREYS = 0.5
 #: a sparse line's precision range came to sit above its truth (#4523).
 POOLED_WEIGHT = float(CHECK_MIN_PICKS)
 
+
+def pooled_weight(depth: int, n_above: int) -> float:
+    """What the pooled share is worth, in picks, to the band *depth* bands up from the line (0 holds the line).
+
+    *n_above* is how many bands sit above the line.  The one place a band's
+    pull toward the pool is decided, so a study can price another taper by
+    replacing it (#4560).
+    """
+    del depth, n_above
+    return POOLED_WEIGHT
+
+
 #: The floor under the model's prior on a band below the line, in pseudo-picks
 #: either way: enough that a band the model counts empty stays correctable by
 #: a pick that finds a match, too little to count as evidence of anything.
@@ -628,6 +640,11 @@ class LineTest:
             right += n_right
         return labelled, right
 
+    def _pooled_weight(self, b: int) -> float:
+        """Band *b*'s pull toward the pool (:func:`pooled_weight`), counted in bands up from the line."""
+        above = self.above
+        return pooled_weight(len(above) - 1 - b, len(above))
+
     def _pooled_share(
         self, rng: np.random.Generator, n: int, extra: dict[int, tuple[int, int]] | None = None
     ) -> np.ndarray:
@@ -667,7 +684,8 @@ class LineTest:
         if band.side == ABOVE:
             if pooled is None:
                 pooled = self._pooled_share(rng, n, None if extra is None else {b: extra})
-            a, c = MODEL_FLOOR + POOLED_WEIGHT * pooled, MODEL_FLOOR + POOLED_WEIGHT * (1.0 - pooled)
+            w = self._pooled_weight(b)
+            a, c = MODEL_FLOOR + w * pooled, MODEL_FLOOR + w * (1.0 - pooled)
         elif self.posteriors is not None:
             mean = self.band_mass(b) / size
             weight = self.budgets.model_weight
@@ -837,11 +855,12 @@ class LineTest:
             return 0.0
         n, alpha, beta = self.budgets.draws, self.budgets.alpha, self.beta
         current = self._summarise(base, beta, alpha)[2].width
-        # The round's predictive under the band's prior: the pooled share's mean at POOLED_WEIGHT (#4539).
+        # The round's predictive under the band's prior: the pooled share's mean at the band's weight (#4539).
         pooled_lab, pooled_right = self._pooled_counts()
         p_mean = (pooled_right + JEFFREYS) / (pooled_lab + 2.0 * JEFFREYS)
-        a = right + MODEL_FLOOR + POOLED_WEIGHT * p_mean
-        bb = labelled - right + MODEL_FLOOR + POOLED_WEIGHT * (1.0 - p_mean)
+        w = self._pooled_weight(b)
+        a = right + MODEL_FLOOR + w * p_mean
+        bb = labelled - right + MODEL_FLOOR + w * (1.0 - p_mean)
         expected = 0.0
         for r in range(m + 1):
             weight = math.comb(m, r) * _beta_fn(a + r, bb + m - r) / _beta_fn(a, bb)
