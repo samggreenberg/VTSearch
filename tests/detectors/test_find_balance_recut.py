@@ -118,9 +118,11 @@ def test_a_find_pass_on_a_reused_head_has_a_ranking_and_can_be_checked(client):
     # The fixture's 8 unlabelled items are the whole unvoted remainder, and the
     # balance's state counts how many of them the line keeps (#4452).
     voted = human_voted_ids(ctx)
-    assert sorted(ctx.line_ranking.candidate(32, voted)) == list(range(13, 21))
+    ranking = get_active_detector_context().line_ranking  # re-read: the pass set it after the drop above
+    assert ranking is not None
+    assert sorted(ranking.candidate(32, voted)) == list(range(13, 21))
     assert ctx.threshold != -999.0 and resp["threshold"] == pytest.approx(ctx.threshold, abs=1e-4)
-    kept = [i for i in ctx.line_ranking.unvoted_ids(voted) if ctx.line_ranking.score_of(int(i)) >= ctx.threshold]
+    kept = [i for i in ranking.unvoted_ids(voted) if ranking.score_of(int(i)) >= ctx.threshold]
     assert resp["balance"]["status"] == "unchecked" and resp["balance"]["count"] == len(kept)
 
     start = client.post("/api/precision-check/start", json={})
