@@ -218,15 +218,18 @@ class LineBudgets:
     to *misses_picks*, because its recall range only holds once the walk
     has corrected the model's tail band by band.  The defaults are the values
     #4523 priced on 192,660 replayed Tests
-    (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``): 0.20 and 40
-    picks above the line, where the precision range held the truth in 92-96%
-    of sessions at beta <= 1; 40 picks below it, where walking to the budget
-    raised the recall range's coverage from 13-38% to 75-94%.
+    (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``) and #4540
+    re-priced with the pooled prior and the deeper walk
+    (``docs/experiments/2026-10-06-test-budget-presets-4540/REPORT.md``): a
+    width of 0.20 and 20 picks above the line, where the precision range holds
+    the truth in 94-99% of sessions, as well as at 40 picks or better, for up
+    to 13 fewer picks at beta 4; 40 picks below it, where walking to the
+    budget raised the recall range's coverage from 13-38% to 81-98%.
     """
 
     matches_width: float = 0.20
     misses_width: float = 0.25
-    matches_picks: int = 40
+    matches_picks: int = 20
     misses_picks: int = 40
     picks_per_round: int = CHECK_MIN_PICKS
     dry_run_share: float = 0.05

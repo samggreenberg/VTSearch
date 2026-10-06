@@ -249,6 +249,29 @@ class TestTheInputs:
         assert set(row) | set(IDENT) == set(LINE_TEST_COLUMNS)
         assert row["t"] == 150 and row["beta"] == 1.0 and row["test_seed"] == 0
         assert row["matches_width"] == DEFAULT_BUDGETS.matches_width
+        # No class model: no preset line to re-estimate (#4540).
+        assert row["preset_b1_count"] == -1 and row["preset_b1_fbeta_held"] == -1
+
+    def test_the_presets_are_what_lean_the_threshold_shows(self):
+        """#4540: each balance preset's count is the labels line's at that beta, read like the app's route."""
+        scores, labels = self._scores()
+        model = ClassScoreModel(mu_pos=1.0, mu_neg=-1.0, sigma=0.5, n_pos=10, n_neg=20)
+        line = LabelsLine(model, 0.5).on_corpus(scores)
+        row = line_test_row(150, scores, labels, 1.0, find_on_test=line, seed=0)
+        order = np.argsort(-scores, kind="stable")
+        truth = labels[order] >= 0.5
+        for beta, tag in ((0.25, "b025"), (1.0, "b1"), (4.0, "b4")):
+            count = int(np.count_nonzero(scores >= line.threshold(beta)))
+            assert row[f"preset_{tag}_count"] == count
+            if row["phase"] == PHASE_DONE and count > 0:
+                p, r, f = truth_at(truth, count, beta)
+                assert row[f"preset_{tag}_precision_true"] == pytest.approx(p)
+                assert row[f"preset_{tag}_fbeta_true"] == pytest.approx(f)
+                assert row[f"preset_{tag}_precision_held"] in (0, 1)
+        # The preset at the session's own beta is the line itself, so its range is the line's.
+        if row["phase"] == PHASE_DONE:
+            assert row["preset_b1_count"] == row["line_count"]
+            assert row["preset_b1_precision_point"] == pytest.approx(row["precision_point"])
 
     def test_a_snapshot_replays_through_the_same_row(self):
         scores, labels = self._scores()

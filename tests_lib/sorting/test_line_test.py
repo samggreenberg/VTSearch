@@ -321,7 +321,8 @@ class TestTheAllocationRule:
         ids, positives, post = _planted(above_rate=1.0)
         # The top three bands are all positives, the band holding the line is half and half.
         positives = {cid for cid in positives if cid <= 32} | set(range(33, 49))
-        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=LineBudgets(matches_width=0.01))
+        budgets = LineBudgets(matches_width=0.01, matches_picks=40)  # room past the first pass
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets)
         _run(test, positives, rounds=4)
         assert test.phase().phase == PHASE_MATCHES
         shrink = {b.index: test.expected_shrink(b.index) for b in test.above}
@@ -468,9 +469,9 @@ class TestThePhaseMachine:
         test = _run(LineTest.start(ids, 64, 1.0, seed=42, budgets=walk), positives)
         assert test.phase().misses_stop == STOP_DRY_RUN and test.phase().picks_below == 25
 
-    def test_the_defaults_are_the_values_4523_priced(self):
-        """``docs/experiments/2026-10-05-line-test-4523/REPORT.md``: 0.20 / 40 above the line, 40 picks below it."""
-        assert (DEFAULT_BUDGETS.matches_width, DEFAULT_BUDGETS.matches_picks) == (0.20, 40)
+    def test_the_defaults_are_the_values_4523_and_4540_priced(self):
+        """0.20 / 20 above the line (#4540's split budget), 40 picks below it (#4523)."""
+        assert (DEFAULT_BUDGETS.matches_width, DEFAULT_BUDGETS.matches_picks) == (0.20, 20)
         assert DEFAULT_BUDGETS.misses_picks == 40 and DEFAULT_BUDGETS.picks_per_round == CHECK_MIN_PICKS == 5
 
     def test_the_phase_is_a_pure_function_of_the_sample_and_the_budgets(self):
@@ -478,7 +479,7 @@ class TestThePhaseMachine:
         test = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42), positives, rounds=6)
         assert line_phase(test) == test.phase()
         tighter = LineTest.start(
-            ids, 64, 1.0, posteriors=post, labels=test.labels, budgets=LineBudgets(matches_width=0.01)
+            ids, 64, 1.0, posteriors=post, labels=test.labels, budgets=LineBudgets(matches_width=0.01, matches_picks=40)
         )
         assert tighter.phase().phase == PHASE_MATCHES and test.phase().phase != PHASE_MATCHES
 

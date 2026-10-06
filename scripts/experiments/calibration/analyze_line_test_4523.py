@@ -102,10 +102,17 @@ def parse_variants(spec: str) -> list[tuple[float, float, float]]:
 
 
 def grid(
-    widths: tuple[float, ...], budgets: tuple[int, ...], variants: list[tuple[float, float, float]] | None = None
+    widths: tuple[float, ...],
+    budgets: tuple[int | tuple[int, int], ...],
+    variants: list[tuple[float, float, float]] | None = None,
 ) -> list[LineBudgets]:
     """The width x budget grid at the plan's walk, plus each other walk variant at the plan's width and budget."""
-    points = [LineBudgets(matches_width=w, matches_picks=b, misses_picks=b) for w in widths for b in budgets]
+    points = []
+    for w in widths:
+        for b in budgets:
+            # An int is one budget for both phases; ``(above, below)`` splits them (#4540).
+            above, below = (b, b) if isinstance(b, int) else b
+            points.append(LineBudgets(matches_width=w, matches_picks=above, misses_picks=below))
     for d, w, mw in variants or []:
         b = LineBudgets(
             matches_width=DEFAULT_BUDGETS.matches_width,
@@ -217,6 +224,7 @@ def cell_rows(job: tuple) -> tuple[list[dict], dict]:
                     "test_seed_index": s,
                     "width": b.matches_width,
                     "budget": b.matches_picks,
+                    "budget_below": b.misses_picks,
                     "walk": walk_tag(b),
                     **row,
                 }
@@ -259,6 +267,7 @@ def doc_rows(job: tuple) -> list[dict]:
                         "test_seed_index": s,
                         "width": b.matches_width,
                         "budget": b.matches_picks,
+                        "budget_below": b.misses_picks,
                         "walk": walk_tag(b),
                         "t": int(v),
                         "beta": float(beta),
@@ -286,7 +295,7 @@ def cluster_se(x: pd.Series, cells: pd.Series) -> float:
 
 def summarise(rows: pd.DataFrame) -> pd.DataFrame:
     """Per world x beta x width x budget x walk: cost, stops, coverage, widths, errors, verdicts."""
-    keys = ["world", "beta", "width", "budget", "walk"]
+    keys = ["world", "beta", "width", "budget", "budget_below", "walk"]
     out: list[dict] = []
     for key, g in rows.groupby(keys, sort=True):
         done = g[g["phase"] == PHASE_DONE]
@@ -349,7 +358,7 @@ def pick(summary: pd.DataFrame, bar: float = COVERAGE_BAR) -> pd.DataFrame:
     for the user).  A world where no point is eligible names the best coverage.
     """
     out: list[dict] = []
-    plan = summary[summary["walk"] == DEFAULT_WALK]
+    plan = summary[(summary["walk"] == DEFAULT_WALK) & (summary["budget_below"] == summary["budget"])]
     for (world, beta), g in plan.groupby(["world", "beta"], sort=True):
         default = g[(g["width"] == DEFAULT_BUDGETS.matches_width) & (g["budget"] == DEFAULT_BUDGETS.matches_picks)]
         ok = g[g["precision_cov"] >= bar].sort_values(["picks_mean", "width"], ascending=[True, False])
@@ -399,7 +408,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--jobs", type=int, default=1)
     ap.add_argument("--widths", default=",".join(str(w) for w in WIDTHS))
-    ap.add_argument("--budgets", default=",".join(str(b) for b in BUDGETS))
+    ap.add_argument(
+        "--budgets",
+        default=",".join(str(b) for b in BUDGETS),
+        help="per-phase pick budgets: 40 for both phases, 20/40 for 20 above the line and 40 below",
+    )
     ap.add_argument("--test-seeds", type=int, default=4, help="Test seeds per session and grid point")
     ap.add_argument(
         "--misses-variants",
@@ -409,7 +422,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="cells per world (0 = all); for a smoke run")
     args = ap.parse_args(argv)
     widths = tuple(float(w) for w in args.widths.split(","))
-    budgets = tuple(int(b) for b in args.budgets.split(","))
+    # ``40`` is one budget for both phases; ``20/40`` is 20 above the line and 40 below it (#4540).
+    budgets = tuple(
+        int(b) if "/" not in b else (int(b.split("/")[0]), int(b.split("/")[1])) for b in args.budgets.split(",")
+    )
     variants = parse_variants(args.misses_variants)
     thin = {kv.split("=", 1)[0]: float(kv.split("=", 1)[1]) for kv in args.thin}
     args.out.mkdir(parents=True, exist_ok=True)

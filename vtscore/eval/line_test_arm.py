@@ -41,7 +41,7 @@ study's report).  Its two constants are named here so the study can move them.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 import numpy as np
@@ -55,7 +55,7 @@ from vtscore.training.thresholds.line_test import (
     found_words,
     line_bands,
 )
-from vtscore.training.thresholds.spot_check import fbeta_score
+from vtscore.training.thresholds.spot_check import BALANCE_PRESETS, fbeta_score
 
 #: How much better another band edge's F-beta must read than the line's for
 #: the verdict to say *Lean the Threshold* (a proposal for #4523 to price).
@@ -79,6 +79,9 @@ LINE_LABELS = "labels"
 LINE_FALLBACK = "fallback"
 LINE_NONE = "none"
 
+#: One NaN object, so two rows reporting "no value" compare equal (``nan != nan`` otherwise).
+_NAN = float("nan")
+
 
 @dataclass(frozen=True)
 class LineTestInputs:
@@ -91,6 +94,9 @@ class LineTestInputs:
     #: with *truth*; ``None`` with no class model.
     posteriors: np.ndarray | None
     line_source: str
+    #: How many items the labels line keeps at each balance preset: what the
+    #: verdict's *Lean the Threshold* re-estimates (#4540).  Empty with no class model.
+    preset_counts: Mapping[float, int] = field(default_factory=dict)
 
     @property
     def size(self) -> int:
@@ -153,7 +159,12 @@ def line_test_inputs(
     else:
         thr = None
     count = int(np.count_nonzero(a >= thr)) if thr is not None and math.isfinite(thr) else 0
-    return LineTestInputs(truth, count, post, source)
+    presets: dict[float, int] = {}
+    if find_on_test is not None:
+        for b in BALANCE_PRESETS:
+            t_b = float(find_on_test.threshold(float(b)))
+            presets[float(b)] = int(np.count_nonzero(a >= t_b)) if math.isfinite(t_b) else 0
+    return LineTestInputs(truth, count, post, source, presets)
 
 
 def truth_at(truth: np.ndarray, count: int, beta: float) -> tuple[float, float, float]:
@@ -217,6 +228,31 @@ def _nan_estimate() -> dict[str, float]:
     return {"point": float("nan"), "lo": float("nan"), "hi": float("nan")}
 
 
+def _preset_columns(test: LineTest | None, truth: np.ndarray, counts: Mapping[float, int]) -> dict[str, Any]:
+    """The ranges *Lean the Threshold* shows for each balance preset, beside the truth (#4540).
+
+    Per preset (``preset_b025_*`` / ``b1`` / ``b4``): its line count, and for
+    precision, recall and F-beta at its own beta the range's point, the
+    truth, and whether the range held it.  -1 / NaN with no test (nothing to
+    test) or no class model to draw the preset's line.
+    """
+    from vtscore.eval.voting_columns import beta_tag  # noqa: PLC0415
+
+    out: dict[str, Any] = {}
+    for b in BALANCE_PRESETS:
+        tag = f"preset_{beta_tag(b)}"
+        count = counts.get(float(b))
+        out[f"{tag}_count"] = -1 if count is None else int(count)
+        truths = truth_at(truth, count, b) if count is not None else (_NAN,) * 3
+        edge = test.estimate_at(count, b) if (test is not None and count is not None and count > 0) else None
+        for name, t in zip(("precision", "recall", "fbeta"), truths):
+            e = None if edge is None else getattr(edge, name)
+            out[f"{tag}_{name}_point"] = _NAN if e is None else e.point
+            out[f"{tag}_{name}_true"] = t
+            out[f"{tag}_{name}_held"] = -1 if e is None else int(e.holds(t))
+    return out
+
+
 def simulate_line_test(
     truth: np.ndarray,
     line_count: int,
@@ -225,6 +261,7 @@ def simulate_line_test(
     posteriors: np.ndarray | None = None,
     budgets: LineBudgets = DEFAULT_BUDGETS,
     seed: int = 0,
+    preset_counts: Mapping[float, int] | None = None,
 ) -> dict[str, Any]:
     """Run the Test autopilot to Done on a frozen ranking, every pick answered from *truth*.
 
@@ -233,7 +270,11 @@ def simulate_line_test(
     identity and the inputs' provenance): the picks and stops per phase, the
     ranges at Done beside the truth, the verdict beside the oracle's, and
     the band-edge coverage.  A line keeping fewer items than one round is
-    *Nothing to test*: no picks, every estimate NaN.
+    *Nothing to test*: no picks, every estimate NaN.  With *preset_counts*
+    (each balance preset's line count), it also records the ranges the
+    verdict's *Lean the Threshold* shows for each preset - ``estimate_at``
+    at that count and beta, as the app's route draws them - beside the truth
+    (#4540).
     """
     truth = np.asarray(truth, dtype=bool)
     n = int(truth.size)
@@ -272,6 +313,7 @@ def simulate_line_test(
         "bands_below": len(test.below),
         "bands_below_reached": sum(1 for b in test.below if test.audited(b.index)),
     }
+    out.update(_preset_columns(test if report.phase != PHASE_NOTHING else None, truth, preset_counts or {}))
     if report.phase == PHASE_NOTHING:
         for name in ("precision", "recall", "fbeta", "positives_above", "positives_below"):
             out.update({f"{name}_{key}": value for key, value in _nan_estimate().items()})
@@ -368,7 +410,13 @@ def line_test_row(
     """
     inputs = line_test_inputs(scores, labels, find_on_test, fallback_threshold, beta=beta)
     outcome = simulate_line_test(
-        inputs.truth, inputs.line_count, beta, posteriors=inputs.posteriors, budgets=budgets, seed=seed
+        inputs.truth,
+        inputs.line_count,
+        beta,
+        posteriors=inputs.posteriors,
+        budgets=budgets,
+        seed=seed,
+        preset_counts=inputs.preset_counts,
     )
     return {
         "t": int(t),
