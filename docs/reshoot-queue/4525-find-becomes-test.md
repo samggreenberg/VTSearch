@@ -10,3 +10,6 @@
 - `combine-datasets-tick` — the Dashboard with two datasets ticked
 - `import-progress` — the Dashboard under an import's progress row
 - `browse-find` — Browse's way back reads ← Back to Test
+- `slides:steps` — Step 5's numbered frame marks Test as step 3, and its results frame is the Review tab
+- `slides:find` — the Dashboard frame shows the relabelled buttons; the shooter now clicks Test, then Review
+- `slides:make-detector` — the empty app's Dashboard shows the relabelled action bar
