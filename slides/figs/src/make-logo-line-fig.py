@@ -201,14 +201,6 @@ def _figure(lines: dict[str, tuple[np.ndarray, np.ndarray]], label_y: dict[str, 
             ha="left",
             va="center",
             annotation_clip=False,
-            arrowprops={
-                "arrowstyle": "-",
-                "color": style["color"],
-                "lw": 1.0,
-                "shrinkA": 2,
-                "shrinkB": 4,
-                "relpos": (0.0, 0.5),
-            },
         )
     return fig
 

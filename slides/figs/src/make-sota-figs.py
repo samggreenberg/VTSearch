@@ -53,7 +53,7 @@ import numpy as np  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import FULL_BLEED, INK, SOFT, save  # noqa: E402
+from slide_figure import FULL_BLEED, INK, SOFT, save, spread_labels  # noqa: E402
 
 SRC = Path(__file__).resolve().parent
 OUT = SRC.parent
@@ -249,18 +249,6 @@ def _check(photos: dict, docs: dict) -> None:
         raise SystemExit(f"make-sota-figs: the reviews no longer say what the notes quote (got, pinned): {wrong}")
 
 
-def _spread(ys: list[float], gap: float) -> list[float]:
-    """Nudge label heights apart by at least *gap*, keeping their order and mean."""
-    order = np.argsort(ys)
-    placed = np.array(ys, dtype=float)[order]
-    for i in range(1, len(placed)):
-        placed[i] = max(placed[i], placed[i - 1] + gap)
-    placed += np.array(ys)[order].mean() - placed.mean()
-    out = np.empty_like(placed)
-    out[order] = placed
-    return out.tolist()
-
-
 #: The figure, in inches: the slide's own 16:9.
 FIG_SIZE = (12.8, 7.2)
 #: Both slides' panels, in figure fractions. The left starts below the title
@@ -416,20 +404,20 @@ def _f_panel(
         ends[beta] = (xs[-1], ys[-1])
     if extra is not None:
         extra(ax, ends)
-    label_y = _spread([ends[b][1] for b, _, _ in RADIOS], gap=0.075)
+    # Each label sits just past its line's end, nudged apart only as far as the
+    # type needs and in the ends' own order: never on a leader, which reads as
+    # one more line (owner, 2026-10-05; STYLE.md).
+    label_y = spread_labels([ends[b][1] for b, _, _ in RADIOS], gap=0.075)
     for (beta, label, _w), y in zip(RADIOS, label_y, strict=True):
-        x, yy = ends[beta]
-        ax.annotate(
+        ax.text(
+            xlim[1] + (xlim[1] - xlim[0]) * 0.02,
+            y,
             label,
-            (x, yy),
-            xytext=(xlim[1] + (xlim[1] - xlim[0]) * 0.03, y),
-            textcoords="data",
             ha="left",
             va="center",
             fontsize=16,
             color=INK,
-            annotation_clip=False,
-            arrowprops={"arrowstyle": "-", "color": SOFT, "lw": 1.0, "shrinkA": 2, "shrinkB": 4},
+            clip_on=False,
         )
     return ax
 
