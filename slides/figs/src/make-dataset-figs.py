@@ -579,17 +579,19 @@ COCO_BETTER_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgeco
 #:
 #: **A gloss says what the images show, not what the set is.** `A⁺` does not
 #: show an A — the pictures in it do, every one of them — so the gloss names
-#: the pictures and the requirement each of them meets: *Images showing A,
-#: maybe more.* Which is also why all four start with the same two words: the
-#: sets differ in what they demand, not in what kind of thing they hold
-#: (#4443).
+#: the pictures and the requirement each of them meets: *Images showing A.*
+#: Which is also why all four start with the same word: the sets differ in
+#: what they demand, not in what kind of thing they hold (#4443). Each says as
+#: little as its requirement does — `A⁺` asks for an A and nothing more, so its
+#: gloss does not add "maybe more", and `Ø` names the three it is without
+#: rather than counting them (#4563).
 #:
 #: The `Easy:` heading is the one entry whose term moves — the experiment is
 #: shown three times, once per class, and `_coco_better_easy_term` supplies the
 #: spelling for the frame being drawn.
 COCO_BETTER_BLOCKS = [
-    ("def", "A⁺", "Images showing A, maybe more."),
-    ("def", EMPTY, "Images showing none of the three."),
+    ("def", "A⁺", "Images showing A."),
+    ("def", EMPTY, "Images without A, B, or C."),
     ("head", f"Easy: A⁺ vs {EMPTY}", None),
     ("def", "AB⁼", "Images showing exactly A and B."),
     ("def", "¬A", "Images showing no A."),

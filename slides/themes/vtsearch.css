@@ -19,7 +19,7 @@
  *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *      --hue-step  red    a numbered click marker, as the screenshot draws it
- *                         (scripts/screenshots/callouts.mjs) — the Step-By-Step
+ *                         (scripts/screenshots/callouts.mjs) — the Instruction
  *                         slides' side lists only
  *
  *    Use them through the .cut / .neg / .pos span classes, and only when the
@@ -187,6 +187,11 @@ section.statement h1 { font-size: 54px; line-height: 1.2; }
 /* Outline slide: the "where this is going" list. Numbered, quiet numerals, one
    line per section so the audience can hold the whole shape at once.
 
+   The numerals are Roman (#4563): the deck's page numbers are Arabic, so a
+   section reads as a different kind of address from a slide, and "section
+   III" can never be mistaken for "slide 3". build.py's bookmarks print them
+   the same way (`roman`).
+
    Laid out like every other slide in the deck rather than as its own kind of
    page: the headline sits in the same top-left notch a full-bleed figure
    leaves for it (`section.full` below, and `slide_figure.TITLE_NOTCH_PX`),
@@ -224,14 +229,16 @@ section.outline ol {
 section.outline ol li {
   counter-increment: outline;
   margin-bottom: 0.5em;
-  padding-left: 1.9em;
+  padding-left: 2.75em;
   position: relative;
 }
+/* Right-aligned in a column as wide as the widest numeral, VIII, so the names
+   start on one line whatever their numeral's width. */
 section.outline ol li::before {
-  content: counter(outline);
+  content: counter(outline, upper-roman);
   position: absolute;
   left: 0;
-  width: 1.25em;
+  width: 2.1em;
   text-align: right;
   color: var(--ink-soft);
   font-weight: 700;
@@ -280,7 +287,7 @@ section.outline.at6 ol li:nth-of-type(6)::before,
 section.outline.at7 ol li:nth-of-type(7)::before,
 section.outline.at8 ol li:nth-of-type(8)::before { color: var(--ink-soft); }
 
-/* The closing line. `The End` is not a section the room is walked through, so
+/* The closing line. `Conclusion` is not a section the room is walked through, so
    it is not on the list they are shown on the way: the fragment wraps it in
    `<span class="closing">`, every showing hides it, and the one showing that
    closes the deck — `outline-<deck> +end` in the manifest — reveals it as the
@@ -349,7 +356,7 @@ section.full .side { max-width: 300px; margin-top: 64px; }
 section.full .side p { margin: 0 0 0.9em; line-height: 1.3; }
 section.full .side .indent { display: inline-block; padding-left: 1.2em; }
 
-/* Step-By-Step: the side column is the key to the screenshot beside it. The
+/* Instruction: the side column is the key to the screenshot beside it. The
    figure marks each control with a red numbered disc, so the list's numbers
    are those discs — the same number in the same mark, and the room can match
    a line to a place on the screen without being told. The fragment writes a

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Slide 32, "Follow Suit": the line follows the user's preference (#4548, #4519).
+"""The appendix's "Follow Suit": the line follows the user's preference (#4548, #4519).
 
 Run from the repo root, once the study's curve CSV is committed:
 
     python slides/figs/src/make-follow-suit-fig.py
 
-The owner wanted slide 32 to show what the work since cross-calibration bought.
+The owner wanted a slide to show what the work since cross-calibration bought.
 Measured on the 1% pool (#4548), it bought a line that follows the user's preset:
 
 - at beta 1/4 today's app beats cross-calibration by +0.17 F-beta at vote 150;
@@ -17,6 +17,9 @@ votes, filled before a detector shows, for two lines:
 
 - cross-calibration (grey): the same sessions whatever the user wants, scored at the row's beta;
 - today's app at that preset (the deck's blue), its own sessions.
+
+Only beta 1/4 separates the two, so the slide sits in the appendix after Conclusion rather than in section V
+(#4563): an answer to a question, not a slide to walk a room through.
 
 Both start at the typed query, the notch at click 0. Page a draws cross-calibration alone ("one line, whatever
 you want"); page b adds today's app. A reveal adds ink and restyles nothing, so every label holds its final
@@ -100,11 +103,17 @@ def read_curves(path: Path) -> dict[tuple[str, str], tuple[np.ndarray, np.ndarra
     return out
 
 
+#: The canvas: the whole slide, at 100 slide pixels to the inch.
+FIG_W, FIG_H = 12.8, 7.2
+
+
 def _figure(curves: dict, today: bool) -> Figure:
     """The slide; *today* adds today's app to every row (page b)."""
-    fig = plt.figure(figsize=(12.8, 7.2))
-    # Under the title notch, with a right column for the line names.
-    top, bottom, left, right, gap = 0.73, 0.13, 0.17, 0.74, 0.035
+    fig = plt.figure(figsize=(FIG_W, FIG_H))
+    # The rows start right of the title notch, tick labels and all, so they run
+    # from the top of the slide rather than from under the headline (#4563),
+    # with a right column for the line names. `save` checks the notch is clear.
+    top, bottom, left, right, gap = 0.93, 0.13, 0.355, 0.795, 0.035
     h = (top - bottom - 2 * gap) / 3
     t_max = int(max(curves[(XCAL, ROWS[0][1])][0].max(), 150))
     for i, (beta, col, rung) in enumerate(ROWS):
@@ -121,8 +130,11 @@ def _figure(curves: dict, today: bool) -> Figure:
             ax.set_xlabel("Votes")
         else:
             ax.set_xticklabels([])
-        # The preset this row is, where Beta Max names its rows: left of the row.
-        ax.text(-0.09, 0.5, f"β = {beta}", transform=ax.transAxes, ha="right", va="center", fontsize=18)
+        # The preset this row is, in the row's own top-left corner: every line is
+        # flat at the floor until a detector shows, so that corner is empty in all
+        # three. Left of the row, where Beta Max names its rows, the top row's
+        # name would sit in the title notch now the rows reach the top.
+        ax.text(0.015, 0.97, f"β = {beta}", transform=ax.transAxes, ha="left", va="top", fontsize=18)
         xt, xy = curves[(XCAL, col)]
         tt, ty = curves[(rung, col)]
         ends = [float(xy[-1]), float(ty[-1])]
@@ -139,7 +151,7 @@ def _figure(curves: dict, today: bool) -> Figure:
                     va="center", clip_on=False)  # fmt: skip
         # The notch: the typed query, where both lines start.
         ax.plot([0], [float(xy[0])], marker="o", color=INK, markersize=8, zorder=5, clip_on=False)
-    fig.text(0.02, (top + bottom) / 2, r"$\mathregular{F_\beta}$ at the row's β", rotation=90, ha="center",
+    fig.text(left - 0.075, (top + bottom) / 2, r"$\mathregular{F_\beta}$ at the row's β", rotation=90, ha="center",
              va="center", fontsize=17)  # fmt: skip
     return fig
 
