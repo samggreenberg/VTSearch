@@ -45,7 +45,10 @@ pip install --upgrade setuptools -q
 #     versions patch CVE-2026-44431/44432.
 #   - httplib2 0.20.4 ships pre-installed (via launchpadlib, debian-managed);
 #     0.32.0 patches PYSEC-2026-3444. Unused by VTSearch.
-pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 httplib2 -q
+#   - pypdf 6.17.0 ships pre-installed in the Python 3.13 image, required by
+#     nothing of ours (PyMuPDF reads our PDFs); 6.19.0 patches
+#     PYSEC-2026-4153..4160.
+pip install --upgrade --ignore-installed pip wheel cryptography pyjwt urllib3 httplib2 pypdf -q
 
 # The container also carries a per-user site (/root/.local/lib/python3.11/
 # site-packages, home of the preinstalled MCP tooling) that sits AHEAD of

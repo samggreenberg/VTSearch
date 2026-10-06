@@ -117,6 +117,13 @@ def caveats_for_embedder_type(embedder_type: str) -> list[str]:
     return [caveat] if caveat else []
 
 
+def _tensor(weights: dict[str, list], key: str) -> np.ndarray:
+    """One tensor of a ``serialize_weights`` dict as ``float32``: a weight ``[out, in]`` or a bias ``[out]``."""
+    import numpy as np  # noqa: PLC0415
+
+    return np.asarray(weights[key], dtype=np.float32)
+
+
 def _split_linear_weights(
     weights: dict[str, list],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -151,9 +158,7 @@ def embedding_dim_from_weights(weights: dict[str, list]) -> int:
     dimensionality for both the MLP (``[hidden, input_dim]``) and the linear
     head (``[1, input_dim]``), so it is agnostic to the head's layer count.
     """
-    import numpy as np  # noqa: PLC0415
-
-    return int(np.asarray(weights["0.weight"], dtype=np.float32).shape[1])
+    return int(_tensor(weights, "0.weight").shape[1])
 
 
 def mlp_weights_to_onnx(weights: dict[str, list]) -> bytes:
@@ -166,14 +171,13 @@ def mlp_weights_to_onnx(weights: dict[str, list]) -> bytes:
     trained ``nn.Sequential`` emits raw logits).  Dropout is a no-op at inference
     and is omitted.  The batch dimension is dynamic.
     """
-    import numpy as np  # noqa: PLC0415
     from onnx import TensorProto, checker, helper, numpy_helper  # noqa: PLC0415
 
     weight_keys = sorted((k for k in weights if k.endswith(".weight")), key=lambda k: int(k.split(".")[0]))
     if len(weight_keys) == 1:
         # Linear head: sigmoid(Gemm(x, W, b)).
-        w = np.asarray(weights["0.weight"], dtype=np.float32)
-        b = np.asarray(weights["0.bias"], dtype=np.float32)
+        w = _tensor(weights, "0.weight")
+        b = _tensor(weights, "0.bias")
         input_dim = int(w.shape[1])
         initializers = [
             numpy_helper.from_array(w, "output.weight"),

@@ -83,7 +83,7 @@ def _build_units(coords: np.ndarray, labels: np.ndarray) -> tuple[list[np.ndarra
     # Fold each noise point into the nearest cluster so it translates with that
     # island instead of becoming its own unit (keeps the unit count bounded by
     # cluster count, which is what lets the O(U^2) relaxation scale).
-    members = {k: list(np.where(labels == k)[0]) for k in cluster_ids}
+    members: dict[int, list[int]] = {k: np.flatnonzero(labels == k).tolist() for k in cluster_ids}
     noise_idx = np.where(labels < 0)[0]
     if noise_idx.size:
         d = np.linalg.norm(coords[noise_idx, None, :] - centroids[None, :, :], axis=2)

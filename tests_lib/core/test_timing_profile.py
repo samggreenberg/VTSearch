@@ -13,6 +13,7 @@ Three things have to hold for the profile to be worth having:
 """
 
 import json
+import math
 
 import pytest
 
@@ -425,7 +426,12 @@ class TestMalformedProfilesAreHarmless:
         assert timing.step_weights("find", device="cpu", fallback=[1.0, 1.0, 1.0]) == [1.0, 1.0, 1.0]
 
     def test_bare_number_is_shorthand_for_a_fixed_cost(self):
-        assert StepCoeffs.from_json(4) == StepCoeffs(a=4.0)
+        # Field by field: a hand-written cost has no fit, so its r2 is NaN, and
+        # from Python 3.13 a dataclass compares fields with ``==``, not as a
+        # tuple whose identity shortcut let the one NaN object equal itself.
+        fixed = StepCoeffs.from_json(4)
+        assert fixed is not None and (fixed.a, fixed.b, fixed.per_mb) == (4.0, 0.0, 0.0)
+        assert math.isnan(fixed.r2)
         assert StepCoeffs.from_json("nope") is None
         assert StepCoeffs.from_json({"a": "nope"}) is None
         assert StepCoeffs.from_json(True) is None
