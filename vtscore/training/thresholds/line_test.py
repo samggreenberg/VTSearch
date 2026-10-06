@@ -772,10 +772,13 @@ class LineTest:
         """What the line would ship if it kept the top *count*, from the same draws (the verdict's **Lean the Threshold**).
 
         Exact at a band edge, where it is :attr:`LineEstimates.at_edges`'
-        entry; inside a band the band's positives are split in proportion to
-        how much of it the top *count* takes, which is the band resolution the
-        picks have.  *beta* defaults to the test's.  A count past the corpus
-        keeps all of it.
+        entry.  Inside a band the band's labelled picks count where their
+        ranks fall, and its unlabelled positives are split by the class
+        model's posterior mass on either side of *count* (#4540): a band's
+        top is richer than its bottom, and splitting it by size read a
+        shallower preset's precision as much as 0.19 low.  With no model, or
+        a band the model counts empty, the split is by size.  *beta*
+        defaults to the test's.  A count past the corpus keeps all of it.
         """
         beta = self.beta if beta is None else float(beta)
         k = max(0, min(int(count), self.size))
@@ -787,13 +790,41 @@ class LineTest:
             if band.hi <= k:
                 running = running + counts[band.index]
             elif band.lo < k:
-                running = running + counts[band.index] * ((k - band.lo) / band.size)
+                running = running + self._partial_band(band, k, counts[band.index])
         kf = float(k)
         p = running / kf if kf > 0 else np.zeros(n)
         r = np.where(total > 0, running / np.maximum(total, _EPS), 0.0)
         fb = (1.0 + beta * beta) * running / np.maximum(beta * beta * total + kf, _EPS)
         side = ABOVE if k <= self.line_count else BELOW
         return EdgeEstimate(k, side, _estimate(p, alpha), _estimate(r, alpha), _estimate(fb, alpha))
+
+    def _partial_band(self, band: Band, k: int, band_counts: np.ndarray) -> np.ndarray:
+        """The draws of band *band*'s positives that rank above *k*: its picks there, plus its share of the rest.
+
+        *band_counts* are the band's drawn positives (its right picks plus its
+        unlabelled items at a drawn share).  The right picks ranked above *k*
+        count as themselves; the unlabelled positives are split by the
+        model's posterior mass on the unlabelled items above *k*, or by their
+        number with no model or no mass.
+        """
+        right_above = right_all = 0
+        for cid, ok in self.labels.items():
+            if self.pick_band.get(cid) != band.index or not ok:
+                continue
+            right_all += 1
+            if self._rank[cid] < k:
+                right_above += 1
+        unlabelled = band_counts - right_all
+        ranks = np.arange(band.lo, band.hi)
+        free = np.array([self.ranking_ids[r] not in self.labels for r in ranks])
+        upper = free & (ranks < k)
+        weights = self.posteriors[band.lo : band.hi] if self.posteriors is not None else None
+        if weights is not None and float(weights[free].sum()) > _EPS:
+            share = float(weights[upper].sum()) / float(weights[free].sum())
+        else:
+            n_free = int(free.sum())
+            share = int(upper.sum()) / n_free if n_free else 0.0
+        return right_above + unlabelled * share
 
     def _expected_shrink(self, b: int, base: np.ndarray) -> float:
         size, labelled, right = self.band_counts(b)
