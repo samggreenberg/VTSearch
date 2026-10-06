@@ -84,10 +84,11 @@ same edit.
   report follows the same shape. Each goes in its own directory,
   `docs/experiments/<date>-state-of-the-app-<path>-<modality>/`, and is written
   when ITS runs finish; one path does not wait for the other.
-- **Stable links, refreshed at each release (owner, 2026-10-06):** the newest
-  report of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages
-  that move when a release reaches `main`, not on every merge to `dev`. A
-  report commits its viewer so the link has one. See
+- **Stable links that follow `dev` (owner, 2026-10-06):** the newest report
+  of each kind, and its `viewer.html`, have fixed URLs on GitHub Pages that
+  move as soon as a report merges to `dev` (first set to follow releases to
+  `main`, then switched the same day). A report commits its viewer so the link
+  has one. See
   [Where the owner reads it](#where-the-owner-reads-it-the-stable-links).
 - **Seeds per path, sized by cost:** Binary Photo is cheap (~7 min and ~1 GB a
   run, ~10-15 min per seed for all 144 cells), so it takes **as many seeds as
@@ -352,10 +353,9 @@ https://samggreenberg.github.io/VTSearch/sota/binary-photo/viewer.html  its inte
 ```
 
 and likewise `region-photo/` and `document-logo/`. `.github/workflows/publish-sota.yml`
-rebuilds them with `scripts/publish-sota-site.py` on each **release to `main`**
-that touches a report. They follow releases, not `dev`, by the owner's choice,
-so a report merged to `dev` reaches its link at the next Dev2Main. Three things
-keep a report on its link:
+rebuilds them with `scripts/publish-sota-site.py` on each **push to `dev`**
+that touches a report, so a report has its link as soon as it merges. Three
+things keep a report on its link:
 
 - **The title.** `REPORT.md`'s first line is `# State of the App: <Kind> — <date>`.
   The kind is what follows the colon, up to the first ` — `, `,` or ` (`; the

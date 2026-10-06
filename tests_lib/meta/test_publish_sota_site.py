@@ -1,12 +1,12 @@
 """Tests for the State of the App links on GitHub Pages.
 
 `.github/workflows/publish-sota.yml` builds a small site with
-`scripts/publish-sota-site.py` and deploys it on every release to ``main`` that
+`scripts/publish-sota-site.py` and deploys it on every push to ``dev`` that
 touches a report. Like the slide publisher, nothing in ``./run-tests.sh`` ever
 runs the deploy, so its failures would show only as a link that quietly stops
 moving. The checks below cover the ways it can rot: the builder picking the
 wrong report, a review whose title no longer parses falling off the links, and
-the workflow drifting off ``main`` or losing the Pages permissions.
+the workflow drifting off ``dev`` or losing the Pages permissions.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def _report(experiments: Path, directory: str, title: str, *, viewer: str | None
 
 def _build(tmp_path: Path, experiments: Path):
     out = tmp_path / "site"
-    series, skipped = site.build(out, experiments=experiments, repo="o/r", ref="main", sha="abc1234")
+    series, skipped = site.build(out, experiments=experiments, repo="o/r", ref="dev", sha="abc1234")
     return out, {s.slug: s for s in series}, skipped
 
 
@@ -87,7 +87,7 @@ def test_newest_report_of_each_kind_wins(tmp_path: Path) -> None:
     assert skipped == []
     redirect = (out / "sota/binary-photo/index.html").read_text()
     assert (
-        'url=https://github.com/o/r/blob/main/docs/experiments/2026-10-05-state-of-the-app-binary-photo/REPORT.md"'
+        'url=https://github.com/o/r/blob/dev/docs/experiments/2026-10-05-state-of-the-app-binary-photo/REPORT.md"'
         in redirect
     )
 
@@ -134,7 +134,7 @@ def test_rebuild_replaces_the_site(tmp_path: Path) -> None:
     out = tmp_path / "site"
     (out / "sota/stale-kind").mkdir(parents=True)
 
-    site.build(out, experiments=exp, repo="o/r", ref="main", sha="abc1234")
+    site.build(out, experiments=exp, repo="o/r", ref="dev", sha="abc1234")
 
     assert not (out / "sota/stale-kind").exists()
 
@@ -167,15 +167,16 @@ def _workflow() -> dict:
     return parsed
 
 
-def test_workflow_publishes_from_main_when_a_report_changes() -> None:
-    """The links follow releases (owner, 2026-10-06), not every merge to dev.
+def test_workflow_publishes_from_dev_when_a_report_changes() -> None:
+    """The links follow `dev`, where reports land (owner, 2026-10-06), not the releases to `main`.
 
-    `main` is also the only branch the github-pages environment deploys from
-    by default, so a trigger on any other branch would fail at the deploy step.
+    The github-pages environment has to list `dev` among its deployment
+    branches for this to deploy; the workflow's header says so.
     """
     triggers = _workflow()["on"]
     push = triggers["push"]
-    assert push["branches"] == ["main"]
+    assert push["branches"] == ["dev"]
+    assert "Deployment branches and tags: add `dev`" in WORKFLOW.read_text(), "the setup note the deploy needs"
     for required in (
         "docs/experiments/*state-of-the-app*/**",
         "scripts/publish-sota-site.py",

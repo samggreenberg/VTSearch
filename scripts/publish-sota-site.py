@@ -37,7 +37,7 @@ The viewer is ``viewer.html`` beside ``REPORT.md``. When the newest report of a
 kind has none, its ``viewer.html`` link serves a short page saying so, rather
 than an older report's viewer under a URL that promises the newest.
 
-.github/workflows/publish-sota.yml runs this on every push to ``main`` that
+.github/workflows/publish-sota.yml runs this on every push to ``dev`` that
 touches a report, and deploys the result. To look at the site locally::
 
     python scripts/publish-sota-site.py --out _site
@@ -207,7 +207,7 @@ def _index_page(series: list[Series], repo: str, ref: str, sha: str, built: str)
     parts = [
         "<h1>State of the App</h1>",
         '<p class="muted">The newest review of each kind. These links follow '
-        f"<code>{html.escape(ref)}</code>, so they move when a release carries a new report there.</p>",
+        f"<code>{html.escape(ref)}</code>, so they move as soon as a new report lands there.</p>",
     ]
     for s in series:
         latest = s.latest
@@ -277,7 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True, type=Path, help="directory to write the site to (replaced)")
     ap.add_argument("--experiments", type=Path, default=EXPERIMENTS, help="where the report directories live")
     ap.add_argument("--repo", default="samggreenberg/VTSearch", help="owner/name the report links point at")
-    ap.add_argument("--ref", default="main", help="branch the report links point at")
+    ap.add_argument("--ref", default="dev", help="branch the report links point at")
     ap.add_argument("--sha", default=None, help="commit the site is built from (default: HEAD)")
     args = ap.parse_args(argv)
 
