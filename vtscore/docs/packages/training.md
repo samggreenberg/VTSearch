@@ -636,14 +636,15 @@ question for the eval, priced by #4523
 - `line_phase(test)` / `test.phase()` derives the phase from state
   (`PhaseReport`): `nothing` when the line keeps fewer items than a round;
   `matches` until the precision range is at or under `budgets.matches_width`
-  after a round, the bands above are exhausted, or `budgets.matches_picks` is
-  spent; `misses` until the walk ends (`exhausted`, or `dry_run` with no
+  once every band above the line has had a round (#4539), the bands above are
+  exhausted, or `budgets.matches_picks` is spent; `misses` until the walk ends (`exhausted`, or `dry_run` with no
   class model), the recall range is under `budgets.misses_width` (with no
   class model only), or `budgets.misses_picks` is spent; then `done`. The
   stop reasons are `STOP_REASONS`, the phases `PHASES`. `LineBudgets`'
-  defaults are the values #4523 priced
-  (`docs/experiments/2026-10-05-line-test-4523/REPORT.md`): a 0.20 precision
-  width and 40 picks a phase.
+  defaults are the values #4523 and #4540 priced
+  (`docs/experiments/2026-10-05-line-test-4523/REPORT.md`,
+  `docs/experiments/2026-10-06-test-budget-presets-4540/REPORT.md`): a 0.20
+  precision width, 20 picks above the line and 40 below it.
 - `TEST_PROVENANCE` is the provenance a test's vote is recorded with
   (`flow: test`); a test vote never trains the detector.
 - A finished test's verdict is kept on the detector by

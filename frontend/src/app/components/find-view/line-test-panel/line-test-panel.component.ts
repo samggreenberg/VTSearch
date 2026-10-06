@@ -113,7 +113,7 @@ export class LineTestPanelComponent {
           widthLight(report?.matches_width, target),
           `Tracks how narrow the likely range for the share right has got: red while wider than ${Math.round(2 * target * 100)} points, ` +
             `yellow within that, green at ${Math.round(target * 100)} points or under, when the step ends. ` +
-            `It also ends at ${budgets?.matches_picks ?? 40} picks, or once every band above the line is checked.`,
+            `It also ends at ${budgets?.matches_picks ?? 20} picks, or once every band above the line is checked.`,
         );
       }
       case 'misses': {

@@ -36,7 +36,7 @@
     "harness": "8df1a1803ff42c2f736d6c100f1086f5827655c2d00563738abaa2f3e675d157"
   },
   "line_test.budgets_default": {
-    "app": "208f7b887252c91cf041217499bdd266d6081ed90e380f8641ceba74957098e9",
+    "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
     "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"
   },
   "progress.eval_geometry": {
