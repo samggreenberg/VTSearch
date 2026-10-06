@@ -227,6 +227,67 @@ class TestTheEstimators:
         recalls = [e.recall.point for e in est.at_edges]
         assert recalls == sorted(recalls)
 
+    def test_estimate_at_a_band_edge_is_the_edges_estimate(self):
+        ids, positives, post = _planted()
+        test = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42), positives)
+        for edge in test.estimates().at_edges:
+            at = test.estimate_at(edge.count)
+            assert (at.precision, at.recall, at.fbeta) == (edge.precision, edge.recall, edge.fbeta)
+
+    def _top_heavy(self):
+        """A line of 64 whose band 32-64 holds all its matches in its top half, and a model that says so."""
+        n = 400
+        ids = list(range(1, n + 1))
+        positives = set(range(1, 33)) | set(range(33, 49))  # bands 0-2 all right; band 3 right only in 32-48
+        post = np.zeros(n)
+        post[:32] = 0.95
+        post[32:48] = 0.9
+        post[48:64] = 0.05
+        post[64:] = 0.001
+        return ids, positives, post
+
+    def test_inside_a_band_the_split_follows_the_models_posteriors(self):
+        """#4540: a shallower preset inside a top-heavy band reads near its truth, not at the band's average."""
+        ids, positives, post = self._top_heavy()
+        budgets = LineBudgets(matches_width=0.01, matches_picks=20, misses_picks=5)
+        test = _run(LineTest.start(ids, 64, 1.0, posteriors=post, seed=42, budgets=budgets), positives)
+        precision_at_48 = sum(1 for cid in ids[:48] if cid in positives) / 48
+        assert precision_at_48 == 1.0
+        by_model = test.estimate_at(48).precision
+        flat = LineTest.start(ids, 64, 1.0, posteriors=None, seed=42, budgets=budgets, labels=test.labels)
+        by_size = flat.estimate_at(48).precision
+        assert by_model.point > by_size.point + 0.05, (by_model, by_size)
+        assert by_model.holds(precision_at_48) or by_model.hi > 0.95
+
+    def test_the_split_never_puts_more_matches_above_the_count_than_it_has_items(self):
+        """A model sure of a band's top cannot read a preset as more than 100% right (the route caught 1.0037)."""
+        ids, positives, post = self._top_heavy()
+        post = post.copy()
+        post[32:34] = 1.0  # all the model's mass on the band's first two items
+        post[34:64] = 1e-6
+        test = LineTest.start(ids, 64, 1.0, posteriors=post, seed=42)
+        for count in (33, 34, 36, 40, 48, 60):
+            at = test.estimate_at(count)
+            assert 0.0 <= at.precision.lo <= at.precision.hi <= 1.0, (count, at.precision)
+            assert 0.0 <= at.recall.lo <= at.recall.hi <= 1.0, (count, at.recall)
+
+    def test_a_pick_inside_the_band_counts_where_its_rank_falls(self):
+        """A labelled right pick ranked above the count is counted as itself, not spread across the band."""
+        ids, positives, post = self._top_heavy()
+        test = LineTest.start(ids, 64, 1.0, posteriors=None, seed=42)
+        # Label every item of band 3 (ranks 32-64): a census, so the split is exact.
+        for cid in ids[32:64]:
+            test.pick_band[cid] = 3
+            test.labels[cid] = cid in positives
+        test._invalidate()
+        at = test.estimate_at(48)
+        band3_above = sum(1 for cid in ids[32:48] if cid in positives)
+        assert band3_above == 16
+        # Bands 0-2 are unlabelled and drawn; band 3's contribution above 48 is exactly its 16 right picks.
+        counts = test._base_draws()
+        expected = (counts[0] + counts[1] + counts[2] + 16) / 48
+        assert at.precision.point == pytest.approx(float(np.mean(expected)), rel=1e-9)
+
     def test_the_count_below_the_line_is_the_models_corrected_by_the_picks(self):
         ids, positives, post = _planted(below=(4, 0, 0, 0, 0, 0, 0))
         # A model that thinks the first band under the line is empty.
