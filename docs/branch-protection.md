@@ -98,7 +98,9 @@ anything landing on `main`.
 practice — nobody working off `dev` has a routine reason to touch `main`:
 
 - All work branches off `dev`; all PRs target `dev`, **never** `main`.
-- `main` is updated **only by @samggreenberg**, by promoting `dev` → `main`.
+- `main` is updated **only by promoting `dev` → `main`**. The Dev2Main Routine
+  does it, acting through @samggreenberg's account: it opens the release PR and,
+  as the runbook's last step, merges it ([`RELEASE.md`](RELEASE.md) step 8).
 - Collaborators do not push directly to `main`.
 
 ### Notifications
@@ -148,6 +150,15 @@ JSON
 With CODEOWNERS as above, `require_code_owner_reviews` means only
 @samggreenberg's review satisfies the gate, and `restrictions.users` limits
 pushes. Set `enforce_admins: true` to bind yourself to the same rules.
+
+**That review gate and the self-merging release interact.** The Dev2Main Routine
+merges the release PR through @samggreenberg's account (RELEASE.md step 8). With
+`enforce_admins: false` the owner's account may merge without a separate
+approval. GitHub will not let an author approve their own PR, so turning on
+`enforce_admins` makes every release wait for a human again. The routine then
+leaves the PR open and says so rather than working around the refusal. On
+2026-10-06 the open release PR (#4501) read `mergeable_state: clean`, so no
+review gate was blocking it.
 
 Keep `dev` lighter — a PR guardrail with no mandatory approver, so routine work
 and Claude PRs keep flowing:

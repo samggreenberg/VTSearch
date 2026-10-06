@@ -103,7 +103,7 @@ Before sending, scan the turn for `#` followed by digits. **Every hit outside a 
   - **The hook can *hard-reset*, not only rebase — read its output.** It picks one of four outcomes and says which: `already includes origin/dev; nothing to do`; **hard-reset** to `origin/dev` (either because the branch has no `origin/<branch>` counterpart — a fresh branch the harness just cut off `main`, whose unique commits are all inherited `main`-only history carrying no Claude work — or because `git cherry` shows every unique commit is patch-equivalent to one already on `dev`); **rebase** onto `origin/dev` (the branch is in sync with its origin counterpart and carries genuinely new pushed commits); or a **skip**. A hard-reset discards the branch's prior commits by design; that is expected at session start and nothing of yours is lost, but do not assume commits you saw in `git log` before the hook ran are still there.
   - If the hook prints `‼ session-start: DID NOT rebase onto origin/dev` (dirty tree, detached HEAD, fetch failed, a reset/rebase that failed, or a local branch that differs from its pushed origin counterpart), run `git fetch origin --prune && git rebase origin/dev` yourself before making any changes.
 - **All pull requests MUST target `dev`**, never `main`.
-- **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
+- **Claude must NEVER open or merge a PR into `main`, except as the Dev2Main release.** `main` is protected and changes only through that release: the runbook in `docs/RELEASE.md` opens the `dev` → `main` PR (step 5) and, once a full `./run-tests.sh` on the tip passes, merges it (step 8, owner, 2026-10-06). No other session touches `main`.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
 - If your feature branch was forked from `main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
 
@@ -148,7 +148,9 @@ git log --pretty=%s -100 origin/dev | grep -cE "\(#[0-9]+\) \(#[0-9]+\)$"   # sq
 ```
 
 **Merging is not part of Auto-PR.** Open the PR without being asked; merge it
-only when the user says so.
+only when the user says so. The Dev2Main release is the standing exception: its
+runbook merges its own housekeeping PRs into `dev` and the release PR into `main`
+because the owner asked it to.
 
 ## Linking a fix PR to its GitHub issue
 
