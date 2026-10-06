@@ -17,6 +17,7 @@ Meta-group: the subject is repo tooling under ``scripts/``, loaded by path with
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import re
@@ -187,3 +188,30 @@ def test_the_viewer_still_opens_where_the_study_says(tmp_path):
     viewer = _load("viewer")
     out = viewer.build_viewer(_frame(1.0), tmp_path / "viewer.html", arms=["prod"], default_metric="cost")
     assert _payload(out)["view"]["metric"] == "cost"
+
+
+# --- Every harness row is priced at its step's beta ------------------------------
+
+
+_EVAL = Path(__file__).resolve().parents[2] / "vtscore" / "eval"
+
+
+def _operating_metrics_calls() -> list[tuple[str, int, ast.Call]]:
+    calls = []
+    for path in sorted(_EVAL.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "operating_metrics":
+                calls.append((path.name, node.lineno, node))
+    return calls
+
+
+def test_every_harness_call_site_names_the_rows_beta():
+    """``operating_metrics``' ``beta`` defaults to ``None`` for out-of-tree callers (#4584).
+
+    In the harness a call that left it out would emit a NaN objective on every
+    row of a balance run, silently, so each one must say what beta it prices.
+    """
+    calls = _operating_metrics_calls()
+    assert len(calls) >= 8, "the scan found fewer operating_metrics call sites than the harness has"
+    missing = [f"{name}:{line}" for name, line, call in calls if not any(k.arg == "beta" for k in call.keywords)]
+    assert not missing, f"operating_metrics called without beta= at {', '.join(missing)}"

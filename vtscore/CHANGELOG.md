@@ -245,6 +245,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **Every eval row carries the objective** (issue #4584). The voting-iterations
+  and calibration frames (`VOTING_COLUMNS`, `CALIBRATION_COLUMNS`) gain
+  `FBETA_COLUMNS`: `fbeta`, F-beta of the withheld half above the row's
+  threshold at the row's own `beta` (NaN where no balance drew the line), and
+  `fbeta_b025` / `fbeta_b1` / `fbeta_b4` at each preset. One definition,
+  `vtscore.eval.calibration_metrics.fbeta_metrics`, computed from the counts
+  through the app's `fbeta_score`; `fbeta_from_rates` is the same number read
+  back off a frame's `precision` and `recall`, for frames written before the
+  columns. `DETECTION_METRICS` gains `fbeta`. `row_metrics.operating_metrics`
+  takes an optional `beta` (default `None`, so existing callers keep working
+  and emit a NaN `fbeta`); `cost` stays on every row as a diagnostic.
+  `RANK_FRAME_BETAS` and `beta_tag` moved up `voting_columns.py`, unchanged.
+
 - **A finished test's verdict is kept on the detector** (issue #4526).
   `vtscore.detectors.line_verdicts`: `LineTestVerdict.from_test` is what a
   finished `LineTest` leaves (the dataset's id and name, the date, the balance,

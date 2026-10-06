@@ -104,7 +104,7 @@ def operating_metrics(
     pool_variant: str,
     provenance: str,
     n_pool_rows: float,
-    beta: float | None,
+    beta: float | None = None,
 ) -> dict[str, Any]:
     """Full per-step calibration metrics for one pooling (issue #2781).
 
@@ -120,9 +120,10 @@ def operating_metrics(
     *beta* is the balance that drew the step's line (``details["beta"]``), and
     prices the objective, ``fbeta``, beside the preset columns
     (:func:`~vtscore.eval.calibration_metrics.fbeta_metrics`, #4584); ``None``
-    where no balance drew one.  Required rather than defaulted, so an arm that
-    forgets it fails here instead of emitting a NaN objective on a balance row.
-    ``cost`` is priced at *inclusion* whatever *beta* is: it is the diagnostic
+    where no balance drew one, which is also the default so a caller written
+    before the column keeps working.  Every harness call site passes it
+    explicitly (``tests_lib/meta/test_analyzer_objective.py`` checks), since a
+    forgotten one would emit a NaN objective on a balance row.  ``cost`` is priced at *inclusion* whatever *beta* is: it is the diagnostic
     column now, not the decision metric.
 
     **Two reference points, because the naive one is optimistic** (#3116, #3248).
