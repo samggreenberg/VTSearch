@@ -4385,16 +4385,20 @@ FMETRICS_INDENT = 0.16
 #: just defined; then β = ¼'s; then β = 4's (`FBETA_REVEAL`'s order).
 FBETA_MAPS_STAGES = 3
 #: The three maps' squares, in canvas units: the side, the gap between maps,
-#: and the first map's left edge. Each map carries its own precision axis, so
-#: a gap holds one ("Precision" and its ticks) clear of the numbers ending the
-#: curves to its left. The row is as wide as the slide allows, short of the
-#: page number's corner; the maps' tops then sit under the title's notch.
-FBETA_MAP_SIDE = 5.05
-FBETA_MAP_GAP = 1.9
+#: and the first map's left edge (room for the row's one "Precision"). A gap
+#: holds the next map's tick numbers clear of the numbers ending the curves to
+#: its left. The row is as wide as the slide allows, short of the page
+#: number's corner; the maps' tops then sit under the title's notch.
+FBETA_MAP_SIDE = 5.4
+FBETA_MAP_GAP = 1.2
 FBETA_MAP_X = 1.3
 FBETA_MAP_Y = 1.55
 #: F-beta's level curves on a map: one every 0.2.
 FBETA_LEVELS = (0.2, 0.4, 0.6, 0.8)
+#: The precision-recall grid: a line every 0.1 in `make-sota-figs`'s
+#: `GRID_COLOUR`, so the maps read like the charts that follow them.
+PR_GRID_STEP = 0.1
+PR_GRID_COLOUR = "#e3e7ec"
 #: The room a level's number takes at the map's edge, in the map's own units
 #: ``(across, up)``: a 16pt "0.8" on a `FBETA_MAP_SIDE` square and a little
 #: air. The curve stops there and its number fills the rest.
@@ -4435,10 +4439,11 @@ def _fbeta_maps_stage(stage: int) -> plt.Figure:
             continue
         x = FBETA_MAP_X + arm * (FBETA_MAP_SIDE + FBETA_MAP_GAP)
         pr = fig.add_axes(_canvas_box((x, FBETA_MAP_Y, FBETA_MAP_SIDE)))
-        # Every map has its own axes, though the three share them: β = 1's
-        # map shows first, alone, and a reveal adds ink without restyling, so
-        # it cannot borrow a precision axis from the map left of it.
-        _pr_plane(pr)
+        # Every map has its own numbers, and the row one "Precision", on the
+        # leftmost (owner, 2026-10-05): one axis, not the same label three
+        # times. β = 1's map, shown first and alone, goes without the word
+        # until β = ¼'s arrives beside it.
+        _pr_plane(pr, precision_label=arm == 0)
         _fbeta_contours(pr, beta)
         ax.text(
             x + FBETA_MAP_SIDE / 2,
@@ -4458,8 +4463,13 @@ def _canvas_box(box: tuple[float, float, float]) -> list[float]:
     return [x / FBETA_CANVAS[0], y / FBETA_CANVAS[1], side / FBETA_CANVAS[0], side / FBETA_CANVAS[1]]
 
 
-def _pr_plane(ax: plt.Axes) -> None:
-    """The square recall-by-precision plane, 0 to 1 on both, in the deck's axis style."""
+def _pr_plane(ax: plt.Axes, precision_label: bool = True) -> None:
+    """The square recall-by-precision plane, 0 to 1 on both, in the deck's axis style.
+
+    Gridded like the precision-recall charts later in the deck (Photo Finish
+    and the document slides, `make-sota-figs._pr_axes`): a faint line every
+    0.1, behind everything, in their colour.
+    """
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.set_aspect("equal")
@@ -4468,7 +4478,14 @@ def _pr_plane(ax: plt.Axes) -> None:
     ax.set_xticklabels(["0", "0.5", "1"], fontsize=16, color=SOFT)
     ax.set_yticklabels(["0", "0.5", "1"], fontsize=16, color=SOFT)
     ax.set_xlabel("Recall", fontsize=18, color=INK)
-    ax.set_ylabel("Precision", fontsize=18, color=INK)
+    if precision_label:
+        ax.set_ylabel("Precision", fontsize=18, color=INK)
+    lines = np.arange(0, 1 + PR_GRID_STEP / 2, PR_GRID_STEP)
+    ax.set_xticks(lines, minor=True)
+    ax.set_yticks(lines, minor=True)
+    ax.tick_params(which="minor", length=0)
+    ax.grid(True, which="both", color=PR_GRID_COLOUR, linewidth=1.0)
+    ax.set_axisbelow(True)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     for side in ("left", "bottom"):
