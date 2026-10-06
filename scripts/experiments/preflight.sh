@@ -656,7 +656,7 @@ elif [[ -n "$REPO" && -f "$KNOB_PROBE" ]]; then
   fi
   if [[ "$unacked" -gt 0 ]]; then
     echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
-    echo "        -> if it is not, the run would measure a detector nobody ships"
+    echo "        -> if it is not, the run would measure a detector or a session nobody ships"
   fi
 fi
 
