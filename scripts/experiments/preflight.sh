@@ -76,6 +76,8 @@ done
   echo "                    (or declare both once with CALIB_HARVEST_BAR / CALIB_HARVEST_PILOT)" >&2
   echo "                    [--resolve-delta D [--sigma S] [--paired-cells N]]" >&2
   echo "                                               # a trajectory A/B: refuse a grid too small to resolve D" >&2
+  echo "                                               # (D in the decision metric's units: the objective at" >&2
+  echo "                                               #  CALIB_BETA's balance, or cost with CALIB_BETA=off)" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
@@ -114,8 +116,37 @@ if [[ -z "$RESOLVE_DELTA" && ( -n "$RESOLVE_SIGMA" || -n "$PAIRED_CELLS" ) ]]; t
   echo "--sigma and --paired-cells size an A/B against --resolve-delta; pass that too" >&2
   exit 2
 fi
+# The default σ is the decision metric's, and the decision metric follows the
+# balance the run draws its line at (#4584): `analyze_ab.py` decides a balance
+# run on the objective, F-beta at the run's beta, so the grid is sized in its
+# units.  Unset CALIB_BETA is the app's default balance (beta 1); only `off` (the
+# Inclusion arm) is decided, and sized, on cost.  The objective's σ is known only
+# at the presets #4584 could read off published paired SEs, so anywhere else the
+# gate asks for `--sigma` rather than guess.
+SIGMA_WHY="--sigma"
+if [[ -n "$RESOLVE_DELTA" && -z "$RESOLVE_SIGMA" ]]; then
+  SIGMA_BETA="${CALIB_BETA:-}"
+  SIGMA_BETA="${SIGMA_BETA,,}"
+  SIGMA_BETA="${SIGMA_BETA//[[:space:]]/}"
+  case "$SIGMA_BETA" in
+    ""|default|app) SIGMA_BETA=1 ;;
+  esac
+  if [[ "$SIGMA_BETA" == off ]]; then
+    RESOLVE_SIGMA=0.04
+    SIGMA_WHY="the Δcost σ of #3840, for a run with no balance (CALIB_BETA=off)"
+  elif [[ "$SIGMA_BETA" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)$ ]]; then
+    RESOLVE_SIGMA=$(awk -v b="$SIGMA_BETA" 'BEGIN { if (b == 0.25) print 0.16; else if (b == 1) print 0.08 }')
+    if [[ -z "$RESOLVE_SIGMA" ]]; then
+      echo "--resolve-delta: no σ is measured yet for the objective at beta $SIGMA_BETA (#4584); pass --sigma" >&2
+      exit 2
+    fi
+    SIGMA_WHY="the objective's σ at beta $SIGMA_BETA, provisional until #4584 measures it"
+  else
+    echo "CALIB_BETA=${CALIB_BETA:-} is not 'off', a beta, or unset (= the app's default)" >&2
+    exit 2
+  fi
+fi
 if [[ -n "$RESOLVE_DELTA" ]]; then
-  RESOLVE_SIGMA="${RESOLVE_SIGMA:-0.04}"
   for pair in "--resolve-delta=$RESOLVE_DELTA" "--sigma=$RESOLVE_SIGMA"; do
     v="${pair#*=}"
     if ! [[ "$v" =~ ^([0-9]+\.?[0-9]*|\.[0-9]+)([eE][-+]?[0-9]+)?$ ]] || ! awk -v x="$v" 'BEGIN { exit !(x + 0 > 0) }'; then
@@ -1168,10 +1199,15 @@ fi
 # task holding `whole_image,max_patch` is two paired cells.  `--paired-cells N`
 # supplies the count for a grid `run_cells.py` does not enumerate.
 #
-# The default σ is #3840's, for the #3585 environments at 100 votes.  It is not
-# universal (#3796 saw 0.056 on `vg_scale_any` at 150 votes), so a study on
-# another environment set reads σ off its first seeds and passes `--sigma`.  Do
-# not shrink it for a "small" arm: that is the one thing #3840 ruled out.
+# The default σ is the decision metric's (see the argument parsing above): the
+# objective's at the run's beta on a balance run (#4584: about 0.16 at beta 1/4
+# and 0.08 at beta 1, read off the paired SEs of #4428, #4496 and #4548 and
+# provisional until measured per cell), #3840's 0.04 on cost with CALIB_BETA=off
+# (the #3585 environments at 100 votes).  Neither is universal (#3796 saw 0.056
+# on `vg_scale_any` at 150 votes), so a study on another environment set reads
+# σ off its first seeds and passes `--sigma`.  Do not shrink it for a "small"
+# arm: that is the one thing #3840 ruled out.  Pass δ in the decision metric's
+# units: a Δcost of 0.01 is not a Δ-objective of 0.01.
 if [[ -n "$RESOLVE_DELTA" ]]; then
   N_PAIRED="$PAIRED_CELLS"
   N_SEEDS=""
@@ -1231,6 +1267,7 @@ PY
     else
       say_ok "A/B resolves δ=$RESOLVE_DELTA at 2 SE: $N_PAIRED paired cells >= $NEED (σ=$RESOLVE_SIGMA; floor δ ≈ $FLOOR)"
     fi
+    echo "        -> σ=$RESOLVE_SIGMA is $SIGMA_WHY"
   fi
 fi
 

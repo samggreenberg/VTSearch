@@ -38,18 +38,25 @@ _PREFLIGHT = _ROOT / "scripts" / "experiments" / "preflight.sh"
 _CALIB = _ROOT / "scripts" / "experiments" / "calibration"
 
 
-def _preflight(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """Run the preflight with no VTS_REPO, so only the explicit-count path is live."""
+def _preflight(tmp_path: Path, *args: str, beta: str | None = "off") -> subprocess.CompletedProcess[str]:
+    """Run the preflight with no VTS_REPO, so only the explicit-count path is live.
+
+    *beta* is ``CALIB_BETA``; ``off`` by default, so the #3840 cost table below
+    is sized on cost, and ``None`` leaves it unset (the app's default balance).
+    """
+    env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(tmp_path)}
+    if beta is not None:
+        env["CALIB_BETA"] = beta
     return subprocess.run(  # noqa: S603  # fixed argv, repo-local script path, no shell
         ["bash", str(_PREFLIGHT), "--exp", str(tmp_path / "exp"), *args],  # noqa: S607 - bash from PATH
         capture_output=True,
         text=True,
-        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "HOME": str(tmp_path)},
+        env=env,
     )
 
 
 class TestPreflightGate:
-    """Check 17 on an explicit `--paired-cells` count."""
+    """Check 17 on an explicit `--paired-cells` count, sized on cost (``CALIB_BETA=off``)."""
 
     @pytest.mark.parametrize(
         ("delta", "need"),
@@ -89,6 +96,41 @@ class TestPreflightGate:
     def test_the_check_is_opt_in(self, tmp_path):
         """Most launches are not A/Bs, and none of them may meet this gate."""
         assert "A/B" not in _preflight(tmp_path).stdout
+        assert "A/B" not in _preflight(tmp_path, beta="4").stdout  # nor ask them for a σ
+
+
+class TestTheSigmaFollowsTheBalance:
+    """#4584: a balance run is decided on the objective, so the default σ is the objective's at its beta."""
+
+    @pytest.mark.parametrize(
+        ("beta", "sigma", "need"),
+        ((None, "0.08", 256), ("1", "0.08", 256), ("1.0", "0.08", 256), ("0.25", "0.16", 1024), (".25", "0.16", 1024)),
+        ids=("unset-is-the-apps-default", "one", "one-point-oh", "quarter", "bare-decimal"),
+    )
+    def test_a_balance_run_is_sized_on_the_objective(self, tmp_path, beta, sigma, need):
+        """(2σ/δ)² at δ = 0.01: 256 cells at beta 1, four times that at beta 1/4."""
+        out = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", str(need - 1), beta=beta).stdout
+        assert f"(σ={sigma}) needs {need}" in out
+        assert f"σ={sigma} is the objective's σ at beta" in out and "provisional" in out
+        ok = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", str(need), beta=beta).stdout
+        assert f"ok    A/B resolves δ=0.01 at 2 SE: {need} paired cells >= {need} (σ={sigma}" in ok
+
+    def test_the_inclusion_arm_is_sized_on_cost(self, tmp_path):
+        out = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", "64", beta="OFF").stdout
+        assert "(σ=0.04; floor" in out and "the Δcost σ of #3840" in out
+
+    @pytest.mark.parametrize("beta", ("4", "0.5"))
+    def test_a_beta_with_no_measured_sigma_asks_for_one(self, tmp_path, beta):
+        proc = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", "400", beta=beta)
+        assert proc.returncode == 2
+        assert f"no σ is measured yet for the objective at beta {beta}" in proc.stderr and "--sigma" in proc.stderr
+        given = _preflight(tmp_path, "--resolve-delta", "0.01", "--sigma", "0.1", "--paired-cells", "400", beta=beta)
+        assert "ok    A/B resolves δ=0.01 at 2 SE: 400 paired cells >= 400 (σ=0.1" in given.stdout
+        assert "σ=0.1 is --sigma" in given.stdout
+
+    def test_a_beta_that_is_not_one_is_a_usage_error(self, tmp_path):
+        proc = _preflight(tmp_path, "--resolve-delta", "0.01", "--paired-cells", "400", beta="lots")
+        assert proc.returncode == 2 and "CALIB_BETA=lots" in proc.stderr
 
     def test_no_count_and_no_grid_to_count_is_a_failure_naming_the_fix(self, tmp_path):
         """An explicit `--resolve-delta` asks for the check now; it cannot pass unlooked."""
