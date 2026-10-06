@@ -45,15 +45,12 @@
      occasional one the whole point — with no second mode to learn and nothing
      to configure between answers. -->
 
-<!-- **f** — Forty-eight questions in — twenty-nine Good, nineteen Bad, a few
-     minutes, the whole budget this task was ever going to get. Twenty of them
-     came in one go: with the Goods and Bads still overlapping, autopilot
-     stopped partway to run a spot check — picks drawn at random down its list,
-     the same Good-or-Bad question in a dialog. That check is a slide of its
-     own, much later. Note what it asks *now*: not a shelf and not a stack, but
-     a man beside a car rack of bicycles and a motorbike. The easy books are
-     answered, and what is left near the line is the frames the model still
-     cannot place — exactly the line the rest of the talk is about. -->
+<!-- **f** — Forty-eight answers in — twenty-nine Good, nineteen Bad, a few
+     minutes, the whole budget this task was ever going to get. Twenty came
+     from a spot check autopilot ran on its own partway (a later slide). Note
+     what it asks *now*: not a shelf or a stack, but a man beside a rack of
+     bicycles. The easy books are answered; what is left is what the model
+     cannot yet place — the line the rest of the talk is about. -->
 
 <!-- If someone asks where the rest of the corpus went: there is a manual mode
      with the whole pile in a grid, sort controls and a threshold control — a
