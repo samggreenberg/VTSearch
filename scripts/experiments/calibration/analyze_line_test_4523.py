@@ -52,7 +52,7 @@ import common  # noqa: E402
 
 common.setup_env()
 
-from _cells_paths import side_frame_files  # noqa: E402
+from _cells_paths import side_frame_files, testscore_files  # noqa: E402
 from vtscore.eval.line_test_arm import row_from_snapshot, simulate_line_test  # noqa: E402
 from vtscore.eval.voting_columns import LINE_TEST_COLUMNS  # noqa: E402
 from vtscore.training.thresholds import DEFAULT_BUDGETS, PHASE_DONE, PHASE_NOTHING, LineBudgets  # noqa: E402
@@ -427,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     for spec in args.world:
         label, d = spec.split("=", 1)
         cells = Path(d) / "cells"
-        npzs = sorted(cells.glob("task_*__testscores.npz"))
+        npzs = testscore_files(cells)
         linetests = {p.name.split("__")[0]: p for p in side_frame_files(cells, "__linetest")}
         if args.limit:
             npzs = npzs[: args.limit]

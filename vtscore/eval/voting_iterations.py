@@ -3574,7 +3574,11 @@ def simulate_voting_iterations(  # noqa: C901
                         else None
                     ),
                 }
-                if rank_frame_steps and any(t_before < s <= t for s in rank_frame_steps):
+                if (
+                    rank_frame_sink is not None
+                    and rank_frame_steps
+                    and any(t_before < s <= t for s in rank_frame_steps)
+                ):
                     rank_frame_sink.append({**rank_ident, **_rank_frame("step", **last_ordinary)})
             if (
                 precision_frame_sink is not None

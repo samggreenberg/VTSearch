@@ -12,6 +12,8 @@ which is what lets the study price budgets without retraining.
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -153,14 +155,9 @@ class TestTheVerdictRule:
         def __init__(self, count, fbeta):
             self.count, self.fbeta = count, fbeta
 
-    def _est(self, fbeta, edges):
-        class _Est:
-            pass
-
-        e = _Est()
-        e.fbeta = fbeta
-        e.at_edges = edges
-        return e
+    def _est(self, fbeta, edges) -> Any:
+        """A stand-in for `LineEstimates` carrying only what `read_verdict` reads."""
+        return SimpleNamespace(fbeta=fbeta, at_edges=edges)
 
     def test_lean_when_another_edge_reads_better_by_the_gain(self):
         est = self._est(
@@ -216,6 +213,7 @@ class TestTheInputs:
         order = np.argsort(-scores, kind="stable")
         assert np.array_equal(got.truth, labels[order] >= 0.5)
         assert got.posteriors is not None and got.posteriors.shape == scores.shape
+        assert line.unvoted_posteriors is not None
         assert np.array_equal(got.posteriors, line.unvoted_posteriors)
 
     def test_an_unscorable_item_ranks_last_and_takes_no_posterior(self):
