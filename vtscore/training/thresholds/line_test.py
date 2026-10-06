@@ -209,7 +209,7 @@ class LineBudgets:
     (``docs/experiments/2026-10-05-line-test-4523/REPORT.md``): 0.20 and 40
     picks above the line, where the precision range held the truth in 92-96%
     of sessions at beta <= 1; 40 picks below it, where walking to the budget
-    raised the recall range's from 13-38% to 75-94%.
+    raised the recall range's coverage from 13-38% to 75-94%.
     """
 
     matches_width: float = 0.20
@@ -768,13 +768,13 @@ class LineTest:
 
         The walk audits the first band under the line, then each next band.
         With a class model it goes on until the phase's pick budget stops it
-        (:func:`line_phase`) or the bands run out (#4523).  Without one it
-        goes on only while the band it just audited turned up a match or
-        holds a posterior mass that is not negligible against the positives
-        found above the line (:attr:`LineBudgets.dry_run_share` of them); a
-        band with no match in its picks and little mass is a dry run.  Past
-        the last band the walk is exhausted; with nothing below the line it
-        is exhausted before it starts.
+        (:func:`line_phase`) or the bands run out (#4523).  Without one a
+        band with no match in its picks and a posterior mass under
+        :attr:`LineBudgets.dry_run_share` of the positives found above the
+        line is a dry run that ends the walk; every band's mass is zero
+        then, so any share above zero stops it at the first band with no
+        match.  Past the last band the walk is exhausted; with nothing below
+        the line it is exhausted before it starts.
         """
         below = self.below
         if not below:
