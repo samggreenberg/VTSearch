@@ -102,10 +102,10 @@ class TestSimulateLineTest:
     def test_a_budget_caps_the_picks_and_is_named_as_the_stop(self):
         truth, post = _planted()
         out = simulate_line_test(
-            truth, 64, 1.0, posteriors=post, budgets=LineBudgets(matches_width=0.01, matches_picks=10), seed=3
+            truth, 64, 1.0, posteriors=post, budgets=LineBudgets(matches_width=0.01, matches_picks=25), seed=3
         )
         assert out["matches_stop"] == "budget"
-        assert out["picks_above"] == 10
+        assert out["picks_above"] == 25  # past the first pass's 20 (four bands above the line, #4560)
 
     def test_a_line_keeping_fewer_than_a_round_is_nothing_to_test(self):
         truth, post = _planted()
