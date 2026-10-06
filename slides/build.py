@@ -114,6 +114,12 @@ PAGENO_DIV = '<div class="pageno">{}</div>'
 # page number, and drawn fainter than it, so the pair reads as one label with
 # the letter subordinate to the number.
 LETTER_DIV = '<div class="pageno-letter">{}</div>'
+# A page number is also the way back: on every slide inside a section, the
+# number (and its letter) links to the outline showing that opened the section
+# — the "you are here" list, from which any other section is one more click.
+# Raw HTML, because the folio divs above are HTML blocks, which markdown does
+# not reach into. See `section_homes`.
+HOME_LINK = '<a href="#{}">{}</a>'
 # A fragment that opts out of numbering entirely — the title slide. It keeps
 # Marpit's own spelling because that is what the directive means; what this
 # script adds is that such a slide does not *consume* a number either.
@@ -597,7 +603,9 @@ def speaker_label(number: int | None, pages: list[int], group: list[int]) -> str
     return f"{number}{''.join(stage_letter(group.index(page)) for page in pages)}"
 
 
-def speaker_page(deck: str, pages: list[int], group: list[int], text: str, number: int | None = None) -> str:
+def speaker_page(
+    deck: str, pages: list[int], group: list[int], text: str, number: int | None = None, home: int | None = None
+) -> str:
     """One showing of a fragment as one speaker page: pictures beside notes.
 
     The miniature is the per-slide PNG of the audience deck (rendered by
@@ -613,6 +621,10 @@ def speaker_page(deck: str, pages: list[int], group: list[int], text: str, numbe
     more than once, where the overview still shows the whole slide and the
     notes are narrowed to this showing.
 
+    *home* is the speaker page of the outline that opened this slide's section,
+    which the printed number links back to (`section_homes`); None prints it
+    plain.
+
     Always exactly one page. Notes that would not fit are a deck error raised
     by `check_speaker_fit`, not a continuation page: a presenter mid-sentence
     does not turn over, so notes split across two pages are notes half read.
@@ -621,6 +633,8 @@ def speaker_page(deck: str, pages: list[int], group: list[int], text: str, numbe
     visual = frame_overview(deck, pages, group, style)
     notes = showing_notes(text, pages, group) or ["*(no presenter notes on this slide)*"]
     label = speaker_label(number, pages, group)
+    if label and home is not None:
+        label = HOME_LINK.format(home, label)
     folio = f'\n\n<div class="speaker-pageno">{label}</div>' if label else ""
     return (
         "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
@@ -858,8 +872,9 @@ def slide_numbers(showings: list[Showing], texts: dict[str, str]) -> dict[str, i
 # Navigation: what a PDF reader can do with a deck besides turn its pages.
 #
 # - The outline's lines are links, each to the page its section starts on
-#   (`link_outline`). Chromium turns a `#<page>` link into an internal PDF link
-#   unaided, so these are plain markdown, and the HTML export follows them too.
+#   (`link_outline`), and every slide's page number links back to that page
+#   (`section_homes`). Chromium turns a `#<page>` link into an internal PDF
+#   link unaided, so these are plain markup, and the HTML export follows them.
 # - Bookmarks: the sections, and the slides in each (`bookmarks`).
 # - Page labels: the viewer's page box reads `5c`, the address printed on the
 #   page, rather than the page's position in the file (`audience_labels`).
@@ -930,6 +945,24 @@ def section_pages(showings: list[Showing], texts: dict[str, str], firsts: list[i
         if item is not None:
             targets.setdefault(name, {}).setdefault(item, page)
     return targets
+
+
+def section_homes(showings: list[Showing], texts: dict[str, str], firsts: list[int]) -> list[int | None]:
+    """The page each showing's number links back to: the outline that opened its section.
+
+    *firsts* is as for `section_pages`. None for a showing that opens a section
+    — it already is the outline — and for the slides before the first section,
+    which have no section to return to.
+    """
+    homes: list[int | None] = []
+    home = None
+    for (name, extras, _stages, _pages), page in zip(showings, firsts):
+        if marked_item(extras, outline_items(texts[name])) is not None:
+            home = page
+            homes.append(None)
+        else:
+            homes.append(home)
+    return homes
 
 
 def link_outline(text: str, targets: dict[int, int], href: str) -> str:
@@ -1093,18 +1126,23 @@ def audience_bodies(
     and the numbering is still computed, so a page's *address* is the same
     whether or not it is printed on it.
 
-    `links=False` leaves the outline's lines plain text, for the editable
-    PowerPoint cut, where a link to "page 31" of a PDF that no longer exists
-    would mean nothing.
+    `links=False` leaves the outline's lines and the page numbers plain text,
+    for the editable PowerPoint cut, where a link to "page 31" of a PDF that no
+    longer exists would mean nothing. The handover cut has no numbers, so it
+    has no way back to the outline either; its outline links still work.
     """
     numbers = slide_numbers(showings, texts)
-    targets = section_pages(showings, texts, [pages[0] for *_, pages in showings]) if links else {}
+    firsts = [pages[0] for *_, pages in showings]
+    targets = section_pages(showings, texts, firsts) if links else {}
+    homes = section_homes(showings, texts, firsts) if links else [None] * len(showings)
     bodies: list[str] = []
-    for name, _extras, stages, pages in showings:
+    for (name, _extras, stages, pages), home in zip(showings, homes):
         for stage, page in zip(stages, pages):
             if name in targets:
                 stage = link_outline(stage, targets[name], "#{}")
             number, letter = page_address(numbers.get(name), page, group[name])
+            if home is not None:
+                number, letter = (HOME_LINK.format(home, mark) if mark else "" for mark in (number, letter))
             marks = ""
             if number and pageno:
                 marks = "\n\n" + PAGENO_DIV.format(number)
@@ -1131,8 +1169,9 @@ def speaker_bodies(
     slide.
     """
     numbers = slide_numbers(showings, texts)
+    homes = section_homes(showings, texts, list(range(1, len(showings) + 1)))
     bodies: list[str] = []
-    for name, _extras, _stages, pages in showings:
+    for (name, _extras, _stages, pages), home in zip(showings, homes):
         for number in pages if write else []:
             if not (BUILD / "imgs" / f"{deck}.{number:03d}.png").exists():
                 problems.append(
@@ -1140,7 +1179,7 @@ def speaker_bodies(
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.append(speaker_page(deck, pages, group[name], texts[name], numbers.get(name)))
+        bodies.append(speaker_page(deck, pages, group[name], texts[name], numbers.get(name), home))
     return bodies
 
 

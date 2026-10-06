@@ -593,3 +593,11 @@ section .pageno-letter {
 }
 section.speaker .pageno,
 section.speaker .pageno-letter { display: none; }
+/* Inside a section, the number is also a link back to the outline that opened
+   it (build.py `section_homes`), on the audience page and the speaker page
+   alike. Like the outline's own links it must not look like one: the folio is
+   an address, and a blue underlined address is a claim about the PDF that the
+   room has no use for. */
+section .pageno a,
+section .pageno-letter a,
+section.speaker .speaker-pageno a { color: inherit; text-decoration: none; }

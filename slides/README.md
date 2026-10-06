@@ -362,7 +362,7 @@ it is one fragment, it is also one *slide*: see **Numbering** above.
 
 ## Navigation (links, bookmarks, page labels)
 
-A rendered PDF is navigable three ways besides turning its pages, and none of
+A rendered PDF is navigable four ways besides turning its pages, and none of
 them changes a pixel of any slide:
 
 - **The outline is clickable.** Every line of it links to the page its section
@@ -371,7 +371,13 @@ them changes a pixel of any slide:
   colour and weight of its line), so the room sees the slide it always saw and
   only a click finds them. That makes the outline the deck's contents page when
   a question sends you back to section 3.
-- **Bookmarks.** The PDF carries an outline in the reader's sidebar: the slides
+- **The page number is the way back.** On every slide inside a section, the
+  number in the corner (and its letter) links to the outline showing that
+  opened the section — the "you are here" list, from which any other section
+  is one more click. Outline pages, and the slides before the first section,
+  print a plain number. The handover cut prints none, so it has no way back.
+- **Bookmarks.** The PDF opens with an outline in the reader's sidebar
+  (Acrobat and Preview honour that; Chrome's viewer keeps it a click away): the slides
   before the first section at the top level, then each section, with its slides
   one level under it. One entry per slide, never per reveal: a build's entry
   lands on its first page. A slide's entry is its headline, with the line break
@@ -382,10 +388,11 @@ them changes a pixel of any slide:
   for the reason it keeps the numbering: an address is the same whether or not
   it is printed.
 
-The speaker deck gets all three, aimed at *its* pages: a bookmark lands on the
+The speaker deck gets all four, aimed at *its* pages: a bookmark lands on the
 slide's one speaker page, a label is the number the page prints in its corner,
-and the outline's lines are clickable on the miniature, jumping to the speaker
-page where that section starts.
+that number links back to the speaker page of the section's outline, and the
+outline's lines are clickable on the miniature, jumping to the speaker page
+where that section starts.
 
 **How.** The links are ordinary markdown links that `build.py` writes around
 the outline's lines,
@@ -395,8 +402,8 @@ the outline's lines,
 ```
 
 because Marpit gives every slide its page number as its `id`, and Chromium
-prints a link to an `id` as a link to that page. They work in the HTML export
-too. Bookmarks and labels Chromium cannot
+prints a link to an `id` as a link to that page; the page numbers' links are the
+same thing in HTML. They work in the HTML export too. Bookmarks and labels Chromium cannot
 write, so `build.py` leaves them in `_build/<deck>.nav.json` and `pdf_nav.py`,
 which `render.sh` runs after every PDF render, writes them in. On a speaker page
 the outline is a picture, so its links have to be measured: `render.sh` renders

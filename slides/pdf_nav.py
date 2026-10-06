@@ -13,6 +13,7 @@ in each) and **page labels** (so the viewer's page box reads `17c`, the
 address printed on the slide, not `95`). `build.py` works both out from the
 manifest, since they are facts about fragments that no rendered page carries,
 and leaves them in `_build/<deck>[...].nav.json` for this script to write in.
+It also sets the PDF to open with the bookmarks showing.
 
 The speaker deck needs one thing more. Its outline is a *picture* — a PNG of
 the audience slide beside the notes — so the links the audience deck gets for
@@ -128,6 +129,10 @@ def main() -> int:
         )
 
     doc.set_toc(nav["toc"], collapse=1)
+    # Open with the bookmarks showing: a reader who never thinks to open the
+    # sidebar never learns the deck has sections to jump between. Acrobat and
+    # Preview honour it; Chrome's viewer ignores it, harmlessly.
+    doc.set_pagemode("UseOutlines")
     doc.set_page_labels(page_labels(nav["labels"]))
     links = 0
     if nav.get("probe"):
