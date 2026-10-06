@@ -1,0 +1,327 @@
+{
+  "cells": 3669,
+  "with_harness_row": 3669,
+  "replayed": 2373,
+  "identical": 190,
+  "differing": [
+    {
+      "cell": "task_0000__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0001__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "positives_below_point",
+        "positives_below_lo",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0002__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0003__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0004__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0005__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0006__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "matches_stop",
+        "misses_stop",
+        "found"
+      ]
+    },
+    {
+      "cell": "task_0007__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "matches_stop",
+        "misses_stop",
+        "found"
+      ]
+    },
+    {
+      "cell": "task_0008__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0009__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0010__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0011__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0012__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0013__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0014__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0015__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "matches_stop",
+        "misses_stop",
+        "found"
+      ]
+    },
+    {
+      "cell": "task_0016__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    },
+    {
+      "cell": "task_0017__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model",
+        "edge_gain_est"
+      ]
+    },
+    {
+      "cell": "task_0018__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "matches_stop",
+        "misses_stop",
+        "found"
+      ]
+    },
+    {
+      "cell": "task_0019__testscores.npz",
+      "harness_row": true,
+      "replayed": true,
+      "same": false,
+      "diff": [
+        "recall_point",
+        "recall_lo",
+        "recall_hi",
+        "fbeta_point",
+        "fbeta_lo",
+        "fbeta_hi",
+        "positives_below_point",
+        "positives_below_lo",
+        "positives_below_hi",
+        "tail_positives_model"
+      ]
+    }
+  ],
+  "errors": []
+}

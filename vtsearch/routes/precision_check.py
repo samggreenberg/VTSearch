@@ -89,7 +89,7 @@ def start_precision_check():
     det_ctx = get_active_detector_context()
     ranking = det_ctx.line_ranking
     if ranking is None:
-        abort(409, message="No ranking to check: run a learned sort or a Find pass first.")
+        abort(409, message="No ranking to check: run a learned sort or a Test pass first.")
     beta = line_knobs()["beta"]
     if beta is None:
         abort(409, message="The detector has no balance to check.")
@@ -155,6 +155,8 @@ def vote_precision_check(body: dict):
         check.fingerprint = det_ctx.line_ranking.fingerprint(check.k, human_voted_ids(det_ctx))
         det_ctx.precision_check = check
         det_ctx.precision_check_run = None
+        # The weak-separation prompt's cooldown counts from here (#4496).
+        det_ctx.check_ended_votes = len(human_voted_ids(det_ctx))
         _move_line(det_ctx)
     return _payload()
 
@@ -164,13 +166,15 @@ def vote_precision_check(body: dict):
 @precision_check_bp.response(200, PrecisionCheckResponseSchema)
 def cancel_precision_check():
     """Abandon the running check.  Its votes so far stay ordinary votes; the balance's state is as it was."""
-    from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
+    from vtscore.state.core import get_active_detector_context, human_voted_ids  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
     check = det_ctx.precision_check_run
     if check is not None:
         check.cancel()
         det_ctx.precision_check_run = None
+        # A check the user closed ended too: the prompt waits a cooldown before asking again (#4496).
+        det_ctx.check_ended_votes = len(human_voted_ids(det_ctx))
     return _payload()
 
 

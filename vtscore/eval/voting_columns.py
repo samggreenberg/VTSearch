@@ -436,22 +436,143 @@ RANK_FRAME_COLUMNS: tuple[str, ...] = (
     "n_pool_pos",
     "pool_pos_ranks",
     #: How many items the shipped unchecked line keeps on the test half at each
-    #: preset beta in :data:`RANK_FRAME_BETAS` (#4389, #4413): the mixture's
-    #: F-beta argmax under the cap, on a corpus that also holds the session's
-    #: votes, as a cold Find draws it.  -1 where no session drew a line: a
-    #: skyline, or no pool ranking.
-    "test_line_k_b05",
+    #: preset beta in :data:`RANK_FRAME_BETAS` (#4389, #4413, #4471).  Under the
+    #: app's labels line (#4452) what it keeps on the test half, its corpus side
+    #: fitted there as Find fits it - the count at the run's own beta is the
+    #: headline's returned set - or, with no class model that step, what the
+    #: retrain's fallback cut keeps; 0 when the line keeps nothing.  Under a
+    #: forced check shape (``walk_shape``) the count line's: the mixture's F-beta
+    #: argmax under the cap on the test half plus the session's votes (#4413).
+    #: The full-label skyline records Find's labels line from its own labels
+    #: (#4486).  -1 with no line: no session drew one, or no pool ranking.  Runs
+    #: before #4471 recorded the count line at 0.5 / 1 / 2.
+    "test_line_k_b025",
     "test_line_k_b1",
-    "test_line_k_b2",
+    "test_line_k_b4",
 )
 
-#: The balances the rank frame records the shipped line's count at (the presets, #4413).
-RANK_FRAME_BETAS: tuple[float, ...] = (0.5, 1.0, 2.0)
+#: The balances the rank frame records the shipped line's count at: the app's
+#: presets, ``vtscore.training.thresholds.BALANCE_PRESETS`` (#4448, #4471; a
+#: test pins the two together, so the analysis follows the app).
+RANK_FRAME_BETAS: tuple[float, ...] = (0.25, 1.0, 4.0)
 
 
 def beta_tag(beta: float) -> str:
-    """``b05`` / ``b1`` / ``b2``: the column suffix a balance's metrics carry."""
+    """``b025`` / ``b1`` / ``b4``: the column suffix a balance's metrics carry."""
     return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
+
+
+#: The Test arm's frame (#4523): one row per session, Test mode's autopilot run
+#: on the withheld half after the last ordinary click, every pick answered from
+#: the truth (:func:`vtscore.eval.line_test_arm.line_test_row`).  Emitted only
+#: with a ``line_test_sink`` and a balance (the Test is the balance line's).
+LINE_TEST_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "calibration_seed",
+    "style",
+    #: The last ordinary click: the ranking the Test ran on.
+    "t",
+    "beta",
+    #: ``labels`` - Find's labels line fitted on the withheld half; ``fallback``
+    #: - the retrain's cut, no class model that step; ``none`` - no line (then
+    #: *Nothing to test*).  ``has_model`` says whether the recall estimator
+    #: had the model's item posteriors below the line.
+    "line_source",
+    "has_model",
+    #: The budgets the Test ran under (:class:`~vtscore.training.thresholds.LineBudgets`).
+    "matches_width",
+    "misses_width",
+    "matches_picks",
+    "misses_picks",
+    "picks_per_round",
+    "dry_run_share",
+    "model_weight",
+    #: The seed the Test's own picks were drawn at.
+    "test_seed",
+    #: ``done`` or ``nothing``; the line's count and the corpus behind it.
+    "phase",
+    "line_count",
+    "n_test",
+    "n_test_pos",
+    #: The cost: rounds, picks per phase, and why each phase ended (one of
+    #: ``STOP_REASONS``; blank for a phase that never ran).
+    "rounds",
+    "picks_above",
+    "picks_below",
+    "picks_total",
+    "matches_stop",
+    "misses_stop",
+    #: The truth at the line, and the best any cut of the ranking reaches.
+    "precision_true",
+    "recall_true",
+    "fbeta_true",
+    "found_true",
+    "fbeta_best_cut_true",
+    "best_cut_true",
+    #: The most another band edge's true F-beta beats the line's by.
+    "edge_gain_true",
+    "n_edges",
+    "bands_below",
+    "bands_below_reached",
+    #: The ranges at Done (point, lo, hi) and whether each held the truth
+    #: (1 / 0; -1 with nothing to test).
+    "precision_point",
+    "precision_lo",
+    "precision_hi",
+    "precision_held",
+    "recall_point",
+    "recall_lo",
+    "recall_hi",
+    "recall_held",
+    "fbeta_point",
+    "fbeta_lo",
+    "fbeta_hi",
+    "fbeta_held",
+    #: The *found* words the verdict shows, against the truth's words.
+    "found",
+    "found_match",
+    #: The counts behind recall: above the line, and the model-assisted count
+    #: below it, each beside the truth; the model's count in the bands the
+    #: walk never reached beside the positives really there.
+    "positives_above_point",
+    "positives_above_lo",
+    "positives_above_hi",
+    "positives_above_true",
+    "positives_below_point",
+    "positives_below_lo",
+    "positives_below_hi",
+    "positives_below_true",
+    "tail_positives_model",
+    "tail_positives_true",
+    "tail_from_model",
+    #: *Lean the Threshold*: the best other edge by the estimate, how much it
+    #: reads above the line, and the truth at that edge.
+    "edge_gain_est",
+    "best_edge_est",
+    "fbeta_at_best_edge_est_true",
+    #: How many of the ``n_edges`` re-estimated ranges held the truth.
+    "edges_precision_held",
+    "edges_recall_held",
+    "edges_fbeta_held",
+    #: The verdict's reading against the oracle's under the same rule
+    #: (:func:`vtscore.eval.line_test_arm.read_verdict`).
+    "verdict",
+    "oracle_verdict",
+    "verdict_match",
+    #: What *Lean the Threshold* shows (#4540): per balance preset, its line
+    #: count on the withheld half and, at its own beta, the range's point, the
+    #: truth and whether the range held it.  -1 / NaN with no class model.
+    *(
+        f"preset_{tag}_{col}"
+        for tag in ("b025", "b1", "b4")
+        for col in (
+            "count",
+            *(f"{m}_{k}" for m in ("precision", "recall", "fbeta") for k in ("point", "true", "held")),
+        )
+    ),
+)
 
 
 #: Column order for the calibration study's main per-step frame (issue #2781),
@@ -473,6 +594,10 @@ CALIBRATION_COLUMNS: tuple[str, ...] = (
     "degenerate",
     "threshold_percentile",
     "xcal_threshold",
+    # #4452: Train's threshold beside the row's (Find's, on the withheld half), and the two prevalence estimates.
+    "train_threshold",
+    "train_prevalence",
+    "find_prevalence",
     "gmm_cut",
     "blend_weight",
     # #3551: which path the SHIPPED threshold took on this row's step (the base

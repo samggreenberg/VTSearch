@@ -170,8 +170,8 @@ const STEPS = `${GUIDE}#step-by-step-your-first-search`;
 /** A dashboard row, matched by its exact name (see `Target`). */
 const datasetRow = (name: string): Target => ({ selector: 'tr[vt-dataset-card]', name });
 const detectorRow = (name: string): Target => ({ selector: 'tr[vt-detector-card]', name });
-/** The Train / Find buttons under the dashboard tables. */
-const dashButton = (hasText: 'Train' | 'Find'): Target => ({
+/** The Train / Test / Find buttons under the dashboard tables. */
+const dashButton = (hasText: 'Train' | 'Test' | 'Find'): Target => ({
   selector: '.dashboard-actions .btn--primary',
   hasText,
 });
@@ -241,11 +241,14 @@ async function trainPair(h: Helpers): Promise<{ dataset: string; detector: strin
  * balance back to the middle radio, so the next Find shot starts from a fresh scoring run
  * whatever an earlier recipe did. Find verifications live in server memory and
  * survive leaving Find, so without this one shot's checked pictures would show
- * up in the next.
+ * up in the next. A test an earlier shot finished is kept on the detector and
+ * would resume at Done, its picks back in the piles (#4526), so it is forgotten
+ * too.
  */
 async function resetFind(h: Helpers): Promise<void> {
   const pair = await findPair(h);
   await h.app.api('/api/find/end-session', { method: 'POST', ...pair });
+  await h.app.api('/api/line-test/forget', { method: 'POST', ...pair });
   await h.app.api('/api/balance', { method: 'POST', body: { beta: 1 }, ...pair });
 }
 
@@ -567,20 +570,97 @@ async function dragLeftDivider(page: Page, h: Helpers, dx: number): Promise<void
   await h.wait(800);
 }
 
-/** Select a dataset + detector on the dashboard, then Find; wait out scoring. */
-async function openFind(page: Page, h: Helpers): Promise<void> {
+/**
+ * Score the test dataset with the detector and land on the Test view's
+ * Autopilot tab (#4524), the tab Test opens on, with the test's first round
+ * dealt. refresh.sh seeds the draw (VTSEARCH_SPOT_CHECK_SEED), so a refresh
+ * frames the same picks.
+ *
+ * It waits for the round itself, a pick's dot, or for a test that ended
+ * before one (Done, Nothing to test). Never for the stage's heading alone:
+ * *Drawing picks…* is a heading too, and the view sat on it when the test
+ * never started (#4555), so a wait that took it photographed the hang.
+ */
+async function openTest(page: Page, h: Helpers): Promise<void> {
   await resetFind(h);
   await h.dashboard();
   await h.selectDatasetRow(TEST_DATASET);
   await h.selectDetectorRow(DETECTOR);
-  // Find scores every item, then opens the three-pane verification view.
-  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  // Test scores every item, then opens the three-pane view on Autopilot.
+  // (Not Find: since #4525 that button runs AutoRun and opens no view.)
+  await page.getByRole('button', { name: 'Test', exact: true }).click();
   await page.waitForSelector('.panel-right', { timeout: 300000 });
-  await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
   // Scoring puts an overlay over the centre panel; wait it out rather than
-  // photographing a progress bar.
+  // photographing a progress bar. The test starts once the pass lands.
   await page.waitForSelector('.find-wait-overlay', { state: 'detached', timeout: 300000 }).catch(() => {});
+  await page.waitForSelector(
+    '.line-test-stage .pick-dot, .line-test-stage[data-phase="done"], .line-test-stage[data-phase="nothing"]',
+    { timeout: 60000 },
+  );
   await h.wait(2500);
+}
+
+/**
+ * Score the test dataset, test the line to Done on Autopilot, then open the
+ * Review tab: the ranked result in full, the test's picks in the piles. That
+ * is the guide's order (Step 4: click until Done, then open Review), and the
+ * only way a reader reaches Review with a Threshold they can move: the test
+ * starts as the pass lands, while the tabs are still disabled, and freezes
+ * the Threshold until Done.
+ */
+async function openFind(page: Page, h: Helpers): Promise<void> {
+  await openTest(page, h);
+  await testUntilDone(page, h);
+  await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+  await page.locator('.left-tab[title^="Review"]').first().click();
+  await page.getByText('Verified Good').first().waitFor({ timeout: 300000 });
+  await h.wait(1500);
+}
+
+/**
+ * Vote the Test autopilot's rounds to Done, with the corpus's truth: each
+ * round's pending picks (in draw order, which is the stage's dot order) are
+ * read off `/api/line-test`, named through `/api/medias/batch`, and answered
+ * with the keys, as a reader would. Up to twenty rounds; a test's budgets
+ * hold it to twelve. With no test running there is nothing to vote, and the
+ * Done the caller waits for will never come, so that throws rather than
+ * leaving the caller to time out on it.
+ */
+async function testUntilDone(page: Page, h: Helpers): Promise<void> {
+  const { pictures } = corpus(TEST_DATASET);
+  const isGood = new Map<string, boolean>(
+    pictures.map((p: { filename: string; yellow_smileys: unknown[] }) => [p.filename, p.yellow_smileys.length > 0]),
+  );
+  const origin = new URL(page.url()).origin;
+  const pair = await findPair(h);
+  const headers = { 'X-Dataset-Id': String(pair.dataset), 'X-Detector-Id': String(pair.detector) };
+  const getJson = async (path: string) => (await page.request.get(origin + path, { headers })).json();
+  for (let round = 0; round < 20; round++) {
+    const state = await getJson('/api/line-test');
+    const test = state.test;
+    if (!test) throw new Error('testUntilDone: no test is running on the Autopilot tab');
+    if (test.phase === 'done' || test.phase === 'nothing') return;
+    const picks: number[] = test.picks;
+    const metas = await (await page.request.post(origin + '/api/medias/batch', { headers, data: { ids: picks } })).json();
+    const nameOf = new Map((metas as { id: number; filename: string }[]).map((m) => [m.id, m.filename]));
+    for (const id of picks) {
+      await page.keyboard.press(isGood.get(nameOf.get(id) ?? '') ? 'ArrowRight' : 'ArrowLeft');
+      await h.wait(250);
+    }
+    await page
+      .waitForFunction(
+        (r) => {
+          const dots = document.querySelectorAll('.line-test-stage .pick-dot');
+          const headline = document.querySelector('.line-test-stage .stage-heading');
+          return (dots.length > 0 && dots[0].getAttribute('data-vote') === null) || headline !== null || r < 0;
+        },
+        round,
+        { timeout: 60000 },
+      )
+      .catch(() => {});
+    await h.wait(400);
+  }
+  throw new Error('testUntilDone: the test is not Done after twenty rounds');
 }
 
 /**
@@ -775,12 +855,12 @@ export const SHOTS: Shot[] = [
   {
     id: 'step-find',
     embeddedIn: STEPS,
-    caption: 'Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Find',
+    caption: 'Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Test',
     themes: BOTH,
     annotations: [
       { target: datasetRow(TEST_DATASET), kind: 'step', step: 1 },
       { target: detectorRow(DETECTOR), kind: 'step', step: 2 },
-      { target: dashButton('Find'), kind: 'step', step: 3 },
+      { target: dashButton('Test'), kind: 'step', step: 3 },
     ],
     async recipe(page, h) {
       await h.dashboard();
@@ -794,7 +874,7 @@ export const SHOTS: Shot[] = [
     id: 'step-find-results',
     embeddedIn: STEPS,
     caption:
-      'Step 4: Find ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
+      'Step 4, the Review tab: Test ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)',
     themes: BOTH,
     annotations: [
       { target: '.panel-left', kind: 'step', step: 1, at: 'corner' },
@@ -836,9 +916,9 @@ export const SHOTS: Shot[] = [
   }),
   icon({
     id: 'icon-find',
-    anchor: 'step-4-run-the-detector-on-the-new-dataset',
-    caption: 'The Find button',
-    target: dashButton('Find'),
+    anchor: 'step-4-test-the-detector-on-the-new-dataset',
+    caption: 'The Test button',
+    target: dashButton('Test'),
     recipe: async (page, h) => {
       await h.dashboard();
       await h.selectDatasetRow(TEST_DATASET);
@@ -890,16 +970,9 @@ export const SHOTS: Shot[] = [
   }),
   icon({
     id: 'icon-export',
-    anchor: 'find-scoring-and-verifying',
-    caption: 'The Export button in the Find view',
+    anchor: 'testing-a-detector',
+    caption: 'The Export button in the Test view',
     target: '.goods-actions button[aria-label="Export"]',
-    recipe: async (page, h) => { await openFind(page, h); },
-  }),
-  icon({
-    id: 'icon-stats',
-    anchor: 'find-scoring-and-verifying',
-    caption: 'The Stats button in the Find view',
-    target: 'button[aria-label="Stats"]',
     recipe: async (page, h) => { await openFind(page, h); },
   }),
 
@@ -908,7 +981,7 @@ export const SHOTS: Shot[] = [
     id: 'dashboard-loaded',
     embeddedIn: `${GUIDE}#what-vtsearch-does`,
     caption:
-      'The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them',
+      'The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Test / Find beneath them',
     themes: BOTH,
     async recipe(page, h) {
       await cleanDashboard(page, h);
@@ -1113,12 +1186,12 @@ export const SHOTS: Shot[] = [
   {
     id: 'dashboard-manage',
     embeddedIn: `${GUIDE}#dashboard-managing-datasets-and-detectors`,
-    caption: 'A dataset row and a detector row selected, with the Train / Find action bar below the tables',
+    caption: 'A dataset row and a detector row selected, with the Train / Test / Find action bar below the tables',
     themes: BOTH,
     annotations: [
       // Box (not highlight): this shot has two focal points — the open ⋯ menu
-      // and the Train/Find bar — so don't dim the rest of the dashboard.
-      { target: '.dashboard-actions', kind: 'box', label: 'Train opens labeling; Find scores the dataset' },
+      // and the Train/Test/Find bar — so don't dim the rest of the dashboard.
+      { target: '.dashboard-actions', kind: 'box', label: 'Train opens labeling; Test tests a detector; Find runs them' },
     ],
     async recipe(_page, h) {
       await h.dashboard();
@@ -1200,53 +1273,30 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'find-view',
-    embeddedIn: `${GUIDE}#find-scoring-and-verifying`,
+    embeddedIn: `${GUIDE}#testing-a-detector`,
     caption:
-      'The Find verification view: the work queue (left), the viewer with Good/Bad (centre), and the Verified Good / Verified Bad piles plus their actions (right)',
+      "The Test view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)",
     themes: BOTH,
     async recipe(page, h) {
-      await openFind(page, h);
+      await openTest(page, h);
     },
+    after: async (_page, h) => resetFind(h),
   },
   {
     id: 'find-stats',
-    embeddedIn: `${GUIDE}#find-scoring-and-verifying`,
+    embeddedIn: `${GUIDE}#testing-a-detector`,
     caption:
-      "The Find view's Detector Stats modal, scrolled to its end: a breakdown of the detector's calls, the Kept rate of the items checked by hand, and a chart of checked precision against how many items are returned",
+      "The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart",
     themes: BOTH,
-    clip: { target: '.modal-content' },
+    clip: { target: '.line-test-result' },
     async recipe(page, h) {
-      await openFind(page, h);
-      await checkSomeInFind(page);
-      // Stats lives in the right-panel action row of the find view.
-      await page.locator('button[aria-label="Stats"]').first().click();
-      await page.waitForSelector('.stats-table', { timeout: 20000 });
-      // The chart is the section this shot is for; it sits below the fold.
-      // Sections above it are still loading when the table appears, so wait
-      // for the modal's height to hold still, then scroll to its very end;
-      // scrolling any sooner leaves the frame wherever their arrival pushed it.
-      await page.waitForFunction(
-        () => {
-          const w = window as unknown as { __statsH?: number; __statsT?: number };
-          const h = document.querySelector('.modal-content')?.scrollHeight ?? 0;
-          if (h !== w.__statsH) {
-            w.__statsH = h;
-            w.__statsT = Date.now();
-          }
-          return Date.now() - (w.__statsT ?? Date.now()) > 1500;
-        },
-        undefined,
-        { timeout: 60000, polling: 250 },
-      );
-      await page.locator('.chart-wrap').scrollIntoViewIfNeeded();
-      await page.evaluate(() => {
-        const modal = document.querySelector('.modal-content');
-        if (modal) modal.scrollTop = modal.scrollHeight;
-      });
-      // Park the pointer off the chart, so the readout shows the current cut.
-      await page.mouse.move(5, 5);
+      await openTest(page, h);
+      await testUntilDone(page, h);
+      await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
+      await page.locator('.line-test-result').first().evaluate((el) => el.scrollTo(0, 0));
       await h.wait(1200);
     },
+    after: async (_page, h) => resetFind(h),
   },
   {
     id: 'floor-check',
@@ -1301,7 +1351,7 @@ export const SHOTS: Shot[] = [
     id: 'correct-verify',
     embeddedIn: `${HOWTO}/check-and-correct.md#step-1-check-the-pictures-the-detector-is-least-sure-of`,
     caption:
-      'Step 1: (1) the picture Find is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad',
+      'Step 1, on the Review tab: (1) the picture the detector is least sure of, (2) Good or Bad, (3) the pictures you have checked, collected in Verified Good and Verified Bad',
     themes: BOTH,
     annotations: [
       { target: 'img.image-element', kind: 'step', step: 1, at: 'corner' },
@@ -1347,11 +1397,13 @@ export const SHOTS: Shot[] = [
       { target: '.find-balance-row .balance-state-text', kind: 'step', step: 2, at: 'right' },
       { target: '.media-threshold-line', kind: 'step', step: 3, at: 'right' },
     ],
-    // Unchecked, as a reader meets it first: the left radio keeps the top 128, so the line
-    // moves down and the note says how many it keeps now.
+    // After the test, as the how-to picks up (the Threshold is frozen until
+    // Done): the left radio (beta 4, #4448) keeps up to the top 128, so the
+    // line moves down and the note says how many it keeps now, tested at
+    // another line.
     async recipe(page, h) {
       await openFind(page, h);
-      await page.locator('.find-balance-row input[type="radio"][value="2"]').click();
+      await page.locator('.find-balance-row input[type="radio"][value="4"]').click();
       await h.wait(1500);
       // The list only draws the pictures near what it shows. Answer the next
       // picture, as Step 1 has the reader do: Find then serves from the line
@@ -1375,17 +1427,14 @@ export const SHOTS: Shot[] = [
     id: 'borderline-chart',
     embeddedIn: `${HOWTO}/borderline-matches.md#step-4-see-the-trade-off`,
     caption:
-      'The Precision by Number Returned chart for the top N pictures, with the line marked and the line under the chart reading it there',
+      'The Precision by Number Returned chart for the top N pictures, with a likely range at every band edge, the line marked, and the line under the chart reading it there',
     themes: BOTH,
     clip: { target: '.chart-wrap', pad: 6 },
     async recipe(page, h) {
-      await openFind(page, h);
-      await verifyServed(page, h, 12);
-      await page.locator('.find-balance-row input[type="radio"][value="2"]').click();
-      await h.wait(1500);
-      await page.locator('button[aria-label="Stats"]').first().click();
-      await page.waitForSelector('.chart-wrap', { timeout: 20000 });
-      await page.locator('.chart-wrap').first().scrollIntoViewIfNeeded();
+      await openTest(page, h);
+      await testUntilDone(page, h);
+      await page.waitForSelector('.line-test-result .chart-wrap', { timeout: 60000 });
+      await page.locator('.line-test-result .chart-wrap').first().scrollIntoViewIfNeeded();
       await h.wait(1200);
     },
     after: async (_page, h) => resetFind(h),
@@ -1396,17 +1445,20 @@ export const SHOTS: Shot[] = [
     id: 'trust-stats',
     embeddedIn: `${HOWTO}/trust-a-detector.md#step-2-read-the-two-trust-checks`,
     caption:
-      'Step 2: in Detector Stats, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
+      'Step 2: under the verdict, (1) Compare against the training dataset, (2) the share of this dataset that looks unlike it, (3) the share the detector calls with no labelled example behind it',
     themes: BOTH,
+    clip: { target: '.line-test-result' },
     annotations: [
       { target: '.domain-ref-select', kind: 'step', step: 1, at: 'right' },
-      { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2 },
-      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3 },
+      // On the right: the clip is the result pane, and a badge on a chip's
+      // left edge would land outside it.
+      { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2, at: 'right' },
+      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3, at: 'right' },
     ],
     async recipe(page, h) {
-      await openFind(page, h);
-      await page.locator('button[aria-label="Stats"]').first().click();
-      await page.waitForSelector('.stats-table', { timeout: 20000 });
+      await openTest(page, h);
+      await testUntilDone(page, h);
+      await page.waitForSelector('.line-test-result .exits', { timeout: 60000 });
       // The overlap check picks the first candidate itself; make sure it is
       // the training pile, and wait for both verdicts to come back.
       const select = page.locator('.domain-ref-select').first();
@@ -1415,8 +1467,10 @@ export const SHOTS: Shot[] = [
       if (trainId && (await select.inputValue()) !== trainId) await select.selectOption(trainId);
       await page.locator('.domain-chip', { hasText: 'atypical' }).first().waitFor({ timeout: 120000 });
       await page.locator('.domain-chip', { hasText: 'evidence vacuum' }).first().waitFor({ timeout: 120000 });
+      await page.locator('.domain-ref-select').first().scrollIntoViewIfNeeded();
       await h.wait(800);
     },
+    after: async (_page, h) => resetFind(h),
   },
 
   // export-matches.md
@@ -1424,7 +1478,7 @@ export const SHOTS: Shot[] = [
     id: 'icon-to-dataset',
     anchor: 'what-gets-sent',
     page: 'export-matches.md',
-    caption: 'The To Dataset button in the Find view',
+    caption: 'The To Dataset button in the Test view',
     target: '.goods-actions button[aria-label="To Dataset"]',
     recipe: async (page, h) => { await openFind(page, h); },
   }),
@@ -2023,8 +2077,8 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'browse-find',
-    embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-find`,
-    caption: "Browsing Find's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Find",
+    embeddedIn: `${HOWTO}/explore-with-browse.md#browse-the-matches-from-test`,
+    caption: "Browsing a tested detector's matches: (1) the selection, (2) Verified Good or Verified Bad, then (3) Back to Test",
     themes: BOTH,
     annotations: [
       { target: '.bsp', kind: 'step', step: 1 },

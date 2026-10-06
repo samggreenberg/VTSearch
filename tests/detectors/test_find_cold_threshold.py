@@ -148,32 +148,22 @@ class TestColdFindCutsOnTheCorpusItDecides:
             "the labelled media must be named so the estimator can drop them from the haystack it fits on (issue #3308)"
         )
 
-    def test_the_two_cuts_move_verdicts(self, monkeypatch):
-        """Guard the guard: on this corpus the substitution is user-visible.
+    def test_the_corpus_prevalence_moves_verdicts(self, monkeypatch):
+        """#4452: the line is the labels' class model at the prevalence estimated on the Find corpus.
 
-        Without this the assertion above could pass on a fixture where the two
-        cuts differ in the sixth decimal and nothing a user sees changes.  The
-        counterfactual is the pre-fusion number - ``_fused_threshold``'s own
-        ``xcal_threshold`` argument, which is exactly what used to ship - and
-        the comparison is paired, since the head is identical either way
-        (training is deterministic) and only the line moves.
+        Guard the guard: pin the corpus's estimate to a common target and the
+        same labels admit more of the same corpus - so handing the estimator
+        this corpus (the assertion above) is what sets the verdicts.
         """
-        import vtscore.detectors.training as training_mod
+        import vtscore.training.thresholds.labels_line as labels_line_mod
 
         corpus = _cold_corpus()
-        anchored, _neg = _run_find(corpus, _cold_config(), monkeypatch)
-
-        monkeypatch.setattr(
-            training_mod,
-            "_fused_threshold",
-            lambda xcal, *args, **kwargs: xcal,
-        )
-        pooled, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
-
-        assert len(pooled) > len(anchored), (
-            f"the pooled cut admitted {len(pooled)} of {len(corpus)} and the anchored cut "
-            f"{len(anchored)}; on this fixture the two rules must separate, or the "
-            "assertion above is checking a difference nobody can see"
+        shipped, _neg = _run_find(corpus, _cold_config(), monkeypatch)
+        # Every image a sure positive: the counted cut keeps the whole corpus.
+        monkeypatch.setattr(labels_line_mod, "corpus_posteriors", lambda _m, u, **_k: np.ones(np.asarray(u).size))
+        common, _neg2 = _run_find(corpus, _cold_config(), monkeypatch)
+        assert len(common) > len(shipped), (
+            f"the shipped line admitted {len(shipped)} of {len(corpus)} and the common-target line {len(common)}"
         )
 
 

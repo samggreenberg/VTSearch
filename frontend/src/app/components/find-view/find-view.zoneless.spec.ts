@@ -11,10 +11,12 @@ import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
+import { KeyboardService } from '../../services/keyboard.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 import { BALANCE_STATES, lineBalance, wireBalance } from '../../testing/line-balance';
+import { wireLineTest, wireTest } from '../../testing/line-test';
 
 /**
  * Zoneless staleness canary for the Find view.
@@ -274,6 +276,21 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.sortOrder?.map((s) => s.id)).toEqual([1]);
     expect(sortState.threshold).toBe(0.5);
     expect(sortState.sortBusy).toBe(false);
+  });
+
+  // #4555: Test opens on the Autopilot tab, and the test of the line starts
+  // the moment the scoring pass lands, with no click. It used to wait for one:
+  // the pass's `finalize` (which drops the busy flag) runs only after its
+  // `next` returns, so the start, asked for from `next`, still saw the pass
+  // busy and stood down, and the stage sat at "Drawing picks…".
+  it('starts the test of the line as soon as the scoring pass lands', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+
+    httpMock.expectNone('/api/line-test/start');
+    httpMock.expectOne('/api/find-label').flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
+
+    httpMock.expectOne('/api/line-test/start');
   });
 
   // The balance POST is deferred until the picker settles (issue #2973), and
@@ -723,6 +740,8 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
   describe('the consumers of the cut', () => {
     beforeEach(async () => {
       await setUp(false);
+      // Today's Find lives on the Review tab (#4524): the work queue and the piles.
+      fixture.componentInstance.onFindTabChange('review');
       await flushInit(ranking.map(({ id }) => id));
       await settleZoneless(fixture);
     });
@@ -789,17 +808,61 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(view().unverifiedGoodIds()).toEqual([1, 2, 3]);
     });
 
-    it.each(BALANCE_STATES)('show the Threshold and its state in the Find row, with no check, when %s', async (status) => {
+    it.each(BALANCE_STATES)('show the Threshold and this corpus\'s test state in the Find row, never Train\'s check, with no check button, when %s', async (status) => {
       sortState.setSortResults(ranking, 0.5, lineBalance(status));
       await settleZoneless(fixture);
       const row = (fixture.nativeElement as HTMLElement).querySelector('.find-balance-row')!;
       const text = row.querySelector('.balance-state')!.textContent!;
-      expect(text).toContain(
-        status === 'unchecked' ? 'Top 32 kept, unchecked' : 'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept',
-      );
+      // The state line reads the test of this corpus, or untested (#4524): Train's
+      // check range measured the training corpus and would read as this one's.
+      expect(text).toContain('Untested · top 2 kept');
+      expect(text).not.toContain('Checked');
       // Find tests the balance Train set: it offers no spot check to set one (#4317).
       expect(row.querySelector('.balance-check-btn')).toBeNull();
       expect((fixture.nativeElement as HTMLElement).querySelector('vt-spot-check-modal')).toBeNull();
+    });
+
+    it('shows the phase panel, the stage and the result on the Autopilot tab, with no ranked list, and the work queue on Review', async () => {
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      // Entering Autopilot with a line drawn and no test starts one.
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('vt-line-test-panel')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-stage')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-result')).not.toBeNull();
+      expect(el.querySelector('vt-media-list')).toBeNull();
+      expect(el.querySelector('vt-right-panel')).toBeNull();
+
+      (el.querySelector('.left-tab[title^="Review"]') as HTMLButtonElement).click();
+      await flushInit(ranking.map(({ id }) => id));
+      await settleZoneless(fixture);
+      expect(el.querySelector('vt-media-list')).not.toBeNull();
+      expect(el.querySelector('vt-center-panel')).not.toBeNull();
+      expect(el.querySelector('vt-right-panel')).not.toBeNull();
+      expect(el.querySelector('vt-line-test-stage')).toBeNull();
+      // The Stats modal is retired into the result pane (#4524).
+      expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
+    });
+
+    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // Review makes is not the one the view opened with; each must be started
+    // (its settings, the shortcuts), or Review's keys do nothing.
+    it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {
+      const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      start.mockClear();
+
+      fixture.componentInstance.onFindTabChange('review');
+      TestBed.tick();
+      // The panel starts a tick after it is made; its own loads then drain.
+      await new Promise((resolve) => setTimeout(resolve));
+      await flushInit(ranking.map(({ id }) => id));
+      expect(start).toHaveBeenCalledTimes(1);
     });
   });
 });

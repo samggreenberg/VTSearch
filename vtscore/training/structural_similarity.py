@@ -31,6 +31,7 @@ embedder registry are imported lazily so the pure data helpers
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, Optional
@@ -69,6 +70,33 @@ K trade-off for an instance-search tool.
 """
 
 STRUCTURAL_DECISION_THRESHOLD = 0.5
+
+#: Decimals a verification score is stored with, and the line is rounded to the same way
+#: (#4464): an unrounded line dropped pages at exactly the Bad ceiling + 1 inliers whenever
+#: their stored score rounded down. At 6 decimals two adjacent inlier counts stay apart up
+#: to ~2,800 inliers (n / (n + 8) moves by 8 / ((n + 8)(n + 9))); at 4 only to ~275.
+SCORE_DECIMALS = 6
+
+#: The recall end of the balance (#4458, owner 2026-10-03). From beta >= RECALL_BETA (nearer the
+#: preset 4 than 1, in log space) the returned set is the beta-1 line's set plus every verified page
+#: with at least max(RECALL_MIN_INLIERS, ceil(RECALL_GOOD_FRACTION x the Goods' median leave-one-out
+#: inliers)) inliers, whatever the Bad ceiling and the geometry cuts say. Class-split CV on FullMarks
+#: tier m chose the floor for beta 4 (both folds alike); the union with the beta-1 set keeps the
+#: slider monotone: F4 share of the best cut +0.066 [+0.030, +0.109] over clicks 0-25, no click worse.
+#: Beta 1/4 and 1 keep the shipped line (round 2 found no rule that passed for them).
+RECALL_BETA = 2.0
+RECALL_MIN_INLIERS = 10
+RECALL_GOOD_FRACTION = 0.25
+
+#: The precision end of the balance (#4479), the recall end's mirror. At beta <= PRECISION_BETA
+#: (nearer the preset 1/4 than 1) the returned set is the beta-1 line's set intersected with the
+#: verified pages with at least max(PRECISION_MIN_INLIERS, ceil(PRECISION_GOOD_FRACTION x the Goods'
+#: median leave-one-out inliers), the Bad ceiling + PRECISION_CEILING_MARGIN + 1) inliers - a subset
+#: of beta 1's set. Click 0's line (the example sort) rises to PRECISION_MIN_INLIERS.
+PRECISION_BETA = 0.5
+PRECISION_MIN_INLIERS = 16
+PRECISION_GOOD_FRACTION = 0.5
+PRECISION_CEILING_MARGIN = 4
 
 #: Geometry cuts for the returned set before a detector's first Bad vote (#4440). Until
 #: then #4367's Bad ceiling is just the 8-inlier gate, which passes hard negatives on
@@ -242,6 +270,9 @@ class VerificationScorer:
     #: reprojection error scores half its value, below the line but in the same order.
     ratio_min: Optional[float] = None
     reproj_max: Optional[float] = None
+    #: With geometry cuts, a fit with at least this many inliers is not demoted however loose
+    #: it is: the recall end of the balance keeps it (#4458).
+    loose_ok_from: Optional[int] = None
 
     def score(self, stats: MatchStats) -> float:
         """The score for *stats*; 0 when RANSAC found no sane model."""
@@ -251,6 +282,8 @@ class VerificationScorer:
         loose = (self.ratio_min is not None and stats.inlier_ratio < self.ratio_min) or (
             self.reproj_max is not None and stats.median_reproj_error > self.reproj_max
         )
+        if loose and self.loose_ok_from is not None and stats.inlier_count >= self.loose_ok_from:
+            return value
         return value / 2.0 if loose else value
 
     def threshold_for(self, inliers: float) -> float:
@@ -333,7 +366,7 @@ def structural_rerank(
             box = stats.inlier_box
         new = dict(entry)
         stage1 = float(new.get(score_key, 0.0) or 0.0)
-        new[score_key] = round(verification, 4)
+        new[score_key] = round(verification, SCORE_DECIMALS)
         if box is not None:
             new["best_region"] = [float(c) for c in box]
         else:
@@ -399,6 +432,7 @@ def maybe_structural_rerank(
     score_key: str = "score",
     feature_snap: Optional[dict[Any, dict]] = None,
     bad_votes: Any = None,
+    beta: Optional[float] = None,
 ) -> tuple[list[dict], float]:
     """Apply the Stage-2 re-rank when the active dataset is structural.
 
@@ -487,7 +521,21 @@ def maybe_structural_rerank(
         threshold_out = _bad_ceiling_threshold(
             list(zip(template_keys, [tpl for _, tpl in templates])), bad_votes, feat_snap, matcher, cache
         )
-    scorer = _line_scorer(template_keys is not None, bad_votes, feat_snap)
+    threshold_out, recall_floor = _recall_line(
+        threshold_out, beta, template_keys, [tpl for _, tpl in templates], good_votes, feat_snap, matcher, cache
+    )
+    threshold_out = _precision_line(
+        threshold_out,
+        beta,
+        template_keys,
+        [tpl for _, tpl in templates],
+        good_votes,
+        bad_votes,
+        feat_snap,
+        matcher,
+        cache,
+    )
+    scorer = _line_scorer(template_keys is not None, bad_votes, feat_snap, loose_ok_from=recall_floor)
     reranked = _rerank_growing(
         results,
         snap,
@@ -501,7 +549,21 @@ def maybe_structural_rerank(
         scorer=scorer,
         parents=parents,
     )
+    _record_gate(det_ctx, reranked, threshold_out, score_key)
     return reranked, threshold_out
+
+
+def _record_gate(det_ctx: Any, reranked: list[dict], threshold: float, score_key: str) -> None:
+    """Leave the pages the gate passes on *det_ctx*: what the balance counts on this line (#4505).
+
+    A set, never a ranking, since a check has no ranking to walk here.
+    """
+    if det_ctx is None:
+        return
+    try:
+        det_ctx.gate_passed = frozenset(r["id"] for r in reranked if float(r.get(score_key) or 0.0) >= threshold)
+    except Exception:  # noqa: BLE001 - request-missing sentinel refuses writes
+        pass
 
 
 #: Stop-list from Bad votes (#4170 / #4180, pre-registered arms): ``"off"`` (shipped),
@@ -565,15 +627,106 @@ def _stoplist(
     return out, tags
 
 
-def _line_scorer(tiled: bool, bad_votes: Any, feature_snap: dict[Any, dict]) -> VerificationScorer:
+def _line_scorer(
+    tiled: bool, bad_votes: Any, feature_snap: dict[Any, dict], *, loose_ok_from: Optional[int] = None
+) -> VerificationScorer:
     """The scorer behind the returned set: geometry cuts on a tiled dataset with no Bad vote yet (#4440).
 
     Until a Bad exists the Bad ceiling is only the 8-inlier gate, so a verified page
     must also fit tightly (:data:`GEOMETRY_RATIO_MIN`, :data:`GEOMETRY_REPROJ_MAX`).
+    At the recall end of the balance a fit with *loose_ok_from* inliers passes loose (#4458).
     """
     if tiled and not any(_local_features(feature_snap.get(b)) for b in (bad_votes or ())):
-        return VerificationScorer(ratio_min=GEOMETRY_RATIO_MIN, reproj_max=GEOMETRY_REPROJ_MAX)
+        return VerificationScorer(
+            ratio_min=GEOMETRY_RATIO_MIN, reproj_max=GEOMETRY_REPROJ_MAX, loose_ok_from=loose_ok_from
+        )
     return VerificationScorer()
+
+
+def _recall_line(
+    threshold: float,
+    beta: Optional[float],
+    template_keys: Optional[Sequence[Any]],
+    template_features: list[StructuralFeatures],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+) -> tuple[float, Optional[int]]:
+    """``(line, floor)`` for the balance (#4458): at the recall end the beta-1 *threshold* or the floor's.
+
+    Below :data:`RECALL_BETA`, or off a tiled dataset, it is *threshold* unchanged and no floor.
+    """
+    if template_keys is None or cache is None or beta is None or beta < RECALL_BETA:
+        return threshold, None
+    floor = _recall_floor(list(zip(template_keys, template_features)), good_votes, feature_snap, matcher, cache)
+    return min(threshold, round(VerificationScorer().threshold_for(floor), SCORE_DECIMALS)), floor
+
+
+def _recall_floor(
+    templates: list[tuple[Any, StructuralFeatures]],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> int:
+    """The recall end's inlier floor (#4458): max(10, ceil(0.25 x the Goods' median leave-one-out inliers)).
+
+    A Good's leave-one-out fit is its best fit to the other Goods' templates, so the floor follows how
+    well this detector's own marks match each other: a faint mark's floor stays at 10.
+    """
+    median = _goods_loo_median(templates, good_votes, feature_snap, matcher, cache)
+    if median is None:
+        return RECALL_MIN_INLIERS
+    return max(RECALL_MIN_INLIERS, math.ceil(RECALL_GOOD_FRACTION * median))
+
+
+def _goods_loo_median(
+    templates: list[tuple[Any, StructuralFeatures]],
+    good_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> Optional[float]:
+    """The median of each Good's best fit to the other Goods' templates; ``None`` with < 2 Goods."""
+    loo: list[int] = []
+    for g in good_votes:
+        feats = _local_features(feature_snap.get(g))
+        others = [(k, t) for k, t in templates if k[0] != g]
+        if feats is None or feats.count == 0 or not others:
+            continue
+        (stats,) = cache.best_many(others, [(g, feats)], matcher)
+        loo.append(stats.inlier_count if stats.model_ok else 0)
+    return float(np.median(loo)) if len(loo) >= 2 else None
+
+
+def _precision_line(
+    threshold: float,
+    beta: Optional[float],
+    template_keys: Optional[Sequence[Any]],
+    template_features: list[StructuralFeatures],
+    good_votes: Any,
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: Optional[VerificationCache],
+) -> float:
+    """The line at the precision end of the balance (#4479): *threshold*, or the floor's, whichever is higher.
+
+    Below :data:`PRECISION_BETA` the floor is max(16, ceil(0.5 x the Goods' median leave-one-out
+    inliers), the Bad ceiling + 5). Above it, or off a tiled dataset, *threshold* is unchanged.
+    """
+    if template_keys is None or cache is None or beta is None or beta > PRECISION_BETA:
+        return threshold
+    templates = list(zip(template_keys, template_features))
+    floor = PRECISION_MIN_INLIERS
+    median = _goods_loo_median(templates, good_votes, feature_snap, matcher, cache)
+    if median is not None:
+        floor = max(floor, math.ceil(PRECISION_GOOD_FRACTION * median))
+    ceiling = _bad_ceiling(templates, bad_votes, feature_snap, matcher, cache)
+    if ceiling is not None:
+        floor = max(floor, ceiling + PRECISION_CEILING_MARGIN + 1)
+    return max(threshold, round(VerificationScorer().threshold_for(floor), SCORE_DECIMALS))
 
 
 def _bad_ceiling_threshold(
@@ -591,13 +744,26 @@ def _bad_ceiling_threshold(
     That took the returned set's F1 from 0.43 to 0.85 at 25 clicks on FullMarks
     (#4367's pre-registered R1). With no Bads, or none that fit, it is the gate.
     """
-    bads = [(b, f) for b in bad_votes if (f := _local_features(feature_snap.get(b))) is not None and f.count > 0]
-    scorer = VerificationScorer()
-    if not bads:
+    ceiling = _bad_ceiling(templates, bad_votes, feature_snap, matcher, cache)
+    if ceiling is None:
         return STRUCTURAL_DECISION_THRESHOLD
+    scorer = VerificationScorer()
+    return round(scorer.threshold_for(max(scorer.min_inliers, ceiling + 1)), SCORE_DECIMALS)
+
+
+def _bad_ceiling(
+    templates: list[tuple[Any, StructuralFeatures]],
+    bad_votes: Any,
+    feature_snap: dict[Any, dict],
+    matcher: StructuralMatcher,
+    cache: VerificationCache,
+) -> Optional[int]:
+    """The most inliers any Bad vote's page reached against *templates*; ``None`` without a usable Bad."""
+    bads = [(b, f) for b in bad_votes or () if (f := _local_features(feature_snap.get(b))) is not None and f.count > 0]
+    if not bads:
+        return None
     fits = cache.best_many(templates, bads, matcher)
-    ceiling = max((s.inlier_count if s.model_ok else 0) for s in fits)
-    return scorer.threshold_for(max(scorer.min_inliers, ceiling + 1))
+    return max((s.inlier_count if s.model_ok else 0) for s in fits)
 
 
 def _rerank_growing(
@@ -669,6 +835,7 @@ def maybe_structural_rerank_example(
     *,
     top_k: int = DEFAULT_RERANK_TOP_K,
     score_key: str = "score",
+    beta: Optional[float] = None,
 ) -> tuple[list[dict], float]:
     """Stage-2 re-rank for the example-sort (seed-by-example) path.
 
@@ -721,4 +888,11 @@ def maybe_structural_rerank_example(
         top_k=top_k,
         score_key=score_key,
     )
-    return reranked, STRUCTURAL_DECISION_THRESHOLD
+    return reranked, _example_line(snap, beta)
+
+
+def _example_line(snap: dict[Any, dict], beta: Optional[float]) -> float:
+    """The example sort's line: the 8-inlier gate, or at the precision end on a tiled dataset 16 (#4479)."""
+    if beta is not None and beta <= PRECISION_BETA and snapshot_has_tiles(snap):
+        return round(VerificationScorer().threshold_for(PRECISION_MIN_INLIERS), SCORE_DECIMALS)
+    return STRUCTURAL_DECISION_THRESHOLD

@@ -5,6 +5,7 @@ import { DetectorStatsModalComponent } from './detector-stats-modal.component';
 import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 import { provideHttpTesting } from '../../../testing/test-providers';
+import { wireVerdict } from '../../../testing/line-test';
 
 describe('DetectorStatsModalComponent', () => {
   let component: DetectorStatsModalComponent;
@@ -27,6 +28,7 @@ describe('DetectorStatsModalComponent', () => {
     created_by: 'sam',
     autofind: false,
     readers: [],
+    test_verdicts: [] as ReturnType<typeof wireVerdict>[],
   };
 
   beforeEach(async () => {
@@ -67,6 +69,33 @@ describe('DetectorStatsModalComponent', () => {
     expect(fixture.nativeElement.querySelector('.loading-text')).toBeFalsy();
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('10 of 12 in "My Dataset"'); // resolvedSummary
+  });
+
+  it('says Untested when the detector keeps no test verdict', async () => {
+    await fixture.whenStable();
+    httpMock.expectOne('/api/detectors/registry/det1/stats').flush(mockStats);
+    await settleZoneless(fixture);
+
+    expect(fixture.nativeElement.querySelector('.verdict-list')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('.verdict-empty').textContent).toContain('Untested');
+  });
+
+  it('lists the kept verdicts under Tested on, with a stale mark where it applies (#4526)', async () => {
+    await fixture.whenStable();
+    httpMock.expectOne('/api/detectors/registry/det1/stats').flush({
+      ...mockStats,
+      test_verdicts: [wireVerdict(), wireVerdict({ dataset_id: 'ds-old', dataset_name: 'drawings-old', stale: true, labelled: 1 })],
+    });
+    await settleZoneless(fixture);
+
+    const rows = Array.from(fixture.nativeElement.querySelectorAll('.verdict')) as HTMLElement[];
+    expect(rows.length).toBe(2);
+    expect(rows[0].textContent).toContain('drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+    expect(rows[0].querySelector('.stale-mark')).toBeFalsy();
+    expect(rows[1].classList).toContain('verdict--stale');
+    expect(rows[1].textContent).toContain('(1 pick, 2026-10-05)');
+    expect(rows[1].querySelector('.stale-mark')!.textContent).toContain('out of date');
+    expect(rows[1].title).toContain('retrained since');
   });
 
   it('repaints the error text on a failed load (zoneless canary)', async () => {

@@ -114,6 +114,8 @@ class TestOneRound:
         assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
         assert ctx.precision_check is not None and ctx.precision_check_run is None
         assert client.get("/api/balance").get_json()["status"] == BALANCE_CHECKED
+        # The weak-separation prompt counts its cooldown from the vote total the check ended at (#4496).
+        assert ctx.check_ended_votes == len(human_voted_ids(ctx))
 
     def test_a_later_vote_inside_the_set_makes_the_result_stale(self, client):
         _run_find(client)
@@ -137,6 +139,8 @@ class TestOneRound:
         assert data["check"] is None and data["balance"]["status"] == "unchecked"
         assert ctx.precision_check_run is None and ctx.precision_check is None
         assert all(cid in ctx.good_votes for cid in picks[:2])
+        # A closed check ended too: the weak-separation prompt counts its cooldown from here (#4496).
+        assert ctx.check_ended_votes == len(human_voted_ids(ctx))
         # Nothing running: cancel again is a no-op.
         assert client.post("/api/precision-check/cancel", json={}).status_code == 200
 

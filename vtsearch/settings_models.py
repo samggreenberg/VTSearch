@@ -396,8 +396,8 @@ class UserSettings(BaseModel):
     volume: Annotated[float, _clamp(0.0, 1.0)] = 1.0
     # The balance (#4413): F-beta's beta, the preference every detector's line
     # is drawn at.  Each detector keeps its own, seeded from this value the
-    # first time it reads one.  Clamped to ``[0.25, 4]`` (the presets are 0.5
-    # precision-leaning, 1 balanced, 2 recall-leaning).
+    # first time it reads one.  Clamped to ``[0.25, 4]`` (the presets are 1/4
+    # precision-leaning, 1 balanced, 4 recall-leaning, #4448).
     beta: Annotated[float, _clamp(0.25, 4.0)] = DEFAULT_BETA
     # ``"system"`` resolves to the OS ``prefers-color-scheme`` value
     # (dark or light) at render time on the frontend. Users can pick a

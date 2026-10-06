@@ -30,13 +30,18 @@ functions that need them so the dataclasses/protocol import without OpenCV.
 from __future__ import annotations
 
 import functools
+import weakref
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol, Sequence, runtime_checkable
+from typing import TYPE_CHECKING, Optional, Protocol, Sequence, runtime_checkable
 
 import numpy as np
 
 from vtscore.config import MAX_STRUCTURAL_DETECT_PIXELS
+
+if TYPE_CHECKING:
+    import torch
 
 # --------------------------------------------------------------------------
 # Constants (pinned by the pre-impl spike; see the design doc's open questions)
@@ -363,6 +368,45 @@ def load_vlad_codebook() -> np.ndarray:
 # of cache-thrashing territory on CPU; a larger shortlist is chunked.
 _MATCH_CHUNK_ELEMENTS = 32_000_000
 
+#: Candidate descriptors kept on the GPU between calls (#4469), in their stored dtype (uint8
+#: for compact features), keyed by the array and checked by a weak reference so a freed
+#: array's id never returns another page's descriptors. A retrain verifies each new template
+#: against the same ~2,000 shortlisted pages; converting and uploading them again for every
+#: template was ~80% of a Good click's retrain on a V100 node.
+_DEVICE_DESCRIPTORS: "OrderedDict[int, tuple[weakref.ref[np.ndarray], torch.Tensor]]" = OrderedDict()
+_DEVICE_DESCRIPTOR_BYTES = [0]
+#: The cache's budget on the device; least recently used pages go first.
+DEVICE_DESCRIPTOR_LIMIT_BYTES = 4 * 2**30
+
+
+def release_device_descriptors() -> None:
+    """Drop every cached candidate descriptor from the device (a dataset switch frees room)."""
+    _DEVICE_DESCRIPTORS.clear()
+    _DEVICE_DESCRIPTOR_BYTES[0] = 0
+
+
+def _device_descriptors(desc: np.ndarray, dev: str, cache: bool) -> "torch.Tensor":
+    """*desc* as a float32 tensor on *dev*; with *cache*, the stored array stays on the device."""
+    import torch  # noqa: PLC0415
+
+    if not cache:
+        return torch.from_numpy(np.asarray(desc, dtype=np.float32)).to(dev)
+    key = id(desc)
+    hit = _DEVICE_DESCRIPTORS.get(key)
+    if hit is not None and hit[0]() is desc:
+        _DEVICE_DESCRIPTORS.move_to_end(key)
+        stored = hit[1]
+    else:
+        if hit is not None:  # the id now belongs to another array
+            _DEVICE_DESCRIPTOR_BYTES[0] -= hit[1].nbytes
+        stored = torch.from_numpy(np.ascontiguousarray(desc)).to(dev)
+        _DEVICE_DESCRIPTORS[key] = (weakref.ref(desc), stored)
+        _DEVICE_DESCRIPTOR_BYTES[0] += stored.nbytes
+        while _DEVICE_DESCRIPTOR_BYTES[0] > DEVICE_DESCRIPTOR_LIMIT_BYTES and len(_DEVICE_DESCRIPTORS) > 1:
+            _old_key, (_ref, old) = _DEVICE_DESCRIPTORS.popitem(last=False)
+            _DEVICE_DESCRIPTOR_BYTES[0] -= old.nbytes
+    return stored.float()  # widened on the device; uint8 values are exact
+
 
 def _match_device() -> str:
     """Device for batched descriptor matching.
@@ -382,6 +426,7 @@ def ratio_test_matches(
     *,
     ratio: float,
     device: Optional[str] = None,
+    cache: bool = False,
 ) -> list[tuple[np.ndarray, np.ndarray]]:
     """Brute-force L2 kNN + Lowe ratio test of one template against many candidates.
 
@@ -402,6 +447,11 @@ def ratio_test_matches(
 
     A candidate with fewer than 2 descriptors yields an empty correspondence
     set, matching ``knnMatch``'s need for a second-nearest neighbour.
+
+    Candidates may be stored descriptors in any numeric dtype (uint8 for compact
+    features); they are widened to float32. With *cache*, each candidate array is
+    kept on the device between calls (:func:`_device_descriptors`), so pass only
+    arrays that live as long as their features, never temporaries.
     """
     import torch  # noqa: PLC0415
 
@@ -412,7 +462,7 @@ def ratio_test_matches(
 
     # Candidates too small to supply a second-nearest neighbour are answered
     # directly; only the usable ones are padded into the batch.
-    usable = [(i, np.asarray(c, dtype=np.float32)) for i, c in enumerate(candidate_descs)]
+    usable = [(i, c) for i, c in enumerate(candidate_descs)]
     usable = [(i, c) for i, c in usable if c.ndim == 2 and c.shape[0] >= 2 and c.shape[1] == tmpl.shape[1]]
 
     results: dict[int, tuple[np.ndarray, np.ndarray]] = {}
@@ -425,10 +475,10 @@ def ratio_test_matches(
         for start in range(0, len(usable), per_chunk):
             chunk = usable[start : start + per_chunk]
             pad = max(c.shape[0] for _, c in chunk)
-            batch = torch.zeros((len(chunk), pad, d), dtype=torch.float32)
+            batch = torch.zeros((len(chunk), pad, d), dtype=torch.float32, device=dev)
             for row, (_, c) in enumerate(chunk):
-                batch[row, : c.shape[0]] = torch.from_numpy(c)
-            dist = torch.cdist(t.unsqueeze(0).expand(len(chunk), -1, -1), batch.to(dev))
+                batch[row, : c.shape[0]] = _device_descriptors(c, dev, cache)
+            dist = torch.cdist(t.unsqueeze(0).expand(len(chunk), -1, -1), batch)
             # A padded row is an all-zero descriptor at a real distance from the
             # template, so mask it out before the nearest-neighbour search rather
             # than letting it win one.
@@ -593,10 +643,14 @@ class SiftMatcher:
         if t_desc.shape[0] < 2:
             return [MatchStats() for _ in candidates]
 
-        pairs = ratio_test_matches(t_desc, [c.descriptors_f32() for c in candidates], ratio=_LOWE_RATIO)
+        # The stored arrays, not float32 copies: they are widened on the device and
+        # kept there across templates (#4469), and the fit converts only matched keypoints.
+        pairs = ratio_test_matches(
+            t_desc, [np.asarray(c.descriptors) for c in candidates], ratio=_LOWE_RATIO, cache=True
+        )
         t_kp = template.keypoints_f32()
         return [
-            self._fit_similarity(t_kp, cand.keypoints_f32(), t_idx, c_idx)
+            self._fit_similarity(t_kp, np.asarray(cand.keypoints), t_idx, c_idx)
             for cand, (t_idx, c_idx) in zip(candidates, pairs)
         ]
 

@@ -26,6 +26,9 @@ from vtscore.training.thresholds import (
     BALANCE_UNCHECKED,
     DEFAULT_BETA,
     NO_BALANCE,
+    WEAK_CHECK_COOLDOWN,
+    WEAK_CHECK_MIN_VOTES,
+    WEAK_SEPARATION_D,
     balance_schedule,
 )
 
@@ -200,7 +203,8 @@ class TestTheBalanceArm:
         steps = [r for r in rows if r["phase"] not in ("check", "")]
         assert steps and all(r["beta"] == 1.0 for r in steps)
         assert all(r["floor_status"] == BALANCE_UNCHECKED for r in steps)
-        assert all(1 <= r["floor_count"] <= min(32, r["n_remainder"]) for r in steps), "the cap holds"
+        # No cap since #4452: the labels' line keeps what clears it, possibly none.
+        assert all(0 <= r["floor_count"] <= r["n_remainder"] for r in steps)
 
     def test_the_check_is_the_f_beta_walk_and_ends_checked(self):
         rows, picks = self._run(beta=1.0)
@@ -223,6 +227,114 @@ class TestTheBalanceArm:
     def test_a_balance_outside_the_range_kills_the_cell_before_it_runs(self):
         with pytest.raises(ValueError, match="beta must be in"):
             self._run(beta=9.0)
+
+
+class TestTheWeakSeparationPrompt:
+    """#4496: ``spot_check="weak"`` - the app prompts a check when the labels separate weakly."""
+
+    def _run(self, n_per_cat: int = 20, max_steps: int = 15, **kwargs):
+        picks: list[dict] = []
+        rows = simulate_voting_iterations(
+            _separable(n_per_cat), "alpha", seed=0, max_steps=max_steps, calibrate_count=2, pick_sink=picks,
+            beta=1.0, **kwargs,
+        )  # fmt: skip
+        return rows, picks
+
+    @staticmethod
+    def _prompts(picks: list[dict]) -> list[list[int]]:
+        """The prompted checks, as runs of prompted picks in the log's order (a round's picks share one ``t``)."""
+        runs: list[list[int]] = []
+        previous = None
+        for p in picks:
+            if p["phase"] == "prompt":
+                if previous != "prompt":
+                    runs.append([])
+                runs[-1].append(p["t"])
+            previous = p["phase"]
+        return runs
+
+    def test_a_weak_session_checks_mid_run_and_the_picks_are_clicks(self):
+        rows, picks = self._run(
+            n_per_cat=40, max_steps=25, spot_check="weak", weak_separation=math.inf, weak_min_t=6, weak_phase="any"
+        )
+        prompts = self._prompts(picks)
+        assert len(prompts) == 1, "prompted once"
+        assert prompts[0][0] > 6, "not before the first eligible click"
+        prompt_rows = [r for r in rows if r["phase"] == "prompt"]
+        assert prompt_rows and all(r["n_good"] + r["n_bad"] == r["t"] for r in prompt_rows)
+        # The prompted picks spend the voting budget: ordinary clicks resume after them and stop at the same count.
+        ordinary = [r for r in rows if r["phase"] not in ("check", "prompt")]
+        assert any(r["t"] > prompts[0][-1] for r in ordinary), "voting resumed"
+        assert max(r["t"] for r in ordinary) == 25
+        # And the end-of-run check still runs after them.
+        end = [r for r in rows if r["phase"] == "check"]
+        assert end and all(r["t"] > 25 for r in end)
+
+    def test_a_session_that_never_separates_weakly_is_the_end_check_run(self):
+        """No prompt draws nothing from the RNG: the run is byte-identical to ``spot_check="end"``."""
+        shipped, shipped_picks = self._run(spot_check="end")
+        weak, weak_picks = self._run(spot_check="weak", weak_separation=-math.inf)
+        assert [p["picked_id"] for p in weak_picks] == [p["picked_id"] for p in shipped_picks]
+        assert [(r["t"], r["phase"], r["floor_count"]) for r in weak] == [
+            (r["t"], r["phase"], r["floor_count"]) for r in shipped
+        ]
+
+    def test_a_learned_only_prompt_waits_for_the_flow_to_leave_its_opening(self):
+        """#4496: the app trains no detector on the text-sort opening, so ``weak_phase="learned"`` waits."""
+        _rows, any_picks = self._run(
+            n_per_cat=40, max_steps=40, spot_check="weak", weak_separation=math.inf, weak_phase="any"
+        )
+        _rows, picks = self._run(
+            n_per_cat=40, max_steps=40, spot_check="weak", weak_separation=math.inf, weak_phase="learned"
+        )
+        before = [
+            picks[i - 1]["phase"]
+            for i, p in enumerate(picks)
+            if p["phase"] == "prompt" and i and picks[i - 1]["phase"] != "prompt"
+        ]
+        assert all(ph not in ("good", "bad", "more") for ph in before), before
+        first_any = next((p["t"] for p in any_picks if p["phase"] == "prompt"), None)
+        first_learned = next((p["t"] for p in picks if p["phase"] == "prompt"), None)
+        assert first_any is not None
+        assert first_learned is None or first_learned >= first_any, "never earlier than anywhere-prompting"
+        with pytest.raises(ValueError, match="weak_phase"):
+            self._run(spot_check="weak", weak_phase="sometimes")
+
+    def test_a_prompted_check_spends_no_more_than_the_budget(self):
+        """Its opening bands must fit the votes left, and a deeper band that would overrun ends it: clicks end at max_steps."""
+        rows, _picks = self._run(
+            n_per_cat=40, max_steps=25, spot_check="weak", weak_separation=math.inf, weak_min_t=6, weak_phase="any"
+        )
+        clicks = [r for r in rows if r["phase"] != "check"]
+        assert any(r["phase"] == "prompt" for r in clicks)
+        assert max(r["t"] for r in clicks) == 25, "the prompted check stayed inside the budget, and voting resumed"
+        _rows, late = self._run(
+            n_per_cat=40, max_steps=25, spot_check="weak", weak_separation=math.inf, weak_min_t=20, weak_phase="any"
+        )
+        assert not [p for p in late if p["phase"] == "prompt"], "no room left at click 20 for a check's opening bands"
+
+    def test_the_default_arm_checks_where_the_apps_rule_says(self):
+        """Since the owner's ruling (2026-10-05) the default is the app's: ``weak`` at the app's constants."""
+        import inspect
+
+        params = inspect.signature(simulate_voting_iterations).parameters
+        assert params["spot_check"].default == "weak"
+        assert params["weak_separation"].default == WEAK_SEPARATION_D
+        assert params["weak_min_t"].default == WEAK_CHECK_MIN_VOTES
+        assert params["weak_repeat"].default == WEAK_CHECK_COOLDOWN
+        assert params["weak_phase"].default == "learned", "the app trains no detector on Autopilot's opening"
+
+    def test_the_prompt_returns_after_its_cooldown_while_separation_stays_weak(self):
+        once, once_picks = self._run(
+            n_per_cat=100, max_steps=90, spot_check="weak", weak_separation=math.inf, weak_repeat=0, weak_phase="any"
+        )
+        again, again_picks = self._run(
+            n_per_cat=100, max_steps=90, spot_check="weak", weak_separation=math.inf, weak_repeat=5, weak_phase="any"
+        )
+        assert len(self._prompts(once_picks)) == 1
+        prompts = self._prompts(again_picks)
+        assert len(prompts) >= 2, "the prompt came back"
+        assert all(b[0] - a[-1] >= 5 for a, b in zip(prompts, prompts[1:])), "after at least the cooldown"
 
 
 class TestTheBalanceAwareAcquisitionArm:

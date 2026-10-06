@@ -1,0 +1,33 @@
+{
+  "clicks": [
+    0,
+    1,
+    2,
+    3,
+    5,
+    10,
+    15,
+    25
+  ],
+  "0.5": {
+    "t": 16,
+    "geo0": false,
+    "geo1": true,
+    "d": 0,
+    "geo2": true
+  },
+  "1.0": {
+    "t": 16,
+    "geo0": false,
+    "geo1": true,
+    "d": 0,
+    "geo2": false
+  },
+  "2.0": {
+    "t": 12,
+    "geo0": false,
+    "geo1": true,
+    "d": 0,
+    "geo2": false
+  }
+}

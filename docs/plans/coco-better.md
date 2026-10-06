@@ -110,9 +110,8 @@ keeping VG.
   with `coco_better`'s classes and bands as strata to report ACROSS rather than as
   the variable under study. Data-property studies (#4051, #4043, #3589, #3807)
   were closed on that ruling. The queued method studies that want this bench
-  include the acquisition offset's environment dependence (#3546), region
-  styles (#2895), and, on `coco_better_full` exports at rare prevalence,
-  `_GMM_MAX_SAMPLES` (#3827).
+  include the acquisition offset's environment dependence (#3546) and region
+  styles (#2895).
 
 <!-- item-sep -->
 

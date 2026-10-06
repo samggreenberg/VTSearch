@@ -7,7 +7,8 @@ beside it:
   the gate's precision / recall / F1, the best cut's F1, the floor-style
   oracle cuts at P), then the per-class table at the final click;
 * ``figures/``: ``ap_found.png``, ``f1_over_clicks.png``,
-  ``line_at_floors.png`` and ``per_class.png``;
+  ``line_at_floors.png``, ``per_class.png`` and, when the run scored every
+  balance (#4457), ``returned_at_beta.png`` and ``retrain.png``;
 * ``images/``: thumbnails of the most helpful and most harmful clicks (credit =
   that click's change in AP, one observation each), the class's box drawn on
   positives, so a reader can check them against the labels;
@@ -39,6 +40,8 @@ DPI = 130
 INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 BLUE, ORANGE, GREEN, PINK = "#2a78d6", "#eb6834", "#1baf7a", "#e87ba4"
 FLOORS = (10, 50, 90)
+#: The balance's presets (#4413) and their column suffixes in ``steps.csv``.
+BETAS = (("1/4", "025"), ("1", "1"), ("4", "4"))
 
 
 def _num(x: Any) -> float:
@@ -123,6 +126,50 @@ def summary(steps: list[dict[str, Any]]) -> str:
     return "\n".join(out) + "\n"
 
 
+def _share(r: dict[str, Any], tag: str) -> float:
+    """The returned set's F-beta as a share of the best cut's, for one step (nan without positives)."""
+    best = r.get(f"best_fb{tag}", float("nan"))
+    return r[f"gate_fb{tag}"] / best if best and not np.isnan(best) and best > 0 else float("nan")
+
+
+def balance(steps: list[dict[str, Any]]) -> str:
+    """The returned set at each balance: F-beta as a share of the best cut's, with P and R beside it.
+
+    The structural line ignores beta, so every beta reads the same sessions and the same set.
+    """
+    if not steps or "gate_fb025" not in steps[0]:
+        return ""
+    points = [("click 0 (example sort)", 0), ("10 clicks", 10), ("25 clicks", 25), ("final", None)]
+    out = [
+        "### The returned set at each balance (F-beta as a share of the best cut's; one set serves every beta)",
+        "",
+        "| | " + " | ".join(f"beta {b}: F-beta / best = share" for b, _ in BETAS) + " | precision | recall |",
+        "|---|" + "---|" * len(BETAS) + "---:|---:|",
+    ]
+    for label, v in points:
+        rows = _at(steps, v)
+        cells = []
+        for _b, tag in BETAS:
+            shares = [x for r in rows if not np.isnan(x := _share(r, tag))]
+            cells.append(
+                f"{_mean(rows, f'gate_fb{tag}'):.2f} / {_mean(rows, f'best_fb{tag}'):.2f} = "
+                f"{float(np.mean(shares)) if shares else float('nan'):.2f}"
+            )
+        out.append(
+            f"| {label} | " + " | ".join(cells) + f" | {_mean(rows, 'gate_precision'):.2f} | "
+            f"{_mean(rows, 'gate_recall'):.2f} |"
+        )
+    times = np.array([r["retrain_s"] for r in steps if not np.isnan(r["retrain_s"])])
+    later = np.array([r["retrain_s"] for r in steps if r["v"] > 0 and not np.isnan(r["retrain_s"])])
+    out += [
+        "",
+        f"Retrain wall clock: median {np.median(times):.1f} s, p90 {np.percentile(times, 90):.1f} s, "
+        f"{(times > 5).mean():.0%} of steps over 5 s (after click 0: p90 {np.percentile(later, 90):.1f} s).",
+        "",
+    ]
+    return "\n".join(out)
+
+
 def _curve(ax, steps: list[dict[str, Any]], key: str, color: str, label: str) -> None:
     by: dict[str, list[dict[str, Any]]] = {}
     for r in steps:
@@ -177,6 +224,51 @@ def figures(steps: list[dict[str, Any]], out: Path) -> None:
     fig.tight_layout()
     fig.savefig(out / "line_at_floors.png")
     plt.close(fig)
+
+    if "gate_fb025" in steps[0]:
+        for r in steps:
+            for _b, tag in BETAS:
+                r[f"share_{tag}"] = _share(r, tag)
+        fig, ax = plt.subplots(figsize=(6.4, 3.8), dpi=DPI)
+        _style(ax)
+        vmax = int(max(r["v"] for r in steps))
+        for (b, tag), color in zip(BETAS, (BLUE, ORANGE, GREEN)):
+            xs = list(range(vmax + 1))
+            ax.plot(
+                xs,
+                [_mean([r for r in steps if int(r["v"]) == v], f"share_{tag}") for v in xs],
+                color=color,
+                linewidth=2.4,
+                label=f"beta {b}",
+            )
+        ax.set_ylim(0, 1)
+        ax.set_xlabel("clicks", color=INK, fontsize=9)
+        ax.set_ylabel("returned set's F-beta / best cut's", color=INK, fontsize=9)
+        ax.set_title("The returned set at each balance (one line for every beta)", loc="left", color=INK, fontsize=10)
+        ax.legend(frameon=False, fontsize=8.5, labelcolor=INK)
+        fig.tight_layout()
+        fig.savefig(out / "returned_at_beta.png")
+        plt.close(fig)
+
+        fig, ax = plt.subplots(figsize=(6.4, 3.8), dpi=DPI)
+        _style(ax)
+        xs = list(range(vmax + 1))
+        for q, color in ((50, BLUE), (90, ORANGE)):
+            ax.plot(
+                xs,
+                [float(np.percentile([r["retrain_s"] for r in steps if int(r["v"]) == v], q)) for v in xs],
+                color=color,
+                linewidth=2.2,
+                label=f"p{q} over classes",
+            )
+        ax.axhline(5, color=MUTED, linestyle="--", linewidth=1, label="5 s budget")
+        ax.set_xlabel("clicks", color=INK, fontsize=9)
+        ax.set_ylabel("retrain wall clock (s)", color=INK, fontsize=9)
+        ax.set_title("Retrain time per click", loc="left", color=INK, fontsize=10)
+        ax.legend(frameon=False, fontsize=8.5, labelcolor=INK)
+        fig.tight_layout()
+        fig.savefig(out / "retrain.png")
+        plt.close(fig)
 
     finals = sorted(_at(steps, None), key=lambda r: r["ap"])
     zero = {r["class_id"]: r for r in _at(steps, 0)}
@@ -289,7 +381,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = ap.parse_args(argv)
     steps = _read(args.run / "steps.csv")
     clicks = _read(args.run / "clicks.csv")
-    text = summary(steps)
+    text = summary(steps) + "\n" + balance(steps)
     figures(steps, args.run / "figures")
     if not args.no_thumbnails:
         rows = thumbnails(clicks, args.run / "images")

@@ -170,7 +170,7 @@ export class AppComponent {
         this.isOnBrowseView.set(onBrowse);
         this.isOnLabelView.set(
           e.urlAfterRedirects.startsWith('/label') ||
-            e.urlAfterRedirects.startsWith('/find') ||
+            e.urlAfterRedirects.startsWith('/test') ||
             onBrowse,
         );
       });

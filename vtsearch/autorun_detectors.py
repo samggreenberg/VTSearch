@@ -12,7 +12,9 @@ two kinds of caller:
   inline on the dataset's Dashboard row and its Cancel button works.  The
   dataset ⋯ menu's **Run AutoRun** starts one directly; a web import starts one
   once the dataset is saved, unless the user unticked **Run AutoRun** in the
-  Add Dataset dialog (:func:`import_post_load`).
+  Add Dataset dialog (:func:`import_post_load`).  The Dashboard's big
+  **AutoRun** button starts one per ticked dataset, restricted to the ticked
+  detectors (``detector_ids``), which may be drafts as well as AutoRun ones.
 
 The CLI's ``--autodetect`` has its own streaming pipeline in :mod:`vtscore.cli`
 and does not come through here.
@@ -135,13 +137,42 @@ def _resolve_names(detector_name: str, media_type: str) -> list[str]:
     return names
 
 
-def _collect_for_media_type(names: list[str], media_type: str) -> tuple[list[tuple[str, dict, dict | None]], list[str]]:
+def _resolve_ids(detector_ids: list[str]) -> list[dict]:
+    """The registry entries of *detector_ids*, the detectors the caller picked.
+
+    Any detector the caller can see qualifies, draft or AutoRun.  An id that
+    names no detector, or one the caller may not access, is a 404 alike, so a
+    caller cannot probe for other users' detectors.
+    """
+    from vtscore.detectors.registry import can_user_access_detector, get_detector  # noqa: PLC0415
+    from vtscore.state.current_user import get_current_user  # noqa: PLC0415
+
+    if not detector_ids:
+        raise AutoRunUnavailable("Select at least one detector to run.")
+    user = get_current_user()
+    entries: list[dict] = []
+    for detector_id in dict.fromkeys(detector_ids):
+        entry = get_detector(detector_id)
+        if entry is None or not can_user_access_detector(detector_id, user):
+            raise AutoRunUnavailable(f"Detector '{detector_id}' not found", status=404)
+        entries.append(entry)
+    return entries
+
+
+def _collect_for_media_type(
+    names: list[str],
+    media_type: str,
+    *,
+    entries: dict[str, dict] | None = None,
+) -> tuple[list[tuple[str, dict, dict | None]], list[str]]:
     """Load detector data + registry entry for each name whose media type is *media_type*.
 
     Returns ``(detectors, missing)``: *missing* holds names whose detector file
     no longer exists on disk (a stale AutoRun reference).  Names whose media
     type simply doesn't match are skipped without being reported - those are
-    legitimately inapplicable, not broken.
+    legitimately inapplicable, not broken.  *entries* maps a name to the
+    registry entry the caller already resolved it from; other names are looked
+    up by name.
     """
     from vtscore.detectors.registry import find_by_name, list_detectors  # noqa: PLC0415
     from vtscore.detectors.store import _detector_path, _read_detector  # noqa: PLC0415
@@ -155,7 +186,7 @@ def _collect_for_media_type(names: list[str], media_type: str) -> tuple[list[tup
             continue
         if det_data.get("media_type", "") != media_type:
             continue
-        reg_entry = find_by_name(name)
+        reg_entry = (entries or {}).get(name) or find_by_name(name)
         if reg_entry is None:
             # Fallback: also accept registry entries whose name matches.
             for entry in list_detectors():
@@ -166,28 +197,38 @@ def _collect_for_media_type(names: list[str], media_type: str) -> tuple[list[tup
     return detectors, missing
 
 
-def plan_autorun(snap: dict, *, detector_name: str = "") -> AutoRunPlan:
-    """Decide which of the current user's AutoRun detectors score *snap*.
+def plan_autorun(snap: dict, *, detector_name: str = "", detector_ids: list[str] | None = None) -> AutoRunPlan:
+    """Decide which detectors score *snap*.
 
-    Keeps the detectors of *snap*'s media type whose locked embedder type the
-    dataset can supply.  Raises :class:`AutoRunUnavailable` when that leaves
-    nothing to run.
+    By default those are the current user's AutoRun detectors (or the one of
+    them *detector_name* names).  *detector_ids* replaces that list with the
+    registry ids the caller picked, drafts included, without touching the
+    user's AutoRun list.  Either way, keeps the detectors of *snap*'s media
+    type whose locked embedder type the dataset can supply, and raises
+    :class:`AutoRunUnavailable` when that leaves nothing to run.
     """
+    if detector_name and detector_ids is not None:
+        raise ValueError("Pass detector_name or detector_ids, not both")
     if not snap:
         raise AutoRunUnavailable("No medias loaded")
     media_type = next(iter(snap.values())).get("media_type", "audio")
-    names = _resolve_names(detector_name, media_type)
-    detectors, missing = _collect_for_media_type(names, media_type)
+    if detector_ids is not None:
+        picked = {entry["name"]: entry for entry in _resolve_ids(detector_ids)}
+        detectors, missing = _collect_for_media_type(list(picked), media_type, entries=picked)
+        whose = "the selected detectors"
+    else:
+        names = _resolve_names(detector_name, media_type)
+        detectors, missing = _collect_for_media_type(names, media_type)
+        whose = "your AutoRun detectors"
     if not detectors:
-        message = f"None of your AutoRun detectors are for {media_type} datasets."
+        message = f"None of {whose} are for {media_type} datasets."
         if missing:
             message += f" Missing detector file(s) for: {', '.join(missing)}"
         raise AutoRunUnavailable(message)
     compatible = [trip for trip in detectors if dataset_supplies_detector_type(trip[1], snap)]
     if not compatible:
         raise AutoRunUnavailable(
-            "None of your AutoRun detectors can score this dataset: it has no embedder "
-            "of the kind they were built with."
+            f"None of {whose} can score this dataset: it has no embedder of the kind they were built with."
         )
     return AutoRunPlan(media_type=media_type, detectors=compatible, missing=missing)
 
@@ -588,7 +629,7 @@ def _dataset_snapshot(ctx: DatasetContext) -> dict:
         return dict(ctx.medias)
 
 
-def start_autorun_task(ctx: DatasetContext, *, trigger: str) -> str:
+def start_autorun_task(ctx: DatasetContext, *, trigger: str, detector_ids: list[str] | None = None) -> str:
     """Start a background AutoRun of the current user's detectors on *ctx*.
 
     The run is a task on the ``loading-tasks`` channel keyed to the dataset
@@ -598,9 +639,11 @@ def start_autorun_task(ctx: DatasetContext, *, trigger: str) -> str:
     touches a loaded detector's live context (the run is not the dataset the
     user is working in); cancelling the task stops it at the next detector.
 
-    Raises :class:`AutoRunUnavailable` when none of the user's AutoRun
-    detectors applies to the dataset.  Returns the task id, which is also the
-    run id :func:`get_autorun_run` answers to.
+    The detectors are the user's AutoRun list, or the registry ids in
+    *detector_ids* when given (see :func:`plan_autorun`).  Raises
+    :class:`AutoRunUnavailable` when none of them applies to the dataset.
+    Returns the task id, which is also the run id :func:`get_autorun_run`
+    answers to.
     """
     from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
     from vtsearch.threading import spawn  # noqa: PLC0415
@@ -609,16 +652,18 @@ def start_autorun_task(ctx: DatasetContext, *, trigger: str) -> str:
         raise ValueError(f"Unknown AutoRun trigger {trigger!r}; expected one of {TRIGGERS}")
 
     snap = _dataset_snapshot(ctx)
-    plan = plan_autorun(snap)
+    plan = plan_autorun(snap, detector_ids=detector_ids)
 
     run_id, block, tracker = _open_run_task(ctx, trigger, plan.media_type)
     dataset_id = block["dataset_id"]
     n_detectors = len(plan.detectors)
-    running_message = f"Running {n_detectors} AutoRun detector{'s' if n_detectors != 1 else ''}…"
+    # Picked detectors may be drafts, so they are not called AutoRun ones.
+    noun = "AutoRun detector" if detector_ids is None else "detector"
+    running_message = f"Running {n_detectors} {noun}{'s' if n_detectors != 1 else ''}…"
     tracker.update("loading", running_message, 0, n_detectors)
 
     def _on_detector_done(done: int, total: int) -> None:
-        tracker.update("loading", f"Scored {done} of {total} AutoRun detectors…", done, total)
+        tracker.update("loading", f"Scored {done} of {total} {noun}s…", done, total)
 
     def _on_train_progress(_status: str, message: str = "", *_args: Any, **_kwargs: Any) -> None:
         # A cold train's own phases ("Resolving 40 label origins…") are the

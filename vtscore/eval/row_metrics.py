@@ -207,6 +207,11 @@ def operating_metrics(
         "gmm_variant": "",
         "schedule": "",
         "xcal_threshold": round6(float(threshold)),
+        # #4452: the base row carries Train's threshold beside its own (Find's,
+        # on the withheld half) and the two prevalence estimates; NaN elsewhere.
+        "train_threshold": nan,
+        "train_prevalence": nan,
+        "find_prevalence": nan,
         "gmm_cut": nan,
         "blend_weight": nan,
         "shipped_provenance": "",

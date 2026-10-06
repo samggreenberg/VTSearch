@@ -78,9 +78,12 @@ CHECK_MIN_PICKS = 5
 
 #: The balance (#4413): the user's precision/recall preference as F-beta's beta.
 #: The presets are precision-leaning, balanced and recall-leaning; any beta in
-#: ``[BETA_MIN, BETA_MAX]`` is accepted.  A line no check has measured is
-#: ``unchecked``; a finished walk is ``checked``.
-BALANCE_PRESETS: tuple[float, ...] = (0.5, 1.0, 2.0)
+#: ``[BETA_MIN, BETA_MAX]`` is accepted.  The ends are the range's own ends, 1/4
+#: and 4 (the owner's pick of 2026-10-03 on #4448, priced on #4452's line: past
+#: 1/3 and 3 each end buys at most 0.02 more of what it leans toward); they were
+#: 0.5 and 2.  A line no check has measured is ``unchecked``; a finished walk is
+#: ``checked``.
+BALANCE_PRESETS: tuple[float, ...] = (0.25, 1.0, 4.0)
 DEFAULT_BETA = 1.0
 BETA_MIN, BETA_MAX = 0.25, 4.0
 #: How a check treats the line at a balance (#4427's pricing, 2026-10-02):
@@ -92,7 +95,11 @@ CHECK_TRIM = "trim"
 CHECK_SHAPES: tuple[str, ...] = (CHECK_ADVISORY, CHECK_TRIM)
 BALANCE_UNCHECKED = "unchecked"
 BALANCE_CHECKED = "checked"
-BALANCE_STATES = (BALANCE_UNCHECKED, BALANCE_CHECKED)
+#: A structural detector's line (#4505): the verification gate's boundary, not a
+#: cut on a ranking, so no check applies to it and it is neither unchecked nor
+#: checked.  Its count is what the gate passes (:func:`gate_balance_state`).
+BALANCE_GATE = "gate"
+BALANCE_STATES = (BALANCE_UNCHECKED, BALANCE_CHECKED, BALANCE_GATE)
 
 #: The surfacing provenance a check's vote is recorded with
 #: (:mod:`vtscore.datasets.vote_provenance`): the app's route and the eval
@@ -212,7 +219,18 @@ def balance_schedule(beta: float, alpha: float = CHECK_ALPHA) -> CheckSchedule:
 
 
 def check_shape(beta: float) -> str:
-    """How a check at *beta* treats the line (#4427): ``advisory`` at beta <= 1, ``trim`` above.
+    """How a check at *beta* treats the line: ``advisory`` at every preset since #4452.
+
+    Since #4452 the app's line comes from the labelset alone (the class model
+    the calibration folds imply, at the prevalence the detector's evidence
+    pools; :mod:`~vtscore.training.thresholds.labels_line`), so a walk's end -
+    a count on the corpus it walked - cannot be the line: an exported labelset
+    would not reproduce it.  The check audits and reports, its picks are
+    ordinary votes the next retrain learns from (uniform picks within bands,
+    the least biased evidence the labels hold), and the line stays where the
+    labels put it.  ``trim`` remains a shape the eval harness can force.
+
+    #4427's pricing, which set ``trim`` above beta 1 for the count-based line:
 
     Priced on the objective (the withheld set's F-beta above the app's
     threshold; Binary, 5 seeds, every preset): the full walk that moved the
@@ -225,7 +243,8 @@ def check_shape(beta: float) -> str:
     the line was never worse than the full walk and the best at beta 2
     (+0.01).  So the check's direction follows the preset the user chose.
     """
-    return CHECK_ADVISORY if float(beta) <= 1.0 + _EPS else CHECK_TRIM
+    del beta  # every preset (#4452)
+    return CHECK_ADVISORY
 
 
 #: How an eval arm whose ``None`` already means "the shipped default" spells
@@ -1092,7 +1111,8 @@ class BalanceState:
 
     The wire shape every response that carries a line carries beside its
     ``threshold`` (:func:`vtscore.state.core.detector_balance_state`):
-    ``status`` is ``unchecked`` or ``checked``; ``precision``
+    ``status`` is ``unchecked``, ``checked``, or ``gate`` on a structural
+    detector's line (:func:`gate_balance_state`); ``precision``
     and ``recall`` are the audited set's likely ranges; ``fbeta`` its estimate.
     Under the ``advisory`` shape (#4427) the audited set is the walk's end and
     the kept ``count`` is the unchecked rule's; under ``trim`` they coincide.
@@ -1113,6 +1133,12 @@ class BalanceState:
     #: The set the last check audited (the walk's end), which under ``advisory``
     #: is not the set the line keeps; ``None`` while unchecked.
     audited: int | None = None
+    #: Whether a check has anything to walk (#4489): an unvoted item in the
+    #: ranking.  ``False`` with no ranking - a structural detector, whose line
+    #: is the verification gate's boundary rather than a cut on a ranking, or
+    #: one not trained on this corpus yet - or with every item in it voted.
+    #: A check cannot start on such a line, so a client offers none.
+    checkable: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -1125,6 +1151,7 @@ class BalanceState:
             "schedule": self.schedule.as_dict(),
             "shape": self.shape,
             "audited": self.audited,
+            "checkable": self.checkable,
         }
 
 
@@ -1181,8 +1208,13 @@ def balance_state(
     also_voted: Iterable[int] = (),
     proposal: int | None = None,
     shape: str | None = None,
+    threshold: float | None = None,
 ) -> BalanceState:
     """The balance's state at *beta*, given the detector's last finished walk, its ranking and the mixture's count.
+
+    With *threshold* (the app's labels line, #4452) the count is how many
+    unvoted items of *ranking* score at or above it - the set the line keeps
+    there, which may be none - rather than the count rule's.
 
     *shape* overrides the preset's check shape (:func:`check_shape`); the
     harness's full-walk arm passes ``trim`` so the walk's end is the count.
@@ -1191,12 +1223,20 @@ def balance_state(
     shape = shape or check_shape(beta)
     applicable = applicable_balance(beta, result)
     count = balance_count(beta, result, proposal, shape)
-    if ranking is not None and (applicable is None or shape == CHECK_ADVISORY):
+    also_voted = frozenset(int(v) for v in also_voted)
+    checkable = ranking is not None and ranking.unvoted_ids(also_voted).size > 0
+    if threshold is not None and ranking is not None:
+        excluded = ranking.voted.union(int(v) for v in also_voted)
+        mask = np.fromiter((int(i) not in excluded for i in ranking.ids), dtype=bool, count=ranking.size)
+        count = int((ranking.scores[mask] >= float(threshold)).sum())
+    elif ranking is not None and (applicable is None or shape == CHECK_ADVISORY):
         # The unchecked rule's count, capped by what is unvoted; a walk's end
         # under ``trim`` is a band edge of the ranking it walked, kept as is.
         count = min(count, len(ranking.candidate(count, also_voted)))
     if applicable is None:
-        return BalanceState(float(beta), BALANCE_UNCHECKED, count, None, None, None, False, schedule, shape, None)
+        return BalanceState(
+            float(beta), BALANCE_UNCHECKED, count, None, None, None, False, schedule, shape, None, checkable
+        )
     stale = ranking is not None and applicable.is_stale(ranking, also_voted)
     return BalanceState(
         float(beta),
@@ -1209,11 +1249,40 @@ def balance_state(
         schedule,
         shape,
         applicable.k,
+        checkable,
+    )
+
+
+def gate_balance_state(beta: float, passed: Iterable[int], also_voted: Iterable[int] = ()) -> BalanceState:
+    """The balance's state on a line the structural verification gate draws (#4505).
+
+    On a structural dataset the line is the gate's boundary, not a cut on a
+    ranking (:func:`~vtscore.training.structural_similarity.maybe_structural_rerank`
+    drops the ranking), so the count rule's 32 says nothing about it.  The
+    count is what the gate keeps: the *passed* items (those at or above its
+    threshold) that are not in *also_voted*.  ``status`` is ``gate``: no check
+    applies, so it carries no ranges, and ``checkable`` is ``False``.
+    """
+    voted = frozenset(int(v) for v in also_voted)
+    count = sum(1 for i in passed if int(i) not in voted)
+    return BalanceState(
+        float(beta),
+        BALANCE_GATE,
+        count,
+        None,
+        None,
+        None,
+        False,
+        balance_schedule(beta),
+        check_shape(beta),
+        None,
+        False,
     )
 
 
 __all__ = [
     "BALANCE_CHECKED",
+    "BALANCE_GATE",
     "BALANCE_PRESETS",
     "BALANCE_STATES",
     "BALANCE_UNCHECKED",
@@ -1253,6 +1322,7 @@ __all__ = [
     "balance_count",
     "balance_line",
     "balance_state",
+    "gate_balance_state",
     "applicable_balance",
     "BalanceState",
     "DEFAULT_BETA",

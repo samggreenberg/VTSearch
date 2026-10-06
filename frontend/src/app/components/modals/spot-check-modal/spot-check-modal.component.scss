@@ -21,6 +21,13 @@
   color: var(--text-secondary);
 }
 
+// Why Autopilot opened the check (#4496): the same quiet line as the walk's note.
+.check-intro {
+  margin: 0;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
 .check-keys {
   font-size: var(--font-xs);
   color: var(--text-muted);

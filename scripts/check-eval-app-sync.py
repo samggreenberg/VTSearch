@@ -122,7 +122,10 @@ MIRRORS: list[Mirror] = [
             "add, remove or reorder a phase, or change what gates one, port the same change. "
             "The 'more' walk (#4282) keeps history the counts cannot: its run of misses, read "
             "off which vote count rose. The app keeps it in checkPhaseTransition; the harness "
-            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done."
+            "in AutopilotFlow._note_more_vote, which next_phase reads as more_done. A document "
+            "dataset (stop_rule 'dry_run', #4488) takes its own branch after the opening - the "
+            "walk with no Good target, its dry run as done - ported as next_phase(dry_run_stop=, "
+            "ran_dry=) and AutopilotFlow(dry_run_stop=)."
         ),
     ),
     Mirror(
@@ -156,7 +159,11 @@ MIRRORS: list[Mirror] = [
             "onAutopilotStop applies the mapping when the user stops Autopilot; the live "
             "mapping is the phase subscription in the same component, which additionally "
             "kicks off the sort request. This anchor is the one place the whole table is "
-            "written out in one block, so it is what the digest watches."
+            "written out in one block, so it is what the digest watches. On a document dataset "
+            "(stop_rule 'dry_run', #4488) 'more' and 'done' draw off learned+top; the harness "
+            "does not model that row, because vtscore.eval simulates photo datasets. Documents are "
+            "simulated by scripts/experiments/fullmarks/sota_documents.py, which clicks the top of "
+            "the retrained structural ranking at every step."
         ),
     ),
     Mirror(
@@ -524,9 +531,11 @@ MIRRORS: list[Mirror] = [
             "any more (#4362): it stopped drawing the line in #4272 and lost its last reader, "
             "the Find Stats curve, in #4360. Since #4269 the app hands reporting_line "
             "PRECISION_FLOOR_FALLBACK_INCLUSION (0) rather than a stored Inclusion; the harness "
-            "hands it the arm's `inclusion`, whose default is that 0. The line under a balance is drawn "
-            "by _preference_line (balance_line over fbeta_count's proposal) when `beta` is given; the "
-            "harness's default arm passes DEFAULT_BETA."
+            "hands it the arm's `inclusion`, whose default is that 0. Since #4452 the line under a balance "
+            "is the labels' line (_labels_line over fit_labels_line, cut at `beta`) when the retrain fitted "
+            "a class model, and the fallbacks otherwise; the harness's default arm passes DEFAULT_BETA and "
+            "draws the same line in _preference_line_for_step. The count line (balance_line over "
+            "fbeta_count's proposal) survives only in the harness, as the forced-check-shape arm."
         ),
         no_harness_pin=(
             "The harness side is _safe_threshold_for_step, the whole production-threshold path (150 lines, named "
@@ -677,6 +686,23 @@ MIRRORS: list[Mirror] = [
             "this mirror, re-check that the divergence is still the one you want AND that "
             "cut_fallback still fires on the same fits in both families - the flag being "
             "comparable is what keeps fallback_rate aggregates joinable across them."
+        ),
+    ),
+    Mirror(
+        id="line_test.budgets_default",
+        app="py:vtscore.training.thresholds.line_test.LineBudgets",
+        harness="vtscore/eval/line_test_arm.py::line_test_row,simulate_line_test",
+        kind="default",
+        note=(
+            "Test mode's targets and budgets (#4523, #4527): the Test arm runs the app's phase "
+            "machine (LineTest.draw / record / line_phase, delegated) at LineBudgets' defaults "
+            "when a run names none, so a changed default - the width a phase stops at, a pick "
+            "budget, the dry-run share, the model's weight - silently changes what the arm's "
+            "default rows measure. When LineBudgets moves, re-read the arm's inputs "
+            "(line_test_inputs: Find's labels line on the withheld half, the posteriors "
+            "aligned with the ranking) and the verdict rule (read_verdict: LEAN_GAIN, "
+            "RETRAIN_BAR), which the app does not implement yet (#4524 takes it from the "
+            "study) and the study's report prices."
         ),
     ),
 ]

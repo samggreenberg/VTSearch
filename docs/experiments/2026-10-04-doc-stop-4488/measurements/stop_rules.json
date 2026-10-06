@@ -1,0 +1,58 @@
+{
+  "chosen": {
+    "0": [
+      0,
+      0.01
+    ],
+    "1": [
+      0,
+      0.01
+    ]
+  },
+  "rows": [
+    {
+      "rule": "**stop (held-out e, c)**",
+      "sessions": 72.0,
+      "stopped_share": 0.8333333333333334,
+      "median_click": 31.0,
+      "min_click": 17.0,
+      "max_click": 50.0,
+      "unfound": 0.05180109922756982,
+      "ap_loss": 0.01848970252517481,
+      "f1_loss": 0.016904761904761905
+    },
+    {
+      "rule": "Smart alone (held-out e)",
+      "sessions": 72.0,
+      "stopped_share": 0.9861111111111112,
+      "median_click": 10.0,
+      "min_click": 10.0,
+      "max_click": 44.0,
+      "unfound": 0.3703409523073201,
+      "ap_loss": 0.030471322419797862,
+      "f1_loss": 0.11119878538262426
+    },
+    {
+      "rule": "Stable alone (held-out c)",
+      "sessions": 72.0,
+      "stopped_share": 0.9583333333333334,
+      "median_click": 24.0,
+      "min_click": 11.0,
+      "max_click": 50.0,
+      "unfound": 0.1302069175657386,
+      "ap_loss": 0.0158211602098897,
+      "f1_loss": -0.0009948531606792364
+    },
+    {
+      "rule": "dry run alone (Span)",
+      "sessions": 72.0,
+      "stopped_share": 0.8333333333333334,
+      "median_click": 31.0,
+      "min_click": 17.0,
+      "max_click": 50.0,
+      "unfound": 0.05180109922756982,
+      "ap_loss": 0.01848970252517481,
+      "f1_loss": 0.016904761904761905
+    }
+  ]
+}

@@ -1,0 +1,270 @@
+<aside class="line-test-result" aria-label="Test result" [attr.data-phase]="phase()">
+  @if (phase() === 'score') {
+    <p class="result-note" role="status">The result forms here once the line is drawn.</p>
+  } @else if (nothing()) {
+    <h3 class="section-title">Nothing to test</h3>
+    <p class="result-note">
+      The line keeps fewer items than one round of picks on this collection, so no sample can say what it would ship.
+      Move the Threshold toward False Positives to keep more, or train the detector further and score again.
+    </p>
+  } @else if (test(); as test) {
+    @if (stale()) {
+      <p class="stale-note" role="note">
+        ⚠ Out of date: corrections were added to the detector after this test, so it has now seen the test set.
+        Score the collection again to test the retrained detector.
+      </p>
+    } @else if (moved()) {
+      <p class="stale-note" role="note">
+        ⚠ The line has moved since this test: it measured the top {{ test.line_count | number }}, and the line keeps the
+        top {{ response()?.line_count | number }} now.
+        <button type="button" class="btn btn--secondary btn--sm" (click)="testAgain.emit()">Test this line</button>
+      </p>
+    }
+    @if (keptNote()) {
+      <p class="result-note kept-note" role="note">{{ keptNote() }}</p>
+    }
+
+    @if (estimates(); as est) {
+      <!-- The headline: F-beta at the balance, and the two ranges under it with their lights. -->
+      <div class="result-headline" role="status">
+        <span class="headline-label" title="F-beta at the balance you picked, from the same draws as the two ranges below: the one number that weighs the two kinds of mistake the way the Threshold does.">Balance (F-beta)</span>
+        <span class="headline-value">{{ fbetaText() }}</span>
+      </div>
+      <dl class="ranges">
+        <div class="range-row" [attr.data-light]="precisionLight()">
+          <dt title="Of what the line keeps, the share that is right: a likely range from random picks above the line.">
+            <span class="ap-light" [attr.data-color]="precisionLight()" role="img" [attr.aria-label]="'Precision: ' + precisionLight()"></span>Right
+          </dt>
+          <dd>{{ precisionText() }}</dd>
+        </div>
+        <div class="range-row" [attr.data-light]="recallLight()">
+          <dt [title]="foundTitle()">
+            <span class="ap-light" [attr.data-color]="recallLight()" role="img" [attr.aria-label]="'Recall: ' + recallLight()"></span>Found
+          </dt>
+          <dd>{{ recallText() }}</dd>
+        </div>
+      </dl>
+      @if (tailNote()) {
+        <p class="result-note">{{ tailNote() }}</p>
+      }
+
+      @if (done()) {
+        <h3 class="section-title">Verdict</h3>
+        <p class="verdict">{{ verdict() }}</p>
+        <div class="exits">
+          <button
+            type="button"
+            class="btn btn--primary exit-btn"
+            (click)="moveToAutoRun.emit()"
+            title="Put this detector on the AutoRun list, so every dataset you import or run it over ships its matches unchecked, at this balance. The verdict beside the button says what that is likely to ship."
+          >Move to AutoRun</button>
+          <button
+            type="button"
+            class="btn btn--secondary exit-btn"
+            (click)="addCorrections.emit()"
+            title="The line is not good enough yet: hand the picks you disagreed with to the detector and retrain it. This result is then out of date, since the detector has seen the test set."
+          >Add Corrections and retrain</button>
+        </div>
+
+        @if (presetRows().length) {
+          <h3 class="section-title" title="The same picks, read at the line each balance would draw on this collection. Pick one to move the Threshold there; nothing is re-scored.">Lean the Threshold</h3>
+          <table class="data-table stats-table presets">
+            <thead>
+              <tr>
+                <th>Balance</th>
+                <th>Keeps</th>
+                <th>Right</th>
+                <th>Found</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of presetRows(); track row.beta) {
+                <tr [class.current]="row.current">
+                  <td>
+                    <button
+                      type="button"
+                      class="btn btn--toolbar preset-btn"
+                      [class.active]="row.current"
+                      [disabled]="row.current"
+                      [title]="presetTitle(row)"
+                      (click)="lean.emit(row.beta)"
+                    >{{ row.beta === 4 ? 'False Positives' : row.beta === 1 ? 'Between' : 'False Negatives' }}</button>
+                  </td>
+                  <td class="num">{{ row.estimate!.count | number }}</td>
+                  <td class="num">{{ row.estimate!.precision.lo * 100 | number: '1.0-0' }}–{{ row.estimate!.precision.hi * 100 | number: '1.0-0' }}%</td>
+                  <td>{{ row.estimate!.found }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      }
+
+      <!-- The band-resolution precision curve: the same draws read at every
+           band edge. It replaces the Stats modal's "Checked by you" curve,
+           which counted only what the boundary walk happened to serve. -->
+      <h3 class="section-title" title="Reading down the ranked list: how right the top N items likely are, for each band edge, from the picks alone. Returning more catches more matches but lets in more wrong ones.">Precision by Number Returned</h3>
+      <div class="chart-wrap">
+        <svg
+          #chartSvg
+          class="precision-chart"
+          [attr.viewBox]="'0 0 ' + chartWidth() + ' ' + chartHeight"
+          role="img"
+          aria-label="Likely precision of the top N items at every band edge, against N on a log scale"
+          (mousemove)="onChartMove($event)"
+          (mouseleave)="onChartLeave()"
+        >
+          <line class="grid" [attr.x1]="axisLeft" [attr.y1]="yFor(0.5)" [attr.x2]="axisRight" [attr.y2]="yFor(0.5)" />
+          <line class="grid" [attr.x1]="axisLeft" [attr.y1]="yFor(1)" [attr.x2]="axisRight" [attr.y2]="yFor(1)" />
+          <line class="axis" [attr.x1]="axisLeft" [attr.y1]="axisTop" [attr.x2]="axisLeft" [attr.y2]="axisBottom" />
+          <line class="axis" [attr.x1]="axisLeft" [attr.y1]="axisBottom" [attr.x2]="axisRight" [attr.y2]="axisBottom" />
+          <text class="tick" [attr.x]="axisLeft - 4" [attr.y]="yFor(0)" text-anchor="end" dominant-baseline="middle">0%</text>
+          <text class="tick" [attr.x]="axisLeft - 4" [attr.y]="yFor(0.5)" text-anchor="end" dominant-baseline="middle">50%</text>
+          <text class="tick" [attr.x]="axisLeft - 4" [attr.y]="yFor(1)" text-anchor="end" dominant-baseline="middle">100%</text>
+          @for (t of xTicks; track t.label) {
+            <text class="tick" [attr.x]="t.x" [attr.y]="axisBottom + 12" text-anchor="middle">{{ t.label }}</text>
+          }
+          <text class="axis-caption" [attr.x]="(axisLeft + axisRight) / 2" [attr.y]="axisBottom + 26" text-anchor="middle">Items returned (log scale)</text>
+          @if (cutX !== null) {
+            <line class="current" [attr.x1]="cutX" [attr.y1]="axisTop" [attr.x2]="cutX" [attr.y2]="axisBottom" />
+          }
+          <!-- Each band edge's likely range, standing on its count. -->
+          @for (e of edges(); track e.count) {
+            <g class="likely-range" [class.hovered]="hoverEdge()?.count === e.count">
+              <title>{{ edgeTitle(e) }}</title>
+              <rect class="range-bar" [attr.x]="xFor(e.count) - 2" [attr.y]="yFor(e.precision.hi)" width="4" [attr.height]="yFor(e.precision.lo) - yFor(e.precision.hi)" />
+            </g>
+          }
+          <polyline class="line-verified" [attr.points]="curvePolyline" />
+          @for (e of edges(); track e.count) {
+            <circle class="dot-verified" [attr.cx]="xFor(e.count)" [attr.cy]="yFor(e.precision.point)" r="2.5" />
+          }
+        </svg>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="swatch swatch-verified"></span>From the picks, at each band edge</span>
+          <span class="legend-item"><span class="swatch swatch-current"></span>Line: the top {{ test.line_count | number }}</span>
+        </div>
+        <p class="chart-readout" aria-live="polite">
+          @if (readoutEdge; as e) {
+            {{ edgeReadout(e) }}
+          } @else {
+            Point at the chart to read it at any band edge.
+          }
+        </p>
+      </div>
+
+      <h3 class="section-title" title="Where this round's picks came from: each band of the list on either side of the line, how many were drawn, and what they said.">Picks by band</h3>
+      @if (bandRows().length) {
+        <table class="data-table stats-table bands">
+          <thead>
+            <tr>
+              <th>Band</th>
+              <th>Picks</th>
+              <th>Right</th>
+              <th>Likely</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of bandRows(); track row.index) {
+              <tr [attr.data-side]="row.side">
+                <td>{{ row.side === 'above' ? '▲' : '▼' }} {{ row.where }}</td>
+                <td class="num">{{ row.labelled }}</td>
+                <td class="num">{{ row.right }}</td>
+                <td class="num">{{ row.range }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      } @else {
+        <p class="result-note">No picks yet.</p>
+      }
+    }
+
+    @if (done()) {
+      <!-- The two trust checks (the Stats modal's), the caveat on reading
+           this collection's result as the next one's. -->
+      @if (refCandidates().length > 0) {
+        <h3 class="section-title" title="How much of this dataset looks unlike the dataset the detector was trained on. Items outside the training domain are the ones the detector is least qualified to judge.">Training-domain overlap</h3>
+        <div class="domain-overlap">
+          <label class="domain-ref">
+            <span class="domain-ref-label">Compare against</span>
+            <select class="domain-ref-select" [value]="selectedRefId()" (change)="onRefChange($event)">
+              <option value="">Select a training dataset…</option>
+              @for (d of refCandidates(); track d.id) {
+                <option [value]="d.id">{{ d.name }}</option>
+              }
+            </select>
+          </label>
+          @if (domainLoading()) {
+            <p class="loading-text">Checking domain overlap…</p>
+          } @else if (domainError()) {
+            <p class="domain-note" role="note">{{ domainError() }}</p>
+          } @else if (domainShift(); as ds) {
+            <div class="domain-chip" [class.shifted]="overlapShifted" role="status">
+              <span class="domain-chip-pct">{{ atypicalPct }}%</span>
+              <span class="domain-chip-text">
+                of this dataset looks atypical vs <strong>{{ selectedRefName }}</strong> —
+                {{ overlapShifted ? 'likely domain shift' : 'largely in-domain' }}
+              </span>
+            </div>
+            <p class="domain-detail muted">
+              {{ ds.n_items | number }} items compared · median typicality p = {{ ds.median_pvalue | number: '1.2-2' }} · z = {{ ds.z_score | number: '1.1-1' }}.
+            </p>
+          }
+        </div>
+      }
+
+      @if (evidence(); as ev) {
+        <h3 class="section-title" title="How much of this dataset the detector is calling with no labeled example like it behind the call. Measured from the detector's own votes, so it works even when the training data isn't loaded.">Evidence coverage</h3>
+        <div class="domain-overlap">
+          <div class="domain-chip" [class.shifted]="evidenceUnsupported" role="status">
+            <span class="domain-chip-pct">{{ unsupportedPct }}%</span>
+            <span class="domain-chip-text">
+              of this dataset sits in an evidence vacuum —
+              {{ evidenceUnsupported ? 'the detector is often calling without support' : 'mostly backed by labeled evidence' }}
+            </span>
+          </div>
+          <p class="domain-detail muted">
+            {{ ev.n_items | number }} scored items · {{ ev.n_pos_labels | number }} good / {{ ev.n_neg_labels | number }} bad labels ·
+            median support p = {{ ev.median_support | number: '1.2-2' }}.
+          </p>
+        </div>
+      }
+
+      <!-- The session's checks against the detector's calls: the Stats
+           modal's 2×2, for the picks and any Review votes. -->
+      @if (stats(); as stats) {
+        <h3 class="section-title" title="Your checks this session (the test's picks and any you verified in Review) against the detector's call at the line.">Your checks</h3>
+        <table class="data-table stats-table confusion">
+          <thead>
+            <tr>
+              <th></th>
+              <th title="The detector's call at the line">Detector Good</th>
+              <th title="The detector's call at the line">Detector Bad</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th class="row-head">Kept Good</th>
+              <td class="cell agree" title="A match you both agree on">{{ stats.confirmed_good | number }}</td>
+              <td class="cell correct" title="A match you rescued (the detector had dropped it)">{{ stats.rescued_false_neg | number }}</td>
+            </tr>
+            <tr>
+              <th class="row-head">Marked Bad</th>
+              <td class="cell correct" title="A wrong match you removed (the detector had kept it)">{{ stats.culled_false_pos | number }}</td>
+              <td class="cell agree" title="A non-match you both agree on">{{ stats.confirmed_bad | number }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="result-note">
+          {{ stats.verified_count | number }} checked by hand · agreement {{ agreementPct }} over all items
+          ({{ stats.corrections | number }} corrections).
+        </p>
+      } @else if (statsError()) {
+        <p class="domain-note" role="note">{{ statsError() }}</p>
+      }
+    }
+  } @else {
+    <p class="result-note" role="status">Drawing the first picks…</p>
+  }
+</aside>

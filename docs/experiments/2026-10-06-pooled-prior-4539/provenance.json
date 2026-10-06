@@ -1,0 +1,112 @@
+{
+  "inputs": {
+    "0.44%": [
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/natural-b025/results/cells",
+        "snapshots": 421,
+        "sha": "d4db8d1eef3dd274"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/natural-b1/results/cells",
+        "snapshots": 421,
+        "sha": "4107d877a2c61457"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/natural-b4/results/cells",
+        "snapshots": 421,
+        "sha": "dd75d4834af444dc"
+      }
+    ],
+    "0.1%": [
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/p0.001-b025/results/cells",
+        "snapshots": 370,
+        "sha": "3b2f5b5560f73333"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/p0.001-b1/results/cells",
+        "snapshots": 370,
+        "sha": "a17eb13612507f68"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/p0.001-b4/results/cells",
+        "snapshots": 370,
+        "sha": "9d4b1af31cb1e911"
+      }
+    ],
+    "5%": [
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/h0.05-b025/results/cells",
+        "snapshots": 432,
+        "sha": "8016e008f1a60a30"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/h0.05-b1/results/cells",
+        "snapshots": 432,
+        "sha": "05795ce123912dcb"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/h0.05-b4/results/cells",
+        "snapshots": 432,
+        "sha": "1f490c69cefb9236"
+      }
+    ],
+    "docs": [
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/docs/b1/frames",
+        "frames": 12,
+        "sha": "c3e2e529451a0929",
+        "betas": "0.25,1"
+      },
+      {
+        "dir": "/expscratch/sgreenberg/line-test-4523/docs/b4/frames",
+        "frames": 12,
+        "sha": "1a61c0a256ace5d7",
+        "betas": "4"
+      }
+    ]
+  },
+  "widths": [
+    0.15,
+    0.2,
+    0.3
+  ],
+  "budgets": [
+    20,
+    40,
+    80
+  ],
+  "walk_variants": [
+    [
+      0.05,
+      5.0,
+      0.25
+    ],
+    [
+      0.0,
+      5.0,
+      0.25
+    ],
+    [
+      0.0,
+      5.0,
+      0.001
+    ],
+    [
+      0.05,
+      1.0,
+      0.25
+    ],
+    [
+      0.0,
+      1.0,
+      0.001
+    ]
+  ],
+  "test_seeds": 4,
+  "thin": {
+    "5%": 0.05
+  },
+  "rows": 192660,
+  "seconds": 3591.5
+}

@@ -135,10 +135,10 @@ TRAIN_PATIENCE = int(os.environ.get("VTSEARCH_TRAIN_PATIENCE", "10"))
 # a second fold doubles that for one extra fold fit.
 DEFAULT_CALIBRATE_COUNT = max(1, int(os.environ.get("VTSEARCH_CALIBRATE_COUNT", "2")))
 #: The balance the line is drawn at by default (#4413): F-beta's beta, 1 =
-#: precision and recall weighed equally.  The presets are 0.5 / 1 / 2.  Defined
-#: here so the settings layer can read it without importing the training stack;
-#: ``vtscore.training.thresholds`` carries the same value as its own
-#: ``DEFAULT_BETA``.
+#: precision and recall weighed equally.  The presets are 1/4 / 1 / 4 (#4448).
+#: Defined here so the settings layer can read it without importing the
+#: training stack; ``vtscore.training.thresholds`` carries the same value as its
+#: own ``DEFAULT_BETA``.
 DEFAULT_BETA = 1.0
 MLP_HIDDEN_MIN = 8
 MLP_HIDDEN_MAX = 32

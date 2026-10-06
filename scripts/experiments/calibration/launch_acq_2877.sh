@@ -449,9 +449,13 @@ case "$MODE" in
         # Check 12 reads `acq_offset` against the SHIPPED constant, which is -1.
         # So `acq_m1` matches and every other arm is a declared divergence --
         # which is the point: a study is always allowed to pin the axis it
-        # sweeps, and never allowed to pin one silently.
+        # sweeps, and never allowed to pin one silently.  The rank pin has no
+        # shipped counterpart at all, so a `rank_pin` arm declares it too.
+        DIVS=""
+        [[ "$OFF" != "$SHIPPED_K" ]] && DIVS="acq_offset"
+        [[ -n "${CALIB_ACQ_RANK_PERCENTILE:-}" ]] && DIVS="${DIVS:+$DIVS,}acq_rank_percentile"
         DIV=()
-        [[ "$OFF" != "$SHIPPED_K" ]] && DIV=(--diverges "acq_offset")
+        [[ -n "$DIVS" ]] && DIV=(--diverges "$DIVS")
 
         # The region-voting premise and the mode-contrast confound are
         # properties of the (dataset, embedder) CELL, so they are the same for

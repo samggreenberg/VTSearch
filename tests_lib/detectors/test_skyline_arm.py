@@ -15,6 +15,8 @@ Everything runs on small synthetic single-vector datasets - no model downloads.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pytest
 
@@ -383,3 +385,56 @@ def test_arm_requires_the_calibration_frame():
             emit_calibration_metrics=False,
             skyline_arms=[SKYLINE_TRAIN_FULL],
         )
+
+
+# ---------------------------------------------------------------------------
+# The ceiling's Find line (#4486)
+# ---------------------------------------------------------------------------
+
+
+def test_the_ceilings_frame_records_finds_labels_line_from_its_full_labels():
+    """The full-label model's rank frame counts what Find's labels line keeps on the withheld half.
+
+    The line is the labels line from the skyline's own calibration folds, its corpus side fitted on the
+    withheld half; the row stays at the oracle's cut. Recomputed here from the same seeded fit.
+    """
+    from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag
+    from vtscore.training.thresholds import fit_labels_line
+
+    medias = _blob_dataset(n_per_cat=30, separation=1.5)
+    ids = sorted(medias)
+    sim_ids, test_ids = ids[0::2], ids[1::2]
+    sink: list = []
+    kwargs: dict[str, Any] = dict(trainer="app", head="linear_svm", style_obj=WholeImageStyle(), region_voting=False, input_dim=DIM,
+                  calibrate_count=2, calibration_fraction=0.5)  # fmt: skip
+    rows = _skyline_arm_rows(
+        [SKYLINE_TRAIN_FULL], medias, "cat0", sim_ids, test_ids, 0, seed=0, rank_frame_sink=sink, **kwargs
+    )
+    assert len(rows) == 1 and len(sink) == 1
+    frame = sink[0]
+    assert frame["kind"] == SKYLINE_TRAIN_FULL
+    assert [frame[f"test_line_k_p{q}"] for q in (10, 50, 90)] == [-1, -1, -1], "no floor line on the ceiling"
+
+    pos = [c for c in sorted(sim_ids) if medias[c]["category"] == "cat0"]
+    neg = [c for c in sorted(sim_ids) if medias[c]["category"] != "cat0"]
+    details: dict = {}
+    ordered = sorted(test_ids)
+    score_map, _step, _timings, _secs = _skyline_fit_and_score(
+        pos, neg, ordered, medias, "cat0", inclusion=0, details_sink=details, **kwargs
+    )
+    assert details.get("fold_orderings"), "the trainer's folds reach the caller"
+    scores = np.array([score_map[c] for c in ordered], dtype=np.float64)
+    line = fit_labels_line(details["fold_orderings"], scores, ordered, {})
+    assert line is not None
+    for b in RANK_FRAME_BETAS:
+        want = int(np.count_nonzero(scores >= line.threshold(b)))
+        assert frame[f"test_line_k_{beta_tag(b)}"] == want, b
+    ks = [frame[f"test_line_k_{beta_tag(b)}"] for b in RANK_FRAME_BETAS]
+    assert ks == sorted(ks)
+    # The row is unchanged: the oracle's cut on the test labels, which other studies read.
+    from vtscore.eval.calibration_metrics import inclusion_weights, oracle_cut
+
+    wf, wn = inclusion_weights(0)
+    labels = np.array([1.0 if medias[c]["category"] == "cat0" else 0.0 for c in ordered])
+    o_thr, *_ = oracle_cut(scores, labels, wf, wn)
+    assert rows[0]["threshold"] == pytest.approx(o_thr)

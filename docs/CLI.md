@@ -131,8 +131,8 @@ Leave it off unless every item really is re-readable from its original
 location. Reference mode swaps a media's bytes for a path, so an item that has
 no file to point back at (a remote source with no local copy) keeps neither —
 it cannot be embedded, and is then skipped at scoring. That silently shortens
-the hit list *and* moves the detector's threshold, because the threshold is
-calibrated against the population actually being scored.
+the hit list *and* moves the detector's threshold, because the line's
+prevalence is estimated on the population actually being scored.
 
 **Chunked loading**: for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
@@ -238,27 +238,29 @@ media by the same **max** rule as converter fan-out. A dataset already loaded
 with the matching clipper is scored as-is (no redundant re-clip), and a detector
 with no `input_spec.clipper` scores whole media.
 
-**The threshold is calibrated on whatever the run ends up scoring.** Converting
-and re-clipping change the population, not just the item count: the max over a
-media's clips is never below the media's own whole-item score, so a cut fitted
-on the loaded medias and applied to the routed ones sits systematically lower in
-the distribution it decides — more hits than the algorithm chose, in a run whose
-numbers all look reasonable. So the routing pass happens **before** calibration,
-and each detector's cut is realized on the converted, re-clipped, re-embedded
-snapshot its own scoring pass will read (issue #3647). On a natively-typed
+**The line's prevalence is estimated on whatever the run ends up scoring.** The
+line itself comes from the labels (#4452): the class model the calibration folds'
+held-out scores of the votes imply. Only how common matches are is read off the
+scored corpus, and converting and re-clipping change that population, not just
+the item count: the max over a media's clips is never below the media's own
+whole-item score, so an estimate taken on the loaded medias and applied to the
+routed ones would sit in the wrong distribution. So the routing pass happens
+**before** calibration, and each detector's prevalence is estimated on the
+converted, re-clipped, re-embedded snapshot its own scoring pass will read
+(issue #3647). On a natively-typed
 dataset needing no re-clip the two are the same set and nothing changes; on a
 converter-routed or re-clipped one the threshold moves, and moving it is the
 fix. The first chunk is prepared once and handed to both passes, so the
 correction costs no extra conversion or embedding work.
 
 **The exported set is unchecked, and the run says so.** Each detector's line
-keeps the top of its ranking at its balance (the `beta` setting, F-beta's
-beta: 1 unless you change it; 2 leans toward recall, 0.5 toward precision):
-the count at which the vote-anchored mixture's F-beta peaks, capped at the
-top 32 unvoted items for beta 1 and 0.5 and the top 128 for beta 2. In the
-app a spot check measures how much of that set is right and how much it
-found; nobody can vote in a headless run, so the run exports the unchecked
-set as it is. The run prints a line naming the detector and the size of the
+is its labels' line at its balance (the `beta` setting, F-beta's beta: 1
+unless you change it; 2 leans toward recall, 0.5 toward precision): the class
+model the labels imply, cut where the expected F-beta peaks at the prevalence
+estimated on the scored corpus (#4452). It keeps every item above the cut,
+possibly none - there is no fixed count and no cap. In the app a spot check
+measures how much of that set is right and how much it found; nobody can vote
+in a headless run, so the run exports the unchecked set as it is. The run prints a line naming the detector and the size of the
 set - `Detector 'det' exports its top 32 unchecked (at F1); nobody is here to
 check it.` - which is a `detector_unchecked` event under
 `--progress-format json` carrying `beta`, `status` and `count`, and every

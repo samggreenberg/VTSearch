@@ -15,12 +15,14 @@ import {
   DEFAULT_BETA,
   balanceExplanation,
   balanceSummary,
+  checkDueNote,
   checkLabel,
   checkTitle,
   isBalancePreset,
   nearestBalancePreset,
   type LineBalance,
 } from '../../../utils/line-balance';
+import type { TestLineState } from '../../../utils/line-test';
 
 /** The dot colour for each state, in `.labeling-indicator[data-status]` terms. */
 type Dot = 'green' | 'yellow' | 'none';
@@ -31,7 +33,7 @@ type Dot = 'green' | 'yellow' | 'none';
  * floor's, #4246). Mounted in the Find row and the Manual tab.
  *
  * A horizontal spectrum from False Positives to False Negatives, with three
- * radios under it (`BALANCE_PRESETS`: beta 2, 1 and 0.5, left to right), one
+ * radios under it (`BALANCE_PRESETS`: beta 4, 1 and 1/4, left to right), one
  * centred under each third. No radio carries a word or a number: where it
  * sits on the spectrum is the whole message, and its tooltip says it in
  * words. A balance promises only a direction (#4298): the line is the set
@@ -51,15 +53,26 @@ type Dot = 'green' | 'yellow' | 'none';
  * line - the set the line keeps and what the spot check found there, never an
  * estimate from the model (owner, 2026-09-29, #4272): checked, with the
  * check's likely share right, how many of all the matches it found in words,
- * and the count kept; or the top N kept unchecked. Nothing is met or fallen
- * short of (#4413). There is no "off": every detector has a balance (#4269).
+ * and the count kept; or the top N kept unchecked; or, on a structural
+ * detector's line, how many pass the verification gate, with no dot, since no
+ * check applies there (#4505). Nothing is met or fallen short of (#4413).
+ * There is no "off": every detector has a balance (#4269).
  *
  * In Train, the check affordance sits beside that line, "Check 5 picks"
  * (#4273), in both states: it opens the spot check (`vt-spot-check-modal`,
  * hosted by the view), and after a finished check it runs a fresh one. Find
  * sets `offerCheck` false: it tests the balance Train set, and labelling more
- * to set one is too late there (#4317). A range that later votes have left
+ * to set one is too late there (#4317). A line a check cannot walk offers none
+ * either (`balance.checkable` false, #4489): a structural detector's, which is
+ * the verification gate's boundary rather than a cut on a ranking. A range that later votes have left
  * stale reads exactly as before; only its tooltip says so.
+ *
+ * In Test (the Find view since #4524) the host supplies the state line
+ * (`lineState`): this corpus's test result, or *untested*, never Train's
+ * check range, which measured the training corpus and would read as this
+ * one's. While a test phase runs the host sets `locked`: the balance is live
+ * between phases and frozen within one, because moving it would move the
+ * line and the bands under the picks.
  *
  * Content marked `balanceActions` is projected onto the Threshold heading's
  * line, so a host can seat controls there (Find's work-queue actions).
@@ -87,6 +100,10 @@ export class BalanceComponent {
   readonly checkable = input(true);
   /** False where the host offers no spot check at all: Find (#4317). */
   readonly offerCheck = input(true);
+  /** The radios are frozen: a test phase is running over the line they would move (#4524). */
+  readonly locked = input(false);
+  /** The host's own state line, in place of the check's (Test: this corpus's result, or untested). */
+  readonly lineState = input<TestLineState | null>(null);
 
   /** A balance the user picked, as a beta. */
   readonly valueChange = output<number>();
@@ -108,17 +125,26 @@ export class BalanceComponent {
   /** The radio the balance shows: a balance off the list shows as the preset it will snap to. */
   readonly selected = computed(() => nearestBalancePreset(this.value()).value);
 
-  readonly summary = computed(() => balanceSummary(this.balance()));
-  readonly explanation = computed(() => balanceExplanation(this.balance()));
+  readonly summary = computed(() => this.lineState()?.text ?? balanceSummary(this.balance()));
+  readonly explanation = computed(() => this.lineState()?.title ?? balanceExplanation(this.balance()));
+  /** Why the radios are frozen, on each one, while `locked`. */
+  readonly lockedHint = 'The Threshold is frozen while a test phase runs: moving it would move the line under the picks.';
   readonly checkText = computed(() => (this.offerCheck() ? checkLabel(this.balance()) : null));
   readonly checkHint = computed(() => checkTitle(this.balance()));
+  /** A check is due (#4496): the button calls for it, and a note says why. Never where no check is offered. */
+  readonly due = computed(() => this.offerCheck() && !!this.balance()?.checkDue);
+  readonly dueNote = computed(() => (this.due() ? checkDueNote(this.balance()) : null));
 
   readonly dot = computed<Dot>(() => {
+    const own = this.lineState();
+    if (own) return own.dot;
     switch (this.balance()?.status) {
       case 'checked':
         return 'green';
       case 'unchecked':
         return 'yellow';
+      // A structural detector's gate line (#4505) has no check to invite or report.
+      case 'gate':
       default:
         return 'none';
     }
@@ -151,6 +177,10 @@ export class BalanceComponent {
   onPick(event: Event, value: number): void {
     (event.target as HTMLElement).blur();
     const shown = this.selected();
+    if (this.locked()) {
+      for (const radio of this.radios()) radio.nativeElement.checked = Number(radio.nativeElement.value) === shown;
+      return;
+    }
     for (const radio of this.radios()) radio.nativeElement.checked = Number(radio.nativeElement.value) === shown;
     if (value === shown) return;
     this.valueChange.emit(value);

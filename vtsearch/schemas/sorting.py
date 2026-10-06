@@ -102,7 +102,9 @@ class BalanceStateSchema(Schema):
     F-beta argmax under the balance's cap; ``checked``: a walk has, and under
     the ``trim`` shape (beta above 1) the line keeps its end, under ``advisory``
     (beta 1 and below) the walk's ranges inform the line and the count stays
-    the unchecked rule's (#4427).
+    the unchecked rule's (#4427); ``gate``: a structural detector's line, the
+    verification gate's boundary, which no check applies to - ``count`` is the
+    unvoted items the gate passes (#4505).
     """
 
     # The detector's balance: F-beta's beta.
@@ -122,6 +124,19 @@ class BalanceStateSchema(Schema):
     # The set the last check audited (the walk's end); under ``advisory`` not the
     # set the line keeps.  ``null`` while unchecked.
     audited = fields.Integer(required=True, allow_none=True)
+    # Whether a spot check can start on this line (#4489): ``false`` with no
+    # ranking to walk - a structural detector, whose line is the verification
+    # gate's boundary, or one not yet trained on this dataset - or nothing in it
+    # unvoted.  ``POST /api/precision-check/start`` refuses those with a 409, so
+    # a client offers no check where this is ``false``.
+    checkable = fields.Boolean(required=True)
+    # How far apart the labels' Good and Bad scores sit, in spreads (d', #4496);
+    # ``null`` before a retrain has drawn the labels' line.
+    separation = fields.Float(allow_none=True)
+    # The labels separate weakly (d' below 1.5, from 10 votes, and 25 votes
+    # after the last check ended): Autopilot runs the check, the Train tab's
+    # Check button calls for one (``weak_check_due``, #4496).
+    check_due = fields.Boolean()
 
 
 # ---------------------------------------------------------------------------
@@ -397,8 +412,9 @@ class BalanceResponseSchema(BalanceStateSchema):
 class BalanceRequestSchema(Schema):
     """Body for ``POST /api/balance``."""
 
-    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 0.5 / 1 / 2).  ``null``,
-    # a boolean, a non-numeric string and ``NaN`` / ``Infinity`` are refused.
+    # F-beta's beta, clamped to ``[0.25, 4]`` (presets 1/4 / 1 / 4, #4448).
+    # ``null``, a boolean, a non-numeric string and ``NaN`` / ``Infinity`` are
+    # refused.
     beta = fields.Float(required=True)
 
 

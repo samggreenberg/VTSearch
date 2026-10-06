@@ -8,10 +8,10 @@
 
 <!-- build: figs/logo-keypoints.build2.webp -->
 
-<!-- How we find one. The data ended on a gap: checking every page with SIFT
-     scores AP 0.87, SigLIP 0.087. These slides are what SIFT does, and what
-     it took to make it work on a pile of scanned pages. The running example
-     is the crest from the FullMarks zoom. -->
+<!-- How we find one, before the data built to test it. These slides are
+     what SIFT does, and what it took to make it work on a pile of scanned
+     pages. The running example is a Philip Morris crest from a real letter;
+     the benchmark it belongs to, FullMarks, follows these slides. -->
 
 <!-- Why not SigLIP, which has done everything so far? It turns a whole
      picture into one point that says what the picture *means*, and every

@@ -1,0 +1,86 @@
+<div class="line-test-stage" [attr.data-phase]="session.phase()">
+  @if (session.running()) {
+    <p class="stage-prompt" role="status">{{ prompt() }}</p>
+
+    <!-- The picks are a sample, not the ranking: they come in the order they
+         were drawn, which is random, with no rank and no score. The dots only
+         count what is left. -->
+    <div class="pick-dots" role="group" aria-label="This round's picks, in random order">
+      @for (id of session.roundPicks(); track id; let i = $index) {
+        <button
+          type="button"
+          class="pick-dot"
+          [class.current]="i === session.index()"
+          [attr.data-vote]="session.roundVotes().get(id) ?? null"
+          [attr.aria-current]="i === session.index() ? 'true' : null"
+          [attr.aria-label]="'Pick ' + (i + 1) + ' of ' + session.roundPicks().length + (session.roundVotes().get(id) ? ': ' + session.roundVotes().get(id) : '')"
+          (click)="session.show(i)"
+        ></button>
+      }
+    </div>
+
+    <div class="pick-stage">
+      @if (currentMedia(); as media) {
+        @switch (mediaType()) {
+          @case ('audio') {
+            <vt-audio-player [media]="media"></vt-audio-player>
+          }
+          @case ('image') {
+            <vt-image-viewer [media]="media"></vt-image-viewer>
+          }
+          @case ('video') {
+            <vt-video-player [media]="media"></vt-video-player>
+          }
+          @case ('text') {
+            <vt-text-viewer [media]="media"></vt-text-viewer>
+          }
+          @default {
+            <vt-document-viewer [media]="media"></vt-document-viewer>
+          }
+        }
+      } @else {
+        <p class="stage-note">Loading the pick…</p>
+      }
+    </div>
+
+    <vt-voting-overlay
+      [isGood]="session.currentVote() === 'good'"
+      [isBad]="session.currentVote() === 'bad'"
+      (voted)="session.vote($event)"
+    ></vt-voting-overlay>
+    <p class="stage-keys">&rarr; Good · &larr; Bad · &darr; back a pick (its vote is taken back) · &uarr; next unvoted.</p>
+
+    @if (session.error()) {
+      <p class="error-text" role="alert">{{ session.error() }}</p>
+    }
+  } @else {
+    <div class="stage-empty empty-state" role="status">
+      @switch (session.phase()) {
+        @case ('done') {
+          <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
+          <p class="stage-heading">Test done</p>
+          <p class="stage-body">
+            The picks have said what they can about the line. Read the result on the right, or open the Review tab to
+            walk the list yourself.
+          </p>
+        }
+        @case ('nothing') {
+          <span class="empty-state__icon" aria-hidden="true"><vt-icon type="check" [size]="32"></vt-icon></span>
+          <p class="stage-heading">Nothing to test</p>
+          <p class="stage-body">
+            The line keeps fewer items than one round of picks. Move the Threshold toward False Positives to keep
+            more, or train the detector further.
+          </p>
+        }
+        @default {
+          <span class="empty-state__icon" aria-hidden="true"><vt-icon type="cursor-click" [size]="32"></vt-icon></span>
+          <p class="stage-heading">Drawing picks…</p>
+          <p class="stage-body">The test starts once the line is drawn.</p>
+        }
+      }
+      @if (session.error()) {
+        <p class="error-text" role="alert">{{ session.error() }}</p>
+      }
+    </div>
+  }
+</div>

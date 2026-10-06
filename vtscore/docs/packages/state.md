@@ -140,8 +140,9 @@ canonical persisted form.
 | `calibration_cache` | `tuple[Any, CalibrationFolds] \| None` | Fingerprint → per-fold held-out scores and models. Deliberately *excludes* the operating point, so a re-cut at another balance or inclusion re-runs only the cheap cut |
 | `anchored_cut_cache` | `FoldAnchoredCut \| None` | The fold-anchored population estimator behind the current threshold |
 | `precision_floor_cache` | `None` | Retired (#4362): always `None`. It held the #4220 estimate a retrain parked for the Find Stats curve, which went in #4360 |
-| `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the balance keeps the top *count* unvoted items of it, and the spot check draws its candidate from it |
+| `line_ranking` | `LineRanking \| None` | The ranking the last retrain scored, sorted, with the trainer's voted items marked: the balance's state counts the unvoted items of it the line keeps, and the spot check draws its bands from it |
 | `precision_check` / `precision_check_run` | `SpotCheck \| None` | The balance's last finished spot check (kept across retrains; its ranges go `stale`) and the one running now |
+| `check_ended_votes` | `int \| None` | The vote total when the last spot check ended, finished or closed: the weak-separation prompt's cooldown counts from it (`weak_check_due`, #4496) |
 
 Everything in this table is in-memory only. `model`,
 `label_embeddings`, `label_local_features`
@@ -612,11 +613,9 @@ register_setting_persister("beta", my_settings.save_beta)
 (see [config.md](config.md)), per detector: the **balance**, F-beta's beta in
 `[0.25, 4]` (#4413). `user_beta()` is the value a detector that has not read
 its own yet will be seeded with, `None` when no settings builder is
-registered. The line keeps a set - the top *count* unvoted items of
-`line_ranking`, *count* being the set the last spot check ended on (where the
-check's shape lets it move the line) or the mixture's F-beta argmax under the
-balance's cap (#4272, #4389) - and `set_beta` moves the active detector's line
-there with no retrain (`recut_detector_threshold(ctx, beta=...)`, through
+registered. The line is the labels' cut at that beta (#4452; the retrain
+parks it as `DetectorContext.labels_line`), and `set_beta` moves the active
+detector's line there with no retrain (`recut_detector_threshold(ctx, beta=...)`, through
 `recompute_detector_thresholds(beta)`) and, in Find mode, re-splits the
 unverified items. `line_knobs()` (`{"beta": b}`) is what every retrain and
 re-cut passes on. `detector_balance_state(ctx, beta)` is the state every

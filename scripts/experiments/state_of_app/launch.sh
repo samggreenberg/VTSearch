@@ -24,17 +24,19 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALIB="$HERE/../calibration"
 
-# The balance (#4413): SOTA_BETA=0.5|1|2 runs every session at that F-beta
-# balance and suffixes the run dir (-b05, -b1, -b2); the review's sessions run
-# once per beta, because the session itself depends on it (the line's count,
-# the spot check, acquisition; #4408).  Unset is the app's default balance,
-# beta 1, in an unsuffixed dir.  The precision floor's SOTA_FLOOR went with the
-# floor (#4421).
+# The balance (#4413): SOTA_BETA=0.25|1|4, the app's presets (#4448), runs every
+# session at that F-beta balance and suffixes the run dir (-b025, -b1, -b4); the
+# review's sessions run once per beta, because the session itself depends on it
+# (the line, the spot check, acquisition; #4408).  Unset is the app's default
+# balance, beta 1, in an unsuffixed dir.  A balance the review runs on purpose is
+# declared to preflight check 12 (launch_bands.sh passes no --diverges of its
+# own).  The precision floor's SOTA_FLOOR went with the floor (#4421).
 if [[ -n "${SOTA_FLOOR:-}" ]]; then
-  echo "SOTA_FLOOR was removed with the precision floor (#4421); set SOTA_BETA=0.5|1|2" >&2; exit 2
+  echo "SOTA_FLOOR was removed with the precision floor (#4421); set SOTA_BETA=0.25|1|4" >&2; exit 2
 fi
 if [[ -n "${SOTA_BETA:-}" ]]; then
   export CALIB_BETA="$SOTA_BETA"
+  export PREFLIGHT_DIVERGES="${PREFLIGHT_DIVERGES:+$PREFLIGHT_DIVERGES,}beta"
   _PTAG="-b$(python3 -c "import sys; b=float(sys.argv[1]); print(f'{b:g}'.replace('.', '') if b < 1 else f'{b:g}')" "$SOTA_BETA")"
 fi
 export SOTA_DATE="${SOTA_DATE:-$(date +%Y-%m-%d)${_PTAG:-}}"

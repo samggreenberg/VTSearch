@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ModalComponent } from '../../modal/modal.component';
 import { AudioPlayerComponent } from '../../center-panel/audio-player/audio-player.component';
@@ -80,6 +80,12 @@ export class SpotCheckModalComponent implements OnInit {
   private readonly keyboard = inject(KeyboardService);
   private readonly destroyRef = inject(DestroyRef);
 
+  /**
+   * Why the check opened, when the user did not ask for it: Autopilot runs one when the labels
+   * separate weakly (#4496). Shown above the picks until the check ends; null shows nothing.
+   */
+  readonly intro = input<string | null>(null);
+
   /** The step closed, however it ended. */
   readonly closed = output<void>();
   /** A round's votes landed on the server. */
@@ -155,7 +161,7 @@ export class SpotCheckModalComponent implements OnInit {
     if (b.shape === 'advisory') {
       const audited = (b.audited ?? b.count).toLocaleString();
       return (
-        `The line keeps its ${kept}, the balance's own count: at this balance the check informs the line and does not move it. ` +
+        `The line keeps its ${kept}, where your labels put it: the check informs the line and does not move it. ` +
         `The ranges are what the picks say about the top ${audited}.`
       );
     }

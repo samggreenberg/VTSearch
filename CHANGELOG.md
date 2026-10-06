@@ -15,8 +15,137 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Added
+
+- **A finished test's verdict is kept on the detector** (issue #4526). Reaching
+  Done in Find's Test autopilot saves the verdict with the detector, one per
+  collection it was tested on: the share right and the share found as ranges,
+  the balance, the date and the picks, never a score. The detector's **Stats**
+  gain a *Tested on* section listing them, and the Dashboard's **AutoRun** tab
+  shows each detector's latest under its name (or *Untested*). A retrain marks
+  a verdict *out of date*; it stays. Opening Find again on a tested collection,
+  with the detector and its ranking unchanged, resumes the test from the kept
+  picks (back in the Review tab's piles). New route `POST /api/line-test/forget`
+  resets a kept verdict, for the screenshot harness.
+
+- **Find opens on a Test autopilot** (issue #4524). The Find view's left panel
+  now carries two tabs, the Train view's Autopilot / Manual split applied to
+  testing. **Autopilot** measures the detector's line on the collection in
+  front of you with random picks from rank bands on either side of it, five a
+  round, through the phases Score, Check the matches, Check the misses and
+  Done, each with a light; the right pane shows the result as it forms (the
+  balance's F-beta, the likely share right as a number, the share of all the
+  matches found in words, a precision-by-count chart at band resolution, the
+  picks by band) and at Done a verdict with three exits: **Move to AutoRun**,
+  **Lean the Threshold** (what each balance would ship, from the same picks)
+  and **Add Corrections and retrain**. **Review** is Find as it was: the ranked
+  list under the line, the boundary walk, the Verified Good / Verified Bad
+  piles, To Dataset, Export and Browse, with the test's picks already in the
+  piles. The Threshold is frozen while a test phase runs, and its note reads
+  this collection's result (or *untested*), never the check Train ran. Test
+  votes never train the detector; **Add Corrections** marks the result out of
+  date. New routes under `/api/line-test`.
+
+### Removed
+
+- **The Find view's Stats modal** (issue #4524). Its Training-domain overlap
+  and Evidence coverage chips, its 2×2 of your checks and its precision chart
+  now live in the Autopilot tab's result pane; the chart draws the test's
+  ranges at every band edge instead of the *Checked by you* curve, which
+  counted only what the boundary walk happened to serve.
+
 ### Changed
 
+- **Test takes exactly one dataset and one detector** (the Dashboard's action bar).
+  With two datasets or two detectors ticked, Test used to stay enabled and quietly open on
+  the first ticked pair; it is now greyed out with *Select exactly 1 dataset* (or
+  *detector*), as Train is. Find still takes any number. The reasons shown under the
+  Train / Test / Find buttons were also reworded to fit under them: two had been cut off
+  with an ellipsis (*Detector has no training labels*, and Train's *Frozen: move to Drafts
+  to retrain* for an AutoRun detector), and the tooltips now name the Train and Test views.
+
+- **Testing a detector checks deeper below the line** (issue #4542). When the detector
+  has a class model, the Test autopilot's *Check the misses* step now keeps drawing picks
+  from deeper bands until it has spent its 40, instead of stopping at the first band that
+  turns up nothing: the share of all the matches found was usually overstated before, and
+  is now right three times in four or better, for about 30 more picks. A detector with no
+  class model (a structural or document one) still stops at the first empty band, and its
+  result now gives the share found in words only and says it is unmeasured below the
+  bands checked.
+
+- **Find is now Test, and the AutoRun button is now Find** (issue #4525, the
+  last slice of #4520). The Dashboard's big button that scores a dataset and
+  tests a detector's line on it reads **Test**, and its view lives at
+  `/test/<dataset>/<detector>`; an old `/find/...` link lands on the
+  Dashboard. The third big button, which runs every ticked detector on every
+  ticked dataset as AutoRun does, reads **Find**. Test carries a new flask
+  icon, and Find the magnifier Test used to carry. The keyboard help's *Train /
+  Find* tab is *Train / Test*, and the Browser's way back is **← Back to
+  Test**. In the user guide, *Find: testing and reviewing* is now *Testing a
+  detector*, and the step-by-step's Step 4 tests the detector. The API keeps
+  its names (`/api/find-label`, `find_mode`, the `find` SSE channel).
+
+- **Document search without a GPU is ~9x faster per click at 50,000 pages** (issue #4514).
+  A vote on a document collection served from a CPU took about 2 minutes at 50,000 pages:
+  each click converted the whole tile matrix to float32. The conversion now happens once
+  when the collection's pages are first scored, so a Good takes ~14 s and a Bad ~3 s
+  (8 cores; ~10 s and 0.1 s at 5,000 pages). That first search is ~30 s slower at 50,000
+  pages, and the CPU server holds twice the tile matrix in memory. Rankings are unchanged.
+
+- **A document ranking no longer depends on the machine the server runs on** (issue #4481).
+  The same detector used to order near-equal pages differently on the GRID's AMD and Intel
+  nodes, because their math libraries rounded the page vectors differently. The server now
+  uses one set of OpenBLAS kernels on every x86 machine (`OPENBLAS_CORETYPE`, see
+  DEPLOYMENT.md), and orders Stage 1 on an exactly recomputed score. Which pages are returned
+  did not change; only the order among near-ties did.
+
+- **Autopilot checks the line when your labels still overlap** (issue #4496).
+  When the detector scores your Good and Bad answers close together (the
+  labels line's separation below 1.5, from 10 votes on), Autopilot opens the
+  spot check itself, once it has started learning, with a line saying why, and
+  asks again 25 votes after the last check if they still overlap. In Manual,
+  the **Check 5 picks** button turns primary with a note. Priced at equal
+  clicks, prompted sessions returned far fewer wrong images and found more
+  right ones (`docs/experiments/2026-10-05-weak-check-4496/REPORT.md`). The
+  balance payload carries `separation` and `check_due`.
+
+- **Document collections stop on a dry run** (issue #4488). On a collection
+  of document pages (`sift_vlad_doc`), Autopilot runs four phases: after the
+  initial goods and bads it offers the detector's own best matches, re-ranked
+  after every vote and with no 20-good target, until 16 in a row are not good;
+  then it is **Done!** and says **Detector Trained**. There is no Refine Boundary
+  or Explore Diversity phase there. On the Manual tab the Smart, Stable and
+  Diverse indicators give way to one readout, **Dry run n/16**. Those
+  indicators scored a page-vector model the document ranking does not use, at
+  the structural detector's threshold. `GET /api/labeling-status` gains
+  `stop_rule` and `dry_run`.
+
+- **Find returns a real set from the first clicks** (issue #4492). Early in a
+  session the Threshold's line used to keep a single image for about 15 clicks,
+  because the model of your labels was held to a fixed minimum width that an
+  early detector's scores are narrower than. The minimum now follows the
+  collection's own spread, so after a handful of votes the line keeps a set of
+  sensible size: at balanced, around 30 to 45 images where it kept 1.
+- **The Threshold's outer radios lean further** (issue #4448). The False
+  Positives radio is now F-beta at 4 (was 2) and the False Negatives radio
+  F-beta at 1/4 (was 1/2); the middle stays balanced. On the same detector the
+  three now keep about 81, 47 and 26 images where they kept 58, 47 and 38, so
+  the choice makes a visible difference. A detector saved on an old outer
+  radio shows on the new one on the same side.
+- **The Threshold's line comes from your labels alone, in Train and in Find**
+  (issue #4452). The line under a balance is no longer a count of the top of
+  the ranking: VTSearch learns from your votes' held-out scores how high a
+  match and a non-match tend to score, estimates how common matches are in the
+  collection being searched, and draws the line where the balance your radio
+  asks for is best for a collection like that. It keeps every item above the
+  line, possibly none - Find on 200 images with nothing like the target used
+  to return the top 26-128 of them, all wrong, and now returns next to nothing.
+  Nothing is stored but the labels, so an exported labelset draws the same
+  line on another collection or with another embedder. The spot check never
+  moves the line any more (it is advisory at every radio): it measures, and
+  its picks train the detector like any vote. The balance state's `count` is
+  what the line keeps of the ranking scored last, and `shape` is always
+  `advisory`.
 - **The spot check's effect on the line follows the balance** (issue #4427).
   At the precision-leaning and balanced presets (beta 1 and below) the check
   is advisory: the walk runs as an audit and reports its ranges, its votes
@@ -195,6 +324,15 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **An AutoRun button on the Dashboard runs the selected detectors on the selected datasets**
+  (issue #4529). A third big button beside **Train** and **Find**, enabled on Find's rule (a
+  dataset and a detector ticked, one media type, every detector trained), starts a background
+  AutoRun on every ticked dataset with every ticked detector, loading a dataset first if
+  needed. Drafts run as they are, without moving to the AutoRun tab. The first run to finish
+  opens the AutoRun Results dialog and later ones offer **View results**. The API route behind
+  it, `POST /api/datasets/registry/<id>/autorun`, takes an optional `detector_ids` list; without
+  it, the dataset ⋯ **Run AutoRun** still runs the AutoRun tab.
+
 - **A deployment can list its own docs in the Help modal** (issue #4310). An
   operator who adds plugins or extensions points users at the docs for them
   with a new `docs_links` key in `data/settings.json`: an ordered list of
@@ -300,6 +438,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A structural detector's Threshold line says how many pass its gate**
+  (issue #4505). On a `sift_vlad` / `sift_vlad_doc` collection the line is
+  the verification gate's boundary, but the state under the Threshold control
+  read "Top 32 kept, unchecked" with a yellow dot however many items the gate
+  kept. It now reads "N pass the verification gate", with no dot, since no
+  spot check applies there; Find's stats chart says the same. The balance
+  state every response carries reports `status: "gate"` with that count.
+- **A structural detector no longer offers a spot check it cannot run**
+  (issue #4489). On a `sift_vlad` / `sift_vlad_doc` collection the line is
+  the verification gate's boundary, not a cut on a ranking, so there is
+  nothing for a check to walk: **Check 5 picks** used to show in Train and
+  fail every time ("No ranking to check"). The Threshold control now leaves
+  it out wherever a check cannot start, and the balance state every response
+  carries gains `checkable`.
 - **On a small dataset, a spot check under the precision/recall balance no
   longer keeps every unvoted item whatever your picks said** (issue #4424).
   When the unvoted items numbered no more than the check's starting count

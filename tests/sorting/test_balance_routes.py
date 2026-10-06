@@ -14,7 +14,7 @@ import pytest
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
 from vtscore.state.core import detector_balance_state, get_active_detector_context, human_voted_ids
-from vtscore.training.thresholds import BALANCE_CHECKED, CHECK_ADVISORY, CHECK_TRIM, balance_count, balance_line
+from vtscore.training.thresholds import BALANCE_CHECKED, BALANCE_GATE, CHECK_ADVISORY, balance_line
 from vtsearch.state import bad_votes, get_beta, good_votes, snapshot_medias
 
 
@@ -65,18 +65,20 @@ class TestTheLineUnderTheBalance:
         client.post("/api/find-label", json={"detector_id": detector_id})
         ctx = get_active_detector_context()
         data = client.get("/api/balance").get_json()
-        expected = balance_line(ctx.line_ranking, 1.0, ctx.precision_check, human_voted_ids(ctx), proposal=None)
         state = detector_balance_state(ctx, 1.0)
         assert state is not None
-        assert data["count"] == state["count"] and 1 <= data["count"] <= 8
-        assert data["threshold"] == round(ctx.threshold, 4)
-        assert ctx.threshold == balance_line(
-            ctx.line_ranking, 1.0, ctx.precision_check, human_voted_ids(ctx), proposal=state["count"]
-        )
-        assert expected is not None
-        # A beta change now moves the line (no retrain).
+        # The labels' line (#4452), fitted by the retrain and re-cut on a balance change; this fixture's
+        # held-out votes do not separate, so there is no class model and the retrain's fallback answers -
+        # never a count on the ranking.
+        if ctx.labels_line is not None:
+            assert ctx.threshold == pytest.approx(ctx.labels_line.threshold(1.0), abs=1e-12)
+        assert data["threshold"] == pytest.approx(ctx.threshold, abs=1e-4)
+        assert data["count"] == state["count"] >= 0, "what the threshold keeps of the ranking, possibly none"
+        # A beta change re-cuts without a retrain.
         moved = client.post("/api/balance", json={"beta": 0.5}).get_json()
-        assert moved["beta"] == 0.5 and moved["threshold"] == round(ctx.threshold, 4)
+        assert moved["beta"] == 0.5 and moved["threshold"] == pytest.approx(ctx.threshold, abs=1e-4)
+        if ctx.labels_line is not None:
+            assert ctx.threshold == pytest.approx(ctx.labels_line.threshold(0.5), abs=1e-12)
 
     def _walk(self, client, positives=frozenset(range(1, 7))):
         start = client.post("/api/precision-check/start", json={})
@@ -94,6 +96,7 @@ class TestTheLineUnderTheBalance:
         rule's count; the state says which set was audited."""
         detector_id = _load_detector(client)
         client.post("/api/find-label", json={"detector_id": detector_id})
+        before = get_active_detector_context().threshold
         start, data = self._walk(client)
         check = start["check"]
         assert check["beta"] == 1.0 and "min_precision" not in check and check["status"] == "running"
@@ -103,27 +106,27 @@ class TestTheLineUnderTheBalance:
         assert data["check"]["status"] == BALANCE_CHECKED, "a balance walk ends checked, never short"
         assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["shape"] == CHECK_ADVISORY
         assert data["balance"]["audited"] == data["check"]["candidate"], "the walk's end is what the ranges describe"
-        unchecked_state = detector_balance_state(ctx, 1.0)
-        assert unchecked_state is not None
-        unchecked = balance_count(1.0, None, proposal=unchecked_state["count"])
-        assert data["balance"]["count"] == unchecked, "the line keeps the unchecked rule's count"
         assert data["balance"]["fbeta"] is not None and data["balance"]["recall"] is not None
-        assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
+        # The line stays where the labels put it (#4452), whatever the walk audited.  The walk's picks are
+        # votes, so the retrain behind the check may refit; the line is that refit's labels line or, with
+        # no class model (this fixture), its fallback - never the walk's end.
+        if ctx.labels_line is not None:
+            assert ctx.threshold == pytest.approx(ctx.labels_line.threshold(1.0), abs=1e-12)
+        assert data["balance"]["count"] != data["check"]["candidate"] or ctx.threshold == pytest.approx(before)
         assert "floor" not in data
 
-    def test_a_check_at_beta_two_trims_and_moves_the_line_to_its_end(self, client):
-        """#4427: above beta 1 the walk may only step shallower, and the line takes the set it ends on."""
+    def test_a_check_at_beta_two_is_advisory_too(self, client):
+        """#4452: the line comes from the labels at every preset; a beta-2 check audits and never moves it."""
         detector_id = _load_detector(client)
         client.post("/api/find-label", json={"detector_id": detector_id})
-        assert client.post("/api/balance", json={"beta": 2.0}).get_json()["shape"] == CHECK_TRIM
-        start, data = self._walk(client)
-        assert start["check"]["beta"] == 2.0 and start["balance"]["shape"] == CHECK_TRIM
+        moved = client.post("/api/balance", json={"beta": 2.0}).get_json()
+        assert moved["shape"] == CHECK_ADVISORY
         ctx = get_active_detector_context()
-        assert data["check"]["status"] == BALANCE_CHECKED
-        assert data["check"]["candidate"] <= data["check"]["start_candidate"], "never deeper than its start"
-        assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["shape"] == CHECK_TRIM
-        assert data["balance"]["count"] == data["balance"]["audited"] == data["check"]["candidate"]
-        assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
+        before = ctx.threshold
+        start, data = self._walk(client)
+        assert start["check"]["beta"] == 2.0 and data["check"]["status"] == BALANCE_CHECKED
+        assert data["balance"]["shape"] == CHECK_ADVISORY and data["balance"]["audited"] == data["check"]["candidate"]
+        assert ctx.threshold == pytest.approx(before, abs=1e-9) or ctx.labels_line is None
 
     def test_a_check_starts_when_the_mixture_has_no_estimate(self, client):
         """#4419: on the 20-item corpus the fit collapses onto the top two scores; the walk reads recall against the cap."""
@@ -138,3 +141,31 @@ class TestTheLineUnderTheBalance:
         start = client.post("/api/precision-check/start", json={})
         assert start.status_code == 200, start.get_json()
         assert start.get_json()["check"]["status"] == "running" and start.get_json()["check"]["beta"] == 1.0
+
+    def test_a_line_with_no_ranking_offers_no_check_and_start_refuses_it(self, client):
+        """#4489: a structural detector's line is the verification gate's boundary, so its rerank drops the
+        ranking; the balance says a check cannot start there, as start's 409 does."""
+        detector_id = _load_detector(client)
+        client.post("/api/find-label", json={"detector_id": detector_id})
+        ctx = get_active_detector_context()
+        assert client.get("/api/balance").get_json()["checkable"] is True
+        ctx.line_ranking = None  # what ``maybe_structural_rerank`` leaves on a structural detector
+        assert client.get("/api/balance").get_json()["checkable"] is False
+        assert client.get("/api/precision-check").get_json()["balance"]["checkable"] is False
+        assert client.post("/api/precision-check/start", json={}).status_code == 409
+
+    def test_a_gate_line_reports_how_many_pass_the_gate(self, client):
+        """#4505: on a structural line the count is what the gate passes, not the count rule's 32."""
+        detector_id = _load_detector(client)
+        client.post("/api/find-label", json={"detector_id": detector_id})
+        ctx = get_active_detector_context()
+        unvoted = [cid for cid in snapshot_medias() if cid not in human_voted_ids(ctx)]
+        # What ``maybe_structural_rerank`` leaves on a structural detector.
+        ctx.line_ranking = None
+        ctx.gate_passed = frozenset(unvoted[:3])
+        for balance in (
+            client.get("/api/balance").get_json(),
+            client.get("/api/precision-check").get_json()["balance"],
+        ):
+            assert balance["status"] == BALANCE_GATE and balance["count"] == 3
+            assert balance["checkable"] is False and balance["precision"] is None

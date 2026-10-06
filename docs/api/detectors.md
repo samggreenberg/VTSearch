@@ -273,7 +273,10 @@ GET /api/detectors/registry
 
 Entries also carry `examples`, `media_example`, `embedder`, `embedder_type`,
 `created_at`, `created_by`, `readers`, and `is_owner`; see the
-`DetectorRegistryListResponse` schema in the spec.
+`DetectorRegistryListResponse` schema in the spec. An AutoRun detector
+(`autofind: true`) also carries `test_verdict`: the newest test verdict it
+keeps, in the shape of the [stats](#detector-statistics)' `test_verdicts`
+entries, or `null` when it was never tested. Drafts leave it out.
 
 `name` is what the on-disk labelset file is looked up by; the file itself is
 `data/detectors/<slug-of-name>.json`. The head is trained on demand from the
@@ -502,7 +505,12 @@ Returns labelset composition and provenance for a registered detector.
 Counts and metadata only — never embeddings or model weights.
 `num_positive_resolved` / `active_dataset_name` report how many of the
 detector's positive labels currently resolve into the loaded dataset (the
-set the dashboard's Browse button projects).
+set the dashboard's Browse button projects). `test_verdicts` is every test
+verdict the detector keeps, one per tested dataset, newest first: what a test
+measured its line to ship there, as ranges, with `stale` once the
+detector has been retrained since (see
+[the kept verdict](find.md#the-kept-verdict)). The Stats dialog's *Tested on*
+section reads it.
 
 →
 ```json
@@ -523,7 +531,18 @@ set the dashboard's Browse button projects).
   "last_trained_at": 1743419700.0,
   "created_by": "default",
   "readers": [],
-  "autofind": false
+  "autofind": false,
+  "test_verdicts": [
+    {
+      "dataset_id": "4f2c…", "dataset_name": "esc50-new", "tested_at": 1790000000.0,
+      "beta": 1.0, "line_count": 64, "size": 1200, "labelled": 34,
+      "precision": {"point": 0.78, "lo": 0.70, "hi": 0.85},
+      "recall": {"point": 0.52, "lo": 0.38, "hi": 0.66},
+      "fbeta": {"point": 0.62, "lo": 0.51, "hi": 0.72},
+      "found": "about half of them found",
+      "stale": false
+    }
+  ]
 }
 ```
 

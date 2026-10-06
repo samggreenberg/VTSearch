@@ -3,6 +3,7 @@ import { DetectorCardComponent } from './detector-card.component';
 import { DashboardLoadingTasksService } from '../../../services/dashboard-loading-tasks.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
+import { wireVerdict } from '../../../testing/line-test';
 
 describe('DetectorCardComponent', () => {
   let component: DetectorCardComponent;
@@ -211,6 +212,31 @@ describe('DetectorCardComponent', () => {
       move!.click();
       expect(component.setAutorun.emit).toHaveBeenCalledWith(false);
     });
+
+    it('reads Untested under the name when it keeps no verdict', () => {
+      const line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
+      expect(line.textContent?.trim()).toBe('Untested');
+      expect(line.classList).toContain('verdict-line--untested');
+    });
+
+    it('shows the latest verdict under the name, and marks a stale one (#4526)', async () => {
+      fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true, test_verdict: wireVerdict() });
+      await settleZoneless(fixture);
+      let line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
+      expect(line.textContent?.trim()).toBe('Tested on drawings-new: likely 70–85% right, about half of them found (34 picks, 2026-10-05)');
+      expect(line.title).toContain('34 random picks');
+
+      fixture.componentRef.setInput('detector', { ...mockDetector, autofind: true, test_verdict: wireVerdict({ stale: true }) });
+      await settleZoneless(fixture);
+      line = (fixture.nativeElement as HTMLElement).querySelector('.verdict-line') as HTMLElement;
+      expect(line.textContent?.trim()).toMatch(/^⚠ Out of date · Tested on drawings-new/);
+      expect(line.classList).toContain('verdict-line--stale');
+      expect(line.title).toContain('retrained since');
+    });
+  });
+
+  it('shows no verdict line on a draft', () => {
+    expect((fixture.nativeElement as HTMLElement).querySelector('.verdict-line')).toBeNull();
   });
 
   it('should format dates', () => {

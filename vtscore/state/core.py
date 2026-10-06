@@ -1086,6 +1086,12 @@ class DetectorContext:
         # a re-cut (``recut_detector_threshold``) and the spot check's
         # candidate both read it.  Ids and scores only - never serialised.
         "line_ranking",  # LineRanking | None
+        # The items the structural verification gate passed on the last
+        # re-rank (#4505): a structural detector's line is the gate's boundary,
+        # so ``line_ranking`` is dropped and this is what the balance counts.
+        # An unordered set, never a ranking a check could walk; cleared
+        # wherever ``line_ranking`` is written or dropped.  Ids only.
+        "gate_passed",  # frozenset[int] | None
         # The spot check (``SpotCheck``, #4272) that last finished on this
         # detector - its fixed candidate, labels, verdict and the fingerprint
         # of the set it left the line on - and the one running now, if any.
@@ -1094,6 +1100,24 @@ class DetectorContext:
         # ends.  Ids and labels only - never serialised.
         "precision_check",  # SpotCheck | None (finished)
         "precision_check_run",  # SpotCheck | None (running)
+        # Test mode's test of the line (``LineTest``, #4524): the one running
+        # on this detector's Find session, or the last finished one, over the
+        # frozen Find scores.  Picks, labels and band counts only - never
+        # serialised itself: a finished test's verdict is kept on the
+        # detector's JSON instead (``vtscore.detectors.line_verdicts``,
+        # #4526).  Goes wherever the spot check goes: a vote clear, a dataset
+        # switch, a fresh Find pass.
+        "line_test",  # LineTest | None
+        # How many votes the detector held when its last spot check ended,
+        # finished or cancelled: the weak-separation rule's cooldown counts
+        # from it (``weak_check_due``, #4496).  Goes with the check.
+        "check_ended_votes",  # int | None
+        # The line the labels imply (``LabelsLine``, #4452): the class model
+        # the last retrain's calibration folds fitted from the labels, and the
+        # prevalence it estimated on the corpus scored last (a Find pass over a
+        # new dataset re-estimates it there).  A balance change re-cuts it.
+        # Goes with the head.
+        "labels_line",  # LabelsLine | None
     )
 
     def __init__(
@@ -1166,8 +1190,12 @@ class DetectorContext:
         self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
         self.precision_floor_cache: Any = None  # retired (#4362): always None
         self.line_ranking: Any = None  # LineRanking | None
+        self.gate_passed: frozenset[Any] | None = None
         self.precision_check: Any = None  # SpotCheck | None
         self.precision_check_run: Any = None  # SpotCheck | None
+        self.line_test: Any = None  # LineTest | None
+        self.check_ended_votes: int | None = None
+        self.labels_line: Any = None  # LabelsLine | None
 
 
 # ---------------------------------------------------------------------------
@@ -1591,6 +1619,31 @@ def invalidate_loaded_detector_models() -> None:
             ctx.threshold = 0.5
 
 
+def _recut_balance(ctx: "DetectorContext", beta: float) -> float | None:
+    """The balance's line for *ctx* at *beta*, or ``None`` for the caller's fallbacks.
+
+    The labels' line (#4452) when the last retrain fitted one: its class model
+    cut at *beta* and the prevalence it was cut at, reading nothing from the
+    ranking, so it moves the same in Train and in Find.  A trained head with no
+    class model (too few votes, one class) draws no count on the corpus: the
+    fallbacks answer, as the retrain's did.  Only a context with no head at
+    all still reads the count rule over its ranking (#4413).
+    """
+    from vtscore.training.thresholds import balance_line  # noqa: PLC0415
+
+    if ctx.labels_line is not None:
+        return float(ctx.labels_line.threshold(beta))
+    if ctx.model is not None:
+        return None
+    return balance_line(
+        ctx.line_ranking,
+        beta,
+        ctx.precision_check,
+        human_voted_ids(ctx),
+        proposal=detector_balance_proposal(ctx, beta),
+    )
+
+
 def recut_detector_threshold(
     ctx: "DetectorContext",
     inclusion_value: float | None = None,
@@ -1607,13 +1660,14 @@ def recut_detector_threshold(
     inclusion (*inclusion_value*) - the internal unit, not a user preference
     (#4269).
 
-    **Under a balance the line keeps a set** (#4272, #4413): the top *count*
-    unvoted items of the ranking the last retrain scored
-    (``ctx.line_ranking``), where *count* is the set the detector's last spot
-    check ended on where the check's shape lets it move the line, or else the
-    mixture's F-beta argmax under the balance's cap
-    (:func:`~vtscore.training.thresholds.balance_line`, shared with training
-    and the eval harness).  The unvoted remainder is read against the live
+    **Under a balance** (#4413) the line is :func:`_recut_balance`'s: the
+    labels' line (#4452) when the last retrain fitted one.  A context with no
+    trained head keeps a set (#4272): the top *count* unvoted items of the
+    ranking the last retrain scored (``ctx.line_ranking``), where *count* is
+    the set the detector's last spot check ended on where the check's shape
+    lets it move the line, or else the mixture's F-beta argmax under the
+    balance's cap (:func:`~vtscore.training.thresholds.balance_line`, shared
+    with training and the eval harness).  The unvoted remainder is read against the live
     votes, so the line follows the ranking at the same count as votes come
     in.  With no ranking to read (never trained against a haystack, or a
     structural detector) the balance has no line and the fallbacks below
@@ -1640,20 +1694,12 @@ def recut_detector_threshold(
       touch of the stepper, which could even admit *fewer* items on a step
       toward lenient.
     """
-    from vtscore.training.thresholds import balance_line, reporting_line
+    from vtscore.training.thresholds import reporting_line
 
     if beta is None and inclusion_value is None:
         raise ValueError("an operating point needs an inclusion or a balance")
     if beta is not None:
-        # The balance's line (#4413): the set the finished F-beta walk ended
-        # on, else the mixture's F-beta argmax under the balance's cap.
-        kept = balance_line(
-            ctx.line_ranking,
-            beta,
-            ctx.precision_check,
-            human_voted_ids(ctx),
-            proposal=detector_balance_proposal(ctx, beta),
-        )
+        kept = _recut_balance(ctx, beta)
         if kept is not None:
             return kept
     line = reporting_line(
@@ -1746,24 +1792,62 @@ def detector_balance_state(ctx: "DetectorContext", beta: float | None) -> dict[s
     Every place a detector's threshold leaves the process - a sort result, a
     Find pass, a balance change, a headless export - reports it beside the
     threshold (#4247, #4272).  ``status`` is ``unchecked`` (the line is the
-    mixture's F-beta argmax under the cap) or ``checked`` (a balance walk has
-    run); ``count`` the set's size; ``precision`` and ``recall`` the walk's
-    likely ranges and ``fbeta`` its estimate, with ``stale`` once the ranking
-    under them moved; ``schedule`` is what a check at this balance costs.
+    mixture's F-beta argmax under the cap) or ``checked`` (the last balance
+    walk's peak); ``count`` the set's size; ``precision`` and ``recall`` the
+    walk's likely ranges and ``fbeta`` its estimate, with ``stale`` once the
+    ranking under them moved; ``schedule`` is what a check at this balance
+    costs.  On a structural detector's line ``status`` is ``gate`` and
+    ``count`` is what the verification gate passes, unvoted (#4505).
     ``None`` when no balance is set (a library caller's choice; the app
     always sets one).
     """
-    from vtscore.training.thresholds import balance_state
+    from vtscore.training.thresholds import balance_state, gate_balance_state
 
     if beta is None:
         return None
-    return balance_state(
-        beta,
-        ctx.precision_check,
-        ctx.line_ranking,
-        human_voted_ids(ctx),
-        proposal=detector_balance_proposal(ctx, beta),
-    ).as_dict()
+    voted = human_voted_ids(ctx)
+    if ctx.line_ranking is None and ctx.gate_passed is not None:
+        # The line is the verification gate's boundary: no ranking, no check.
+        state = gate_balance_state(beta, ctx.gate_passed, voted).as_dict()
+    else:
+        # Under the labelset's line (#4452) the count is what the threshold keeps
+        # of the ranking scored last - possibly none - not the count rule's.
+        state = balance_state(
+            beta,
+            ctx.precision_check,
+            ctx.line_ranking,
+            voted,
+            proposal=detector_balance_proposal(ctx, beta) if ctx.labels_line is None else None,
+            threshold=ctx.threshold if ctx.labels_line is not None else None,
+        ).as_dict()
+    state.update(detector_check_prompt(ctx, len(voted)))
+    return state
+
+
+def detector_check_prompt(ctx: "DetectorContext", n_votes: int) -> dict[str, Any]:
+    """Whether *ctx*'s labels separate weakly enough that a spot check is due (#4496).
+
+    ``separation`` is the labels line's d' (``None`` before a retrain has drawn
+    one, or when it is unbounded); ``check_due`` is :func:`weak_check_due` on
+    it, counted from the vote total when the last check ended.  Never due in
+    Find, which offers no check (#4317), nor while a check is running, nor on
+    a line a check cannot walk (#4489): no ranking - a structural detector's
+    line is the verification gate's boundary - or nothing in it unvoted, where
+    a check would be refused.
+    """
+    from vtscore.training.thresholds import weak_check_due  # noqa: PLC0415
+
+    sep = ctx.labels_line.separation if ctx.labels_line is not None else None
+    ranking = ctx.line_ranking
+    due = (
+        not ctx.find_mode
+        and ctx.precision_check_run is None
+        and ranking is not None
+        and ranking.unvoted_ids(human_voted_ids(ctx)).size > 0
+        and weak_check_due(sep, n_votes, ctx.check_ended_votes)
+    )
+    shown = round(float(sep), 4) if sep is not None and math.isfinite(sep) else None
+    return {"separation": shown, "check_due": bool(due)}
 
 
 def detector_acquisition_threshold(

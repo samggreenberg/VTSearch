@@ -19,12 +19,18 @@ keeps one page per fragment — the final stage. See slides/README.md.
     ./build.py --check               # preflight only, write nothing
     ./build.py --list                # decks, slide counts, unused fragments
 
+Beside every assembled deck goes `_build/<deck>[...].nav.json`: the PDF's
+bookmarks and page labels, which Chromium cannot write and pdf_nav.py writes in
+after the render (see "Navigation" below, and slides/README.md). The outline's
+lines become links here too, as plain markdown.
+
 The --speaker variant renders presenter notes *visibly*, PowerPoint
 notes-page style: each speaker page shows a miniature of the real rendered
 slide beside the notes for it. Notes are the HTML comments that are not Marp
 directives — the same comments Marp exports as PPTX/HTML presenter notes, so
 they are authored once. The speaker build references per-slide PNGs of the
-audience deck under _build/imgs/, which render.sh produces first; run
+audience deck's unnumbered cut under _build/imgs/, which render.sh produces
+first, and prints each slide's number large in the page's corner instead; run
 `./render.sh <deck> pdf --speaker` rather than calling this mode directly.
 The audience build is untouched.
 """
@@ -32,6 +38,8 @@ The audience build is untouched.
 from __future__ import annotations
 
 import argparse
+import html
+import json
 import math
 import os
 import re
@@ -66,6 +74,33 @@ BUILD_BODY_RE = re.compile(r"\s*build(?:\s*:\s*\S+)?\s*")
 FRAMES_RE = re.compile(r"^\s*<!--\s*frames\s*:\s*(\S+)\s*-->\s*$")
 FRAMES_BODY_RE = re.compile(r"\s*frames\s*:\s*\S+\s*")
 FRAME_STYLES = ("build", "equal")
+# What a fragment is called in the PDF's bookmarks when its headline will not
+# do, alone on its line: `<!-- bookmark: Data, Set: COCO -->`. The headline is
+# the default and is almost always right; this exists for the slide whose
+# headline repeats — four "Data, Set" cards would be four identical entries in
+# a list whose only job is telling pages apart. Stripped from every emitted
+# deck, and never a presenter note.
+BOOKMARK_RE = re.compile(r"^\s*<!--\s*bookmark\s*:\s*(.*?)\s*-->\s*$")
+BOOKMARK_BODY_RE = re.compile(r"\s*bookmark\s*:.*", re.DOTALL)
+# A slide's headline, for its bookmark: the first `#` or `##` line outside a
+# comment.
+HEADLINE_RE = re.compile(r"^#{1,2}\s+(.+?)\s*$", re.M)
+# A top-level item of an ordered list, as the outline fragment writes one:
+# `3. Preference`. The *position* of the item is what `+at3` names (the theme
+# marks `li:nth-of-type(3)`), so the number written is not read.
+OUTLINE_ITEM_RE = re.compile(r"^(\d+\.\s+)(\S.*?)\s*$")
+# An outline item that is one inline element end to end — the closing line,
+# `<span class="closing">The End</span>`. Its link goes *inside* the element:
+# the theme finds that line by `li:has(> .closing)`, and an `<a>` wrapped
+# around the span would stop it being the item's child.
+WRAPPED_ITEM_RE = re.compile(r"^(<(\w+)[^>]*>)(.*)(</\2>)$")
+# What the outline-link probe links to instead of `#<page>`: a page number
+# Chromium cannot resolve inside a deck holding only the outline. See
+# `probe_bodies` and pdf_nav.py.
+PROBE_SCHEME = "vtsnav:"
+# The page label of a page that carries no number — the title slide, which is
+# the only thing `_paginate: false` is for.
+UNNUMBERED_LABEL = "title"
 # The page number, emitted by this script rather than by Marpit. Marpit can
 # only count pages or hold the previous count, and this deck needs neither: the
 # title slide takes no number at all (so the first real slide is 1, not 2), and
@@ -79,6 +114,12 @@ PAGENO_DIV = '<div class="pageno">{}</div>'
 # page number, and drawn fainter than it, so the pair reads as one label with
 # the letter subordinate to the number.
 LETTER_DIV = '<div class="pageno-letter">{}</div>'
+# A page number is also the way back: on every slide inside a section, the
+# number (and its letter) links to the outline showing that opened the section
+# — the "you are here" list, from which any other section is one more click.
+# Raw HTML, because the folio divs above are HTML blocks, which markdown does
+# not reach into. See `section_homes`.
+HOME_LINK = '<a href="#{}">{}</a>'
 # A fragment that opts out of numbering entirely — the title slide. It keeps
 # Marpit's own spelling because that is what the directive means; what this
 # script adds is that such a slide does not *consume* a number either.
@@ -245,7 +286,9 @@ def fragment_notes(text: str) -> list[str]:
     notes: list[str] = []
     for match in COMMENT_RE.finditer(text):
         body = match.group(1)
-        if is_directive_comment(body) or BUILD_BODY_RE.fullmatch(body) or FRAMES_BODY_RE.fullmatch(body):
+        if is_directive_comment(body) or any(
+            pattern.fullmatch(body) for pattern in (BUILD_BODY_RE, FRAMES_BODY_RE, BOOKMARK_BODY_RE)
+        ):
             continue
         # Reflow: Marp renders single newlines as hard breaks, so joining the
         # comment's wrapped lines with "\n" would keep its ragged wrapping.
@@ -290,9 +333,10 @@ def expand_builds(text: str) -> list[str]:
     whole numbering group, which `assemble` knows about and one fragment does
     not — a fragment shown six times over is six pages of one slide.
     """
-    # The frames directive steers the speaker build only; Marp would read it as
-    # a presenter note, so it never reaches an emitted deck.
-    lines = [line for line in text.splitlines() if not FRAMES_RE.match(line)]
+    # The frames directive steers the speaker build only, and the bookmark one
+    # the PDF's navigation; Marp would read either as a presenter note, so
+    # neither reaches an emitted deck.
+    lines = [line for line in text.splitlines() if not (FRAMES_RE.match(line) or BOOKMARK_RE.match(line))]
     markers = [(i, m.group(1)) for i, m in ((i, BUILD_RE.match(line)) for i, line in enumerate(lines)) if m]
     if not markers:
         return ["\n".join(lines)]
@@ -540,19 +584,46 @@ def showing_notes(text: str, pages: list[int], group: list[int]) -> list[str]:
     return notes_for_showing(notes, letters, first=pages[0] == group[0])
 
 
-def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> str:
+def speaker_label(number: int | None, pages: list[int], group: list[int]) -> str:
+    """The slide's address as the speaker page prints it, large, bottom right.
+
+    The miniatures are rendered from the *unnumbered* cut of the deck: a 20px
+    number shrunk to a 40% thumbnail is too small to read, and it repeats on
+    every frame of the contact sheet. So the page prints the number once, at a
+    size a presenter can find at a glance, and it is the same number the room
+    sees. A fragment shown more than once adds this showing's letters (the
+    outline before section 3 is `1d`), because its speaker pages are otherwise
+    the same picture; a build's page covers every letter, which the contact
+    sheet already labels, so it prints the number alone.
+    """
+    if number is None:
+        return ""
+    if pages == group:
+        return str(number)
+    return f"{number}{''.join(stage_letter(group.index(page)) for page in pages)}"
+
+
+def speaker_page(
+    deck: str, pages: list[int], group: list[int], text: str, number: int | None = None, home: int | None = None
+) -> str:
     """One showing of a fragment as one speaker page: pictures beside notes.
 
     The miniature is the per-slide PNG of the audience deck (rendered by
-    render.sh into _build/imgs/ before this runs), so the speaker sees exactly
-    what the audience sees, pixel for pixel — page number included. When the
-    fragment renders as more than one page, `frame_overview` draws the rest of
-    the group with it, in whichever of the two shapes the fragment declares.
+    render.sh into _build/imgs/ before this runs), so the speaker sees what the
+    audience sees, pixel for pixel, except the page number: the images are the
+    unnumbered cut, and the page prints the number itself, large, in its
+    bottom-right corner (`speaker_label`). When the fragment renders as more
+    than one page, `frame_overview` draws the rest of the group with it, in
+    whichever of the two shapes the fragment declares.
 
     *pages* is this showing's audience pages; *group* is every page the
     fragment renders as across the deck. They differ only for a fragment shown
     more than once, where the overview still shows the whole slide and the
     notes are narrowed to this showing.
+
+    *home* is the speaker page of the outline that opened this slide's section,
+    which the printed number links back to (`section_homes`); None prints it
+    plain.
 
     Always exactly one page. Notes that would not fit are a deck error raised
     by `check_speaker_fit`, not a continuation page: a presenter mid-sentence
@@ -561,11 +632,15 @@ def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> st
     style = fragment_frame_style(text)
     visual = frame_overview(deck, pages, group, style)
     notes = showing_notes(text, pages, group) or ["*(no presenter notes on this slide)*"]
+    label = speaker_label(number, pages, group)
+    if label and home is not None:
+        label = HOME_LINK.format(home, label)
+    folio = f'\n\n<div class="speaker-pageno">{label}</div>' if label else ""
     return (
         "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
         f'<div class="speaker-page">\n<div class="speaker-visual speaker-visual--{style}">\n'
         f"{visual}"
-        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>"
+        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>" + folio
     )
 
 
@@ -678,6 +753,24 @@ def check_frames_directive(name: str, text: str, problems: list[str]) -> None:
         problems.append(f"fragments/{name}.md: more than one frames directive (lines {lines})")
 
 
+def check_bookmark_directive(name: str, text: str, problems: list[str]) -> None:
+    """Preflight a fragment's `<!-- bookmark: ... -->` declaration."""
+    seen = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = BOOKMARK_RE.match(line)
+        if match:
+            seen.append(lineno)
+            if not match.group(1):
+                problems.append(f"fragments/{name}.md:{lineno}: empty bookmark directive — name the slide or delete it")
+        elif line.strip().startswith("<!-- bookmark"):
+            problems.append(
+                f"fragments/{name}.md:{lineno}: malformed bookmark directive — expected "
+                f"`<!-- bookmark: <title> -->` alone on its line"
+            )
+    if len(seen) > 1:
+        problems.append(f"fragments/{name}.md: more than one bookmark directive (lines {', '.join(map(str, seen))})")
+
+
 def check_speaker_fit(
     showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]], problems: list[str]
 ) -> None:
@@ -717,6 +810,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
     check_headline(name, text, problems)
     check_build_markers(name, text, problems)
     check_frames_directive(name, text, problems)
+    check_bookmark_directive(name, text, problems)
     for match in IMAGE_RE.finditer(text):
         target = match.group(1)
         if target.startswith(("http://", "https://", "data:")):
@@ -761,34 +855,337 @@ def lay_out(
     return showings, texts, group
 
 
-def audience_bodies(
-    showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]], pageno: bool = True
-) -> list[str]:
-    """The audience deck's slides, each carrying its page number and letter.
+def slide_numbers(showings: list[Showing], texts: dict[str, str]) -> dict[str, int]:
+    """Each numbered fragment's slide number, in order of first showing.
 
     A slide's number is claimed by its fragment's first showing and reused by
     the rest; a fragment marked `_paginate: false` — the title slide — takes no
     number and does not consume one, so the first real slide is 1 rather than 2.
+    """
+    numbers: dict[str, int] = {}
+    for name, _extras, _stages, _pages in showings:
+        if name not in numbers and not UNPAGINATED_RE.search(texts[name]):
+            numbers[name] = len(numbers) + 1
+    return numbers
 
-    `pageno=False` draws neither, for a deck being handed over rather than
+
+# Navigation: what a PDF reader can do with a deck besides turn its pages.
+#
+# - The outline's lines are links, each to the page its section starts on
+#   (`link_outline`), and every slide's page number links back to that page
+#   (`section_homes`). Chromium turns a `#<page>` link into an internal PDF
+#   link unaided, so these are plain markup, and the HTML export follows them.
+# - Bookmarks: the sections, and the slides in each (`bookmarks`).
+# - Page labels: the viewer's page box reads `5c`, the address printed on the
+#   page, rather than the page's position in the file (`audience_labels`).
+# - Click to advance: the middle of every page but the outline's is a link to
+#   the next page, so a viewer with no slideshow mode is one anyway
+#   (`advance_pages`).
+#
+# Chromium writes none of the last three, so `assemble` puts them in
+# `_build/<deck>[...].nav.json` beside the markdown and pdf_nav.py writes them
+# into the rendered PDF. They are worked out here because they are facts about
+# fragments and showings, which nothing downstream of this script can see.
+
+#: The outline's closing line, by its class: what `+end` marks.
+CLOSING_RE = re.compile(r'class="[^"]*\bclosing\b')
+
+
+def plain_text(markdown: str) -> str:
+    """Inline *markdown* as a bookmark shows it: no tags, line breaks or emphasis."""
+    text = re.sub(r"<[^>]+>", "", BR_RE.sub(" ", markdown))
+    return " ".join(html.unescape(re.sub(r"[*`]", "", text)).split())
+
+
+def bookmark_title(name: str, text: str) -> str:
+    """A fragment's bookmark: its `bookmark:` directive, else its headline."""
+    for line in text.splitlines():
+        match = BOOKMARK_RE.match(line)
+        if match:
+            return match.group(1)
+    headline = HEADLINE_RE.search(COMMENT_RE.sub("", text))
+    return plain_text(headline.group(1)) if headline else name
+
+
+def outline_items(text: str) -> list[str]:
+    """An outline fragment's lines, in the order `+atN` counts them; [] for any other fragment."""
+    own = CLASS_RE.findall(text)
+    if not own or "outline" not in own[-1].split():
+        return []
+    return [m.group(2) for m in map(OUTLINE_ITEM_RE.match, COMMENT_RE.sub("", text).splitlines()) if m]
+
+
+def marked_item(extras: list[str], items: list[str]) -> int | None:
+    """Which outline line a showing marks — `+at3` the third, `+end` the closing one.
+
+    A showing that marks a line is where that line's section starts, so it is
+    both the page the line links to and the section's bookmark. None when the
+    showing marks nothing; an index past the end when it marks a line the
+    outline does not have, which `check_outline_marks` reports.
+    """
+    if not items:
+        return None
+    for extra in extras:
+        at = re.fullmatch(r"at(\d+)", extra)
+        if at:
+            return int(at.group(1)) - 1
+        if extra == "end":
+            return next((i for i, item in enumerate(items) if CLOSING_RE.search(item)), len(items))
+    return None
+
+
+def section_pages(showings: list[Showing], texts: dict[str, str], firsts: list[int]) -> dict[str, dict[int, int]]:
+    """Where each outline line's section starts: fragment -> line -> page.
+
+    *firsts* is each showing's first page in the deck being built — the
+    audience deck's, or the speaker deck's one page per showing — which is all
+    that tunes the links to one cut or the other. A line marked twice links to
+    its first showing.
+    """
+    targets: dict[str, dict[int, int]] = {}
+    for (name, extras, _stages, _pages), page in zip(showings, firsts):
+        item = marked_item(extras, outline_items(texts[name]))
+        if item is not None:
+            targets.setdefault(name, {}).setdefault(item, page)
+    return targets
+
+
+def section_homes(showings: list[Showing], texts: dict[str, str], firsts: list[int]) -> list[int | None]:
+    """The page each showing's number links back to: the outline that opened its section.
+
+    *firsts* is as for `section_pages`. None for a showing that opens a section
+    — it already is the outline — and for the slides before the first section,
+    which have no section to return to.
+    """
+    homes: list[int | None] = []
+    home = None
+    for (name, extras, _stages, _pages), page in zip(showings, firsts):
+        if marked_item(extras, outline_items(texts[name])) is not None:
+            home = page
+            homes.append(None)
+        else:
+            homes.append(home)
+    return homes
+
+
+def link_outline(text: str, targets: dict[int, int], href: str) -> str:
+    """Make each outline line in *text* a link to the page its section starts on.
+
+    *href* formats the page: `#{}` in a deck, which Chromium resolves to the
+    page itself because Marpit gives every slide its page number as its `id`,
+    and `vtsnav:{}` in the probe (`probe_bodies`). The theme draws
+    `section.outline a` exactly like the text around it, so a reader who never
+    clicks sees the same slide; a line the theme hides — the closing line, on
+    every showing but the last — is not drawn, so Chromium writes no link for it.
+    """
+    item = -1
+
+    def link(line: str) -> str:
+        nonlocal item
+        match = OUTLINE_ITEM_RE.match(line)
+        if not match:
+            return line
+        item += 1
+        if item not in targets:
+            return line
+        target = href.format(targets[item])
+        wrapped = WRAPPED_ITEM_RE.match(match.group(2))
+        if wrapped:
+            return f"{match.group(1)}{wrapped.group(1)}[{wrapped.group(3)}]({target}){wrapped.group(4)}"
+        return f"{match.group(1)}[{match.group(2)}]({target})"
+
+    pieces = re.split(r"(<!--.*?-->)", text, flags=re.DOTALL)
+    return "".join(piece if piece.startswith("<!--") else "\n".join(map(link, piece.split("\n"))) for piece in pieces)
+
+
+#: The outline numbers its sections in Roman numerals (`upper-roman` in the
+#: theme), so the deck's pages, all Arabic, are never mistaken for sections.
+ROMAN = ((10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"))
+
+
+def roman(number: int) -> str:
+    """*number* as the outline's list prints it: `4` -> `IV`. Enough for any outline (under 40 lines)."""
+    out = ""
+    for value, numeral in ROMAN:
+        count, number = divmod(number, value)
+        out += numeral * count
+    return out
+
+
+def bookmarks(showings: list[Showing], texts: dict[str, str], firsts: list[int]) -> list[list[int | str]]:
+    """The PDF's bookmarks, in the shape PyMuPDF's `set_toc` takes: `[level, title, page]`.
+
+    A showing that marks an outline line opens a section, titled by that line
+    as the slide numbers it — `III. Inclination`, in the Roman numerals the
+    theme prints sections in — and every slide after it sits one level under
+    it until the next; a slide before the first section — the title, the
+    opening outline — is top-level. A slide's entry leads with its page number
+    the same way, `18. The Cutting Room`, so the sidebar names a slide by the
+    address the room and the presenter use for it; the title slide has none.
+    One entry per showing, never per page: a build's reveals are one slide,
+    and its entry lands on the first of them.
+    """
+    numbers = slide_numbers(showings, texts)
+    toc: list[list[int | str]] = []
+    nested = False
+    for (name, extras, _stages, _pages), page in zip(showings, firsts):
+        items = outline_items(texts[name])
+        item = marked_item(extras, items)
+        if item is None:
+            title = bookmark_title(name, texts[name])
+            number = numbers.get(name)
+            toc.append([2 if nested else 1, f"{number}. {title}" if number else title, page])
+            continue
+        toc.append([1, f"{roman(item + 1)}. {plain_text(items[item])}", page])
+        nested = True
+    return toc
+
+
+def advance_pages(showings: list[Showing], texts: dict[str, str]) -> list[int]:
+    """The audience pages whose middle is a link to the next page (#4563).
+
+    Every page but the outline's, and but the last, which has nowhere to go.
+    It is what makes a PDF viewer with no slideshow mode into one: click the
+    slide, get the next. The outline is left out because its lines are links
+    already, each to its own section, and an area over them would shadow them.
+    The rectangle itself is pdf_nav.py's (`ADVANCE_INSET`), since it is a fact
+    about the page's size rather than about fragments.
+    """
+    pages = [page for name, _extras, _stages, pages in showings if not outline_items(texts[name]) for page in pages]
+    last = sum(len(pages) for *_, pages in showings)
+    return [page for page in pages if page != last]
+
+
+def page_address(number: int | None, page: int, group: list[int]) -> tuple[str, str]:
+    """A page's number and letter as the deck prints them: `("5", "c")`, `("12", "")`.
+
+    `("", "")` for a page that takes no number.
+    """
+    if number is None:
+        return "", ""
+    return str(number), stage_letter(group.index(page)) if len(group) > 1 else ""
+
+
+def audience_labels(showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]]) -> list[str]:
+    """Every audience page's label: the address the page prints, `5c`.
+
+    So a viewer's page box agrees with the corner of the slide, and a reader
+    told "look at 17c" can type exactly that. Computed whether or not the
+    numbers are drawn, for the same reason the numbering is: a page's address
+    is the same in the handover cut as in the one being presented.
+    """
+    numbers = slide_numbers(showings, texts)
+    return [
+        "".join(page_address(numbers.get(name), page, group[name])) or UNNUMBERED_LABEL
+        for name, _extras, _stages, pages in showings
+        for page in pages
+    ]
+
+
+def speaker_labels(showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]]) -> list[str]:
+    """Every speaker page's label: the address it prints in its own corner."""
+    numbers = slide_numbers(showings, texts)
+    return [
+        speaker_label(numbers.get(name), pages, group[name]) or UNNUMBERED_LABEL
+        for name, _extras, _stages, pages in showings
+    ]
+
+
+def probe_bodies(showings: list[Showing], texts: dict[str, str]) -> tuple[list[str], list[int]]:
+    """The outline-link probe: each outline showing alone, and its speaker page.
+
+    On a speaker page the outline is a picture — a PNG of the audience slide —
+    so its lines can only be clickable once something has measured where they
+    are. The probe is the measurement: those slides as the PNGs drew them (the
+    unnumbered cut, the same classes), each line linking to its section's
+    *speaker* page through `PROBE_SCHEME`. render.sh renders it to PDF and
+    pdf_nav.py lays its link rectangles over the miniatures. A `#<page>` link
+    could not carry the page: Chromium drops a link to a slide the document
+    does not have, and a deck of outline slides alone has almost none of them.
+    """
+    firsts = list(range(1, len(showings) + 1))
+    targets = section_pages(showings, texts, firsts)
+    bodies: list[str] = []
+    pages: list[int] = []
+    for (name, _extras, stages, _pages), page in zip(showings, firsts):
+        if name in targets:
+            bodies.append(link_outline(stages[-1], targets[name], PROBE_SCHEME + "{}"))
+            pages.append(page)
+    return bodies, pages
+
+
+def check_outline_marks(deck: str, showings: list[Showing], texts: dict[str, str], problems: list[str]) -> None:
+    """Preflight that every `+atN` / `+end` on an outline names a line it has.
+
+    The theme would quietly mark nothing, and the links and bookmarks would
+    have no line to hang the section on.
+    """
+    for name, extras, _stages, _pages in showings:
+        items = outline_items(texts[name])
+        item = marked_item(extras, items)
+        if item is None or item < len(items):
+            continue
+        mark = next(extra for extra in extras if extra == "end" or re.fullmatch(r"at\d+", extra))
+        lacks = 'a `<span class="closing">` line' if mark == "end" else f"only {len(items)} lines"
+        problems.append(f"{deck}.deck: `{name} +{mark}` marks a line fragments/{name}.md lacks — it has {lacks}")
+
+
+def check_bookmarks(deck: str, showings: list[Showing], texts: dict[str, str], problems: list[str]) -> None:
+    """Preflight that no two slides share a bookmark.
+
+    The bookmarks exist to tell pages apart, and two entries reading the same
+    cannot. A fragment shown twice is one slide and may repeat its own; two
+    fragments whose headlines match — the "Data, Set" cards — need a
+    `<!-- bookmark: ... -->` line to say which is which.
+    """
+    owners: dict[str, str] = {}
+    for (name, *_), (_level, title, _page) in zip(showings, bookmarks(showings, texts, [0] * len(showings))):
+        first = owners.setdefault(str(title), name)
+        if first != name:
+            problems.append(
+                f"{deck}.deck: fragments/{first}.md and fragments/{name}.md would both be bookmarked "
+                f"{title!r} — add a `<!-- bookmark: ... -->` line to one of them saying which is which"
+            )
+
+
+def audience_bodies(
+    showings: list[Showing],
+    texts: dict[str, str],
+    group: dict[str, list[int]],
+    pageno: bool = True,
+    links: bool = True,
+) -> list[str]:
+    """The audience deck's slides, each carrying its page number and letter.
+
+    The numbers are `slide_numbers`'. `pageno=False` draws neither, for a deck being handed over rather than
     presented. The numbers are earned — they are how a question from the room
     names a slide, and how this repo's own review comments do — so this is an
     export option and not a style choice: nothing else about the deck changes,
     and the numbering is still computed, so a page's *address* is the same
     whether or not it is printed on it.
+
+    `links=False` leaves the outline's lines and the page numbers plain text,
+    for the editable PowerPoint cut, where a link to "page 31" of a PDF that no
+    longer exists would mean nothing. The handover cut has no numbers, so it
+    has no way back to the outline either; its outline links still work.
     """
-    numbers: dict[str, int] = {}
+    numbers = slide_numbers(showings, texts)
+    firsts = [pages[0] for *_, pages in showings]
+    targets = section_pages(showings, texts, firsts) if links else {}
+    homes = section_homes(showings, texts, firsts) if links else [None] * len(showings)
     bodies: list[str] = []
-    for name, _extras, stages, pages in showings:
-        numbered = not UNPAGINATED_RE.search(texts[name])
-        if numbered and name not in numbers:
-            numbers[name] = len(numbers) + 1
-        for offset, stage in enumerate(stages):
+    for (name, _extras, stages, pages), home in zip(showings, homes):
+        for stage, page in zip(stages, pages):
+            if name in targets:
+                stage = link_outline(stage, targets[name], "#{}")
+            number, letter = page_address(numbers.get(name), page, group[name])
+            if home is not None:
+                number, letter = (HOME_LINK.format(home, mark) if mark else "" for mark in (number, letter))
             marks = ""
-            if numbered and pageno:
-                marks = "\n\n" + PAGENO_DIV.format(numbers[name])
-                if len(group[name]) > 1:
-                    marks += "\n\n" + LETTER_DIV.format(stage_letter(group[name].index(pages[offset])))
+            if number and pageno:
+                marks = "\n\n" + PAGENO_DIV.format(number)
+                if letter:
+                    marks += "\n\n" + LETTER_DIV.format(letter)
             bodies.append(stage + marks)
     return bodies
 
@@ -809,8 +1206,10 @@ def speaker_bodies(
     a deck error (`check_speaker_fit`), so this never emits two pages for one
     slide.
     """
+    numbers = slide_numbers(showings, texts)
+    homes = section_homes(showings, texts, list(range(1, len(showings) + 1)))
     bodies: list[str] = []
-    for name, _extras, _stages, pages in showings:
+    for (name, _extras, _stages, pages), home in zip(showings, homes):
         for number in pages if write else []:
             if not (BUILD / "imgs" / f"{deck}.{number:03d}.png").exists():
                 problems.append(
@@ -818,7 +1217,7 @@ def speaker_bodies(
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.append(speaker_page(deck, pages, group[name], texts[name]))
+        bodies.append(speaker_page(deck, pages, group[name], texts[name], numbers.get(name), home))
     return bodies
 
 
@@ -838,11 +1237,27 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
     for name, text in texts.items():
         check_note_letters(name, text, len(group[name]), problems)
     check_speaker_fit(showings, texts, group, problems)
+    check_outline_marks(deck, showings, texts, problems)
+    check_bookmarks(deck, showings, texts, problems)
+    if problems:
+        return problems  # the navigation below indexes the outline lines those checks vouch for
 
     if speaker:
         bodies = speaker_bodies(deck, showings, texts, group, write, problems)
+        firsts = list(range(1, len(showings) + 1))
+        labels = speaker_labels(showings, texts, group)
+        probe, probe_pages = probe_bodies(showings, texts)
     else:
-        bodies = audience_bodies(showings, texts, group, pageno)
+        bodies = audience_bodies(showings, texts, group, pageno, links=not editable)
+        firsts = [pages[0] for *_, pages in showings]
+        labels = audience_labels(showings, texts, group)
+        probe, probe_pages = [], []
+    nav = {
+        "toc": bookmarks(showings, texts, firsts),
+        "labels": labels,
+        "probe": probe_pages,
+        "advance": [] if speaker else advance_pages(showings, texts),
+    }
 
     if problems or not write:
         return problems
@@ -866,6 +1281,16 @@ def assemble(deck: str, write: bool, speaker: bool = False, pageno: bool = True,
     if problems:
         out.unlink()
         return problems
+
+    # What pdf_nav.py writes into the rendered PDF; see "Navigation" above.
+    out.with_suffix(".nav.json").write_text(json.dumps(nav, ensure_ascii=False, indent=1) + "\n")
+    if speaker:
+        probe_out = BUILD / f"{deck}.probe.md"
+        if probe:
+            probe_body = rewrite_images("\n\n---\n\n".join(probe))
+            probe_out.write_text(f"---\n{header}\n---\n\n{probe_body}\n")
+        else:
+            probe_out.unlink(missing_ok=True)
 
     print(f"built {out.relative_to(ROOT)}  ({len(bodies)} slides)")
     return []

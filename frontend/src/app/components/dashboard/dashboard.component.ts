@@ -141,12 +141,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
   readonly deletingDatasetId = signal('');
   readonly deletingDetectorId = signal('');
   trainAfterModelCreation = false;
-  /** Mirrors the user's click intent so the Train/Find button icons
+  /** Mirrors the user's click intent so the Train/Test button icons
    *  can waggle while the `activeContextGuard` waits between click and
    *  route activation. Reset when `contextSwitch.switching$` settles
    *  back to false (either route activated or canActivate denied). */
   // Written from the router-events subscribe (an unpatched callback) as well as
-  // the bound Train/Find click handlers, so signals so the button-icon waggle
+  // the bound Train/Test click handlers, so signals so the button-icon waggle
   // repaints under zoneless.
   readonly trainLoading = signal(false);
   readonly findLoading = signal(false);
@@ -876,7 +876,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           // Promote to active once the load has settled (never before, per
           // the H25 intent/active ordering), keeping any active detector
           // half. This drives the interceptor's X-Dataset-Id and the
-          // top-bar label on the label/find views; on the Dashboard itself
+          // top-bar label on the label/test views; on the Dashboard itself
           // the top bar mirrors the table selection instead.
           this.activeContext.setActivePair(dataset.id, this.activeContext.modelId),
         ),
@@ -889,23 +889,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.autorunDetectors.filter((d) => d.media_type === dataset.media_type).length;
   }
 
-  /** The dataset ⋯ "Run AutoRun": run the user's AutoRun detectors on it now.
-   *  The run is a background task shown inline on the row, and its results
-   *  dialog opens when it finishes (`AutoRunService`). AutoRun scores a
-   *  dataset in memory, so an unloaded one is loaded first. */
-  runAutorun(dataset: DatasetRegistryEntry): void {
+  /** The dataset ⋯ "Run AutoRun": run the user's AutoRun detectors on it now,
+   *  or exactly *detectorIds* when given (the big Find button, via
+   *  {@link onAutorun}). The run is a background task shown inline on the row,
+   *  and its results dialog opens when it finishes (`AutoRunService`). AutoRun
+   *  scores a dataset in memory, so an unloaded one is loaded first. */
+  runAutorun(dataset: DatasetRegistryEntry, detectorIds?: string[]): void {
     if (dataset.loaded) {
-      this.autorun.run(dataset.id);
+      this.autorun.run(dataset.id, detectorIds);
       return;
     }
     this.datasetsRegistryApi.loadRegistered(dataset.id).subscribe({
       next: (response) => {
         if (!response.task_id) {
-          this.autorun.run(dataset.id);
+          this.autorun.run(dataset.id, detectorIds);
           return;
         }
         // Fires once the load settles, and not at all if it fails.
-        this.loadingTasksSvc.startProgressPolling(response.task_id, () => this.autorun.run(dataset.id));
+        this.loadingTasksSvc.startProgressPolling(response.task_id, () =>
+          this.autorun.run(dataset.id, detectorIds),
+        );
       },
     });
   }
@@ -1222,7 +1225,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // --- Button state ---
 
   /** True only while the **active (dataset, detector) pair** is mid-switch:
-   *  a top-bar pulldown change, or a Train/Find click, that the
+   *  a top-bar pulldown change, or a Train/Test click, that the
    *  `activeContextGuard` is still promoting. That promotion is the
    *  H25-critical window — the moment the HTTP interceptor's request
    *  tagging is in transition — so the dashboard freezes its controls
@@ -1243,10 +1246,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.trainLoading() || this.findLoading() || this.contextSwitch.switching;
   }
 
-  /** Train/Find gate on this rather than `isContextSwitching` because they
+  /** Train/Test gate on this rather than `isContextSwitching` because they
    *  must also wait out an in-flight browse-prep: when its projection build
    *  finishes it fires a navigation to `/browse/:id`, and starting a Train/
-   *  Find navigation underneath it would race that redirect. Independent
+   *  Test navigation underneath it would race that redirect. Independent
    *  actions don't care — to them browse-prep is just more background work. */
   get isNavBusy(): boolean {
     return this.isContextSwitching || this.browsePrep.preparing;
@@ -1307,33 +1310,65 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return this.detectors.filter((d) => this.selectedDetectorIds.has(d.id));
   }
 
-  get findEnabled(): boolean {
-    if (this.resolvedSelectedDatasets.length < 1 || this.resolvedSelectedModels.length < 1) return false;
-    if (!this.findMediaTypesMatch()) return false;
-    if (this.hasUntrainedModel()) return false;
-    return true;
-  }
-
-  get findHint(): string {
+  /** Why the selection cannot be scored, or `''` when it can: at least one
+   *  dataset and one detector, one media type across every ticked row, and
+   *  every ticked detector trained. Test and Find share this rule, except that
+   *  Test (*onePair*) opens one view on one pair and so takes exactly one of
+   *  each, as Train does; Find runs AutoRun on every ticked dataset with every
+   *  ticked detector.
+   *
+   *  Each reason is shown under its button as well as in the tooltip, so it
+   *  must fit the fixed-width `.action-btn-group` (about 36 characters at the
+   *  hint's size) or it is cut off with an ellipsis. */
+  private scoreSelectionBlocker(onePair: boolean): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
     // "row above": selection means checking a table row — a dataset can be
     // loaded (named in the top bar) while its row is unchecked, so a bare
     // "select a dataset" reads as already satisfied.
-    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and detector above.';
-    if (nDatasets === 0) return 'Select a dataset in the table above.';
-    if (nModels === 0) return 'Select a detector in the table above.';
+    if (nDatasets === 0 && nModels === 0) return 'Select a dataset and detector above';
+    if (nDatasets === 0) return 'Select a dataset in the table above';
+    if (nModels === 0) return 'Select a detector in the table above';
+    if (onePair && nDatasets > 1) return 'Select exactly 1 dataset';
+    if (onePair && nModels > 1) return 'Select exactly 1 detector';
     if (!this.findMediaTypesMatch()) return 'Media type mismatch';
-    if (this.hasUntrainedModel()) return 'Selected detector has no training labels';
-    return 'Score selected datasets with selected detectors';
+    if (this.hasUntrainedModel()) return 'Detector has no training labels';
+    return '';
   }
 
+  get findEnabled(): boolean {
+    return this.scoreSelectionBlocker(true) === '';
+  }
+
+  /** The Test button's hint (the view is `find` in code, as Train's is `label`). */
+  get findHint(): string {
+    return (
+      this.scoreSelectionBlocker(true) ||
+      "Open the Test view to score the selected dataset and test the selected detector's line on it"
+    );
+  }
+
+  /** The big Find button (#4529; labelled AutoRun until #4525): enabled on
+   *  Test's rule, for any number of ticked rows. */
+  get autorunEnabled(): boolean {
+    return this.scoreSelectionBlocker(false) === '';
+  }
+
+  get autorunHint(): string {
+    return (
+      this.scoreSelectionBlocker(false) ||
+      'Run every selected detector on every selected dataset, as AutoRun does, and show the results as each run finishes'
+    );
+  }
+
+  /** The Train button's hint; like {@link scoreSelectionBlocker}'s reasons,
+   *  a disabled one must fit under the button. */
   get labelHint(): string {
     const nDatasets = this.resolvedSelectedDatasets.length;
     const nModels = this.resolvedSelectedModels.length;
-    if (nDatasets === 0) return 'Select a dataset in the table above.';
+    if (nDatasets === 0) return 'Select a dataset in the table above';
     if (nDatasets > 1) return 'Select exactly 1 dataset';
-    if (nModels === 0) return 'Create a new detector and start training';
+    if (nModels === 0) return 'Create a new detector, then train it on the selected dataset';
     if (nModels > 1) return 'Select exactly 1 detector';
     const model = this.resolvedSelectedModels[0];
     const dataset = this.resolvedSelectedDatasets[0];
@@ -1341,9 +1376,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return 'Media type mismatch';
     }
     if (model?.autofind) {
-      return 'AutoRun detectors are frozen — move to Drafts to retrain';
+      // AutoRun detectors are frozen against edits.
+      return 'Frozen: move to Drafts to retrain';
     }
-    return 'Open Train Mode with the selected dataset and detector';
+    return 'Open the Train view with the selected dataset and detector';
   }
 
   private storeSelectedModelTextQuery(): void {
@@ -1383,6 +1419,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     // See `onLabel`; the route guard owns context + loading.
     this.findLoading.set(true);
-    this.router.navigate(['/find', dataset.id, model.id]);
+    this.router.navigate(['/test', dataset.id, model.id]);
+  }
+
+  /** The big Find button: one background AutoRun per ticked dataset, each
+   *  restricted to the ticked detectors (drafts run as they are, without
+   *  moving to the AutoRun tab). Not a view: the runs show inline on their
+   *  dataset rows, and `AutoRunService` opens the results as they land. */
+  onAutorun(): void {
+    if (!this.autorunEnabled) return;
+    const detectorIds = this.resolvedSelectedModels.map((m) => m.id);
+    for (const dataset of this.resolvedSelectedDatasets) {
+      this.runAutorun(dataset, detectorIds);
+    }
   }
 }

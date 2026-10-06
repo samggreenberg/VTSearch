@@ -317,6 +317,8 @@ describe('LeftPanelComponent', () => {
 
     function show(panelMode: 'label' | 'find', balance: ReturnType<typeof lineBalance>): HTMLElement {
       fixture.componentRef.setInput('panelMode', panelMode);
+      // Today's Find lives on the Review tab (#4524); Autopilot shows no list.
+      fixture.componentRef.setInput('findTab', 'review');
       fixture.componentRef.setInput('medias', ranking.map(({ id }) => stub(id)));
       fixture.componentRef.setInput('sortOrder', ranking);
       fixture.componentRef.setInput('threshold', 0.5);
@@ -367,6 +369,7 @@ describe('LeftPanelComponent', () => {
 
     function find(sortOrder: { id: number; score: number }[] | null, threshold: number | null): HTMLElement {
       fixture.componentRef.setInput('panelMode', 'find');
+      fixture.componentRef.setInput('findTab', 'review');
       fixture.componentRef.setInput('medias', (sortOrder ?? []).map(({ id }) => stub(id)));
       fixture.componentRef.setInput('sortOrder', sortOrder);
       fixture.componentRef.setInput('threshold', threshold);
@@ -427,12 +430,12 @@ describe('LeftPanelComponent', () => {
     });
 
     it('shows the balance, its state and the count the line returns', () => {
-      fixture.componentRef.setInput('beta', 0.5);
-      fixture.componentRef.setInput('balance', lineBalance('checked', { beta: 0.5 }));
+      fixture.componentRef.setInput('beta', 0.25);
+      fixture.componentRef.setInput('balance', lineBalance('checked', { beta: 0.25 }));
       fixture.componentRef.setInput('returned', 212);
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const checked = el.querySelector('.find-balance-row input[type="radio"]:checked') as HTMLInputElement;
-      expect(checked.value).toBe('0.5');
+      expect(checked.value).toBe('0.25');
       expect(el.querySelector('.find-balance-row .balance-state')!.textContent).toContain(
         'Checked · likely 55–100% right, about half of them found (checked 5) · 32 kept',
       );
@@ -441,8 +444,8 @@ describe('LeftPanelComponent', () => {
     it('forwards a picked balance as betaChange', () => {
       const el = find([{ id: 1, score: 0.9 }], 0.5);
       const emitted = vi.spyOn(component.betaChange, 'emit');
-      (el.querySelector('.find-balance-row input[type="radio"][value="0.5"]') as HTMLInputElement).click();
-      expect(emitted).toHaveBeenCalledWith(0.5);
+      (el.querySelector('.find-balance-row input[type="radio"][value="0.25"]') as HTMLInputElement).click();
+      expect(emitted).toHaveBeenCalledWith(0.25);
     });
   });
 

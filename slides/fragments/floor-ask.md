@@ -8,23 +8,27 @@
 
 <!-- build: figs/calib-floor-ask.build2.png -->
 
-<!-- **a** — What the control says, word for word, before anyone checks.
-     Under it, the corpus as before, best on the right, and what comes back:
-     the **kept** set, the items nobody has voted on above the <span
-     class="cut">line</span>. How many is the vote-anchored mixture's estimate
-     of where F-beta peaks, capped at the top 32 — 128 at the left-hand radio,
-     which wants more back. And the control says so: *unchecked*. -->
+<!-- build: figs/calib-floor-ask.build3.png -->
 
-<!-- **b** — The obvious move is to read the promise off the votes the session
-     already holds. Here they are, at the scores they landed on: a cluster at
-     the top, where autopilot asked for likely matches, and a cluster around
-     the line, where it asked the hard ones. Every one of them was chosen by
-     the model — which makes them a biased sample of its own scores.
-     Measured: an estimator that promises a precision from those votes alone
-     breaks **83%** of its 50% promises once its reference pool is built
-     consistently. -->
+<!-- **a** — The problem, first. Under the line, ranked best on the right, is
+     what comes back: the **kept** set, the 32 items nobody has voted on above
+     the <span class="cut">line</span>. 32 is wherever What to Expect's peak
+     fell on this corpus; no cap set it. The question: how many of those 32
+     are right? That is the kept set's precision, and the user should be told
+     it with an honest range. -->
 
-<!-- **c** — So *unchecked* means it: how right the kept set is has to be
-     measured another way. The app's way is a spot check — a few items drawn
-     at random from each band of the ranking, which the model did not choose
-     and so cannot bias — offered in the Train view. -->
+<!-- **b** — Where the app tells them: the Threshold control, Beta Max's three
+     radios, has one line of words under it. Before anyone checks, all it can
+     honestly say is how many are kept, and that nobody has checked them. -->
+
+<!-- **c** — The obvious source of an answer: the votes the session already
+     holds, at the scores they landed on. A cluster at the top, where
+     Autopilot asked for likely matches, and one round the line, where it
+     asked the hard ones. The model chose every one of them. -->
+
+<!-- **d** — That is the trouble: a sample the model chose is biased toward
+     where the model looked. An estimator that promises a precision from
+     those votes alone breaks **83%** of its 50% promises (#4256). So the
+     answer has to come from picks the model did not choose, drawn uniformly
+     from the kept set, and counted. The next slide turns a count into a
+     range. -->

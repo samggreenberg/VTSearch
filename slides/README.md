@@ -35,8 +35,10 @@ slide. This file is the mechanics; that one is the choices.
 
 ## Build
 
-Needs node and python3. Nothing to install — `npx` fetches Marp on first run
-(~1 min, once). Run from this directory:
+Needs node, python3 and PyMuPDF. Nothing else to install — `npx` fetches Marp
+on first run (~1 min, once), and PyMuPDF, which writes a PDF's bookmarks and
+page labels (see **Navigation** below), is already in the project's `agpl`
+extra (else `pip install pymupdf`). Run from this directory:
 
 ```bash
 ./render.sh hold-the-line           # -> _out/hold-the-line.pdf
@@ -196,6 +198,13 @@ miniature of the real rendered slide (pixel-identical — it *is* a PNG of the
 audience deck, rendered in a first pass) with that slide's notes beside it.
 Same fragments, same manifest — the notes are authored once, as comments.
 
+The one difference is the page number. The miniatures come from the deck's
+unnumbered cut, because a 20px number shrunk into a thumbnail is too small to
+read and repeats on every frame of the contact sheet. The speaker page prints
+the slide's number once instead, large, in its own bottom-right corner — the
+same number the room sees, plus this showing's letters for a slide the deck
+shows more than once (the outline before section 3 reads `1d`).
+
 **Never put a bare `---` in a fragment**: Marp reads it as a slide break and
 would silently split one slide into two. `build.py` errors on it. Use `***`
 for a horizontal rule.
@@ -351,6 +360,80 @@ section with a different line marked; near-identical fragments are copies to
 keep in step, and one fragment used five ways cannot drift. Because
 it is one fragment, it is also one *slide*: see **Numbering** above.
 
+## Navigation (links, bookmarks, page labels)
+
+A rendered PDF is navigable five ways besides turning its pages, and none of
+them changes a pixel of any slide:
+
+- **Click the slide for the next one.** The middle of every page — inset a
+  tenth of the page from each edge, so 80% by 80% of it — is a link to the next
+  page, so a PDF viewer with no slideshow mode is one anyway (#4563). The
+  outline's pages are left out, because their lines are links of their own,
+  and so is the last page, which has nowhere to go. The area stops short of the
+  corner, so the page number's own link still works.
+
+- **The outline is clickable.** Every line of it links to the page its section
+  starts on — the showing of the outline marked `+atN` for that line, or `+end`
+  for the closing one. The links are invisible (`section.outline a` takes the
+  colour and weight of its line), so the room sees the slide it always saw and
+  only a click finds them. That makes the outline the deck's contents page when
+  a question sends you back to section III.
+- **The page number is the way back.** On every slide inside a section, the
+  number in the corner (and its letter) links to the outline showing that
+  opened the section — the "you are here" list, from which any other section
+  is one more click. Outline pages, and the slides before the first section,
+  print a plain number. The handover cut prints none, so it has no way back.
+- **Bookmarks.** The PDF opens with an outline in the reader's sidebar
+  (Acrobat and Preview honour that; Chrome's viewer keeps it a click away): the slides
+  before the first section at the top level, then each section, with its slides
+  one level under it. One entry per slide, never per reveal: a build's entry
+  lands on its first page. Each entry leads with the address the deck uses for
+  it — a section its Roman numeral, `III. Inclination`, and a slide its page
+  number, `18. The Cutting Room` — followed by the section's line or the
+  slide's headline, with the line break taken out.
+- **Page labels.** The viewer's page box reads the address the page prints —
+  `17c`, not `95` — so a reader told to look at 17c can type exactly that. The
+  title slide reads `title`. The handover cut (`--no-pageno`) carries them too,
+  for the reason it keeps the numbering: an address is the same whether or not
+  it is printed.
+
+The speaker deck gets the last four, aimed at *its* pages: a bookmark lands on the
+slide's one speaker page, a label is the number the page prints in its corner,
+that number links back to the speaker page of the section's outline, and the
+outline's lines are clickable on the miniature, jumping to the speaker page
+where that section starts.
+
+**How.** The links are ordinary markdown links that `build.py` writes around
+the outline's lines,
+
+```markdown
+1. [VTSearch](#3)
+```
+
+because Marpit gives every slide its page number as its `id`, and Chromium
+prints a link to an `id` as a link to that page; the page numbers' links are the
+same thing in HTML. They work in the HTML export too. Bookmarks, labels and
+the click-to-advance areas Chromium cannot write, so `build.py` leaves them in
+`_build/<deck>.nav.json` (the last as the list of pages that get one,
+`advance_pages`) and `pdf_nav.py`, which `render.sh` runs after every PDF
+render, writes them in. `pdf_nav.py` refuses a page whose own links reach into
+its click-to-advance area, rather than let the two overlap. On a speaker page
+the outline is a picture, so its links have to be measured: `render.sh` renders
+the outline's showings alone (`_build/<deck>.probe.md`, a few seconds), and
+`pdf_nav.py` scales each link Chromium drew there onto the miniature.
+
+**A headline that repeats needs a bookmark of its own.** Bookmarks exist to
+tell pages apart, so `build.py --check` fails a deck where two different
+fragments would get the same entry — the four "Data, Set" cards, say. Name each
+with a line of its own, which renders nothing:
+
+```markdown
+<!-- bookmark: Data, Set: COCO Better -->
+```
+
+`--check` also fails a `+atN` or `+end` that names a line the outline does not
+have, since the section would have nowhere to start.
+
 ## Figures
 
 Commit them. That is deliberate: a re-rendered figure costs one ~150 KB blob,
@@ -378,6 +461,19 @@ plot can be regenerated when the underlying numbers move —
 `slide_figure.save()` rather than `fig.savefig`: it enforces the type floor
 (see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
 be unreadable in its slot.
+
+**Regenerate with matplotlib's stock defaults.** The figures were drawn with
+none of a machine's own matplotlib settings, and a Claude Code on the web
+container has some: its `/etc/matplotlib/matplotlibrc` sets the Inter face and
+turns hinting off, so a generator that does not name its own face draws in a
+different typeface from the committed figures, and every figure comes out a
+pixel off the one it replaces. Point `MATPLOTLIBRC` at an empty file and the
+regenerated figures match the committed ones wherever nothing was changed:
+
+```bash
+touch /tmp/empty-matplotlibrc
+MATPLOTLIBRC=/tmp/empty-matplotlibrc python slides/figs/src/make-data-cards.py --only coco
+```
 
 **Screenshots of the app are generated too.** `figs/ui-make-detector*.webp`,
 `figs/ui-train-loop*.webp`, `figs/ui-find*.webp`, `figs/ui-steps-*.webp` and
@@ -409,7 +505,7 @@ caption. Nothing is staged through the API that a slide says was done by hand:
 the button `train-loop` clicks is chosen from the served item's own file name,
 so the piles are a real session's.
 
-The **Step-By-Step** figures (`figs/ui-steps-*.webp`, section 8) are that same
+The **Instruction** figures (`figs/ui-steps-*.webp`, section VIII) are that same
 session photographed a second time at the moments a user has to click, with a
 red numbered disc on each control (`scripts/screenshots/callouts.mjs`, shared
 with the user guide's screenshots). Where a moment is also an intro frame, the

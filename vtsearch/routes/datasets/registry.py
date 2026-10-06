@@ -52,6 +52,7 @@ from vtscore.datasets.registry import (
     update_dataset as _reg_update,
 )
 from vtsearch.schemas.datasets import (
+    DatasetAutorunRequestSchema,
     DatasetDomainShiftResponseSchema,
     DatasetRegistryDuplicatesResponseSchema,
     DatasetRegistryLoadResponseSchema,
@@ -647,22 +648,33 @@ def dataset_domain_shift(dataset_id: str):
 
 
 @datasets_registry_bp.route("/api/datasets/registry/<dataset_id>/autorun", methods=["POST"])
+@datasets_registry_bp.arguments(DatasetAutorunRequestSchema, required=False)
 @datasets_registry_bp.response(200, DatasetRegistryLoadResponseSchema)
 @datasets_registry_bp.alt_response(
     400,
-    description="None of the caller's AutoRun detectors applies to this dataset (its media or embedder types).",
+    description=(
+        "None of the detectors to run applies to this dataset (its media or embedder types), "
+        "or ``detector_ids`` is empty."
+    ),
 )
 @datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
-@datasets_registry_bp.alt_response(404, description="Dataset not found.")
+@datasets_registry_bp.alt_response(
+    404, description="Dataset not found, or a ``detector_ids`` entry names no detector the caller can access."
+)
 @datasets_registry_bp.alt_response(409, description="Dataset is not currently loaded.")
-def run_dataset_autorun(dataset_id: str):
-    """Run the caller's AutoRun detectors on a loaded dataset, in the background.
+def run_dataset_autorun(body: dict, dataset_id: str):
+    """Run AutoRun on a loaded dataset, in the background.
 
-    The Dashboard's dataset ⋯ **Run AutoRun**.  Scores the dataset with every
-    detector on the caller's AutoRun list that applies to it, sends the results
-    to their Auto-Find exporter when one is set, and keeps them for the AutoRun
-    Results dialog (``GET /api/autorun/runs/<task_id>``).  Progress is reported
-    on the ``loading-tasks`` channel of ``GET /api/events`` under the returned
+    The Dashboard's dataset ⋯ **Run AutoRun** sends no body, and the run scores
+    the dataset with every detector on the caller's AutoRun list that applies
+    to it.  The Dashboard's big **AutoRun** button sends ``detector_ids``, the
+    ticked detectors, and the run scores with those instead: drafts run as they
+    are, without being moved to the AutoRun list.
+
+    Either way the run sends the results to the caller's Auto-Find exporter
+    when one is set, and keeps them for the AutoRun Results dialog
+    (``GET /api/autorun/runs/<task_id>``).  Progress is reported on the
+    ``loading-tasks`` channel of ``GET /api/events`` under the returned
     ``task_id``, on a task keyed to this dataset; its ``autorun`` block carries
     the summary once it finishes.  Cancellable like any loading task.
     """
@@ -679,7 +691,7 @@ def run_dataset_autorun(dataset_id: str):
         abort(409, message="Load the dataset before running AutoRun on it")
 
     try:
-        task_id = start_autorun_task(ctx, trigger="manual")
+        task_id = start_autorun_task(ctx, trigger="manual", detector_ids=(body or {}).get("detector_ids"))
     except AutoRunUnavailable as exc:
         abort(exc.status, message=exc.message)
     return {"ok": True, "message": "AutoRun started", "task_id": task_id}

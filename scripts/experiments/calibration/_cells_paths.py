@@ -32,7 +32,7 @@ from pathlib import Path
 #: What the registry is still for is :func:`side_frame_files`, which asks for a
 #: frame by name, and the meta-test that holds it to what the runner writes
 #: (``tests_lib/meta/test_calibration_cells_io.py``).
-SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks", "__fitq", "__rankframes")
+SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks", "__fitq", "__rankframes", "__linetest")
 
 
 #: A run under ``CALIB_CELLS_GZIP=1`` writes every frame as ``task_NNNN.csv.gz``
@@ -77,3 +77,12 @@ def pframe_files(cells_dir: str | Path) -> list[Path]:
     cell is named by the main frame sharing its stem.
     """
     return sorted(Path(cells_dir).glob("task_*__pframes.npz"))
+
+
+def testscore_files(cells_dir: str | Path) -> list[Path]:
+    """Every cell's #4452 withheld-half archive, ``task_NNNN__testscores.npz``.
+
+    Like :func:`pframe_files`, an npz outside the CSV registry, written only
+    under ``CALIB_SAVE_TEST_SCORES``; the Test arm's replay (#4523) reads it.
+    """
+    return sorted(Path(cells_dir).glob("task_*__testscores.npz"))

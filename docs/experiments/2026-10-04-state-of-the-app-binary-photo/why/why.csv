@@ -1,0 +1,11 @@
+class,text_ap,final_ap,ceiling_ap,positives_found,good_clicks,bad_clicks,bad_holds
+chair,0.06,0.039,0.127,4.933,89,2376,bench 15% (x10); couch 17% (x9); tv 6% (x6); teddy bear 3% (x4); toilet 8% (x4)
+bowl,0.042,0.094,0.211,5.267,113,2397,broccoli 7% (x14); toilet 23% (x11); (none of COCO's 80) 4% (x5); banana 2% (x4); pizza 2% (x3)
+knife,0.064,0.134,0.272,7.6,141,2354,scissors 11% (x47); pizza 5% (x6); broccoli 3% (x5); oven 3% (x3); (none of COCO's 80) 2% (x2)
+dining table,0.113,0.136,0.189,10.533,197,2378,chair 10% (x8); couch 12% (x6); potted plant 4% (x5); oven 5% (x5); refrigerator 5% (x5)
+spoon,0.07,0.197,0.281,11.8,220,2345,knife 3% (x29); toothbrush 2% (x29); broccoli 4% (x7); cake 2% (x4); (none of COCO's 80) 3% (x3)
+enclosed road vehicle,0.157,0.211,0.252,9.933,191,2374,(none of COCO's 80) 21% (x25); stop sign 5% (x6); train 13% (x5); traffic light 3% (x5); bus 10% (x4)
+bench,0.231,0.244,0.251,10.467,202,2353,parking meter 2% (x10); (none of COCO's 80) 7% (x8); fire hydrant 3% (x4); teddy bear 3% (x4); chair 4% (x3)
+bottle,0.154,0.254,0.304,13.333,232,2328,toothbrush 3% (x45); cup 3% (x15); parking meter 3% (x15); fire hydrant 5% (x6); (none of COCO's 80) 4% (x5)
+fork,0.149,0.257,0.334,15.533,312,2293,knife 3% (x28); broccoli 6% (x13); pizza 6% (x7); sandwich 3% (x7); cake 3% (x5)
+book,0.237,0.266,0.314,10.6,203,2342,keyboard 2% (x10); scissors 2% (x10); teddy bear 7% (x9); laptop 5% (x7); (none of COCO's 80) 4% (x5)

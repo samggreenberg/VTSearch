@@ -1082,6 +1082,36 @@ describe('LabelViewComponent', () => {
     expect(sortState.threshold).toBe(0.5);
   });
 
+  it('runs the spot check itself when the labels separate weakly, but not on its opening (#4496)', async () => {
+    flushInitialRequests();
+    const autopilot = TestBed.inject(AutopilotStateService);
+    component.voteState.loadVotes();
+    httpMock.expectOne('/api/votes').flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+    autopilot.activate();
+    TestBed.tick();
+    const due = wireBalance('unchecked', { checkDue: true, separation: 0.7 });
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The opening (retrain mode ranks with the model here): a due check waits for the learned phases.
+    autopilot.checkPhaseTransition(3, 0);
+    TestBed.tick();
+    expect(autopilot.state.phase).toBe('bad');
+    httpMock.expectOne('/api/learned-sort').flush({ status: 'done', results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }], threshold: 0.5, balance: due });
+    await settleResource();
+    expect(el.querySelector('vt-spot-check-modal')).toBeNull();
+    expect(httpMock.match((req) => req.url === '/api/precision-check/start')).toEqual([]);
+
+    // Past it, the first learned sort that says a check is due opens one, saying why.
+    autopilot.checkPhaseTransition(3, 4);
+    TestBed.tick();
+    expect(autopilot.state.phase).toBe('hard');
+    httpMock.expectOne('/api/learned-sort').flush({ status: 'done', results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }], threshold: 0.5, balance: due });
+    await settleResource();
+    expect(el.querySelector('vt-spot-check-modal')).not.toBeNull();
+    expect(component.spotCheckIntro()).toContain('Autopilot is checking the line');
+    httpMock.expectOne((req) => req.url === '/api/precision-check/start');
+  });
+
   it('should switch to hard select mode when bouncing from new back to hard', () => {
     flushInitialRequests();
 

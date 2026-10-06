@@ -103,7 +103,7 @@ Before sending, scan the turn for `#` followed by digits. **Every hit outside a 
   - **The hook can *hard-reset*, not only rebase — read its output.** It picks one of four outcomes and says which: `already includes origin/dev; nothing to do`; **hard-reset** to `origin/dev` (either because the branch has no `origin/<branch>` counterpart — a fresh branch the harness just cut off `main`, whose unique commits are all inherited `main`-only history carrying no Claude work — or because `git cherry` shows every unique commit is patch-equivalent to one already on `dev`); **rebase** onto `origin/dev` (the branch is in sync with its origin counterpart and carries genuinely new pushed commits); or a **skip**. A hard-reset discards the branch's prior commits by design; that is expected at session start and nothing of yours is lost, but do not assume commits you saw in `git log` before the hook ran are still there.
   - If the hook prints `‼ session-start: DID NOT rebase onto origin/dev` (dirty tree, detached HEAD, fetch failed, a reset/rebase that failed, or a local branch that differs from its pushed origin counterpart), run `git fetch origin --prune && git rebase origin/dev` yourself before making any changes.
 - **All pull requests MUST target `dev`**, never `main`.
-- **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
+- **Claude must NEVER open or merge a PR into `main`, except as the Dev2Main release.** `main` is protected and changes only through that release: the runbook in `docs/RELEASE.md` opens the `dev` → `main` PR (step 5) and, once a full `./run-tests.sh` on the tip passes, merges it (step 8, owner, 2026-10-06). No other session touches `main`.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
 - If your feature branch was forked from `main` instead of `dev`, rebase or merge onto `dev` before opening a PR.
 
@@ -148,7 +148,9 @@ git log --pretty=%s -100 origin/dev | grep -cE "\(#[0-9]+\) \(#[0-9]+\)$"   # sq
 ```
 
 **Merging is not part of Auto-PR.** Open the PR without being asked; merge it
-only when the user says so.
+only when the user says so. The Dev2Main release is the standing exception: its
+runbook merges its own housekeeping PRs into `dev` and the release PR into `main`
+because the owner asked it to.
 
 ## Linking a fix PR to its GitHub issue
 
@@ -511,7 +513,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters and snapshot checks run before pytest; pyright and pip-audit run alongside it). There is no CI backstop: VTSearch's one GitHub Actions workflow only republishes rendered slide decks and gates nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these are `./run-tests.sh` gates (the linters and snapshot checks run before pytest; pyright and pip-audit run alongside it). There is no CI backstop: VTSearch's two GitHub Actions workflows only publish (the rendered slide decks, and the State of the App links on GitHub Pages) and gate nothing, so `./run-tests.sh` is the source of truth — do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it, and file an issue for it unless one already exists (see "Work still owed goes in an issue" above). The default is **fix it**; skipping requires justification.
@@ -562,7 +564,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
-- **Frontend audit**: `cd frontend && npm audit` (checks for known vulnerabilities in dependencies)
+- **Frontend audit**: `python scripts/npm-audit-gate.py` (the `./run-tests.sh` gate: `npm audit` over `frontend/`, minus the advisories in its `WAIVERS` table, which have no patched release anywhere; bare `cd frontend && npm audit` still lists those)
 - **Frontend unit tests**: `cd frontend && npm run test:ci` (headless Vitest via the `@angular/build:unit-test` builder + jsdom; no browser needed). Also run by `./run-tests.sh` (full suite) and `./run-tests.sh frontend` (frontend-only gate: build + audit + Vitest). `npm test` is the watch-mode variant.
 - **Lint**: `ruff check .`
 - **Format**: `ruff format .`

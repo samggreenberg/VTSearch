@@ -307,7 +307,7 @@ class TestPrecisionFrames:
 class TestRankFrames:
     """#4357: where the positives sit in the test half and the session's unvoted pool."""
 
-    def _run(self, steps, sink, pframes=None):
+    def _run(self, steps, sink, pframes=None, **knobs):
         clips = _separable_clips(n_per_cat=80, n_cats=5, seed=0)
         return simulate_voting_iterations(
             clips,
@@ -322,7 +322,21 @@ class TestRankFrames:
             rank_frame_steps=steps,
             precision_frame_sink=pframes,
             precision_frame_steps=steps if pframes is not None else None,
+            **knobs,
         )
+
+    def test_a_prompted_checks_rounds_are_clicks_and_carry_the_frames_they_reach(self):
+        """#4496: a weak-separation check's rounds jump five clicks; a requested frame lands on the row that reaches it."""
+        sink: list = []
+        rows = self._run(
+            tuple(range(2, 21)), sink, spot_check="weak", weak_separation=float("inf"), weak_min_t=2, weak_phase="any"
+        )
+        prompt_ts = [r["t"] for r in rows if r["phase"] == "prompt"]
+        assert prompt_ts, "the check was prompted"
+        steps = [f["t"] for f in sink if f["kind"] == "step"]
+        assert set(prompt_ts) <= set(steps), "every prompted round that reached a requested click left its frame"
+        assert steps == sorted(set(steps)) and steps[-1] == 20
+        assert max(r["t"] for r in rows if r["phase"] != "check") <= 20, "the prompted check stayed inside the budget"
 
     def test_step_last_and_skyline_frames(self):
         sink: list = []
@@ -358,13 +372,48 @@ class TestRankFrames:
             expected = np.flatnonzero(pf["test_labels"][order] == 1).tolist()
             assert [int(r) for r in f["test_pos_ranks"].split()] == expected
 
-    def test_step_frames_record_the_shipped_lines_count_on_the_test_half(self):
-        """#4389, #4413: a cold Find over the test half plus the votes, at each preset balance; the skyline drew no line."""
+    def test_the_frames_read_the_apps_presets(self):
+        """#4471: the betas a frame records are the app's presets, so a review reads what the radios offer."""
+        from vtscore.eval.voting_columns import RANK_FRAME_BETAS, RANK_FRAME_COLUMNS, beta_tag
+        from vtscore.training.thresholds import BALANCE_PRESETS
+
+        assert RANK_FRAME_BETAS == BALANCE_PRESETS
+        assert [c for c in RANK_FRAME_COLUMNS if c.startswith("test_line_k_b")] == [
+            f"test_line_k_{beta_tag(b)}" for b in RANK_FRAME_BETAS
+        ]
+
+    def test_step_frames_record_what_the_labels_line_keeps_at_each_preset(self):
+        """#4471: under the app's labels line (#4452) a frame counts what Find's line keeps on the test half.
+
+        At the run's own beta (the default, 1) that is the headline row's
+        returned set exactly - the same fit on the same scores - and a more
+        recall-leaning preset never keeps fewer.
+        """
+        sink: list = []
+        rows = self._run((10, 20), sink)
+        base = {
+            int(r["t"]): r
+            for r in rows
+            if r.get("pool_variant") == "max" and not r.get("gmm_variant") and r["phase"] not in ("check", "")
+        }
+        steps = [f for f in sink if f["kind"] in ("step", "last")]
+        assert steps
+        for f in steps:
+            r = base[int(f["t"])]
+            returned = r["recall"] * r["n_test_pos"] + r["fpr"] * r["n_test_neg"]
+            assert f["test_line_k_b1"] == round(returned), (f["kind"], f["t"])
+            assert 0 <= f["test_line_k_b025"] <= f["test_line_k_b1"] <= f["test_line_k_b4"] <= f["n_test"]
+        sky = [sink[-1][f"test_line_k_{t}"] for t in ("b025", "b1", "b4")]
+        assert all(k >= 0 for k in sky) and sky == sorted(sky), "the ceiling records Find's labels line (#4486)"
+
+    def test_a_forced_check_shape_frames_the_count_line(self):
+        """#4413: under ``walk_shape`` the mixture's F-beta argmax under the balance's cap, on the same corpus and fit."""
+        from vtscore.eval.voting_columns import RANK_FRAME_BETAS, beta_tag
         from vtscore.training.thresholds import LineRanking, balance_count, fbeta_count
 
         sink: list = []
         pframes: list = []
-        self._run((10, 20), sink, pframes)
+        self._run((10, 20), sink, pframes, walk_shape="advisory")
         for f, pf in zip([f for f in sink if f["kind"] == "step"], pframes, strict=True):
             test_s = pf["test_scores"].astype(np.float64)
             vote_s = pf["vote_scores"].astype(np.float64)
@@ -372,13 +421,11 @@ class TestRankFrames:
             votes = list(range(n_test, n_test + len(vote_s)))
             corpus = LineRanking.from_scores([*range(n_test), *votes], [*test_s, *vote_s], votes)
             labels = {v: bool(lab >= 0.5) for v, lab in zip(votes, pf["vote_labels"], strict=True)}
-            for b, tag in ((0.5, "b05"), (1.0, "b1"), (2.0, "b2")):
+            for b in RANK_FRAME_BETAS:
                 want = min(balance_count(b, None, fbeta_count(corpus, b, labels)), n_test)
-                assert f[f"test_line_k_{tag}"] == want, (f["t"], b)
-            assert f["test_line_k_b05"] <= f["test_line_k_b1"] <= f["test_line_k_b2"] or f["test_line_k_b1"] == 32
-        sky = sink[-1]
-        assert [sky[f"test_line_k_{tag}"] for tag in ("b05", "b1", "b2")] == [-1, -1, -1]
-        assert [sink[-1][f"test_line_k_{t}"] for t in ("b05", "b1", "b2")] == [-1, -1, -1], "a skyline drew no line"
+                assert f[f"test_line_k_{beta_tag(b)}"] == want, (f["t"], b)
+        sky = [sink[-1][f"test_line_k_{t}"] for t in ("b025", "b1", "b4")]
+        assert all(k >= 0 for k in sky) and sky == sorted(sky), "the ceiling records Find's labels line (#4486)"
 
     def test_recording_does_not_change_the_run(self):
         plain = self._run(None, None)

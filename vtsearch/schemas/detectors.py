@@ -72,6 +72,7 @@ from marshmallow import Schema, fields, validate
 
 from vtsearch.schemas.common import PluginExtrasSchema, list_of_strings
 from vtsearch.schemas.labels import LabeledElementSchema
+from vtsearch.schemas.line_test import LineTestVerdictSchema
 from vtsearch.schemas.media import MediaEntrySchema, OriginSchema, VoteProvenanceSchema
 from vtsearch.schemas.sorting import BalanceStateSchema
 
@@ -313,6 +314,10 @@ class DetectorRegistryEntrySchema(Schema):
     # type-based detector/dataset compatibility gate.  See patch-embedder.md →
     # "Per-detector embedder type".
     embedder_type = fields.String()
+    # The newest test verdict the detector keeps (#4526), which the AutoRun
+    # tab shows beside it: present on AutoRun detectors only, ``null`` for
+    # one never tested.
+    test_verdict = fields.Nested(LineTestVerdictSchema, allow_none=True)
 
     class Meta:
         # Registry entries may carry extension keys (e.g. future per-row
@@ -505,6 +510,9 @@ class DetectorRegistryStatsResponseSchema(Schema):
     created_by = fields.String(required=True)
     readers = fields.List(fields.String(), required=True)
     autofind = fields.Boolean(required=True)
+    # Every test verdict the detector keeps, one per tested dataset, newest
+    # first (#4526): the *Tested on* section.
+    test_verdicts = fields.List(fields.Nested(LineTestVerdictSchema), required=True)
 
 
 class DetectorBrowsePositivesResponseSchema(Schema):

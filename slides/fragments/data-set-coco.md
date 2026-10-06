@@ -1,5 +1,6 @@
 <!-- _class: full -->
 <!-- frames: equal -->
+<!-- bookmark: Data, Set: Caltech-101 and COCO -->
 
 ![bg fit](figs/data-set-coco-zoom.webp)
 
@@ -30,7 +31,7 @@
      boxed. 123,287 images exactly, across train and val, and 80
      classes. -->
 
-<!-- **d** — The zoom, bigger than its cell in the grid: a museum case with
+<!-- **d** — The zoom, grown out of its corner cell: a museum case with
      Mary Poppins' umbrella in it. Blue names are in the picture, each joined
      to its box — a book, a bowl, the umbrella. Grey names are not, and that is
      the property the rest of this section leans on: COCO answers for all 80

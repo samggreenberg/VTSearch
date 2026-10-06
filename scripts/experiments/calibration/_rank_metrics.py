@@ -9,7 +9,7 @@ positives' ranks and on nothing else.  That is what a rank frame records
 and what ``text_baseline.py`` builds for the typed query, so the click-0 sort
 and the clicked detector are read by one definition.
 
-Numpy only; *ranks* are 0-based, best first, in the order
+Numpy, plus the harness's beta list (``RANK_FRAME_BETAS``); *ranks* are 0-based, best first, in the order
 :class:`~vtscore.training.thresholds.LineRanking` sorts (score descending, ties
 by id).
 """
@@ -19,6 +19,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import numpy as np
+
+from vtscore.eval.voting_columns import RANK_FRAME_BETAS
 
 #: The floors the app offers, left to right along its control
 #: (the floor presets the app offered, #4298).
@@ -122,11 +124,16 @@ def frame_k(frame: dict, floor: float) -> int | None:
     return k if k >= 1 else None
 
 
-BETAS: tuple[float, ...] = (0.5, 1.0, 2.0)
+#: The balances a review reads: the betas the harness's rank frames record,
+#: which a test pins to the app's presets (#4471: 1/4, 1 and 4 since #4448).
+#: A run recorded before #4471 holds the count line at 0.5 / 1 / 2 instead;
+#: its columns at these betas are missing, and the reading falls back to the
+#: cap (:func:`balance_metrics`) - re-run it rather than read it.
+BETAS: tuple[float, ...] = RANK_FRAME_BETAS
 
 
 def beta_tag(beta: float) -> str:
-    """``b05`` / ``b1`` / ``b2``: the column suffix a balance's metrics carry (``vtscore.eval.voting_columns.beta_tag``)."""
+    """``b025`` / ``b1`` / ``b4``: the column suffix a balance's metrics carry (``vtscore.eval.voting_columns.beta_tag``)."""
     return "b" + (f"{beta:g}".replace(".", "") if beta < 1 else f"{beta:g}")
 
 
@@ -145,13 +152,17 @@ def oracle_fbeta(ranks: np.ndarray, n_pos: int, beta: float) -> float:
 
 
 def frame_beta_k(frame: dict, beta: float) -> int | None:
-    """How many the shipped balance line keeps on this frame's test half at *beta* (``test_line_k_b1``, ...), or ``None``."""
+    """How many the shipped balance line keeps on this frame's test half at *beta* (``test_line_k_b1``, ...).
+
+    ``None`` when the frame did not record it (a missing column or -1). 0 is
+    a recorded count: the labels line (#4452) can keep nothing.
+    """
     v = frame.get(f"test_line_k_{beta_tag(beta)}")
     try:
         k = int(v)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
-    return k if k >= 1 else None
+    return k if k >= 0 else None
 
 
 def balance_metrics(ranks: np.ndarray, n: int, n_pos: int, beta: float, k: int | None) -> dict[str, float]:
@@ -160,13 +171,25 @@ def balance_metrics(ranks: np.ndarray, n: int, n_pos: int, beta: float, k: int |
     *k* is the balance line's count the frame recorded (:func:`frame_beta_k`);
     ``None`` reads the balance's cap (the floor schedule's 32 at beta <= 1, 128
     above), which is what a run before the column, the text sort and the
-    ceiling keep.
+    ceiling keep.  ``k == 0`` is an empty returned set (#4452's line can keep
+    nothing): it finds none of the positives, so recall and F-beta are 0 and
+    precision is undefined.
     """
     nan = float("nan")
     if n <= 0:
         return {"k": 0, "precision": nan, "recall": nan, "fbeta": nan, "oracle_fbeta": nan, "fb_share": nan}
     if k is None:
         k = 32 if beta <= 1.0 else 128
+    if k <= 0:
+        best = oracle_fbeta(ranks, n_pos, beta)
+        return {
+            "k": 0,
+            "precision": nan,
+            "recall": 0.0 if n_pos > 0 else nan,
+            "fbeta": 0.0 if n_pos > 0 else nan,
+            "oracle_fbeta": best,
+            "fb_share": 0.0 if (n_pos > 0 and best > 0) else nan,
+        }
     k = int(max(1, min(k, n)))
     right = top_k_right(ranks, k)
     best = oracle_fbeta(ranks, n_pos, beta)

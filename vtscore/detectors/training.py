@@ -179,23 +179,35 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
     return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
 
 
-def _preference_line(
-    ranking: Any, det_ctx: Any, beta: float | None, labels: "Mapping[int, bool] | None"
+def _labels_line(
+    folds: Any,
+    final_scores: list[float],
+    final_ids: list[int] | None,
+    labels: "Mapping[int, bool] | None",
+    beta: float,
+    det_ctx: Any,
 ) -> float | None:
-    """The line the user's balance draws over *ranking*, or ``None`` when no balance is set.
+    """The balance's line from the labels (#4452), parked on *det_ctx*; ``None`` with no class model.
 
-    The set the finished F-beta walk ended on where the check's shape lets it
-    move the line, else the mixture's F-beta argmax under the balance's cap
-    (#4413).  *labels* anchor the mixture: the same votes the fold-anchored
-    cut anchors on.  The fit is memoised on the ranking, so the re-cut and the
-    state read it back.
+    The class model the calibration folds' held-out scores of the votes imply,
+    cut where the expected F-beta peaks at the prevalence that model estimates
+    on the corpus this retrain scored - the Train dataset in Train, the
+    searched one in Find, AutoRun and the CLI.  The same labels and embedder
+    give the same model everywhere; no count is drawn on any corpus.  ``None``
+    (too few votes, one class) leaves the caller's fallbacks, which admit
+    nothing when the folds never split.
     """
-    from vtscore.training.thresholds import balance_line, fbeta_count  # noqa: PLC0415
+    from vtscore.training.thresholds import fit_labels_line  # noqa: PLC0415
 
-    if beta is None:
-        return None
-    check = det_ctx.precision_check if det_ctx is not None else None
-    return balance_line(ranking, beta, check, proposal=fbeta_count(ranking, beta, labels or {}))
+    line = fit_labels_line(
+        folds.orderings if folds.fallback is None else None,
+        final_scores,
+        final_ids if final_ids is not None else range(len(final_scores)),
+        labels,
+    )
+    if det_ctx is not None:
+        det_ctx.labels_line = line
+    return None if line is None else float(line.threshold(beta))
 
 
 def _fused_threshold(
@@ -273,15 +285,16 @@ def _fused_threshold(
     :func:`vtscore.state.core.recompute_detector_thresholds`).
 
     **The line is drawn at an operating point.**  Under a balance *beta*
-    (the app's case, #4413) **the line keeps a set** (#4272): the top *count*
-    unvoted items of the haystack this final model scored, where *count* is
-    the set the detector's last spot check ended on where the check's shape
-    lets it move the line, or else the mixture's F-beta argmax under the
-    balance's cap (:func:`~vtscore.training.thresholds.balance_line`, the rule
-    the re-cut and the eval harness's default arm share).  The ranking is
-    parked on ``det_ctx.line_ranking`` so a balance change re-cuts, and a spot
-    check draws its bands, without a retrain.  With no balance (#4269, a library
-    caller's choice) the line is the fold-anchored cut at Inclusion 0 through
+    (the app's case, #4413) the line is the labels' line (#4452,
+    :func:`_labels_line`): the class model the calibration folds' held-out
+    votes imply, cut where the expected F-beta peaks at the prevalence it
+    estimates on the haystack this final model scored, parked on
+    ``det_ctx.labels_line`` so a balance change re-cuts it without a retrain.
+    The ranking of that haystack, voted items marked, is parked on
+    ``det_ctx.line_ranking``: the balance's state counts what the line keeps
+    there (#4272), and a spot check draws its bands from it.  With no class
+    model (too few votes, one class) or no balance (#4269, a library caller's
+    choice) the line is the fold-anchored cut at Inclusion 0 through
     :func:`~vtscore.training.thresholds.reporting_line`, and with no fitted cut
     at all the schedule blend answers as it always has.
 
@@ -349,6 +362,9 @@ def _fused_threshold(
     if det_ctx is not None:
         det_ctx.anchored_cut_cache = cut
         det_ctx.line_ranking = ranking
+        # A new line is drawn on this ranking; a structural re-rank that
+        # follows sets the gate's passed set afresh (#4505).
+        det_ctx.gate_passed = None
 
     if cut is not None and cut.n_unconverged:
         # Not a fallback and not an error - the threshold is still this fit's -
@@ -362,9 +378,11 @@ def _fused_threshold(
             ",".join(str(i) for i in cut.fold_iterations),
         )
 
-    kept = _preference_line(ranking, det_ctx, beta, labels)
-    if kept is not None:
-        return kept
+    # Fitted on every retrain, so a later change of balance re-cuts it without
+    # a retrain (``recut_detector_threshold``); drawn only when a balance is set.
+    labels_kept = _labels_line(folds, final_scores, final_ids, labels, beta if beta is not None else 1.0, det_ctx)
+    if beta is not None and labels_kept is not None:
+        return labels_kept
     line = reporting_line(cut, None, inclusion_value=PRECISION_FLOOR_FALLBACK_INCLUSION, min_precision=None)
     if line.threshold is not None:
         return line.threshold
@@ -527,9 +545,8 @@ def train_and_threshold(
     The balance is read from ``line_knobs()``, which resolves to the *active
     detector context's* beta (seeded from the user's settings the first time
     it's read for a detector).  Both Train and Find therefore cut at the same
-    per-detector balance within a session.  The line keeps the set the
-    balance keeps - the top *count* unvoted items of the haystack (#4272,
-    #4413; see :func:`_fused_threshold`).
+    per-detector balance within a session.  The line is the labels' line at
+    that balance (#4413, #4452; see :func:`_fused_threshold`).
 
     Args:
         X_list: Embedding vectors (list of numpy arrays).
@@ -742,6 +759,7 @@ def train_and_threshold(
         # and no ranking for a balance to keep a set of.
         det_ctx.anchored_cut_cache = None
         det_ctx.line_ranking = None
+        det_ctx.gate_passed = None
 
     return model, threshold
 
@@ -1515,7 +1533,7 @@ def train_and_score(
     from vtscore.training.structural_similarity import maybe_structural_rerank  # noqa: PLC0415
 
     results, threshold = maybe_structural_rerank(
-        results, threshold, clips_dict, good_votes, region_boxes, det_ctx, bad_votes=bad_votes
+        results, threshold, clips_dict, good_votes, region_boxes, det_ctx, bad_votes=bad_votes, beta=beta
     )
     return results, threshold, model
 

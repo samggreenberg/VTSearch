@@ -8,19 +8,19 @@
     "harness": "e9bc83e67824b3998c984178f84e2a4d0ee679dbf99483b9a0d20cf6ef44254b"
   },
   "autopilot.phase_machine": {
-    "app": "4bffe267fd028fb1dc4b8c257dba90b9f37a4d9d785271a257496f91ee44a307",
-    "harness": "0568d59021a33417f1fb3db9d824a277d6b4987cccef8b14f1001c040dd7c281"
+    "app": "946fde8789eb55d969da5c329c8a32a0dc5ed5be6cb02805a9852abefa38981c",
+    "harness": "8a2ee776a1d1727538534a12b3d66e6f1534e0679d0ffd6fa62e74c942849a40"
   },
   "autopilot.phase_sort_select": {
-    "app": "ca7dd419d094b0b143bc921bd62de8bff8e3a53d7cabfa2d6fb34374e0c6b970",
+    "app": "f8ce126d5b82dfbcf902a5b0a48cc9d8dbc21ca214de458d1899d1d20c98224d",
     "harness": "1616b452a1dceccde4dba4393f86b6229f04639b0bce26bda985729e3e6e84a8"
   },
   "autopilot.startup_default": {
-    "app": "0895209e8fa0e2c0f2c4f6ec922e5ea17a8cdaf3d0e7f22cf8e57d7fa0792f16",
+    "app": "061f132f6c46ae5877353081ac1ccaf55e79a2ff92599319bb5be79590990116",
     "harness": "1e2f0e59ddd85cb3504335ac5259eb202a623ea1d5f939a61ebd2a1ff5d58dc8"
   },
   "autopilot.vote_targets": {
-    "app": "0895209e8fa0e2c0f2c4f6ec922e5ea17a8cdaf3d0e7f22cf8e57d7fa0792f16",
+    "app": "061f132f6c46ae5877353081ac1ccaf55e79a2ff92599319bb5be79590990116",
     "harness": "c73eed9f2e65df07b0851b2550aaea6a33079b6002674b772387647cbfc177da"
   },
   "check.bands": {
@@ -38,6 +38,10 @@
   "check.walk": {
     "app": "fd583ae911acc83d83c31dc74d821c189e778401b2baed42a2f2148d2425df96",
     "harness": "841d7ec31d00d8827250dae11129fd7ff71bd42c83883414a595a7f73c2dc5b1"
+  },
+  "line_test.budgets_default": {
+    "app": "d28b9a8e52440375aaa50facbe78eb851bbe31c90693f348cf84eea6cd561b95",
+    "harness": "5039b347a41d2d8c8ae8f0949ce2e1d28a8de4a3827c53a8ae82839deb3f2e2b"
   },
   "progress.eval_geometry": {
     "app": "556b4ddfc8c7870caea0a99fdd8b4a670ca1e3378025e8c539d9a37618797852",
@@ -78,14 +82,14 @@
     "app": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1"
   },
   "training.fused_threshold": {
-    "app": "e3558d75e0d006dd55abd0da5dd8eaefe0126a3464940ee7781e8503f99ddbc1"
+    "app": "7f6f1d6bbc35d0e3462aa9fd1feed6597e7f7a4abe748e1df225c9a911969a9a"
   },
   "training.split_fraction_default": {
     "app": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
     "harness": "33e0ad5486369bf6646ccacd13b8ba076a12a55f4a92849c4bac36360b5b79ca"
   },
   "training.train_and_threshold": {
-    "app": "a18b5c43863d7f32f0ce0ff1a1de84a8605b4b03579eb3cfa61ab894247377c3",
+    "app": "700adc788d4a6bad044c4b002034d015f46531c18be9935608339ce4f7f73ae2",
     "harness": "9673e37fce15a5fccc1ecbec181807bc4a8367309130b9e952a8799db1d9d651"
   }
 }

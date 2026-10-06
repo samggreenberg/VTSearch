@@ -60,32 +60,53 @@ export class KeyboardService implements OnDestroy {
    */
   captureVoteKeys(capture: KeyCapture): () => void {
     this.captures.push(capture);
+    this.sync();
     return () => {
       const i = this.captures.indexOf(capture);
       if (i !== -1) this.captures.splice(i, 1);
+      this.sync();
     };
   }
 
-  /** Start listening for keyboard shortcuts on the document. */
+  /** Start listening for keyboard shortcuts on the document (the centre panel's `init`). */
   start(): void {
-    if (this.listener) return;
-    this.listener = (e: KeyboardEvent) => this.handleKeydown(e);
-    this.zone.runOutsideAngular(() => {
-      document.addEventListener('keydown', this.listener!);
-    });
+    this.started = true;
+    this.sync();
   }
 
-  /** Stop listening for keyboard shortcuts. */
+  /** Stop listening for keyboard shortcuts; a held claim keeps its keys. */
   stop(): void {
-    if (this.listener) {
-      document.removeEventListener('keydown', this.listener);
-      this.listener = null;
-    }
+    this.started = false;
+    this.sync();
   }
 
   ngOnDestroy(): void {
-    this.stop();
+    this.started = false;
+    this.captures.length = 0;
+    this.sync();
     this.action$.complete();
+  }
+
+  /** The centre panel has started the shortcuts (and not stopped them since). */
+  private started = false;
+
+  /**
+   * Listen while the shortcuts are started or a claim is held, whichever
+   * comes and goes first. A claim's holder can be on screen with no centre
+   * panel to start them (the Test autopilot's stage, #4555), and a centre
+   * panel torn down beside it must not take its keys away.
+   */
+  private sync(): void {
+    const want = this.started || this.captures.length > 0;
+    if (want && !this.listener) {
+      this.listener = (e: KeyboardEvent) => this.handleKeydown(e);
+      this.zone.runOutsideAngular(() => {
+        document.addEventListener('keydown', this.listener!);
+      });
+    } else if (!want && this.listener) {
+      document.removeEventListener('keydown', this.listener);
+      this.listener = null;
+    }
   }
 
   private handleKeydown(e: KeyboardEvent): void {

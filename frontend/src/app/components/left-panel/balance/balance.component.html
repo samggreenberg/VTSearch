@@ -18,13 +18,14 @@
     <!-- One radio under each third of the spectrum, with no word or number (#4317). -->
     <div class="spectrum-radios">
       @for (opt of options; track opt.value) {
-        <label class="spectrum-radio" [title]="opt.hint">
+        <label class="spectrum-radio" [class.locked]="locked()" [title]="locked() ? lockedHint : opt.hint">
           <input
             #radio
             type="radio"
             [name]="groupName"
             [value]="opt.value"
             [checked]="opt.value === selected()"
+            [disabled]="locked()"
             [attr.aria-label]="opt.hint"
             (change)="onPick($event, opt.value)"
           />
@@ -42,7 +43,9 @@
       @if (checkText(); as label) {
         <button
           type="button"
-          class="btn btn--toolbar balance-check-btn"
+          class="btn balance-check-btn"
+          [class.btn--toolbar]="!due()"
+          [class.btn--primary]="due()"
           [disabled]="!checkable()"
           [title]="checkHint()"
           (click)="check.emit()"
@@ -51,5 +54,8 @@
         </button>
       }
     </p>
+    @if (dueNote(); as note) {
+      <p class="balance-due" role="status">{{ note }}</p>
+    }
   }
 </div>

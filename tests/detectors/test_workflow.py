@@ -9,6 +9,8 @@ the MLP when both a good and a bad vote are present.
 
 from __future__ import annotations
 
+import math
+
 import pytest
 
 from tests.fixtures.medias import DEFAULT_AUDIO_EMBEDDER
@@ -107,9 +109,12 @@ class TestTraining:
         assert resolved == 2
         assert trained is True
         assert det_ctx.model is not None
-        # The threshold should be a finite float in [0, 1].
+        # The threshold is a finite, non-negative float. Above 1 it keeps nothing (the NO_GOOD_THRESHOLD
+        # convention): with one Good and one Bad the labels line's class model has no spread of its own, and
+        # since #4492 a tight corpus (here 18 clips near logit 0) floors it tightly, so the line can decline
+        # to draw a set.
         assert isinstance(det_ctx.threshold, float)
-        assert 0.0 <= det_ctx.threshold <= 1.0
+        assert math.isfinite(det_ctx.threshold) and det_ctx.threshold >= 0.0
         # training_medias cache should hold both voted media.
         assert set(det_ctx.training_medias) >= {1, 2}
         # embedder / media_type stamped from the snapshot.

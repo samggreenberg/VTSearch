@@ -140,6 +140,65 @@ class TestRatioTestMatches:
         assert [_as_set(p) for p in chunked] == [_as_set(p) for p in whole]
 
 
+class TestDeviceDescriptorCache:
+    """#4469: stored candidate descriptors stay on the device across templates, with the same matches."""
+
+    @pytest.fixture(autouse=True)
+    def _fresh(self):
+        from vtscore.media import structural
+
+        structural.release_device_descriptors()
+        yield
+        structural.release_device_descriptors()
+
+    def test_uint8_and_cached_candidates_match_like_float32(self) -> None:
+        template = _descs(40, seed=1)
+        cands = [_descs(n, seed=10 + n).astype(np.uint8) for n in (30, 55, 2, 80)]
+        plain = ratio_test_matches(template, [c.astype(np.float32) for c in cands], ratio=_LOWE)
+        cached = ratio_test_matches(template, cands, ratio=_LOWE, cache=True)
+        again = ratio_test_matches(template, cands, ratio=_LOWE, cache=True)  # served from the cache
+        assert [_as_set(p) for p in cached] == [_as_set(p) for p in plain] == [_as_set(p) for p in again]
+
+    def test_a_reused_id_never_returns_another_arrays_descriptors(self) -> None:
+        import weakref
+
+        import torch
+
+        from vtscore.media import structural
+
+        fresh = np.full((3, 4), 7, dtype=np.uint8)
+        dead = np.zeros((3, 4), dtype=np.uint8)
+        stale = torch.zeros((3, 4), dtype=torch.uint8)
+        # A cache entry left by a freed array whose id the new array now has.
+        structural._DEVICE_DESCRIPTORS[id(fresh)] = (weakref.ref(dead), stale)
+        structural._DEVICE_DESCRIPTOR_BYTES[0] = stale.nbytes
+        out = structural._device_descriptors(fresh, "cpu", cache=True)
+        assert out.dtype == torch.float32
+        assert torch.equal(out, torch.full((3, 4), 7.0))
+
+    def test_the_least_recently_used_pages_go_past_the_budget(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from vtscore.media import structural
+
+        monkeypatch.setattr(structural, "DEVICE_DESCRIPTOR_LIMIT_BYTES", 2 * 100 * 128)
+        pages = [np.zeros((100, 128), dtype=np.uint8) for _ in range(3)]
+        for p in pages:
+            structural._device_descriptors(p, "cpu", cache=True)
+        kept = [k for k in structural._DEVICE_DESCRIPTORS]
+        assert kept == [id(pages[1]), id(pages[2])]
+        assert structural._DEVICE_DESCRIPTOR_BYTES[0] == 2 * 100 * 128
+
+    def test_verify_many_on_compact_features_matches_float_features(self) -> None:
+        matcher = SiftMatcher()
+        feats = [matcher.detect_and_describe(_textured_image(s), max_features=200) for s in range(5)]
+        compact = [f.compact() for f in feats]
+        template = compact[0]
+        a = matcher.verify_many(template, compact)
+        b = [matcher.verify(template, c) for c in compact]
+        assert [(x.inlier_count, x.tentative_count, x.model_ok) for x in a] == [
+            (y.inlier_count, y.tentative_count, y.model_ok) for y in b
+        ]
+
+
 # --------------------------------------------------------------------------
 # SiftMatcher.verify_many
 # --------------------------------------------------------------------------

@@ -40,8 +40,8 @@
 
 <!-- **e** — What exhaustive annotation adds is the equals sign: not "an A is
      here" but "an A and a B are here, and nothing else is". Seven cells,
-     each an exact set. This is the sentence Visual Genome cannot say — its
-     silence is not a no. -->
+     each an exact set. This is the sentence a sparsely labelled set cannot
+     say — its silence is not a no. -->
 
 <!-- **f** — And it is the exact sets that buy the complement: everything
      without an A is three of those cells plus the empty one. You can only

@@ -14,7 +14,7 @@
 SHELL := /bin/bash
 FMT   ?= pdf
 DECKS := $(basename $(notdir $(wildcard decks/*.deck)))
-DEPS  := $(wildcard fragments/*.md) $(wildcard figs/*) themes/vtsearch.css build.py
+DEPS  := $(wildcard fragments/*.md) $(wildcard figs/*) themes/vtsearch.css build.py pdf_nav.py
 
 # render.sh is the ONLY place that invokes Marp. It carries two fixes a bare
 # Marp call does not have -- `--no-stdin` (without it Marp waits for EOF on

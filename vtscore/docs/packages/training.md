@@ -21,7 +21,8 @@ this package is the underlying ML core.
 | `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
 | `vtscore/training/svm.py`                                             | `SVMClassifier`, `train_svm`, and `fit_linear_svm_head` (the production head's fit) |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
-| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank + match-statistic verification classifier |
+| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank: the inlier gate, and the returned-set line on documents (#4367, #4440) |
+| `vtscore/training/structural_stage1.py`                               | The tiled Stage 1 for document pages (best tile per page), the shortlist size and the verification cache |
 | `vtscore/training/query_sort.py`                                      | External-query sorts of the active dataset (example media, label files): `cosine_sort_active`, `example_sort_from_paths`, `train_and_score_active`, … |
 
 The package `__init__.py` re-exports the head-building names and the eight
@@ -579,6 +580,104 @@ range comes only from those picks, never from a model.
 
 `scripts/check-eval-app-sync.py` pins the band schedule, `likely_range` and
 `SpotCheck` against the analysis scripts that priced them.
+
+### The test sample: `LineTest`, `LineBudgets`, `line_phase`, `found_words`
+
+`vtscore/training/thresholds/line_test.py` (#4527; the first slice of Test
+mode, #4520). Test mode asks of a detector on a corpus it
+never trained on what share of what its line ships would be right and what
+share of the real matches it would ship, as likely ranges from uniform picks
+within rank bands; this module is the sample, its estimators, the allocation
+rule and the phase machine, pure statistics over ids, ranks and labels that
+the app's routes and the eval harness both call.
+
+**Why it is shaped this way.** AutoRun ships the set above the line unchecked,
+and nobody downstream can tell a wrong match from a missed one, so a test
+reports both halves, the line's precision and recall on the corpus at the
+user's balance, with F-beta at that balance as the headline, all from one set
+of draws. The corpus stands in for the future datasets AutoRun will see; the
+app's two trust checks (training-domain overlap, evidence coverage) are the
+caveat on that extrapolation. The verdict is a reading of the ranges, never a
+threshold the app enforces (#4267: *do your best, and say how close we got*).
+Two rules make the numbers mean anything:
+
+- **A test vote never trains the detector.** The point of a test set is that
+  the detector never saw it. The app keeps test votes out of the labelset and
+  records them with their own provenance flow; **Add Corrections** is the
+  failed-the-test exit, and the moment it is used the result is stale.
+- **Every number comes from uniform picks within rank bands**, never from the
+  top of the ranking or the boundary walk, which is biased toward the line by
+  design (#4257: model-chosen votes broke 83% of the #4220 estimator's
+  promises). The ranking is frozen for the whole test, which is what makes
+  the band design valid, and the app hides the ranked list while a test runs,
+  since a pick's place in it would show its rank.
+
+The intervals are Beta posteriors drawn jointly, so optional stopping does not
+change what a posterior means; the frequentist coverage of the stop is a
+question for the eval, priced by #4523
+([`REPORT.md`](../../../docs/experiments/2026-10-05-line-test-4523/REPORT.md)).
+
+- `LineTest.start(ranking_ids, line_count, beta, posteriors=None, budgets=,
+  seed=None, labels=None)` freezes the ranking and the line (the top
+  `line_count`), cuts both sides into bands (`line_bands`: the spot check's
+  `band_edges` from the top for the matches, the same doubling from the line
+  downward for the misses) and takes `posteriors`, the labels line's chance
+  per item, as the auxiliary below the line. `labels` restores picks already
+  taken on the same ranking (a resumed test, #4526, which sets `kept_at` to
+  when they were taken). `draw()` deals a round (`budgets.picks_per_round`,
+  5) from the band `next_band()` names, uniformly without replacement (a
+  census of a band no larger than a round); `record({id: match})` takes the
+  labels; `unrecord(id)` takes one back; `pick_band` records which band each
+  pick came from.
+- `estimates()` is every number from one set of joint Monte Carlo draws
+  (`LineEstimates`): per band, a Beta posterior on the share right under the
+  Jeffreys prior (`JEFFREYS`, 1/2) with the unlabelled items drawn binomially
+  at it, so a censused band is exact; `precision`, `recall` and `fbeta` of the
+  line as a point and a central `1 - alpha` range (`TEST_ALPHA`, 95%;
+  `Estimate.point` / `lo` / `hi` / `width` / `holds`); `at_edges`, the same
+  three at every band edge on both sides, which *Lean the Threshold* reads;
+  `positives_below`, model-assisted (each reached band's model mass corrected
+  by its picks, the difference estimator under the band design) with the
+  unreached tail taken from the model as a point and flagged
+  `tail_from_model`; and `found`, the recall range in the spot check's words
+  (`found_words`, cut at 15 / 37.5 / 62.5 / 87.5 percent). `estimate_at(count,
+  beta=None)` reads the same draws at any count (#4524): exact at a band edge,
+  a band's positives split in proportion inside one, which is how the verdict
+  reports the line each balance preset would ship.
+- `next_band()` is the allocation rule. Above the line, every band once from
+  the band holding the line upward, then the band whose next round would
+  shrink the F-beta range most in expectation (`expected_shrink`, a
+  pre-posterior over the round's outcomes on the same draws: the greedy face
+  of Neyman allocation). Below the line, `misses_walk()`: the first band
+  under the line, then one band deeper a round. With a class model
+  (`posteriors` given) the walk runs to `budgets.misses_picks` or the
+  corpus's end: a walk that stops early leaves the tail to the model's
+  point, and #4523 found its recall range then held the truth in 13-38% of
+  sessions, against 75-94% walking to the budget. Without one it goes on only
+  while the band just audited turned up a match or holds a posterior mass
+  that is not negligible against the positives found above
+  (`budgets.dry_run_share` of them, and with no model every band's mass is
+  zero); a dry band is a dry run that ends the walk, since a deeper band
+  would be read on the Jeffreys prior alone. `as_dict()` says which with
+  `class_model`.
+- `line_phase(test)` / `test.phase()` derives the phase from state
+  (`PhaseReport`): `nothing` when the line keeps fewer items than a round;
+  `matches` until, once every band above the line has had a round (#4539,
+  #4560), the precision range is at or under `budgets.matches_width` or
+  `budgets.matches_picks` is spent, or until the bands above are exhausted.
+  A band above the line takes its prior from the picks in its neighbouring
+  bands (`POOL_RADIUS`, #4560); `misses` until the walk ends (`exhausted`, or `dry_run` with no
+  class model), the recall range is under `budgets.misses_width` (with no
+  class model only), or `budgets.misses_picks` is spent; then `done`. The
+  stop reasons are `STOP_REASONS`, the phases `PHASES`. `LineBudgets`'
+  defaults are the values #4523 and #4540 priced
+  (`docs/experiments/2026-10-05-line-test-4523/REPORT.md`,
+  `docs/experiments/2026-10-06-test-budget-presets-4540/REPORT.md`): a 0.20
+  precision width, 20 picks above the line and 40 below it.
+- `TEST_PROVENANCE` is the provenance a test's vote is recorded with
+  (`flow: test`); a test vote never trains the detector.
+- A finished test's verdict is kept on the detector by
+  [`vtscore.detectors.line_verdicts`](detectors.md#kept-test-verdicts).
 
 ---
 

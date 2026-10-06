@@ -61,6 +61,22 @@ from vtscore.training.thresholds import (
     gmm_cut_from_fit,
     inclusion_cost_weights,
 )
+from vtscore.training.thresholds.labels_line import ClassScoreModel, LabelsLine, corpus_sigma_floor, fit_labels_line
+from vtscore.training.structural_similarity import (
+    PRECISION_CEILING_MARGIN,
+    PRECISION_GOOD_FRACTION,
+    PRECISION_MIN_INLIERS,
+    RECALL_GOOD_FRACTION,
+    RECALL_MIN_INLIERS,
+)
+from vtscore.training.thresholds.spot_check import (  # noqa: E402
+    CHECK_ALPHA,
+    clopper_pearson_lower,
+    clopper_pearson_upper,
+    fbeta_score,
+    likely_range,
+    range_tail,
+)
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -76,6 +92,9 @@ NEUTRAL_FILL = "#e8ebef"  # a wash *behind* other ink: a band, a shaded interval
 #: absence of hatching says "classes unknown", and neither is a claim that
 #: wants colour.
 UNLABELED_FILL = "#dae0e8"
+#: The zoom wedge on Second Cut: lighter than an unlabeled cell, so the strip it
+#: opens into still reads as the thing being looked at.
+ZOOM_WEDGE_FILL = "#eef1f5"
 BLUE = "#0b5fa5"  # production / the shipped thing
 RED = "#b91c1c"  # the Bad component / cross-calibration
 GREEN = "#0d8a5f"  # the Good component
@@ -145,8 +164,13 @@ MODEL_W, MODEL_H = 0.85, 0.62
 #: The outlined block arrows: shaft width, then the head's width and length.
 ARROW_W, ARROW_HEAD_W, ARROW_HEAD_L = 0.5, 0.66, 0.32
 
-#: Type size of the word written along a block arrow.
+#: Type size of the word written along a block arrow, and its cap height in
+#: drawing units, measured off the glyph as `arrow_len_for` measures widths.
 ARROW_LABEL_PT = 15.0
+ARROW_CAP = (
+    TextPath((0, 0), "H", size=ARROW_LABEL_PT, prop=FontProperties(family="DejaVu Sans")).get_extents().height
+    / FLOW_UNIT_PT
+)
 
 
 @functools.lru_cache(maxsize=None)
@@ -205,10 +229,6 @@ VOTE_PANEL_MARK_PT = 22
 #: fails the build if a reflow moves one of them.
 VOTE_MARK_PX = 24.0
 VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 * VOTE_PANEL_MARK_PT / VOTE_MARK_PT + LABEL_GAP
-
-#: The same label under a baseline that carries *no* vote glyphs: the notch's
-#: own length plus a gap, and nothing else to clear.
-NOTCH_LABEL_DROP = 0.32 + LABEL_GAP
 
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
@@ -398,6 +418,12 @@ def _labeled_arrow(
     shaft is the part with room in it) reads as a label shoved towards the
     tail, because the eye counts the head as space like everything else
     (issue #3217). Every arrow here is drawn long enough for that to fit.
+
+    Width-wise, the centre is the centre of the *capitals*: the baseline sits
+    half a cap height below the arrow's axis. matplotlib's `va="center"`
+    centres the line box instead, which reserves room for descenders whether
+    the word has any or not, so "DINOv3" rode visibly high in its shaft
+    (#4563).
     """
     (x0, y0), (x1, y1) = xy_from, xy_to
     dx, dy = x1 - x0, y1 - y0
@@ -427,14 +453,17 @@ def _labeled_arrow(
     angle = float(np.degrees(np.arctan2(dy, dx)))
     if angle < -90 or angle > 90:  # keep the label reading left-to-right
         angle += 180
+    # The text's own "up", turned with it, and half a cap height along it.
+    up = np.array([-np.sin(np.radians(angle)), np.cos(np.radians(angle))])
+    baseline = np.array([x0 + dx * 0.5, y0 + dy * 0.5]) - up * ARROW_CAP / 2
     ax.text(
-        x0 + dx * 0.5,
-        y0 + dy * 0.5,
+        *baseline,
         label,
         rotation=angle,
+        rotation_mode="anchor",
         ha="center",
-        va="center",
-        fontsize=15,
+        va="baseline",
+        fontsize=ARROW_LABEL_PT,
         color=INK,
         zorder=z + 0.05,
     )
@@ -2179,10 +2208,7 @@ def _theta_notch(
     """The progression's one cut mark: a notch under the baseline, then a name.
 
     `drop` is how far under the baseline the *name* hangs, and it defaults to
-    clearing a panel's row of vote glyphs. A baseline with no glyphs under it
-    has nothing to clear, and paying `VOTE_LABEL_DROP` there drives the label
-    into whatever sits below — which is how the crossing figure's θ_mid ended
-    up inside the sentence beneath it. Those callers pass `NOTCH_LABEL_DROP`.
+    clearing a panel's row of vote glyphs.
     """
     ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
     dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
@@ -2620,7 +2646,7 @@ INCL_POPULATION = XQUANT_POPULATIONS[0]
 KNOB_FLOW_STAGES = 4
 WALK_FLOW_STAGES = 6
 TILT_FLOW_STAGES = 6
-ACQ_FLOW_STAGES = 5
+ACQ_FLOW_STAGES = 4
 
 #: The gauge row's geometry: three bars across the panel's width.
 INCL_GAUGE_GAP = 0.8
@@ -2917,13 +2943,13 @@ def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.
     # every setting of a knob whose two ends are three orders of magnitude
     # apart.
     #
-    # Weighted like the three prices on the slide before (`COST_WEIGHTS`): light
-    # for the end that fears false alarms, bold for the end that fears misses.
+    # Weighted like the three balances of the F-beta figure (`BALANCE_WEIGHTS`):
+    # light for the end that fears false alarms, bold for the end that fears misses.
     # Both solid, for the reason given there — one quantity at two settings.
     band_lo, band_hi = float(scores[labels == 0].max()), float(scores[labels == 1].min())
     band_mid = (band_lo + band_hi) / 2
     grid = np.linspace(0.0, 1.0, 800)
-    ends = ((-10, COST_WEIGHTS[0], 0.035), (10, COST_WEIGHTS[-1], 0.965))
+    ends = ((-10, BALANCE_WEIGHTS[0], 0.035), (10, BALANCE_WEIGHTS[-1], 0.965))
     for reveal, (inclusion, weight, name_at) in enumerate(ends, start=2):
         if stage < reveal:
             continue
@@ -3610,7 +3636,10 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     def row_name(x: float, y: float, text: str, size: float = 15.0) -> None:
         ax.text(x - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
 
-    # ── stage 1: where the calibration talk left off ──────────────────────────
+    # ── stage 1: where the calibration talk left off, and job one ─────────────
+    # The cut read as a decision boundary arrives with the drawing rather than a
+    # page after it: on its own page the bracket was the only change, and the
+    # room read the two pages as one (#4517).
     ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
     _data_block(ax, block_x0, block_y0, block_w, block_h)
     train_x = block_x0 + block_w + OBJECT_GAP
@@ -3629,43 +3658,49 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     _quantile_gauge(ax, x0, gauge_y0, w, ACQ_GAUGE_H, q_report, "")
     row_name(x0, gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
 
-    # ── stage 2: job one — the cut read as a decision boundary ───────────────
-    if stage >= 2:
-        brace_x0, brace_x1 = x0 + q_report * w, x0 + w
-        brace_y = gauge_top + GAUGE_STUB + OBJECT_GAP
-        ax.plot(
-            [brace_x0, brace_x0, brace_x1, brace_x1],
-            [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12],
-            color=INK,
-            linewidth=1.6,
-            zorder=5,
-        )
-        ax.text(
-            (brace_x0 + brace_x1) / 2,
-            brace_y + LABEL_GAP,
-            "what you keep",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-        )
+    brace_x0, brace_x1 = x0 + q_report * w, x0 + w
+    brace_y = gauge_top + GAUGE_STUB + OBJECT_GAP
+    ax.plot(
+        [brace_x0, brace_x0, brace_x1, brace_x1],
+        [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12],
+        color=INK,
+        linewidth=1.6,
+        zorder=5,
+    )
+    ax.text(
+        (brace_x0 + brace_x1) / 2,
+        brace_y + LABEL_GAP,
+        "what you keep",
+        ha="center",
+        va="bottom",
+        fontsize=15,
+        color=INK,
+    )
 
-    # ── stage 3: job two reads the same number as a rank, so zoom in ─────────
-    if stage >= 3:
+    # ── stage 2: job two reads the same number as a rank, so zoom in ─────────
+    if stage >= 2:
         for i in range(zoom_cells):
             kind = "unlabeled"
             for idx, good in ACQ_ZOOM_VOTES:
                 if idx == i:
                     kind = "good" if good else "bad"
             _acq_cell(ax, zx0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
-        for target in (zx0, zx0 + zw):
-            ax.plot(
-                [x0 + q_report * w, target],
-                [gauge_y0, zoom_top],
-                color=RULE,
-                linewidth=1.4,
+        # The enlargement, drawn as a wedge from the one point on the ranking to
+        # the whole width of the zoom: shaded, with soft edges, so the thin cut
+        # visibly opens into the wide strip. Two hairlines in `RULE` used to say
+        # this, and at slide size they were invisible (#4517).
+        apex = (x0 + q_report * w, gauge_y0)
+        ax.add_patch(
+            Polygon(
+                [apex, (zx0, zoom_top), (zx0 + zw, zoom_top)],
+                closed=True,
+                facecolor=ZOOM_WEDGE_FILL,
+                edgecolor="none",
                 zorder=0,
             )
+        )
+        for target in (zx0, zx0 + zw):
+            ax.plot([apex[0], target], [apex[1], zoom_top], color=SOFT, linewidth=1.4, zorder=1)
         row_name(zx0, zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
         # The two cuts' names sit *between* them, each against its own tick: the
         # gap is wide enough to hold both, and a name hung outside the window
@@ -3681,8 +3716,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             color=INK,
         )
 
-    # ── stage 4: the second cut, a few steps of the knob further up the ranking
-    if stage >= 4:
+    # ── stage 3: the second cut, a few steps of the knob further up the ranking
+    if stage >= 3:
         ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
         ax.text(
             zoom_acq_x - LABEL_GAP,
@@ -3694,6 +3729,8 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             color=INK,
         )
         _acq_cell(ax, zx0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+        # Backed in white: it sits inside the zoom wedge, whose edge would
+        # otherwise run through the words.
         ax.text(
             zx0 + (pick_index + 0.5) * cell_w,
             zoom_top + LABEL_GAP,
@@ -3702,14 +3739,16 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             va="bottom",
             fontsize=15,
             color=INK,
+            bbox={"boxstyle": "square,pad=0.1", "facecolor": "white", "edgecolor": "none"},
+            zorder=3,
         )
 
-    # ── stage 5: the vote goes back to D₀, and the loop closes ───────────────
+    # ── stage 4: the vote goes back to D₀, and the loop closes ───────────────
     # Routed down the left margin, as the loop schematic routes its own return:
     # a straight diagonal would cross both rows of evidence, and what the last
     # step has to say is that the threshold chooses what gets voted on, which a
     # clean rectangular return says more plainly than a shortcut.
-    if stage >= 5:
+    if stage >= 4:
         pick_cx = zx0 + (pick_index + 0.5) * cell_w
         ax.plot(
             [pick_cx, pick_cx, rail_x, rail_x],
@@ -3786,7 +3825,7 @@ def blend_schedule_fig() -> None:
     ax.set_xlim(0, 122)
     ax.set_ylim(-0.03, 1.12)
     ax.set_yticks([0, 0.5, 1.0], ["GMM", "half", "x-cal"])
-    ax.set_xlabel("votes", labelpad=2)
+    ax.set_xlabel("Votes", labelpad=2)
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
     fig.text(
@@ -3919,7 +3958,7 @@ def split_fraction_fig() -> None:
     """
     import csv
 
-    report = _REPO_ROOT / "docs" / "experiments" / "calibration-fraction-3287"
+    report = _REPO_ROOT / "docs" / "experiments" / "2026-08-27-calibration-fraction-3287"
     series: dict[tuple[str, float], dict[int, tuple[float, float]]] = {}
     for run in ("figures", "siglip2l/figures", "clip/figures", "clip_l/figures"):
         with (report / run / "cost_vs_clicks.csv").open() as fh:
@@ -4077,29 +4116,25 @@ def anchored_fig() -> None:
 #: unit scale so a 16pt label renders the same size here as everywhere else.
 TEACH_CANVAS = (19.8, 11.0)
 
-#: How many build stages the cost-knob figure reveals in: the ranking; the cost
-#: rule and the balanced cut; the strict cut; the permissive cut; the slider
-#: that names them.
-COST_STAGES = 5
-
-#: How many stages the Bayes-crossing figure reveals in: the fitted mixture;
-#: the midpoint of the means; the weighted densities and where they actually
-#: cross; the arithmetic that moves one to the other.
-CROSSING_STAGES = 4
+#: How many build stages the F-beta figure reveals in: the ranking; the rule
+#: and the balanced peak; the precise peak; the recall-leaning peak; the
+#: control that names them.
+FBETA_STAGES = 5
 
 #: How many stages the region-maximum figure reveals in: two photographs cut
 #: into regions; each region's score and the max over them; the corpus of
 #: maxima; the two tail families fitted to it.
 REGION_MAX_STAGES = 4
 
-#: The cost weightings the knob figure draws, as (price of a false alarm, price
-#: of a miss, label). Symmetric about the middle one on purpose: the slide's
-#: claim is that reasonable people disagree in *both* directions, and a
-#: one-sided pair reads as a default and a special case.
-COST_ARMS = (
-    (4.0, 1.0, "4 : 1"),
-    (1.0, 1.0, "1 : 1"),
-    (1.0, 4.0, "1 : 4"),
+#: The balances the F-beta figure draws, top row first, as (beta, label): the
+#: app's three presets (#4448), F-beta's beta of 1/4, 1 and 4. Symmetric about
+#: the middle one on purpose — 4 is as far from 1 as 1/4 is, in the ratio a
+#: beta is — because the slide's claim is that reasonable people disagree in
+#: *both* directions, and a one-sided pair reads as a default and a special case.
+FBETA_ARMS = (
+    (0.25, "¼"),
+    (1.0, "1"),
+    (4.0, "4"),
 )
 
 #: Line weights for those three arms, in the same order — light, normal, bold.
@@ -4107,13 +4142,14 @@ COST_ARMS = (
 #: encoding and the wrong one: a dashed, a solid and a dotted line read as three
 #: *kinds* of thing, where these are one quantity at three settings, and a
 #: weight ramp is read as an ordering without being told (#3296). Bold is the
-#: most permissive arm, so the ramp runs the way the slider under it does.
-COST_WEIGHTS = (1.2, 2.8, 5.0)
+#: arm that returns the most, so the ramp runs the way the control under it
+#: does, from its precise end to its permissive one.
+BALANCE_WEIGHTS = (1.2, 2.8, 5.0)
 
-#: Which build stage each arm arrives on, in `COST_ARMS` order. The balanced
+#: Which build stage each arm arrives on, in `FBETA_ARMS` order. The balanced
 #: one comes first because it is the cut the room already has in mind; the
 #: other two are what the slide is arguing also exist.
-COST_REVEAL = (3, 2, 4)
+FBETA_REVEAL = (3, 2, 4)
 
 
 #: The ranking this slide argues over — **the same ten items the slide before it
@@ -4124,12 +4160,13 @@ COST_REVEAL = (3, 2, 4)
 #: (#3296).
 #:
 #: Ten items is also what makes the cuts nameable: they come out as the *same*
-#: three cuts, so "Include 2" there and the strict arm's minimum here are one
+#: three cuts, so "Include 2" there and the precise arm's peak here are one
 #: thing seen twice. **Keep this in step with that tuple by hand** — it is the
 #: same ranking written twice, once as photographs and once as marks.
 #:
-#: The arrangement is chosen so each arm has a *single* cheapest cut and no two
-#: arms choose the same one; see `RANKING` for why.
+#: The arrangement is chosen so each arm has a *single* best cut and no two
+#: arms choose the same one; see `RANKING` for why. F-beta at 1/4, 1 and 4
+#: peaks at Include 2, 5 and 8 — the three cuts that slide names.
 RANK_MARKS = (False, False, True, False, False, True, True, False, True, True)
 
 
@@ -4146,106 +4183,93 @@ def _cut_score(admitted: int) -> float:
 def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
     """The Bad pile and the Good pile of `RANK_MARKS`, as scores.
 
-    Evenly spaced, because nothing downstream depends on the spacing: a
-    threshold's FPR and FNR are counts of marks either side of it, so the
-    ranking's *order* is the whole of what the cost panel reads.
+    Evenly spaced, because nothing downstream depends on the spacing: what a
+    threshold keeps is a count of marks above it, so the ranking's *order* is
+    the whole of what the F-beta panel reads.
     """
     scores = np.array([_mark_score(i) for i in range(len(RANK_MARKS))])
     keep = np.array(RANK_MARKS)
     return scores[~keep], scores[keep]
 
 
-def _optima(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float) -> list[int]:
-    """Every admitted-count that minimises this arm's cost.
+def _fbeta_curve(bad: np.ndarray, good: np.ndarray, beta: float, cuts: np.ndarray) -> np.ndarray:
+    """The kept set's F-beta at every cut in *cuts*: ``(1 + b²)·hits / (b²·matches + kept)``.
 
-    Still a list rather than a number, though on the shipped `RANK_MARKS` every
-    arm returns exactly one: the ranking is arranged so the three arms pick
-    three different cuts and none of them ties. Returning the whole set is what
-    makes that visible instead of assumed — if an edit to the ranking
-    re-introduces a tie, the figure draws two dots on one curve and says so,
-    rather than silently picking whichever count `argmin` reached first.
+    The count form, which is the one the app evaluates (``corpus_cut`` in
+    ``vtscore.training.thresholds.labels_line``, with expected hits in place of
+    counted ones) and the one the slide prints. A cut that keeps nothing scores
+    0, as it does there.
+    """
+    b2 = beta * beta
+    hits = np.array([(good >= t).sum() for t in cuts], dtype=float)
+    kept = hits + np.array([(bad >= t).sum() for t in cuts], dtype=float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        f = (1.0 + b2) * hits / (b2 * good.size + kept)
+    return np.where(kept > 0, f, 0.0)
+
+
+def _peaks(bad: np.ndarray, good: np.ndarray, beta: float) -> list[int]:
+    """Every admitted-count at which this arm's F-beta peaks.
+
+    A list rather than a number, though on the shipped `RANK_MARKS` every arm
+    returns exactly one: the ranking is arranged so the three arms pick three
+    different cuts and none of them ties. Returning the whole set is what makes
+    that visible instead of assumed — if an edit to the ranking re-introduces a
+    tie, the figure draws two dots on one curve and says so, rather than
+    silently picking whichever count `argmax` reached first.
     """
     counts = np.arange(len(RANK_MARKS) + 1)
-    costs = _cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(n) for n in counts]))
-    return [int(n) for n in counts[costs <= costs.min() + 1e-9]]
+    scores = _fbeta_curve(bad, good, beta, np.array([_cut_score(n) for n in counts]))
+    return [int(n) for n in counts[scores >= scores.max() - 1e-9]]
 
 
-def _cost_curve(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float, cuts: np.ndarray) -> np.ndarray:
-    """Weighted error rate at every cut in *cuts* — the same quantity the app minimises."""
-    fpr = np.array([(bad >= t).mean() for t in cuts])
-    fnr = np.array([(good < t).mean() for t in cuts])
-    return (w_fp * fpr + w_fn * fnr) / (w_fp + w_fn)
-
-
-def cost_knob_fig() -> None:
-    """What the Threshold control is *for*.
+def fbeta_fig() -> None:
+    """What the Threshold control is *for*, and the score it maximises (#4413, #4448).
 
     One imperfect ranking, three defensible cuts, and the thing that chooses
-    between them: how much the person at the keyboard hates a false alarm
-    against how much they hate a miss. The last page draws the control that
-    asks them — the three radios of the app's balance (#4413).
+    between them: F-beta, at the beta the person at the keyboard picked. Each
+    balance's curve peaks under a different cut — Include 2, 5 and 8, the
+    three the slide before names. The last page draws the control that asks for
+    beta — the three radios of the app's balance.
     """
-    final = _cost_knob_stage(COST_STAGES)
+    final = _fbeta_stage(FBETA_STAGES)
     box = tight_box(final)
-    for stage in range(1, COST_STAGES):
-        save(_cost_knob_stage(stage), OUT, f"calib-cost-knob.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-cost-knob.png", column=FULL_BLEED, box=box)
+    for stage in range(1, FBETA_STAGES):
+        save(_fbeta_stage(stage), OUT, f"calib-fbeta.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fbeta.png", column=FULL_BLEED, box=box)
 
 
-#: The cost figure's own canvas: the slide's 16:9 at nearly the teaching
+#: The F-beta figure's own canvas: the slide's 16:9 at nearly the teaching
 #: figures' scale, so its type stays their size. Wider and shorter than
 #: `TEACH_CANVAS` on purpose. That canvas was indented past the title notch and
 #: left a column of white under the headline; this one spans the slide and
-#: drops the whole drawing below the notch instead (`COST_TOP_RESERVE`), which
+#: drops the whole drawing below the notch instead (`FBETA_TOP_RESERVE`), which
 #: costs a little height and buys the width the panel is read across.
-COST_CANVAS = (20.6, 11.6)
+FBETA_CANVAS = (20.6, 11.6)
 #: Canvas units kept clear at the top for the headline: the notch's 172px at
 #: this canvas's 62px a unit, plus the object gap under it.
-COST_TOP_RESERVE = 3.1
+FBETA_TOP_RESERVE = 3.1
+#: Each balance's row: its height, the gap between rows, and the share of the
+#: row an F-beta of 1 reaches (the rest is air above the tallest peak).
+FBETA_ROW_H = 1.4
+FBETA_ROW_GAP = 0.15
+FBETA_ROW_FILL = 0.9
 
 
-def _cost_knob_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the cost figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in COST_CANVAS))
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, COST_CANVAS[0])
-    ax.set_ylim(0, COST_CANVAS[1])
-    ax.set_axis_off()
+def _fbeta_ranking(ax: plt.Axes) -> tuple[float, float, float]:
+    """The ten-item ranking both F-beta figures open on; returns ``(x0, w, rank_y)``.
 
-    bad, good = _ranked_votes()
+    One row of marks, under the line, in the order the Cutting Room's
+    photographs are in. Shared by F-ing Metrics and Beta Max so that, flicking
+    from one to the next, the ranking does not move.
 
-    # ── layout ────────────────────────────────────────────────────────────────
-    # The ranking sits at the top of the drawing and the cost panel under it, on
-    # the same x scale, so a minimum in the panel is directly under the cut it
-    # names. Indented from the left: the top row spans the drawing, which is the
-    # one shape the title notch cannot be panned out of (`slides/STYLE.md`).
-    #
-    # The right margin used to be 3.4 units holding nothing but three arm
-    # labels. Moving those to the left — where the panel is already clear of the
-    # notch, which reserves a corner and not a band — spends that width on the
-    # panel instead, which is the row the room is asked to read (#3296).
-    # 1.5 of right margin stays: the slide draws its own page number in the
-    # bottom-right corner, and a slider label run out to the canvas edge lands
-    # on top of it.
-    # The ranking's line sits at the height of the previous slide's score axis
-    # (see `COST_AXIS_LABEL_X`), and the panel gives up the difference.
-    x0, w = 4.0, COST_CANVAS[0] - 4.0 - 1.5
-    rank_y = COST_CANVAS[1] - COST_TOP_RESERVE - 0.97
-    panel_top = rank_y - 2.15
-    panel_h = 3.38
-    panel_base = panel_top - panel_h
-
-    cuts = np.linspace(0.0, 1.0, 501)
-    curves = [_cost_curve(bad, good, w_fp, w_fn, cuts) for w_fp, w_fn, _ in COST_ARMS]
-    ceiling = max(float(c.max()) for c in curves)
-    sy = panel_h / ceiling
-
-    # ── stage 1: one imperfect ranking ────────────────────────────────────────
-    # One row of marks, under the line, in the order the previous slide's
-    # photographs are in. Good above the line and Bad below it made the two
-    # piles legible when there were twenty-three of them; with ten it only
-    # breaks the correspondence with the row of pictures the room has just been
-    # looking at.
+    Indented from the left: the top row spans the drawing, which is the one
+    shape the title notch cannot be panned out of (`slides/STYLE.md`). 1.5 of
+    right margin stays: the slide draws its own page number in the
+    bottom-right corner, and a label run out to the canvas edge lands on it.
+    """
+    x0, w = 4.0, FBETA_CANVAS[0] - 4.0 - 1.5
+    rank_y = FBETA_CANVAS[1] - FBETA_TOP_RESERVE - 0.97
     _range_line(ax, x0, x0 + w, rank_y, z=3)
     for index, keep in enumerate(RANK_MARKS):
         ax.text(
@@ -4257,50 +4281,325 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
             fontsize=30,
             color=GREEN if keep else RED,
         )
-    # The previous slide's axis label, word for word, in the same place on the
+    # The Cutting Room's axis label, word for word, in the same place on the
     # slide and at the same rendered size: flicking between the two, the
     # photographs go and the label does not move. So it is centred on the
-    # *slide* (`COST_AXIS_LABEL_X`), not on this line, which starts right of
-    # the prices' column. `make-book-figs.py` draws the same string.
+    # *slide* (`FBETA_AXIS_LABEL_X`), not on this line, which starts right of
+    # the balances' column. `make-book-figs.py` draws the same string.
     ax.text(
-        COST_AXIS_LABEL_X,
-        rank_y + COST_AXIS_LABEL_LIFT,
-        "“bookness”, low to high",
+        FBETA_AXIS_LABEL_X,
+        rank_y + FBETA_AXIS_LABEL_LIFT,
+        "“Bookness”, low to high",
         ha="center",
         va="bottom",
-        fontsize=COST_AXIS_LABEL_PT,
+        fontsize=FBETA_AXIS_LABEL_PT,
         color=SOFT,
     )
+    return x0, w, rank_y
 
-    # ── stages 2-4: one cost rule, three prices, three cuts ───────────────────
-    # The rule names the panel rather than sitting in a row of its own: the
-    # dotted drops from a minimum up to the cut it chooses have to cross that
-    # row, and a formula with dotted lines through it is a formula nobody reads.
-    # Haloed for the same reason, and the same way the theme halos a full-bleed
-    # headline: white behind the letters, not a white plate over the drawing.
-    if stage >= 2:
+
+#: How many stages F-ing Metrics reveals in: the cut and its three counts;
+#: precision and recall; F₁; F-beta.
+FMETRICS_STAGES = 4
+#: The cut F-ing Metrics reads, as items kept: the Cutting Room's middle one,
+#: one mistake of each kind, where every F-beta agrees (0.80).
+FMETRICS_KEPT = 5
+
+
+def fmetrics_fig() -> None:
+    """What F₁ is, and then what F-beta is, on the ten items the room just saw (#4517).
+
+    Beta Max used to print the F-beta formula under its rows and leave the room
+    to take it in while the rows were the point. This comes first, with Beta
+    Release (the same score as a map, at each beta) between the two: one cut
+    through the same ranking, the three counts it has, the two rates
+    those make, F₁ as their harmonic mean, and F-beta as the same mean with
+    recall weighted β times. The count form on the last line is the one Beta
+    Max and What to Expect then evaluate.
+    """
+    final = _fmetrics_stage(FMETRICS_STAGES)
+    box = tight_box(final)
+    for stage in range(1, FMETRICS_STAGES):
+        save(_fmetrics_stage(stage), OUT, f"calib-fmetrics.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fmetrics.png", column=FULL_BLEED, box=box)
+
+
+def _fmetrics_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of F-ing Metrics."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+
+    x0, w, rank_y = _fbeta_ranking(ax)
+    bad, good = _ranked_votes()
+    cut = _cut_score(FMETRICS_KEPT)
+    hits = int((good >= cut).sum())
+    kept = hits + int((bad >= cut).sum())
+    matches = int(good.size)
+    precision, recall = hits / kept, hits / matches
+    f1 = 2 * precision * recall / (precision + recall)
+
+    # ── stage 1: one cut, and the three counts it has ─────────────────────────
+    cut_x = x0 + cut * w
+    ax.plot([cut_x] * 2, [rank_y - 1.05, rank_y + 0.25], color=INK, linewidth=2.0, linestyle=(0, (4, 3)), zorder=4)
+    bracket_y = rank_y - 1.2
+    ax.plot([cut_x, x0 + w], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=4)
+    for x in (cut_x, x0 + w):
+        ax.plot([x] * 2, [bracket_y, bracket_y + 0.18], color=INK, linewidth=1.6, zorder=4)
+    centre = x0 + w / 2
+    counts_y = rank_y - 2.0
+    for dx, name, value, gloss in (
+        (-w / 3, "kept", kept, "came back"),
+        (0.0, "hits", hits, "came back and are books"),
+        (w / 3, "matches", matches, "books in all"),
+    ):
+        ax.text(centre + dx, counts_y, f"{name} = {value}", ha="center", va="center", fontsize=20, color=INK)
+        ax.text(centre + dx, counts_y - 0.55, gloss, ha="center", va="center", fontsize=16, color=SOFT)
+
+    # ── stages 2-4: the formulas, one per row ─────────────────────────────────
+    # Left-aligned on one edge so the eye runs down them as a derivation. What
+    # each one *says* is the presenter's to read out, so it is in the notes and
+    # not on the slide: set beside the formulas, the glosses crowded them.
+    rows = (
+        (2, f"precision  P = hits / kept = {precision:.2f}"),
+        (2, f"recall  R = hits / matches = {recall:.2f}"),
+        (3, _sub(r"F_1") + f" = 2PR / (P + R) = {f1:.2f}"),
+        (4, _sub(r"F_\beta") + " = (1 + β²) PR / (β²P + R)"),
+        (4, "= (1 + β²) · hits / (β² · matches + kept)"),
+    )
+    row_x = x0 + w * FMETRICS_INDENT
+    # The count form continues the line above it, so its "=" sits under that
+    # line's: measured, because the F_β in front of it is set in mathtext.
+    prefix = ax.text(row_x, 0, _sub(r"F_\beta") + " ", fontsize=20, alpha=0)
+    renderer = fig.canvas.get_renderer()
+    box = prefix.get_window_extent(renderer).transformed(ax.transData.inverted())
+    prefix.remove()
+    row_y = counts_y - 1.6
+    for index, (first, formula) in enumerate(rows):
+        if index and rows[index - 1][0] != first:
+            row_y -= 0.3
+        if stage >= first:
+            x = row_x + box.width if formula.startswith("=") else row_x
+            ax.text(x, row_y, formula, ha="left", va="baseline", fontsize=20, color=INK)
+        row_y -= 0.72
+    return fig
+
+
+#: Where the formulas' shared left edge sits, as a share of the ranking's width:
+#: in from the line's own start, so the block sits under the middle of the
+#: ranking rather than hanging off its left end.
+FMETRICS_INDENT = 0.16
+
+
+# ── Beta Release: F-beta as a map, once per beta (#4519) ──────────────────────
+
+#: How many stages Beta Release reveals in: F₁'s map, the one F-ing Metrics
+#: just defined; then β = ¼'s; then β = 4's (`FBETA_REVEAL`'s order).
+FBETA_MAPS_STAGES = 3
+#: The three maps' squares, in canvas units: the side, the gap between maps,
+#: and the first map's left edge (room for the row's one "Precision"). A gap
+#: holds the next map's tick numbers clear of the numbers ending the curves to
+#: its left. The row is as wide as the slide allows, short of the page
+#: number's corner, and as high: its titles just under the title's notch, so
+#: the slack is a margin below the row as well as above it (owner, 2026-10-05).
+FBETA_MAP_SIDE = 5.4
+FBETA_MAP_GAP = 1.2
+FBETA_MAP_X = 1.3
+FBETA_MAP_Y = 2.0
+#: How far above its map a map's "β = ..." sits: well clear of the numbers
+#: that end β = 4's curves along its top, so it reads as the map's title and
+#: not as one more curve's label (owner, 2026-10-05). The slack above the
+#: maps, under the notch, pays for it.
+FBETA_MAP_TITLE_LIFT = 0.85
+#: F-beta's level curves on a map: one every 0.2.
+FBETA_LEVELS = (0.2, 0.4, 0.6, 0.8)
+#: The precision-recall grid: a line every 0.1 in `make-sota-figs`'s
+#: `GRID_COLOUR`, so the maps read like the charts that follow them.
+PR_GRID_STEP = 0.1
+PR_GRID_COLOUR = "#e3e7ec"
+#: The room a level's number takes at the map's edge, in the map's own units
+#: ``(across, up)``: a 16pt "0.8" on a `FBETA_MAP_SIDE` square and a little
+#: air. The curve stops there and its number fills the rest.
+FBETA_MAP_LABEL_ROOM = (0.16, 0.1)
+
+
+def fbeta_maps_fig() -> None:
+    """F-beta as a contour map over recall and precision, at each of the app's betas (#4519).
+
+    The owner, 2026-10-05: one slide with the level-curve map for each beta, so
+    the three are comparable, and the slide that names ¼, 1 and 4 as the betas
+    the talk uses from here on. A map's contours are where F-beta takes one
+    value: at β = 1 they bow symmetrically about the diagonal; at β = ¼ they lie
+    down, so precision sets the height; at β = 4 they stand up, so recall does.
+    Every map's contours cross the diagonal at the same values — where
+    precision equals recall, every F-beta is that number — which is the beat
+    Beta Max later lands on its Include-5 cut.
+    """
+    final = _fbeta_maps_stage(FBETA_MAPS_STAGES)
+    box = tight_box(final)
+    for stage in range(1, FBETA_MAPS_STAGES):
+        save(_fbeta_maps_stage(stage), OUT, f"calib-fbeta-maps.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-fbeta-maps.png", column=FULL_BLEED, box=box)
+
+
+def _fbeta_maps_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of Beta Release."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+    # In `FBETA_ARMS` order, left to right, so beta rises across the slide; the
+    # same three, top to bottom, are Beta Max's rows.
+    first = min(FBETA_REVEAL) - 1
+    for arm, ((beta, name), reveal) in enumerate(zip(FBETA_ARMS, FBETA_REVEAL, strict=True)):
+        if stage < reveal - first:
+            continue
+        x = FBETA_MAP_X + arm * (FBETA_MAP_SIDE + FBETA_MAP_GAP)
+        pr = fig.add_axes(_canvas_box((x, FBETA_MAP_Y, FBETA_MAP_SIDE)))
+        # Every map has its own numbers, and the row one "Precision", on the
+        # leftmost (owner, 2026-10-05): one axis, not the same label three
+        # times. β = 1's map, shown first and alone, goes without the word
+        # until β = ¼'s arrives beside it.
+        _pr_plane(pr, precision_label=arm == 0)
+        _fbeta_contours(pr, beta)
         ax.text(
-            x0 + w,
-            panel_top + LABEL_GAP,
-            "cost = " + _sub(r"w_f") + "·FPR + " + _sub(r"w_n") + "·FNR",
-            ha="right",
+            x + FBETA_MAP_SIDE / 2,
+            FBETA_MAP_Y + FBETA_MAP_SIDE + FBETA_MAP_TITLE_LIFT,
+            f"β = {name}",
+            ha="center",
             va="bottom",
-            fontsize=18,
+            fontsize=22,
             color=INK,
-            zorder=6,
-            path_effects=[patheffects.withStroke(linewidth=7, foreground="white")],
         )
-    for arm, ((w_fp, w_fn, name), curve, weight) in enumerate(zip(COST_ARMS, curves, COST_WEIGHTS, strict=True)):
-        # Balanced first, then strict, then permissive: the middle arm is the
+    return fig
+
+
+def _canvas_box(box: tuple[float, float, float]) -> list[float]:
+    """A square ``(x, y, side)`` in canvas units, as figure fractions for ``add_axes``."""
+    x, y, side = box
+    return [x / FBETA_CANVAS[0], y / FBETA_CANVAS[1], side / FBETA_CANVAS[0], side / FBETA_CANVAS[1]]
+
+
+def _pr_plane(ax: plt.Axes, precision_label: bool = True) -> None:
+    """The square recall-by-precision plane, 0 to 1 on both, in the deck's axis style.
+
+    Gridded like the precision-recall charts later in the deck (Photo Finish
+    and the document slides, `make-sota-figs._pr_axes`): a faint line every
+    0.1, behind everything, in their colour.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_aspect("equal")
+    ax.set_xticks([0, 0.5, 1])
+    ax.set_yticks([0, 0.5, 1])
+    ax.set_xticklabels(["0", "0.5", "1"], fontsize=16, color=SOFT)
+    ax.set_yticklabels(["0", "0.5", "1"], fontsize=16, color=SOFT)
+    ax.set_xlabel("Recall", fontsize=18, color=INK)
+    if precision_label:
+        ax.set_ylabel("Precision", fontsize=18, color=INK)
+    lines = np.arange(0, 1 + PR_GRID_STEP / 2, PR_GRID_STEP)
+    ax.set_xticks(lines, minor=True)
+    ax.set_yticks(lines, minor=True)
+    ax.tick_params(which="minor", length=0)
+    ax.grid(True, which="both", color=PR_GRID_COLOUR, linewidth=1.0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(SOFT)
+    ax.tick_params(colors=SOFT)
+
+
+def _fbeta_contours(ax: plt.Axes, beta: float) -> None:
+    """F-beta's level curves over the plane, each numbered at its own end (never on a leader).
+
+    Drawn from the formula rather than traced by ``contour``: a curve has to
+    stop short of the edge to leave its number room, and ``clabel`` both
+    clipped the number at the edge and left a stub of curve beyond it.
+    """
+    b2 = beta * beta
+    room_x, room_y = FBETA_MAP_LABEL_ROOM
+    for c in FBETA_LEVELS:
+        # The level set F = c, as precision against recall and recall against
+        # precision, sampled along both so its steep arm is as smooth as its
+        # flat one; it enters the square at precision 1, recall c·b²/(1+b²-c).
+        rec_a = np.linspace(c * b2 / (1 + b2 - c), 1, 600)
+        prec_b = np.linspace(c / (1 + b2 - c * b2), 1, 600)
+        rec = np.concatenate([rec_a, c * b2 * prec_b / ((1 + b2) * prec_b - c)])
+        prec = np.concatenate([c * rec_a / ((1 + b2) * rec_a - c * b2), prec_b])
+        order = np.argsort(rec)
+        rec, prec = rec[order], prec[order]
+        # Its number is its end (`slides/STYLE.md`), on the edge where the four
+        # ends spread out: the right edge when the curves lie down or bow
+        # (β <= 1), the top when they stand up (β > 1). The other edge bunches
+        # them: β = 4's right ends are all under 0.2.
+        if beta <= 1:
+            keep = rec <= 1 - room_x
+            ax.plot(rec[keep], prec[keep], color=INK, linewidth=1.8, zorder=2)
+            ax.text(1, prec[keep][-1], f"{c:.1f}", ha="right", va="center", fontsize=16, color=INK, clip_on=False)
+        else:
+            keep = prec <= 1 - room_y
+            ax.plot(rec[keep], prec[keep], color=INK, linewidth=1.8, zorder=2)
+            ax.text(rec[keep][0], 1, f"{c:.1f}", ha="center", va="top", fontsize=16, color=INK, clip_on=False)
+
+
+def _fbeta_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the F-beta figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+
+    bad, good = _ranked_votes()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # The ranking sits at the top of the drawing (`_fbeta_ranking`, stage 1)
+    # and one row per balance under it, on the same x scale, so a peak in a
+    # row is directly under the cut it names.
+    #
+    # One row per balance, not three curves on one panel: the three F-betas
+    # are equal wherever precision equals recall, and on this ranking that is
+    # the whole Include-5 plateau, so overlaid they ran on top of one another
+    # for a fifth of the axis. Separate rows also give each peak its own zero.
+    x0, w, rank_y = _fbeta_ranking(ax)
+    rows_top = rank_y - 1.05
+    sy = FBETA_ROW_H * FBETA_ROW_FILL
+    row_base = [rows_top - (i + 1) * FBETA_ROW_H - i * FBETA_ROW_GAP for i in range(len(FBETA_ARMS))]
+    panel_base = row_base[-1]
+
+    # The cut's plateaus: a riser at every item, and one cut inside each step.
+    edges = np.array([0.0, *(_mark_score(i) for i in range(len(RANK_MARKS))), 1.0])
+    plateaus = (edges[:-1] + edges[1:]) / 2
+
+    # ── stage 1 is the ranking, drawn above; stages 2-4: three balances ───────
+    # The score itself is F-ing Metrics', two slides back, so it is not
+    # printed again here (#4517).
+    for arm, ((beta, name), weight, base) in enumerate(zip(FBETA_ARMS, BALANCE_WEIGHTS, row_base, strict=True)):
+        # Balanced first, then precise, then permissive: the middle arm is the
         # one the room already has in mind, and the other two are what the
         # slide is arguing also exist.
-        if stage < COST_REVEAL[arm]:
+        if stage < FBETA_REVEAL[arm]:
             continue
-        ys = panel_base + curve * sy
-        ax.plot(x0 + cuts * w, ys, color=INK, linewidth=weight, zorder=3)
-        for admitted in _optima(bad, good, w_fp, w_fn):
+        # Each row's zero, faint: it is what a peak is read against, and not a
+        # thing to read.
+        ax.plot([x0, x0 + w], [base, base], color=RULE, linewidth=1.4, zorder=1)
+        # One plateau per admitted count, with its risers at the items: drawn as
+        # stairs rather than sampled, so every step is vertical.
+        ax.stairs(
+            base + _fbeta_curve(bad, good, beta, plateaus) * sy,
+            x0 + edges * w,
+            baseline=None,
+            color=INK,
+            linewidth=weight,
+            zorder=3,
+        )
+        for admitted in _peaks(bad, good, beta):
             cut_x = x0 + _cut_score(admitted) * w
-            cut_y = panel_base + float(_cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(admitted)]))[0]) * sy
+            cut_y = base + float(_fbeta_curve(bad, good, beta, np.array([_cut_score(admitted)]))[0]) * sy
             # Black, like the curves they sit on and like the same three cuts
             # on the previous slide. Blue is the palette's "the shipped thing"
             # and these cuts are not that; drawn in it, the dots read as a
@@ -4309,36 +4608,32 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
             ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=INK, zorder=5)
             ax.plot([cut_x, cut_x], [cut_y, rank_y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
             ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=INK, linewidth=2.4, zorder=4)
-        # The arm is named at the left-hand end of its own curve. The three
-        # start a quarter of the panel apart there and converge on one another's
-        # ends, so the left is the one place a label can sit on the line it
-        # names without three of them stacking up.
         ax.text(
             x0 - LABEL_GAP,
-            ys[0],
-            _sub(rf"w_f : w_n = {name}"),
+            base + sy / 2,
+            f"β = {name}",
             ha="right",
             va="center",
-            fontsize=15,
+            fontsize=16,
             color=INK,
         )
 
-    # ── stage 5: the control that asks for the ratio ──────────────────────────
-    # Down in the corner with the prices, not under the ranking. It chooses
+    # ── stage 5: the control that asks for beta ───────────────────────────────
+    # Down in the corner with the balances, not under the ranking. It chooses
     # among what those three labels name, so that is where it belongs; drawn
     # across the full width under the panel, a control read as a second copy of
     # the score axis, as though it picked an item.
-    if stage >= COST_STAGES:
-        _balance_control(ax, COST_CONTROL_X0, panel_base - COST_CONTROL_DROP, COST_CONTROL_W)
+    if stage >= FBETA_STAGES:
+        _balance_control(ax, FBETA_CONTROL_X0, panel_base - FBETA_CONTROL_DROP, FBETA_CONTROL_W)
     return fig
 
 
 #: Where the control sits: the bottom-left corner, under the column of three
-#: prices it chooses among, stopping short of the panel.
-COST_CONTROL_X0 = 0.45
-COST_CONTROL_W = 3.35
+#: balances it chooses among, stopping short of the panel.
+FBETA_CONTROL_X0 = 0.45
+FBETA_CONTROL_W = 3.35
 #: How far under the panel's floor the control's track runs.
-COST_CONTROL_DROP = 1.4
+FBETA_CONTROL_DROP = 1.23
 #: The radios' radius, in canvas units.
 BALANCE_RADIO_R = 0.13
 
@@ -4346,9 +4641,9 @@ BALANCE_RADIO_R = 0.13
 #: centred on the slide rather than on this figure's (indented) axis, and at
 #: the same rendered size. Measured, not derived — if either figure's framing
 #: changes, re-measure both labels in slide pixels and move this one.
-COST_AXIS_LABEL_X = 10.30
-COST_AXIS_LABEL_LIFT = 0.30
-COST_AXIS_LABEL_PT = 12.8
+FBETA_AXIS_LABEL_X = 10.30
+FBETA_AXIS_LABEL_LIFT = 0.30
+FBETA_AXIS_LABEL_PT = 12.8
 
 
 def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
@@ -4357,8 +4652,9 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
     The app's balance (`balance.component.html`, #4413): a False Positives …
     False Negatives track with a radio under each third and no word or number
     on any of them, the middle one picked. Left to right they lean to recall,
-    sit between, and lean to precision — F-beta's beta of 2, 1 and 0.5 — which
-    are the loose, middle and strict cuts the three prices above it choose.
+    sit between, and lean to precision — F-beta's beta of 4, 1 and 1/4
+    (#4448) — which are the loose, middle and strict cuts the three balances
+    above it choose.
     """
     ax.text(x0, y + 1.02, "Threshold:", ha="left", va="baseline", fontsize=16, color=INK)
     # On one shared baseline: "Negatives" has a descender and "Positives" does
@@ -4384,168 +4680,329 @@ def _balance_control(ax: plt.Axes, x0: float, y: float, w: float) -> None:
             ax.add_patch(Circle((cx, y - 0.38), BALANCE_RADIO_R * 0.55, facecolor=BLUE, edgecolor="none", zorder=5))
 
 
-#: The mixture the crossing figure argues over: (weight, mean, variance) for
-#: the Bad component and the Good one. The weights are the measured ones from
-#: the anchored slide — a fitted high-component weight far under a half is what
-#: makes the midpoint and the crossing different places, and a figure drawn at
-#: equal weights would show them on top of each other and prove nothing.
-CROSSING_LO = (0.91, 0.30, 0.0130)
-CROSSING_HI = (0.09, 0.70, 0.0130)
+# ── DINOv3, and the patches it makes (#4517, #4533) ─────────────────────────
 
-#: How tall the small component is drawn relative to its own true height. The
-#: two weighted densities differ by a factor of ten, so the Good one drawn to
-#: scale is a smear along the baseline and the crossing it makes is invisible.
-#: The *shapes* are therefore drawn unweighted and the weights are carried by
-#: the second pair of curves, which is the whole distinction the slide makes.
-CROSSING_SHAPE_H = 0.86
+#: How many build stages the patch figure reveals in: one photograph, and
+#: DINOv3, which sends what it is given into content space, as SigLIP does; the
+#: grid it cuts the photograph into; and a point for every patch, where SigLIP
+#: would have made one for the photo. It used to go on to a Good box and the
+#: points it trains on, which was a step ahead of the slide: there is no target
+#: yet while the embedder is being introduced (#4563).
+PATCH_STAGES = 3
+#: DINOv3 ViT-B/16 sees a 224-pixel square as a 14 x 14 grid of 16-pixel
+#: patches and gives each a 768-number vector (`embedder_dinov3_patch`), plus
+#: one for the image as a whole; scoring max-pools over all of them
+#: (`vtscore.embedding.matrix.media_score_rows`).
+PATCH_GRID = 14
+PATCH_DIM = 768
+#: The photograph: Extreme Measures' first one, the doll holding a book, as a
+#: single COCO val2017 frame fetched by URL rather than out of the 1 GB corpus
+#: archive, because this figure needs nothing else from it.
+PATCH_PHOTO_ID = 167159  # `REGION_PHOTOS[0][0]`, defined further down
+PATCH_PHOTO_URL = f"http://images.cocodataset.org/val2017/{PATCH_PHOTO_ID:012d}.jpg"
+#: The one patch on the book the figure follows into content space, as a grid
+#: cell (row, col), read off the photograph. It is drawn the way the deck draws
+#: the positive side — green, and hatched like the Good pile — on the
+#: photograph and in the cube alike, so the eye pairs the two across the arrow.
+PATCH_FOLLOWED = (10, 4)
+PATCH_FOLLOWED_HATCH = "//////"
+#: The followed point's radius, in ordinary dots'.
+PATCH_FOLLOWED_SCALE = 2.6
+#: Layout, in `TEACH_CANVAS` units: the photograph's square `(x0, y0, side)`,
+#: and content space's cube `(x0, y0, side, depth)`. The cube is
+#: Embed-time Stories' (`make-intro-figs.py`): the same wire, the same 45°
+#: depth at the same share of its side, the same hollow dots, so the room
+#: reads it as the space SigLIP's points went into (#4533).
+PATCH_PHOTO = (0.9, 1.1, 6.9)
+PATCH_CUBE = (11.4, 0.85, 5.9, 1.53)
+#: The wire of the cube, and its dots' radius and how much the back of the
+#: cloud shrinks: `make-intro-figs`'s `WIRE` and `FLOW_DEPTH_SHRINK`, with the
+#: radius cut to suit 197 dots rather than 60.
+PATCH_WIRE = "#98a2b0"
+PATCH_DOT_R, PATCH_DOT_SHRINK = 0.1, 0.30
+#: How far in from the cube's faces the cloud stays.
+PATCH_CLOUD_PAD = 0.07
+#: The book's outline in the square crop's pixels: COCO's own segmentation of
+#: it (annotation on image 167159), shifted left by the crop's 62 pixels, and
+#: pinned here so the figure needs only the one photograph, not the corpus.
+PATCH_BOOK_OUTLINE = (
+    (105, 197), (90, 226), (68, 275), (48, 322), (79, 340), (119, 365),
+    (136, 365), (157, 318), (182, 260), (191, 228), (163, 218), (121, 199),
+)  # fmt: skip
+#: Where the book's patches gather in the cube, and how loosely: a patch that
+#: is mostly book moves to this neighbourhood, and every other patch is drawn
+#: at least `PATCH_BOOK_CLEAR` (in cube sides, on the page) from its centre,
+#: so the gathering reads as one.
+PATCH_BOOK_CENTRE = (0.72, 0.70, 0.3)
+PATCH_BOOK_SPREAD = 0.3
+PATCH_BOOK_CLEAR = 0.24
 
 
-def crossing_fig() -> None:
-    """Why the midpoint of two means is not the cut, unless the two are equally likely.
+@functools.cache
+def _patch_photo():
+    """The doll photograph, centre-cropped to the square the model sees."""
+    import io
+    import urllib.request
 
-    The deck asserted this in one bullet and then reported that fixing it was
-    worth −0.0044. A room that has not seen *where* the two answers differ has
-    no way to judge either number (#3246).
+    from PIL import Image
+
+    cache = Path(__file__).resolve().parents[3] / "data" / "coco-val2017" / "val2017" / f"{PATCH_PHOTO_ID:012d}.jpg"
+    if cache.exists():
+        image = Image.open(cache)
+    else:
+        with urllib.request.urlopen(PATCH_PHOTO_URL) as response:  # noqa: S310
+            image = Image.open(io.BytesIO(response.read()))
+    image = image.convert("RGB")
+    width, height = image.size
+    side = min(width, height)
+    dx, dy = (width - side) // 2, (height - side) // 2
+    return image.crop((dx, dy, dx + side, dy + side))
+
+
+@functools.cache
+def _patch_points() -> np.ndarray:
+    """Where each patch lands in the cube, in [0, 1]³, row-major from the top-left patch.
+
+    A drawing, not DINOv3, and it says so in two steps. Every patch starts
+    where its own colour and texture put it: the mean and spread of its pixels,
+    reduced to three numbers by principal components and spread evenly across
+    the cube by rank, so the cloud fills the box without piling up at a face.
+    Then every patch that is mostly book (`PATCH_BOOK_OUTLINE`) moves to one
+    neighbourhood, keeping its place within it, because that is the one
+    property of DINOv3's space the slide leans on: patches of the same *thing*
+    land together, however differently they are lit. The cube is a lie of
+    scale either way (Embed-time Stories).
     """
-    final = _crossing_stage(CROSSING_STAGES)
+    from PIL import Image, ImageDraw
+
+    photo = _patch_photo()
+    pixels = np.asarray(photo.resize((PATCH_GRID * 16,) * 2), dtype=float) / 255.0
+    cells = pixels.reshape(PATCH_GRID, 16, PATCH_GRID, 16, 3).transpose(0, 2, 1, 3, 4)
+    features = np.hstack([cells.mean(axis=(2, 3)), cells.std(axis=(2, 3))]).reshape(PATCH_GRID**2, -1)
+    features = (features - features.mean(axis=0)) / features.std(axis=0)
+    _u, _s, vt = np.linalg.svd(features, full_matrices=False)
+    coords = features @ vt[:3].T
+    spread = coords.argsort(axis=0).argsort(axis=0) / (PATCH_GRID**2 - 1)
+
+    mask = Image.new("L", photo.size, 0)
+    ImageDraw.Draw(mask).polygon(PATCH_BOOK_OUTLINE, fill=255)
+    book = np.asarray(mask.resize((PATCH_GRID, PATCH_GRID), Image.Resampling.BOX), dtype=float).ravel() / 255.0
+    centre = np.array(PATCH_BOOK_CENTRE)
+    gathered = centre + PATCH_BOOK_SPREAD * (spread - 0.5)
+    is_book = book >= 0.5
+    points = np.where(is_book[:, None], gathered, spread)
+    # Mostly not book: pushed out of the book's neighbourhood, so the room sees
+    # a gathering rather than a crowd. Measured where the dots land on the
+    # page, not in the cube: the figure is read in two dimensions, and a dot a
+    # unit behind the gathering still draws on top of it.
+    _x0, _y0, side, depth = PATCH_CUBE
+    lean = depth / side
+
+    def flat(p: np.ndarray) -> np.ndarray:
+        return np.array([p[0] + lean * p[2], p[1] + lean * p[2]])
+
+    # The push is r -> sqrt(r² + clear²) on every such dot, which keeps equal
+    # areas equal: the cloud stays as even as it was, with a hole cut in it,
+    # rather than piling the dots it moves into a ring round the hole.
+    for i in np.flatnonzero(~is_book):
+        offset = flat(points[i]) - flat(centre)
+        distance = float(np.linalg.norm(offset))
+        pushed = float(np.hypot(distance, PATCH_BOOK_CLEAR))
+        points[i, :2] += offset / max(distance, 1e-9) * (pushed - distance)
+    # Back into the cube by rescaling, not clipping: a clip stacks every dot
+    # the push carried past a face into a column along it.
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    return PATCH_CLOUD_PAD + (1 - 2 * PATCH_CLOUD_PAD) * (points - lo) / (hi - lo)
+
+
+def _cube_at(point: np.ndarray) -> tuple[float, float]:
+    """Where a point of the unit cube lands on the page: Embed-time Stories' axonometric."""
+    x0, y0, side, depth = PATCH_CUBE
+    return x0 + point[0] * side + point[2] * depth, y0 + point[1] * side + point[2] * depth
+
+
+def _content_cube(ax: plt.Axes) -> None:
+    """The wire-frame box content space is drawn as, its hidden edges behind the cloud.
+
+    `make-intro-figs._wire_cube`, at this figure's size: the three edges where
+    the hidden faces meet pass behind every dot, the other nine in front.
+    """
+    x0, y0, side, depth = PATCH_CUBE
+    front = [(x0, y0), (x0 + side, y0), (x0 + side, y0 + side), (x0, y0 + side)]
+    back = [(x + depth, y + depth) for x, y in front]
+    bl, br, tr, tl = range(4)
+    hidden = {(bl, br), (bl, tl)}
+    edges = []
+    for a, b in ((bl, br), (br, tr), (tr, tl), (tl, bl)):
+        edges.append((front[a], front[b], False))
+        edges.append((back[a], back[b], (a, b) in hidden))
+    for corner in range(4):
+        edges.append((front[corner], back[corner], corner == bl))
+    for (xa, ya), (xb, yb), behind in edges:
+        ax.plot(
+            [xa, xb],
+            [ya, yb],
+            color=PATCH_WIRE,
+            linewidth=1.4,
+            solid_capstyle="projecting",
+            zorder=2 if behind else 7.5,
+        )
+
+
+def _cube_dot(
+    ax: plt.Axes,
+    point: np.ndarray,
+    edge: str = INK,
+    hatch: str | None = None,
+    scale: float = 1.0,
+    zorder: float | None = None,
+) -> None:
+    """One point in the cube: hollow, smaller and further back with depth; *hatch* fills it in *edge*'s colour."""
+    x, y = _cube_at(point)
+    radius = scale * PATCH_DOT_R * (1.0 - PATCH_DOT_SHRINK * point[2])
+    ax.add_patch(
+        Circle(
+            (x, y),
+            radius,
+            facecolor="white",
+            edgecolor=edge,
+            hatch=hatch,
+            linewidth=1.1,
+            zorder=5 + 2 * (1 - point[2]) if zorder is None else zorder,
+        )
+    )
+
+
+def patch_fig() -> None:
+    """DINOv3, and what a patch is, before Extreme Measures takes a maximum over them (#4517, #4533).
+
+    Region voting runs on a model the deck had not introduced: DINOv3. It is
+    introduced in the picture the deck already has for an embedding, the
+    content-space cube of Embed-time Stories, where SigLIP sent each
+    photograph to one point. DINOv3 cuts the photograph into a grid first and
+    sends each patch to its own point, which is the whole difference. (It
+    makes one more for the image as a whole, which the notes mention and the
+    figure leaves out.) What region voting does with those points is the next
+    slide's, not this one's (#4563).
+    """
+    final = _patch_stage(PATCH_STAGES)
     box = tight_box(final)
-    for stage in range(1, CROSSING_STAGES):
-        save(_crossing_stage(stage), OUT, f"calib-crossing.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-crossing.png", column=FULL_BLEED, box=box)
+    for stage in range(1, PATCH_STAGES):
+        save(_patch_stage(stage), OUT, f"calib-patches.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-patches.png", column=FULL_BLEED, box=box)
 
 
-def _crossing_point() -> float:
-    """Where the two weighted components actually cross, in score units.
-
-    Closed form, because the two variances are equal: the log-odds are linear
-    in the score, so the crossing is the midpoint of the means displaced by the
-    prior's own log-ratio. That displacement is the slide.
-    """
-    (w_lo, mu_lo, var), (w_hi, mu_hi, _) = CROSSING_LO, CROSSING_HI
-    return 0.5 * (mu_lo + mu_hi) + var / (mu_hi - mu_lo) * float(np.log(w_lo / w_hi))
+def _patch_cell(row: int, col: int) -> tuple[float, float, float]:
+    """A grid cell's lower-left corner and side, in canvas units."""
+    x0, y0, side = PATCH_PHOTO
+    cell = side / PATCH_GRID
+    return x0 + col * cell, y0 + side - (row + 1) * cell, cell
 
 
-def _crossing_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the crossing figure."""
+def _patch_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the patch figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, TEACH_CANVAS[0])
     ax.set_ylim(0, TEACH_CANVAS[1])
     ax.set_axis_off()
 
-    (w_lo, mu_lo, var_lo), (w_hi, mu_hi, var_hi) = CROSSING_LO, CROSSING_HI
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
-    shape_base = TEACH_CANVAS[1] - 1.0 - 3.1
-    shape_h = 3.1
-    weighted_base = 2.35
-    weighted_h = 3.1
-    arithmetic_y = 0.55
+    x0, y0, side = PATCH_PHOTO
+    cube_x0, cube_y0, cube_side, cube_depth = PATCH_CUBE
+    points = _patch_points()
+    followed = PATCH_FOLLOWED[0] * PATCH_GRID + PATCH_FOLLOWED[1]
 
-    xs = np.linspace(0.0, 1.0, 700)
-    lo, hi = gaussian(xs, mu_lo, var_lo), gaussian(xs, mu_hi, var_hi)
-    mid = 0.5 * (mu_lo + mu_hi)
-    crossing = _crossing_point()
-
-    # ── stage 1: the fit, as the mixture slide left it — two shapes and two means
-    peak = float(max(lo.max(), hi.max()))
-    for curve, colour, name, hatch in ((lo, RED, r"\mu_{lo}", "\\\\\\"), (hi, GREEN, r"\mu_{hi}", "//////")):
-        density_ys = shape_base + curve / peak * shape_h * CROSSING_SHAPE_H
-        ys = density_ys - HUMP_DROP
-        mu = mu_lo if colour == RED else mu_hi
-        keep = np.flatnonzero(density_ys > shape_base + TAIL_FLOOR)
-        ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=HUMP_LW, zorder=3)
-        pts = [(x0 + xs[keep[0]] * w, shape_base)]
-        pts += [(x0 + xx * w, yy) for xx, yy in zip(xs[keep], ys[keep])]
-        pts.append((x0 + xs[keep[-1]] * w, shape_base))
-        ax.add_patch(Polygon(pts, closed=True, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2))
-        top = shape_base + float(curve.max()) / peak * shape_h * CROSSING_SHAPE_H - HUMP_DROP
-        ax.plot([x0 + mu * w] * 2, [shape_base, top], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
-        ax.text(x0 + mu * w, shape_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=16, color=INK)
-    _range_line(ax, x0, x0 + w, shape_base, z=5)
-
-    # ── stage 2: the shipped rule — halfway between the means ─────────────────
+    # ── stage 1: one photograph, and DINOv3, into content space ───────────────
+    ax.imshow(_patch_photo(), extent=(x0, x0 + side, y0, y0 + side), zorder=1, aspect="auto")
+    mid = y0 + side / 2
+    arrow_x0 = x0 + side + OBJECT_GAP
+    _labeled_arrow(ax, (arrow_x0, mid), (cube_x0 - OBJECT_GAP, mid), "DINOv3")
+    _content_cube(ax)
+    ax.text(
+        cube_x0 + (cube_side + cube_depth) / 2,
+        cube_y0 - LABEL_GAP,
+        f"{PATCH_DIM}-d",
+        ha="center",
+        va="top",
+        fontsize=17,
+        color=INK,
+    )
+    # ── stage 2: the grid DINOv3 cuts it into ─────────────────────────────────
     if stage >= 2:
-        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"), drop=NOTCH_LABEL_DROP)
-
-    # ── stage 3: the same two components, priced by how likely each is ────────
-    if stage >= 3:
-        weighted = [(w_lo * lo, RED, "\\\\\\"), (w_hi * hi, GREEN, "//////")]
-        top = float(max(c.max() for c, _c, _h in weighted))
-        for curve, colour, hatch in weighted:
-            density_ys = weighted_base + curve / top * weighted_h
-            ys = density_ys - HUMP_DROP
-            keep = np.flatnonzero(density_ys > weighted_base + TAIL_FLOOR)
-            ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=HUMP_LW, zorder=3)
-            pts = [(x0 + xs[keep[0]] * w, weighted_base)]
-            pts += [(x0 + xx * w, yy) for xx, yy in zip(xs[keep], ys[keep])]
-            pts.append((x0 + xs[keep[-1]] * w, weighted_base))
-            ax.add_patch(
-                Polygon(pts, closed=True, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
-            )
-        _range_line(ax, x0, x0 + w, weighted_base, z=5)
+        for k in range(1, PATCH_GRID):
+            t = k * side / PATCH_GRID
+            ax.plot([x0 + t] * 2, [y0, y0 + side], color="white", linewidth=0.9, alpha=0.85, zorder=2)
+            ax.plot([x0, x0 + side], [y0 + t] * 2, color="white", linewidth=0.9, alpha=0.85, zorder=2)
         ax.text(
-            x0,
-            weighted_base + weighted_h + LABEL_GAP,
-            _sub(r"\pi_{lo} = 0.91"),
-            ha="left",
-            va="bottom",
-            fontsize=16,
-            color=INK,
-        )
-        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"), drop=NOTCH_LABEL_DROP)
-        # The midpoint, carried down onto the weighted picture so the gap
-        # between the two answers is a gap the room can measure by eye rather
-        # than a claim about two numbers on two different rows.
-        ax.plot(
-            [x0 + mid * w] * 2,
-            [weighted_base, weighted_base + weighted_h * 0.62],
-            color=SOFT,
-            linewidth=2.0,
-            linestyle=(0, (4, 3)),
-            zorder=4,
-        )
-        ax.annotate(
-            "",
-            xy=(x0 + crossing * w, weighted_base + weighted_h * 0.5),
-            xytext=(x0 + mid * w, weighted_base + weighted_h * 0.5),
-            arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.8, "shrinkA": 0, "shrinkB": 0},
-        )
-
-    # ── stage 4: the arithmetic that moves one to the other ───────────────────
-    if stage >= CROSSING_STAGES:
-        ax.text(
-            x0 + w / 2,
-            arithmetic_y,
-            _sub(r"\theta^* = \theta_{mid} + \frac{\sigma^2}{\mu_{hi} - \mu_{lo}}\,")
-            + "ln "
-            + _sub(r"\frac{\pi_{lo}}{\pi_{hi}}"),
+            x0 + side / 2,
+            y0 - LABEL_GAP,
+            f"{PATCH_GRID} × {PATCH_GRID} = {PATCH_GRID**2} patches",
             ha="center",
-            va="center",
-            fontsize=19,
+            va="top",
+            fontsize=17,
             color=INK,
+        )
+
+    # ── stage 3: a point for every patch ──────────────────────────────────────
+    if stage >= 3:
+        for index, point in enumerate(points):
+            if index != followed:
+                _cube_dot(ax, point)
+        # The one patch the figure follows: outlined on the photograph, and its
+        # point in the cube drawn green and hatched, ringed the same way, so the
+        # eye can pair the two across the arrow.
+        row, col = PATCH_FOLLOWED
+        px, py, cell = _patch_cell(row, col)
+        ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor="white", linewidth=4.5, zorder=5))
+        ax.add_patch(Rectangle((px, py), cell, cell, facecolor="none", edgecolor=GREEN, linewidth=2.2, zorder=6))
+        # Large enough for its hatching to read as hatching rather than as a
+        # tint, and on top of the neighbours it lands among.
+        point = points[followed]
+        _cube_dot(ax, point, edge=GREEN, hatch=PATCH_FOLLOWED_HATCH, scale=PATCH_FOLLOWED_SCALE, zorder=7.8)
+        fx, fy = _cube_at(point)
+        ring = (PATCH_FOLLOWED_SCALE + 0.9) * PATCH_DOT_R
+        ax.add_patch(
+            Rectangle(
+                (fx - ring, fy - ring),
+                2 * ring,
+                2 * ring,
+                facecolor="none",
+                edgecolor=GREEN,
+                linewidth=2.2,
+                zorder=8,
+            )
         )
     return fig
 
 
-#: The region grid the max figure opens on: rows, columns, and which cell wins.
-REGION_GRID = (3, 4)
+#: The region grid the max figure opens on: rows and columns. Finer than the
+#: 3 x 4 it was, and over a closer crop, so it reads as the same kind of grid
+#: as DINO Might's 14 x 14 rather than as a different idea (#4533). Over the
+#: whole frame it would be about 6 x 8: still coarser than DINOv3's, on purpose,
+#: because every cell carries its score.
+REGION_GRID = (4, 5)
 
 #: The score range the maxima panel is drawn over. Cropped to the sample rather
 #: than run 0-1: the whole claim of the stage is a *shape* — that a maximum
 #: leans right — and a distribution drawn across four times its own width is a
 #: spike with no shape at all.
-REGION_RANGE = (0.33, 0.82)
+REGION_RANGE = (0.36, 0.82)
 REGION_BINS = 42
 
-#: The two photographs the max figure opens on, by COCO val2017 id: one
+#: The two photographs the max figure opens on, by COCO val2017 id, each with
+#: the 5:4 window of it the figure shows, in the frame's own pixels: one
 #: holding a book (a doll's "Goody Two Shoes"), and one holding none — a dog on
-#: a couch, with cushions for a detector to be tempted by.
-REGION_PHOTOS = (167159, 347930)
+#: a couch, with cushions for a detector to be tempted by. Each window is
+#: about two thirds of its frame's width, around the book and the dog.
+REGION_PHOTOS = (
+    (167159, (21, 119, 341, 375)),
+    (347930, (83, 90, 493, 418)),
+)
 
 
 @functools.cache
-def _region_photo(image_id: int) -> tuple:
-    """`(4:3 image, [book boxes in its pixels])` for one COCO val2017 frame."""
+def _region_photo(image_id: int, window: tuple[int, int, int, int]) -> tuple:
+    """`(the window of one COCO val2017 frame, [book boxes in its pixels])`."""
     import json
 
     from PIL import Image
@@ -4557,11 +5014,9 @@ def _region_photo(image_id: int) -> tuple:
     meta = next(i for i in coco["images"] if i["id"] == image_id)
     book = next(c["id"] for c in coco["categories"] if c["name"] == "book")
     image = Image.open(coco_fixture.IMAGES / meta["file_name"]).convert("RGB")
-    width, height = image.size
-    side = int(round(height * 4 / 3)) if width / height > 4 / 3 else width
-    tall = height if width / height > 4 / 3 else int(round(width * 3 / 4))
-    dx, dy = (width - side) // 2, (height - tall) // 2
-    image = image.crop((dx, dy, dx + side, dy + tall))
+    dx, dy, x1, y1 = window
+    assert (x1 - dx) * REGION_GRID[0] == (y1 - dy) * REGION_GRID[1], f"{image_id}: the window is not 5:4"
+    image = image.crop(window)
     boxes = [
         (x - dx, y - dy, w, h)
         for a in coco["annotations"]
@@ -4571,16 +5026,18 @@ def _region_photo(image_id: int) -> tuple:
     return image, boxes
 
 
-def _region_scores(image_id: int, seed: int) -> np.ndarray:
+def _region_scores(image_id: int, window: tuple[int, int, int, int], seed: int) -> np.ndarray:
     """Illustrative per-region scores: a little of everything, and a lot of book.
 
     Each region scores a noisy baseline — every region of every photograph
     resembles *something* — plus a share proportional to how much of it the
     photograph's COCO book box covers. So the book's own regions win when there
     is a book, and when there is none the grid still has a spread, and a top.
-    Seeded, so the slide is the same every time it is drawn.
+    Seeded, so the slide is the same every time it is drawn. The book's share
+    is sized so a cell the book fills scores high without saturating, so the
+    winning cell is one cell and not a tie.
     """
-    image, boxes = _region_photo(image_id)
+    image, boxes = _region_photo(image_id, window)
     rows, cols = REGION_GRID
     width, height = image.size
     rng = np.random.default_rng(seed)
@@ -4593,7 +5050,7 @@ def _region_scores(image_id: int, seed: int) -> np.ndarray:
                 max(0.0, min(x1, bx + bw) - max(x0, bx)) * max(0.0, min(y1, by + bh) - max(y0, by))
                 for bx, by, bw, bh in boxes
             ) / ((x1 - x0) * (y1 - y0))
-            scores[r, c] += 0.8 * cover
+            scores[r, c] += 0.5 * cover
     return np.round(np.clip(scores, 0.0, 0.95), 2)
 
 
@@ -4629,6 +5086,18 @@ def _gumbel_fit(sample: np.ndarray) -> tuple[float, float]:
     return float(sample.mean()) - 0.5772156649 * scale, scale
 
 
+#: The region figure's layout, in `TEACH_CANVAS` units: each photograph's
+#: width and height (5:4, so a cell is square), the gap between the two, and
+#: where the first starts — right of the title notch, and centred with its
+#: partner over the histogram below.
+REGION_PHOTO_W, REGION_PHOTO_H, REGION_PHOTO_GAP, REGION_PHOTO_X0 = 5.0, 4.0, 1.6, 6.7
+#: The cell scores' type: as large as a two-decimal score can be and still
+#: clear its neighbour in a one-unit cell.
+REGION_SCORE_PT = 13
+#: The histogram panel: left edge, floor, and height.
+REGION_PANEL_X0, REGION_PANEL_Y0, REGION_PANEL_H = 5.9, 1.55, 3.3
+
+
 def _region_max_stage(stage: int) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the region-max figure."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
@@ -4638,12 +5107,14 @@ def _region_max_stage(stage: int) -> plt.Figure:
     ax.set_axis_off()
 
     rows, cols = REGION_GRID
-    photo_w, photo_h = 4.6, 3.45
+    photo_w, photo_h = REGION_PHOTO_W, REGION_PHOTO_H
     photo_top = TEACH_CANVAS[1] - 0.5
-    for slot, (image_id, seed) in enumerate(zip(REGION_PHOTOS, (3, 7), strict=True)):
-        image, _ = _region_photo(image_id)
-        scores = _region_scores(image_id, seed)
-        px0 = 6.2 + slot * (photo_w + 2.2)
+    # Seeds picked so each photo has one clear winner: on the book's own cell,
+    # and on the dog photo's cushions.
+    for slot, ((image_id, window), seed) in enumerate(zip(REGION_PHOTOS, (11, 8), strict=True)):
+        image, _ = _region_photo(image_id, window)
+        scores = _region_scores(image_id, window, seed)
+        px0 = REGION_PHOTO_X0 + slot * (photo_w + REGION_PHOTO_GAP)
         py0 = photo_top - photo_h
         ax.imshow(image, extent=(px0, px0 + photo_w, py0, photo_top), zorder=1, aspect="auto")
         best = np.unravel_index(int(np.argmax(scores)), scores.shape)
@@ -4673,12 +5144,12 @@ def _region_max_stage(stage: int) -> plt.Figure:
                     f"{scores[r, c]:.2f}",
                     ha="center",
                     va="center",
-                    fontsize=15,
+                    fontsize=REGION_SCORE_PT,
                     color=INK,
                     fontweight="bold" if won else "normal",
                     zorder=4,
                     bbox={
-                        "boxstyle": "round,pad=0.15",
+                        "boxstyle": "round,pad=0.12",
                         "facecolor": "white",
                         "alpha": 0.85 if won else 0.7,
                         "edgecolor": "none",
@@ -4697,14 +5168,20 @@ def _region_max_stage(stage: int) -> plt.Figure:
         )
 
     # ── stage 3: every item is a maximum, so the corpus is a pile of maxima ───
-    panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
-    panel_h = 3.75
-    y_base = 1.5
+    panel_x0, panel_w = REGION_PANEL_X0, TEACH_CANVAS[0] - REGION_PANEL_X0 - 0.7
+    panel_h, y_base = REGION_PANEL_H, REGION_PANEL_Y0
+    lo, hi = REGION_RANGE
     sample = _maxima()
+    density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
+    xs = np.linspace(lo, hi, 500)
+    normal = gaussian(xs, float(sample.mean()), float(sample.var()))
+    loc, scale = _gumbel_fit(sample)
+    z = (xs - loc) / scale
+    gumbel = np.exp(-(z + np.exp(-z))) / scale
+    # One vertical scale for the bars and both fits, set by whichever reaches
+    # highest, so a fitted curve never rises through the caption over the panel.
+    sy = panel_h / max(float(density.max()), float(normal.max()), float(gumbel.max()))
     if stage >= 3:
-        lo, hi = REGION_RANGE
-        density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
-        sy = panel_h / float(density.max())
         bars = _staircase(panel_x0, y_base, panel_w / (hi - lo), sy, (edges - lo), density, 0, len(density) - 1)
         bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
         ax.add_patch(bars)
@@ -4718,20 +5195,32 @@ def _region_max_stage(stage: int) -> plt.Figure:
             fontsize=16,
             color=INK,
         )
+        # The axes, named and no more (#4533): the slide is about the shape,
+        # so neither carries ticks.
+        ax.text(
+            panel_x0 + panel_w / 2,
+            y_base - RANGE_FOOT - LABEL_GAP,
+            "Similarity",
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=SOFT,
+        )
+        ax.text(
+            panel_x0 - 2 * LABEL_GAP,
+            y_base + panel_h / 2,
+            "#",
+            ha="right",
+            va="center",
+            fontsize=16,
+            color=SOFT,
+        )
 
     # ── stage 4: the two tail families, fitted to the same maxima ─────────────
     if stage >= REGION_MAX_STAGES:
-        lo, hi = REGION_RANGE
-        density, _edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
-        sy = panel_h / float(density.max())
-        xs = np.linspace(lo, hi, 500)
-        normal = gaussian(xs, float(sample.mean()), float(sample.var()))
-        loc, scale = _gumbel_fit(sample)
-        z = (xs - loc) / scale
-        gumbel = np.exp(-(z + np.exp(-z))) / scale
         for curve, colour, dash, name in (
-            (normal, SOFT, (0, (5, 3)), "a Gaussian, fitted"),
-            (gumbel, BLUE, (0, ()), "a Gumbel, fitted"),
+            (normal, SOFT, (0, (5, 3)), "Fitted Gaussian"),
+            (gumbel, BLUE, (0, ()), "Fitted Gumbel"),
         ):
             ax.plot(
                 panel_x0 + (xs - lo) / (hi - lo) * panel_w,
@@ -4750,15 +5239,6 @@ def _region_max_stage(stage: int) -> plt.Figure:
                 fontsize=15,
                 color=colour,
             )
-        ax.text(
-            panel_x0 + panel_w,
-            y_base - 0.32 - LABEL_GAP,
-            "a maximum is not a mean: it leans right, and the tail is where the cut goes",
-            ha="right",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
     return fig
 
 
@@ -5047,31 +5527,644 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
     return fig
 
 
-# ── the precision-floor pair (#4244) ─────────────────────────────────────────
+# ── the line the labels draw (#4452) ─────────────────────────────────────────
 
-#: The two figures that close the Preference section share one drawing: the
-#: corpus ranked as a strip of items, the candidate the floor works on
-#: bracketed at its top, and the line at the candidate's foot. `calib-floor-ask`
-#: states the floor and shows why the session's own votes cannot certify it;
-#: `calib-floor-check` runs the spot check on the same strip. Same canvas and
-#: same rows, so the strip does not move between the two slides.
+#: How many build stages the labels-line figure reveals in: the held-out votes;
+#: the class model fitted to them; the corpus and its fit; expected F-beta at
+#: the balanced radio, and the line at its peak; the other two radios' peaks.
+LL_STAGES = 5
+
+#: The canvas: `FBETA_CANVAS`, so the two slides that explain the balance
+#: draw at one scale and their type lands at one size.
+LL_CANVAS = FBETA_CANVAS
+#: The score axis every row shares, in logit units. The class model is two
+#: normals on the logit scale (`ClassScoreModel`), so that is the scale on
+#: which they look like normals; the slide calls it "score" and the notes say
+#: which score.
+LL_LOGIT = (-3.6, 3.0)
+#: The held-out votes, in logit units: every vote, scored by the fold model
+#: that never saw it. Spaced so no two glyphs touch, and imperfect on purpose:
+#: the top Bad outscores the bottom Good. The Bads sit near the middle rather
+#: than down in the bulk, because Autopilot asked about the items near its
+#: line — the bias the corpus fit exists to correct.
+LL_GOODS = (0.35, 0.95, 1.25, 1.55, 1.85)
+LL_BADS = (-1.3, -0.95, -0.6, -0.25, 0.05, 0.65)
+#: The corpus the line is drawn on: (items, share that are matches, the
+#: matches' (mean, spread), the rest's (mean, spread), seed), in logit units.
+#: One in eight are matches, far more than a real search sees (COCO Better's
+#: pools are 0.44%), so the matches' hump is visible at all; the seed is the
+#: one whose fit *under*-counts the matches a little (219 of 240), as a
+#: session's easiest Goods make it do in practice.
+LL_CORPUS = (2000, 0.12, (1.1, 0.65), (-1.3, 0.85), 3)
+LL_BINS = 46
+#: The rows' baselines and heights, in canvas units: the votes and their
+#: class model; the corpus; expected F-beta.
+LL_VOTES_Y, LL_MODEL_H = 8.15, 1.1
+LL_CORPUS_Y, LL_CORPUS_H = 4.25, 2.75
+LL_F_Y, LL_F_H = 0.8, 2.25
+#: The β the room has picked, and the two it has not: drawn heavier in the
+#: `BALANCE_WEIGHTS` ramp, the same three weights as on `calib-fbeta`.
+LL_PICKED = 1.0
+
+
+def _ll_sigmoid(x: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-np.asarray(x, dtype=float)))
+
+
+@functools.lru_cache(maxsize=None)
+def _ll_data() -> tuple[np.ndarray, "LabelsLine"]:
+    """The corpus (logit units) and the line the **shipped** code draws on it.
+
+    Schematic inputs, real code: `fit_labels_line` is the one function the
+    app's retrain, its no-refit re-cut and the eval harness's default arm all
+    call, so every curve and cut below is what the app would draw on these
+    votes and this corpus.
+    """
+    n, share, (pos_mu, pos_sd), (neg_mu, neg_sd), seed = LL_CORPUS
+    rng = np.random.default_rng(seed)
+    n_pos = int(round(n * share))
+    corpus = np.concatenate([rng.normal(pos_mu, pos_sd, n_pos), rng.normal(neg_mu, neg_sd, n - n_pos)])
+    votes = _ll_sigmoid(np.array(LL_GOODS + LL_BADS))
+    labels = [1.0] * len(LL_GOODS) + [0.0] * len(LL_BADS)
+    line = fit_labels_line([(votes, labels)], _ll_sigmoid(corpus))
+    assert line is not None and line.unvoted_scores is not None and line.unvoted_posteriors is not None
+    return corpus, line
+
+
+def _ll_logit(p: float | np.ndarray) -> np.ndarray:
+    q = np.clip(np.asarray(p, dtype=float), 1e-9, 1 - 1e-9)
+    return np.log(q / (1 - q))
+
+
+def _ll_expected_f(line: "LabelsLine", beta: float) -> tuple[np.ndarray, np.ndarray]:
+    """``(threshold in logits, expected F-beta)`` for every cut down the corpus, best first.
+
+    `corpus_cut`'s own arithmetic, kept whole so the curve can be drawn: the
+    cut after the k-th item keeps k, holds the sum of their chances of being a
+    match, out of the 2-part fit's count of all the matches.
+    """
+    scores = np.asarray(line.unvoted_scores, dtype=float)
+    tp = np.cumsum(np.asarray(line.unvoted_posteriors, dtype=float))
+    total = max(float(line.unvoted_share) * scores.size, float(tp[-1]))
+    kept = np.arange(1, scores.size + 1, dtype=float)
+    b2 = beta * beta
+    return _ll_logit(scores), (1.0 + b2) * tp / (b2 * total + kept)
+
+
+def labels_line_fig() -> None:
+    """How the app finds the F-beta peak without knowing what is a match (#4452).
+
+    Three rows on one score axis: the votes, held out, and the class model
+    they imply; the corpus, and how many matches the fit says it holds; the
+    expected F-beta of every cut, and the line at its peak. The last page adds
+    the other two radios' peaks — the same three balances as `calib-fbeta`.
+    """
+    final = _ll_stage(LL_STAGES)
+    box = tight_box(final)
+    for stage in range(1, LL_STAGES):
+        save(_ll_stage(stage), OUT, f"calib-labels-line.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-labels-line.png", column=FULL_BLEED, box=box)
+
+
+#: The rows' left edge and width: the same indent and right margin as
+#: `calib-fbeta`, for the same reasons — the rows' names take the left column,
+#: clear of the title notch above them, and the slide's page number takes the
+#: bottom-right corner.
+LL_X0 = 4.0
+LL_W = LL_CANVAS[0] - LL_X0 - 1.5
+
+
+def _ll_at(logit: float | np.ndarray) -> np.ndarray:
+    """Canvas x for a score in logit units, on the axis every row shares."""
+    lo, hi = LL_LOGIT
+    return LL_X0 + (np.asarray(logit, dtype=float) - lo) / (hi - lo) * LL_W
+
+
+def _ll_row_name(ax: plt.Axes, y: float, text: str) -> None:
+    ax.text(LL_X0 - 0.35, y, text, ha="right", va="center", fontsize=16, color=INK)
+
+
+def _ll_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the labels-line figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    corpus, line = _ll_data()
+    model = line.model.floored(corpus_sigma_floor(_ll_sigmoid(corpus)))
+    _ll_votes_row(ax, model, stage)
+    if stage >= 3:
+        _ll_corpus_row(ax, corpus, line, model)
+    if stage >= 4:
+        _ll_f_row(ax, corpus, line, stage)
+    return fig
+
+
+def _ll_votes_row(ax: plt.Axes, model: "ClassScoreModel", stage: int) -> None:
+    """Stages 1-2: the votes, each scored by a model that never saw it; then two normals, one spread."""
+    _range_line(ax, LL_X0, LL_X0 + LL_W, LL_VOTES_Y, z=3)
+    for x, good in [(g, True) for g in LL_GOODS] + [(b, False) for b in LL_BADS]:
+        ax.text(
+            float(_ll_at(x)),
+            LL_VOTES_Y - 0.12,
+            "✓" if good else "✗",
+            ha="center",
+            va="top",
+            fontsize=20,
+            color=GREEN if good else RED,
+            fontweight="bold",
+        )
+    _ll_row_name(ax, LL_VOTES_Y + 0.15, "The votes")
+    if stage < 2:
+        return
+    # Drawn at one height: the class model says what a match and a near-miss
+    # *score*, not how many of each there are. That is the corpus row's job.
+    grid = np.linspace(*LL_LOGIT, 700)
+    for mu, color in ((model.mu_neg, RED), (model.mu_pos, GREEN)):
+        curve = np.exp(-0.5 * ((grid - mu) / model.sigma) ** 2)
+        seen = curve > 0.012
+        ax.plot(_ll_at(grid[seen]), LL_VOTES_Y + curve[seen] * LL_MODEL_H, color=color, linewidth=HUMP_LW, zorder=4)
+
+
+def _ll_corpus_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", model: "ClassScoreModel") -> None:
+    """Stage 3: the corpus, the 2-part fit over it, and how many matches that fit says it holds."""
+    lo, hi = LL_LOGIT
+    counts, edges = np.histogram(corpus, bins=LL_BINS, range=LL_LOGIT)
+    bin_w = (hi - lo) / LL_BINS
+    sy = LL_CORPUS_H / float(counts.max())
+    u_edges = (edges - lo) / (hi - lo)
+    bars = _staircase(LL_X0, LL_CORPUS_Y, LL_W, sy, u_edges, counts.astype(float), 0, len(counts) - 1)
+    bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    ax.add_patch(bars)
+    for i in range(1, len(counts)):
+        top = LL_CORPUS_Y + float(min(counts[i - 1], counts[i])) * sy
+        if top > LL_CORPUS_Y:
+            ax.plot([LL_X0 + u_edges[i] * LL_W] * 2, [LL_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    _range_line(ax, LL_X0, LL_X0 + LL_W, LL_CORPUS_Y, z=5)
+    _ll_row_name(ax, LL_CORPUS_Y + 0.9, "The corpus")
+    # The 2-part fit: the labels' Good normal, its shape held, and a normal
+    # for everything else, each scaled to the count the fit gives it.
+    grid = np.linspace(lo, hi, 700)
+    matches = float(line.unvoted_share) * corpus.size
+    negs = line.negatives
+    for mu, sd, count, color in (
+        (negs.mu, negs.sigma, corpus.size - matches, SOFT),
+        (model.mu_pos, model.sigma, matches, GREEN),
+    ):
+        dens = count * bin_w * np.exp(-0.5 * ((grid - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
+        seen = dens * sy > TAIL_FLOOR
+        ax.plot(_ll_at(grid[seen]), LL_CORPUS_Y + dens[seen] * sy - HUMP_DROP, color=color, linewidth=HUMP_LW, zorder=4)
+    # Over the matches' hump, clear of the tallest bar under it, and starting
+    # at its peak so it stays right of the line and inside the canvas (a label
+    # past the edge widens the crop and rescales the slide).
+    under = edges[1:] > model.mu_pos - model.sigma
+    ax.text(
+        float(_ll_at(model.mu_pos)),
+        LL_CORPUS_Y + float(counts[under].max()) * sy + LABEL_GAP,
+        f"≈ {int(round(matches, -1)):,} matches",
+        ha="left",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+
+
+def _ll_f_row(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", stage: int) -> None:
+    """Stages 4-5: expected F-beta down the ranking, the line at the picked radio's peak, then the other two."""
+    lo, hi = LL_LOGIT
+    _range_line(ax, LL_X0, LL_X0 + LL_W, LL_F_Y, z=3)
+    _ll_row_name(ax, LL_F_Y + 0.75, "Expected " + _sub(r"F_\beta"))
+    for (beta, _name), weight in zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True):
+        picked = beta == LL_PICKED
+        if stage < (4 if picked else 5):
+            continue
+        xs, f = _ll_expected_f(line, beta)
+        inside = (xs >= lo) & (xs <= hi)
+        ax.plot(_ll_at(xs[inside]), LL_F_Y + f[inside] * LL_F_H, color=INK, linewidth=weight, zorder=3)
+        cut_x = float(_ll_at(float(_ll_logit(line.threshold(beta)))))
+        dot_y = LL_F_Y + float(f.max()) * LL_F_H
+        ax.plot([cut_x], [dot_y], marker="o", markersize=8, color=INK, zorder=6)
+        if picked:
+            _ll_line(ax, corpus, line, cut_x, dot_y)
+        else:
+            # The radios not picked: their peaks, dropped to the corpus they
+            # would cut, in black like the three cuts on `calib-fbeta`.
+            ax.plot([cut_x] * 2, [dot_y, LL_CORPUS_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+
+
+def _ll_line(ax: plt.Axes, corpus: np.ndarray, line: "LabelsLine", cut_x: float, dot_y: float) -> None:
+    """The line: blue, the palette's "the shipped thing", from the peak that placed it up through the corpus."""
+    top = LL_CORPUS_Y + LL_CORPUS_H + 0.15
+    ax.plot([cut_x] * 2, [dot_y, top], color=BLUE, linewidth=2.6, zorder=5)
+    kept = int(np.sum(corpus >= float(_ll_logit(line.threshold(LL_PICKED)))))
+    bracket_y = LL_CORPUS_Y + LL_CORPUS_H - 0.35
+    right = LL_X0 + LL_W
+    ax.plot([cut_x + 0.08, right], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=5)
+    ax.plot([right] * 2, [bracket_y - 0.14, bracket_y], color=INK, linewidth=1.6, zorder=5)
+    ax.text(
+        (cut_x + right) / 2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="center", va="bottom", fontsize=16, color=INK
+    )
+
+
+# ── what travels from Train to Find (#4517) ──────────────────────────────────
+
+#: How many build stages the transfer figure reveals in: Train as What to
+#: Expect left it; the labels, carried across; the corpus Find is pointed at;
+#: the line the same labels draw there.
+TX_STAGES = 4
+#: The two columns, each a copy of What to Expect's votes and corpus rows on
+#: its own copy of the score axis: (left edge, width). The gap between them is
+#: what the one arrow crosses.
+TX_TRAIN = (4.0, 6.3)
+TX_FIND = (12.8, 6.3)
+#: Rows, in canvas units: the column names, the votes, the corpus.
+TX_HEAD_Y = 10.35
+TX_VOTES_Y = 8.6
+TX_CORPUS_Y, TX_CORPUS_H = 1.2, 4.6
+#: The corpus Find is pointed at, in `LL_CORPUS`'s form: half again as many
+#: items and a third the share of matches, so the line has to land somewhere
+#: else and keep a different count, from the same votes.
+TX_FIND_CORPUS = (3000, 0.04, (1.1, 0.65), (-1.0, 0.9), 7)
+TX_BINS = 30
+
+
+@functools.lru_cache(maxsize=None)
+def _tx_find() -> tuple[np.ndarray, "LabelsLine"]:
+    """The Find corpus and the line `fit_labels_line` draws on it from What to Expect's votes."""
+    n, share, (pos_mu, pos_sd), (neg_mu, neg_sd), seed = TX_FIND_CORPUS
+    rng = np.random.default_rng(seed)
+    n_pos = int(round(n * share))
+    corpus = np.concatenate([rng.normal(pos_mu, pos_sd, n_pos), rng.normal(neg_mu, neg_sd, n - n_pos)])
+    votes = _ll_sigmoid(np.array(LL_GOODS + LL_BADS))
+    labels = [1.0] * len(LL_GOODS) + [0.0] * len(LL_BADS)
+    line = fit_labels_line([(votes, labels)], _ll_sigmoid(corpus))
+    assert line is not None
+    return corpus, line
+
+
+def transfer_fig() -> None:
+    """What the line has to work with once it leaves Train (#4517).
+
+    Find runs on a corpus nobody voted on. The model's scores there are new,
+    the Train corpus and its line stay behind, and the one thing carried
+    across is the labels. What to Expect's own votes and `fit_labels_line`,
+    run on a second corpus: the same labels draw a different line there, and
+    keep a different count, because the corpus is half the input.
+    """
+    final = _tx_stage(TX_STAGES)
+    box = tight_box(final)
+    for stage in range(1, TX_STAGES):
+        save(_tx_stage(stage), OUT, f"calib-transfer.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-transfer.png", column=FULL_BLEED, box=box)
+
+
+def _tx_at(column: tuple[float, float], logit: float | np.ndarray) -> np.ndarray:
+    lo, hi = LL_LOGIT
+    x0, w = column
+    return x0 + (np.asarray(logit, dtype=float) - lo) / (hi - lo) * w
+
+
+def _tx_votes(ax: plt.Axes, column: tuple[float, float]) -> None:
+    """The votes on half What to Expect's width: Goods in one row, Bads in the row under it.
+
+    At half the width the eleven glyphs no longer fit one row without touching,
+    and two rows are also the clearer picture: which kind a vote is reads off
+    its row, not only off its colour.
+    """
+    x0, w = column
+    _range_line(ax, x0, x0 + w, TX_VOTES_Y, z=3)
+    for row, (scores, glyph, color) in enumerate(((LL_GOODS, "✓", GREEN), (LL_BADS, "✗", RED))):
+        for x in scores:
+            ax.text(
+                float(_tx_at(column, x)),
+                TX_VOTES_Y - 0.12 - row * TX_VOTE_ROW,
+                glyph,
+                ha="center",
+                va="top",
+                fontsize=18,
+                color=color,
+                fontweight="bold",
+            )
+
+
+#: The step from the Goods' row to the Bads' row, in canvas units.
+TX_VOTE_ROW = 0.62
+
+
+def _tx_corpus(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, sy: float) -> None:
+    x0, w = column
+    lo, hi = LL_LOGIT
+    counts, edges = np.histogram(corpus, bins=TX_BINS, range=LL_LOGIT)
+    u_edges = (edges - lo) / (hi - lo)
+    bars = _staircase(x0, TX_CORPUS_Y, w, sy, u_edges, counts.astype(float), 0, len(counts) - 1)
+    bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    ax.add_patch(bars)
+    for i in range(1, len(counts)):
+        top = TX_CORPUS_Y + float(min(counts[i - 1], counts[i])) * sy
+        if top > TX_CORPUS_Y:
+            ax.plot([x0 + u_edges[i] * w] * 2, [TX_CORPUS_Y, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
+    _range_line(ax, x0, x0 + w, TX_CORPUS_Y, z=5)
+
+
+def _tx_line(ax: plt.Axes, column: tuple[float, float], corpus: np.ndarray, line: "LabelsLine") -> None:
+    """The line at the middle radio, blue, through the corpus, and what it keeps."""
+    x0, w = column
+    cut = float(_ll_logit(line.threshold(LL_PICKED)))
+    cut_x = float(_tx_at(column, cut))
+    top = TX_CORPUS_Y + TX_CORPUS_H + 0.2
+    ax.plot([cut_x] * 2, [TX_CORPUS_Y, top], color=BLUE, linewidth=2.6, zorder=5)
+    kept = int(np.sum(corpus >= cut))
+    bracket_y = TX_CORPUS_Y + TX_CORPUS_H - 0.3
+    right = x0 + w
+    ax.plot([cut_x + 0.08, right], [bracket_y] * 2, color=INK, linewidth=1.6, zorder=5)
+    ax.plot([right] * 2, [bracket_y - 0.14, bracket_y], color=INK, linewidth=1.6, zorder=5)
+    # Starting just right of the line rather than centred on the bracket: on
+    # a corpus with few matches the line sits near the right end, and a centred
+    # label would straddle it.
+    ax.text(cut_x + 0.2, bracket_y + LABEL_GAP, f"kept: {kept}", ha="left", va="bottom", fontsize=16, color=INK)
+
+
+def _tx_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the transfer figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LL_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LL_CANVAS[0])
+    ax.set_ylim(0, LL_CANVAS[1])
+    ax.set_axis_off()
+
+    train, train_line = _ll_data()
+    find, find_line = _tx_find()
+    # One count scale for both histograms, so the bigger corpus looks bigger.
+    peak = max(np.histogram(c, bins=TX_BINS, range=LL_LOGIT)[0].max() for c in (train, find))
+    sy = (TX_CORPUS_H - 0.9) / float(peak)
+
+    # ── stage 1: Train, as What to Expect left it ─────────────────────────────
+    for name, y in (("The votes", TX_VOTES_Y + 0.15), ("The corpus", TX_CORPUS_Y + 1.6)):
+        ax.text(TX_TRAIN[0] - 0.35, y, name, ha="right", va="center", fontsize=16, color=INK)
+    ax.text(
+        sum(TX_TRAIN) - TX_TRAIN[1] / 2,
+        TX_HEAD_Y,
+        "Train",
+        ha="center",
+        va="center",
+        fontsize=20,
+        color=INK,
+        fontweight="bold",
+    )
+    _tx_votes(ax, TX_TRAIN)
+    _tx_corpus(ax, TX_TRAIN, train, sy)
+    _tx_line(ax, TX_TRAIN, train, train_line)
+
+    # ── stage 2: what crosses — the labels, and nothing else ──────────────────
+    if stage >= 2:
+        gap_l, gap_r = sum(TX_TRAIN) + 0.15, TX_FIND[0] - 0.15
+        _labeled_arrow(ax, (gap_l, TX_VOTES_Y - 0.35), (gap_r, TX_VOTES_Y - 0.35), "labels")
+        ax.text(
+            sum(TX_FIND) - TX_FIND[1] / 2,
+            TX_HEAD_Y,
+            "Find",
+            ha="center",
+            va="center",
+            fontsize=20,
+            color=INK,
+            fontweight="bold",
+        )
+        _tx_votes(ax, TX_FIND)
+
+    # ── stage 3: the corpus Find is pointed at ────────────────────────────────
+    if stage >= 3:
+        _tx_corpus(ax, TX_FIND, find, sy)
+
+    # ── stage 4: the line the same labels draw there ──────────────────────────
+    if stage >= TX_STAGES:
+        _tx_line(ax, TX_FIND, find, find_line)
+    return fig
+
+
+# ── the document line at the three radios (#4367, #4458, #4479) ─────────────
+
+#: How many build stages the document-balance figure reveals in: the votes and
+#: the verified pages on one inlier axis; the middle radio's line (the Bad
+#: ceiling); the recall end's floor; the precision end's floor.
+DOC_STAGES = 4
+#: The canvas: `FBETA_CANVAS`, so the three slides about the balance draw at
+#: one scale and their type lands at one size.
+DOC_CANVAS = FBETA_CANVAS
+#: The inlier axis, as `(low, high)` counts.
+DOC_AXIS = (0.0, 84.0)
+#: One detector, some way into a session: each Good's leave-one-out fit (its
+#: best fit to the *other* Goods' templates) and each Bad's best fit to the
+#: templates. Schematic, chosen so the three radios' rules land in three
+#: different places: the Goods' median is 40, the Bad ceiling 21.
+DOC_GOODS = (25, 33, 40, 48, 62)
+DOC_BADS = (9, 15, 21)
+#: The shortlisted pages that verified at all, by inlier count: copies of the
+#: mark, then pages that are not it. Faint copies sit among the hard negatives
+#: low on the axis — the pages the two ends of the balance disagree about. No
+#: page sits within a count of any radio's cut, so no dot straddles one.
+DOC_MARK_PAGES = (11, 14, 18, 23, 28, 31, 35, 39, 44, 50, 57, 65, 74)
+DOC_OTHER_PAGES = (8, 12, 15, 17, 19, 24)
+#: Pages closer than this many counts stack, so no two dots overlap.
+DOC_STACK_GAP = 2.0
+#: Rows, in canvas units: the votes; the pages; one row per radio, top to
+#: bottom the precision end, the middle, the recall end — the order
+#: `calib-fbeta` stacks the same three balances in. Votes and pages each get
+#: one line, Good above it and Bad below (#4533), so which kind a mark is reads
+#: off its side of the line as well as its colour, and which of the two rows it
+#: is reads off its shape: a vote is a ✓ or a ✗, a page is a hatched dot.
+DOC_VOTE_ROW_Y = 7.55
+DOC_PAGE_ROW_Y = 5.6
+DOC_RADIO_Y = (3.75, 2.5, 1.25)
+DOC_DOT_R = 0.15
+#: How far a mark sits off its row's line, above or below.
+DOC_MARK_GAP = 0.06
+
+
+def _doc_lines() -> dict[float, tuple[int, str]]:
+    """Each radio's lowest inlier count kept, and the rule that sets it, from the shipped constants.
+
+    The rules are `structural_similarity`'s: the Bad ceiling at the middle
+    radio (#4367); at beta >= `RECALL_BETA` a floor that also keeps every page
+    with max(10, ceil(¼ x the Goods' median)) inliers (#4458); at beta <=
+    `PRECISION_BETA` a floor of max(16, ceil(½ x the median), the ceiling + 5)
+    that the middle radio's set must also clear (#4479).
+    """
+    median = float(np.median(DOC_GOODS))
+    ceiling = max(DOC_BADS)
+    middle = ceiling + 1
+    recall = max(RECALL_MIN_INLIERS, math.ceil(RECALL_GOOD_FRACTION * median))
+    precision = max(
+        PRECISION_MIN_INLIERS,
+        math.ceil(PRECISION_GOOD_FRACTION * median),
+        ceiling + PRECISION_CEILING_MARGIN + 1,
+    )
+    return {
+        0.25: (max(middle, precision), f"beat every Bad by {PRECISION_CEILING_MARGIN + 1}"),
+        1.0: (middle, "beat every Bad"),
+        4.0: (min(middle, recall), f"¼ × Goods' median, {RECALL_MIN_INLIERS} at least"),
+    }
+
+
+def doc_balance_fig() -> None:
+    """Where the document line goes at each of the three radios (#4458, #4479).
+
+    One inlier axis: the Goods' leave-one-out fits and the Bads' best fits
+    above it, the verified pages on it, and one row per radio under it with the
+    set that radio keeps. The middle radio keeps what beats every Bad; the
+    recall end adds the faint copies a floor under the Goods' own fits lets in;
+    the precision end keeps only what clears the ceiling by a margin.
+    """
+    final = _doc_stage(DOC_STAGES)
+    box = tight_box(final)
+    for stage in range(1, DOC_STAGES):
+        save(_doc_stage(stage), OUT, f"logo-balance.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "logo-balance.png", column=FULL_BLEED, box=box)
+
+
+def _hatched_dot(ax: plt.Axes, xy: tuple[float, float], r: float, good: bool, z: float = 4) -> None:
+    """A Good or Bad item as a hollow dot, hatched the way `_data_block` hatches its halves.
+
+    A solid green or red dot reads as a vote (#4533); the hatch says what kind
+    an item is without saying that anybody voted on it. The Bad hatch is drawn
+    at the Good one's density rather than `_data_block`'s sparser one: a dot
+    is small enough that half as many lines leaves a single stroke across it,
+    which reads as a "no entry" sign rather than as a fill.
+    """
+    colour, hatch = (GREEN, "//////") if good else (RED, "\\\\\\\\\\\\")
+    ax.add_patch(Circle(xy, r, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=1.3, zorder=z))
+
+
+def _doc_rows(ax: plt.Axes, x0: float, w: float, at) -> None:
+    """Stage 1 of the document-balance figure: the votes and the verified pages, each Good over Bad.
+
+    *at* maps an inlier count to canvas x on the axis every row shares.
+    """
+
+    def row_name(y: float, noun: str) -> None:
+        ax.text(x0 - 0.35, y, noun, ha="right", va="center", fontsize=16, color=INK)
+
+    y = DOC_VOTE_ROW_Y
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for counts, good in ((DOC_GOODS, True), (DOC_BADS, False)):
+        for count in counts:
+            ax.text(
+                at(count),
+                y + DOC_MARK_GAP if good else y - DOC_MARK_GAP,
+                "✓" if good else "✗",
+                ha="center",
+                va="bottom" if good else "top",
+                fontsize=20,
+                color=GREEN if good else RED,
+                fontweight="bold",
+            )
+    row_name(y, "Votes")
+    ax.text(
+        x0 + w,
+        DOC_VOTE_ROW_Y + 0.6,
+        "Inliers, few to many",
+        ha="right",
+        va="bottom",
+        fontsize=FBETA_AXIS_LABEL_PT,
+        color=SOFT,
+    )
+    # One dot per page, Good above the line and Bad below. Pages closer than
+    # `DOC_STACK_GAP` counts on one side would stack a level further out,
+    # though none of the drawing's pages are that close.
+    y = DOC_PAGE_ROW_Y
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for counts, good in ((DOC_MARK_PAGES, True), (DOC_OTHER_PAGES, False)):
+        side = 1 if good else -1
+        placed: list[tuple[float, int]] = []
+        for count in sorted(counts):
+            level = 0
+            while any(lvl == level and abs(count - c) < DOC_STACK_GAP for c, lvl in placed):
+                level += 1
+            placed.append((count, level))
+            offset = DOC_DOT_R + DOC_MARK_GAP + 0.04 + level * (2 * DOC_DOT_R + 0.06)
+            _hatched_dot(ax, (at(count), y + side * offset), DOC_DOT_R, good)
+    row_name(y, "Pages")
+
+
+def _doc_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the document-balance figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in DOC_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, DOC_CANVAS[0])
+    ax.set_ylim(0, DOC_CANVAS[1])
+    ax.set_axis_off()
+
+    lo, hi = DOC_AXIS
+    x0, w = 4.0, DOC_CANVAS[0] - 4.0 - 1.5
+
+    def at(count: float) -> float:
+        return x0 + (count - lo) / (hi - lo) * w
+
+    def row_name(y: float, text: str) -> None:
+        ax.text(x0 - 0.35, y, text, ha="right", va="center", fontsize=16, color=INK)
+
+    # ── stage 1: the votes, and the pages that verified ───────────────────────
+    _doc_rows(ax, x0, w, at)
+
+    # ── stages 2-4: what each radio keeps ─────────────────────────────────────
+    lines = _doc_lines()
+    pages = [(c, True) for c in DOC_MARK_PAGES] + [(c, False) for c in DOC_OTHER_PAGES]
+    reveal = {1.0: 2, 4.0: 3, 0.25: 4}
+    for ((beta, name), weight), y in zip(zip(FBETA_ARMS, BALANCE_WEIGHTS, strict=True), DOC_RADIO_Y, strict=True):
+        if stage < reveal[beta]:
+            continue
+        first, rule = lines[beta]
+        # Half a count below the lowest page kept, so the cut sits between two
+        # integer counts rather than on one.
+        cut = at(first - 0.5)
+        ax.plot([cut, cut], [y, DOC_PAGE_ROW_Y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+        ax.plot([cut, x0 + w], [y, y], color=INK, linewidth=weight, solid_capstyle="butt", zorder=3)
+        ax.plot([cut] * 2, [y - 0.18, y + 0.18], color=INK, linewidth=2.4, zorder=3)
+        kept = [mark for count, mark in pages if count >= first]
+        wrong = sum(1 for mark in kept if not mark)
+        ax.text(
+            x0 + w,
+            y + LABEL_GAP,
+            f"{len(kept)} kept, {wrong} wrong",
+            ha="right",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        ax.text(cut + 0.15, y + LABEL_GAP, rule, ha="left", va="bottom", fontsize=15, color=INK)
+        row_name(y, f"β = {name}")
+    return fig
+
+
+# ── the balance's line and its spot check (#4244, #4413, #4444) ──────────────
+
+#: The two figures that close the Inclination section share one drawing: the
+#: corpus ranked as a strip of items, the set the line keeps bracketed at its
+#: top, and the line at that set's foot. `calib-floor-ask` says what the
+#: Threshold control says before anyone checks, and shows why the session's
+#: own votes cannot vouch for the kept set; `calib-floor-check` runs the spot
+#: check on the same strip. Same canvas and same rows, so the strip does not
+#: move between the two slides. (The names are the precision floor's, which
+#: the pair drew first.)
 #: Each figure's canvas is exactly what it draws, because `tight_box` crops to
 #: the canvas: the axes fill it, so a short figure on a tall canvas would keep
 #: a band of white under its last line (#3265). Every row is measured *down
 #: from the canvas top*, so the two share their top rows — statement, vote row,
-#: strip, candidate, line — and differ only in how far below the strip they go.
-FLOOR_ASK_CANVAS_H = 6.35
-FLOOR_CHECK_CANVAS_H = 10.1
-#: How many items the strip shows, and how many of them the candidate is: the
-#: top 32 unvoted items, which is the check's candidate at every floor from 50%
-#: up (#4272). Forty-eight leaves a third of the strip below the line, enough
-#: to read the candidate as the *top* of something rather than as all of it.
-FLOOR_ITEMS = 48
+#: strip, kept set, line — and differ only in how far below the strip they go.
+FLOOR_ASK_CANVAS_H = 8.15
+FLOOR_CHECK_CANVAS_H = 8.65
+#: How far `calib-floor-ask` sets its shared rows below its own canvas top: the
+#: room it takes for the question above the control's sentence (#4517).
+FLOOR_ASK_HEADROOM = 0.75
+#: How many items the strip shows, and how many of them the line keeps. The
+#: count is wherever the labels' line falls on the corpus (#4452), so 32 is a
+#: choice of the drawing, not a cap: it is the set the check's walk starts on
+#: at the middle radio, which lets one strip show both. Sixty-four is the kept
+#: set plus the band the check's first deeper step audits, so that band is
+#: exactly the strip's left half (#4444).
+FLOOR_ITEMS = 64
 FLOOR_K = 32
-#: The floor the figures are drawn at — the default every detector starts with —
-#: and the level the check is tested at.
-FLOOR_X = 0.5
-FLOOR_ALPHA = 0.05
 #: The strip's geometry. It starts at the left margin and spans the canvas:
 #: the strip sits low enough that the title notch falls above it, so the top
 #: row needs no indent; the statement above it is what has to start right of
@@ -5083,79 +6176,73 @@ FLOOR_STATEMENT_DROP = 0.75
 #: The row above the strip that both figures label: the model's votes on one
 #: slide, the picks on the other.
 FLOOR_ROW_LABEL_DROP = 1.85
-#: The spot check's five picks, as strip indices — all inside the candidate
-#: (the top 32 of 48 are indices 16–47) and spread through it rather than
-#: crowding its top, which is the one thing about the picks the slide has to
-#: show. Four come back right: the check falls short of 50%, which is the
-#: common outcome at COCO Better's prevalence and the state the copy has to be
-#: honest about.
-FLOOR_PICKS = (18, 25, 31, 38, 45)
-FLOOR_PICK_VOTES = (True, True, False, True, True)
+#: The ✓s and ✗s over the strip. At 64 items neighbouring cells are 12.5pt
+#: apart and a bold 22pt ✗ is 12.8pt wide, so the panel size would print two
+#: neighbouring picks over each other; at this size they keep 3pt between them.
+FLOOR_MARK_PT = VOTE_MARK_PT
 #: The session's own votes, at the strip positions their scores fall on: a
 #: cluster around the line, where autopilot asks the hard questions, and a
 #: cluster at the top, where it asks for likely matches. They are drawn *above*
 #: the strip because they are not in it — the strip is the unvoted corpus.
 FLOOR_MODEL_VOTES = (
-    (3, False),
-    (6, False),
-    (9, True),
-    (11, False),
-    (13, True),
     (15, False),
-    (17, True),
-    (20, False),
-    (44, True),
-    (46, True),
-    (47, True),
+    (19, False),
+    (23, True),
+    (25, False),
+    (28, True),
+    (31, False),
+    (33, True),
+    (37, False),
+    (60, True),
+    (62, True),
+    (63, True),
 )
-FLOOR_ASK_STAGES = 3
+#: The balance the check is drawn at: the middle radio, every detector's
+#: default. A check is advisory at every radio since #4452: it audits and
+#: reports, and the line stays where the labels put it.
+FLOOR_BETA = 1.0
+#: The walk's count of the ranking's positives, which turns the picks' shares
+#: into recall: the mixture's, fixed when the check starts. Schematic, set so
+#: the kept set holds about half of them.
+FLOOR_CHECK_POSITIVES = 35.0
+#: The check's bands, as ranks from the top, ``[first, end)``: the three that
+#: hold the kept set, then the one its first deeper step audits. The figure
+#: prints no band's size and no count of picks, so a change to either touches
+#: the presenter notes and not the drawing (#4444).
+FLOOR_BANDS = ((0, 8), (8, 16), (16, 32), (32, 64))
+FLOOR_KEPT_BANDS = 3
+#: Each band's picks, as strip indices, and the user's vote on each. Drawn
+#: uniformly within the band, so some land side by side. The share right falls
+#: down the ranking, four of five in the top band to one of five past the line,
+#: which is what makes the walk's deeper step worse (`_floor_walk`).
+FLOOR_BAND_PICKS = (
+    ((56, True), (58, True), (59, False), (61, True), (63, True)),
+    ((48, False), (50, True), (51, True), (53, False), (55, True)),
+    ((33, False), (37, True), (40, False), (42, False), (46, True)),
+    ((2, False), (9, False), (15, True), (21, False), (27, False)),
+)
+#: How far above the strip the band brackets sit: clear of the tallest vote
+#: mark under them (a 16pt ✗ is 0.31 units over its 0.10 lift) by a label gap.
+FLOOR_BAND_LIFT = 0.70
+#: The walk row under the line: how far below the line's foot its arrows run.
+FLOOR_WALK_DROP = 0.55
+FLOOR_ASK_STAGES = 4
 FLOOR_CHECK_STAGES = 5
 
 
-def _binomial_tail(s: int, n: int, p: float) -> float:
-    """P(X ≥ s) for X ~ Binomial(n, p)."""
-    return float(sum(math.comb(n, k) * p**k * (1 - p) ** (n - k) for k in range(s, n + 1)))
-
-
-def clopper_pearson(s: int, n: int, tail: float) -> tuple[float, float]:
-    """The range the control shows for `s` right of `n` uniform picks, each tail at `tail`.
-
-    The same interval `analyze_floor_candidate_4267.likely_range` prices — the
-    one-sided Clopper–Pearson bounds at level `tail` on each side — computed
-    here by bisection on the exact binomial tail rather than through scipy, so
-    the figure generators keep to the project's own dependencies. Its lower
-    end is the very bound the check is tested at, which is why a check confirms
-    the floor iff that end clears it.
-    """
-    if not 0 <= s <= n:
-        raise ValueError(f"{s} right of {n}")
-
-    def solve(hits: int) -> float:
-        # The p at which P(X ≥ hits) = tail; the tail rises monotonically in p.
-        lo, hi = 0.0, 1.0
-        for _ in range(200):
-            mid = (lo + hi) / 2
-            if _binomial_tail(hits, n, mid) < tail:
-                lo = mid
-            else:
-                hi = mid
-        return (lo + hi) / 2
-
-    lower = 0.0 if s == 0 else solve(s)
-    upper = 1.0 if s == n else 1.0 - solve(n - s)
-    return lower, upper
-
-
 def floor_ask_fig() -> None:
-    """The line the balance keeps, and why the session's own votes cannot vouch for it.
+    """The problem the spot check solves, and why the session's own votes cannot solve it.
 
-    Three stages: what the Threshold control says before anyone checks — the
-    top 32 nobody has voted on are kept, unchecked (#4413) — with that kept set
-    and its line; the votes the session already holds, drawn where the model
-    chose to look; and the conclusion — they say where the model looked, not
-    how right the kept set is. The 83% is #4256's: an estimator calibrated on
-    learned-sort evidence alone, with a consistent reference pool, broke that
-    share of its 50% promises.
+    Four stages (#4517: the problem first, then the excuse): the kept set, its
+    line, and the question — how many of it are right; what the Threshold
+    control can say about that before anyone checks — the top 32 nobody has
+    voted on are kept, unchecked, where the labels' line fell (#4413, #4452);
+    the votes the session already holds, drawn where the model chose to look;
+    and the conclusion — they say where the model looked, not how right the
+    kept set is, so the answer has to come from picks drawn at random. The 83%
+    in the notes is #4256's: an estimator calibrated on learned-sort evidence
+    alone, with a consistent reference pool, broke that share of its 50%
+    promises.
     """
     final = _floor_stage(FLOOR_ASK_STAGES, "ask")
     box = tight_box(final)
@@ -5165,19 +6252,174 @@ def floor_ask_fig() -> None:
 
 
 def floor_check_fig() -> None:
-    """The spot check that earns the floor's promise, and its three states (#4244, #4272).
+    """The spot check on the kept set: the band walk, and what it says (#4388, #4413, #4427).
 
-    Five stages: the same candidate; five picks drawn uniformly from it; their
-    votes; the likely range those votes support, against the floor; and the
-    three states the control can end in. The range is the shipped rule's —
-    `clopper_pearson` at the check's own level — so the numbers on the drawing
-    are the ones the control would show for these five votes.
+    Five stages: the same kept set and line as `calib-floor-ask`; the ranking
+    cut into bands, and picks drawn at random from each band the kept set
+    holds; the user's votes on them; the walk's step one band deeper and its
+    step one band shallower, both worse, so it ends on the kept set; and what
+    the control says once checked, with the line where it was — at every
+    radio a check informs the line and does not move it (#4452). The reading is the
+    app's own range over these votes (`_floor_check_reading`), so its numbers
+    are the ones the control would show for them.
     """
+    _floor_walk()
     final = _floor_stage(FLOOR_CHECK_STAGES, "check")
     box = tight_box(final)
     for stage in range(1, FLOOR_CHECK_STAGES):
         save(_floor_stage(stage, "check"), OUT, f"calib-floor-check.build{stage}.png", column=FULL_BLEED, box=box)
     save(final, OUT, "calib-floor-check.png", column=FULL_BLEED, box=box)
+
+
+# ── Clopper–Pearson, on its own (#4517) ──────────────────────────────────────
+
+#: How many build stages the Clopper–Pearson figure reveals in: five picks and
+#: what they say; the lowest share that could still give four right; the
+#: highest that could still give only four; the range between; and the same
+#: share from fifty picks.
+CP_STAGES = 5
+#: The picks the slide reads, as (right, drawn): the top band of Spot Check's
+#: first audit, four of five; and ten times as many at the same share.
+CP_SMALL = (4, 5)
+CP_LARGE = (40, 50)
+#: Each tail's share: a two-sided 95% range, the check's own alpha split in two.
+CP_TAIL = CHECK_ALPHA / 2
+#: The share axis: left edge, width and height, in `FBETA_CANVAS` units.
+CP_AXIS_X0, CP_AXIS_W, CP_AXIS_Y = 4.0, 15.1, 4.7
+#: The picks row, and the two lines of each end's flag, in canvas units.
+CP_PICKS_Y = 8.3
+CP_FLAG_Y = (6.55, 5.95)
+
+
+def clopper_fig() -> None:
+    """Clopper–Pearson in general, before Spot Check uses it (#4517).
+
+    A random sample's count, turned into a range on the share it was drawn
+    from: the lowest share that would still give a count this high at least
+    `CP_TAIL` of the time, and the highest that would still give one this low.
+    Each end carries a flag saying exactly that, in words and as "1 time in
+    40", because the tails themselves are too thin to draw: a bar of 2.5% is a
+    sliver at any size a slide can show. The bounds are the app's
+    (`clopper_pearson_lower` / `_upper`, the functions the spot check's ranges
+    are built from).
+    """
+    final = _cp_stage(CP_STAGES)
+    box = tight_box(final)
+    for stage in range(1, CP_STAGES):
+        save(_cp_stage(stage), OUT, f"calib-clopper.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-clopper.png", column=FULL_BLEED, box=box)
+
+
+def _cp_x(share: float) -> float:
+    return CP_AXIS_X0 + share * CP_AXIS_W
+
+
+def _cp_bounds(right: int, drawn: int) -> tuple[float, float]:
+    return clopper_pearson_lower(right, drawn, CP_TAIL), clopper_pearson_upper(right, drawn, CP_TAIL)
+
+
+def _cp_pct(share: float) -> str:
+    """A share as the slide says it: whole percent, or one decimal near the ends."""
+    value = share * 100
+    return f"{value:.1f}%" if value > 99 or value < 1 else f"{value:.0f}%"
+
+
+def _cp_flag(ax: plt.Axes, share: float, lines: tuple[str, str], ha: str) -> None:
+    """One end of the range: its tick on the axis, and what makes it the end.
+
+    The flag's own first line names the share, so the tick carries no number.
+    *ha* is the flag's alignment; a right-aligned flag ends at the axis's own
+    right end, so a flag near 100% stays inside the canvas.
+    """
+    x = _cp_x(share)
+    ax.plot([x] * 2, [CP_AXIS_Y - 0.18, CP_AXIS_Y + 0.18], color=INK, linewidth=2.2, zorder=4)
+    ax.plot(
+        [x] * 2,
+        [CP_AXIS_Y + 0.25, CP_FLAG_Y[1] - 0.35],
+        color=INK,
+        linewidth=1.4,
+        linestyle=(0, (2, 3)),
+        zorder=2,
+    )
+    anchor = {"right": CP_AXIS_X0 + CP_AXIS_W, "center": x}[ha]
+    for y, words in zip(CP_FLAG_Y, lines, strict=True):
+        ax.text(anchor, y, words, ha=ha, va="center", fontsize=17, color=INK)
+
+
+def _cp_range(ax: plt.Axes, y: float, lo: float, hi: float, words: str, ends: bool = False) -> None:
+    """A range under the axis, named on its left; *ends* prints its two shares under its ends."""
+    x0, x1 = _cp_x(lo), _cp_x(hi)
+    ax.plot([x0, x1], [y, y], color=INK, linewidth=5.0, solid_capstyle="butt", zorder=4)
+    for x in (x0, x1):
+        ax.plot([x, x], [y - 0.16, y + 0.16], color=INK, linewidth=2.2, zorder=4)
+    ax.text(x0 - 0.25, y, words, ha="right", va="center", fontsize=17, color=INK)
+    if ends:
+        for x, share in ((x0, lo), (x1, hi)):
+            ax.text(x, y - 0.3, _cp_pct(share), ha="center", va="top", fontsize=16, color=INK)
+
+
+def _cp_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the Clopper–Pearson figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in FBETA_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, FBETA_CANVAS[0])
+    ax.set_ylim(0, FBETA_CANVAS[1])
+    ax.set_axis_off()
+
+    right, drawn = CP_SMALL
+    lo, hi = _cp_bounds(right, drawn)
+    odds = f"1 time in {round(1 / CP_TAIL)}"
+
+    # ── stage 1: five picks at random, and the share they read ────────────────
+    for i in range(drawn):
+        ax.text(
+            6.8 + i * 0.85,
+            CP_PICKS_Y,
+            "✓" if i < right else "✗",
+            ha="center",
+            va="center",
+            fontsize=30,
+            color=GREEN if i < right else RED,
+        )
+    ax.text(
+        6.8 + drawn * 0.85,
+        CP_PICKS_Y,
+        f"{right} of {drawn} picks right, drawn at random",
+        ha="left",
+        va="center",
+        fontsize=20,
+        color=INK,
+    )
+    _range_line(ax, CP_AXIS_X0, CP_AXIS_X0 + CP_AXIS_W, CP_AXIS_Y, z=3)
+    for share, words in ((0.0, "0%"), (1.0, "100%")):
+        ax.text(_cp_x(share), CP_AXIS_Y - 0.3, words, ha="center", va="top", fontsize=15, color=SOFT)
+    ax.text(
+        _cp_x(0.5),
+        CP_AXIS_Y - 0.3,
+        "How much of the whole set is right",
+        ha="center",
+        va="top",
+        fontsize=16,
+        color=SOFT,
+    )
+    point = right / drawn
+    ax.plot([_cp_x(point)], [CP_AXIS_Y], marker="o", markersize=10, color=INK, zorder=5)
+    ax.text(_cp_x(point), CP_AXIS_Y + 0.25, _cp_pct(point), ha="center", va="bottom", fontsize=16, color=INK)
+
+    # ── stages 2-3: the share at each end that makes this count a fluke ───────
+    if stage >= 2:
+        _cp_flag(ax, lo, (f"If only {_cp_pct(lo)} were right,", f"{right} or more of {drawn}: {odds}"), "center")
+    if stage >= 3:
+        _cp_flag(ax, hi, (f"If {_cp_pct(hi)} were right,", f"{right} or fewer of {drawn}: {odds}"), "right")
+
+    # ── stage 4: everything between, the range ────────────────────────────────
+    if stage >= 4:
+        _cp_range(ax, CP_AXIS_Y - 1.35, lo, hi, f"{right} of {drawn}")
+    # ── stage 5: the same share from ten times the picks ──────────────────────
+    if stage >= CP_STAGES:
+        big_lo, big_hi = _cp_bounds(*CP_LARGE)
+        _cp_range(ax, CP_AXIS_Y - 2.1, big_lo, big_hi, f"{CP_LARGE[0]} of {CP_LARGE[1]}", ends=True)
+    return fig
 
 
 def _floor_cell_x(index: int) -> float:
@@ -5189,20 +6431,21 @@ def _floor_stage(stage: int, variant: str) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of one of the pair."""
     top = FLOOR_ASK_CANVAS_H if variant == "ask" else FLOOR_CHECK_CANVAS_H
     fig, ax = _incl_figure(top)
-    voted = dict(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True)) if variant == "check" and stage >= 3 else {}
-    rows = _floor_first_stage(ax, top, voted)
     if variant == "ask":
-        _floor_ask_stages(ax, stage, rows)
+        rows = _floor_first_stage(ax, top - FLOOR_ASK_HEADROOM, statement=False)
+        _floor_ask_stages(ax, stage, rows, top)
     else:
+        rows = _floor_first_stage(ax, top)
         _floor_check_stages(ax, stage, rows)
     return fig
 
 
-def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict:
-    """The sentence, the corpus, the candidate and the line: both figures' first page.
+def _floor_first_stage(ax: plt.Axes, top: float, statement: bool = True) -> dict:
+    """The sentence, the corpus, the kept set and the line: both figures' first page.
 
-    Returns the rows the later stages hang off. `voted` names strip cells drawn
-    as cast votes rather than unlabeled media — the check's picks, once voted.
+    `calib-floor-ask` passes ``statement=False`` and draws the control's
+    sentence a stage later, under the question it answers. Returns the rows the
+    later stages hang off.
     """
     cell_w = FLOOR_STRIP_W / FLOOR_ITEMS
     strip_top = top - FLOOR_STRIP_DROP
@@ -5214,25 +6457,25 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
     # checks, word for word, and it is the only ink above the strip on the
     # first page. It starts right of the title notch; the strip below runs from
     # the margin.
-    ax.text(
-        FLOOR_STATEMENT_X,
-        top - FLOOR_STATEMENT_DROP,
-        f"“Top {FLOOR_K} kept, unchecked”",
-        ha="left",
-        va="bottom",
-        fontsize=18,
-        color=INK,
-    )
+    if statement:
+        ax.text(
+            FLOOR_STATEMENT_X,
+            top - FLOOR_STATEMENT_DROP,
+            f"“Top {FLOOR_K} kept, unchecked”",
+            ha="left",
+            va="bottom",
+            fontsize=18,
+            color=INK,
+        )
     for index in range(FLOOR_ITEMS):
-        kind = "unlabeled" if index not in voted else ("good" if voted[index] else "bad")
-        _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, kind)
+        _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled")
     # The axis, named the way every score axis in the deck is: best on the right.
-    # Under the strip's left third, which nothing else uses; above it is where
+    # Under the strip's left end, which nothing else uses; above it is where
     # the two figures draw their votes.
     ax.text(
-        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
+        FLOOR_STRIP_X0, strip_y0 - LABEL_GAP, "Ranked, best on the right", ha="left", va="top", fontsize=15, color=SOFT
     )
-    # The candidate: a bracket under the top 32, named once.
+    # The kept set: a bracket under the top 32, named once.
     brace_y = strip_y0 - 0.42
     ax.plot(
         [line_x, line_x, cand_x1, cand_x1],
@@ -5250,7 +6493,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
         fontsize=15,
         color=INK,
     )
-    # The line, at the candidate's foot, in the palette's blue: it is the shipped
+    # The line, at the kept set's foot, in the palette's blue: it is the shipped
     # decision, and the one thing on the drawing the fragment names in colour.
     line_bottom = strip_y0 - 1.15
     ax.plot([line_x] * 2, [line_bottom, strip_top + 0.25], color=BLUE, linewidth=2.6, zorder=6)
@@ -5261,6 +6504,7 @@ def _floor_first_stage(ax: plt.Axes, top: float, voted: dict[int, bool]) -> dict
         "row_label_y": top - FLOOR_ROW_LABEL_DROP,
         "brace_y": brace_y,
         "line_x": line_x,
+        "line_bottom": line_bottom,
         "cand_x1": cand_x1,
     }
 
@@ -5274,19 +6518,41 @@ def _floor_vote_marks(ax: plt.Axes, rows: dict, votes: tuple[tuple[int, bool], .
             "✓" if good else "✗",
             ha="center",
             va="bottom",
-            fontsize=VOTE_PANEL_MARK_PT,
+            fontsize=FLOOR_MARK_PT,
             color=GREEN if good else RED,
             fontweight="bold",
         )
 
 
-def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
-    """Stages 2–3 of `calib-floor-ask`: the session's votes, and what they can say."""
-    # ── stage 2: the votes the session already holds ─────────────────────────
+def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict, top: float) -> None:
+    """Stages of `calib-floor-ask`: the question, the control's answer, the votes, and what they can say."""
+    # ── stage 1: the problem, before anything is said about it ────────────────
+    ax.text(
+        FLOOR_STATEMENT_X,
+        top - FLOOR_STATEMENT_DROP,
+        f"How many of the kept {FLOOR_K} are right?",
+        ha="left",
+        va="bottom",
+        fontsize=18,
+        color=INK,
+        fontweight="bold",
+    )
+    # ── stage 2: what the Threshold control can say so far ────────────────────
     if stage >= 2:
+        ax.text(
+            FLOOR_STATEMENT_X,
+            top - FLOOR_STATEMENT_DROP - FLOOR_ASK_HEADROOM,
+            f"The Threshold control says: “Top {FLOOR_K} kept, unchecked”",
+            ha="left",
+            va="bottom",
+            fontsize=18,
+            color=INK,
+        )
+    # ── stage 3: the votes the session already holds ─────────────────────────
+    if stage >= 3:
         _floor_vote_marks(ax, rows, FLOOR_MODEL_VOTES)
         ax.text(
-            (rows["line_x"] + rows["cand_x1"]) / 2 - 1.0,
+            INCL_CANVAS_W / 2 + 2.0,
             rows["row_label_y"],
             "the session's own votes, at their scores: where the model chose to look",
             ha="center",
@@ -5294,127 +6560,211 @@ def _floor_ask_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
             fontsize=15,
             color=INK,
         )
-    # ── stage 3: what they can and cannot say ────────────────────────────────
-    if stage >= 3:
-        ax.text(
-            INCL_CANVAS_W / 2,
-            rows["brace_y"] - 1.75,
-            "They say where the model looked, not how right the kept set is.",
-            ha="center",
-            va="center",
-            fontsize=17,
-            color=INK,
+    # ── stage 4: what they can and cannot say, and so what to do instead ─────
+    if stage >= 4:
+        for row, words in enumerate(
+            (
+                "They say where the model looked, not how right the kept set is.",
+                "So pick from the kept set at random, and count.",
+            )
+        ):
+            ax.text(
+                INCL_CANVAS_W / 2,
+                rows["brace_y"] - 1.75 - row * 0.7,
+                words,
+                ha="center",
+                va="center",
+                fontsize=17,
+                color=INK,
+            )
+
+
+def _floor_band_cells(band: int) -> range:
+    """The strip indices of check band *band*, worst first."""
+    first, end = FLOOR_BANDS[band]
+    return range(FLOOR_ITEMS - end, FLOOR_ITEMS - first)
+
+
+def _floor_band_positives(bands: int) -> float:
+    """The walk's estimate of the positives in the top *bands* bands: each band's share right times its size."""
+    total = 0.0
+    for band in range(bands):
+        first, end = FLOOR_BANDS[band]
+        votes = [good for _index, good in FLOOR_BAND_PICKS[band]]
+        total += (end - first) * sum(votes) / len(votes)
+    return total
+
+
+def _floor_walk() -> tuple[float, float, float]:
+    """The walk's F-beta estimate one band shallower, at the kept set, and one band deeper.
+
+    `fbeta_score` is the app's: the estimated positives over the walk's count of
+    them. The figure draws both steps as worse, and this is where that claim is
+    checked against the votes it draws.
+    """
+    n_pos = FLOOR_CHECK_POSITIVES
+    shallower, kept, deeper = (
+        fbeta_score(_floor_band_positives(b), FLOOR_BANDS[b - 1][1], n_pos, FLOOR_BETA)
+        for b in (FLOOR_KEPT_BANDS - 1, FLOOR_KEPT_BANDS, FLOOR_KEPT_BANDS + 1)
+    )
+    assert shallower < kept > deeper, (shallower, kept, deeper)
+    return shallower, kept, deeper
+
+
+def _floor_found_words(mid: float) -> str:
+    """The recall range's midpoint in words, as the control words it (`foundWords`, `line-balance.ts`)."""
+    for bound, words in (
+        (0.15, "few of them found"),
+        (0.375, "about a quarter of them found"),
+        (0.625, "about half of them found"),
+        (0.875, "about three quarters of them found"),
+    ):
+        if mid < bound:
+            return words
+    return "nearly all of them found"
+
+
+def _floor_check_reading() -> str:
+    """What the Threshold control says once the check has run, for the votes the figure draws.
+
+    The app's own ranges (`SpotCheck.range` and `recall_range`): each kept
+    band's Clopper–Pearson interval at the walk's split tail, `likely_range` at
+    `range_tail`, weighted by the band's size — over the kept set for precision
+    and over the walk's count of positives for recall. Worded as the control's
+    state line (`balanceSummary`), and rounded the way it rounds.
+    """
+    k = FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][1]
+    assert k == FLOOR_K, k
+    tail = range_tail(FLOOR_KEPT_BANDS, CHECK_ALPHA)
+    lo = hi = 0.0
+    labelled = 0
+    for band in range(FLOOR_KEPT_BANDS):
+        first, end = FLOOR_BANDS[band]
+        votes = [good for _index, good in FLOOR_BAND_PICKS[band]]
+        part = likely_range(sum(votes), len(votes), end - first, tail)
+        lo += (end - first) * part.lo
+        hi += (end - first) * part.hi
+        labelled += len(votes)
+    n_pos = FLOOR_CHECK_POSITIVES
+    found = _floor_found_words((min(1.0, lo / n_pos) + min(1.0, hi / n_pos)) / 2)
+    percent = "–".join(f"{math.floor(100 * x / k + 0.5):d}" for x in (lo, hi))
+    return f"Checked · likely {percent}% right, {found} (checked {labelled}) · {FLOOR_K} kept"
+
+
+def _floor_band_bracket(ax: plt.Axes, rows: dict, band: int) -> None:
+    """A bracket over check band *band*, above its picks' votes: where the band starts and ends.
+
+    Inset a little at each end, so two neighbouring bands read as two brackets.
+    """
+    cells = _floor_band_cells(band)
+    x0 = _floor_cell_x(cells.start) + 0.06
+    x1 = _floor_cell_x(cells.stop) - 0.06
+    y = rows["strip_top"] + FLOOR_BAND_LIFT
+    ax.plot([x0, x0, x1, x1], [y - 0.12, y, y, y - 0.12], color=INK, linewidth=1.6, zorder=5)
+
+
+def _floor_walk_arrow(ax: plt.Axes, x_from: float, x_to: float, y: float, label: str) -> None:
+    """One step the walk tried and did not take: a dashed arrow from the line, its verdict under it."""
+    head_l, head_w = 0.32, 0.26
+    sign = 1.0 if x_to > x_from else -1.0
+    ax.plot([x_from, x_to - sign * head_l], [y, y], color=INK, linewidth=1.8, linestyle=(0, (4, 3)), zorder=5)
+    ax.add_patch(
+        Polygon(
+            [(x_to, y), (x_to - sign * head_l, y + head_w / 2), (x_to - sign * head_l, y - head_w / 2)],
+            closed=True,
+            facecolor=INK,
+            edgecolor="none",
+            zorder=5,
         )
+    )
+    ax.text((x_from + x_to) / 2, y - head_w / 2 - LABEL_GAP, label, ha="center", va="top", fontsize=15, color=INK)
 
 
 def _floor_check_stages(ax: plt.Axes, stage: int, rows: dict) -> None:
-    """Stages 2–5 of `calib-floor-check`: picks, votes, the range, the states."""
+    """Stages 2–5 of `calib-floor-check`: the picks, their votes, the walk, the reading."""
     cell_w, strip_top = rows["cell_w"], rows["strip_top"]
-    cand_cx = (rows["line_x"] + rows["cand_x1"]) / 2
-    # ── stage 2: five picks, uniform within the candidate ─────────────────────
+    strip_y0 = strip_top - FLOOR_STRIP_H
+    kept_picks = tuple(pick for band in FLOOR_BAND_PICKS[:FLOOR_KEPT_BANDS] for pick in band)
+    deeper_picks = FLOOR_BAND_PICKS[FLOOR_KEPT_BANDS]
+    for band, picks in enumerate(FLOOR_BAND_PICKS):
+        assert all(index in _floor_band_cells(band) for index, _good in picks), band
+    # ── stage 2: the bands the kept set holds, and a few picks from each ──────
     if stage >= 2:
-        for index in FLOOR_PICKS:
-            _acq_cell(ax, _floor_cell_x(index), strip_top - FLOOR_STRIP_H, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
+        for band in range(FLOOR_KEPT_BANDS):
+            _floor_band_bracket(ax, rows, band)
+        for index, _good in kept_picks:
+            _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
         ax.text(
-            cand_cx,
+            (rows["line_x"] + rows["cand_x1"]) / 2,
             rows["row_label_y"],
-            f"{len(FLOOR_PICKS)} picks, drawn uniformly from the candidate",
+            "a few picks, drawn at random from each band",
             ha="center",
             va="bottom",
             fontsize=15,
             color=INK,
         )
     # ── stage 3: the user's votes on them ─────────────────────────────────────
-    right = sum(FLOOR_PICK_VOTES)
     if stage >= 3:
-        _floor_vote_marks(ax, rows, tuple(zip(FLOOR_PICKS, FLOOR_PICK_VOTES, strict=True)))
-        ax.text(
-            rows["cand_x1"],
-            rows["row_label_y"],
-            f"{right} of {len(FLOOR_PICKS)} right",
-            ha="right",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-        )
-    # ── stage 4: the range those votes support, against the floor ─────────────
-    lo, hi = clopper_pearson(right, len(FLOOR_PICKS), FLOOR_ALPHA)
-    gauge_y = rows["brace_y"] - 1.85
+        _floor_vote_marks(ax, rows, kept_picks)
+    # ── stage 4: the walk — one band deeper, one band shallower, both worse ───
+    walk_y = rows["line_bottom"] - FLOOR_WALK_DROP
     if stage >= 4:
-        _floor_gauge(ax, gauge_y, lo, hi)
+        _floor_band_bracket(ax, rows, FLOOR_KEPT_BANDS)
+        for index, _good in deeper_picks:
+            _acq_cell(ax, _floor_cell_x(index), strip_y0, cell_w, FLOOR_STRIP_H, "unlabeled", lw=3.2)
+        _floor_vote_marks(ax, rows, deeper_picks)
+        # Both steps leave from the line: its own blue, carried down dashed to
+        # the walk row, so the two arrows read as two moves of one line rather
+        # than as one arrow with two heads.
+        line_x = rows["line_x"]
+        ax.plot(
+            [line_x] * 2,
+            [walk_y, rows["line_bottom"]],
+            color=BLUE,
+            linewidth=2.0,
+            linestyle=(0, (2, 2)),
+            zorder=6,
+        )
+        shallower_x = _floor_cell_x(FLOOR_ITEMS - FLOOR_BANDS[FLOOR_KEPT_BANDS - 1][0])
+        _floor_walk_arrow(ax, line_x - 0.2, FLOOR_STRIP_X0, walk_y, "a band deeper: worse")
+        _floor_walk_arrow(ax, line_x + 0.2, shallower_x, walk_y, "a band shallower: worse")
+    # ── stage 5: what the control says, and what the check did to the line ───
+    if stage >= 5:
+        reading_y = walk_y - 1.45
         ax.text(
             INCL_CANVAS_W / 2,
-            gauge_y - 1.15,
-            f"“Aimed at 50%: likely {round(100 * lo):d}–{round(100 * hi):d}% right (checked {len(FLOOR_PICKS)}).”",
+            reading_y,
+            f"“{_floor_check_reading()}”",
             ha="center",
             va="center",
             fontsize=17,
             color=INK,
         )
-    # ── stage 5: the three states ─────────────────────────────────────────────
-    if stage >= 5:
-        states = (
-            ("unchecked", "nobody has voted on the candidate yet; no range"),
-            ("confirmed", "the range's lower end clears the floor"),
-            ("short", f"it does not: the line keeps the {FLOOR_K} it checked, and says how close"),
-        )
-        name_x = INCL_CANVAS_W / 2 - 3.2
-        for row, (name, meaning) in enumerate(states):
-            y = gauge_y - 2.25 - row * 0.62
-            ax.text(name_x, y, name, ha="right", va="top", fontsize=15, color=INK, fontweight="bold")
-            ax.text(name_x + 0.25, y, "— " + meaning, ha="left", va="top", fontsize=15, color=INK)
-
-
-def _floor_gauge(ax: plt.Axes, gauge_y: float, lo: float, hi: float) -> None:
-    """A 0–100% axis carrying the likely range as a bar, and the floor as a notch."""
-    gauge_x0, gauge_w = FLOOR_STRIP_X0 + 3.6, FLOOR_STRIP_W - 3.6
-    _range_line(ax, gauge_x0, gauge_x0 + gauge_w, gauge_y, z=3)
-    ax.text(gauge_x0 - LABEL_GAP - 0.1, gauge_y, "likely right", ha="right", va="center", fontsize=16, color=INK)
-    for frac, name in ((0.0, "0%"), (1.0, "100%")):
-        ax.text(
-            gauge_x0 + frac * gauge_w,
-            gauge_y - RANGE_FOOT - LABEL_GAP,
-            name,
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=SOFT,
-        )
-    # The range: a bar on the axis, its ends named — except an end that all but
-    # touches an end of the axis, which takes the axis's own label rather than
-    # printing "99%" over "100%".
-    ax.plot(
-        [gauge_x0 + lo * gauge_w, gauge_x0 + hi * gauge_w],
-        [gauge_y] * 2,
-        color=INK,
-        linewidth=9,
-        solid_capstyle="butt",
-        zorder=4,
-    )
-    for frac in (lo, hi):
-        if min(frac, 1.0 - frac) < 0.05:
-            continue
-        ax.text(
-            gauge_x0 + frac * gauge_w,
-            gauge_y - RANGE_FOOT - LABEL_GAP,
-            f"{round(100 * frac):d}%",
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=INK,
-            fontweight="bold",
-        )
-    # The floor, marked above the axis the way every cut in the deck is: a
-    # notch and a name. It is the line's blue because it is what the line was
-    # asked for.
-    floor_x = gauge_x0 + FLOOR_X * gauge_w
-    ax.plot([floor_x] * 2, [gauge_y, gauge_y + 0.42], color=BLUE, linewidth=2.6, zorder=5)
-    ax.text(floor_x, gauge_y + 0.42 + LABEL_GAP, "the floor, 50%", ha="center", va="bottom", fontsize=15, color=INK)
+        for row, words in enumerate(
+            (
+                "At every radio a check informs the line and does not move it:",
+                "its picks are votes, and the line stays where the labels put it.",
+            )
+        ):
+            ax.text(
+                INCL_CANVAS_W / 2,
+                reading_y - 0.75 - row * 0.55,
+                words,
+                ha="center",
+                va="center",
+                fontsize=15,
+                color=INK,
+            )
 
 
 if __name__ == "__main__":
-    cost_knob_fig()
-    crossing_fig()
+    fmetrics_fig()
+    fbeta_maps_fig()
+    fbeta_fig()
+    labels_line_fig()
+    transfer_fig()
+    doc_balance_fig()
+    patch_fig()
     region_max_fig()
     xcal_flow_fig()
     gmm_flow_fig()
@@ -5427,6 +6777,7 @@ if __name__ == "__main__":
     tilt_flow_fig()
     acq_flow_fig()
     floor_ask_fig()
+    clopper_fig()
     floor_check_fig()
     blend_schedule_fig()
     split_fraction_fig()

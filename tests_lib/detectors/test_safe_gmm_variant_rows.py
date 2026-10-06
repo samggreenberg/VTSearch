@@ -316,3 +316,43 @@ class TestCutDiagnosticFrame:
     def test_no_diagnostic_rows_without_a_sink(self):
         rows = _run_safe("max_patch")
         assert rows  # the run still works with cut_diag_sink=None
+
+
+class TestTheDefaultArmDrawsTheLabelsLine:
+    """#4452: under the app's default balance the shipped arm draws the labels' line and the test side models Find.
+
+    The first pricing run of the labels line drew the old count line on every
+    cell: the harness's fold scores are float32, and the class model's
+    ``isinstance(float)`` filter dropped every one of them, so no model was ever
+    fitted.  This runs the shipped fused configuration at the default balance.
+    """
+
+    def test_base_rows_carry_both_prevalences_and_find_cuts_the_withheld_half(self):
+        rows = _run_safe_uncached("max_patch", min_precision=None)
+        base = [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]
+        assert base, "no base rows"
+        drawn = [r for r in base if np.isfinite(r["train_prevalence"])]
+        assert drawn, "the default arm never drew the labels' line"
+        assert all(np.isfinite(r["find_prevalence"]) and 0.0 < r["find_prevalence"] <= 0.5 for r in drawn)
+        assert all(np.isfinite(r["train_threshold"]) for r in drawn)
+
+
+class TestTheWiderWorldKnobs:
+    """#4452: the withheld half's scores are kept for post-hoc Find scenarios, and the Train pool can shrink."""
+
+    def test_the_test_score_sink_carries_the_withheld_half_and_the_labels_model(self):
+        sink: list = []
+        rows = _run_safe_uncached("max_patch", min_precision=None, test_score_sink=sink)
+        assert rows and sink
+        last = sink[-1]
+        assert last["scores"].dtype == np.float64 and last["scores"].shape == last["labels"].shape
+        assert last["labels"].sum() > 0 and np.isfinite(last["train_threshold"])
+        drawn = [s for s in sink if s["model"] is not None]
+        assert drawn and {"mu_pos", "mu_neg", "sigma"} <= set(drawn[-1]["model"])
+
+    def test_a_smaller_train_pool_keeps_the_withheld_half_whole(self):
+        full = _run_safe_uncached("max_patch", min_precision=None, max_steps=6)
+        small = _run_safe_uncached("max_patch", min_precision=None, max_steps=6, sim_size=30)
+        assert {r["prevalence_arm"] for r in small} == {"sim_30"}
+        base = lambda rows: [r for r in rows if r["pool_variant"] == "max" and r["gmm_variant"] == ""]  # noqa: E731
+        assert base(full)[0]["n_test_pos"] == base(small)[0]["n_test_pos"], "the Find side is untouched"

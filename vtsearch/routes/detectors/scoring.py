@@ -78,30 +78,33 @@ def _abort_if_find_cancelled() -> None:
     """
     if find_progress.is_cancelled:
         find_idle()
-        abort(409, message="Find cancelled")
+        abort(409, message="Test cancelled")
 
 
 def _keep_line_ranking(results: list[dict], threshold: float) -> float:
-    """Give a Find pass that reused a cached head the ranking its line keeps a set of (#4272, #4273).
+    """Give a Find pass that reused a cached head the ranking its line is read against (#4272, #4273).
 
     Training stores the ranking the line is drawn over (``line_ranking``).  A
     head reused as it was (:func:`~vtscore.detectors.model_loading.cached_head_is_current`)
     brings none when the last one was dropped - by a dataset switch, or by
-    ending a Find session - and then the pass drew the stored score cut rather
-    than the set the balance keeps, and a spot check had nothing to draw from.
-    So a pass with no ranking builds one from the scores it just computed, with
-    the votes a person had cast before it marked voted, as training marks the
-    labelset's items, and draws the line at the set the balance keeps (#4413).
-    A ranking training has just stored is left alone.  Returns the threshold to
-    use: *threshold* unchanged when there was a ranking already, or no set to
-    keep.
+    ending a Find session - and then the balance's state had nothing to count
+    and a spot check had nothing to draw from.  So a pass with no ranking
+    builds one from the scores it just computed, with the votes a person had
+    cast before it marked voted, as training marks the labelset's items.  A
+    ranking training has just stored is left alone.  Returns the threshold to
+    use: *threshold* unchanged when there was a ranking already, no balance,
+    or no class model behind the head.
+
+    Under the balance (#4452) nothing is counted on this corpus: the line is
+    the labels' class model with the prevalence re-estimated on these scores,
+    which is what a cold Find over the same corpus computes; the ranking only
+    reports how many the line keeps here.
     """
     from vtscore.state.core import (  # noqa: PLC0415
-        detector_balance_proposal,
         get_active_detector_context,
         human_voted_ids,
     )
-    from vtscore.training.thresholds import LineRanking, balance_line  # noqa: PLC0415
+    from vtscore.training.thresholds import LineRanking  # noqa: PLC0415
     from vtsearch.state import line_knobs  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
@@ -109,17 +112,24 @@ def _keep_line_ranking(results: list[dict], threshold: float) -> float:
         return threshold
     voted = human_voted_ids(det_ctx)
     det_ctx.line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], voted)
+    det_ctx.gate_passed = None  # a structural re-rank after this pass sets it afresh (#4505)
     beta = line_knobs()["beta"]
-    if beta is None:
-        return threshold
-    kept = balance_line(
-        det_ctx.line_ranking,
-        beta,
-        det_ctx.precision_check,
-        voted,
-        proposal=detector_balance_proposal(det_ctx, beta),
-    )
-    return threshold if kept is None else kept
+    if beta is not None and det_ctx.labels_line is not None:
+        # The labels' line (#4452): the class model the labels gave the head,
+        # with the prevalence re-estimated on this corpus as a cold Find would
+        # (the same EM over its scores) - never a count drawn on it.  The
+        # ranking stays for the line's state: how many it keeps here.
+        det_ctx.labels_line = det_ctx.labels_line.on_corpus(
+            [r["score"] for r in results],
+            [r["id"] for r in results],
+            {cid: True for cid in det_ctx.good_votes if cid in voted}
+            | {cid: False for cid in det_ctx.bad_votes if cid in voted},
+        )
+        return float(det_ctx.labels_line.threshold(beta))
+    # No balance, or no class model behind this head (too few votes, one
+    # class): the threshold the retrain stored stands - no count on this
+    # corpus (#4452).
+    return threshold
 
 
 @detector_scoring_bp.route("/api/find-label", methods=["POST"])
@@ -356,6 +366,8 @@ def find_label(body: dict):
         # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
         # a prior corrections-to-detector fold no longer applies.
         det_ctx.find_eval_stale = False
+        # A test of the line was over the previous pass's scores (#4524).
+        det_ctx.line_test = None
         # The counts the client shows are the labels this pass *adopted*, which is
         # the threshold split everywhere except the verified items that held their
         # human vote.  ``replace_all`` left exactly this label set behind, so the
@@ -662,7 +674,7 @@ def find_corrections_to_detector():
 
         initial = det_ctx.find_initial_labels
         if not initial:
-            abort(400, message="No Find run to take corrections from. Score the dataset first.")
+            abort(400, message="No Test run to take corrections from. Score the dataset first.")
 
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 

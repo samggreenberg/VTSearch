@@ -172,6 +172,7 @@ class TestVocabulary:
             "bulk",
             "undo",
             "check",
+            "test",
             "unknown",
         }
 

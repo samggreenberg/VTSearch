@@ -1,8 +1,8 @@
 # The tiled Stage 1 in the app: end-to-end on FullMarks (#3928)
 
 **Question.** #3928 built a Stage 1 that retrieves marks on document pages
-(tiled VLAD) and priced it offline. Built into the app (PR #4378, plan
-`docs/plans/structural-tiled-stage1.md`), does the app's own structural path
+(tiled VLAD) and priced it offline. Built into the app (PR #4378; the gates measured before the build are
+[below](#the-gates-measured-before-the-build-m1m4)), does the app's own structural path
 now find stamps and logos the way verifying every page does? At what cost per
 vote?
 
@@ -151,6 +151,73 @@ StaVer/SPODS stamps:
 - **One query crop per class** (#3949's extra crops are not in the roster
   yet).
 
+## The gates measured before the build (M1–M4)
+
+These were run on 2026-09-30, before #4378 was built, as the owner's
+pre-registered gates. All four passed. Their run directory is
+`/expscratch/sgreenberg/stage1-v50-3928/`, and their scripts are
+`stage1_cell.py --from-compact / --fit-sources`, `stage1_votes.py` and
+`bench_verify.py` in `scripts/experiments/fullmarks/`.
+
+**Why Stage 1 was the limit.** FullMarks v5.0, 36 classes, mean AP:
+
+| | tier `s` (5k pages) | tier `m` (50k pages) |
+|---|---:|---:|
+| SIFT verifies every page (8,192 keypoints) | 0.83 | 0.87 |
+| **Tiled VLAD, 512 dims, top 1,000 → SIFT** | **0.80** | **0.72** |
+| Tiled VLAD, 512 dims, top 500 → SIFT | 0.77 | 0.67 |
+| Tiled VLAD alone | 0.47 | 0.38 |
+| The app before, with 10 votes (page VLAD SVM, top 50 → SIFT) | 0.17 | — |
+
+At tier `m` the top 1,000 keep 84% of verifying every page, from 2% of the
+pages.
+
+**M1, tiles from the stored features: PASS.** Tiles built from the compacted
+features the app stores (fp16 keypoints, uint8 descriptors) rank like the
+float extraction: tier `s`, K = 1,000, mean AP 0.798 against 0.799 (mean
+paired difference −0.001, largest single-class gap 0.03).
+
+**M2, does a projection transfer: PASS, with a rule for the fit.** Each
+projection was fit on some sources only, and scored against the all-source
+fit (tier `s`, paired over classes, 95% intervals):
+
+| projection fit on | unseen sources, K = 1,000 | own sources, K = 1,000 | own sources, Stage 1 alone |
+|---|---:|---:|---:|
+| SPODS + StaVer | +0.03 [−0.02, +0.11] | −0.02 [−0.04, +0.01] | **−0.17** [−0.25, −0.10] |
+| Tobacco800 + UCSF | +0.00 [−0.01, +0.01] | −0.02 [−0.07, +0.06] | −0.02 [−0.06, +0.01] |
+
+Transfer holds. What hurts is fitting on pages dense with the marks being
+searched: whitening flattens the directions those repeated marks occupy. So
+the cached asset is fit on mark-sparse pages, FullMarks' distractor-dominated
+all-source tier `s` (`fit_tile_projection.py`).
+
+**M3, queries from votes: max over queries wins; an SVM over tiles loses.**
+The shared vote sequence (#4162), 10 votes, scored on the unlabelled
+remainder:
+
+| 10 votes | Stage 1, `s` | → SIFT K = 1,000, `s` | Stage 1, `m` | → SIFT K = 1,000, `m` | → SIFT K = 500, `m` |
+|---|---:|---:|---:|---:|---:|
+| crop only | 0.38 | 0.82 | 0.28 | 0.66 | 0.60 |
+| **max over crop + Good boxes** | **0.68** | **0.87** | **0.59** | **0.84** | **0.79** |
+| SVM over tile rows (Bads flood) | 0.49 | 0.86 | 0.38 | 0.73 | 0.68 |
+
+At tier `m`, max over queries beats the SVM by 0.11 [0.05, 0.18] through the
+pipeline, and reaches 97% of verifying every page (0.84 against 0.87). The
+vote sequence comes from the exhaustive ranking, which flatters Stage 1, but
+the comparison between arms is fair.
+
+**M4, verification cost: PASS on a GPU.** `verify_many`, one template against
+1,000 pages at 8,192 keypoints:
+
+| | L40S + 8 CPUs | 8 CPUs, no GPU |
+|---|---:|---:|
+| median Good-box template (138–485 keypoints) | **0.85 s** | 5.9 s |
+| query crop (1,209 keypoints) | 1.3 s | 20 s |
+
+The batched ratio test is nearly all of it. With the verification cache a
+vote costs ~1 s on a GPU, and a CPU-only deployment verifies a shorter
+shortlist (`TILED_TOP_K_CPU`).
+
 ## Reproduce
 
 ```bash
@@ -161,6 +228,6 @@ python scripts/experiments/fullmarks/app_replay_tiled.py --tier s \
 python docs/experiments/2026-09-30-fullmarks-tiled-stage1-app-3928/figures.py
 ```
 
-`measurements/` also holds the gate measurements the plan cites: M1 (`eval-m1-*`),
+`measurements/` also holds the gate measurements summarised below: M1 (`eval-m1-*`),
 M2 (`eval-m2-*`), M3 (`m3-*`), M4 (`m4-*.json`) and the asset pricing
 (`eval-v1asset.csv`).

@@ -60,14 +60,17 @@ export class DatasetsRegistryApiService {
     }).pipe(map((r) => r.body));
   }
 
-  /** Start a background run of the caller's AutoRun detectors on a loaded
-   *  dataset (the dataset ⋯ **Run AutoRun**). Resolves with the ``task_id``;
-   *  progress arrives on the ``loading-tasks`` channel on a row keyed to the
-   *  dataset, and the finished row's ``autorun`` block names the results. */
-  runAutorun(datasetId: string): Observable<DatasetRegistryLoadResponse> {
-    return runDatasetAutorun(this.http, this.config.rootUrl, { dataset_id: datasetId }).pipe(
-      map((r) => r.body),
-    );
+  /** Start a background AutoRun on a loaded dataset. Without *detectorIds* it
+   *  runs the caller's AutoRun detectors (the dataset ⋯ **Run AutoRun**); with
+   *  them, exactly those detectors, drafts included (the Dashboard's big
+   *  **AutoRun** button). Resolves with the ``task_id``; progress arrives on
+   *  the ``loading-tasks`` channel on a row keyed to the dataset, and the
+   *  finished row's ``autorun`` block names the results. */
+  runAutorun(datasetId: string, detectorIds?: string[]): Observable<DatasetRegistryLoadResponse> {
+    return runDatasetAutorun(this.http, this.config.rootUrl, {
+      dataset_id: datasetId,
+      body: detectorIds ? { detector_ids: detectorIds } : undefined,
+    }).pipe(map((r) => r.body));
   }
 
   unloadRegistered(datasetId: string): Observable<DatasetRegistryOkResponse> {

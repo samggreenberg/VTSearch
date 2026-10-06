@@ -99,6 +99,14 @@ const PLATEAU_NOTE =
   'All quality indicators are green, but some items near the cutoff still change calls between retrains and that is no longer improving: the remaining ambiguity looks irreducible in this embedding.';
 const DONE_PLATEAU_HELP = `${PLATEAU_NOTE} You can continue labeling or export your results.`;
 
+/**
+ * What the Done step says on a document dataset, which stops on the dry run
+ * rather than the indicators (#4488).
+ */
+function dryRunNote(dryRun: number): string {
+  return `${dryRun} of the detector's best matches in a row were not good: the documents it can find are likely found.`;
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-autopilot-panel',
@@ -187,10 +195,11 @@ export class AutopilotPanelComponent implements OnInit {
         if (phase === 'done') {
           this.announceCompletion({
             heading: 'Detector Trained',
-            detail:
-              'Every quality indicator is green: the detector\'s accuracy has settled, its calls '
-              + 'have stopped shifting between labeling steps, and your votes span a broad mix of '
-              + 'the collection.',
+            detail: this.state.dryRunStop
+              ? dryRunNote(this.state.moreDryRun)
+              : 'Every quality indicator is green: the detector\'s accuracy has settled, its calls '
+                + 'have stopped shifting between labeling steps, and your votes span a broad mix of '
+                + 'the collection.',
             nextSteps:
               'Nothing here expires. Keep labeling to refine the detector further, or head to the '
               + 'Dashboard to export it, run it over another dataset, or start something new.',
@@ -250,7 +259,11 @@ export class AutopilotPanelComponent implements OnInit {
   }
 
   get steps(): StepDisplay[] {
-    const phases: AutopilotPhase[] = ['good', 'bad', 'more', 'hard', 'new', 'done'];
+    // A document dataset stops on the walk's dry run (#4488): no Boundary or
+    // Diversity step.
+    const phases: AutopilotPhase[] = this.state.dryRunStop
+      ? ['good', 'bad', 'more', 'done']
+      : ['good', 'bad', 'more', 'hard', 'new', 'done'];
     const phaseIndex = phases.indexOf(this.state.phase);
 
     return phases.map((phase, i) => {
@@ -403,6 +416,16 @@ export class AutopilotPanelComponent implements OnInit {
         );
       }
       case 'more': {
+        if (st.dryRunStop) {
+          // On a document dataset the run of misses is the stop (#4488), so the
+          // light tracks it, and a Good, which restarts the run, dims it.
+          return light(
+            progressLight(st.moreMisses, st.moreDryRun),
+            `Counts the detector's best matches in a row that are not good: ${st.moreMisses} so far. `
+            + `Red until ${st.moreDryRun / 2}, yellow past halfway, green at ${st.moreDryRun}, when the step ends. `
+            + 'A good match starts the count again.',
+          );
+        }
         const target = this.effMoreTarget;
         return light(
           progressLight(this.goodVotes().size, target),
@@ -436,7 +459,7 @@ export class AutopilotPanelComponent implements OnInit {
         );
       }
       case 'done':
-        return light('green', 'All quality indicators are green.');
+        return light('green', st.dryRunStop ? dryRunNote(st.moreDryRun) : 'All quality indicators are green.');
       default:
         return light('red', '');
     }
@@ -446,10 +469,15 @@ export class AutopilotPanelComponent implements OnInit {
     switch (phase) {
       case 'good': return 'Label a few examples of what you are looking for so the system can learn what "good" looks like.';
       case 'bad': return 'Label examples that are not what you want, helping the system learn the good/bad cutoff.';
-      case 'more': return 'Keep labeling the best matches for your search. Stops once the matches stop turning up goods.';
+      case 'more':
+        return this.state.dryRunStop
+          ? `Keep labeling the detector's best matches. Stops after ${this.state.moreDryRun} in a row that are not good.`
+          : 'Keep labeling the best matches for your search. Stops once the matches stop turning up goods.';
       case 'hard': return 'The system shows you items near the good/bad cutoff. Labeling these improves accuracy where it matters most.';
       case 'new': return 'Explore a broad mix of items the system is less certain about, ensuring nothing important is missed.';
-      case 'done': return this.state.stablePlateau ? DONE_PLATEAU_HELP : DONE_HELP;
+      case 'done':
+        if (this.state.dryRunStop) return `${dryRunNote(this.state.moreDryRun)} You can continue labeling or export your results.`;
+        return this.state.stablePlateau ? DONE_PLATEAU_HELP : DONE_HELP;
       default: return '';
     }
   }
@@ -467,12 +495,17 @@ export class AutopilotPanelComponent implements OnInit {
       case 'bad':
         return `Phase ${stepNumber}: Find initial bads. Label a few negatives so the detector has both sides of the good/bad cutoff.`;
       case 'more':
-        return `Phase ${stepNumber}: Find more goods. Keep labeling the best matches for your search while they keep turning up goods; more goods early make a better detector later.`;
+        return this.state.dryRunStop
+          ? `Phase ${stepNumber}: Find more goods. Keep labeling the detector's best matches until ${this.state.moreDryRun} in a row are not good; then the detector is trained.`
+          : `Phase ${stepNumber}: Find more goods. Keep labeling the best matches for your search while they keep turning up goods; more goods early make a better detector later.`;
       case 'hard':
         return `Phase ${stepNumber}: Refine the cutoff. Votes on uncertain items train the detector fastest.`;
       case 'new':
         return `Phase ${stepNumber}: Cover a broad mix. Items from parts of your collection you haven't seen catch edge cases the cutoff phase missed.`;
       case 'done':
+        if (this.state.dryRunStop) {
+          return `Done. ${dryRunNote(this.state.moreDryRun)} Keep labeling for more, or export your results.`;
+        }
         return this.state.stablePlateau
           ? `Done. ${PLATEAU_NOTE} Keep labeling if you want, but more votes are unlikely to change the result; or export your results.`
           : 'Done. All quality indicators are green. Keep labeling for more accuracy, or export your results.';
@@ -489,7 +522,9 @@ export class AutopilotPanelComponent implements OnInit {
       case 'bad':
         return `${this.badVotes().size}/${this.effBadTarget} bad labels`;
       case 'more':
-        return `${this.goodVotes().size}/${this.effMoreTarget} good labels`;
+        return st.dryRunStop
+          ? `${st.moreMisses}/${st.moreDryRun} in a row not good`
+          : `${this.goodVotes().size}/${this.effMoreTarget} good labels`;
       case 'hard': {
         // No count target here — the phase ends when the smart and stable
         // indicators (the dots rendered right after this text) both go green.
@@ -503,7 +538,7 @@ export class AutopilotPanelComponent implements OnInit {
           ? `Diversity: ${Math.round(st.fracDiversity)}/${st.spanTarget}`
           : `Diversity: ${Math.round(st.fracDiversity)}`;
       case 'done':
-        return 'All indicators green';
+        return st.dryRunStop ? 'Best matches ran dry' : 'All indicators green';
       default:
         return '';
     }
@@ -517,7 +552,9 @@ export class AutopilotPanelComponent implements OnInit {
   private phaseDetailTitle(phase: AutopilotPhase): string {
     switch (phase) {
       case 'more':
-        return `Ends at ${this.effMoreTarget} good labels, or after ${this.state.moreDryRun} matches in a row that are not good.`;
+        return this.state.dryRunStop
+          ? `Ends after ${this.state.moreDryRun} of the detector's best matches in a row are not good. ${this.goodVotes().size} good labels so far.`
+          : `Ends at ${this.effMoreTarget} good labels, or after ${this.state.moreDryRun} matches in a row that are not good.`;
       case 'hard':
         return 'Ends when both indicators turn green.';
       case 'new':

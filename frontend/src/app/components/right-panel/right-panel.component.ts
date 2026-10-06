@@ -73,8 +73,6 @@ export class RightPanelComponent implements OnInit, OnDestroy {
   readonly toDataset = output<void>();
   /** Find mode: export a label partition (good / bad). */
   readonly exportLabels = output<'good' | 'bad'>();
-  /** Find mode: open the detector-evaluation Stats modal. */
-  readonly stats = output<void>();
   /** Find mode: fold the corrections into the detector's labelset and retrain. */
   readonly addCorrections = output<void>();
 
@@ -236,9 +234,6 @@ export class RightPanelComponent implements OnInit, OnDestroy {
     this.exportLabels.emit('bad');
   }
 
-  onStats(): void {
-    this.stats.emit();
-  }
 
   onAddCorrections(): void {
     this.addCorrections.emit();

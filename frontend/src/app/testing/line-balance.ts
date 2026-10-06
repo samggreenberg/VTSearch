@@ -1,6 +1,9 @@
 import type { BalanceShape, BalanceStatus, CheckSchedule, LikelyRange, LineBalance } from '../utils/line-balance';
 
-/** The two states the balance reports (#4413). */
+/**
+ * The two states a check moves the balance between (#4413). A structural
+ * detector's `gate` line (#4505) is apart from them: no check applies there.
+ */
 export const BALANCE_STATES: BalanceStatus[] = ['unchecked', 'checked'];
 
 /** A five-pick precision range with 2 of 5 right. */
@@ -40,6 +43,9 @@ export function lineBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     schedule: SCHEDULE_DEFAULT,
     shape: shapeFor(beta),
     audited: checked ? count : null,
+    checkable: status !== 'gate',
+    separation: null,
+    checkDue: false,
     ...overrides,
   };
 }
@@ -57,5 +63,8 @@ export function wireBalance(status: BalanceStatus, overrides: Partial<LineBalanc
     schedule: b.schedule ?? SCHEDULE_DEFAULT,
     shape: b.shape,
     audited: b.audited,
+    checkable: b.checkable,
+    separation: b.separation,
+    check_due: b.checkDue,
   };
 }

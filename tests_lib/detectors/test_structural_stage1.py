@@ -8,6 +8,7 @@ untouched.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 import numpy as np
@@ -16,6 +17,7 @@ import pytest
 from vtscore.media.structural import SIFT_DESCRIPTOR_DIM, MatchStats, StructuralFeatures
 from vtscore.media.structural_tiles import fit_projection, raw_tiles, tile_vectors
 from vtscore.training import structural_stage1 as s1
+from vtscore.training.thresholds import LineRanking, balance_state, gate_balance_state
 from vtscore.training.structural_similarity import (
     VerificationScorer,
     maybe_structural_rerank,
@@ -114,10 +116,77 @@ class TestTiledStage1:
         s1._GPU_CACHE.clear()
         matrix = np.zeros((1000, DIM), dtype=np.float16)
         with caplog.at_level("WARNING", logger=s1._log.name):
-            out = s1._gpu_page_scores(matrix, np.array([0, 500]), np.zeros((1, DIM), dtype=np.float32))
+            out = s1._gpu_page_max(matrix, np.array([0, 500]), np.zeros((1, DIM), dtype=np.float32))
         assert out is None
         assert calls == ["empty", "measure"]
         assert "scoring on the CPU" in caplog.text
+
+    def test_each_page_keeps_its_first_best_tile_and_the_query_that_gave_it(self):
+        # #4481: the pair the exact score is recomputed from.
+        best = np.array([0.2, 0.9, 0.9, 0.5, 0.1, 0.7], dtype=np.float32)
+        best_query = np.array([0, 2, 1, 0, 1, 3])
+        pm = s1.page_max_from_tiles(best, best_query, np.array([0, 3, 3, 4]))  # page 1 has no tiles
+        np.testing.assert_array_equal(pm.score, np.array([0.9, -np.inf, 0.5, 0.7], dtype=np.float32))
+        np.testing.assert_array_equal(pm.tile, [1, -1, 3, 5])
+        np.testing.assert_array_equal(pm.query, [2, 0, 0, 3])
+
+    def test_exact_scores_are_the_best_pair_in_float64(self):
+        rng = np.random.default_rng(1)
+        matrix = rng.standard_normal((12, DIM)).astype(np.float16)
+        queries = rng.standard_normal((3, DIM)).astype(np.float32)
+        starts = np.array([0, 4, 9])
+        pm = s1._cpu_page_max(matrix, starts, queries)
+        exact = s1.exact_page_scores(matrix, queries, pm)
+        brute = [
+            max(float(np.dot(matrix[r].astype(np.float64), q.astype(np.float64))) for r in range(a, b) for q in queries)
+            for a, b in zip(starts, [4, 9, 12])
+        ]
+        np.testing.assert_allclose(exact, brute, rtol=0, atol=1e-12)
+
+    def test_the_cpu_path_converts_the_matrix_once_and_exactly(self, tiled):
+        # #4514: numpy's fp16 -> float32 conversion of the whole matrix on every call cost
+        # ~2 minutes a click at 50,000 pages. The copy is made once per page set.
+        snap = tiled(4)
+        _ids, matrix, _starts = s1._tile_matrix(snap)
+        f32 = s1._float32_matrix(matrix)
+        assert f32.dtype == np.float32
+        np.testing.assert_array_equal(f32, matrix.astype(np.float32))
+        assert s1._float32_matrix(matrix) is f32
+        s1._tile_matrix(tiled(3))  # a new page set drops it
+        assert not s1._CPU_CACHE
+
+    def test_only_the_head_is_recomputed_and_it_stays_on_top(self, monkeypatch):
+        # Recomputing every page cost ~0.2 s a call at 50,000 pages; past the shortlist the
+        # float32 order is enough (#4481).
+        monkeypatch.setattr(s1, "TILED_TOP_K", 1)
+        monkeypatch.setattr(s1, "TILED_K_CAP", 1)  # a head of 2 pages
+        score = np.array([0.30, 0.90, 0.10, 0.80, 0.20], dtype=np.float32)
+        pm = s1.PageMax(score, np.array([0, 1, 2, 3, 4]), np.zeros(5, dtype=np.int64))
+        matrix = np.zeros((5, DIM), dtype=np.float16)
+        matrix[1, 0], matrix[3, 0] = 0.9, 0.8  # the exact values of the two head pages
+        out = s1.exact_page_scores(matrix, np.eye(1, DIM, dtype=np.float32), pm)
+        assert out[1] == pytest.approx(float(np.float16(0.9)), abs=0) and out[3] == pytest.approx(
+            float(np.float16(0.8)), abs=0
+        )
+        np.testing.assert_array_equal(out[[0, 2, 4]], score[[0, 2, 4]].astype(np.float64))
+        assert list(np.argsort(-out, kind="stable")[:2]) == [1, 3]
+
+    def test_the_order_does_not_move_with_float32_noise_in_the_device_scores(self, tiled, monkeypatch):
+        # #4481: two GPU types gave the same best pairs but cosines a few ulps apart, which
+        # reordered near-equal pages. The order now comes from the pairs, recomputed exactly.
+        snap = tiled(6)
+        queries = snap[2]["tile_vectors"].vectors[:2].astype(np.float32)
+        monkeypatch.setattr(s1, "_cuda", lambda: False)
+        reference = s1.tiled_stage1(snap, queries)
+        cpu = s1._cpu_page_max
+
+        def jittered(matrix, starts, q):
+            pm = cpu(matrix, starts, q)
+            noise = np.random.default_rng(7).uniform(-1e-6, 1e-6, size=pm.score.shape).astype(np.float32)
+            return s1.PageMax(pm.score + noise, pm.tile, pm.query)
+
+        monkeypatch.setattr(s1, "_gpu_page_max", jittered)
+        assert s1.tiled_stage1(snap, queries) == reference
 
     def test_a_seeded_crop_queries_whole_and_a_page_by_its_tiles(self, tiled):
         # #4170: a crop's tiles are fragments of the mark, so a seeded crop is one whole-VLAD query.
@@ -223,6 +292,46 @@ class TestChokepoint:
         maybe_structural_rerank(results, 0.3, snap, {0: None}, {})
         assert matcher.calls == 50  # DEFAULT_RERANK_TOP_K, one template
 
+    def test_a_structural_line_leaves_a_spot_check_nothing_to_walk(self, monkeypatch):
+        """#4489: the line is the gate's boundary, not a cut on a ranking, so the balance offers no check."""
+        snap = {mid: {"embedder": "sift_vlad", "local_features": _features(mid, 30)} for mid in range(10)}
+        monkeypatch.setattr(
+            "vtscore.training.structural_similarity._resolve_matcher", lambda _snap: _CountingMatcher({})
+        )
+        results = [{"id": mid, "score": 1.0 - mid / 10} for mid in range(10)]
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = None
+            line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], {0})
+
+        ctx = Ctx()
+        assert balance_state(1.0, None, ctx.line_ranking).checkable
+        maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, ctx)
+        assert ctx.line_ranking is None
+        assert not balance_state(1.0, None, ctx.line_ranking).checkable
+
+    def test_a_structural_line_records_what_the_gate_passes(self, monkeypatch):
+        """#4505: the balance counts the gate's set, so the rerank leaves it on the context."""
+        snap = {mid: {"embedder": "sift_vlad", "local_features": _features(mid, 30)} for mid in range(10)}
+        # Pages 0-4 fit the template with 20 inliers (past the 8-inlier gate); 5-9 do not fit.
+        matcher = _CountingMatcher({id(snap[mid]["local_features"]): 20 for mid in range(5)})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+        results = [{"id": mid, "score": 1.0 - mid / 10} for mid in range(10)]
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = None
+            line_ranking = LineRanking.from_scores([r["id"] for r in results], [r["score"] for r in results], {0})
+            gate_passed = None
+
+        ctx = Ctx()
+        out, threshold = maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, ctx)
+        passed = ctx.gate_passed
+        assert passed is not None
+        assert passed == frozenset(range(5)) == {e["id"] for e in out if e["score"] >= threshold}
+        assert gate_balance_state(1.0, passed, {0}).count == 4, "the voted template is not counted"
+
     def test_example_sort_on_a_tiled_dataset_ranks_by_the_crops_tiles(self, tiled, monkeypatch):
         snap = tiled(6)
         matcher = _CountingMatcher({})
@@ -299,6 +408,13 @@ class TestBadCeiling:
         _out, gate = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx)
         assert gate == 0.5
 
+    def test_a_page_at_exactly_the_ceiling_plus_one_is_returned(self, tiled, monkeypatch):
+        # #4464: 11 / 19 = 0.578947..., which a 4-decimal score rounded down below the unrounded line.
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 11, 2: 10, 3: 10, 4: 9, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out, thresh = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None})
+        assert {e["id"] for e in out if e["score"] >= thresh} == {0, 1}
+
     def test_a_bad_that_does_not_fit_leaves_the_gate(self, tiled, monkeypatch):
         snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
         results = [{"id": mid, "score": 0.0} for mid in snap]
@@ -313,6 +429,110 @@ class TestBadCeiling:
         results = [{"id": mid, "score": 0.0} for mid in snap]
         _out, thresh = maybe_structural_rerank(results, 0.3, snap, {0: None}, {}, bad_votes={3: None})
         assert thresh == 0.5
+
+
+class TestRecallEnd:
+    """#4458: at beta 4 the returned set is the beta-1 set plus every verified page above the recall floor."""
+
+    def _setup(self, tiled, monkeypatch, inliers_by_page, loose=()):
+        snap = tiled(6)
+        by_id = {id(snap[mid]["local_features"]): n for mid, n in inliers_by_page.items()}
+        loose_ids = {id(snap[mid]["local_features"]) for mid in loose}
+
+        class Matcher(_CountingMatcher):
+            def verify(self, template, candidate):
+                stats = super().verify(template, candidate)
+                if id(candidate) in loose_ids:
+                    return dataclasses.replace(stats, inlier_ratio=0.3)
+                return stats
+
+        matcher = Matcher(by_id)
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = line_ranking = None
+
+        return snap, Ctx()
+
+    @staticmethod
+    def _returned(out, thresh):
+        return {e["id"] for e in out if e["score"] >= thresh}
+
+    def test_the_line_drops_to_the_floor_below_the_bad_ceiling(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out1, t1 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=1.0)
+        out4, t4 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=4.0)
+        # One Good: no leave-one-out median, so the floor is 10; page 4 (12 inliers) joins at beta 4.
+        assert t1 == pytest.approx(31 / 39, abs=1e-6) and t4 == pytest.approx(10 / 18, abs=1e-6)
+        assert self._returned(out1, t1) == {0, 1, 2}
+        assert self._returned(out1, t1) <= self._returned(out4, t4) and 4 in self._returned(out4, t4)
+
+    def test_the_floor_follows_the_goods_own_fits(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        # Goods 0 and 1 fit each other with 90 and 60 inliers: median 75, floor ceil(18.75) = 19.
+        out, t = maybe_structural_rerank(results, 0.5, snap, {0: None, 1: None}, {}, ctx, bad_votes={3: None}, beta=4.0)
+        assert t == pytest.approx(19 / 27, abs=1e-6)
+        assert 4 not in self._returned(out, t) and 2 in self._returned(out, t)
+
+    def test_before_a_bad_a_loose_fit_above_the_floor_is_kept(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 3, 2: 3, 3: 3, 4: 12, 5: 9}, loose=(4, 5))
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out1, t1 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, beta=1.0)
+        out4, t4 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, beta=4.0)
+        assert t1 == t4 == 0.5
+        assert self._returned(out1, t1) == {0}  # H1: loose fits fall below the line
+        assert self._returned(out4, t4) == {0, 4}  # 12 >= the floor of 10; page 5 (9, loose) stays out
+
+    def test_no_balance_is_the_shipped_line(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 40, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        _o, t_none = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None})
+        _o, t_one = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=1.0)
+        assert t_none == t_one == pytest.approx(31 / 39, abs=1e-6)
+
+
+class TestPrecisionEnd:
+    """#4479: at beta 1/4 the returned set is the beta-1 set above the precision floor."""
+
+    def _setup(self, tiled, monkeypatch, inliers_by_page):
+        snap = tiled(6)
+        matcher = _CountingMatcher({id(snap[mid]["local_features"]): n for mid, n in inliers_by_page.items()})
+        monkeypatch.setattr("vtscore.training.structural_similarity._resolve_matcher", lambda _snap: matcher)
+
+        class Ctx:
+            structural_verification_cache = None
+            anchored_cut_cache = calibration_cache = line_ranking = None
+
+        return snap, Ctx()
+
+    def test_the_line_rises_above_the_ceiling_by_the_margin(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 33, 3: 30, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        out1, t1 = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=1.0)
+        out_q, t_q = maybe_structural_rerank(results, 0.5, snap, {0: None}, {}, ctx, bad_votes={3: None}, beta=0.25)
+        # Ceiling 30: beta 1 keeps >= 31 inliers; beta 1/4 keeps >= 35 (ceiling + 4 + 1), so page 2 (33) leaves.
+        assert t1 == pytest.approx(31 / 39, abs=1e-6) and t_q == pytest.approx(35 / 43, abs=1e-6)
+        kept1 = {e["id"] for e in out1 if e["score"] >= t1}
+        kept_q = {e["id"] for e in out_q if e["score"] >= t_q}
+        assert kept_q <= kept1 and kept1 - kept_q == {2}
+
+    def test_the_floor_follows_the_goods_own_fits(self, tiled, monkeypatch):
+        snap, ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 60, 2: 33, 3: 3, 4: 12, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        # Goods 0 and 1 fit each other with 90 and 60: median 75, floor ceil(37.5) = 38, no Bad yet.
+        _out, t = maybe_structural_rerank(results, 0.5, snap, {0: None, 1: None}, {}, ctx, beta=0.25)
+        assert t == pytest.approx(38 / 46, abs=1e-6)
+
+    def test_click_0_rises_to_16_inliers(self, tiled, monkeypatch):
+        snap, _ctx = self._setup(tiled, monkeypatch, {0: 90, 1: 20, 2: 12, 3: 3, 4: 3, 5: 3})
+        results = [{"id": mid, "score": 0.0} for mid in snap]
+        crop = snap[0]["local_features"]
+        _o, t1 = maybe_structural_rerank_example(results, 0.5, snap, crop, beta=1.0)
+        _o, t_q = maybe_structural_rerank_example(results, 0.5, snap, crop, beta=0.25)
+        assert t1 == 0.5 and t_q == pytest.approx(16 / 24, abs=1e-6)
 
 
 class TestStoplist:

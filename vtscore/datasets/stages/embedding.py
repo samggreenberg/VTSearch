@@ -449,6 +449,9 @@ def _side_channel_passes(emb) -> list[_SideChannel]:
       the keypoints Stage 2 verifies, stored compact (fp16/uint8);
     * **tile vectors** (``tile_vectors``): document structural embedders, the
       tiled Stage 1 (#3928), derived from the local features and so after them.
+      A key of their own, not ``patch_grid``: the tiles overlap, where
+      ``patch_grid`` is a regular grid of the dataset's one patch embedder, and
+      reusing it would switch on the patch-space training path.
     """
     passes: list[_SideChannel] = []
     if getattr(emb, "supports_patch_regions", False) is True:

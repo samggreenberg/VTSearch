@@ -436,7 +436,7 @@ def fig_fullmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     ax.set_ylim(top=max(pages) * 40)
     ax.set_xticks(range(len(names)))
     ax.set_xticklabels(names, fontsize=FLOOR_PT + 1, color=INK)
-    ax.set_ylabel("pages (log)", fontsize=FLOOR_PT, color=SOFT)
+    ax.set_ylabel("Pages (log)", fontsize=FLOOR_PT, color=SOFT)
     ax.tick_params(axis="y", labelsize=FLOOR_PT, colors=SOFT)
     ax.tick_params(axis="x", length=0)
     for spine in ("top", "right"):
@@ -460,8 +460,8 @@ def fig_fullmarks_shape(dc: Any, facts: dict[str, Any]) -> plt.Figure:
     ax = fig.add_axes([bar_x, 0.175, 0.975 - bar_x, 0.20])
     ax.bar(range(len(facts["class_instances"])), facts["class_instances"], color=CUT, width=0.82)
     ax.axhline(median, color=NEG, lw=1.5, ls="--")
-    ax.set_xlabel("one bar per mark, most copies first", fontsize=FLOOR_PT, color=SOFT)
-    ax.set_ylabel("copies", fontsize=FLOOR_PT, color=SOFT)
+    ax.set_xlabel("One bar per mark, most copies first", fontsize=FLOOR_PT, color=SOFT)
+    ax.set_ylabel("Copies", fontsize=FLOOR_PT, color=SOFT)
     # No x ticks: the bars are marks, and their position in a sorted order
     # is not a quantity anybody should read off an axis.
     ax.set_xticks([])
@@ -579,17 +579,19 @@ COCO_BETTER_CHIP = {"boxstyle": "square,pad=0.18", "facecolor": "white", "edgeco
 #:
 #: **A gloss says what the images show, not what the set is.** `A⁺` does not
 #: show an A — the pictures in it do, every one of them — so the gloss names
-#: the pictures and the requirement each of them meets: *Images showing A,
-#: maybe more.* Which is also why all four start with the same two words: the
-#: sets differ in what they demand, not in what kind of thing they hold
-#: (#4443).
+#: the pictures and the requirement each of them meets: *Images showing A.*
+#: Which is also why all four start with the same word: the sets differ in
+#: what they demand, not in what kind of thing they hold (#4443). Each says as
+#: little as its requirement does — `A⁺` asks for an A and nothing more, so its
+#: gloss does not add "maybe more", and `Ø` names the three it is without
+#: rather than counting them (#4563).
 #:
 #: The `Easy:` heading is the one entry whose term moves — the experiment is
 #: shown three times, once per class, and `_coco_better_easy_term` supplies the
 #: spelling for the frame being drawn.
 COCO_BETTER_BLOCKS = [
-    ("def", "A⁺", "Images showing A, maybe more."),
-    ("def", EMPTY, "Images showing none of the three."),
+    ("def", "A⁺", "Images showing A."),
+    ("def", EMPTY, "Images without A, B, or C."),
     ("head", f"Easy: A⁺ vs {EMPTY}", None),
     ("def", "AB⁼", "Images showing exactly A and B."),
     ("def", "¬A", "Images showing no A."),

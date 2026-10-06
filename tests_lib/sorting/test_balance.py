@@ -18,7 +18,11 @@ import pytest
 from tests_lib.sorting.test_mixture import _two_populations
 from vtscore.training.thresholds import (
     BALANCE_CHECKED,
+    BALANCE_GATE,
     BALANCE_PRESETS,
+    BALANCE_STATES,
+    BETA_MAX,
+    BETA_MIN,
     CHECK_ADVISORY,
     CHECK_TRIM,
     BALANCE_UNCHECKED,
@@ -37,6 +41,7 @@ from vtscore.training.thresholds import (
     check_shape,
     fbeta_count,
     fbeta_score,
+    gate_balance_state,
     mixture_positives,
     resolve_line_knobs,
     rounds_for,
@@ -73,15 +78,16 @@ class TestTheArithmetic:
         assert fbeta_score(0, 0, 0, 1.0) == 0.0
 
     def test_the_presets_and_their_caps(self):
-        assert BALANCE_PRESETS == (0.5, 1.0, 2.0) and DEFAULT_BETA == 1.0
+        assert BALANCE_PRESETS == (0.25, 1.0, 4.0) and DEFAULT_BETA == 1.0
+        assert BALANCE_PRESETS[0] == BETA_MIN and BALANCE_PRESETS[-1] == BETA_MAX  # #4448: the ends are the range's
         # The precision floor's schedule counts at 50% and 10% (#4267), which the balance kept as its caps.
         assert (
-            balance_schedule(0.5).as_dict()
+            balance_schedule(0.25).as_dict()
             == balance_schedule(1.0).as_dict()
             == {"candidate": 32, "rounds": 3, "picks": 5}
         )
-        assert balance_schedule(2.0).as_dict() == {"candidate": 128, "rounds": 5, "picks": 5}
-        assert balance_schedule(4.0) == balance_schedule(2.0) and rounds_for(128) == 5
+        assert balance_schedule(4.0).as_dict() == {"candidate": 128, "rounds": 5, "picks": 5}
+        assert balance_schedule(2.0) == balance_schedule(4.0) and rounds_for(128) == 5
         assert balance_schedule(1.0, CHECK_ALPHA) == balance_schedule(1.0)
 
     @pytest.mark.parametrize("bad", [0.0, 0.1, 5.0, -1.0])
@@ -215,7 +221,7 @@ class TestTheWalk:
             check = SpotCheck.start_balance(ranking.unvoted_ids().tolist(), beta, 52.0, seed=0)
             kept[beta] = _finish(check, positives).k
             assert kept[beta] == _best_edge(check, positives, beta)
-        assert kept[0.5] <= kept[1.0] <= kept[2.0]
+        assert kept[0.25] <= kept[1.0] <= kept[4.0]
 
     def test_an_all_wrong_ranking_ends_at_the_first_band_never_short(self):
         """Nothing right anywhere: the estimate ties at 0, and ties keep the smaller set, down to the first band."""
@@ -352,14 +358,15 @@ class TestTheWalk:
 
 
 class TestTheCheckShape:
-    def test_the_shape_follows_the_preset(self):
-        """#4427's pricing: advisory at beta <= 1, trim above; the walk's default direction follows it."""
-        assert [check_shape(b) for b in (0.25, 0.5, 1.0, 2.0, 4.0)] == [CHECK_ADVISORY] * 3 + [CHECK_TRIM] * 2
+    def test_the_check_is_advisory_at_every_preset(self):
+        """#4452: the line comes from the labels, so a walk's end (a count on one corpus) never moves it."""
+        assert [check_shape(b) for b in (0.25, 0.5, 1.0, 2.0, 4.0)] == [CHECK_ADVISORY] * 5
         ranking, _ = _planted(52)
         unvoted = ranking.unvoted_ids().tolist()
-        assert not SpotCheck.start_balance(unvoted, 1.0, 52.0).shallow_only, "advisory: the full walk, as audit"
-        assert SpotCheck.start_balance(unvoted, 2.0, 52.0).shallow_only, "trim: shallower only"
-        assert not SpotCheck.start_balance(unvoted, 2.0, 52.0, shallow_only=False).shallow_only, "forced"
+        assert not SpotCheck.start_balance(unvoted, 2.0, 52.0).shallow_only, "the full walk, as an audit"
+        assert SpotCheck.start_balance(unvoted, 2.0, 52.0, shallow_only=True).shallow_only, (
+            "a harness arm may force trim"
+        )
 
 
 class TestTheLineAndTheState:
@@ -383,9 +390,11 @@ class TestTheLineAndTheState:
         assert check_shape(1.0) == CHECK_ADVISORY and balance_count(1.0, check, proposal=3) == 3
         assert balance_count(1.0, check, proposal=3, shape=CHECK_TRIM) == 64, "the full walk's end, forced"
         assert balance_count(2.0, check, proposal=3) == 3, "another balance is unchecked until it is walked"
-        trim = _finish(SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 2.0, 52.0, seed=0), positives)
-        assert check_shape(2.0) == CHECK_TRIM and trim.shallow_only, "above 1 the walk may only trim"
-        assert balance_count(2.0, trim, proposal=3) == trim.k, "and its end is the line"
+        trim = _finish(
+            SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 2.0, 52.0, seed=0, shallow_only=True), positives
+        )
+        assert balance_count(2.0, trim, proposal=3) == 3, "advisory at beta 2 too (#4452)"
+        assert balance_count(2.0, trim, proposal=3, shape=CHECK_TRIM) == trim.k, "a forced trim takes the walk's end"
         running = SpotCheck.start_balance(ranking.unvoted_ids().tolist(), 1.0, 52.0, seed=0)
         assert applicable_balance(1.0, running) is None, "a running walk serves no line"
 
@@ -409,3 +418,23 @@ class TestTheLineAndTheState:
         stale = balance_state(1.0, check, ranking, also_voted={1})
         assert stale.stale is True and stale.as_dict()["precision"]["stale"] is True
         assert balance_state(2.0, check, ranking).status == BALANCE_UNCHECKED, "a result belongs to its balance"
+
+    def test_the_state_says_whether_a_check_can_start(self):
+        """#4489: a check walks the unvoted ranking, so a line with none - a structural detector's - offers none."""
+        ranking, _ = _planted(52)
+        assert balance_state(1.0, None, ranking).as_dict()["checkable"] is True
+        assert balance_state(1.0, None, None).as_dict()["checkable"] is False, "no ranking: the structural line"
+        every = set(ranking.unvoted_ids().tolist())
+        assert balance_state(1.0, None, ranking, also_voted=every).checkable is False, "nothing left unvoted"
+        assert balance_state(1.0, None, ranking, also_voted=iter(sorted(every)[1:])).checkable is True
+
+    def test_a_gate_line_counts_what_the_gate_passes_unvoted(self):
+        """#4505: a structural line is the verification gate's, so its count is the gate's, not the cap's 32."""
+        state = gate_balance_state(1.0, frozenset(range(100)), also_voted=iter([3, 7, 500]))
+        assert BALANCE_GATE in BALANCE_STATES and state.status == BALANCE_GATE
+        assert state.count == 98, "the two voted items that passed drop out; a voted item that did not changes nothing"
+        d = state.as_dict()
+        assert d["checkable"] is False and d["audited"] is None
+        assert d["precision"] is None and d["recall"] is None and d["fbeta"] is None
+        assert d["shape"] == check_shape(1.0) and d["schedule"] == balance_schedule(1.0).as_dict()
+        assert gate_balance_state(4.0, ()).count == 0, "nothing passes: the gate keeps nothing, not the cap's 128"

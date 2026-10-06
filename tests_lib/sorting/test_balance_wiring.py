@@ -26,10 +26,13 @@ from vtscore.state.core import (
 )
 from vtscore.training.thresholds import (
     CHECK_ADVISORY,
-    CHECK_TRIM,
     BALANCE_CHECKED,
+    BALANCE_GATE,
     BALANCE_UNCHECKED,
     PRECISION_FLOOR_FALLBACK_INCLUSION,
+    WEAK_CHECK_COOLDOWN,
+    ClassScoreModel,
+    LabelsLine,
     LineRanking,
     SpotCheck,
     balance_count,
@@ -162,17 +165,17 @@ class TestTheLine:
         assert state["precision"]["stale"] is False and state["recall"]["lo"] <= state["recall"]["hi"]
         assert detector_balance_state(ctx, 2.0)["status"] == BALANCE_UNCHECKED, "a result belongs to its balance"
 
-    def test_a_finished_balance_walk_at_beta_two_trims_and_the_line_takes_its_end(self):
-        """#4427: above beta 1 the walk may only step shallower, and the line keeps the set it ended on."""
+    def test_a_finished_balance_walk_at_beta_two_is_advisory_too(self):
+        """#4452: the line comes from the labels at every preset; a walk at beta 2 audits and never moves it."""
         ctx = _ctx()
-        voted = human_voted_ids(ctx)
+        before = recut_detector_threshold(ctx, beta=2.0)
         check = self._walk(ctx, 2.0)
-        assert check.shallow_only and check.k <= check.start_k
+        assert not check.shallow_only, "the full walk, as an audit"
         ctx.precision_check = check
-        assert recut_detector_threshold(ctx, beta=2.0) == ctx.line_ranking.threshold_for(check.k, voted)
+        assert recut_detector_threshold(ctx, beta=2.0) == before
         state = detector_balance_state(ctx, 2.0)
-        assert state["status"] == BALANCE_CHECKED and state["shape"] == CHECK_TRIM
-        assert state["count"] == state["audited"] == check.k
+        assert state["status"] == BALANCE_CHECKED and state["shape"] == CHECK_ADVISORY
+        assert state["audited"] == check.k
 
     def test_the_state_before_a_check(self):
         ctx = _ctx()
@@ -211,6 +214,82 @@ class TestTheLine:
         assert recut_detector_threshold(bare, 4, beta=1.0) is None
         with pytest.raises(ValueError, match="needs an inclusion"):
             recut_detector_threshold(bare)
+
+
+class TestTheGateLine:
+    """#4505: a structural detector's line is the verification gate's, and its state says how many pass."""
+
+    def _gated(self) -> DetectorContext:
+        ctx = DetectorContext("det-gate")
+        ctx.good_votes.update({0: None, 1: None})
+        ctx.bad_votes.update({50: None})
+        ctx.gate_passed = frozenset(range(10))  # what ``maybe_structural_rerank`` leaves
+        return ctx
+
+    def test_the_state_counts_the_unvoted_items_the_gate_passes(self):
+        state = detector_balance_state(self._gated(), 1.0)
+        assert state["status"] == BALANCE_GATE and state["count"] == 8
+        assert state["checkable"] is False and state["check_due"] is False
+        assert state["precision"] is None and state["audited"] is None
+
+    def test_a_ranking_drawn_after_the_gate_is_the_line(self):
+        ctx = self._gated()
+        ctx.line_ranking, _ = _two_populations(n_high=28)
+        assert detector_balance_state(ctx, 1.0)["status"] == BALANCE_UNCHECKED
+
+    def test_a_dataset_switch_clears_the_gate(self):
+        from vtscore.detectors.dataset_sync import _drop_line_ranking
+
+        ctx = self._gated()
+        _drop_line_ranking(ctx)
+        assert ctx.gate_passed is None, "media ids are per dataset"
+        assert detector_balance_state(ctx, 1.0)["status"] == BALANCE_UNCHECKED
+
+
+class TestTheWeakCheckPrompt:
+    """#4496: the balance payload says when the labels separate weakly enough that a check is due."""
+
+    @staticmethod
+    def _weak(ctx: DetectorContext, gap: float = 0.2) -> DetectorContext:
+        ctx.labels_line = LabelsLine(ClassScoreModel(gap, 0.0, 0.5, 8, 8), 0.01)  # d' = gap / 0.5
+        return ctx
+
+    def test_weak_labels_make_a_check_due(self):
+        state = detector_balance_state(self._weak(_ctx("det-weak")), 1.0)
+        assert state["separation"] == pytest.approx(0.4)
+        assert state["check_due"] is True
+
+    def test_strong_labels_or_no_labels_line_make_none_due(self):
+        assert detector_balance_state(self._weak(_ctx("det-strong"), gap=2.0), 1.0)["check_due"] is False
+        bare = detector_balance_state(_ctx("det-no-line"), 1.0)
+        assert bare["separation"] is None and bare["check_due"] is False
+
+    def test_never_due_in_find_or_while_a_check_runs(self):
+        find = self._weak(_ctx("det-weak-find"))
+        find.find_mode = True
+        assert detector_balance_state(find, 1.0)["check_due"] is False
+        running = self._weak(_ctx("det-weak-running"))
+        running.precision_check_run = SpotCheck.start(running.line_ranking.unvoted_ids(human_voted_ids(running)), 0.5)
+        assert detector_balance_state(running, 1.0)["check_due"] is False
+
+    def test_never_due_on_a_line_a_check_cannot_walk(self):
+        """#4489: no ranking (a structural detector's line) or nothing in it unvoted - a check would be refused."""
+        gone = self._weak(_ctx("det-weak-structural"))
+        gone.line_ranking = None
+        exhausted = self._weak(_ctx("det-weak-exhausted"))
+        r = exhausted.line_ranking
+        exhausted.line_ranking = LineRanking.from_scores(r.ids.tolist(), r.scores, r.ids.tolist())
+        for ctx in (gone, exhausted):
+            state = detector_balance_state(ctx, 1.0)
+            assert state["checkable"] is False and state["check_due"] is False
+
+    def test_it_waits_a_cooldown_after_the_last_check_ended(self):
+        ctx = self._weak(_ctx("det-weak-cooldown"))
+        n = len(human_voted_ids(ctx))
+        ctx.check_ended_votes = n
+        assert detector_balance_state(ctx, 1.0)["check_due"] is False
+        ctx.check_ended_votes = n - WEAK_CHECK_COOLDOWN
+        assert detector_balance_state(ctx, 1.0)["check_due"] is True
 
 
 def test_the_planted_ranking_is_what_the_tests_assume():
