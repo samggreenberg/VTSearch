@@ -40,9 +40,9 @@
     @case ('done') {
       <div class="browse-status">
         <p class="browse-status-message browse-status-success">
-          All items were verified. Go back to Find to see your results.
+          All items were verified. Go back to Test to see your results.
         </p>
-        <button class="btn btn--primary" (click)="back()">Back to Find</button>
+        <button class="btn btn--primary" (click)="back()">Back to Test</button>
       </div>
     }
     @case ('ready') {
@@ -82,8 +82,8 @@
                 type="button"
                 class="btn btn--secondary btn--sm browse-back"
                 (click)="back()"
-                title="Return to the Find view (keeps any items you removed from Good)">
-                &larr; Back to Find
+                title="Return to the Test view (keeps any items you removed from Good)">
+                &larr; Back to Test
               </button>
             }
             <button

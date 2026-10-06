@@ -666,7 +666,7 @@ is optional. Without it (or with `detector_ids` omitted or `null`), the run
 uses the caller's AutoRun detectors - the Dashboard's ⋯ **Run AutoRun**. With
 `detector_ids`, it uses exactly the detectors those registry ids name, drafts
 included, and leaves the caller's AutoRun list alone - the Dashboard's big
-**AutoRun** button, which sends the ticked detectors once per ticked dataset.
+**Find** button, which sends the ticked detectors once per ticked dataset.
 Detectors of another media type, or of an embedder type the dataset lacks, are
 skipped as for the AutoRun list. The task reports on the
 `loading-tasks` channel with the dataset's `dataset_id`, so it renders on the

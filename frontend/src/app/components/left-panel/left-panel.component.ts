@@ -109,7 +109,7 @@ export class LeftPanelComponent implements OnInit {
    * (the parent flips this back to ``false`` once both label classes exist).
    */
   readonly autopilotDisabled = input(false);
-  /** 'label' = full labeling UI (default), 'find' = the Find view's Autopilot / Review tabs (#4524) */
+  /** 'label' = full labeling UI (default), 'find' = the Test view's Autopilot / Review tabs (#4524, #4525) */
   readonly panelMode = input<'label' | 'find'>('label');
   /**
    * Find's tab (#4524): `autopilot` is the Test autopilot, whose phase panel the

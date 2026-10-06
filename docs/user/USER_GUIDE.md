@@ -17,7 +17,7 @@
 7. [Manual mode: for power users](#manual-mode-for-power-users)
 8. [Region voting on images](#region-voting-on-images)
 9. [Creating a detector](#creating-a-detector)
-10. [Find: testing and reviewing](#find-testing-and-reviewing)
+10. [Testing a detector](#testing-a-detector)
 11. [View options](#view-options)
 12. [Settings tabs](#settings-tabs)
 13. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
@@ -63,7 +63,7 @@ need to think about sort modes or selection strategies directly.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dashboard-loaded.dark.webp" />
-  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them" width="720" />
+  <img src="assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Test / Find beneath them" width="720" />
 </picture>
 
 > Every screenshot in this guide follows one example: a few hundred cartoon
@@ -82,7 +82,7 @@ A trained detector gives every item a **score** and ranks the dataset by
 it, best match first. It also draws a **line** through that ranking (the
 *threshold*): items at or above the line are its **matches**, and items
 below it are not. Everything that acts on "the matches" acts on exactly the
-items above the line: the *Unverified Good* count in Find, **To Dataset**,
+items above the line: the *Unverified Good* count in Test, **To Dataset**,
 **Export**, **Browse**, and the exports an AutoRun detector sends.
 
 Two numbers describe how good a set of matches is:
@@ -102,11 +102,11 @@ same items stay in the same order. Which way to lean depends on what you
 will do with the results. If you will read every match, lean toward
 precision; if missing one is the costly mistake, lean toward recall.
 
-In the Find view, the Test autopilot measures both on the collection in
+In the Test view, the Test autopilot measures both on the collection in
 front of you: **Right** is the likely share of what the line keeps that is a
 match, and **Found** the likely share of all the matches it keeps, each from
 random picks you voted on rather than from the detector's own guess (see
-[Find: testing and reviewing](#find-testing-and-reviewing)).
+[Testing a detector](#testing-a-detector)).
 
 #### How close the line got
 
@@ -131,8 +131,8 @@ draws the line where the balance your radio asks for is best for a
 collection like that. The line keeps every item above it that you haven't
 voted on - as many as clear it, and on a collection with nothing like your
 target, few or none. Nothing caps it at a fixed number. Because the line comes
-from your labels, it travels with them: export the detector, run Find with
-it on another collection, and VTSearch draws the line the same way there.
+from your labels, it travels with them: export the detector, run it on
+another collection, and VTSearch draws the line the same way there.
 Until you **check** the items above the line, nothing has measured how much
 of them is right or how much of what is there they found, and the note under
 the Threshold says so: **Top 32 kept, unchecked** (or however many it kept).
@@ -142,8 +142,8 @@ VTSearch cuts the list you haven't voted on into bands from the top (the top
 8, the next 8, then 16, 32, 64, and so on), draws 5 items at random from a
 band, and shows them one at a time. Vote each one Good or Bad with the usual
 keys: → for Good, ← for Bad, and ↓ to go back and change one. The last vote
-of a round sends it, and the check moves to the next band. Find offers no
-check: it is where you test the Threshold you set here, not where you set it.
+of a round sends it, and the check moves to the next band. Test offers no
+spot check: it is where you test the Threshold you set here, not where you set it.
 
 **When your labels still overlap**, a check is worth doing now rather than
 later. If the detector scores your Good and Bad answers close together, the
@@ -202,7 +202,7 @@ close did we get?". The **found** phrase is the rougher of the two: it reads
 the same picks against the detector's own estimate of how many matches the
 list holds, which is the one thing the picks cannot measure. The check
 decides where to stop on the picks' plain share, so the range says how sure
-the picks are, and the count says where the balance peaked. The Find view does
+the picks are, and the count says where the balance peaked. The Test view does
 not show this range: there the Test autopilot measures the line on the
 collection you are testing, and its result pane draws its own ranges.
 
@@ -220,7 +220,7 @@ Cancelling or closing the check leaves the Threshold as it was. The rounds you
 finished stay as votes.
 
 Everything that uses the matches works on the line in every state: the
-*Unverified Good* count, the Find review walk, **To Dataset**, **Export**
+*Unverified Good* count, Test's review walk, **To Dataset**, **Export**
 and **Browse** all act on the items above it. An AutoRun or command-line run
 has nobody to vote, so it can't be checked: it exports the line your labels
 draw for that collection and records it as unchecked, with a line in the run's log and a
@@ -334,20 +334,20 @@ detector never saw any of these pictures while you were training it.
   <img src="assets/step-import-test.light.webp" alt="Step 3: the same Folder importer, (3) pointed at a second folder of pictures the detector has never seen, then (4) Import" width="720" />
 </picture>
 
-### Step 4: Run the detector on the new dataset
+### Step 4: Test the detector on the new dataset
 
 Back on the dashboard:
 
 1. Tick the new dataset (`drawings-new`).
 2. Tick the trained detector (`Yellow Smileys`).
-3. Click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Find button" height="24" /></picture>.
+3. Click **Test** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Test button" height="24" /></picture>.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-find.dark.webp" />
-  <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Find" width="720" />
+  <img src="assets/step-find.light.webp" alt="Step 4: tick (1) the new dataset and (2) the trained detector, then (3) Test" width="720" />
 </picture>
 
-Find scores every picture in the dataset and opens on its **Autopilot**
+Test scores every picture in the dataset and opens on its **Autopilot**
 tab, which tests the detector's line: it shows you pictures picked at random
 from either side of the line, you answer each with **Good** or **Bad**, and
 the result on the right says how much of what the detector would ship is
@@ -368,12 +368,18 @@ results in full:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/step-find-results.dark.webp" />
-  <img src="assets/step-find-results.light.webp" alt="Step 4, the Review tab: Find ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
+  <img src="assets/step-find-results.light.webp" alt="Step 4, the Review tab: Test ranks the new pictures, best match first (1). Check any you like with Good or Bad (2); the checked ones collect on the right (3), and Export sends the matches on (4)" width="720" />
 </picture>
 
-That is the whole loop. The [how-to guides](#how-to-guides-one-task-at-a-time)
-below take each next step the same way, one task at a time; the rest of this
-guide covers each part of VTSearch in more depth.
+That is the whole loop. Once you trust the detector, the **Find** button
+beside **Test** runs it on new datasets without a test: tick the detectors
+and the datasets, and click **Find**. Or move the detector to the
+**AutoRun** tab, and it runs on every dataset you import (see
+[Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
+
+The [how-to guides](#how-to-guides-one-task-at-a-time) below take each next
+step the same way, one task at a time; the rest of this guide covers each
+part of VTSearch in more depth.
 
 ---
 
@@ -384,7 +390,7 @@ drawings and the same `Yellow Smileys` detector as
 [Step by step](#step-by-step-your-first-search). Do that first: every page
 picks up where it leaves off.
 
-**Check and use what Find found**
+**Test a detector and use its matches**
 
 - [Check and correct a detector's calls](howto/check-and-correct.md): verify
   the pictures near the line and hand your corrections back to the detector.
@@ -420,7 +426,7 @@ picks up where it leaves off.
 **Explore and manage your data**
 
 - [Explore a dataset with Browse](howto/explore-with-browse.md): the whole
-  dataset as a map, and Find's matches on it.
+  dataset as a map, and a tested detector's matches on it.
 - [Check what's in a dataset or a detector](howto/check-a-dataset.md): their
   **Stats**.
 - [Choose how a dataset is imported](howto/advanced-import.md): the
@@ -593,10 +599,10 @@ dataset's media type.
 
 To run detectors of your choosing instead - drafts included, without
 moving them to the AutoRun tab - tick them and the datasets to run them
-on, and click the big **AutoRun** button in the Dashboard's action bar,
-beside **Train** and **Find**. It is enabled on the same rule as
-**Find**: at least one dataset and one detector, all of one media type,
-and every ticked detector trained. Unlike Find it uses every ticked row:
+on, and click the big **Find** button in the Dashboard's action bar,
+beside **Train** and **Test**. It is enabled on the same rule as
+**Test**: at least one dataset and one detector, all of one media type,
+and every ticked detector trained. Unlike Test it uses every ticked row:
 each ticked dataset gets its own run with every ticked detector, loading
 first if it isn't loaded, and shows on its own row. The first run to
 finish opens the AutoRun Results dialog; any that finish while the
@@ -901,7 +907,7 @@ how close it got. Hover a radio for what it does. Changing the Threshold
 moves the line over the scores the detector already has; the ranking itself
 does not change.
 
-Once the list is ranked by the detector (a **Learned** sort, or Find), the
+Once the list is ranked by the detector (a **Learned** sort, or Test), the
 note under the spectrum says what the Threshold is doing to the line, in one
 of two states:
 
@@ -918,7 +924,7 @@ picks** runs a spot check of the list: 5 random picks from each band of it,
 which you vote on, walking deeper while a longer list scores better on the
 balance and stopping where it peaks. See
 [How close the line got](#how-close-the-line-got) for the check and its
-likely range. Find shows the same note with no check beside it: there you
+likely range. Test shows the same note with no check beside it: there you
 test the Threshold, and it is too late to label more to set it. The **?**
 beside **Threshold:** explains it in two short sentences.
 
@@ -1106,31 +1112,36 @@ in [Start a detector from an example picture](howto/start-from-an-example.md).
 
 ---
 
-## Find: testing and reviewing
+## Testing a detector
 
-**Find** scores an entire dataset with a detector and drops you into a
+**Test** scores an entire dataset with a detector and drops you into a
 dedicated **three-pane view** to test the detector's line on it, and to
 confirm or correct its calls before exporting. Start it from the Dashboard:
-select a dataset row and a detector row, then click **Find** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Find button" height="24" /></picture> in
+select a dataset row and a detector row, then click **Test** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-find.dark.webp" /><img src="assets/icon-find.light.webp" alt="The Test button" height="24" /></picture> in
 the action bar (VTSearch scores every item, showing progress while it
 runs). The left pane then carries two tabs, the Train view's Autopilot /
 Manual split applied to testing:
 
 - **Autopilot** - the Test autopilot, which measures the line: the guided
-  flow, and the tab Find opens on.
+  flow, and the tab Test opens on.
 - **Review** - the ranked list under the line, the boundary walk, and the
-  **Verified Good** / **Verified Bad** piles: Find in full, a tab away, with
+  **Verified Good** / **Verified Bad** piles: every result, a tab away, with
   the test's picks already in the piles. A user who wants the list without a
   test clicks **Review** first.
 
+Test is where you decide whether to trust a detector. To run detectors you
+already trust and collect what they match, with no view to work through, use
+the Dashboard's **Find** button instead (see
+[Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-view.dark.webp" />
-  <img src="assets/find-view.light.webp" alt="The Find view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)" width="720" />
+  <img src="assets/find-view.light.webp" alt="The Test view's Autopilot tab: the Threshold and the test's phases (left), the current pick with Good/Bad (centre), and the result as it forms (right)" width="720" />
 </picture>
 
 ### The Test autopilot
 
-The question Find's Autopilot answers is the one AutoRun needs answered: *if
+The question the Test autopilot answers is the one AutoRun needs answered: *if
 this detector shipped the matches it finds in a future dataset like this one,
 unchecked, what share would be right, and what share of the real matches
 would it ship?* The answer comes from **random picks** rather than from the
@@ -1201,7 +1212,7 @@ ways out, as the **Detector Trained** dialog does in Train:
 - **Add Corrections and retrain** - the failed-the-test exit: hand the picks
   you disagreed with (and anything you corrected in Review) to the detector.
   The result is then *out of date*, since the detector has seen the test set;
-  running Find again retrains and re-scores, and every item you verified
+  running Test again retrains and re-scores, and every item you verified
   keeps the call *you* made. See
   [Check and correct a detector's calls](howto/check-and-correct.md).
 
@@ -1213,7 +1224,7 @@ lists it under *Tested on*, and an AutoRun detector shows its latest under its
 name on the Dashboard. Once the detector is retrained (more votes in Train,
 **Add Corrections**, imported labels), the ranking those picks were drawn
 from no longer exists, so the verdict is marked *out of date*; it stays, so
-you can see what the detector used to ship. Open Find on a collection you
+you can see what the detector used to ship. Open Test on a collection you
 tested before, with the detector and its ranking unchanged, and the test
 picks up where it left off: the kept picks come back, already in the Review
 tab's piles, and the result says when you took them, so there is nothing to
@@ -1227,12 +1238,12 @@ collection.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Find view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="720" />
+  <img src="assets/find-stats.light.webp" alt="The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="720" />
 </picture>
 
 ### Review
 
-The **Review** tab is Find in full:
+The **Review** tab holds the whole result:
 
 - **Left pane** - the **work queue** of items the detector hasn't been
   confirmed on yet, ranked by score, under the same
@@ -1241,7 +1252,7 @@ The **Review** tab is Find in full:
   are here), so a collection with nothing like your target shows few or none
   above it.
 - **Centre pane** - the **viewer** with Good / Bad buttons, so you verify the
-  current item just like you vote during training. Find serves the item
+  current item just like you vote during training. Review serves the item
   nearest the line, taking turns between just above it and just below it.
 - **Right pane** - the **Verified Good** and **Verified Bad** piles, where
   confirmed items accumulate; the test's picks are already there.
@@ -1253,9 +1264,9 @@ The action buttons let you act on the result:
 - **Add Corrections to Detector** - the same exit as the verdict's: fold the
   items you changed from the detector's call back into the detector's
   examples. Nothing is re-scored straight away (the test result is marked out
-  of date); running Find again retrains the detector and re-scores the
+  of date); running Test again retrains the detector and re-scores the
   dataset with it.
-- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Find view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
+- **Export** <picture><source media="(prefers-color-scheme: dark)" srcset="assets/icon-export.dark.webp" /><img src="assets/icon-export.light.webp" alt="The Export button in the Test view" height="24" /></picture> - send the good set to clipboard, a file, email, a webhook,
   or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
   [Browse](#browse-exploring-a-dataset-spatially) view.
@@ -1412,7 +1423,7 @@ with bulk-action and per-card controls.
     retrain, or label import until you pick **Move to Drafts** from the
     **⋯** menu to unfreeze them. Read-only actions (**Load**, **Browse
     positives**, **Stats**, **Export labels**) stay available, and
-    **Find** works as usual. Under each name is the latest
+    **Test** and **Find** work as usual. Under each name is the latest
     [test verdict](#the-result) the detector keeps (*Tested on
     drawings-new: likely 70-85% right, about half of them found (34
     picks, 2026-10-05)*), marked *Out of date* if it was retrained
@@ -1427,7 +1438,7 @@ with bulk-action and per-card controls.
   Drafts, where a new detector lands.
 
   Only detectors on the tab you're looking at can be selected, so
-  **Train**, **Find** and **AutoRun** always act on rows you can see. Switching
+  **Train**, **Test** and **Find** always act on rows you can see. Switching
   tabs clears the detector selection, and picking a detector from the
   top bar switches to its tab.
 
@@ -1448,19 +1459,19 @@ row to select them (a detector you just made, with no labels yet, gets a
 bar below the two tables. That opens the three-panel labeling view
 against your selection.
 
-**Scoring a dataset:** select a dataset and a detector, then click
-**Find** in the action bar to open the verification view (see
-[Find: testing and reviewing](#find-testing-and-reviewing)).
+**Testing a detector:** select a dataset and a detector, then click
+**Test** in the action bar to open the test view (see
+[Testing a detector](#testing-a-detector)).
 
 **Running detectors unattended:** select any number of datasets and
-detectors of one media type, then click **AutoRun** in the action bar.
+detectors of one media type, then click **Find** in the action bar.
 It opens no view: each selected dataset gets a background run of every
 selected detector, shown on its row, and the results open in the
 **AutoRun Results** dialog as the runs finish (see
 [Running AutoRun on a new dataset](#running-autorun-on-a-new-dataset)).
 
 You can keep multiple datasets and multiple detectors loaded at once.
-Loading just pulls them into memory; the Train / Find / AutoRun buttons
+Loading just pulls them into memory; the Train / Test / Find buttons
 work on whichever rows you currently have selected.
 
 ### Combining datasets and detectors
@@ -1614,10 +1625,10 @@ how you carve a region of interest out of a large collection by eye; on a
 whole dataset the selection is for looking, and is gone when you leave
 Browse.
 
-Browse can also open **scoped to a Find result**: after scoring a dataset
+Browse can also open **scoped to a Test result**: after scoring a dataset
 you can map just the matched items and use **Verified Good** /
 **Verified Bad** to lasso and prune wrong matches before exporting.
-(See [Find](#find-testing-and-reviewing), and
+(See [Testing a detector](#testing-a-detector), and
 [Explore a dataset with Browse](howto/explore-with-browse.md).)
 
 ---
@@ -1625,13 +1636,13 @@ you can map just the matched items and use **Verified Good** /
 ## Exporting your work
 
 In the labeling view, the right panel's **Export** button saves your current
-labels. In Find, the **Export** icons at the top of the **Verified Good** and
+labels. In Test, the **Export** icons at the top of the **Verified Good** and
 **Verified Bad** piles send each set (checked or not), and the one beside
 the Threshold sends only the matches you haven't checked (see
 [Send your matches somewhere](howto/export-matches.md)). Both open the same
 window with the same destinations, and its title says what is leaving:
 **Export Detector Labels** for your answers (the thing that rebuilds the
-detector), **Export Results** for what Find matched (**Export Unverified
+detector), **Export Results** for what the detector matched in Test (**Export Unverified
 Good** from the Threshold's button). Formats (by their display names):
 
 <picture>
@@ -1742,7 +1753,7 @@ Two ways to bring in existing work:
   lists the saved detectors already in the registry, so you can score a
   fresh dataset with one without retraining. (There is no separate
   detector-file upload step in the labeling UI; detectors come in via the
-  registry and via [Find](#find-testing-and-reviewing).)
+  registry and via [Test](#testing-a-detector).)
 
 ---
 
@@ -1791,7 +1802,7 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   `↑` instead drops you on the next unlabeled item, wherever the
   current selection strategy says that is. Because the arrows carry this, **volume moved to
   `Shift`+`↑` / `Shift`+`↓`**.
-- **Double-click the image to zoom in.** In Train / Find, a double-click
+- **Double-click the image to zoom in.** In Train / Test, a double-click
   on the image zooms in on the spot you clicked - the quick way to check a
   detail before voting without leaving the keyboard rhythm. Double-click
   again to go deeper; the viewer stops at 5x, and a double-click there

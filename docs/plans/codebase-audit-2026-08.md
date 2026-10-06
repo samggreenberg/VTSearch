@@ -325,10 +325,4 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **ensure-test-deps.sh keeps the SETUPTOOLS_USE_DISTUTILS=stdlib shim that install.sh explicitly documents as broken** — `.claude/hooks/ensure-test-deps.sh` (low impact)
-
-  Line 59 installs apricot-select under `SETUPTOOLS_USE_DISTUTILS=stdlib`, while scripts/install.sh's vts_install_toponymy comment (added later) states verbatim: "Do NOT wrap it in SETUPTOOLS_USE_DISTUTILS=stdlib: pip's isolated build env installs the latest setuptools, and setuptools >= 74 refuses to even import with that value set, so the build dies with 'BackendUnavailable' (and Python >= 3.12 has no stdlib distutils for the shim to point at anyway)... verified on Python 3.12 and 3.14". The hook works today only because the remote container runs Python 3.11 (stdlib distutils still exists — I confirmed the build succeeds there); the day the remote image moves to Python 3.12+, first-run dependency install breaks at this line and every test/app command is blocked. The two installers for the same package now embody contradictory conclusions about the same workaround.
-
-  *Direction:* Drop the env-var prefix in ensure-test-deps.sh to match install.sh's vts_install_toponymy (plain `pip install apricot-select`).
-
 <!-- item-sep -->

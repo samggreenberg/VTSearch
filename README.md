@@ -10,7 +10,7 @@ A trainable media search tool. VTSearch searches collections of audio clips, ima
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/user/assets/dashboard-loaded.dark.webp" />
-  <img src="docs/user/assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Find beneath them" width="720" />
+  <img src="docs/user/assets/dashboard-loaded.light.webp" alt="The VTSearch dashboard: datasets of drawings on the top card, the Yellow Smileys detector on the bottom one, and Train / Test / Find beneath them" width="720" />
 </picture>
 
 > **New to VTSearch?** Read **[docs/user/USER_GUIDE.md](docs/user/USER_GUIDE.md)** for a walkthrough of loading a dataset, training a detector with Autopilot (or applying an existing one), and exporting the matches. Most users never need anything else.

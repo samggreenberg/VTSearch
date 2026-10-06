@@ -8,7 +8,7 @@ import { DatasetRegistryEntry } from '../../models/api.models';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
 
 /**
- * Renders in place of `/label` and `/find` content when the active
+ * Renders in place of `/label` and `/test` content when the active
  * dataset/detector pair is incompatible (different media types, or one
  * half unset). Tells the user what's wrong and offers two ways out:
  * fix the other half via its pulldown, or go to the Dashboard.

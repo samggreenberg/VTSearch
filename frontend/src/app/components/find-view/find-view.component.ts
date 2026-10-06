@@ -390,7 +390,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     // Reload + rescore when the active pair changes via the top-bar
-    // switcher or a route-param swap (`/find/:ds/:det` → `/find/:ds2/:det2`).
+    // switcher or a route-param swap (`/test/:ds/:det` → `/test/:ds2/:det2`).
     // Skip the first emission (ngOnInit already triggered the initial
     // loads + runFindLabel call above).
     let firstPair = true;

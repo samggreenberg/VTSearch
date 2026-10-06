@@ -169,7 +169,7 @@ def drop_voted(
 
 
 def apply_vote_exclusion(
-    scores: "list[float] | np.ndarray",
+    scores: "Sequence[float] | np.ndarray",
     score_ids: "Sequence[int]",
     voted_ids: "set[int] | None",
     *,

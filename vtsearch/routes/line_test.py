@@ -4,7 +4,7 @@ Find scores a corpus the detector never trained on and draws the balance's
 line on it.  A **test** measures that line: uniform picks from rank bands on
 both sides of it, the user votes each one, and the picks say, as likely
 ranges, what share of what the line ships would be right and what share of
-the real matches it would ship (``docs/plans/test-mode.md``).  The rule lives
+the real matches it would ship (``vtscore/docs/packages/training.md``).  The rule lives
 in :mod:`vtscore.training.thresholds.line_test`; this blueprint is its
 lifecycle for the active detector's Find session:
 
