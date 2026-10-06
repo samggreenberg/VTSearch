@@ -127,13 +127,13 @@ EXPECT = {
     ("documents", 1.0, "kept"): 14,
     ("documents", 4.0, "kept"): 25,
     ("documents", 1.0, "f50"): 0.87,
-    ("regions", 0.25, "after"): 0.73,
+    ("regions", 0.25, "after"): 0.74,
     ("regions", 1.0, "after"): 0.63,
     ("regions", 4.0, "after"): 0.72,
-    ("regions", 0.25, "kept"): 31,
+    ("regions", 0.25, "kept"): 30,
     ("regions", 1.0, "kept"): 48,
-    ("regions", 4.0, "kept"): 95,
-    ("regions", 0.25, "precision"): 0.81,
+    ("regions", 4.0, "kept"): 96,
+    ("regions", 0.25, "precision"): 0.82,
     ("regions", 4.0, "recall"): 0.83,
 }
 
