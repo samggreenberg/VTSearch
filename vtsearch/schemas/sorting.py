@@ -164,10 +164,12 @@ _WINDOW_META_FIELDS = {
     # True when ``results`` is a head window and more rows follow (page them via
     # /api/sort/page). False when the full ranking was transmitted.
     "has_more_below": fields.Boolean(required=False),
-    # The rank position Autopilot's Hard / New picks sample around, which since
-    # #2876 sits *above* the reporting ``threshold`` - the two cuts do different
-    # jobs (see vtscore.state.core.detector_acquisition_threshold).  ``None`` on
-    # sorts with no detector behind them; the client falls back to ``threshold``.
+    # The rank position Autopilot's Hard / New picks sample around - the two
+    # cuts do different jobs.  On a learned sort it sits *above* the reporting
+    # ``threshold`` since #2876 (vtscore.state.core.detector_acquisition_threshold);
+    # on a text sort it is the mixture midpoint under the guarded display line
+    # since #4136 (vtscore.training.thresholds.text_sort_cuts).  ``None`` on
+    # the example and label-file sorts; the client falls back to ``threshold``.
     "acq_threshold": fields.Float(required=False, allow_none=True),
 }
 

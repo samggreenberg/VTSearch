@@ -638,11 +638,35 @@ class TestLearnedSort:
         ctx = get_active_detector_context()
         assert data["acq_threshold"] == round(detector_acquisition_threshold(ctx, None, beta=1.0), 4)
 
-    def test_text_sort_carries_no_acquisition_cut(self, client):
-        """No detector behind it, so there is nothing to re-cut."""
+    def test_text_sort_carries_the_midpoint_as_its_acquisition_cut(self, client, monkeypatch):
+        """A text sort carries two lines too (#4136): the display line as ``threshold``
+        and the mixture midpoint as ``acq_threshold``, so the Hard select samples
+        where it did before the guarded display line shipped."""
+        import vtscore.training.thresholds as T
+        from vtscore.training.thresholds import TextSortCuts
+
+        seen: list[list[float]] = []
+
+        def fake_cuts(scores):
+            seen.append(list(scores))
+            return TextSortCuts(0.9, 0.3, "tail")
+
+        monkeypatch.setattr(T, "text_sort_cuts", fake_cuts)
         resp = client.post("/api/sort", json={"text": "a sound"})
         assert resp.status_code == 200
-        assert resp.get_json()["acq_threshold"] is None
+        data = resp.get_json()
+        assert (data["threshold"], data["acq_threshold"]) == (0.9, 0.3)
+        # Both drawn over the whole ranking, in one call.
+        assert len(seen) == 1 and len(seen[0]) == NUM_MEDIAS
+        # The green region reads the display line, not the sampling position.
+        assert data["above_threshold"] == sum(r["similarity"] >= 0.9 for r in data["results"])
+
+    def test_text_sort_acquisition_cut_is_a_number_under_the_default_rule(self, client):
+        resp = client.post("/api/sort", json={"text": "a sound"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data["acq_threshold"], float)
+        assert isinstance(data["threshold"], float)
 
     def test_only_good_votes_returns_400(self, client):
         good_votes.update({k: None for k in [1, 2]})
