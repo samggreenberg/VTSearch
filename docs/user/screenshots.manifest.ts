@@ -1450,8 +1450,10 @@ export const SHOTS: Shot[] = [
     clip: { target: '.line-test-result' },
     annotations: [
       { target: '.domain-ref-select', kind: 'step', step: 1, at: 'right' },
-      { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2 },
-      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3 },
+      // On the right: the clip is the result pane, and a badge on a chip's
+      // left edge would land outside it.
+      { target: { selector: '.domain-chip', hasText: 'atypical' }, kind: 'step', step: 2, at: 'right' },
+      { target: { selector: '.domain-chip', hasText: 'evidence vacuum' }, kind: 'step', step: 3, at: 'right' },
     ],
     async recipe(page, h) {
       await openTest(page, h);

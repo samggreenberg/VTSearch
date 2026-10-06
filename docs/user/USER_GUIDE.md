@@ -1127,8 +1127,9 @@ Manual split applied to testing:
   flow, and the tab Test opens on.
 - **Review** - the ranked list under the line, the boundary walk, and the
   **Verified Good** / **Verified Bad** piles: every result, a tab away, with
-  the test's picks already in the piles. A user who wants the list without a
-  test clicks **Review** first.
+  the test's picks already in the piles. A user who wants the list without
+  testing clicks **Review** once scoring ends; the test waits on its tab, and
+  the Threshold stays frozen until it reaches **Done!**.
 
 Test is where you decide whether to trust a detector. To run detectors you
 already trust and collect what they match, with no view to work through, use
@@ -1244,7 +1245,7 @@ collection.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.webp" />
-  <img src="assets/find-stats.light.webp" alt="The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="720" />
+  <img src="assets/find-stats.light.webp" alt="The Test view's result pane at Done: the balance headline, the Right and Found ranges, the verdict with its three exits, the per-balance table, and the Precision by Number Returned chart" width="400" />
 </picture>
 
 ### Review
