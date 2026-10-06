@@ -238,7 +238,7 @@ describe('DashboardComponent', () => {
       component.toggleDetectorSelection('m2', new MouseEvent('click'));
       expect(component.selectedDetectorIds.has('m2')).toBe(true);
       expect(component.labelEnabled).toBe(false);
-      expect(component.labelHint).toBe('AutoRun detectors are frozen — move to Drafts to retrain');
+      expect(component.labelHint).toBe('Frozen: move to Drafts to retrain');
       // Test (read-only scoring) stays available.
       expect(component.findEnabled).toBe(true);
     });
@@ -266,7 +266,7 @@ describe('DashboardComponent', () => {
         expect(component.detectorTab()).toBe('drafts');
         expect(component.selectedDetectorIds.size).toBe(0);
         expect(component.findEnabled).toBe(false);
-        expect(component.findHint).toBe('Select a detector in the table above.');
+        expect(component.findHint).toBe('Select a detector in the table above');
       });
 
       it('leaves Drafts empty after selecting on AutoRun and switching back, across refreshes', () => {
@@ -626,7 +626,7 @@ describe('DashboardComponent', () => {
     it('should hint about missing dataset', () => {
       flushInitialRequests();
       selection.clear('dataset');
-      expect(component.labelHint).toBe('Select a dataset in the table above.');
+      expect(component.labelHint).toBe('Select a dataset in the table above');
     });
 
     it('should hint about missing model', () => {
@@ -634,7 +634,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests(datasets);
       // Single dataset is auto-selected; no detector selected.
       selection.clear('detector');
-      expect(component.labelHint).toBe('Create a new detector and start training');
+      expect(component.labelHint).toBe('Create a new detector, then train it on the selected dataset');
     });
 
     it('should hint about multiple datasets', () => {
@@ -671,7 +671,7 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio' }];
       flushInitialRequests(datasets, models);
-      expect(component.labelHint).toBe('Open Train Mode with the selected dataset and detector');
+      expect(component.labelHint).toBe('Open the Train view with the selected dataset and detector');
     });
   });
 
@@ -680,7 +680,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests();
       selection.clear('dataset');
       selection.clear('detector');
-      expect(component.findHint).toBe('Select a dataset and detector above.');
+      expect(component.findHint).toBe('Select a dataset and detector above');
     });
 
     it('should hint about missing dataset', () => {
@@ -688,7 +688,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests([], models);
       // Single detector is auto-selected; no dataset selected.
       selection.clear('dataset');
-      expect(component.findHint).toBe('Select a dataset in the table above.');
+      expect(component.findHint).toBe('Select a dataset in the table above');
     });
 
     it('should hint about missing model', () => {
@@ -696,7 +696,7 @@ describe('DashboardComponent', () => {
       flushInitialRequests(datasets);
       // Single dataset is auto-selected; no detector selected.
       selection.clear('detector');
-      expect(component.findHint).toBe('Select a detector in the table above.');
+      expect(component.findHint).toBe('Select a detector in the table above');
     });
 
     it('should hint about media type mismatch', () => {
@@ -711,7 +711,7 @@ describe('DashboardComponent', () => {
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
       flushInitialRequests(datasets, models);
       expect(component.findHint).toBe(
-        'Score the selected dataset with the selected detector, then test how well its line does there',
+        "Open the Test view to score the selected dataset and test the selected detector's line on it",
       );
     });
 
@@ -719,7 +719,38 @@ describe('DashboardComponent', () => {
       const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
       const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 0 }];
       flushInitialRequests(datasets, models);
-      expect(component.findHint).toBe('Selected detector has no training labels');
+      expect(component.findHint).toBe('Detector has no training labels');
+    });
+
+    // Test opens one view on one pair, so it takes exactly one of each, as
+    // Train does, rather than quietly testing the first ticked pair; Find
+    // takes any number.
+    it('should hint about multiple datasets, leaving Find enabled', () => {
+      const datasets = [
+        { id: 'd1', name: 'DS1', media_type: 'audio' },
+        { id: 'd2', name: 'DS2', media_type: 'audio' },
+      ];
+      const models = [{ id: 'm1', name: 'M', media_type: 'audio', num_training: 5 }];
+      flushInitialRequests(datasets, models);
+      selection.selectOnly('dataset', ['d1', 'd2']);
+      selection.selectOnly('detector', ['m1']);
+      expect(component.findEnabled).toBe(false);
+      expect(component.findHint).toBe('Select exactly 1 dataset');
+      expect(component.autorunEnabled).toBe(true);
+    });
+
+    it('should hint about multiple detectors, leaving Find enabled', () => {
+      const datasets = [{ id: 'd1', name: 'DS', media_type: 'audio' }];
+      const models = [
+        { id: 'm1', name: 'M1', media_type: 'audio', num_training: 5 },
+        { id: 'm2', name: 'M2', media_type: 'audio', num_training: 5 },
+      ];
+      flushInitialRequests(datasets, models);
+      selection.selectOnly('dataset', ['d1']);
+      selection.selectOnly('detector', ['m1', 'm2']);
+      expect(component.findEnabled).toBe(false);
+      expect(component.findHint).toBe('Select exactly 1 detector');
+      expect(component.autorunEnabled).toBe(true);
     });
   });
 
@@ -755,7 +786,7 @@ describe('DashboardComponent', () => {
     it('is disabled, with the hint Test gives, until a dataset and a detector are ticked', () => {
       flushInitialRequests();
       expect(component.autorunEnabled).toBe(false);
-      expect(component.autorunHint).toBe('Select a dataset and detector above.');
+      expect(component.autorunHint).toBe('Select a dataset and detector above');
       expect(autorunButton().disabled).toBe(true);
     });
 
@@ -786,7 +817,7 @@ describe('DashboardComponent', () => {
       selection.selectOnly('dataset', ['d1']);
       selection.selectOnly('detector', ['m1', 'm3']);
       expect(component.autorunEnabled).toBe(false);
-      expect(component.autorunHint).toBe('Selected detector has no training labels');
+      expect(component.autorunHint).toBe('Detector has no training labels');
     });
 
     it('starts one run per ticked dataset, restricted to the ticked detectors', () => {
