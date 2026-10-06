@@ -3,9 +3,10 @@
 This is the procedure the **Dev2Main** Routine follows to promote `dev` to `main`. It lives in the repo (not in Claude settings) so it's versioned, PR-reviewable, and run by reference: the Routine prompt is a thin pointer at this file.
 
 > **Override for this procedure only:** the final release PR's `base` is
-> **`main`**, not `dev`. This is the one sanctioned exception to CLAUDE.md's
-> "never open a PR to `main`" rule — it applies solely to the release PR
-> opened in step 5, and only when running this runbook.
+> **`main`**, not `dev`, and this runbook merges it. This is the one sanctioned
+> exception to CLAUDE.md's "never open or merge a PR into `main`" rule — it
+> applies solely to the release PR opened in step 5 and merged in step 8, and
+> only when running this runbook.
 
 Work through the steps in order.
 
@@ -73,6 +74,11 @@ A harness that won't run at all doesn't block the release: stale screenshots are
 - **Title:** `Release: dev → main (YYYY-MM-DD)` using today's date.
 - **Base:** `main`. **Head:** `dev`.
 - **Body:** the step-3 summary, verbatim.
+
+If a `dev` → `main` PR is already open, a previous run's that never merged,
+update its title and body to this run's instead of opening another. GitHub
+allows one open PR per head and base, and its head is `dev`, so it already
+carries everything this run covers.
 
 ## 6. Close the issues shipped in this release
 
@@ -195,3 +201,38 @@ grep -rl 'docs/plans/<deleted-name>\.md' --include="*.py" --include="*.ts" --inc
 ```
 
 Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule; issue #2982 is the incident that motivated it — 94 source files had gone dangling this way across 13 deleted plans before anyone grepped for them.
+
+## 8. Merge the release PR
+
+The release merges itself (owner, 2026-10-06). It used to wait for a human, and
+the wait was easy to forget: the 2026-10-05 release PR (#4501) was still open a
+day later, so nothing in it had reached `main` while step 6 had already closed
+its issues as shipped. Merging here makes "closed" mean "on `main`".
+
+1. **Land everything first.** This step comes last so that every commit this run
+   made reaches `dev` before the merge: step 2's triage, step 4's punch card,
+   step 4b's screenshots and step 7's prunes, each through a PR into `dev`. A
+   commit left on a branch misses this release.
+2. **Gate the tip.** `git fetch origin --prune`, check out `origin/dev`'s tip and run a
+   full `./run-tests.sh` on it, unless this run already ran one on exactly that
+   SHA. A red run does not merge. Fix it on `dev` (a PR, per CLAUDE.md's "Fix
+   All Errors") and gate again. If it cannot be fixed in this run, leave the
+   release PR open, comment on it naming the failing gates, and file an issue.
+3. **Check the window did not move.** Re-run `python scripts/release-prs.py`. A
+   PR it lists that step 6 never saw landed on `dev` during this run, and this
+   merge would ship it with its issue still open, after which no release window
+   would ever contain it again. Take any such PR through steps 4, 6 and 7, then
+   repeat this step.
+4. **Merge it** with `merge_pull_request`, `merge_method: "merge"`, and
+   `expectedHeadSha` set to the SHA you gated. **Never squash or rebase.** `dev`'s commits
+   must stay ancestors of `main`, or the next release's `origin/main..origin/dev`
+   window would show everything again. If the merge is refused because `dev`
+   moved, go back to substep 2.
+5. **If it is refused for any other reason** (a review the owner's account
+   cannot supply, a conflict), do not work around it: no admin bypass, no other
+   merge method. Leave the PR open, comment on it with the refusal verbatim, and
+   lead the run's final message with it, since the release has not shipped.
+
+End the run by naming the merge commit on `main`. The push to `main` also
+republishes the State of the App links (`.github/workflows/publish-sota.yml`)
+when the release carried a report.
