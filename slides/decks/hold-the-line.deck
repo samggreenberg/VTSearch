@@ -70,6 +70,7 @@ slides:
   outline-hold-the-line +at3
   inclusion-rank
   fbeta-metrics
+  fbeta-maps
   balance-fbeta
   labels-line
   transfer-student
