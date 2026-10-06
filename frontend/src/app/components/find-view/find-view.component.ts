@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { CommonModule } from '@angular/common';
@@ -84,7 +84,7 @@ const BALANCE_POST_DEBOUNCE_MS = 150;
   styleUrl: './find-view.component.scss',
   providers: [PairScopeService, LineTestSessionService],
 })
-export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
+export class FindViewComponent implements OnInit, OnDestroy {
   private mediasApi = inject(MediasApiService);
   private detectorsFindApi = inject(DetectorsFindApiService);
   private datasetsCrudApi = inject(DatasetsCrudApiService);
@@ -302,6 +302,20 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       this.applyPanelPx();
     });
 
+    // The centre panel lives on the Review tab only (#4524), so every switch
+    // to Review makes a new one, and each needs its `init`: its settings, the
+    // shortcuts, its keyboard subscription. Only the one the view opened with
+    // used to get it, and Test opens on Autopilot, where there is none
+    // (#4555). A tick later, as the view-init call this replaces did, and only
+    // if a switch back has not torn it down by then.
+    effect(() => {
+      const panel = this.centerPanel();
+      if (!panel) return;
+      setTimeout(() => {
+        if (this.centerPanel() === panel) panel.init();
+      });
+    });
+
     effect(() => {
       const medias = this.mediaState.mediasSignal();
       if (medias.length > 0) {
@@ -414,10 +428,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.lineTest.clear();
     this.voteState.loadVotes();
     this.runFindLabel();
-  }
-
-  ngAfterViewInit(): void {
-    setTimeout(() => this.centerPanel()?.init());
   }
 
   ngOnDestroy(): void {

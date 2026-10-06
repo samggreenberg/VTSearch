@@ -11,6 +11,7 @@ import { MediaPrefetchService } from '../../services/media-prefetch.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { VoteHistoryService } from '../../services/vote-history.service';
+import { KeyboardService } from '../../services/keyboard.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -843,6 +844,25 @@ describe('FindViewComponent in every balance state (#4247, #4272, #4413)', () =>
       expect(el.querySelector('vt-line-test-stage')).toBeNull();
       // The Stats modal is retired into the result pane (#4524).
       expect(el.querySelector('button[aria-label="Stats"]')).toBeNull();
+    });
+
+    // #4555: Test opens on Autopilot, which has no centre panel, so the one
+    // Review makes is not the one the view opened with; each must be started
+    // (its settings, the shortcuts), or Review's keys do nothing.
+    it('starts each centre panel the Review tab makes, the shortcuts with it', async () => {
+      const start = vi.spyOn(TestBed.inject(KeyboardService), 'start');
+      sortState.setSortResults(ranking, 0.5, lineBalance('unchecked'));
+      fixture.componentInstance.onFindTabChange('autopilot');
+      httpMock.expectOne('/api/line-test/start').flush(wireLineTest(wireTest({ picks: [1, 2] })));
+      await settleZoneless(fixture);
+      start.mockClear();
+
+      fixture.componentInstance.onFindTabChange('review');
+      TestBed.tick();
+      // The panel starts a tick after it is made; its own loads then drain.
+      await new Promise((resolve) => setTimeout(resolve));
+      await flushInit(ranking.map(({ id }) => id));
+      expect(start).toHaveBeenCalledTimes(1);
     });
   });
 });
