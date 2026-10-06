@@ -26,7 +26,8 @@ presets hold **0.45–0.89**, and they miss one way:
 
 That is the under-read gain #4523's verdict study saw, located: the rule it
 priced was the harness's proposal, but the ranges it read are the ones the
-app shows. #4540 stays open for the estimator fix.
+app shows. Splitting a band by the model's posteriors instead of by size
+(below) brings the presets one step away to 0.84–0.97.
 
 Part of #4520; follows #4523, #4539, #4542. Data: #4523's 3,669 saved photo
 sessions replayed under dev at 8bb7cfde9 + this branch (the arm now records the
@@ -84,11 +85,29 @@ direction follows the side:
 - **Deeper** presets add bands below the line, whose counts lean on the
   model's tail, which the walk corrects only as deep as it reaches.
 
-**The fix to try (#4540).** The class model's posteriors rank the items
-within a band. Splitting a band's matches by posterior mass instead of by
-size would move the shallow presets' estimate up where the model says the
-top is richer, at no cost in picks. A pooled weight that falls with distance
-from the top is a second lever. Either is priced by the same replay.
+## The posterior split (#4540)
+
+`estimate_at` now counts a band's labelled picks where their ranks fall and
+splits its unlabelled matches by the class model's posterior mass on either
+side of the count, instead of by size. Nothing else moves: every line-level
+number in `summary.csv` is identical, since only the presets read
+`estimate_at`. F-beta coverage of the alternatives Lean shows, at 20 / 40
+(`presets.csv` before, `presets_posterior_split.csv` after):
+
+| session → preset | 0.1% | 0.44% | 5% |
+|---|---|---|---|
+| 1 → 1/4 (shallower) | 0.71 → **0.92** | 0.84 → **0.91** | 0.80 → **0.92** |
+| 4 → 1 (shallower) | 0.79 → **0.86** | 0.75 → **0.85** | 0.57 → **0.84** |
+| 4 → 1/4 (much shallower) | 0.63 → 0.81 | 0.58 → 0.75 | 0.45 → 0.67 |
+| 1/4 → 1 (deeper) | 0.77 → 0.81 | 0.83 → 0.86 | 0.89 → **0.97** |
+| 1/4 → 4 (much deeper) | 0.79 → 0.82 | 0.86 → 0.86 | 0.89 → **0.97** |
+
+The presets one step from the session's balance now hold 0.84–0.97. The
+furthest-shallow preset (a beta-4 session's beta-1/4 option, about a quarter
+of the line) still under-reads its precision by 0.10–0.16: there the count
+falls in the top bands, whose estimates the pooled prior (#4539) pulls toward
+the line's average. A pooled weight that falls with distance from the top is
+the lever for that; it is left for another round.
 
 ## Decisions made without the owner
 
