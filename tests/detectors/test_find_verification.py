@@ -232,6 +232,10 @@ class TestFindStats:
             "schedule": {"candidate": 32, "rounds": 3, "picks": 5},
             "shape": "advisory",
             "audited": None,
+            # No ranking behind this fixture's line, so nothing a check could walk (#4489, #4496).
+            "checkable": False,
+            "separation": None,
+            "check_due": False,
         }
         assert "floor" not in data
         # The sweep went with the Inclusion stepper.

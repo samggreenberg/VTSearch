@@ -13,20 +13,21 @@ change re-derives the threshold and re-splits the unverified items, with the
 ``/api/votes`` good set (what Browse reads) staying in lock-step with the export
 partition (what Export reads).
 
-Under a balance the line keeps a set (#4272, #4413): the mixture's F-beta
-argmax under the balance's cap, or the set a finished spot check ended on.  The
-fixture leaves 8 unvoted items, so where the line lands at one beta or another
-is whatever the fit says; the stored cutoff is poisoned before the change so a
-skipped recompute is observable, and the re-cut is pinned to land on the
-balance's own line.
+Under a balance the line is the labels' line (#4452): the class model the
+retrain's calibration folds imply, cut at the beta, or the fold-anchored cut
+when the folds fit no class model.  The fixture leaves 8 unvoted items, so
+where the line lands at one beta or another is whatever the fit says; the
+stored cutoff is poisoned before the change so a skipped recompute is
+observable, and the re-cut is pinned to land on the balance's own line.
 """
 
 from __future__ import annotations
 
+import pytest
+
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
-from vtscore.state.core import detector_balance_proposal, get_active_detector_context, human_voted_ids
-from vtscore.training.thresholds import balance_line
+from vtscore.state.core import get_active_detector_context, human_voted_ids, recut_detector_threshold
 from vtsearch.state import snapshot_medias
 
 
@@ -68,14 +69,15 @@ def test_find_label_populates_calibration_cache(client):
     assert ctx.calibration_cache is not None
     assert ctx.anchored_cut_cache is not None
     assert ctx.precision_floor_cache is None, "a retrain no longer parks the #4220 estimate (#4362)"
-    assert ctx.line_ranking is not None, "the ranking the balance keeps a set of"
+    assert ctx.line_ranking is not None, "the ranking the balance's state counts the line against"
 
 
 def test_a_balance_change_recuts_and_resplits(client):
     _run_find(client)
     ctx = get_active_detector_context()
-    voted = human_voted_ids(ctx)
-    kept = balance_line(ctx.line_ranking, 1.0, ctx.precision_check, voted, proposal=detector_balance_proposal(ctx, 1.0))
+    # The balance's line at beta 1, through the same re-cut a change runs: the
+    # labels' line, or the fold-anchored cut with no class model (#4452).
+    kept = recut_detector_threshold(ctx, beta=1.0)
     assert kept is not None
 
     # Start from another balance, so the move to 1 is a change, then poison
@@ -94,13 +96,13 @@ def test_a_balance_change_recuts_and_resplits(client):
     assert _export_good(client) == _votes_good(client)
 
 
-def test_a_find_pass_on_a_reused_head_keeps_the_balances_set(client):
-    """A Find pass that reuses the cached head draws the balance's set, and can be checked (#4273).
+def test_a_find_pass_on_a_reused_head_has_a_ranking_and_can_be_checked(client):
+    """A Find pass that reuses the cached head gets its ranking back, and can be checked (#4273).
 
-    Ending a Find session drops the ranking the line kept a set of; the next
+    Ending a Find session drops the ranking the line is read against; the next
     pass reuses the head as it was (no retrain), so before the fix it came back
-    with the stored score cut and no ranking, and a spot check refused to start
-    ("No ranking to check") straight after a Find pass.
+    with no ranking, and a spot check refused to start ("No ranking to check")
+    straight after a Find pass.
     """
     detector_id = _run_find(client)
     ctx = get_active_detector_context()
@@ -114,13 +116,12 @@ def test_a_find_pass_on_a_reused_head_keeps_the_balances_set(client):
     assert ctx.model is head, "the pass reused the cached head rather than retraining"
     assert ctx.line_ranking is not None
     # The fixture's 8 unlabelled items are the whole unvoted remainder, and the
-    # line keeps the top of them the balance says.
-    count = resp["balance"]["count"]
-    assert resp["balance"]["status"] == "unchecked" and 1 <= count <= 8
-    assert sorted(ctx.line_ranking.candidate(32, human_voted_ids(ctx))) == list(range(13, 21))
-    assert resp["threshold"] == ctx.threshold == ctx.line_ranking.threshold_for(count, human_voted_ids(ctx))
-    above = {r["id"] for r in resp["results"] if r["score"] >= resp["threshold"]}
-    assert set(ctx.line_ranking.candidate(count, human_voted_ids(ctx))) <= above
+    # balance's state counts how many of them the line keeps (#4452).
+    voted = human_voted_ids(ctx)
+    assert sorted(ctx.line_ranking.candidate(32, voted)) == list(range(13, 21))
+    assert ctx.threshold != -999.0 and resp["threshold"] == pytest.approx(ctx.threshold, abs=1e-4)
+    kept = [i for i in ctx.line_ranking.unvoted_ids(voted) if ctx.line_ranking.score_of(int(i)) >= ctx.threshold]
+    assert resp["balance"]["status"] == "unchecked" and resp["balance"]["count"] == len(kept)
 
     start = client.post("/api/precision-check/start", json={})
     assert start.status_code == 200, start.get_json()

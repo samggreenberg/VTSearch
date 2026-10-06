@@ -48,11 +48,9 @@ from vtscore.training.thresholds import (
     calibration_folds_cached,
     compute_fold_orderings,
     eligible_fold_orderings,
-    fbeta_count,
     fit_fold_anchored_cut,
     fit_precision_floor_curve,
     line_inclusion,
-    line_under,
     precision_floor_cut,
     reporting_line,
     walk_positives,
@@ -365,41 +363,29 @@ class TestARetrain:
         ctx, _t = self._train()
         assert ctx.precision_floor_cache is None
 
-    def test_a_retrain_parks_the_ranking_and_cuts_at_the_balances_cap(self, schedule_only):
-        """The line keeps the top K unvoted items of the haystack it scored (#4272), voted items marked."""
+    def test_a_retrain_parks_the_ranking_and_cuts_at_the_labels_line(self):
+        """The line is the labels' line (#4452); the ranking it is read against is parked, voted items marked (#4272)."""
         ctx, threshold = self._train(beta=1.0)
         ranking = ctx.line_ranking
         assert ranking is not None and ranking.size == 30
         assert ranking.voted == frozenset(range(500, 514))
-        # 30 media, 14 voted: the 16 unvoted are the whole set under the cap of 32.
-        assert ranking.candidate(32) == tuple(sorted(range(514, 530), key=ranking.score_of, reverse=True))
-        assert (
-            threshold == ranking.threshold_for(32) == line_under(min(ranking.score_of(cid) for cid in range(514, 530)))
-        )
+        assert ctx.labels_line is not None, "the fixture's votes separate, so the folds fit a class model"
+        assert threshold == pytest.approx(ctx.labels_line.threshold(1.0), abs=1e-12)
+        assert recut_detector_threshold(ctx, beta=1.0) == pytest.approx(threshold, abs=1e-12)
 
-    def test_a_retrain_anchors_the_mixture_on_its_votes_and_cuts_at_the_smaller_count(self):
-        """The unchecked line a retrain draws is the smaller of the cap's 32 and the mixture's F1 argmax (#4389, #4413).
-
-        The mixture is anchored on the votes the retrain trained on, and
-        memoised on the ranking it parks, so the re-cut and the balance state
-        read the same count back without a refit.
-        """
+    def test_the_balances_state_counts_what_the_labels_line_keeps(self):
+        """No count is drawn on the ranking (#4452): the state reports how many unvoted items clear the line."""
         ctx, threshold = self._train(beta=1.0)
+        ctx.threshold = threshold  # what the caller of a retrain stores, as the app does
         ranking = ctx.line_ranking
         assert ranking is not None
-        labels = {**dict.fromkeys(range(500, 506), True), **dict.fromkeys(range(506, 514), False)}
-        proposal = fbeta_count(ranking, 1.0, labels)
-        assert proposal is not None and 1 <= proposal <= 16
-        assert threshold == ranking.threshold_for(min(32, proposal))
-        assert len(ranking.mixture) == 1 and ranking.mixture[0] is not None, "one fit, memoised on the ranking"
+        unvoted = ranking.unvoted_ids(set())
+        kept = sum(1 for cid in unvoted if ranking.score_of(int(cid)) >= threshold)
+        assert detector_balance_state(ctx, 1.0)["count"] == kept
+        assert ranking.mixture == [], "the count line's mixture is never fitted under the labels' line"
 
-        fit = ranking.mixture[0]
-        assert recut_detector_threshold(ctx, beta=1.0) == threshold
-        assert detector_balance_state(ctx, 1.0)["count"] == min(32, proposal)
-        assert ranking.mixture == [fit], "the re-cut and the state read the retrain's fit"
-
-    def test_a_retrain_keeps_a_finished_trim_walks_end(self, schedule_only):
-        """Above beta 1 the check may trim the line, and a retrain keeps the set it ended on (#4427)."""
+    def test_a_finished_walk_never_moves_the_labels_line(self):
+        """Every preset's check is advisory since #4452: a retrain after a walk still cuts at the labels' line."""
         ctx, _t = self._train(beta=2.0)
         ranking = ctx.line_ranking
         assert ranking is not None
@@ -409,9 +395,9 @@ class TestARetrain:
             check.record({cid: cid < 520 for cid in check.pending})
         check.fingerprint = ranking.fingerprint(check.k, set(check.labels))
         ctx2, threshold = self._train(beta=2.0, det_ctx_check=check)
-        assert ctx2.line_ranking is not None
-        assert threshold == ctx2.line_ranking.threshold_for(check.k)
-        assert recut_detector_threshold(ctx2, beta=2.0) == threshold
+        assert ctx2.labels_line is not None
+        assert threshold == pytest.approx(ctx2.labels_line.threshold(2.0), abs=1e-12)
+        assert recut_detector_threshold(ctx2, beta=2.0) == pytest.approx(threshold, abs=1e-12)
 
 
 class TestTheRetiredTrainingFilter:

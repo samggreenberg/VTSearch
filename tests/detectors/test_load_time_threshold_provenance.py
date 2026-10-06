@@ -50,8 +50,8 @@ def _load_saved_detector(client, name: str):
     return ctx
 
 
-def test_reloaded_detector_starts_on_the_balances_set(client):
-    from vtscore.state.core import detector_balance_state, human_voted_ids
+def test_reloaded_detector_starts_on_the_balances_line(client):
+    from vtscore.state.core import recut_detector_threshold
 
     ctx = _load_saved_detector(client, "reload-anchored")
 
@@ -59,13 +59,11 @@ def test_reloaded_detector_starts_on_the_balances_set(client):
         "the registry load path must fit the fold-anchored population estimator; "
         "without it a resumed session would start on the pooled conformal cut"
     )
-    # Under the balance the line keeps the balance's unchecked set of the
-    # haystack the load scored (#4272, #4413), and acquisition re-cuts the
-    # anchored estimator from it.
+    # Under the balance the line is the labels' line (#4452), or the
+    # fold-anchored cut when the folds fit no class model; the load parks the
+    # ranking of the haystack it scored, and a re-cut lands where the load did.
     assert ctx.line_ranking is not None
-    state = detector_balance_state(ctx, 1.0)
-    assert state is not None
-    assert ctx.threshold == ctx.line_ranking.threshold_for(state["count"], human_voted_ids(ctx))
+    assert ctx.threshold == recut_detector_threshold(ctx, beta=1.0)
 
 
 def test_reloaded_threshold_is_not_the_pooled_conformal_cut(client):

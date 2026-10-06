@@ -21,8 +21,13 @@ import pytest
 
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
-from vtscore.state.core import detector_walk_positives, get_active_detector_context, human_voted_ids
-from vtscore.training.thresholds import BALANCE_CHECKED, CHECK_TRIM, LineRanking, SpotCheck
+from vtscore.state.core import (
+    detector_walk_positives,
+    get_active_detector_context,
+    human_voted_ids,
+    recut_detector_threshold,
+)
+from vtscore.training.thresholds import BALANCE_CHECKED, CHECK_ADVISORY, LineRanking, SpotCheck
 from vtsearch.state import set_beta, snapshot_medias
 
 
@@ -110,8 +115,9 @@ class TestOneRound:
         # The votes are ordinary labels: cast, verified in Find mode, tagged as the check's.
         assert all(cid in ctx.good_votes and cid in ctx.verified_ids for cid in picks)
         assert all(ctx.vote_provenance[cid]["flow"] == "check" for cid in picks)
-        # The line keeps the set the balance keeps, and the check is the last finished one.
-        assert ctx.threshold == ctx.line_ranking.threshold_for(data["balance"]["count"], human_voted_ids(ctx))
+        # The check is advisory (#4452): the line stays the balance's, re-cut once the walk ended, and the
+        # check is the last finished one.
+        assert ctx.threshold == recut_detector_threshold(ctx, beta=1.0)
         assert ctx.precision_check is not None and ctx.precision_check_run is None
         assert client.get("/api/balance").get_json()["status"] == BALANCE_CHECKED
         # The weak-separation prompt counts its cooldown from the vote total the check ended at (#4496).
@@ -186,29 +192,32 @@ class TestSeveralBands:
         assert check["rounds"] == 6 and len(check["picks"]) == 5, "the ranking of 200 has six bands"
         assert data["balance"]["schedule"] == {"candidate": start, "rounds": bands, "picks": 5}
 
-    def test_a_trim_walk_whose_every_pick_is_wrong_ends_on_the_first_band(self, client):
+    def test_a_walk_whose_every_pick_is_wrong_ends_on_the_first_band(self, client):
+        """At beta 2 the walk starts at the bands holding the top 128; the line is never the walk's end (#4452)."""
         _run_find(client)
-        ranking = _plant_big_ranking()
+        _plant_big_ranking()
         set_beta(2.0)
         ctx = get_active_detector_context()
 
         data = _start(client)
-        assert data["balance"]["shape"] == CHECK_TRIM
+        assert data["balance"]["shape"] == CHECK_ADVISORY
         assert data["check"]["band"] == {"index": 0, "lo": 1, "hi": 8} and data["check"]["direction"] == "start"
         seen: list[int] = []
-        for band, (lo, hi) in enumerate(((1, 8), (9, 16), (17, 32), (33, 64), (65, 128))):
+        # The five bands holding the top 128, then one deeper: the full walk (advisory, not a trim) looks past
+        # the start before it settles.
+        for band, (lo, hi) in enumerate(((1, 8), (9, 16), (17, 32), (33, 64), (65, 128), (129, 200))):
             assert data["check"]["band"] == {"index": band, "lo": lo, "hi": hi}
+            assert data["check"]["direction"] == ("deeper" if band == 5 else "start")
             picks = data["check"]["picks"]
             assert len(picks) == 5 and set(picks) <= set(range(lo, hi + 1)) and not set(picks) & set(seen)
             seen += picks
             assert data["balance"]["status"] == "unchecked", "not decided yet"
             data = client.post("/api/precision-check/votes", json=_votes(picks, False)).get_json()
-        # The fifth band decided the starting set: the walk stepped shallower to the first band, with no new picks.
+        # Every set scores the same F-beta, 0, so the walk settles on the smallest: the first band, no new picks.
         assert data["check"]["status"] == BALANCE_CHECKED and data["check"]["direction"] == "shallower"
-        assert data["check"]["round"] == 5 and data["check"]["picks"] == []
-        assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["count"] == 8
-        assert data["balance"]["audited"] == 8
-        assert ctx.threshold == ranking.threshold_for(8, human_voted_ids(ctx))
+        assert data["check"]["round"] == 6 and data["check"]["picks"] == []
+        assert data["balance"]["status"] == BALANCE_CHECKED and data["balance"]["audited"] == 8
+        assert ctx.threshold == recut_detector_threshold(ctx, beta=2.0)
 
 
 class TestSeed:

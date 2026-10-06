@@ -413,7 +413,6 @@ def test_the_ceilings_frame_records_finds_labels_line_from_its_full_labels():
     assert len(rows) == 1 and len(sink) == 1
     frame = sink[0]
     assert frame["kind"] == SKYLINE_TRAIN_FULL
-    assert [frame[f"test_line_k_p{q}"] for q in (10, 50, 90)] == [-1, -1, -1], "no floor line on the ceiling"
 
     pos = [c for c in sorted(sim_ids) if medias[c]["category"] == "cat0"]
     neg = [c for c in sorted(sim_ids) if medias[c]["category"] != "cat0"]

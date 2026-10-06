@@ -27,10 +27,11 @@ from vtscore.state import set_beta
 from vtscore.training.thresholds import LineRanking
 
 #: ``(beta, the balance's cap, the bands the walk audits first, picks a band, the check's shape)`` (#4388, #4427).
+# The app's presets (#4448); every check is advisory since #4452.
 PRESETS = [
-    pytest.param(0.5, 32, 3, 5, "advisory", id="F0.5"),
+    pytest.param(0.25, 32, 3, 5, "advisory", id="F0.25"),
     pytest.param(1.0, 32, 3, 5, "advisory", id="F1"),
-    pytest.param(2.0, 128, 5, 5, "trim", id="F2"),
+    pytest.param(4.0, 128, 5, 5, "advisory", id="F4"),
 ]
 
 
@@ -85,6 +86,9 @@ class TestTrainingRecordsTheState:
             "schedule": {"candidate": candidate, "rounds": rounds, "picks": picks},
             "shape": shape,
             "audited": None,
+            "checkable": True,
+            "separation": None,
+            "check_due": False,
         }
         assert "floor" not in out["det"]
         assert out["det"]["threshold"] == 0.5, "the cut is still the one training drew"

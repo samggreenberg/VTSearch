@@ -13,8 +13,13 @@ import pytest
 
 from tests import load_detector_and_wait
 from tests.helpers import setup_trainable_model_in_registry
-from vtscore.state.core import detector_balance_state, get_active_detector_context, human_voted_ids
-from vtscore.training.thresholds import BALANCE_CHECKED, BALANCE_GATE, CHECK_ADVISORY, balance_line
+from vtscore.state.core import (
+    detector_balance_state,
+    get_active_detector_context,
+    human_voted_ids,
+    recut_detector_threshold,
+)
+from vtscore.training.thresholds import BALANCE_CHECKED, BALANCE_GATE, CHECK_ADVISORY
 from vtsearch.state import bad_votes, get_beta, good_votes, snapshot_medias
 
 
@@ -43,10 +48,9 @@ class TestTheSetting:
         ctx = get_active_detector_context()
         state = detector_balance_state(ctx, 2.0)
         assert state is not None
-        assert data["count"] == state["count"] and data["threshold"] == round(ctx.threshold, 4)
-        assert ctx.threshold == balance_line(
-            ctx.line_ranking, 2.0, ctx.precision_check, human_voted_ids(ctx), proposal=state["count"]
-        )
+        assert data["count"] == state["count"] and data["threshold"] == pytest.approx(ctx.threshold, abs=1e-4)
+        # The balance's own line at beta 2 (#4452): the labels' line, or the fallback with no class model.
+        assert ctx.threshold == recut_detector_threshold(ctx, beta=2.0)
 
     @pytest.mark.parametrize("bad", [True, None, "x"])
     def test_a_non_numeric_balance_is_refused(self, client, bad):

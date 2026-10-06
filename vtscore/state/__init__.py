@@ -282,9 +282,8 @@ def line_knobs() -> dict[str, float | None]:
 def get_beta() -> float | None:
     """The active detector's balance (#4413): F-beta's beta, seeded from the user's setting on first read.
 
-    Draws the line: the band walk stopped at the F-beta peak, or the
-    mixture's F-beta argmax under the balance's cap before any check.
-    ``None`` means no balance: the line is the Inclusion 0 cut.  The app
+    Draws the line: the labels' line cut at this beta (#4452).  ``None``
+    means no balance: the line is the Inclusion 0 cut.  The app
     always sets a balance; ``None`` survives for library callers
     (``CoreConfig(beta=None)``).
     """

@@ -269,7 +269,8 @@ class TestTheWeakCheckPrompt:
         find.find_mode = True
         assert detector_balance_state(find, 1.0)["check_due"] is False
         running = self._weak(_ctx("det-weak-running"))
-        running.precision_check_run = SpotCheck.start(running.line_ranking.unvoted_ids(human_voted_ids(running)), 0.5)
+        unvoted = running.line_ranking.unvoted_ids(human_voted_ids(running)).tolist()
+        running.precision_check_run = SpotCheck.start_balance(unvoted, 1.0, 10.0, seed=0)
         assert detector_balance_state(running, 1.0)["check_due"] is False
 
     def test_never_due_on_a_line_a_check_cannot_walk(self):

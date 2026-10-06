@@ -80,8 +80,11 @@ class TestTheArms:
         assert {r["floor_status"] for r in rows} <= set(BALANCE_STATES)
 
     def test_before_the_check_the_line_keeps_the_unchecked_cap(self, schedule_only):
-        """What a headless run exports: the top K unvoted, K the balance's cap, capped by the corpus."""
-        rows, _picks = self._run()
+        """The count line before a check: the top K unvoted, K the balance's cap, capped by the corpus.
+
+        Since #4452 the default arm draws the labels' line; the count line is the forced-shape arm's.
+        """
+        rows, _picks = self._run(walk_shape="advisory")
         steps = [r for r in rows if r["phase"] != "check"]
         assert steps and all(r["floor_status"] == BALANCE_UNCHECKED for r in steps)
         k = balance_schedule(DEFAULT_BETA).candidate
@@ -93,9 +96,9 @@ class TestTheArms:
         """The app's unchecked line: the smaller of the cap and the mixture's F-beta argmax (#4389, #4413).
 
         The harness hands the votes so far to the same ``fbeta_count`` the app
-        anchors on, so a headless study exports what AutoRun would.
+        anchored on before #4452; the count line is now the forced-shape arm's.
         """
-        rows, _picks = self._run()
+        rows, _picks = self._run(walk_shape="advisory")
         steps = [r for r in rows if r["phase"] != "check"]
         k = balance_schedule(DEFAULT_BETA).candidate
         assert steps and all(1 <= r["floor_count"] <= min(k, r["n_remainder"]) for r in steps)
