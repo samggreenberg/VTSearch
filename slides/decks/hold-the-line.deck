@@ -29,6 +29,11 @@
 # a talk *for* users moves it up to follow section 1 instead.
 
 theme: vtsearch
+# PDF metadata. Marp takes the title from the first heading unaided, but the
+# language it guesses from the locale of whatever machine renders it (`POSIX`
+# on a CI runner), and that is what a screen reader reads the deck in.
+author: Sam Greenberg
+lang: en
 
 slides:
   title-hold-the-line

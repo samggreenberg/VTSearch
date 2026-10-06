@@ -279,7 +279,9 @@ known_first_party = [
 "scikit-learn" = "sklearn"
 "umap-learn" = "umap"
 "opencv-python-headless" = "cv2"
-"PyMuPDF" = "fitz"
+# Both spellings: the repo imports the historical `fitz`, and slides/pdf_nav.py
+# the `pymupdf` alias PyMuPDF now prefers (`import fitz` warns on 1.28+).
+"PyMuPDF" = ["fitz", "pymupdf"]
 "Pillow" = "PIL"
 "pyyaml" = "yaml"
 "dnspython" = "dns"
